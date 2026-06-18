@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const namespaceEventsDomainName = "namespace-events"
@@ -150,9 +151,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if event.InvolvedObject.Namespace == "" {
 			continue
 		}
-		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, event)
-		facts := model.Facts.Event
-		timestamp := resourcemodel.EventTimestamp(event).Time
+		facts := eventres.BuildFacts(meta.ClusterID, event)
+		timestamp := eventres.EventTimestamp(event).Time
 		summary := EventSummary{
 			ClusterMeta:      meta,
 			Kind:             event.InvolvedObject.Kind,
@@ -167,7 +167,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Type:             facts.EventType,
 			Source:           facts.Source,
 			Reason:           facts.Reason,
-			Object:           resourcemodel.EventObjectDisplay(event),
+			Object:           eventres.EventObjectDisplay(event),
 			Message:          facts.Message,
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),

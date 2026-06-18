@@ -1,47 +1,84 @@
-import { types } from '@wailsjs/go/models';
+import {
+  admission,
+  apiextensions,
+  backendtlspolicy,
+  clusterrole,
+  clusterrolebinding,
+  configmap,
+  cronjob,
+  daemonset,
+  deployment,
+  endpointslice,
+  gateway,
+  gatewayclass,
+  helm,
+  listenerset,
+  referencegrant,
+  hpa,
+  ingress,
+  ingressclass,
+  limitrange,
+  job,
+  namespaces,
+  networkpolicy,
+  nodes,
+  persistentvolume,
+  persistentvolumeclaim,
+  poddisruptionbudget,
+  replicaset,
+  resourcequota,
+  role,
+  rolebinding,
+  secret,
+  service,
+  serviceaccount,
+  statefulset,
+  storageclass,
+  types,
+} from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface DetailSlots {
   podDetails: types.PodDetailInfo | null;
-  deploymentDetails: types.DeploymentDetails | null;
-  replicaSetDetails: types.ReplicaSetDetails | null;
-  daemonSetDetails: types.DaemonSetDetails | null;
-  statefulSetDetails: types.StatefulSetDetails | null;
-  jobDetails: types.JobDetails | null;
-  cronJobDetails: types.CronJobDetails | null;
-  configMapDetails: types.ConfigMapDetails | null;
-  secretDetails: types.SecretDetails | null;
-  helmReleaseDetails: types.HelmReleaseDetails | null;
-  serviceDetails: types.ServiceDetails | null;
-  ingressDetails: types.IngressDetails | null;
-  networkPolicyDetails: types.NetworkPolicyDetails | null;
-  endpointSliceDetails: types.EndpointSliceDetails | null;
-  gatewayDetails?: types.GatewayDetails | null;
+  deploymentDetails: deployment.DeploymentDetails | null;
+  replicaSetDetails: replicaset.ReplicaSetDetails | null;
+  daemonSetDetails: daemonset.DaemonSetDetails | null;
+  statefulSetDetails: statefulset.StatefulSetDetails | null;
+  jobDetails: job.JobDetails | null;
+  cronJobDetails: cronjob.CronJobDetails | null;
+  configMapDetails: configmap.ConfigMapDetails | null;
+  secretDetails: secret.SecretDetails | null;
+  helmReleaseDetails: helm.HelmReleaseDetails | null;
+  serviceDetails: service.ServiceDetails | null;
+  ingressDetails: ingress.IngressDetails | null;
+  networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
+  endpointSliceDetails: endpointslice.EndpointSliceDetails | null;
+  gatewayDetails?: gateway.GatewayDetails | null;
   httpRouteDetails?: types.RouteDetails | null;
   grpcRouteDetails?: types.RouteDetails | null;
   tlsRouteDetails?: types.RouteDetails | null;
-  listenerSetDetails?: types.ListenerSetDetails | null;
-  referenceGrantDetails?: types.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
-  pvcDetails: types.PersistentVolumeClaimDetails | null;
-  pvDetails: types.PersistentVolumeDetails | null;
-  storageClassDetails: types.StorageClassDetails | null;
-  serviceAccountDetails: types.ServiceAccountDetails | null;
-  roleDetails: types.RoleDetails | null;
-  roleBindingDetails: types.RoleBindingDetails | null;
-  clusterRoleDetails: types.ClusterRoleDetails | null;
-  clusterRoleBindingDetails: types.ClusterRoleBindingDetails | null;
-  hpaDetails: types.HorizontalPodAutoscalerDetails | null;
-  pdbDetails: types.PodDisruptionBudgetDetails | null;
-  resourceQuotaDetails: types.ResourceQuotaDetails | null;
-  limitRangeDetails: types.LimitRangeDetails | null;
-  nodeDetails: types.NodeDetails | null;
-  namespaceDetails: types.NamespaceDetails | null;
-  ingressClassDetails: types.IngressClassDetails | null;
-  gatewayClassDetails?: types.GatewayClassDetails | null;
-  crdDetails: types.CustomResourceDefinitionDetails | null;
-  mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
-  validatingWebhookDetails: types.ValidatingWebhookConfigurationDetails | null;
+  listenerSetDetails?: listenerset.ListenerSetDetails | null;
+  referenceGrantDetails?: referencegrant.ReferenceGrantDetails | null;
+  backendTLSPolicyDetails?: backendtlspolicy.BackendTLSPolicyDetails | null;
+  pvcDetails: persistentvolumeclaim.PersistentVolumeClaimDetails | null;
+  pvDetails: persistentvolume.PersistentVolumeDetails | null;
+  storageClassDetails: storageclass.StorageClassDetails | null;
+  serviceAccountDetails: serviceaccount.ServiceAccountDetails | null;
+  roleDetails: role.RoleDetails | null;
+  roleBindingDetails: rolebinding.RoleBindingDetails | null;
+  clusterRoleDetails: clusterrole.ClusterRoleDetails | null;
+  clusterRoleBindingDetails: clusterrolebinding.ClusterRoleBindingDetails | null;
+  hpaDetails: hpa.HorizontalPodAutoscalerDetails | null;
+  pdbDetails: poddisruptionbudget.PodDisruptionBudgetDetails | null;
+  resourceQuotaDetails: resourcequota.ResourceQuotaDetails | null;
+  limitRangeDetails: limitrange.LimitRangeDetails | null;
+  nodeDetails: nodes.NodeDetails | null;
+  namespaceDetails: namespaces.NamespaceDetails | null;
+  ingressClassDetails: ingressclass.IngressClassDetails | null;
+  gatewayClassDetails?: gatewayclass.GatewayClassDetails | null;
+  crdDetails: apiextensions.CustomResourceDefinitionDetails | null;
+  mutatingWebhookDetails: admission.MutatingWebhookConfigurationDetails | null;
+  validatingWebhookDetails: admission.ValidatingWebhookConfigurationDetails | null;
 }
 
 type DetailContainer = {
@@ -195,45 +232,57 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'pod':
       return { ...EMPTY_DETAIL_SLOTS, podDetails: detailPayload as types.PodDetailInfo };
     case 'deployment':
-      return { ...EMPTY_DETAIL_SLOTS, deploymentDetails: detailPayload as types.DeploymentDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        deploymentDetails: detailPayload as deployment.DeploymentDetails,
+      };
     case 'replicaset':
-      return { ...EMPTY_DETAIL_SLOTS, replicaSetDetails: detailPayload as types.ReplicaSetDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        replicaSetDetails: detailPayload as replicaset.ReplicaSetDetails,
+      };
     case 'daemonset':
-      return { ...EMPTY_DETAIL_SLOTS, daemonSetDetails: detailPayload as types.DaemonSetDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        daemonSetDetails: detailPayload as daemonset.DaemonSetDetails,
+      };
     case 'statefulset':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        statefulSetDetails: detailPayload as types.StatefulSetDetails,
+        statefulSetDetails: detailPayload as statefulset.StatefulSetDetails,
       };
     case 'job':
-      return { ...EMPTY_DETAIL_SLOTS, jobDetails: detailPayload as types.JobDetails };
+      return { ...EMPTY_DETAIL_SLOTS, jobDetails: detailPayload as job.JobDetails };
     case 'cronjob':
-      return { ...EMPTY_DETAIL_SLOTS, cronJobDetails: detailPayload as types.CronJobDetails };
+      return { ...EMPTY_DETAIL_SLOTS, cronJobDetails: detailPayload as cronjob.CronJobDetails };
     case 'configmap':
-      return { ...EMPTY_DETAIL_SLOTS, configMapDetails: detailPayload as types.ConfigMapDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        configMapDetails: detailPayload as configmap.ConfigMapDetails,
+      };
     case 'secret':
-      return { ...EMPTY_DETAIL_SLOTS, secretDetails: detailPayload as types.SecretDetails };
+      return { ...EMPTY_DETAIL_SLOTS, secretDetails: detailPayload as secret.SecretDetails };
     case 'helmrelease':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        helmReleaseDetails: detailPayload as types.HelmReleaseDetails,
+        helmReleaseDetails: detailPayload as helm.HelmReleaseDetails,
       };
     case 'service':
-      return { ...EMPTY_DETAIL_SLOTS, serviceDetails: detailPayload as types.ServiceDetails };
+      return { ...EMPTY_DETAIL_SLOTS, serviceDetails: detailPayload as service.ServiceDetails };
     case 'ingress':
-      return { ...EMPTY_DETAIL_SLOTS, ingressDetails: detailPayload as types.IngressDetails };
+      return { ...EMPTY_DETAIL_SLOTS, ingressDetails: detailPayload as ingress.IngressDetails };
     case 'networkpolicy':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        networkPolicyDetails: detailPayload as types.NetworkPolicyDetails,
+        networkPolicyDetails: detailPayload as networkpolicy.NetworkPolicyDetails,
       };
     case 'endpointslice':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        endpointSliceDetails: detailPayload as types.EndpointSliceDetails,
+        endpointSliceDetails: detailPayload as endpointslice.EndpointSliceDetails,
       };
     case 'gateway':
-      return { ...EMPTY_DETAIL_SLOTS, gatewayDetails: detailPayload as types.GatewayDetails };
+      return { ...EMPTY_DETAIL_SLOTS, gatewayDetails: detailPayload as gateway.GatewayDetails };
     case 'httproute':
       return { ...EMPTY_DETAIL_SLOTS, httpRouteDetails: detailPayload as types.RouteDetails };
     case 'grpcroute':
@@ -243,97 +292,106 @@ function buildDetailSlots(objectKind: string | null, detailPayload: unknown): De
     case 'listenerset':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        listenerSetDetails: detailPayload as types.ListenerSetDetails,
+        listenerSetDetails: detailPayload as listenerset.ListenerSetDetails,
       };
     case 'referencegrant':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        referenceGrantDetails: detailPayload as types.ReferenceGrantDetails,
+        referenceGrantDetails: detailPayload as referencegrant.ReferenceGrantDetails,
       };
     case 'backendtlspolicy':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        backendTLSPolicyDetails: detailPayload as types.BackendTLSPolicyDetails,
+        backendTLSPolicyDetails: detailPayload as backendtlspolicy.BackendTLSPolicyDetails,
       };
     case 'persistentvolumeclaim':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        pvcDetails: detailPayload as types.PersistentVolumeClaimDetails,
+        pvcDetails: detailPayload as persistentvolumeclaim.PersistentVolumeClaimDetails,
       };
     case 'persistentvolume':
-      return { ...EMPTY_DETAIL_SLOTS, pvDetails: detailPayload as types.PersistentVolumeDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        pvDetails: detailPayload as persistentvolume.PersistentVolumeDetails,
+      };
     case 'storageclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        storageClassDetails: detailPayload as types.StorageClassDetails,
+        storageClassDetails: detailPayload as storageclass.StorageClassDetails,
       };
     case 'serviceaccount':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        serviceAccountDetails: detailPayload as types.ServiceAccountDetails,
+        serviceAccountDetails: detailPayload as serviceaccount.ServiceAccountDetails,
       };
     case 'role':
-      return { ...EMPTY_DETAIL_SLOTS, roleDetails: detailPayload as types.RoleDetails };
+      return { ...EMPTY_DETAIL_SLOTS, roleDetails: detailPayload as role.RoleDetails };
     case 'rolebinding':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        roleBindingDetails: detailPayload as types.RoleBindingDetails,
+        roleBindingDetails: detailPayload as rolebinding.RoleBindingDetails,
       };
     case 'clusterrole':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        clusterRoleDetails: detailPayload as types.ClusterRoleDetails,
+        clusterRoleDetails: detailPayload as clusterrole.ClusterRoleDetails,
       };
     case 'clusterrolebinding':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        clusterRoleBindingDetails: detailPayload as types.ClusterRoleBindingDetails,
+        clusterRoleBindingDetails: detailPayload as clusterrolebinding.ClusterRoleBindingDetails,
       };
     case 'horizontalpodautoscaler':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        hpaDetails: detailPayload as types.HorizontalPodAutoscalerDetails,
+        hpaDetails: detailPayload as hpa.HorizontalPodAutoscalerDetails,
       };
     case 'poddisruptionbudget':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        pdbDetails: detailPayload as types.PodDisruptionBudgetDetails,
+        pdbDetails: detailPayload as poddisruptionbudget.PodDisruptionBudgetDetails,
       };
     case 'resourcequota':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        resourceQuotaDetails: detailPayload as types.ResourceQuotaDetails,
+        resourceQuotaDetails: detailPayload as resourcequota.ResourceQuotaDetails,
       };
     case 'limitrange':
-      return { ...EMPTY_DETAIL_SLOTS, limitRangeDetails: detailPayload as types.LimitRangeDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        limitRangeDetails: detailPayload as limitrange.LimitRangeDetails,
+      };
     case 'node':
-      return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as types.NodeDetails };
+      return { ...EMPTY_DETAIL_SLOTS, nodeDetails: detailPayload as nodes.NodeDetails };
     case 'namespace':
-      return { ...EMPTY_DETAIL_SLOTS, namespaceDetails: detailPayload as types.NamespaceDetails };
+      return {
+        ...EMPTY_DETAIL_SLOTS,
+        namespaceDetails: detailPayload as namespaces.NamespaceDetails,
+      };
     case 'ingressclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        ingressClassDetails: detailPayload as types.IngressClassDetails,
+        ingressClassDetails: detailPayload as ingressclass.IngressClassDetails,
       };
     case 'gatewayclass':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        gatewayClassDetails: detailPayload as types.GatewayClassDetails,
+        gatewayClassDetails: detailPayload as gatewayclass.GatewayClassDetails,
       };
     case 'customresourcedefinition':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        crdDetails: detailPayload as types.CustomResourceDefinitionDetails,
+        crdDetails: detailPayload as apiextensions.CustomResourceDefinitionDetails,
       };
     case 'mutatingwebhookconfiguration':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        mutatingWebhookDetails: detailPayload as types.MutatingWebhookConfigurationDetails,
+        mutatingWebhookDetails: detailPayload as admission.MutatingWebhookConfigurationDetails,
       };
     case 'validatingwebhookconfiguration':
       return {
         ...EMPTY_DETAIL_SLOTS,
-        validatingWebhookDetails: detailPayload as types.ValidatingWebhookConfigurationDetails,
+        validatingWebhookDetails: detailPayload as admission.ValidatingWebhookConfigurationDetails,
       };
     default:
       return EMPTY_DETAIL_SLOTS;

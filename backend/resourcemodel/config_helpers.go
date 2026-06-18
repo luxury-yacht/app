@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func configResourceModel(
+func ConfigResourceModel(
 	clusterID, kind, resource string,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
@@ -29,8 +29,8 @@ func configResourceModel(
 		Source: ResourceSourceKubernetes,
 		Scope:  ResourceScopeNamespaced,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(meta.Labels),
-			Annotations:       copyStringMap(meta.Annotations),
+			Labels:            CopyStringMap(meta.Labels),
+			Annotations:       CopyStringMap(meta.Annotations),
 			CreationTimestamp: meta.CreationTimestamp,
 			ResourceVersion:   meta.ResourceVersion,
 			Finalizers:        append([]string(nil), meta.Finalizers...),
@@ -40,7 +40,7 @@ func configResourceModel(
 	}
 }
 
-func deletingConfigStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
+func DeletingConfigStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
 	if meta.DeletionTimestamp == nil {
 		return ResourceStatusPresentation{}, false
 	}
@@ -59,7 +59,7 @@ func deletingConfigStatus(meta metav1.ObjectMeta, state string, signals []Resour
 	}, true
 }
 
-func configSourceStatus(label, state, reason, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func ConfigSourceStatus(label, state, reason, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -70,28 +70,28 @@ func configSourceStatus(label, state, reason, presentation string, signals []Res
 	}
 }
 
-func configLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+func ConfigLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,
 	}
 }
 
-func itemCountLabel(count int) string {
+func ItemCountLabel(count int) string {
 	if count == 1 {
 		return "1 item"
 	}
 	return fmt.Sprintf("%d items", count)
 }
 
-func keyCountLabel(count int) string {
+func KeyCountLabel(count int) string {
 	if count == 1 {
 		return "1 key"
 	}
 	return fmt.Sprintf("%d keys", count)
 }
 
-func sortedStringMapKeys(values map[string]string) []string {
+func SortedStringMapKeys(values map[string]string) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -100,7 +100,7 @@ func sortedStringMapKeys(values map[string]string) []string {
 	return keys
 }
 
-func sortedBytesMapKeys(values map[string][]byte) []string {
+func SortedBytesMapKeys(values map[string][]byte) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -122,7 +122,7 @@ func podResourceLink(clusterID string, pod corev1.Pod) ResourceLink {
 	)
 }
 
-func sortResourceLinksByObjectName(links []ResourceLink) {
+func SortResourceLinksByObjectName(links []ResourceLink) {
 	sort.SliceStable(links, func(i, j int) bool {
 		left := resourceLinkSortKey(links[i])
 		right := resourceLinkSortKey(links[j])

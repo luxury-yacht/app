@@ -4,7 +4,42 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
+import {backendtlspolicy} from '../models';
+import {clusterrole} from '../models';
+import {clusterrolebinding} from '../models';
+import {configmap} from '../models';
+import {cronjob} from '../models';
+import {apiextensions} from '../models';
+import {daemonset} from '../models';
+import {deployment} from '../models';
+import {endpointslice} from '../models';
+import {gateway} from '../models';
+import {gatewayclass} from '../models';
 import {json} from '../models';
+import {helm} from '../models';
+import {hpa} from '../models';
+import {ingress} from '../models';
+import {ingressclass} from '../models';
+import {job} from '../models';
+import {limitrange} from '../models';
+import {listenerset} from '../models';
+import {admission} from '../models';
+import {namespaces} from '../models';
+import {networkpolicy} from '../models';
+import {nodes} from '../models';
+import {persistentvolume} from '../models';
+import {persistentvolumeclaim} from '../models';
+import {poddisruptionbudget} from '../models';
+import {referencegrant} from '../models';
+import {replicaset} from '../models';
+import {resourcequota} from '../models';
+import {role} from '../models';
+import {rolebinding} from '../models';
+import {secret} from '../models';
+import {service} from '../models';
+import {serviceaccount} from '../models';
+import {statefulset} from '../models';
+import {storageclass} from '../models';
 import {snapshot} from '../models';
 import {capabilities} from '../models';
 
@@ -68,7 +103,7 @@ export function GetAppSettingsSchema():Promise<types.AppSettingsSchema>;
 
 export function GetAppearanceModeInfo():Promise<types.AppearanceModeInfo>;
 
-export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<types.BackendTLSPolicyDetails>;
+export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<backendtlspolicy.BackendTLSPolicyDetails>;
 
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
 
@@ -76,35 +111,35 @@ export function GetClusterAuthState(arg1:string):Promise<string|string>;
 
 export function GetClusterPortForwardCount(arg1:string):Promise<number>;
 
-export function GetClusterRole(arg1:string,arg2:string):Promise<types.ClusterRoleDetails>;
+export function GetClusterRole(arg1:string,arg2:string):Promise<clusterrole.ClusterRoleDetails>;
 
-export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<types.ClusterRoleBindingDetails>;
+export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<clusterrolebinding.ClusterRoleBindingDetails>;
 
 export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 
 export function GetClusterTabOrder():Promise<Array<string>>;
 
-export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<types.ConfigMapDetails>;
+export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<configmap.ConfigMapDetails>;
 
 export function GetContainerLogsScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
 
-export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<types.CronJobDetails>;
+export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<cronjob.CronJobDetails>;
 
-export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<types.CustomResourceDefinitionDetails>;
+export function GetCustomResourceDefinition(arg1:string,arg2:string):Promise<apiextensions.CustomResourceDefinitionDetails>;
 
-export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<types.DaemonSetDetails>;
+export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<daemonset.DaemonSetDetails>;
 
-export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<types.DeploymentDetails>;
+export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<deployment.DeploymentDetails>;
 
-export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<types.EndpointSliceDetails>;
+export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<endpointslice.EndpointSliceDetails>;
 
 export function GetFavorites():Promise<Array<backend.Favorite>>;
 
 export function GetGRPCRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 
-export function GetGateway(arg1:string,arg2:string,arg3:string):Promise<types.GatewayDetails>;
+export function GetGateway(arg1:string,arg2:string,arg3:string):Promise<gateway.GatewayDetails>;
 
-export function GetGatewayClass(arg1:string,arg2:string):Promise<types.GatewayClassDetails>;
+export function GetGatewayClass(arg1:string,arg2:string):Promise<gatewayclass.GatewayClassDetails>;
 
 export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
 
@@ -112,17 +147,17 @@ export function GetHTTPRoute(arg1:string,arg2:string,arg3:string):Promise<types.
 
 export function GetHelmManifest(arg1:string,arg2:string,arg3:string):Promise<string>;
 
-export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promise<types.HelmReleaseDetails>;
+export function GetHelmReleaseDetails(arg1:string,arg2:string,arg3:string):Promise<helm.HelmReleaseDetails>;
 
 export function GetHelmValues(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
-export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<types.HorizontalPodAutoscalerDetails>;
+export function GetHorizontalPodAutoscaler(arg1:string,arg2:string,arg3:string):Promise<hpa.HorizontalPodAutoscalerDetails>;
 
-export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<types.IngressDetails>;
+export function GetIngress(arg1:string,arg2:string,arg3:string):Promise<ingress.IngressDetails>;
 
-export function GetIngressClass(arg1:string,arg2:string):Promise<types.IngressClassDetails>;
+export function GetIngressClass(arg1:string,arg2:string):Promise<ingressclass.IngressClassDetails>;
 
-export function GetJob(arg1:string,arg2:string,arg3:string):Promise<types.JobDetails>;
+export function GetJob(arg1:string,arg2:string,arg3:string):Promise<job.JobDetails>;
 
 export function GetKubeconfigSearchPaths():Promise<Array<string>>;
 
@@ -130,59 +165,59 @@ export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetKubernetesAPIClientDiagnostics():Promise<Array<backend.KubernetesAPIClientDiagnostics>>;
 
-export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
+export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<limitrange.LimitRangeDetails>;
 
-export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;
+export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<listenerset.ListenerSetDetails>;
 
-export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
+export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<admission.MutatingWebhookConfigurationDetails>;
 
-export function GetNamespace(arg1:string,arg2:string):Promise<types.NamespaceDetails>;
+export function GetNamespace(arg1:string,arg2:string):Promise<namespaces.NamespaceDetails>;
 
-export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<types.NetworkPolicyDetails>;
+export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<networkpolicy.NetworkPolicyDetails>;
 
-export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
+export function GetNode(arg1:string,arg2:string):Promise<nodes.NodeDetails>;
 
 export function GetObjectYAMLByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
-export function GetPersistentVolume(arg1:string,arg2:string):Promise<types.PersistentVolumeDetails>;
+export function GetPersistentVolume(arg1:string,arg2:string):Promise<persistentvolume.PersistentVolumeDetails>;
 
-export function GetPersistentVolumeClaim(arg1:string,arg2:string,arg3:string):Promise<types.PersistentVolumeClaimDetails>;
+export function GetPersistentVolumeClaim(arg1:string,arg2:string,arg3:string):Promise<persistentvolumeclaim.PersistentVolumeClaimDetails>;
 
 export function GetPod(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<types.PodDetailInfo>;
 
 export function GetPodContainers(arg1:string,arg2:string,arg3:string):Promise<Array<string>>;
 
-export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<types.PodDisruptionBudgetDetails>;
+export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<poddisruptionbudget.PodDisruptionBudgetDetails>;
 
-export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<types.ReferenceGrantDetails>;
+export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<referencegrant.ReferenceGrantDetails>;
 
 export function GetRefreshBaseURL():Promise<string>;
 
-export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<types.ReplicaSetDetails>;
+export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<replicaset.ReplicaSetDetails>;
 
-export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
+export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<resourcequota.ResourceQuotaDetails>;
 
 export function GetRevisionHistory(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.RevisionEntry>>;
 
-export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleDetails>;
+export function GetRole(arg1:string,arg2:string,arg3:string):Promise<role.RoleDetails>;
 
-export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<types.RoleBindingDetails>;
+export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<rolebinding.RoleBindingDetails>;
 
-export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<types.SecretDetails>;
+export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<secret.SecretDetails>;
 
 export function GetSelectedKubeconfigs():Promise<Array<string>>;
 
 export function GetSelectionDiagnostics():Promise<backend.SelectionDiagnostics>;
 
-export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.ServiceDetails>;
+export function GetService(arg1:string,arg2:string,arg3:string):Promise<service.ServiceDetails>;
 
-export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<types.ServiceAccountDetails>;
+export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<serviceaccount.ServiceAccountDetails>;
 
 export function GetShellSessionBacklog(arg1:string):Promise<string>;
 
-export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<types.StatefulSetDetails>;
+export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<statefulset.StatefulSetDetails>;
 
-export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
+export function GetStorageClass(arg1:string,arg2:string):Promise<storageclass.StorageClassDetails>;
 
 export function GetTLSRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 
@@ -190,7 +225,7 @@ export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function GetThemes():Promise<Array<types.Theme>>;
 
-export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
+export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<admission.ValidatingWebhookConfigurationDetails>;
 
 export function GetZoomLevel():Promise<number>;
 

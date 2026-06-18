@@ -39,13 +39,13 @@ func planCollectionSourceForGroupResource(gr schema.GroupResource) collectionSou
 		plan.watchable = true
 		plan.promotable = false
 	default:
-		if _, ok := sharedInformerListers[gr]; ok {
+		if _, ok := sharedInformerGroupResources[gr]; ok {
 			plan.source = collectionSourceSharedInformer
-			_, plan.watchable = watchInformerAccessor[gr]
+			_, plan.watchable = watchInformerGroupResources[gr]
 			plan.promotable = false
 			return plan
 		}
-		if _, ok := gatewayInformerListers[gr]; ok {
+		if _, ok := gatewayInformerGroupResources[gr]; ok {
 			plan.source = collectionSourceGatewayInformer
 			plan.promotable = false
 			return plan

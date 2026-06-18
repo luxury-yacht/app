@@ -385,24 +385,21 @@ type ClsIngressClassInfo struct {
 
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {
-	Kind               string `json:"kind"` // pod
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Ready              string `json:"ready"`
-	Restarts           int32  `json:"restarts"` // Total restart count across all containers
-	Age                string `json:"age"`
-	CPURequest         string `json:"cpuRequest"` // Aggregated CPU requests
-	CPULimit           string `json:"cpuLimit"`   // Aggregated CPU limits
-	CPUUsage           string `json:"cpuUsage"`   // Current CPU usage from metrics
-	MemRequest         string `json:"memRequest"` // Aggregated memory requests
-	MemLimit           string `json:"memLimit"`   // Aggregated memory limits
-	MemUsage           string `json:"memUsage"`   // Current memory usage from metrics
-	OwnerKind          string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
-	OwnerName          string `json:"ownerName"`  // Name of the owner resource
+	Kind      string `json:"kind"` // pod
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	StatusProjection
+	Ready      string `json:"ready"`
+	Restarts   int32  `json:"restarts"` // Total restart count across all containers
+	Age        string `json:"age"`
+	CPURequest string `json:"cpuRequest"` // Aggregated CPU requests
+	CPULimit   string `json:"cpuLimit"`   // Aggregated CPU limits
+	CPUUsage   string `json:"cpuUsage"`   // Current CPU usage from metrics
+	MemRequest string `json:"memRequest"` // Aggregated memory requests
+	MemLimit   string `json:"memLimit"`   // Aggregated memory limits
+	MemUsage   string `json:"memUsage"`   // Current memory usage from metrics
+	OwnerKind  string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
+	OwnerName  string `json:"ownerName"`  // Name of the owner resource
 	// OwnerAPIVersion is the wire-form apiVersion of the owner (e.g.
 	// "apps/v1", "argoproj.io/v1alpha1", "kubevirt.io/v1"). Threaded from
 	// pod.OwnerReferences[*].APIVersion (or hardcoded apps/v1 for the
@@ -496,72 +493,6 @@ type NsHelmInfo struct {
 	Age        string `json:"age"`        // First deployment time
 }
 
-// HelmReleaseDetails represents detailed information about a Helm release
-type HelmReleaseDetails struct {
-	// Basic information
-	Kind      string `json:"kind"`
-	TypeAlias string `json:"typeAlias"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
-
-	// Chart information
-	Chart      string `json:"chart"`
-	Version    string `json:"version"`
-	AppVersion string `json:"appVersion"`
-
-	// Status information
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Revision           int    `json:"revision"`
-	Updated            string `json:"updated"`
-
-	// Additional details
-	Description string                 `json:"description,omitempty"`
-	Notes       string                 `json:"notes,omitempty"`
-	Values      map[string]interface{} `json:"values,omitempty"`
-
-	// History
-	History []HelmRevision `json:"history,omitempty"`
-
-	// Resources managed by this release
-	Resources []HelmResource `json:"resources,omitempty"`
-
-	// Metadata
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-// HelmRevision represents a single revision in the Helm release history
-type HelmRevision struct {
-	Revision           int    `json:"revision"`
-	Updated            string `json:"updated"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Chart              string `json:"chart"`
-	AppVersion         string `json:"appVersion,omitempty"`
-	Description        string `json:"description,omitempty"`
-}
-
-// HelmResource represents a Kubernetes resource managed by a Helm release.
-//
-// APIVersion carries the manifest's apiVersion verbatim (e.g. "apps/v1",
-// "v1", "documentdb.services.k8s.aws/v1alpha1") so the frontend can open
-// the target in the object panel with a fully-qualified GVK. Required for
-// CRDs that share a Kind across operator groups — without it the strict
-// object-YAML path hard-fails on Helm-managed custom resources.
-type HelmResource struct {
-	Kind       string `json:"kind"`
-	APIVersion string `json:"apiVersion,omitempty"`
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Scope      string `json:"scope,omitempty"`
-}
-
 // PodDetailInfoContainer represents detailed container information within a pod
 type PodDetailInfoContainer struct {
 	Name            string            `json:"name"`
@@ -587,21 +518,18 @@ type PodDetailInfoContainer struct {
 // PodDetailInfo represents comprehensive pod information for the object panel
 type PodDetailInfo struct {
 	// Basic information (same as PodSimpleInfo)
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Ready              string `json:"ready"`
-	Restarts           int32  `json:"restarts"`
-	Age                string `json:"age"`
-	CPURequest         string `json:"cpuRequest"`
-	CPULimit           string `json:"cpuLimit"`
-	CPUUsage           string `json:"cpuUsage"`
-	MemRequest         string `json:"memRequest"`
-	MemLimit           string `json:"memLimit"`
-	MemUsage           string `json:"memUsage"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	StatusProjection
+	Ready      string `json:"ready"`
+	Restarts   int32  `json:"restarts"`
+	Age        string `json:"age"`
+	CPURequest string `json:"cpuRequest"`
+	CPULimit   string `json:"cpuLimit"`
+	CPUUsage   string `json:"cpuUsage"`
+	MemRequest string `json:"memRequest"`
+	MemLimit   string `json:"memLimit"`
+	MemUsage   string `json:"memUsage"`
 
 	// Ownership information
 	OwnerKind string `json:"ownerKind"`
@@ -637,139 +565,15 @@ type PodDetailInfo struct {
 	SecurityContext map[string]any           `json:"securityContext,omitempty"`
 }
 
-type ConfigMapDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	Data        map[string]string `json:"data,omitempty"`
-	BinaryData  map[string]string `json:"binaryData,omitempty"`
-	DataCount   int               `json:"dataCount"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-}
-
-type SecretDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	SecretType  string            `json:"secretType"`
-	Data        map[string]string `json:"data,omitempty"`
-	DataKeys    []string          `json:"dataKeys"`
-	DataCount   int               `json:"dataCount"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-}
-
-type ServiceDetails struct {
-	Kind                   string               `json:"kind"`
-	Name                   string               `json:"name"`
-	Namespace              string               `json:"namespace"`
-	Age                    string               `json:"age"`
-	Details                string               `json:"details"`
-	Status                 string               `json:"status"`
-	StatusState            string               `json:"statusState,omitempty"`
-	StatusPresentation     string               `json:"statusPresentation,omitempty"`
-	StatusReason           string               `json:"statusReason,omitempty"`
-	ServiceType            string               `json:"serviceType"`
-	ClusterIP              string               `json:"clusterIP"`
-	ClusterIPs             []string             `json:"clusterIPs,omitempty"`
-	ExternalIPs            []string             `json:"externalIPs,omitempty"`
-	LoadBalancerIP         string               `json:"loadBalancerIP,omitempty"`
-	LoadBalancerStatus     string               `json:"loadBalancerStatus,omitempty"`
-	ExternalName           string               `json:"externalName,omitempty"`
-	Ports                  []ServicePortDetails `json:"ports"`
-	SessionAffinity        string               `json:"sessionAffinity"`
-	SessionAffinityTimeout int32                `json:"sessionAffinityTimeout,omitempty"`
-	Selector               map[string]string    `json:"selector,omitempty"`
-	Endpoints              []string             `json:"endpoints,omitempty"`
-	EndpointCount          int                  `json:"endpointCount"`
-	Labels                 map[string]string    `json:"labels,omitempty"`
-	Annotations            map[string]string    `json:"annotations,omitempty"`
-	HealthStatus           string               `json:"healthStatus"`
-}
-
-type ServicePortDetails struct {
-	Name       string `json:"name,omitempty"`
-	Protocol   string `json:"protocol"`
-	Port       int32  `json:"port"`
-	TargetPort string `json:"targetPort"`
-	NodePort   int32  `json:"nodePort,omitempty"`
-}
+// ConfigMapDetails moved to resources/configmap and SecretDetails moved to
+// resources/secret (co-located with each kind's model + detail builder).
 
 // EndpointSliceDetails describes a single EndpointSlice resource. Address,
 // port, and address-type fields are flattened directly because each Object
 // Panel renders one EndpointSlice; aggregation across slices for a Service
 // uses a different model.
-type EndpointSliceDetails struct {
-	Kind              string                 `json:"kind"`
-	Name              string                 `json:"name"`
-	Namespace         string                 `json:"namespace"`
-	Age               string                 `json:"age"`
-	Details           string                 `json:"details"`
-	AddressType       string                 `json:"addressType"`
-	ReadyAddresses    []EndpointSliceAddress `json:"readyAddresses,omitempty"`
-	NotReadyAddresses []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
-	Ports             []EndpointSlicePort    `json:"ports,omitempty"`
-	Labels            map[string]string      `json:"labels,omitempty"`
-	Annotations       map[string]string      `json:"annotations,omitempty"`
-}
-
-type EndpointSliceAddress struct {
-	IP        string `json:"ip"`
-	Hostname  string `json:"hostname,omitempty"`
-	NodeName  string `json:"nodeName,omitempty"`
-	TargetRef string `json:"targetRef,omitempty"`
-}
-
-type EndpointSlicePort struct {
-	Name        string `json:"name,omitempty"`
-	Port        int32  `json:"port"`
-	Protocol    string `json:"protocol"`
-	AppProtocol string `json:"appProtocol,omitempty"`
-}
-
-type IngressDetails struct {
-	Kind               string                 `json:"kind"`
-	Name               string                 `json:"name"`
-	Namespace          string                 `json:"namespace"`
-	Age                string                 `json:"age"`
-	Details            string                 `json:"details"`
-	IngressClassName   *string                `json:"ingressClassName,omitempty"`
-	Rules              []IngressRuleDetails   `json:"rules"`
-	TLS                []IngressTLSDetails    `json:"tls,omitempty"`
-	LoadBalancerStatus []string               `json:"loadBalancerStatus,omitempty"`
-	DefaultBackend     *IngressBackendDetails `json:"defaultBackend,omitempty"`
-	Labels             map[string]string      `json:"labels,omitempty"`
-	Annotations        map[string]string      `json:"annotations,omitempty"`
-}
-
-type IngressRuleDetails struct {
-	Host  string               `json:"host,omitempty"`
-	Paths []IngressPathDetails `json:"paths"`
-}
-
-type IngressPathDetails struct {
-	Path     string                `json:"path"`
-	PathType string                `json:"pathType"`
-	Backend  IngressBackendDetails `json:"backend"`
-}
-
-type IngressBackendDetails struct {
-	ServiceName string `json:"serviceName,omitempty"`
-	ServicePort string `json:"servicePort,omitempty"`
-	Resource    string `json:"resource,omitempty"`
-}
-
-type IngressTLSDetails struct {
-	Hosts      []string `json:"hosts"`
-	SecretName string   `json:"secretName,omitempty"`
-}
+// EndpointSliceDetails + EndpointSliceAddress/Port moved to resources/endpointslice
+// (co-located with the EndpointSlice model + detail builder).
 
 // ObjectRef is the shared openable Kubernetes object identity.
 type ObjectRef = resourcemodel.ResourceRef
@@ -796,35 +600,6 @@ type ConditionsSummary struct {
 	Programmed *ConditionState `json:"programmed,omitempty"`
 	Ready      *ConditionState `json:"ready,omitempty"`
 	Resolved   *ConditionState `json:"resolvedRefs,omitempty"`
-}
-
-type GatewayClassDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Controller  string            `json:"controller"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	Conditions  []ConditionState  `json:"conditions,omitempty"`
-	Summary     ConditionsSummary `json:"summary"`
-	Parameters  *RefOrDisplay     `json:"parameters,omitempty"`
-	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-type GatewayDetails struct {
-	Kind            string                   `json:"kind"`
-	Name            string                   `json:"name"`
-	Namespace       string                   `json:"namespace"`
-	Age             string                   `json:"age"`
-	Details         string                   `json:"details"`
-	GatewayClassRef ObjectRef                `json:"gatewayClassRef"`
-	Addresses       []string                 `json:"addresses,omitempty"`
-	Listeners       []GatewayListenerDetails `json:"listeners,omitempty"`
-	Conditions      []ConditionState         `json:"conditions,omitempty"`
-	Summary         ConditionsSummary        `json:"summary"`
-	Labels          map[string]string        `json:"labels,omitempty"`
-	Annotations     map[string]string        `json:"annotations,omitempty"`
 }
 
 type GatewayListenerDetails struct {
@@ -861,120 +636,17 @@ type HTTPRouteDetails = RouteDetails
 type GRPCRouteDetails = RouteDetails
 type TLSRouteDetails = RouteDetails
 
-type ListenerSetDetails struct {
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Age         string                   `json:"age"`
-	Details     string                   `json:"details"`
-	ParentRef   RefOrDisplay             `json:"parentRef"`
-	Listeners   []GatewayListenerDetails `json:"listeners,omitempty"`
-	Conditions  []ConditionState         `json:"conditions,omitempty"`
-	Summary     ConditionsSummary        `json:"summary"`
-	Labels      map[string]string        `json:"labels,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-}
-
-type ReferenceGrantDetails struct {
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Age         string                   `json:"age"`
-	Details     string                   `json:"details"`
-	From        []ReferenceGrantFromInfo `json:"from,omitempty"`
-	To          []RefOrDisplay           `json:"to,omitempty"`
-	Labels      map[string]string        `json:"labels,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-}
-
 type ReferenceGrantFromInfo struct {
 	Group     string `json:"group"`
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
 }
 
-type BackendTLSPolicyDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	TargetRefs  []RefOrDisplay    `json:"targetRefs,omitempty"`
-	Conditions  []ConditionState  `json:"conditions,omitempty"`
-	Summary     ConditionsSummary `json:"summary"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
+// IngressClassDetails + IngressClassParameters moved to resources/ingressclass
+// (co-located with the IngressClass model + detail builder).
 
-type IngressClassDetails struct {
-	Kind        string                  `json:"kind"`
-	Name        string                  `json:"name"`
-	Controller  string                  `json:"controller"`
-	Age         string                  `json:"age"`
-	IsDefault   bool                    `json:"isDefault"`
-	Details     string                  `json:"details"`
-	Parameters  *IngressClassParameters `json:"parameters,omitempty"`
-	Labels      map[string]string       `json:"labels,omitempty"`
-	Annotations map[string]string       `json:"annotations,omitempty"`
-	Ingresses   []string                `json:"ingresses,omitempty"`
-}
-
-type IngressClassParameters struct {
-	APIGroup  string `json:"apiGroup,omitempty"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-	Scope     string `json:"scope,omitempty"`
-}
-
-type NetworkPolicyDetails struct {
-	Kind         string              `json:"kind"`
-	Name         string              `json:"name"`
-	Namespace    string              `json:"namespace"`
-	Age          string              `json:"age"`
-	Details      string              `json:"details"`
-	PodSelector  map[string]string   `json:"podSelector"`
-	PolicyTypes  []string            `json:"policyTypes"`
-	IngressRules []NetworkPolicyRule `json:"ingressRules,omitempty"`
-	EgressRules  []NetworkPolicyRule `json:"egressRules,omitempty"`
-	Labels       map[string]string   `json:"labels,omitempty"`
-	Annotations  map[string]string   `json:"annotations,omitempty"`
-}
-
-type NetworkPolicyRule struct {
-	From  []NetworkPolicyPeer `json:"from,omitempty"`
-	To    []NetworkPolicyPeer `json:"to,omitempty"`
-	Ports []NetworkPolicyPort `json:"ports,omitempty"`
-}
-
-type NetworkPolicyPeer struct {
-	PodSelector       map[string]string `json:"podSelector,omitempty"`
-	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
-	IPBlock           *IPBlock          `json:"ipBlock,omitempty"`
-}
-
-type IPBlock struct {
-	CIDR   string   `json:"cidr"`
-	Except []string `json:"except,omitempty"`
-}
-
-type NetworkPolicyPort struct {
-	Protocol string  `json:"protocol,omitempty"`
-	Port     *string `json:"port,omitempty"`
-	EndPort  *int32  `json:"endPort,omitempty"`
-}
-
-type RoleDetails struct {
-	Kind               string            `json:"kind"`
-	Name               string            `json:"name"`
-	Namespace          string            `json:"namespace"`
-	Age                string            `json:"age"`
-	Details            string            `json:"details"`
-	Rules              []PolicyRule      `json:"rules"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	Annotations        map[string]string `json:"annotations,omitempty"`
-	UsedByRoleBindings []ObjectRef       `json:"usedByRoleBindings,omitempty"`
-}
+// NetworkPolicyDetails + NetworkPolicyRule/Peer/Port + IPBlock moved to
+// resources/networkpolicy (co-located with the NetworkPolicy model + builder).
 
 type PolicyRule struct {
 	APIGroups       []string `json:"apiGroups,omitempty"`
@@ -982,18 +654,6 @@ type PolicyRule struct {
 	ResourceNames   []string `json:"resourceNames,omitempty"`
 	Verbs           []string `json:"verbs"`
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
-}
-
-type RoleBindingDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	RoleRef     RoleRef           `json:"roleRef"`
-	Subjects    []Subject         `json:"subjects"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type RoleRef struct {
@@ -1009,50 +669,6 @@ type Subject struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type ClusterRoleDetails struct {
-	Kind                string            `json:"kind"`
-	Name                string            `json:"name"`
-	Age                 string            `json:"age"`
-	Details             string            `json:"details"`
-	Rules               []PolicyRule      `json:"rules"`
-	AggregationRule     *AggregationRule  `json:"aggregationRule,omitempty"`
-	Labels              map[string]string `json:"labels,omitempty"`
-	Annotations         map[string]string `json:"annotations,omitempty"`
-	ClusterRoleBindings []ObjectRef       `json:"clusterRoleBindings,omitempty"`
-	RoleBindings        []ObjectRef       `json:"roleBindings,omitempty"`
-}
-
-type AggregationRule struct {
-	ClusterRoleSelectors []map[string]string `json:"clusterRoleSelectors,omitempty"`
-}
-
-type ClusterRoleBindingDetails struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	Age         string            `json:"age"`
-	Details     string            `json:"details"`
-	RoleRef     RoleRef           `json:"roleRef"`
-	Subjects    []Subject         `json:"subjects"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-type ServiceAccountDetails struct {
-	Kind                         string            `json:"kind"`
-	Name                         string            `json:"name"`
-	Namespace                    string            `json:"namespace"`
-	Age                          string            `json:"age"`
-	Details                      string            `json:"details"`
-	Secrets                      []ObjectRef       `json:"secrets,omitempty"`
-	ImagePullSecrets             []ObjectRef       `json:"imagePullSecrets,omitempty"`
-	AutomountServiceAccountToken *bool             `json:"automountServiceAccountToken,omitempty"`
-	Labels                       map[string]string `json:"labels,omitempty"`
-	Annotations                  map[string]string `json:"annotations,omitempty"`
-	UsedByPods                   []ObjectRef       `json:"usedByPods,omitempty"`
-	RoleBindings                 []ObjectRef       `json:"roleBindings,omitempty"`
-	ClusterRoleBindings          []ObjectRef       `json:"clusterRoleBindings,omitempty"`
-}
-
 type PodMetricsSummary struct {
 	Pods       int    `json:"pods"`
 	ReadyPods  int    `json:"readyPods"`
@@ -1064,18 +680,8 @@ type PodMetricsSummary struct {
 	MemLimit   string `json:"memLimit,omitempty"`
 }
 
-// VolumeClaimTemplateSummary captures the operationally-relevant
-// fields of a StatefulSet `spec.volumeClaimTemplates[]` entry — name,
-// size request, storage class, access modes, volume mode. These are
-// template definitions; the actual per-replica PVC resources live
-// elsewhere and aren't carried here.
-type VolumeClaimTemplateSummary struct {
-	Name           string   `json:"name"`
-	StorageRequest string   `json:"storageRequest,omitempty"` // e.g. "10Gi"
-	StorageClass   string   `json:"storageClass,omitempty"`   // empty = cluster default
-	AccessModes    []string `json:"accessModes,omitempty"`    // e.g. ["ReadWriteOnce"]
-	VolumeMode     string   `json:"volumeMode,omitempty"`     // "Filesystem" (default) or "Block"
-}
+// VolumeClaimTemplateSummary moved to resources/statefulset (co-located with the
+// StatefulSet DTO).
 
 type ReplicaSetSummary struct {
 	Name      string `json:"name"`
@@ -1087,351 +693,22 @@ type ReplicaSetSummary struct {
 }
 
 // ReplicaSetDetails represents detailed ReplicaSet information for the object panel.
-type ReplicaSetDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Replicas           string `json:"replicas"`
-	Ready              string `json:"ready"`
-	Available          int32  `json:"available"`
-	DesiredReplicas    int32  `json:"desiredReplicas"`
-	Age                string `json:"age"`
+// ReplicaSetDetails moved to resources/replicaset (co-located with its model +
+// detail builder).
 
-	// Average resource utilization (per pod)
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
+// DeploymentDetails moved to resources/deployment, and StatefulSetDetails +
+// VolumeClaimTemplateSummary moved to resources/statefulset — each co-located
+// with its kind's model + detail builder. ReplicaSetSummary stays here because
+// it is shared across kinds.
 
-	// ReplicaSet configuration
-	MinReadySeconds int32             `json:"minReadySeconds,omitempty"`
-	Selector        map[string]string `json:"selector,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	Annotations     map[string]string `json:"annotations,omitempty"`
+// DaemonSetDetails moved to resources/daemonset (co-located with its model +
+// detail builder).
 
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
+// JobDetails moved to resources/job and CronJobDetails moved to resources/cronjob
+// (each co-located with its model + detail builder). JobReference, JobSimpleInfo,
+// and JobTemplateDetails stay here — they are shared sub-types CronJobDetails
+// references.
 
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Status
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	IsActive           bool  `json:"isActive"`
-}
-
-type DeploymentDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Replicas           string `json:"replicas"`
-	Ready              string `json:"ready"`
-	Updated            string `json:"updated,omitempty"`
-	UpToDate           int32  `json:"upToDate,omitempty"`
-	Available          int32  `json:"available"`
-	DesiredReplicas    int32  `json:"desiredReplicas"`
-	Age                string `json:"age"`
-
-	// Average resource utilization (per pod)
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
-
-	// Strategy information
-	Strategy         string `json:"strategy,omitempty"`
-	MaxSurge         string `json:"maxSurge,omitempty"`
-	MaxUnavailable   string `json:"maxUnavailable,omitempty"`
-	MinReadySeconds  int32  `json:"minReadySeconds,omitempty"`
-	RevisionHistory  int32  `json:"revisionHistory,omitempty"`
-	ProgressDeadline int32  `json:"progressDeadline,omitempty"`
-
-	// Service information
-	ServiceAccount string `json:"serviceAccount,omitempty"`
-
-	// Pod placement constraints (from the pod template).
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	Tolerations  []string          `json:"tolerations,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// ReplicaSet information
-	CurrentRevision     string              `json:"currentRevision,omitempty"`
-	CurrentReplicaSet   string              `json:"currentReplicaSet,omitempty"`
-	ReplicaSets         []string            `json:"replicaSets,omitempty"`
-	ReplicaSetSummaries []ReplicaSetSummary `json:"replicaSetSummaries,omitempty"`
-
-	// Rollout status
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	Paused             bool   `json:"paused,omitempty"`
-	RolloutStatus      string `json:"rolloutStatus,omitempty"`
-	RolloutMessage     string `json:"rolloutMessage,omitempty"`
-}
-
-type StatefulSetDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Replicas           string `json:"replicas"`
-	Ready              string `json:"ready"`
-	UpToDate           int32  `json:"upToDate,omitempty"`
-	Available          int32  `json:"available"`
-	DesiredReplicas    int32  `json:"desiredReplicas"`
-	Age                string `json:"age"`
-
-	// Average resource utilization (per pod)
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
-
-	// Update strategy
-	UpdateStrategy       string `json:"updateStrategy,omitempty"`
-	Partition            *int32 `json:"partition,omitempty"`
-	MaxUnavailable       string `json:"maxUnavailable,omitempty"`
-	PodManagementPolicy  string `json:"podManagementPolicy,omitempty"`
-	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
-
-	// Service information
-	ServiceName                          string            `json:"serviceName,omitempty"`
-	ServiceAccount                       string            `json:"serviceAccount,omitempty"`
-	PersistentVolumeClaimRetentionPolicy map[string]string `json:"pvcRetentionPolicy,omitempty"`
-
-	// Pod placement constraints (from the pod template).
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	Tolerations  []string          `json:"tolerations,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Volume claim templates — structured summaries of each entry in
-	// `spec.volumeClaimTemplates`.
-	VolumeClaimTemplates []VolumeClaimTemplateSummary `json:"volumeClaimTemplates,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Revision information
-	CurrentRevision string `json:"currentRevision,omitempty"`
-	UpdateRevision  string `json:"updateRevision,omitempty"`
-	CurrentReplicas int32  `json:"currentReplicas,omitempty"`
-	UpdatedReplicas int32  `json:"updatedReplicas,omitempty"`
-
-	// Status
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	CollisionCount     *int32 `json:"collisionCount,omitempty"`
-}
-
-type DaemonSetDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Desired            int32  `json:"desired"`
-	Current            int32  `json:"current"`
-	Ready              int32  `json:"ready"`
-	UpToDate           int32  `json:"upToDate,omitempty"`
-	Available          int32  `json:"available"`
-	Updated            int32  `json:"updated,omitempty"`
-	Age                string `json:"age"`
-
-	// Average resource utilization (per pod)
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
-
-	// Update strategy
-	UpdateStrategy       string `json:"updateStrategy,omitempty"`
-	MaxUnavailable       string `json:"maxUnavailable,omitempty"`
-	MaxSurge             string `json:"maxSurge,omitempty"`
-	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
-	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
-
-	// Service information
-	ServiceAccount string `json:"serviceAccount,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Pod placement constraints (from the pod template).
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	Tolerations  []string          `json:"tolerations,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Template information
-	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
-	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
-
-	// Pod information
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-
-	// Status
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	NumberMisscheduled int32  `json:"numberMisscheduled,omitempty"`
-	CollisionCount     *int32 `json:"collisionCount,omitempty"`
-}
-
-type JobDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Age                string `json:"age,omitempty"`
-
-	// Job status
-	Status         string       `json:"status,omitempty"`
-	Completions    int32        `json:"completions,omitempty"`
-	Parallelism    int32        `json:"parallelism,omitempty"`
-	Succeeded      int32        `json:"succeeded,omitempty"`
-	Failed         int32        `json:"failed,omitempty"`
-	Active         int32        `json:"active,omitempty"`
-	StartTime      *metav1.Time `json:"startTime,omitempty"`
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-	Duration       string       `json:"duration,omitempty"`
-
-	// Job configuration
-	BackoffLimit            int32  `json:"backoffLimit,omitempty"`
-	ActiveDeadlineSeconds   *int64 `json:"activeDeadlineSeconds,omitempty"`
-	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
-	CompletionMode          string `json:"completionMode,omitempty"`
-	Suspend                 bool   `json:"suspend,omitempty"`
-
-	// Selector and labels
-	Selector    map[string]string `json:"selector,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Pod template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
-
-	// Conditions
-	Conditions []string `json:"conditions,omitempty"`
-
-	// Related pods
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-}
-
-type CronJobDetails struct {
-	// Basic information
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Status             string `json:"status,omitempty"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Details            string `json:"details"`
-	Age                string `json:"age"`
-
-	// Schedule information
-	Schedule              string       `json:"schedule"`
-	Suspend               bool         `json:"suspend"`
-	LastScheduleTime      *metav1.Time `json:"lastScheduleTime,omitempty"`
-	LastSuccessfulTime    *metav1.Time `json:"lastSuccessfulTime,omitempty"`
-	NextScheduleTime      string       `json:"nextScheduleTime,omitempty"`
-	TimeUntilNextSchedule string       `json:"timeUntilNextSchedule,omitempty"`
-
-	// Derived from owned Jobs — bounded by job-history retention. A
-	// nil value can mean "never happened" OR "happened but the job
-	// record has been garbage-collected"; the UI should hint at this.
-	LastManualTime  *metav1.Time `json:"lastManualTime,omitempty"`
-	LastFailureTime *metav1.Time `json:"lastFailureTime,omitempty"`
-
-	// Job configuration
-	ConcurrencyPolicy       string `json:"concurrencyPolicy"`
-	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
-	SuccessfulJobsHistory   int32  `json:"successfulJobsHistory"`
-	FailedJobsHistory       int32  `json:"failedJobsHistory"`
-
-	// Active jobs
-	ActiveJobs []JobReference `json:"activeJobs,omitempty"`
-
-	// All owned jobs (completed, failed, running, etc.)
-	Jobs []JobSimpleInfo `json:"jobs,omitempty"`
-
-	// Job template information
-	JobTemplate JobTemplateDetails `json:"jobTemplate"`
-
-	// Labels and annotations
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Related pods
-	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
-	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
-}
 type JobReference struct {
 	Name      string       `json:"name"`
 	StartTime *metav1.Time `json:"startTime,omitempty"`
@@ -1439,22 +716,19 @@ type JobReference struct {
 
 // JobSimpleInfo provides a summary of a Job for list/tab views.
 type JobSimpleInfo struct {
-	Kind               string       `json:"kind"`
-	Name               string       `json:"name"`
-	Namespace          string       `json:"namespace"`
-	Status             string       `json:"status"`
-	StatusState        string       `json:"statusState,omitempty"`
-	StatusPresentation string       `json:"statusPresentation,omitempty"`
-	StatusReason       string       `json:"statusReason,omitempty"`
-	Completions        string       `json:"completions"` // e.g. "1/1"
-	Succeeded          int32        `json:"succeeded"`
-	Failed             int32        `json:"failed"`
-	Active             int32        `json:"active"`
-	StartTime          *metav1.Time `json:"startTime,omitempty"`
-	CompletionTime     *metav1.Time `json:"completionTime,omitempty"`
-	Duration           string       `json:"duration,omitempty"`
-	DurationSeconds    int64        `json:"durationSeconds,omitempty"`
-	Age                string       `json:"age"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	StatusProjection
+	Completions     string       `json:"completions"` // e.g. "1/1"
+	Succeeded       int32        `json:"succeeded"`
+	Failed          int32        `json:"failed"`
+	Active          int32        `json:"active"`
+	StartTime       *metav1.Time `json:"startTime,omitempty"`
+	CompletionTime  *metav1.Time `json:"completionTime,omitempty"`
+	Duration        string       `json:"duration,omitempty"`
+	DurationSeconds int64        `json:"durationSeconds,omitempty"`
+	Age             string       `json:"age"`
 }
 type JobTemplateDetails struct {
 	Completions             *int32                   `json:"completions,omitempty"`

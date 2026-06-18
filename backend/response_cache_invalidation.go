@@ -15,13 +15,14 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
 	helmReleaseSecretType = "helm.sh/release.v1"
-	helmReleaseNamePrefix = "sh.helm.release.v1."
 	helmReleaseOwnerLabel = "owner"
 	helmReleaseOwnerValue = "helm"
 )
@@ -54,6 +55,8 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	if shared == nil {
 		return
 	}
+	gateway := subsystem.InformerFactory.GatewayInformerFactory()
+	apiext := subsystem.InformerFactory.APIExtensionsInformerFactory()
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool {
@@ -66,17 +69,33 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	// creation for cluster-scoped resources the user cannot list/watch.
 	var perms permissions.ListWatchChecker = subsystem.InformerFactory
 
-	a.registerCoreInvalidation(shared, selectionKey, guard, perms)
-	a.registerAppsInvalidation(shared, selectionKey, guard, perms)
-	a.registerBatchInvalidation(shared, selectionKey, guard, perms)
-	a.registerRBACInvalidation(shared, selectionKey, guard, perms)
-	a.registerStorageInvalidation(shared, selectionKey, guard, perms)
-	a.registerNetworkingInvalidation(shared, selectionKey, guard, perms)
-	a.registerGatewayAPIInvalidation(subsystem.InformerFactory.GatewayInformerFactory(), selectionKey, guard, perms)
-	a.registerAutoscalingInvalidation(shared, selectionKey, guard, perms)
-	a.registerPolicyInvalidation(shared, selectionKey, guard, perms)
-	a.registerAdmissionInvalidation(shared, selectionKey, guard, perms)
-	a.registerAPIExtensionsInvalidation(subsystem.InformerFactory.APIExtensionsInformerFactory(), selectionKey, guard, perms)
+	// Every detail-cacheable kind drives response-cache eviction. The kind registry
+	// is the single source; the informer is read generically from the factory its
+	// group implies (Gateway-API, apiextensions, or the core shared factory), so no
+	// per-kind informer accessor is wired here. Permissions are checked before
+	// ForResource to avoid creating informers the user cannot list/watch.
+	for _, d := range kindregistry.All {
+		if !d.DetailCacheable {
+			continue
+		}
+		group := d.Identity.Group
+		resource := d.Identity.Resource
+		if !perms.CanListWatch(group, resource) {
+			continue
+		}
+		gvr := schema.GroupVersionResource{Group: group, Version: d.Identity.Version, Resource: resource}
+		var informer cache.SharedIndexInformer
+		switch group {
+		case gatewayAPIGroup:
+			informer = gatewayFactoryInformer(gateway, gvr)
+		case apiExtensionsGroup:
+			informer = apiextensionsFactoryInformer(apiext, gvr)
+		default:
+			informer = sharedFactoryInformer(shared, gvr)
+		}
+		a.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity.Kind, guard)
+	}
+
 	if subsystem.ResourceStream != nil {
 		// Use custom resource stream updates to evict cached YAML for dynamic resources.
 		subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
@@ -88,168 +107,51 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	}
 }
 
-func (a *App) registerCoreInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	// All informers watch at cluster scope, so every resource needs a permission check
-	// to prevent lazy informer creation for resources the user cannot list/watch cluster-wide.
-	if perms == nil || perms.CanListWatch("", "pods") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().Pods().Informer(), selectionKey, "Pod", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "configmaps") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().ConfigMaps().Informer(), selectionKey, "ConfigMap", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "secrets") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().Secrets().Informer(), selectionKey, "Secret", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "services") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().Services().Informer(), selectionKey, "Service", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "persistentvolumeclaims") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().PersistentVolumeClaims().Informer(), selectionKey, "PersistentVolumeClaim", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "resourcequotas") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().ResourceQuotas().Informer(), selectionKey, "ResourceQuota", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "limitranges") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().LimitRanges().Informer(), selectionKey, "LimitRange", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "serviceaccounts") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().ServiceAccounts().Informer(), selectionKey, "ServiceAccount", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "namespaces") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().Namespaces().Informer(), selectionKey, "Namespace", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "nodes") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().Nodes().Informer(), selectionKey, "Node", guard)
-	}
-	if perms == nil || perms.CanListWatch("", "persistentvolumes") {
-		a.addResponseCacheInvalidationHandler(shared.Core().V1().PersistentVolumes().Informer(), selectionKey, "PersistentVolume", guard)
-	}
-}
+// gatewayAPIGroup and apiExtensionsGroup select the non-core informer factory for
+// a kind in the response-cache invalidation loop; every other group reads from the
+// core shared informer factory.
+const (
+	gatewayAPIGroup    = "gateway.networking.k8s.io"
+	apiExtensionsGroup = "apiextensions.k8s.io"
+)
 
-func (a *App) registerAppsInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("apps", "replicasets") {
-		a.addResponseCacheInvalidationHandler(shared.Apps().V1().ReplicaSets().Informer(), selectionKey, "ReplicaSet", guard)
-	}
-	if perms == nil || perms.CanListWatch("apps", "deployments") {
-		a.addResponseCacheInvalidationHandler(shared.Apps().V1().Deployments().Informer(), selectionKey, "Deployment", guard)
-	}
-	if perms == nil || perms.CanListWatch("apps", "statefulsets") {
-		a.addResponseCacheInvalidationHandler(shared.Apps().V1().StatefulSets().Informer(), selectionKey, "StatefulSet", guard)
-	}
-	if perms == nil || perms.CanListWatch("apps", "daemonsets") {
-		a.addResponseCacheInvalidationHandler(shared.Apps().V1().DaemonSets().Informer(), selectionKey, "DaemonSet", guard)
-	}
-}
-
-func (a *App) registerBatchInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("batch", "jobs") {
-		a.addResponseCacheInvalidationHandler(shared.Batch().V1().Jobs().Informer(), selectionKey, "Job", guard)
-	}
-	if perms == nil || perms.CanListWatch("batch", "cronjobs") {
-		a.addResponseCacheInvalidationHandler(shared.Batch().V1().CronJobs().Informer(), selectionKey, "CronJob", guard)
-	}
-}
-
-func (a *App) registerRBACInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("rbac.authorization.k8s.io", "roles") {
-		a.addResponseCacheInvalidationHandler(shared.Rbac().V1().Roles().Informer(), selectionKey, "Role", guard)
-	}
-	if perms == nil || perms.CanListWatch("rbac.authorization.k8s.io", "rolebindings") {
-		a.addResponseCacheInvalidationHandler(shared.Rbac().V1().RoleBindings().Informer(), selectionKey, "RoleBinding", guard)
-	}
-	if perms == nil || perms.CanListWatch("rbac.authorization.k8s.io", "clusterroles") {
-		a.addResponseCacheInvalidationHandler(shared.Rbac().V1().ClusterRoles().Informer(), selectionKey, "ClusterRole", guard)
-	}
-	if perms == nil || perms.CanListWatch("rbac.authorization.k8s.io", "clusterrolebindings") {
-		a.addResponseCacheInvalidationHandler(shared.Rbac().V1().ClusterRoleBindings().Informer(), selectionKey, "ClusterRoleBinding", guard)
-	}
-}
-
-func (a *App) registerStorageInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	// StorageClasses are cluster-scoped — gate on permissions.
-	if perms == nil || perms.CanListWatch("storage.k8s.io", "storageclasses") {
-		a.addResponseCacheInvalidationHandler(shared.Storage().V1().StorageClasses().Informer(), selectionKey, "StorageClass", guard)
-	}
-}
-
-func (a *App) registerNetworkingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("networking.k8s.io", "ingresses") {
-		a.addResponseCacheInvalidationHandler(shared.Networking().V1().Ingresses().Informer(), selectionKey, "Ingress", guard)
-	}
-	if perms == nil || perms.CanListWatch("networking.k8s.io", "networkpolicies") {
-		a.addResponseCacheInvalidationHandler(shared.Networking().V1().NetworkPolicies().Informer(), selectionKey, "NetworkPolicy", guard)
-	}
-	if perms == nil || perms.CanListWatch("discovery.k8s.io", "endpointslices") {
-		a.addResponseCacheInvalidationHandler(shared.Discovery().V1().EndpointSlices().Informer(), selectionKey, "EndpointSlice", guard)
-	}
-	if perms == nil || perms.CanListWatch("networking.k8s.io", "ingressclasses") {
-		a.addResponseCacheInvalidationHandler(shared.Networking().V1().IngressClasses().Informer(), selectionKey, "IngressClass", guard)
-	}
-}
-
-func (a *App) registerGatewayAPIInvalidation(factory gatewayinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
+// sharedFactoryInformer returns the core shared informer for a GVR, reading it
+// generically via ForResource so no per-kind accessor is wired. Returns nil when
+// the factory is absent or cannot serve the GVR; the caller's handler registration
+// is a no-op on nil.
+func sharedFactoryInformer(factory informers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
 	if factory == nil {
-		return
+		return nil
 	}
-	gateway := factory.Gateway().V1()
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "gatewayclasses") {
-		a.addResponseCacheInvalidationHandler(gateway.GatewayClasses().Informer(), selectionKey, "GatewayClass", guard)
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
 	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "gateways") {
-		a.addResponseCacheInvalidationHandler(gateway.Gateways().Informer(), selectionKey, "Gateway", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "httproutes") {
-		a.addResponseCacheInvalidationHandler(gateway.HTTPRoutes().Informer(), selectionKey, "HTTPRoute", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "grpcroutes") {
-		a.addResponseCacheInvalidationHandler(gateway.GRPCRoutes().Informer(), selectionKey, "GRPCRoute", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "tlsroutes") {
-		a.addResponseCacheInvalidationHandler(gateway.TLSRoutes().Informer(), selectionKey, "TLSRoute", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "listenersets") {
-		a.addResponseCacheInvalidationHandler(gateway.ListenerSets().Informer(), selectionKey, "ListenerSet", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "referencegrants") {
-		a.addResponseCacheInvalidationHandler(gateway.ReferenceGrants().Informer(), selectionKey, "ReferenceGrant", guard)
-	}
-	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "backendtlspolicies") {
-		a.addResponseCacheInvalidationHandler(gateway.BackendTLSPolicies().Informer(), selectionKey, "BackendTLSPolicy", guard)
-	}
+	return generic.Informer()
 }
 
-func (a *App) registerAutoscalingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("autoscaling", "horizontalpodautoscalers") {
-		a.addResponseCacheInvalidationHandler(shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer(), selectionKey, "HorizontalPodAutoscaler", guard)
+// gatewayFactoryInformer is sharedFactoryInformer for the Gateway-API factory.
+func gatewayFactoryInformer(factory gatewayinformers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
+	if factory == nil {
+		return nil
 	}
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
+	}
+	return generic.Informer()
 }
 
-func (a *App) registerPolicyInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if perms == nil || perms.CanListWatch("policy", "poddisruptionbudgets") {
-		a.addResponseCacheInvalidationHandler(shared.Policy().V1().PodDisruptionBudgets().Informer(), selectionKey, "PodDisruptionBudget", guard)
+// apiextensionsFactoryInformer is sharedFactoryInformer for the apiextensions factory.
+func apiextensionsFactoryInformer(factory apiextensionsinformers.SharedInformerFactory, gvr schema.GroupVersionResource) cache.SharedIndexInformer {
+	if factory == nil {
+		return nil
 	}
-}
-
-func (a *App) registerAdmissionInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	// MutatingWebhookConfigurations and ValidatingWebhookConfigurations are cluster-scoped — gate on permissions.
-	if perms == nil || perms.CanListWatch("admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
-		a.addResponseCacheInvalidationHandler(shared.Admissionregistration().V1().MutatingWebhookConfigurations().Informer(), selectionKey, "MutatingWebhookConfiguration", guard)
+	generic, err := factory.ForResource(gvr)
+	if err != nil {
+		return nil
 	}
-	if perms == nil || perms.CanListWatch("admissionregistration.k8s.io", "validatingwebhookconfigurations") {
-		a.addResponseCacheInvalidationHandler(shared.Admissionregistration().V1().ValidatingWebhookConfigurations().Informer(), selectionKey, "ValidatingWebhookConfiguration", guard)
-	}
-}
-
-func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
-	if shared == nil {
-		return
-	}
-	// CustomResourceDefinitions are cluster-scoped — gate on permissions.
-	if perms != nil && !perms.CanListWatch("apiextensions.k8s.io", "customresourcedefinitions") {
-		return
-	}
-	informer := shared.Apiextensions().V1().CustomResourceDefinitions().Informer()
-	a.addResponseCacheInvalidationHandler(informer, selectionKey, "CustomResourceDefinition", guard)
+	return generic.Informer()
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.
@@ -351,12 +253,12 @@ func (a *App) invalidateHelmCacheIfNeeded(selectionKey string, obj interface{}) 
 		if !isHelmReleaseObject(typed.Name, typed.Labels, string(typed.Type)) {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, helmReleaseName(typed.Name))
+		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	case *corev1.ConfigMap:
 		if !isHelmReleaseObject(typed.Name, typed.Labels, "") {
 			return
 		}
-		a.invalidateHelmCache(selectionKey, typed.Namespace, helmReleaseName(typed.Name))
+		a.invalidateHelmCache(selectionKey, typed.Namespace, resourcemodel.HelmReleaseName(typed.Name))
 	}
 }
 
@@ -437,17 +339,5 @@ func isHelmReleaseObject(name string, labels map[string]string, secretType strin
 			return true
 		}
 	}
-	return strings.HasPrefix(name, helmReleaseNamePrefix)
-}
-
-func helmReleaseName(name string) string {
-	if !strings.HasPrefix(name, helmReleaseNamePrefix) {
-		return name
-	}
-	trimmed := strings.TrimPrefix(name, helmReleaseNamePrefix)
-	index := strings.LastIndex(trimmed, ".v")
-	if index <= 0 {
-		return trimmed
-	}
-	return trimmed[:index]
+	return strings.HasPrefix(name, resourcemodel.HelmReleaseNamePrefix)
 }

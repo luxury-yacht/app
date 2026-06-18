@@ -9,6 +9,15 @@ package resourcestream
 import (
 	"fmt"
 
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
+
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -43,8 +52,8 @@ func (m *Manager) broadcastPodRow(
 	if pod == nil {
 		return
 	}
-	summary := snapshot.BuildPodSummary(m.clusterMeta, pod, podUsage, m.rsLister)
-	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	summary := podStreamRow(m, pod, podUsage)
+	ref := m.resourceRefForObject(pod, podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainPods, pod, ref, summary)
 	if len(scopes) == 0 {
 		scopes = scopesForPod(summary)
@@ -67,8 +76,8 @@ func (m *Manager) handlePodEvent(oldObj interface{}, newObj interface{}, updateT
 			return
 		}
 		podUsage := m.podMetricsSnapshot()
-		oldSummary := snapshot.BuildPodSummary(m.clusterMeta, oldPod, podUsage, m.rsLister)
-		newSummary := snapshot.BuildPodSummary(m.clusterMeta, newPod, podUsage, m.rsLister)
+		oldSummary := podStreamRow(m, oldPod, podUsage)
+		newSummary := podStreamRow(m, newPod, podUsage)
 		if staleScopes := stalePodScopes(oldSummary, newSummary); len(staleScopes) > 0 {
 			m.broadcastPodRow(oldPod, MessageTypeDeleted, staleScopes, podUsage)
 		}
@@ -156,7 +165,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	ref := m.resourceRefForObject(node, "", "v1", "Node", "nodes")
+	ref := m.resourceRefForObject(node, nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNodes, node, ref, summary)
 
 	m.broadcast(domainNodes, []string{""}, update)
@@ -199,15 +208,15 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 func (m *Manager) workloadRef(workload metav1.Object, kind string) resourcemodel.ResourceRef {
 	switch workload.(type) {
 	case *appsv1.Deployment:
-		return m.resourceRefForObject(workload, "apps", "v1", "Deployment", "deployments")
+		return m.resourceRefForObject(workload, deploymentpkg.Identity.Group, deploymentpkg.Identity.Version, deploymentpkg.Identity.Kind, deploymentpkg.Identity.Resource)
 	case *appsv1.StatefulSet:
-		return m.resourceRefForObject(workload, "apps", "v1", "StatefulSet", "statefulsets")
+		return m.resourceRefForObject(workload, statefulsetpkg.Identity.Group, statefulsetpkg.Identity.Version, statefulsetpkg.Identity.Kind, statefulsetpkg.Identity.Resource)
 	case *appsv1.DaemonSet:
-		return m.resourceRefForObject(workload, "apps", "v1", "DaemonSet", "daemonsets")
+		return m.resourceRefForObject(workload, daemonsetpkg.Identity.Group, daemonsetpkg.Identity.Version, daemonsetpkg.Identity.Kind, daemonsetpkg.Identity.Resource)
 	case *batchv1.Job:
-		return m.resourceRefForObject(workload, "batch", "v1", "Job", "jobs")
+		return m.resourceRefForObject(workload, jobpkg.Identity.Group, jobpkg.Identity.Version, jobpkg.Identity.Kind, jobpkg.Identity.Resource)
 	case *batchv1.CronJob:
-		return m.resourceRefForObject(workload, "batch", "v1", "CronJob", "cronjobs")
+		return m.resourceRefForObject(workload, cronjobpkg.Identity.Group, cronjobpkg.Identity.Version, cronjobpkg.Identity.Kind, cronjobpkg.Identity.Resource)
 	default:
 		return m.resourceRefForObject(workload, "", "", kind, "")
 	}
@@ -298,7 +307,7 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 		return
 	}
 	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, m.podMetricsSnapshot(), hpas...)
-	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	ref := m.resourceRefForObject(pod, podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource)
 	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, pod, ref, summary)
 	update.ResourceVersion = resourceVersion
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
@@ -314,7 +323,7 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 
 	hpas := m.hpasForWorkloadContext(pod.Namespace, nil, updateType)
 	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage, hpas...)
-	ref := m.resourceRefForObject(pod, "", "v1", "Pod", "pods")
+	ref := m.resourceRefForObject(pod, podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainWorkloads, pod, ref, summary)
 
 	m.broadcast(domainWorkloads, scopesForNamespace(pod.Namespace), update)
@@ -356,7 +365,15 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		return
 	}
 
-	ref := m.resourceRefForObject(node, "", "v1", "Node", "nodes")
+	ref := m.resourceRefForObject(node, nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource)
 	update := m.newObjectRowUpdate(MessageTypeModified, domainNodes, node, ref, summary)
 	m.broadcast(domainNodes, []string{""}, update)
+}
+
+// podStreamRow resolves a pod's current usage and builds its row via the pods
+// package (which cannot import refresh/metrics — it would cycle through
+// resourcecontract — so the manager owns the usage lookup).
+func podStreamRow(m *Manager, pod *corev1.Pod, podUsage map[string]metrics.PodUsage) snapshot.PodSummary {
+	usage := podUsage[pod.Namespace+"/"+pod.Name]
+	return podres.BuildStreamSummary(m.clusterMeta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, m.rsLister)
 }

@@ -17,16 +17,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,9 +34,7 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
-	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -50,9 +43,24 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
 const podNodeIndexName = "pods:node"
@@ -79,7 +87,6 @@ const (
 
 const (
 	helmReleaseSecretType = "helm.sh/release.v1"
-	helmReleaseNamePrefix = "sh.helm.release.v1."
 	helmReleaseOwnerLabel = "owner"
 	helmReleaseOwnerValue = "helm"
 )
@@ -99,60 +106,13 @@ type bufferedUpdate struct {
 	update   Update
 }
 
-// updateBuffer stores a fixed-size ring of updates for stream resumption.
-type updateBuffer struct {
-	items []bufferedUpdate
-	start int
-	count int
-	max   int
-}
+// updateBuffer is the per-domain/scope resume buffer; the ring + replay logic is
+// shared via ringbuffer.Buffer.
+type updateBuffer = ringbuffer.Buffer[bufferedUpdate]
 
 // newUpdateBuffer allocates a resume buffer capped at the requested size.
 func newUpdateBuffer(max int) *updateBuffer {
-	return &updateBuffer{
-		items: make([]bufferedUpdate, max),
-		max:   max,
-	}
-}
-
-// add inserts an update, evicting the oldest when the buffer is full.
-func (b *updateBuffer) add(update bufferedUpdate) {
-	if b.max == 0 {
-		return
-	}
-	if b.count < b.max {
-		index := (b.start + b.count) % b.max
-		b.items[index] = update
-		b.count++
-		return
-	}
-	b.items[b.start] = update
-	b.start = (b.start + 1) % b.max
-}
-
-// since returns updates newer than the provided sequence, or false if too old.
-func (b *updateBuffer) since(sequence uint64) ([]bufferedUpdate, bool) {
-	if b.count == 0 {
-		return nil, false
-	}
-	oldest := b.items[b.start].sequence
-	latestIndex := (b.start + b.count - 1) % b.max
-	latest := b.items[latestIndex].sequence
-	if sequence < oldest {
-		return nil, false
-	}
-	if sequence >= latest {
-		return []bufferedUpdate{}, true
-	}
-	updates := make([]bufferedUpdate, 0, b.count)
-	for i := 0; i < b.count; i++ {
-		index := (b.start + i) % b.max
-		item := b.items[index]
-		if item.sequence > sequence {
-			updates = append(updates, item)
-		}
-	}
-	return updates, true
+	return ringbuffer.New(max, func(u bufferedUpdate) uint64 { return u.sequence })
 }
 
 func (s *subscription) close(reason DropReason) {
@@ -222,8 +182,6 @@ type Manager struct {
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
 	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
-	ingressLister    networklisters.IngressLister
-	policyLister     networklisters.NetworkPolicyLister
 
 	customInformerMu sync.Mutex
 	customInformers  map[string]*customResourceInformer
@@ -285,13 +243,10 @@ func NewManager(
 	mgr.registerPodStreams(factory)
 	mgr.registerConfigStreams(factory)
 	mgr.registerNetworkStreams(factory)
-	mgr.registerStorageStreams(factory)
+	mgr.registerDescriptorStreams(factory)
 	mgr.registerAutoscalingStreams(factory)
 	mgr.registerNodeStreams(factory)
 	mgr.registerWorkloadStreams(factory)
-	mgr.registerRBACStreams(factory)
-	mgr.registerQuotaStreams(factory)
-	mgr.registerClusterConfigStreams(factory)
 
 	mgr.initCustomResourceInformers(factory)
 
@@ -573,12 +528,12 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		// for both the cluster-scoped and namespace-scoped paths.
 		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
+			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
 			// set for anything that reaches an informer).
-			row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
+			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)
@@ -598,7 +553,7 @@ func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
 	}
 
 	ref := m.resourceRefForObject(crd, "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions")
-	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, snapshot.BuildClusterCRDSummary(m.clusterMeta, crd))
+	update := m.newObjectRowUpdate(updateType, domainClusterCRDs, crd, ref, apiextensionspkg.BuildStreamSummary(m.clusterMeta, crd))
 
 	m.broadcast(domainClusterCRDs, scopesForCluster(), update)
 }
@@ -661,8 +616,8 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary := snapshot.BuildConfigMapSummary(m.clusterMeta, cm)
-	ref := m.resourceRefForObject(cm, "", "v1", "ConfigMap", "configmaps")
+	summary := configmap.BuildStreamSummary(m.clusterMeta, cm)
+	ref := m.resourceRefForObject(cm, configmap.Identity.Group, configmap.Identity.Version, configmap.Identity.Kind, configmap.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
@@ -694,8 +649,8 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	summary := snapshot.BuildSecretSummary(m.clusterMeta, secret)
-	ref := m.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
+	summary := secretpkg.BuildStreamSummary(m.clusterMeta, secret)
+	ref := m.resourceRefForObject(secret, secretpkg.Identity.Group, secretpkg.Identity.Version, secretpkg.Identity.Kind, secretpkg.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, ref, summary)
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
@@ -743,14 +698,14 @@ func helmReleaseKeyForConfigMap(cm *corev1.ConfigMap) string {
 	if cm == nil || !isHelmReleaseObject(cm.Name, cm.Labels, "") {
 		return ""
 	}
-	return cm.Namespace + "/" + helmReleaseName(cm.Name)
+	return cm.Namespace + "/" + resourcemodel.HelmReleaseName(cm.Name)
 }
 
 func helmReleaseKeyForSecret(secret *corev1.Secret) string {
 	if secret == nil || !isHelmReleaseObject(secret.Name, secret.Labels, string(secret.Type)) {
 		return ""
 	}
-	return secret.Namespace + "/" + helmReleaseName(secret.Name)
+	return secret.Namespace + "/" + resourcemodel.HelmReleaseName(secret.Name)
 }
 
 func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, updateType MessageType) {
@@ -764,7 +719,7 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 		reason = "helm release updated"
 	}
 
-	releaseName := helmReleaseName(name)
+	releaseName := resourcemodel.HelmReleaseName(name)
 	ref := m.helmReleaseRef(namespace, releaseName)
 	// COMPLETE is scope-level resync. Ref is carried as diagnostic context
 	// so debugging can see which Helm release triggered the resync.
@@ -780,72 +735,7 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
 }
 
-func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
-	role := roleFromObject(obj)
-	if role == nil {
-		return
-	}
-
-	summary := snapshot.BuildRoleSummary(m.clusterMeta, role)
-	ref := m.resourceRefForObject(role, "rbac.authorization.k8s.io", "v1", "Role", "roles")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, role, ref, summary)
-
-	m.broadcast(domainNamespaceRBAC, scopesForNamespace(role.Namespace), update)
-}
-
-func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
-	binding := roleBindingFromObject(obj)
-	if binding == nil {
-		return
-	}
-
-	summary := snapshot.BuildRoleBindingSummary(m.clusterMeta, binding)
-	ref := m.resourceRefForObject(binding, "rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, binding, ref, summary)
-
-	m.broadcast(domainNamespaceRBAC, scopesForNamespace(binding.Namespace), update)
-}
-
-func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) {
-	serviceAccount := serviceAccountFromObject(obj)
-	if serviceAccount == nil {
-		return
-	}
-
-	summary := snapshot.BuildServiceAccountSummary(m.clusterMeta, serviceAccount)
-	ref := m.resourceRefForObject(serviceAccount, "", "v1", "ServiceAccount", "serviceaccounts")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceRBAC, serviceAccount, ref, summary)
-
-	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
-}
-
 // Cluster RBAC updates target the cluster scope only.
-func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
-	role := clusterRoleFromObject(obj)
-	if role == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterRoleSummary(m.clusterMeta, role)
-	ref := m.resourceRefForObject(role, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles")
-	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, role, ref, summary)
-
-	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
-}
-
-func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageType) {
-	binding := clusterRoleBindingFromObject(obj)
-	if binding == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterRoleBindingSummary(m.clusterMeta, binding)
-	ref := m.resourceRefForObject(binding, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings")
-	update := m.newObjectRowUpdate(updateType, domainClusterRBAC, binding, ref, summary)
-
-	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
-}
-
 func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 	service := serviceFromObject(obj)
 	if service == nil {
@@ -861,8 +751,8 @@ func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices))
+	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, servicepkg.BuildStreamSummary(m.clusterMeta, service, slices))
 
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
 }
@@ -874,8 +764,8 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	}
 	serviceName := endpointSliceServiceName(slice)
 
-	ref := m.resourceRefForObject(slice, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice))
+	ref := m.resourceRefForObject(slice, endpointslice.Identity.Group, endpointslice.Identity.Version, endpointslice.Identity.Kind, endpointslice.Identity.Resource)
+	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, endpointslice.BuildStreamSummary(m.clusterMeta, slice))
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
 
 	m.broadcastServiceFromEndpointSlice(slice, serviceName)
@@ -924,199 +814,23 @@ func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointS
 	if err != nil || service == nil {
 		return
 	}
-	serviceSummary := snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
-	ref := m.resourceRefForObject(service, "", "v1", "Service", "services")
+	serviceSummary := servicepkg.BuildStreamSummary(m.clusterMeta, service, slices)
+	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
 	serviceUpdate := m.newObjectRowUpdate(MessageTypeModified, domainNamespaceNetwork, service, ref, serviceSummary)
 	serviceUpdate.ResourceVersion = slice.ResourceVersion
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
 }
 
-func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
-	ingress := ingressFromObject(obj)
-	if ingress == nil {
-		return
-	}
-
-	ref := m.resourceRefForObject(ingress, "networking.k8s.io", "v1", "Ingress", "ingresses")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, ingress, ref, snapshot.BuildIngressNetworkSummary(m.clusterMeta, ingress))
-
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(ingress.Namespace), update)
-}
-
-func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
-	policy := networkPolicyFromObject(obj)
-	if policy == nil {
-		return
-	}
-
-	ref := m.resourceRefForObject(policy, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, policy, ref, snapshot.BuildNetworkPolicySummary(m.clusterMeta, policy))
-
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(policy.Namespace), update)
-}
-
-func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
-	item := gatewayFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "Gateway", "gateways", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
-	item := httpRouteFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "HTTPRoute", "httproutes", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
-	item := grpcRouteFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "GRPCRoute", "grpcroutes", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
-	item := tlsRouteFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "TLSRoute", "tlsroutes", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
-	item := listenerSetFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "ListenerSet", "listenersets", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
-	item := referenceGrantFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "ReferenceGrant", "referencegrants", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
-	item := backendTLSPolicyFromObject(obj)
-	if item == nil {
-		return
-	}
-	m.broadcastGatewayNetworkUpdate(updateType, item, "BackendTLSPolicy", "backendtlspolicies", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
-}
-
-func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, obj metav1.Object, kind, resource string, row snapshot.NetworkSummary) {
-	ref := m.resourceRefForObject(obj, "gateway.networking.k8s.io", "v1", kind, resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, obj, ref, row)
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(obj.GetNamespace()), update)
-}
-
 // Cluster configuration updates stream shared cluster resources.
-func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
-	storageClass := storageClassFromObject(obj)
-	if storageClass == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterStorageClassSummary(m.clusterMeta, storageClass)
-	ref := m.resourceRefForObject(storageClass, "storage.k8s.io", "v1", "StorageClass", "storageclasses")
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, storageClass, ref, summary)
-
-	m.broadcast(domainClusterConfig, scopesForCluster(), update)
-}
-
-func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
-	ingressClass := ingressClassFromObject(obj)
-	if ingressClass == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterIngressClassSummary(m.clusterMeta, ingressClass)
-	ref := m.resourceRefForObject(ingressClass, "networking.k8s.io", "v1", "IngressClass", "ingressclasses")
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, ingressClass, ref, summary)
-
-	m.broadcast(domainClusterConfig, scopesForCluster(), update)
-}
-
-func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
-	gatewayClass := gatewayClassFromObject(obj)
-	if gatewayClass == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterGatewayClassSummary(m.clusterMeta, gatewayClass)
-	ref := m.resourceRefForObject(gatewayClass, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses")
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, gatewayClass, ref, summary)
-
-	m.broadcast(domainClusterConfig, scopesForCluster(), update)
-}
-
-func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageType) {
-	webhook := validatingWebhookFromObject(obj)
-	if webhook == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterValidatingWebhookSummary(m.clusterMeta, webhook)
-	ref := m.resourceRefForObject(webhook, "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations")
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, ref, summary)
-
-	m.broadcast(domainClusterConfig, scopesForCluster(), update)
-}
-
-func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType) {
-	webhook := mutatingWebhookFromObject(obj)
-	if webhook == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterMutatingWebhookSummary(m.clusterMeta, webhook)
-	ref := m.resourceRefForObject(webhook, "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations")
-	update := m.newObjectRowUpdate(updateType, domainClusterConfig, webhook, ref, summary)
-
-	m.broadcast(domainClusterConfig, scopesForCluster(), update)
-}
-
-func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {
-	pvc := persistentVolumeClaimFromObject(obj)
-	if pvc == nil {
-		return
-	}
-
-	ref := m.resourceRefForObject(pvc, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceStorage, pvc, ref, snapshot.BuildPVCStorageSummary(m.clusterMeta, pvc))
-
-	m.broadcast(domainNamespaceStorage, scopesForNamespace(pvc.Namespace), update)
-}
-
 // Persistent volumes belong to the cluster storage domain.
-func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType) {
-	pv := persistentVolumeFromObject(obj)
-	if pv == nil {
-		return
-	}
-
-	summary := snapshot.BuildClusterStorageSummary(m.clusterMeta, pv)
-	ref := m.resourceRefForObject(pv, "", "v1", "PersistentVolume", "persistentvolumes")
-	update := m.newObjectRowUpdate(updateType, domainClusterStorage, pv, ref, summary)
-
-	m.broadcast(domainClusterStorage, scopesForCluster(), update)
-}
-
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	hpa := hpaFromObject(obj)
 	if hpa == nil {
 		return
 	}
 
-	ref := m.resourceRefForObject(hpa, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, snapshot.BuildHPASummary(m.clusterMeta, hpa))
+	ref := m.resourceRefForObject(hpa, hpapkg.IdentityV1.Group, hpapkg.IdentityV1.Version, hpapkg.IdentityV1.Kind, hpapkg.IdentityV1.Resource)
+	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, hpapkg.BuildStreamSummary(m.clusterMeta, hpa))
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
 	m.handleWorkloadFromHPA(hpa, updateType)
@@ -1147,7 +861,7 @@ func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscal
 		return
 	}
 	hpas := m.hpasForWorkloadContext(namespace, hpa, updateType)
-	if kind == "Pod" {
+	if kind == podspkg.Identity.Kind {
 		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion, hpas)
 		return
 	}
@@ -1164,11 +878,11 @@ func hpaWorkloadTarget(hpa *autoscalingv1.HorizontalPodAutoscaler) (namespace, k
 		return "", "", "", false
 	}
 	switch {
-	case gvk.Group == "apps" && gvk.Version == "v1" && (gvk.Kind == "Deployment" || gvk.Kind == "StatefulSet" || gvk.Kind == "DaemonSet"):
+	case gvk.Group == "apps" && gvk.Version == "v1" && (gvk.Kind == deploymentpkg.Identity.Kind || gvk.Kind == statefulsetpkg.Identity.Kind || gvk.Kind == daemonsetpkg.Identity.Kind):
 		return hpa.Namespace, gvk.Kind, ref.Name, true
-	case gvk.Group == "batch" && gvk.Version == "v1" && (gvk.Kind == "Job" || gvk.Kind == "CronJob"):
+	case gvk.Group == "batch" && gvk.Version == "v1" && (gvk.Kind == jobpkg.Identity.Kind || gvk.Kind == cronjobpkg.Identity.Kind):
 		return hpa.Namespace, gvk.Kind, ref.Name, true
-	case gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == "Pod":
+	case gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == podspkg.Identity.Kind:
 		return hpa.Namespace, gvk.Kind, ref.Name, true
 	default:
 		return "", "", "", false
@@ -1181,45 +895,6 @@ func hpaWorkloadKey(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
 		return ""
 	}
 	return snapshot.WorkloadOwnerKey(kind, namespace, name)
-}
-
-func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
-	quota := resourceQuotaFromObject(obj)
-	if quota == nil {
-		return
-	}
-
-	summary := snapshot.BuildResourceQuotaSummary(m.clusterMeta, quota)
-	ref := m.resourceRefForObject(quota, "", "v1", "ResourceQuota", "resourcequotas")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, quota, ref, summary)
-
-	m.broadcast(domainNamespaceQuotas, scopesForNamespace(quota.Namespace), update)
-}
-
-func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
-	limit := limitRangeFromObject(obj)
-	if limit == nil {
-		return
-	}
-
-	summary := snapshot.BuildLimitRangeSummary(m.clusterMeta, limit)
-	ref := m.resourceRefForObject(limit, "", "v1", "LimitRange", "limitranges")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, limit, ref, summary)
-
-	m.broadcast(domainNamespaceQuotas, scopesForNamespace(limit.Namespace), update)
-}
-
-func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageType) {
-	pdb := podDisruptionBudgetFromObject(obj)
-	if pdb == nil {
-		return
-	}
-
-	summary := snapshot.BuildPodDisruptionBudgetSummary(m.clusterMeta, pdb)
-	ref := m.resourceRefForObject(pdb, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets")
-	update := m.newObjectRowUpdate(updateType, domainNamespaceQuotas, pdb, ref, summary)
-
-	m.broadcast(domainNamespaceQuotas, scopesForNamespace(pdb.Namespace), update)
 }
 
 func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
@@ -1261,7 +936,7 @@ func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update,
 		sequence := m.nextSequenceLocked(domain, scope)
 		scopedUpdate.Sequence = strconv.FormatUint(sequence, 10)
 		buffer := m.bufferLocked(domain, scope)
-		buffer.add(bufferedUpdate{sequence: sequence, update: scopedUpdate})
+		buffer.Add(bufferedUpdate{sequence: sequence, update: scopedUpdate})
 	}
 	if len(scopeSubs) == 0 {
 		return scopedUpdate, nil
@@ -1534,15 +1209,15 @@ func (m *Manager) lookupWorkload(kind, namespace, name string) (metav1.Object, e
 func workloadFromObject(obj interface{}) (metav1.Object, string) {
 	switch typed := obj.(type) {
 	case *appsv1.Deployment:
-		return typed, "Deployment"
+		return typed, deploymentpkg.Identity.Kind
 	case *appsv1.StatefulSet:
-		return typed, "StatefulSet"
+		return typed, statefulsetpkg.Identity.Kind
 	case *appsv1.DaemonSet:
-		return typed, "DaemonSet"
+		return typed, daemonsetpkg.Identity.Kind
 	case *batchv1.Job:
-		return typed, "Job"
+		return typed, jobpkg.Identity.Kind
 	case *batchv1.CronJob:
-		return typed, "CronJob"
+		return typed, cronjobpkg.Identity.Kind
 	case cache.DeletedFinalStateUnknown:
 		return workloadFromObject(typed.Obj)
 	default:
@@ -1550,378 +1225,58 @@ func workloadFromObject(obj interface{}) (metav1.Object, string) {
 	}
 }
 
+// The *FromObject decoders adapt the generic objectAs[T] (type assertion +
+// delete-tombstone unwrap) to the ergonomic nil-returning form their call sites
+// use — including dual-decode compares in the event/fanout handlers. The unwrap
+// logic lives once in objectAs.
 func replicaSetFromObject(obj interface{}) *appsv1.ReplicaSet {
-	switch typed := obj.(type) {
-	case *appsv1.ReplicaSet:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return replicaSetFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*appsv1.ReplicaSet](obj)
+	return typed
 }
 
 func customResourceDefinitionFromObject(obj interface{}) *apiextensionsv1.CustomResourceDefinition {
-	switch typed := obj.(type) {
-	case *apiextensionsv1.CustomResourceDefinition:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return customResourceDefinitionFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*apiextensionsv1.CustomResourceDefinition](obj)
+	return typed
 }
 
 func customResourceFromObject(obj interface{}) *unstructured.Unstructured {
-	switch typed := obj.(type) {
-	case *unstructured.Unstructured:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return customResourceFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*unstructured.Unstructured](obj)
+	return typed
 }
 
 func podFromObject(obj interface{}) *corev1.Pod {
-	switch typed := obj.(type) {
-	case *corev1.Pod:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return podFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*corev1.Pod](obj)
+	return typed
 }
 
 func nodeFromObject(obj interface{}) *corev1.Node {
-	switch typed := obj.(type) {
-	case *corev1.Node:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return nodeFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*corev1.Node](obj)
+	return typed
 }
 
 func configMapFromObject(obj interface{}) *corev1.ConfigMap {
-	switch typed := obj.(type) {
-	case *corev1.ConfigMap:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return configMapFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*corev1.ConfigMap](obj)
+	return typed
 }
 
 func secretFromObject(obj interface{}) *corev1.Secret {
-	switch typed := obj.(type) {
-	case *corev1.Secret:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return secretFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func roleFromObject(obj interface{}) *rbacv1.Role {
-	switch typed := obj.(type) {
-	case *rbacv1.Role:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return roleFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func roleBindingFromObject(obj interface{}) *rbacv1.RoleBinding {
-	switch typed := obj.(type) {
-	case *rbacv1.RoleBinding:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return roleBindingFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func clusterRoleFromObject(obj interface{}) *rbacv1.ClusterRole {
-	switch typed := obj.(type) {
-	case *rbacv1.ClusterRole:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return clusterRoleFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func clusterRoleBindingFromObject(obj interface{}) *rbacv1.ClusterRoleBinding {
-	switch typed := obj.(type) {
-	case *rbacv1.ClusterRoleBinding:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return clusterRoleBindingFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func serviceAccountFromObject(obj interface{}) *corev1.ServiceAccount {
-	switch typed := obj.(type) {
-	case *corev1.ServiceAccount:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return serviceAccountFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*corev1.Secret](obj)
+	return typed
 }
 
 func serviceFromObject(obj interface{}) *corev1.Service {
-	switch typed := obj.(type) {
-	case *corev1.Service:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return serviceFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*corev1.Service](obj)
+	return typed
 }
 
 func endpointSliceFromObject(obj interface{}) *discoveryv1.EndpointSlice {
-	switch typed := obj.(type) {
-	case *discoveryv1.EndpointSlice:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return endpointSliceFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func ingressFromObject(obj interface{}) *networkingv1.Ingress {
-	switch typed := obj.(type) {
-	case *networkingv1.Ingress:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return ingressFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func ingressClassFromObject(obj interface{}) *networkingv1.IngressClass {
-	switch typed := obj.(type) {
-	case *networkingv1.IngressClass:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return ingressClassFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func networkPolicyFromObject(obj interface{}) *networkingv1.NetworkPolicy {
-	switch typed := obj.(type) {
-	case *networkingv1.NetworkPolicy:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return networkPolicyFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func gatewayClassFromObject(obj interface{}) *gatewayv1.GatewayClass {
-	switch typed := obj.(type) {
-	case *gatewayv1.GatewayClass:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return gatewayClassFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func gatewayFromObject(obj interface{}) *gatewayv1.Gateway {
-	switch typed := obj.(type) {
-	case *gatewayv1.Gateway:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return gatewayFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func httpRouteFromObject(obj interface{}) *gatewayv1.HTTPRoute {
-	switch typed := obj.(type) {
-	case *gatewayv1.HTTPRoute:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return httpRouteFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func grpcRouteFromObject(obj interface{}) *gatewayv1.GRPCRoute {
-	switch typed := obj.(type) {
-	case *gatewayv1.GRPCRoute:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return grpcRouteFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func tlsRouteFromObject(obj interface{}) *gatewayv1.TLSRoute {
-	switch typed := obj.(type) {
-	case *gatewayv1.TLSRoute:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return tlsRouteFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func listenerSetFromObject(obj interface{}) *gatewayv1.ListenerSet {
-	switch typed := obj.(type) {
-	case *gatewayv1.ListenerSet:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return listenerSetFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func referenceGrantFromObject(obj interface{}) *gatewayv1.ReferenceGrant {
-	switch typed := obj.(type) {
-	case *gatewayv1.ReferenceGrant:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return referenceGrantFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func backendTLSPolicyFromObject(obj interface{}) *gatewayv1.BackendTLSPolicy {
-	switch typed := obj.(type) {
-	case *gatewayv1.BackendTLSPolicy:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return backendTLSPolicyFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func storageClassFromObject(obj interface{}) *storagev1.StorageClass {
-	switch typed := obj.(type) {
-	case *storagev1.StorageClass:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return storageClassFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func validatingWebhookFromObject(obj interface{}) *admissionregistrationv1.ValidatingWebhookConfiguration {
-	switch typed := obj.(type) {
-	case *admissionregistrationv1.ValidatingWebhookConfiguration:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return validatingWebhookFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func mutatingWebhookFromObject(obj interface{}) *admissionregistrationv1.MutatingWebhookConfiguration {
-	switch typed := obj.(type) {
-	case *admissionregistrationv1.MutatingWebhookConfiguration:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return mutatingWebhookFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func persistentVolumeClaimFromObject(obj interface{}) *corev1.PersistentVolumeClaim {
-	switch typed := obj.(type) {
-	case *corev1.PersistentVolumeClaim:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return persistentVolumeClaimFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func persistentVolumeFromObject(obj interface{}) *corev1.PersistentVolume {
-	switch typed := obj.(type) {
-	case *corev1.PersistentVolume:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return persistentVolumeFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*discoveryv1.EndpointSlice](obj)
+	return typed
 }
 
 func hpaFromObject(obj interface{}) *autoscalingv1.HorizontalPodAutoscaler {
-	switch typed := obj.(type) {
-	case *autoscalingv1.HorizontalPodAutoscaler:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return hpaFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func resourceQuotaFromObject(obj interface{}) *corev1.ResourceQuota {
-	switch typed := obj.(type) {
-	case *corev1.ResourceQuota:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return resourceQuotaFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func limitRangeFromObject(obj interface{}) *corev1.LimitRange {
-	switch typed := obj.(type) {
-	case *corev1.LimitRange:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return limitRangeFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func podDisruptionBudgetFromObject(obj interface{}) *policyv1.PodDisruptionBudget {
-	switch typed := obj.(type) {
-	case *policyv1.PodDisruptionBudget:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return podDisruptionBudgetFromObject(typed.Obj)
-	default:
-		return nil
-	}
+	typed, _ := objectAs[*autoscalingv1.HorizontalPodAutoscaler](obj)
+	return typed
 }
 
 func parseWorkloadOwnerKey(key string) (namespace, kind, name string, ok bool) {
@@ -1943,7 +1298,7 @@ func podOwnedByReplicaSet(pod *corev1.Pod, rs *appsv1.ReplicaSet) bool {
 		return false
 	}
 	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == "ReplicaSet" && owner.Name == rs.Name {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == replicasetpkg.Identity.Kind && owner.Name == rs.Name {
 			return true
 		}
 	}
@@ -1987,7 +1342,7 @@ func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
 		return ""
 	}
 	for _, owner := range rs.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == "Deployment" && owner.Name != "" {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == deploymentpkg.Identity.Kind && owner.Name != "" {
 			return owner.Name
 		}
 	}
@@ -2080,19 +1435,7 @@ func isHelmReleaseObject(name string, labels map[string]string, secretType strin
 			return true
 		}
 	}
-	return strings.HasPrefix(name, helmReleaseNamePrefix)
-}
-
-func helmReleaseName(name string) string {
-	if !strings.HasPrefix(name, helmReleaseNamePrefix) {
-		return name
-	}
-	trimmed := strings.TrimPrefix(name, helmReleaseNamePrefix)
-	index := strings.LastIndex(trimmed, ".v")
-	if index <= 0 {
-		return trimmed
-	}
-	return trimmed[:index]
+	return strings.HasPrefix(name, resourcemodel.HelmReleaseNamePrefix)
 }
 
 func convertPodIndexerItems(items []interface{}) []*corev1.Pod {

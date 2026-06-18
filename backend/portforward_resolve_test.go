@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -539,9 +540,9 @@ func TestIsPodReady(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isPodReady(tt.pod)
+			result := common.IsPodReady(tt.pod)
 			if result != tt.expected {
-				t.Errorf("isPodReady() = %v, expected %v", result, tt.expected)
+				t.Errorf("common.IsPodReady() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}

@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { types } from '@wailsjs/go/models';
+import { endpointslice } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
@@ -15,7 +15,7 @@ import './shared/OverviewBlocks.css';
 import './EndpointsOverview.css';
 
 interface EndpointSliceOverviewProps {
-  endpointSliceDetails: types.EndpointSliceDetails | null;
+  endpointSliceDetails: endpointslice.EndpointSliceDetails | null;
 }
 
 interface ClusterMeta {
@@ -63,7 +63,7 @@ const TargetRefLink: React.FC<{
 };
 
 const AddressRow: React.FC<{
-  address: types.EndpointSliceAddress;
+  address: endpointslice.EndpointSliceAddress;
   namespace: string;
   clusterMeta: ClusterMeta;
 }> = ({ address, namespace, clusterMeta }) => (
@@ -98,7 +98,7 @@ const AddressRow: React.FC<{
 );
 
 const AddressList: React.FC<{
-  addresses: types.EndpointSliceAddress[];
+  addresses: endpointslice.EndpointSliceAddress[];
   limit: number;
   namespace: string;
   clusterMeta: ClusterMeta;
@@ -118,7 +118,7 @@ const AddressList: React.FC<{
   </div>
 );
 
-const formatPortValue = (port: types.EndpointSlicePort): string => {
+const formatPortValue = (port: endpointslice.EndpointSlicePort): string => {
   const protocol = port.protocol ? `/${port.protocol}` : '';
   const appProtocol = port.appProtocol ? ` (${port.appProtocol})` : '';
   return `${port.port}${protocol}${appProtocol}`;

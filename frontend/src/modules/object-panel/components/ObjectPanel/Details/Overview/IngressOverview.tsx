@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { types } from '@wailsjs/go/models';
+import { ingress } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
@@ -14,7 +14,7 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface IngressOverviewProps {
-  ingressDetails: types.IngressDetails | null;
+  ingressDetails: ingress.IngressDetails | null;
 }
 
 interface ClusterMeta {
@@ -36,7 +36,7 @@ const pathTypeTooltip = (pathType: string): string | undefined => {
 };
 
 const renderBackend = (
-  backend: types.IngressBackendDetails,
+  backend: ingress.IngressBackendDetails,
   namespace: string,
   clusterMeta: ClusterMeta
 ): React.ReactNode => {
@@ -117,14 +117,14 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
           label="Rules"
           value={
             <div className="overview-card-list">
-              {ingressDetails.rules.map((rule: types.IngressRuleDetails, ruleIndex: number) => (
+              {ingressDetails.rules.map((rule: ingress.IngressRuleDetails, ruleIndex: number) => (
                 <div key={`rule-${ruleIndex}-${rule.host ?? 'default'}`} className="overview-card">
                   <div className="overview-card-header">
                     <span className="overview-card-title">{rule.host || 'Default'}</span>
                   </div>
                   {rule.paths && rule.paths.length > 0 && (
                     <div className="overview-card-rows">
-                      {rule.paths.map((path: types.IngressPathDetails, pathIndex: number) => (
+                      {rule.paths.map((path: ingress.IngressPathDetails, pathIndex: number) => (
                         <div key={`path-${pathIndex}-${path.path ?? '/'}`} className="overview-row">
                           <span className="overview-row-label">{path.path || '/'}</span>
                           <span className="overview-row-value">
@@ -154,7 +154,7 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
           label="TLS"
           value={
             <div className="overview-card-list">
-              {ingressDetails.tls.map((tls: types.IngressTLSDetails, index: number) => (
+              {ingressDetails.tls.map((tls: ingress.IngressTLSDetails, index: number) => (
                 <div
                   key={`tls-${index}-${tls.secretName ?? 'no-secret'}`}
                   className="overview-card"

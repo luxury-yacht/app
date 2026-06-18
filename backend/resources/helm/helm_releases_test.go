@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
 type testResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
@@ -132,7 +131,7 @@ items:
 	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
-	require.Equal(t, []types.HelmResource{
+	require.Equal(t, []HelmResource{
 		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default", Scope: "namespaced"},
 		{Kind: "Deployment", APIVersion: "apps/v1", Name: "web", Namespace: "staging", Scope: "namespaced"},
 		{Kind: "Service", APIVersion: "v1", Name: "web", Namespace: "prod", Scope: "namespaced"},
@@ -172,7 +171,7 @@ items:
 	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "team-default")
 
-	require.Equal(t, []types.HelmResource{
+	require.Equal(t, []HelmResource{
 		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a", Scope: "namespaced"},
 		{Kind: "Service", APIVersion: "v1", Name: "svc", Namespace: "other", Scope: "namespaced"},
 	}, resources)
@@ -208,7 +207,7 @@ metadata:
 	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
-	require.Equal(t, []types.HelmResource{
+	require.Equal(t, []HelmResource{
 		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data", Scope: "namespaced"},
 		{Kind: "DBCluster", APIVersion: "postgresql.cnpg.io/v1", Name: "primary", Namespace: "data", Scope: "namespaced"},
 	}, resources)
@@ -234,7 +233,7 @@ metadata:
 	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
 	resources := service.extractResourcesFromManifest(manifest, "release-ns")
 
-	require.Equal(t, []types.HelmResource{
+	require.Equal(t, []HelmResource{
 		{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1", Name: "reader", Namespace: "", Scope: "cluster"},
 		{Kind: "Database", APIVersion: "databases.example.com/v1alpha1", Name: "orders", Namespace: "release-ns"},
 	}, resources)

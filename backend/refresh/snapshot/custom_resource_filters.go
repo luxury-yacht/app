@@ -3,6 +3,11 @@ package snapshot
 import (
 	"strings"
 
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	grpcroutepkg "github.com/luxury-yacht/app/backend/resources/grpcroute"
+	httproutepkg "github.com/luxury-yacht/app/backend/resources/httproute"
+	tlsroutepkg "github.com/luxury-yacht/app/backend/resources/tlsroute"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
@@ -14,10 +19,10 @@ type firstClassCRDKey struct {
 
 var firstClassCustomResourceDefinitions = map[firstClassCRDKey]struct{}{
 	{group: "gateway.networking.k8s.io", resource: "gatewayclasses", kind: "GatewayClass"}:         {},
-	{group: "gateway.networking.k8s.io", resource: "gateways", kind: "Gateway"}:                    {},
-	{group: "gateway.networking.k8s.io", resource: "httproutes", kind: "HTTPRoute"}:                {},
-	{group: "gateway.networking.k8s.io", resource: "grpcroutes", kind: "GRPCRoute"}:                {},
-	{group: "gateway.networking.k8s.io", resource: "tlsroutes", kind: "TLSRoute"}:                  {},
+	{group: "gateway.networking.k8s.io", resource: "gateways", kind: gatewaypkg.Identity.Kind}:     {},
+	{group: "gateway.networking.k8s.io", resource: "httproutes", kind: httproutepkg.Identity.Kind}: {},
+	{group: "gateway.networking.k8s.io", resource: "grpcroutes", kind: grpcroutepkg.Identity.Kind}: {},
+	{group: "gateway.networking.k8s.io", resource: "tlsroutes", kind: tlsroutepkg.Identity.Kind}:   {},
 	{group: "gateway.networking.k8s.io", resource: "listenersets", kind: "ListenerSet"}:            {},
 	{group: "gateway.networking.k8s.io", resource: "referencegrants", kind: "ReferenceGrant"}:      {},
 	{group: "gateway.networking.k8s.io", resource: "backendtlspolicies", kind: "BackendTLSPolicy"}: {},

@@ -18,12 +18,137 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// quotasCollectIndexer resolves the namespace-quotas stream descriptors to the
+// supplied test indexers (nil = kind unavailable).
+func quotasCollectIndexer(quotaIdx, limitIdx, pdbIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "resourcequotas":
+			return quotaIdx
+		case "limitranges":
+			return limitIdx
+		case "poddisruptionbudgets":
+			return pdbIdx
+		}
+		return nil
+	}
+}
+
+// configCollectIndexer resolves the namespace-config stream descriptors to the
+// supplied test indexers (nil = kind unavailable).
+func configCollectIndexer(cmIdx, secIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "configmaps":
+			return cmIdx
+		case "secrets":
+			return secIdx
+		}
+		return nil
+	}
+}
+
+// autoscalingCollectIndexer resolves the namespace-autoscaling stream descriptor
+// to the supplied test indexer (nil = kind unavailable).
+func autoscalingCollectIndexer(hpaIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		if d.Resource == "horizontalpodautoscalers" {
+			return hpaIdx
+		}
+		return nil
+	}
+}
+
+// storageCollectIndexer resolves the namespace-storage stream descriptor to the
+// supplied test indexer (nil = kind unavailable).
+func storageCollectIndexer(pvcIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		if d.Resource == "persistentvolumeclaims" {
+			return pvcIdx
+		}
+		return nil
+	}
+}
+
+// clusterStorageCollectIndexer resolves the cluster-storage stream descriptor to
+// the supplied test indexer (nil = kind unavailable).
+func clusterStorageCollectIndexer(pvIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		if d.Resource == "persistentvolumes" {
+			return pvIdx
+		}
+		return nil
+	}
+}
+
+// networkIndexers holds the per-kind test indexers for the descriptor-driven
+// network kinds (nil = kind unavailable).
+type networkIndexers struct {
+	ingress          cache.Indexer
+	networkpolicy    cache.Indexer
+	gateway          cache.Indexer
+	httproute        cache.Indexer
+	grpcroute        cache.Indexer
+	tlsroute         cache.Indexer
+	listenerset      cache.Indexer
+	referencegrant   cache.Indexer
+	backendtlspolicy cache.Indexer
+}
+
+// networkCollectIndexer resolves the namespace-network stream descriptors to the
+// supplied test indexers. Service and EndpointSlice are listed via the builder's
+// own listers, not here.
+func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "ingresses":
+			return idx.ingress
+		case "networkpolicies":
+			return idx.networkpolicy
+		case "gateways":
+			return idx.gateway
+		case "httproutes":
+			return idx.httproute
+		case "grpcroutes":
+			return idx.grpcroute
+		case "tlsroutes":
+			return idx.tlsroute
+		case "listenersets":
+			return idx.listenerset
+		case "referencegrants":
+			return idx.referencegrant
+		case "backendtlspolicies":
+			return idx.backendtlspolicy
+		}
+		return nil
+	}
+}
+
+// rbacCollectIndexer returns a collectIndexer that resolves the RBAC stream
+// descriptors to the supplied test indexers (nil = kind unavailable), so the
+// descriptor-driven NamespaceRBACBuilder can be tested without an informer factory.
+func rbacCollectIndexer(roleIdx, bindingIdx, saIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "roles":
+			return roleIdx
+		case "rolebindings":
+			return bindingIdx
+		case "serviceaccounts":
+			return saIdx
+		}
+		return nil
+	}
+}
 
 func TestNamespaceConfigBuilder(t *testing.T) {
 	now := time.Now()
@@ -49,8 +174,10 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectIndexer: configCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, configMap),
+			testsupport.NewNamespacedIndexer(t, secret),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -88,8 +215,10 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectIndexer: configCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, configMap),
+			testsupport.NewNamespacedIndexer(t, secret),
+		),
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
@@ -128,8 +257,10 @@ func TestNamespaceConfigBuilderQueryReportsPartialAllowedResources(t *testing.T)
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectIndexer: configCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, configMap),
+			testsupport.NewNamespacedIndexer(t, secret),
+		),
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
@@ -198,8 +329,10 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMapDefault, configMapSystem),
-		secrets:    testsupport.NewSecretLister(t, secretDefault, secretOther),
+		collectIndexer: configCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, configMapDefault, configMapSystem),
+			testsupport.NewNamespacedIndexer(t, secretDefault, secretOther),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -244,8 +377,10 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 	}
 
 	builder := &NamespaceConfigBuilder{
-		configMaps: testsupport.NewConfigMapLister(t, configMap),
-		secrets:    testsupport.NewSecretLister(t, secret),
+		collectIndexer: configCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, configMap),
+			testsupport.NewNamespacedIndexer(t, secret),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -374,8 +509,10 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	builder := &NamespaceNetworkBuilder{
 		serviceLister:       testsupport.NewServiceLister(t, svc),
 		endpointSliceLister: testsupport.NewEndpointSliceLister(t, slice),
-		ingressLister:       testsupport.NewIngressLister(t, ing),
-		policyLister:        testsupport.NewNetworkPolicyLister(t, policy),
+		collectIndexer: networkCollectIndexer(networkIndexers{
+			ingress:       testsupport.NewNamespacedIndexer(t, ing),
+			networkpolicy: testsupport.NewNamespacedIndexer(t, policy),
+		}),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -470,8 +607,10 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 	builder := &NamespaceNetworkBuilder{
 		serviceLister:       testsupport.NewServiceLister(t, svcDefault, svcOther),
 		endpointSliceLister: testsupport.NewEndpointSliceLister(t, sliceDefault, sliceOther),
-		ingressLister:       testsupport.NewIngressLister(t, ingDefault),
-		policyLister:        testsupport.NewNetworkPolicyLister(t, policyOther),
+		collectIndexer: networkCollectIndexer(networkIndexers{
+			ingress:       testsupport.NewNamespacedIndexer(t, ingDefault),
+			networkpolicy: testsupport.NewNamespacedIndexer(t, policyOther),
+		}),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -519,7 +658,7 @@ func TestNamespaceStorageBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceStorageBuilder{
-		pvcLister: testsupport.NewPersistentVolumeClaimLister(t, pvc),
+		collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -562,7 +701,7 @@ func TestNamespaceStorageBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceStorageBuilder{
-		pvcLister: testsupport.NewPersistentVolumeClaimLister(t, pvcDefault, pvcOther),
+		collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvcDefault, pvcOther)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -625,9 +764,11 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceQuotasBuilder{
-		quotaLister: testsupport.NewResourceQuotaLister(t, quota),
-		limitLister: testsupport.NewLimitRangeLister(t, limit),
-		pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdb),
+		collectIndexer: quotasCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, quota),
+			testsupport.NewNamespacedIndexer(t, limit),
+			testsupport.NewNamespacedIndexer(t, pdb),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -697,9 +838,11 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceQuotasBuilder{
-		quotaLister: testsupport.NewResourceQuotaLister(t, quotaDefault, quotaOther),
-		limitLister: testsupport.NewLimitRangeLister(t, limitDefault),
-		pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdbDefault),
+		collectIndexer: quotasCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, quotaDefault, quotaOther),
+			testsupport.NewNamespacedIndexer(t, limitDefault),
+			testsupport.NewNamespacedIndexer(t, pdbDefault),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -741,7 +884,7 @@ func TestNamespaceAutoscalingBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceAutoscalingBuilder{
-		hpaLister: testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
+		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -798,7 +941,7 @@ func TestNamespaceAutoscalingBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceAutoscalingBuilder{
-		hpaLister: testsupport.NewHorizontalPodAutoscalerLister(t, hpaDefault, hpaSystem),
+		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpaDefault, hpaSystem)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -989,9 +1132,11 @@ func TestNamespaceRBACBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceRBACBuilder{
-		roleLister:    testsupport.NewRoleLister(t, role),
-		bindingLister: testsupport.NewRoleBindingLister(t, binding),
-		saLister:      testsupport.NewServiceAccountLister(t, sa),
+		collectIndexer: rbacCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, role),
+			testsupport.NewNamespacedIndexer(t, binding),
+			testsupport.NewNamespacedIndexer(t, sa),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -1052,9 +1197,11 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceRBACBuilder{
-		roleLister:    testsupport.NewRoleLister(t, roleDefault, roleOther),
-		bindingLister: testsupport.NewRoleBindingLister(t, binding),
-		saLister:      testsupport.NewServiceAccountLister(t, sa),
+		collectIndexer: rbacCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, roleDefault, roleOther),
+			testsupport.NewNamespacedIndexer(t, binding),
+			testsupport.NewNamespacedIndexer(t, sa),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -1088,7 +1235,7 @@ func TestNamespaceRBACBuilderAllNamespacesCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &NamespaceRBACBuilder{
-		roleLister: testsupport.NewRoleLister(t, roles...),
+		collectIndexer: rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -1113,7 +1260,7 @@ func TestNamespaceRBACBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &NamespaceRBACBuilder{
-		roleLister: testsupport.NewRoleLister(t, roles...),
+		collectIndexer: rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
@@ -1161,9 +1308,11 @@ func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {
 	}
 
 	builder := &NamespaceRBACBuilder{
-		roleLister:    testsupport.NewRoleLister(t, roleStaging, roleDefault),
-		bindingLister: testsupport.NewRoleBindingLister(t, bindingDefault),
-		saLister:      testsupport.NewServiceAccountLister(t, serviceAccount),
+		collectIndexer: rbacCollectIndexer(
+			testsupport.NewNamespacedIndexer(t, roleStaging, roleDefault),
+			testsupport.NewNamespacedIndexer(t, bindingDefault),
+			testsupport.NewNamespacedIndexer(t, serviceAccount),
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")

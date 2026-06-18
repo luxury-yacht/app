@@ -1,0 +1,113 @@
+/*
+ * backend/resources/deployment/details_test.go
+ *
+ * Tests for the Deployment detail service (co-located with the kind).
+ */
+
+package deployment_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/luxury-yacht/app/backend/resources/deployment"
+	"github.com/luxury-yacht/app/backend/testsupport"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	cgofake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
+)
+
+func TestDeploymentServiceDeployment(t *testing.T) {
+	deploy := testsupport.DeploymentFixture("default", "web", testsupport.DeploymentWithReplicas(2))
+	deploy.UID = types.UID("deployment-web")
+	deploy.Status.Replicas = 2
+	deploy.Status.ReadyReplicas = 2
+	deploy.Status.AvailableReplicas = 2
+	deploy.Status.UpdatedReplicas = 2
+
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-rs",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "web"},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       deploy.Name,
+				UID:        deploy.UID,
+				Controller: ptr.To(true),
+			}},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Selector: deploy.Spec.Selector,
+			Template: deploy.Spec.Template,
+		},
+	}
+	replicaSet.UID = types.UID("replicaset-web")
+
+	podA := testsupport.PodFixture(
+		"default",
+		"web-0",
+		testsupport.PodWithOwner("ReplicaSet", replicaSet.Name, true),
+		testsupport.PodWithLabels(map[string]string{"app": "web"}),
+	)
+	podB := testsupport.PodFixture(
+		"default",
+		"web-1",
+		testsupport.PodWithOwner("ReplicaSet", replicaSet.Name, true),
+		testsupport.PodWithLabels(map[string]string{"app": "web"}),
+	)
+
+	if len(podA.OwnerReferences) > 0 {
+		podA.OwnerReferences[0].UID = replicaSet.UID
+	}
+	if len(podB.OwnerReferences) > 0 {
+		podB.OwnerReferences[0].UID = replicaSet.UID
+	}
+
+	client := cgofake.NewClientset(
+		deploy.DeepCopy(),
+		replicaSet.DeepCopy(),
+		podA.DeepCopy(),
+		podB.DeepCopy(),
+	)
+
+	deps := testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	)
+
+	service := deployment.NewService(deps)
+	details, err := service.Deployment("default", "web")
+	if err != nil {
+		t.Fatalf("Deployment returned error: %v", err)
+	}
+	if details == nil {
+		t.Fatalf("Deployment returned nil details")
+	}
+	if details.Name != "web" {
+		t.Fatalf("expected deployment name 'web', got %s", details.Name)
+	}
+	require.Equal(t, "Running", details.Status)
+	require.Equal(t, "2/2", details.StatusState)
+	require.Equal(t, "ready", details.StatusPresentation)
+	require.Equal(t, "2/2", details.Replicas)
+	require.Equal(t, "2/2", details.Ready)
+	require.Equal(t, int32(2), details.UpToDate)
+	require.Equal(t, int32(2), details.Available)
+	require.Equal(t, int32(2), details.DesiredReplicas)
+	if len(details.Pods) != 2 {
+		t.Fatalf("expected 2 pods, got %d", len(details.Pods))
+	}
+
+	ownerKinds := map[string]string{}
+	for _, pod := range details.Pods {
+		ownerKinds[pod.Name] = pod.OwnerKind
+	}
+	if ownerKinds["web-0"] != "Deployment" || ownerKinds["web-1"] != "Deployment" {
+		t.Fatalf("expected pods to resolve to Deployment owner, got %+v", ownerKinds)
+	}
+}

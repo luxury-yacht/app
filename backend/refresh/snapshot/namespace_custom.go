@@ -18,10 +18,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
 )
 
 const (
@@ -51,30 +52,9 @@ type NamespaceCustomSnapshot struct {
 // share a Kind (e.g. DBInstance.rds.services.k8s.aws vs
 // DBInstance.documentdb.services.k8s.aws) would be indistinguishable on
 // the frontend.
-type NamespaceCustomSummary struct {
-	ClusterMeta
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	APIGroup   string `json:"apiGroup"`
-	APIVersion string `json:"apiVersion"`
-	// CRDName is the name of the CustomResourceDefinition that defines
-	// this resource's Kind, in the canonical Kubernetes form
-	// `<plural>.<group>` (e.g. "dbinstances.rds.services.k8s.aws"). The
-	// frontend uses it to render a clickable cell that opens the owning
-	// CRD in the object panel. Always set for CRD-backed resources;
-	// omitted (empty) for any synthetic/non-CRD case.
-	CRDName            string                         `json:"crdName,omitempty"`
-	Namespace          string                         `json:"namespace"`
-	Status             string                         `json:"status,omitempty"`
-	StatusState        string                         `json:"statusState,omitempty"`
-	StatusPresentation string                         `json:"statusPresentation,omitempty"`
-	Ready              *bool                          `json:"ready,omitempty"`
-	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
-	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
-	Age                string                         `json:"age"`
-	Labels             map[string]string              `json:"labels,omitempty"`
-	Annotations        map[string]string              `json:"annotations,omitempty"`
-}
+// NamespaceCustomSummary lives in the streamrows leaf so the customresource
+// package can build it; this alias keeps the snapshot-side name and wire JSON.
+type NamespaceCustomSummary = streamrows.NamespaceCustomSummary
 
 // RegisterNamespaceCustomDomain wires the builder into the registry.
 func RegisterNamespaceCustomDomain(
@@ -217,7 +197,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 				// for items that don't carry their own. `crdCopy.Name` is
 				// the canonical CRD name (`<plural>.<group>`) used to
 				// open the owning CRD from the row.
-				items = append(items, BuildNamespaceCustomSummary(
+				items = append(items, customresource.BuildNamespaceStreamSummary(
 					meta,
 					item,
 					gvr.Group,

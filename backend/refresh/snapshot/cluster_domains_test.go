@@ -12,11 +12,33 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// clusterConfigCollectIndexer resolves the cluster-config stream descriptors to
+// the supplied test indexers (nil = kind unavailable).
+func clusterConfigCollectIndexer(scIdx, icIdx, gcIdx, vwhIdx, mwhIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		switch d.Resource {
+		case "storageclasses":
+			return scIdx
+		case "ingressclasses":
+			return icIdx
+		case "gatewayclasses":
+			return gcIdx
+		case "validatingwebhookconfigurations":
+			return vwhIdx
+		case "mutatingwebhookconfigurations":
+			return mwhIdx
+		}
+		return nil
+	}
+}
 
 func TestClusterConfigBuilder(t *testing.T) {
 	now := time.Now()
@@ -64,19 +86,25 @@ func TestClusterConfigBuilder(t *testing.T) {
 	}
 
 	builder := &ClusterConfigBuilder{
-		storageClassLister:      testsupport.NewStorageClassLister(t, storageClass),
-		ingressClassLister:      testsupport.NewIngressClassLister(t, ingressClass),
-		validatingWebhookLister: testsupport.NewValidatingWebhookLister(t, validatingWebhook),
-		mutatingWebhookLister:   testsupport.NewMutatingWebhookLister(t, mutatingWebhook),
-		perms: ClusterConfigPermissions{
-			IncludeStorageClasses:     true,
-			IncludeIngressClasses:     true,
-			IncludeValidatingWebhooks: true,
-			IncludeMutatingWebhooks:   true,
-		},
+		collectIndexer: clusterConfigCollectIndexer(
+			testsupport.NewClusterIndexer(t, storageClass),
+			testsupport.NewClusterIndexer(t, ingressClass),
+			nil,
+			testsupport.NewClusterIndexer(t, validatingWebhook),
+			testsupport.NewClusterIndexer(t, mutatingWebhook),
+		),
 	}
 
-	snapshot, err := builder.Build(context.Background(), "")
+	// GatewayClass is omitted from the allowed set so it does not appear among the
+	// available kinds (the indexer is nil and the runtime permission denies it).
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
+		"storage.k8s.io/storageclasses":                                true,
+		"networking.k8s.io/ingressclasses":                             true,
+		"admissionregistration.k8s.io/validatingwebhookconfigurations": true,
+		"admissionregistration.k8s.io/mutatingwebhookconfigurations":   true,
+	})
+
+	snapshot, err := builder.Build(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, clusterConfigDomainName, snapshot.Domain)
 	require.Equal(t, uint64(24), snapshot.Version)
@@ -117,8 +145,10 @@ func TestClusterConfigBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &ClusterConfigBuilder{
-		storageClassLister: testsupport.NewStorageClassLister(t, classes...),
-		perms:              ClusterConfigPermissions{IncludeStorageClasses: true},
+		collectIndexer: clusterConfigCollectIndexer(
+			testsupport.NewClusterIndexer(t, classes...),
+			nil, nil, nil, nil,
+		),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -140,10 +170,11 @@ func TestClusterConfigBuilderQueryReportsPartialAllowedResources(t *testing.T) {
 		Spec: networkingv1.IngressClassSpec{Controller: "nginx.org/ingress-controller"},
 	}
 	builder := &ClusterConfigBuilder{
-		ingressClassLister: testsupport.NewIngressClassLister(t, ingressClass),
-		perms: ClusterConfigPermissions{
-			IncludeIngressClasses: true,
-		},
+		collectIndexer: clusterConfigCollectIndexer(
+			nil,
+			testsupport.NewClusterIndexer(t, ingressClass),
+			nil, nil, nil,
+		),
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterConfigDomainName, domainpermissions.AllowedResources{
 		"networking.k8s.io/ingressclasses": false,
@@ -184,7 +215,7 @@ func TestClusterStorageBuilder(t *testing.T) {
 	}
 
 	builder := &ClusterStorageBuilder{
-		pvLister: testsupport.NewPersistentVolumeLister(t, pv),
+		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -221,7 +252,7 @@ func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &ClusterStorageBuilder{
-		pvLister: testsupport.NewPersistentVolumeLister(t, pvs...),
+		collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pvs...)),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -315,87 +346,4 @@ func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterCRDEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "CRDs")
-}
-
-// TestCRDVersionSummary covers the storage-version + extra-served-count
-// helper that drives the Version column in the CRDs view.
-func TestCRDVersionSummary(t *testing.T) {
-	makeCRD := func(versions ...apiextensionsv1.CustomResourceDefinitionVersion) *apiextensionsv1.CustomResourceDefinition {
-		return &apiextensionsv1.CustomResourceDefinition{
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{Versions: versions},
-		}
-	}
-
-	t.Run("nil CRD returns zero values", func(t *testing.T) {
-		storage, extra := crdVersionSummary(nil)
-		require.Equal(t, "", storage)
-		require.Equal(t, 0, extra)
-	})
-
-	t.Run("empty versions returns zero values", func(t *testing.T) {
-		storage, extra := crdVersionSummary(makeCRD())
-		require.Equal(t, "", storage)
-		require.Equal(t, 0, extra)
-	})
-
-	t.Run("single served+storage version returns version with no extras", func(t *testing.T) {
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
-		))
-		require.Equal(t, "v1", storage)
-		require.Equal(t, 0, extra)
-	})
-
-	t.Run("multi-version with v1 as storage counts the other served versions", func(t *testing.T) {
-		// Mirrors the cert-manager-style historical setup where multiple
-		// alpha/beta versions are served alongside the stable storage version.
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: true, Storage: false},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1beta1", Served: true, Storage: false},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
-		))
-		require.Equal(t, "v1", storage)
-		require.Equal(t, 2, extra)
-	})
-
-	t.Run("storage version not served counts all served as extras", func(t *testing.T) {
-		// Rare/transient: storage version is being deprecated and is no
-		// longer served, but still where data is persisted.
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: true},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: false},
-		))
-		require.Equal(t, "v1alpha1", storage)
-		require.Equal(t, 1, extra)
-	})
-
-	t.Run("non-served versions are ignored in the extras count", func(t *testing.T) {
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
-		))
-		require.Equal(t, "v1", storage)
-		require.Equal(t, 0, extra, "served=false versions must not contribute to the extra count")
-	})
-
-	t.Run("falls back to first served version when no storage flag", func(t *testing.T) {
-		// Defensive: malformed CRD with no Storage flag at all.
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1beta1", Served: true, Storage: false},
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: false},
-		))
-		require.Equal(t, "v1beta1", storage, "fall back to first served version")
-		require.Equal(t, 1, extra, "v1 is also served but is not the chosen storage version")
-	})
-
-	t.Run("falls back to first version when nothing is served", func(t *testing.T) {
-		// Pathological: nothing served, no storage flag. Show something
-		// rather than blank.
-		storage, extra := crdVersionSummary(makeCRD(
-			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
-		))
-		require.Equal(t, "v1alpha1", storage)
-		require.Equal(t, 0, extra)
-	})
 }

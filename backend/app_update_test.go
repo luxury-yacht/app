@@ -41,10 +41,10 @@ func TestParseVersionParts(t *testing.T) {
 
 func TestIsDevVersion(t *testing.T) {
 	cases := map[string]bool{
-		"dev":        true,
-		"1.0.0":      false,
+		"dev":         true,
+		"1.0.0":       false,
 		"1.0.0 (dev)": true,
-		"":           true,
+		"":            true,
 	}
 
 	for value, expected := range cases {

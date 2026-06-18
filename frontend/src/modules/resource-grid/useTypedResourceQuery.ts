@@ -190,31 +190,44 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   );
   const queryIdentityRef = useRef(queryIdentity);
   const queryResetIdentityRef = useRef(queryResetIdentity);
-  const queryHardResetIdentityRef = useRef(queryHardResetIdentity);
   queryIdentityRef.current = queryIdentity;
 
   const requestTokenForScope =
     queryResetIdentityRef.current === queryResetIdentity ? requestToken : null;
 
+  // Hard reset — cluster, domain, base scope, predicates, or enabled changed, so
+  // the applied page now belongs to a DIFFERENT cluster/resource. Clear it DURING
+  // render (React's "adjust state when an identity changes" pattern), not in an
+  // effect: an effect-based clear first commits and PAINTS one frame of the prior
+  // cluster's rows under the new cluster's identity — the cross-cluster data
+  // flash. Setting state during render makes React discard this render and
+  // re-render with the page cleared before it ever commits. The soft reset below
+  // (cursors only) stays in an effect because it deliberately KEEPS the visible
+  // rows for quiet filtering and so never flashes.
+  const [appliedHardResetIdentity, setAppliedHardResetIdentity] = useState(queryHardResetIdentity);
+  if (appliedHardResetIdentity !== queryHardResetIdentity) {
+    setAppliedHardResetIdentity(queryHardResetIdentity);
+    setRows([]);
+    setPayload(null);
+    setLoaded(false);
+    setTotalCount(0);
+    setTotalIsExact(true);
+    setFilterOptions({});
+    setDynamic(null);
+  }
+
+  // Soft reset — filters, sort, page size, or live-data identity changed within
+  // the SAME cluster/resource. Drop the pagination cursors so the refetch restarts
+  // at page 1, but keep the visible rows (quiet filtering). Safe after paint: no
+  // row change, no flash.
   useEffect(() => {
     queryResetIdentityRef.current = queryResetIdentity;
-    const hardReset = queryHardResetIdentityRef.current !== queryHardResetIdentity;
-    queryHardResetIdentityRef.current = queryHardResetIdentity;
     setRequestToken(null);
     setContinueToken(null);
     setPreviousTokens([]);
     setPageIndex(1);
-    if (hardReset) {
-      setTotalCount(0);
-      setTotalIsExact(true);
-      setRows([]);
-      setPayload(null);
-      setLoaded(false);
-      setFilterOptions({});
-      setDynamic(null);
-    }
     pendingNavigationRef.current = null;
-  }, [queryHardResetIdentity, queryResetIdentity]);
+  }, [queryResetIdentity]);
 
   const scope = useMemo(() => {
     if (!enabled) {

@@ -7,30 +7,45 @@ import (
 	"strings"
 	"time"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/job"
 )
 
 const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
 const maxScaleReplicas = 1<<31 - 1
 
+// workloadOperationsByKind indexes each workload kind's mutating operations from the
+// single registry, so the action handlers dispatch by kind instead of switching on it.
+var workloadOperationsByKind = func() map[string]*kindspec.WorkloadOperations {
+	m := map[string]*kindspec.WorkloadOperations{}
+	for _, d := range kindregistry.All {
+		if d.Workload != nil {
+			m[d.Identity.Kind] = d.Workload
+		}
+	}
+	return m
+}()
+
 var (
-	actionRestartableWorkloadKinds = map[string]struct{}{
-		"Deployment":  {},
-		"StatefulSet": {},
-		"DaemonSet":   {},
-	}
-	actionScalableWorkloadKinds = map[string]struct{}{
-		"Deployment":  {},
-		"StatefulSet": {},
-		"ReplicaSet":  {},
-	}
+	actionRestartableWorkloadKinds = workloadKindsSupporting(func(w *kindspec.WorkloadOperations) bool { return w.Restart != nil })
+	actionScalableWorkloadKinds    = workloadKindsSupporting(func(w *kindspec.WorkloadOperations) bool { return w.Scale != nil })
 )
+
+// workloadKindsSupporting returns the set of workload kinds whose operations satisfy
+// pred, so the supported-kind validation lists no kind by hand.
+func workloadKindsSupporting(pred func(*kindspec.WorkloadOperations) bool) map[string]struct{} {
+	m := map[string]struct{}{}
+	for kind, ops := range workloadOperationsByKind {
+		if pred(ops) {
+			m[kind] = struct{}{}
+		}
+	}
+	return m
+}
 
 func validateAppsV1WorkloadAction(action, group, version, kind string, supported map[string]struct{}) (string, error) {
 	normalizedKind := strings.TrimSpace(kind)
@@ -111,66 +126,21 @@ func (a *App) restartWorkloadInternal(clusterID, namespace, group, version, work
 		ctx = context.Background()
 	}
 
-	switch workloadKind {
-	case "Deployment":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:     group,
-			Version:   version,
-			Kind:      workloadKind,
-			Namespace: namespace,
-			Name:      name,
-			Verb:      "patch",
-		}); err != nil {
-			return err
-		}
-		_, err = deps.KubernetesClient.AppsV1().Deployments(namespace).Patch(
-			ctx,
-			name,
-			types.StrategicMergePatchType,
-			patchBytes,
-			metav1.PatchOptions{},
-		)
-	case "StatefulSet":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:     group,
-			Version:   version,
-			Kind:      workloadKind,
-			Namespace: namespace,
-			Name:      name,
-			Verb:      "patch",
-		}); err != nil {
-			return err
-		}
-		_, err = deps.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(
-			ctx,
-			name,
-			types.StrategicMergePatchType,
-			patchBytes,
-			metav1.PatchOptions{},
-		)
-	case "DaemonSet":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:     group,
-			Version:   version,
-			Kind:      workloadKind,
-			Namespace: namespace,
-			Name:      name,
-			Verb:      "patch",
-		}); err != nil {
-			return err
-		}
-		_, err = deps.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(
-			ctx,
-			name,
-			types.StrategicMergePatchType,
-			patchBytes,
-			metav1.PatchOptions{},
-		)
-	default:
+	ops := workloadOperationsByKind[workloadKind]
+	if ops == nil || ops.Restart == nil {
 		return fmt.Errorf("restart not supported for workload kind %q", workloadKind)
 	}
-
-	if err != nil {
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:     group,
+		Version:   version,
+		Kind:      workloadKind,
+		Namespace: namespace,
+		Name:      name,
+		Verb:      "patch",
+	}); err != nil {
+		return err
+	}
+	if err = ops.Restart(ctx, deps.KubernetesClient, namespace, name, patchBytes); err != nil {
 		return fmt.Errorf("failed to restart %s/%s (%s): %w", namespace, name, workloadKind, err)
 	}
 
@@ -233,14 +203,6 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	scale := &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: autoscalingv1.ScaleSpec{Replicas: int32(replicas)},
-	}
-
 	ctx := deps.Context
 	if ctx == nil {
 		ctx = context.Background()
@@ -250,72 +212,23 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 		return err
 	}
 
-	switch workloadKind {
-	case "Deployment":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:       group,
-			Version:     version,
-			Kind:        workloadKind,
-			Namespace:   namespace,
-			Name:        name,
-			Verb:        "update",
-			Subresource: "scale",
-		}); err != nil {
-			return err
-		}
-		_, err := deps.KubernetesClient.AppsV1().Deployments(namespace).UpdateScale(
-			ctx,
-			name,
-			scale,
-			metav1.UpdateOptions{},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to scale deployment %s/%s: %w", namespace, name, err)
-		}
-	case "StatefulSet":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:       group,
-			Version:     version,
-			Kind:        workloadKind,
-			Namespace:   namespace,
-			Name:        name,
-			Verb:        "update",
-			Subresource: "scale",
-		}); err != nil {
-			return err
-		}
-		_, err := deps.KubernetesClient.AppsV1().StatefulSets(namespace).UpdateScale(
-			ctx,
-			name,
-			scale,
-			metav1.UpdateOptions{},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to scale statefulset %s/%s: %w", namespace, name, err)
-		}
-	case "ReplicaSet":
-		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-			Group:       group,
-			Version:     version,
-			Kind:        workloadKind,
-			Namespace:   namespace,
-			Name:        name,
-			Verb:        "update",
-			Subresource: "scale",
-		}); err != nil {
-			return err
-		}
-		_, err := deps.KubernetesClient.AppsV1().ReplicaSets(namespace).UpdateScale(
-			ctx,
-			name,
-			scale,
-			metav1.UpdateOptions{},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to scale replicaset %s/%s: %w", namespace, name, err)
-		}
-	default:
+	ops := workloadOperationsByKind[workloadKind]
+	if ops == nil || ops.Scale == nil {
 		return fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
+	}
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Group:       group,
+		Version:     version,
+		Kind:        workloadKind,
+		Namespace:   namespace,
+		Name:        name,
+		Verb:        "update",
+		Subresource: "scale",
+	}); err != nil {
+		return err
+	}
+	if err := ops.Scale(ctx, deps.KubernetesClient, namespace, name, int32(replicas)); err != nil {
+		return fmt.Errorf("failed to scale %s %s/%s: %w", strings.ToLower(workloadKind), namespace, name, err)
 	}
 
 	applog.Info(
@@ -354,37 +267,11 @@ func currentWorkloadDesiredReplicas(ctx context.Context, deps common.Dependencie
 	if deps.KubernetesClient == nil {
 		return 0, fmt.Errorf("kubernetes client is not initialized")
 	}
-	switch workloadKind {
-	case "Deployment":
-		deployment, err := deps.KubernetesClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return 0, err
-		}
-		if deployment.Spec.Replicas == nil {
-			return 1, nil
-		}
-		return *deployment.Spec.Replicas, nil
-	case "StatefulSet":
-		statefulSet, err := deps.KubernetesClient.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return 0, err
-		}
-		if statefulSet.Spec.Replicas == nil {
-			return 1, nil
-		}
-		return *statefulSet.Spec.Replicas, nil
-	case "ReplicaSet":
-		replicaSet, err := deps.KubernetesClient.AppsV1().ReplicaSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return 0, err
-		}
-		if replicaSet.Spec.Replicas == nil {
-			return 1, nil
-		}
-		return *replicaSet.Spec.Replicas, nil
-	default:
+	ops := workloadOperationsByKind[workloadKind]
+	if ops == nil || ops.CurrentReplicas == nil {
 		return 0, fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
 	}
+	return ops.CurrentReplicas(ctx, deps.KubernetesClient, namespace, name)
 }
 
 // triggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
@@ -397,9 +284,9 @@ func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) 
 		Action: ObjectActionTrigger,
 		Target: objectActionTarget(
 			clusterID,
-			"batch",
-			"v1",
-			"CronJob",
+			cronjob.Identity.Group,
+			cronjob.Identity.Version,
+			cronjob.Identity.Kind,
 			namespace,
 			name,
 		),
@@ -408,8 +295,8 @@ func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) 
 }
 
 func (a *App) triggerCronJobAction(target ObjectActionTargetRef) (string, error) {
-	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
-		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, "batch/v1", "CronJob")
+	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
+		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
 	return a.triggerCronJobInternal(target.ClusterID, target.Namespace, target.Name)
 }
@@ -431,68 +318,26 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 		ctx = context.Background()
 	}
 
-	// Fetch the CronJob to get its jobTemplate
-	cronJob, err := deps.KubernetesClient.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to get cronjob %s/%s: %w", namespace, name, err)
-	}
-	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
-		return "", fmt.Errorf("cannot trigger suspended cronjob %s/%s", namespace, name)
-	}
+	// Permission to create the Job is checked here; the CronJob fetch, suspended
+	// guard, and Job creation live in the cronjob package.
 	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
-		Group:     "batch",
-		Version:   "v1",
-		Kind:      "Job",
+		Group:     job.Identity.Group,
+		Version:   job.Identity.Version,
+		Kind:      job.Identity.Kind,
 		Namespace: namespace,
 		Verb:      "create",
 	}); err != nil {
 		return "", err
 	}
 
-	// Generate a unique job name with timestamp
-	timestamp := time.Now().UTC().Format("20060102150405")
-	jobName := fmt.Sprintf("%s-manual-%s", name, timestamp)
-
-	// Create the Job from the CronJob's jobTemplate
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: namespace,
-			Labels:    cronJob.Spec.JobTemplate.Labels,
-			Annotations: map[string]string{
-				"cronjob.kubernetes.io/instantiate": "manual",
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "batch/v1",
-					Kind:       "CronJob",
-					Name:       cronJob.Name,
-					UID:        cronJob.UID,
-					Controller: boolPtr(true),
-				},
-			},
-		},
-		Spec: cronJob.Spec.JobTemplate.Spec,
-	}
-
-	// Copy annotations from jobTemplate if present
-	if cronJob.Spec.JobTemplate.Annotations != nil {
-		if job.ObjectMeta.Annotations == nil {
-			job.ObjectMeta.Annotations = make(map[string]string)
-		}
-		for k, v := range cronJob.Spec.JobTemplate.Annotations {
-			job.ObjectMeta.Annotations[k] = v
-		}
-	}
-
-	createdJob, err := deps.KubernetesClient.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	jobName, err := cronjob.TriggerManualJob(ctx, deps.KubernetesClient, namespace, name)
 	if err != nil {
-		return "", fmt.Errorf("failed to create job from cronjob %s/%s: %w", namespace, name, err)
+		return "", err
 	}
 
-	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "triggerCronJob")
-	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
-	return createdJob.Name, nil
+	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, jobName), "triggerCronJob")
+	a.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
+	return jobName, nil
 }
 
 // suspendCronJob sets the suspend field on a CronJob.
@@ -505,9 +350,9 @@ func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) er
 		Action: ObjectActionSuspend,
 		Target: objectActionTarget(
 			clusterID,
-			"batch",
-			"v1",
-			"CronJob",
+			cronjob.Identity.Group,
+			cronjob.Identity.Version,
+			cronjob.Identity.Kind,
 			namespace,
 			name,
 		),
@@ -517,8 +362,8 @@ func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) er
 }
 
 func (a *App) suspendCronJobAction(target ObjectActionTargetRef, suspend bool) error {
-	if target.Group != "batch" || target.Version != "v1" || target.Kind != "CronJob" {
-		return errUnsupportedActionTarget(ObjectActionSuspend, target, "batch/v1", "CronJob")
+	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
+		return errUnsupportedActionTarget(ObjectActionSuspend, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
 	return a.suspendCronJobInternal(target.ClusterID, target.Namespace, target.Name, suspend)
 }
@@ -536,9 +381,9 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 	}
 
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Group:     "batch",
-		Version:   "v1",
-		Kind:      "CronJob",
+		Group:     cronjob.Identity.Group,
+		Version:   cronjob.Identity.Version,
+		Kind:      cronjob.Identity.Kind,
 		Namespace: namespace,
 		Name:      name,
 		Verb:      "patch",
@@ -551,26 +396,8 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		ctx = context.Background()
 	}
 
-	patch := map[string]any{
-		"spec": map[string]any{
-			"suspend": suspend,
-		},
-	}
-
-	patchBytes, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("failed to marshal suspend patch: %w", err)
-	}
-
-	_, err = deps.KubernetesClient.BatchV1().CronJobs(namespace).Patch(
-		ctx,
-		name,
-		types.StrategicMergePatchType,
-		patchBytes,
-		metav1.PatchOptions{},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update cronjob %s/%s suspend state: %w", namespace, name, err)
+	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, namespace, name, suspend); err != nil {
+		return err
 	}
 
 	action := "Suspended"
@@ -578,7 +405,7 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		action = "Resumed"
 	}
 	applog.Info(deps.Logger, fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "suspendCronJob")
-	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
+	a.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
 	return nil
 }
 

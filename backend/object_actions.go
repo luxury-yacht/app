@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/nodes"
+	"github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -144,9 +147,9 @@ func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, api
 
 func (a *App) deleteObjectAction(target ObjectActionTargetRef, force bool) error {
 	switch {
-	case target.Group == "" && target.Version == "v1" && target.Kind == "Pod":
+	case target.Group == "" && target.Version == "v1" && target.Kind == pods.Identity.Kind:
 		return a.deletePodAction(target)
-	case target.Group == "" && target.Version == "v1" && target.Kind == "Node":
+	case target.Group == "" && target.Version == "v1" && target.Kind == nodes.Identity.Kind:
 		return a.deleteNodeAction(target, force)
 	case target.Group == "helm.sh" && target.Version == "v3" && strings.EqualFold(target.Kind, "HelmRelease"):
 		return a.deleteHelmReleaseAction(target)

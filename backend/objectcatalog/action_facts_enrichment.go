@@ -2,6 +2,9 @@ package objectcatalog
 
 import (
 	"strings"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func enrichCatalogActionFacts(items map[string]Summary, allowed map[string]resourceDescriptor, failed map[string]error) {
@@ -58,10 +61,20 @@ func catalogHPACoverageKnown(allowed map[string]resourceDescriptor, failed map[s
 	return false
 }
 
+// catalogScalableWorkloadKinds is the set of scalable-workload kinds from the single
+// registry (the Graph.ScalableWorkload facet), keyed by group+kind.
+var catalogScalableWorkloadKinds = func() map[schema.GroupKind]bool {
+	m := map[schema.GroupKind]bool{}
+	for _, d := range kindregistry.All {
+		if d.Graph.ScalableWorkload {
+			m[schema.GroupKind{Group: d.Identity.Group, Kind: d.Identity.Kind}] = true
+		}
+	}
+	return m
+}()
+
 func isCatalogScalableWorkload(item Summary) bool {
-	return item.Group == "apps" &&
-		item.Version == "v1" &&
-		(item.Kind == "Deployment" || item.Kind == "StatefulSet" || item.Kind == "ReplicaSet")
+	return item.Version == "v1" && catalogScalableWorkloadKinds[schema.GroupKind{Group: item.Group, Kind: item.Kind}]
 }
 
 func actionTargetKey(namespace, group, version, kind, name string) string {

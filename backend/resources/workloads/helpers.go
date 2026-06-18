@@ -11,13 +11,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
-	"github.com/robfig/cron/v3"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -98,7 +95,7 @@ func aggregatePodAverages(podSlice []corev1.Pod, podMetrics map[string]*metricsv
 	return avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage
 }
 
-func summarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (*restypes.PodMetricsSummary, int32) {
+func SummarizePodMetrics(podSlice []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) (*restypes.PodMetricsSummary, int32) {
 	summary := &restypes.PodMetricsSummary{}
 	cpuRequest := resource.NewQuantity(0, resource.DecimalSI)
 	cpuLimit := resource.NewQuantity(0, resource.DecimalSI)
@@ -172,11 +169,11 @@ func parseReadyStatus(value string) (ready, total int) {
 	return readyVal, totalVal
 }
 
-// buildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion
+// BuildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion
 // supplied by the workload caller (Deployment, StatefulSet, DaemonSet, ReplicaSet —
 // all apps/v1). The apiVersion lets the panel open the owner with a fully-qualified
 // GVK; see PodSimpleInfo.OwnerAPIVersion
-func buildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
+func BuildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(podsList))
 	for _, pod := range podsList {
 		podInfos = append(podInfos, pods.SummarizePod(clusterID, pod, podMetrics, ownerKind, ownerName, ownerAPIVersion))
@@ -185,7 +182,7 @@ func buildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, 
 	return podInfos
 }
 
-func describeContainers(containers []corev1.Container) []restypes.PodDetailInfoContainer {
+func DescribeContainers(containers []corev1.Container) []restypes.PodDetailInfoContainer {
 	result := make([]restypes.PodDetailInfoContainer, 0, len(containers))
 	for _, container := range containers {
 		detail := restypes.PodDetailInfoContainer{
@@ -255,81 +252,7 @@ func describeContainers(containers []corev1.Container) []restypes.PodDetailInfoC
 	return result
 }
 
-func defaultInt32(ptr *int32, fallback int32) int32 {
-	if ptr != nil {
-		return *ptr
-	}
-	return fallback
-}
-
-func filterPodsForJob(job *batchv1.Job, podList *corev1.PodList) []corev1.Pod {
-	if podList == nil {
-		return nil
-	}
-
-	var filtered []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Controller != nil && *owner.Controller && owner.Kind == "Job" && owner.UID == job.UID {
-				filtered = append(filtered, pod)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
-func summarizeJob(job *batchv1.Job, details *restypes.JobDetails) string {
-	completions := details.Completions
-	summary := fmt.Sprintf("Status: %s, Succeeded: %d/%d", details.Status, job.Status.Succeeded, completions)
-	if job.Status.Failed > 0 {
-		summary += fmt.Sprintf(", Failed: %d", job.Status.Failed)
-	}
-	return summary
-}
-
-func summarizeCronJob(details *restypes.CronJobDetails) string {
-	summary := fmt.Sprintf("Schedule: %s", details.Schedule)
-	if details.Suspend {
-		summary += " (suspended)"
-	} else if details.LastScheduleTime != nil {
-		summary += fmt.Sprintf(", Last: %s ago", common.FormatAge(details.LastScheduleTime.Time))
-	}
-	return summary
-}
-
-// calculateNextSchedule parses the CronJob's schedule expression and returns
-// the next firing time as RFC3339 plus a human "in 15m" string. Falls back to
-// empty values when the expression is unparseable so the frontend can hide the
-// row instead of showing wrong data.
-func calculateNextSchedule(schedule string, timeZone *string) (string, string) {
-	return calculateNextScheduleAt(schedule, timeZone, time.Now())
-}
-
-func calculateNextScheduleAt(schedule string, timeZone *string, now time.Time) (string, string) {
-	// k8s CronJob uses the standard 5-field format (no seconds) plus
-	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
-	// both, matching the kube-controller-manager parser.
-	expr, err := cron.ParseStandard(formatCronJobSchedule(schedule, timeZone))
-	if err != nil {
-		return "", ""
-	}
-	nextTime := expr.Next(now)
-	if nextTime.IsZero() {
-		return "", ""
-	}
-	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-nextTime.Sub(now)))
-}
-
-func formatCronJobSchedule(schedule string, timeZone *string) string {
-	if strings.Contains(schedule, "TZ") {
-		return schedule
-	}
-	if timeZone == nil {
-		return schedule
-	}
-	if _, err := time.LoadLocation(*timeZone); err != nil {
-		return schedule
-	}
-	return fmt.Sprintf("TZ=%s %s", *timeZone, schedule)
-}
+// Job-specific helpers (filterPodsForJob, summarizeJob) and CronJob-specific
+// helpers (defaultInt32, summarizeCronJob, calculateNextSchedule[At],
+// formatCronJobSchedule) moved to resources/job and resources/cronjob with their
+// detail builders.

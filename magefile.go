@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -213,6 +214,20 @@ func (QC) GoModUpdate() error {
 	return sh.RunV("go", "mod", "tidy")
 }
 
+// Checks that all Go files are gofmt-formatted. Fails (listing the offending
+// files) if any need formatting; run `gofmt -w .` to fix.
+func (QC) Fmt() error {
+	fmt.Println("\n🔎 Running gofmt...")
+	out, err := sh.Output("gofmt", "-l", ".")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) != "" {
+		return fmt.Errorf("these Go files are not gofmt-formatted (run `gofmt -w .`):\n%s", out)
+	}
+	return nil
+}
+
 // Runs go vet and staticcheck
 func (QC) Vet() error {
 	if err := isStaticcheckInstalled(); err != nil {
@@ -325,7 +340,7 @@ func (QC) Reset() error {
 
 // Runs all checks that could cause a release to fail.
 func (QC) PreRelease() error {
-	mg.SerialDeps(QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
+	mg.SerialDeps(QC.Fmt, QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
 	return nil
 }
 

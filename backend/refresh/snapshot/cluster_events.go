@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const (
@@ -130,9 +131,8 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		if strings.TrimSpace(objectNamespace) != "" {
 			continue
 		}
-		model := resourcemodel.BuildEventResourceModel(meta.ClusterID, evt)
-		facts := model.Facts.Event
-		timestamp := resourcemodel.EventTimestamp(evt).Time
+		facts := eventres.BuildFacts(meta.ClusterID, evt)
+		timestamp := eventres.EventTimestamp(evt).Time
 		eventType := facts.EventType
 		if eventType == "" {
 			eventType = "-"
@@ -155,8 +155,8 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Type:             eventType,
 			Source:           source,
 			Reason:           facts.Reason,
-			Object:           resourcemodel.EventObjectDisplay(evt),
-			Message:          resourcemodel.EventMessage(evt),
+			Object:           eventres.EventObjectDisplay(evt),
+			Message:          eventres.EventMessage(evt),
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}

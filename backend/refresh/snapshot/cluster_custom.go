@@ -18,10 +18,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
 )
 
 const (
@@ -40,29 +41,9 @@ type ClusterCustomBuilder struct {
 // APIGroup and APIVersion together identify the owning CRD's GroupVersion
 // so the frontend can disambiguate colliding Kinds across API groups.
 // See the NamespaceCustomSummary comment for details.
-type ClusterCustomSummary struct {
-	ClusterMeta
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	APIGroup   string `json:"apiGroup"`
-	APIVersion string `json:"apiVersion"`
-	// CRDName is the name of the CustomResourceDefinition that defines
-	// this resource's Kind, in the canonical Kubernetes form
-	// `<plural>.<group>` (e.g. "dbclusters.rds.services.k8s.aws"). The
-	// frontend's CRD column renders it as a clickable cell that opens
-	// the owning CRD in the object panel. See NamespaceCustomSummary
-	// for the same-shape field on the namespace-scoped variant.
-	CRDName            string                         `json:"crdName,omitempty"`
-	Status             string                         `json:"status,omitempty"`
-	StatusState        string                         `json:"statusState,omitempty"`
-	StatusPresentation string                         `json:"statusPresentation,omitempty"`
-	Ready              *bool                          `json:"ready,omitempty"`
-	ObservedGeneration *int64                         `json:"observedGeneration,omitempty"`
-	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
-	Age                string                         `json:"age"`
-	Labels             map[string]string              `json:"labels,omitempty"`
-	Annotations        map[string]string              `json:"annotations,omitempty"`
-}
+// ClusterCustomSummary lives in the streamrows leaf so the customresource package
+// can build it; this alias keeps the snapshot-side name and wire JSON.
+type ClusterCustomSummary = streamrows.ClusterCustomSummary
 
 // ClusterCustomSnapshot is returned to clients.
 type ClusterCustomSnapshot struct {
@@ -209,7 +190,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 				// streaming_helpers.go. `crdCopy.Name` is the canonical
 				// CRD name (`<plural>.<group>`) used to open the owning
 				// CRD from the row.
-				localSummaries = append(localSummaries, BuildClusterCustomSummary(
+				localSummaries = append(localSummaries, customresource.BuildClusterStreamSummary(
 					meta,
 					item,
 					gvr.Group,

@@ -50,10 +50,10 @@ func TestForEachRunsAllItems(t *testing.T) {
 	items := []string{"a", "b", "c", "d"}
 
 	var (
-		mu       sync.Mutex
-		visited  = make(map[string]int)
-		current  int64
-		maxSeen  int64
+		mu      sync.Mutex
+		visited = make(map[string]int)
+		current int64
+		maxSeen int64
 	)
 
 	err := ForEach(context.Background(), items, 2, func(ctx context.Context, item string) error {

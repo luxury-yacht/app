@@ -10,7 +10,7 @@
  * - Helps ensure consistency between backend data structures and frontend usage.
  * - Supports telemetry and monitoring of refresh operations by defining standard payloads.
  */
-import { types } from '@wailsjs/go/models';
+import { nodes } from '@wailsjs/go/models';
 import type { SnapshotStats } from './client';
 
 // PermissionDeniedStatus mirrors Status-like RBAC error payloads from the refresh API.
@@ -216,7 +216,7 @@ export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   unschedulable: boolean;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
-  taints?: types.NodeTaint[];
+  taints?: nodes.NodeTaint[];
   podMetrics?: NodePodMetric[];
 }
 

@@ -214,7 +214,7 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 	}
 
 	buffer := newEventBuffer(2)
-	buffer.add(bufferedEvent{
+	buffer.Add(bufferedEvent{
 		sequence: 1,
 		entry: Entry{
 			Kind:    "Event",
@@ -222,7 +222,7 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 			Message: "first message",
 		},
 	})
-	buffer.add(bufferedEvent{
+	buffer.Add(bufferedEvent{
 		sequence: 2,
 		entry: Entry{
 			Kind:    "Event",
@@ -267,15 +267,15 @@ func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
 
 func TestEventBufferDetectsExpiredResumeAfterOverflow(t *testing.T) {
 	buffer := newEventBuffer(2)
-	buffer.add(bufferedEvent{sequence: 1, entry: Entry{Name: "one"}})
-	buffer.add(bufferedEvent{sequence: 2, entry: Entry{Name: "two"}})
-	buffer.add(bufferedEvent{sequence: 3, entry: Entry{Name: "three"}})
+	buffer.Add(bufferedEvent{sequence: 1, entry: Entry{Name: "one"}})
+	buffer.Add(bufferedEvent{sequence: 2, entry: Entry{Name: "two"}})
+	buffer.Add(bufferedEvent{sequence: 3, entry: Entry{Name: "three"}})
 
-	if _, ok := buffer.since(1); ok {
+	if _, ok := buffer.Since(1); ok {
 		t.Fatal("expected resume before oldest buffered event to fail")
 	}
 
-	events, ok := buffer.since(2)
+	events, ok := buffer.Since(2)
 	if !ok {
 		t.Fatal("expected resume from retained sequence to succeed")
 	}

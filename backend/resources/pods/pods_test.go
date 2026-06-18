@@ -862,7 +862,6 @@ func TestResolveOwnerFallsBackToNone(t *testing.T) {
 }
 
 func TestFormatHelpersHandleEmptyInputs(t *testing.T) {
-	require.Empty(t, formatPodConditions(nil))
 	require.Empty(t, formatPodVolumes(nil))
 	require.Empty(t, FormatPodTolerations(nil))
 	require.Nil(t, buildAffinityMap(nil))

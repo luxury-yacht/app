@@ -16,22 +16,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
-	"github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/config"
-	"github.com/luxury-yacht/app/backend/resources/constraints"
-	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
-	"github.com/luxury-yacht/app/backend/resources/namespaces"
-	"github.com/luxury-yacht/app/backend/resources/network"
-	"github.com/luxury-yacht/app/backend/resources/nodes"
-	"github.com/luxury-yacht/app/backend/resources/pods"
-	"github.com/luxury-yacht/app/backend/resources/policy"
-	"github.com/luxury-yacht/app/backend/resources/rbac"
-	"github.com/luxury-yacht/app/backend/resources/storage"
-	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -54,296 +40,64 @@ type objectDetailFetcher struct {
 	withDeps func(deps common.Dependencies, namespace, name string) (interface{}, string, error)
 }
 
-var objectDetailFetchers = map[string]objectDetailFetcher{
-	"pod": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := pods.GetPod(deps, namespace, name, true)
-			return detail, "", err
-		},
-	},
-	"deployment": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDeploymentService(deps).Deployment(namespace, name)
-			return detail, "", err
-		},
-	},
-	"replicaset": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewReplicaSetService(deps).ReplicaSet(namespace, name)
-			return detail, "", err
-		},
-	},
-	"daemonset": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDaemonSetService(deps).DaemonSet(namespace, name)
-			return detail, "", err
-		},
-	},
-	"statefulset": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewStatefulSetService(deps).StatefulSet(namespace, name)
-			return detail, "", err
-		},
-	},
-	"job": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewJobService(deps).Job(namespace, name)
-			return detail, "", err
-		},
-	},
-	"cronjob": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewCronJobService(deps).CronJob(namespace, name)
-			return detail, "", err
-		},
-	},
-	"configmap": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(deps).ConfigMap(namespace, name)
-			return detail, "", err
-		},
-	},
-	"secret": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(deps).Secret(namespace, name)
-			return detail, "", err
-		},
-	},
-	"helmrelease": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)
-			return detail, "", err
-		},
-	},
-	"service": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).GetService(namespace, name)
-			return detail, "", err
-		},
-	},
-	"ingress": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).Ingress(namespace, name)
-			return detail, "", err
-		},
-	},
-	"gateway": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).Gateway(namespace, name)
-			return detail, "", err
-		},
-	},
-	"httproute": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).HTTPRoute(namespace, name)
-			return detail, "", err
-		},
-	},
-	"grpcroute": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).GRPCRoute(namespace, name)
-			return detail, "", err
-		},
-	},
-	"tlsroute": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).TLSRoute(namespace, name)
-			return detail, "", err
-		},
-	},
-	"listenerset": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).ListenerSet(namespace, name)
-			return detail, "", err
-		},
-	},
-	"referencegrant": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).ReferenceGrant(namespace, name)
-			return detail, "", err
-		},
-	},
-	"backendtlspolicy": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).BackendTLSPolicy(namespace, name)
-			return detail, "", err
-		},
-	},
-	"networkpolicy": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).NetworkPolicy(namespace, name)
-			return detail, "", err
-		},
-	},
-	"endpointslice": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).EndpointSlice(namespace, name)
-			return detail, "", err
-		},
-	},
-	"persistentvolumeclaim": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).PersistentVolumeClaim(namespace, name)
-			return detail, "", err
-		},
-	},
-	"persistentvolume": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).PersistentVolume(name)
-			return detail, "", err
-		},
-	},
-	"storageclass": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(deps).StorageClass(name)
-			return detail, "", err
-		},
-	},
-	"serviceaccount": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ServiceAccount(namespace, name)
-			return detail, "", err
-		},
-	},
-	"role": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).Role(namespace, name)
-			return detail, "", err
-		},
-	},
-	"rolebinding": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).RoleBinding(namespace, name)
-			return detail, "", err
-		},
-	},
-	"clusterrole": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ClusterRole(name)
-			return detail, "", err
-		},
-	},
-	"clusterrolebinding": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(deps).ClusterRoleBinding(name)
-			return detail, "", err
-		},
-	},
-	"resourcequota": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(deps).ResourceQuota(namespace, name)
-			return detail, "", err
-		},
-	},
-	"limitrange": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(deps).LimitRange(namespace, name)
-			return detail, "", err
-		},
-	},
-	"horizontalpodautoscaler": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := autoscaling.NewService(deps).HorizontalPodAutoscaler(namespace, name)
-			return detail, "", err
-		},
-	},
-	"poddisruptionbudget": {
-		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := policy.NewService(deps).PodDisruptionBudget(namespace, name)
-			return detail, "", err
-		},
-	},
-	"namespace": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := namespaces.NewService(deps).Namespace(name)
-			return detail, "", err
-		},
-	},
-	"node": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := nodes.NewService(deps).Node(name)
-			return detail, "", err
-		},
-	},
-	"ingressclass": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := network.NewService(deps).IngressClass(name)
-			return detail, "", err
-		},
-	},
-	"gatewayclass": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := gatewayapi.NewService(deps).GatewayClass(name)
-			return detail, "", err
-		},
-	},
-	"customresourcedefinition": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := apiextensions.NewService(deps).CustomResourceDefinition(name)
-			return detail, "", err
-		},
-	},
-	"mutatingwebhookconfiguration": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := admission.NewService(deps).MutatingWebhookConfiguration(name)
-			return detail, "", err
-		},
-	},
-	"validatingwebhookconfiguration": {
-		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := admission.NewService(deps).ValidatingWebhookConfiguration(name)
-			return detail, "", err
-		},
-	},
+// objectDetailFetchers is generated from the genappbindings binding descriptor
+// (see object_detail_fetchers_generated.go); run `go generate ./backend` to refresh.
+
+// detailFetcherVersionPins records the API version a typed detail fetcher
+// serves for kinds the built-in contract lists under more than one version. A
+// kind absent here must be unique in resourcecontract.BuiltinResources.
+var detailFetcherVersionPins = map[string]string{
+	"horizontalpodautoscaler": "v2",
 }
 
-// objectDetailFetcherGVKs maps typed detail fetchers to the exact GVK each
-// fetcher handles. It is fetcher capability metadata, not a resource identity
-// source; dynamic resource identity still resolves through the object catalog.
-var objectDetailFetcherGVKs = map[string]schema.GroupVersionKind{
-	"pod":                            builtinDetailGVK("", "v1", "Pod"),
-	"deployment":                     builtinDetailGVK("apps", "v1", "Deployment"),
-	"replicaset":                     builtinDetailGVK("apps", "v1", "ReplicaSet"),
-	"daemonset":                      builtinDetailGVK("apps", "v1", "DaemonSet"),
-	"statefulset":                    builtinDetailGVK("apps", "v1", "StatefulSet"),
-	"job":                            builtinDetailGVK("batch", "v1", "Job"),
-	"cronjob":                        builtinDetailGVK("batch", "v1", "CronJob"),
-	"configmap":                      builtinDetailGVK("", "v1", "ConfigMap"),
-	"secret":                         builtinDetailGVK("", "v1", "Secret"),
-	"service":                        builtinDetailGVK("", "v1", "Service"),
-	"ingress":                        builtinDetailGVK("networking.k8s.io", "v1", "Ingress"),
-	"gateway":                        builtinDetailGVK("gateway.networking.k8s.io", "v1", "Gateway"),
-	"httproute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "HTTPRoute"),
-	"grpcroute":                      builtinDetailGVK("gateway.networking.k8s.io", "v1", "GRPCRoute"),
-	"tlsroute":                       builtinDetailGVK("gateway.networking.k8s.io", "v1", "TLSRoute"),
-	"listenerset":                    builtinDetailGVK("gateway.networking.k8s.io", "v1", "ListenerSet"),
-	"referencegrant":                 builtinDetailGVK("gateway.networking.k8s.io", "v1", "ReferenceGrant"),
-	"backendtlspolicy":               builtinDetailGVK("gateway.networking.k8s.io", "v1", "BackendTLSPolicy"),
-	"networkpolicy":                  builtinDetailGVK("networking.k8s.io", "v1", "NetworkPolicy"),
-	"endpointslice":                  builtinDetailGVK("discovery.k8s.io", "v1", "EndpointSlice"),
-	"persistentvolumeclaim":          builtinDetailGVK("", "v1", "PersistentVolumeClaim"),
-	"persistentvolume":               builtinDetailGVK("", "v1", "PersistentVolume"),
-	"storageclass":                   builtinDetailGVK("storage.k8s.io", "v1", "StorageClass"),
-	"serviceaccount":                 builtinDetailGVK("", "v1", "ServiceAccount"),
-	"role":                           builtinDetailGVK("rbac.authorization.k8s.io", "v1", "Role"),
-	"rolebinding":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "RoleBinding"),
-	"clusterrole":                    builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRole"),
-	"clusterrolebinding":             builtinDetailGVK("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"),
-	"resourcequota":                  builtinDetailGVK("", "v1", "ResourceQuota"),
-	"limitrange":                     builtinDetailGVK("", "v1", "LimitRange"),
-	"horizontalpodautoscaler":        builtinDetailGVK("autoscaling", "v2", "HorizontalPodAutoscaler"),
-	"poddisruptionbudget":            builtinDetailGVK("policy", "v1", "PodDisruptionBudget"),
-	"namespace":                      builtinDetailGVK("", "v1", "Namespace"),
-	"node":                           builtinDetailGVK("", "v1", "Node"),
-	"ingressclass":                   builtinDetailGVK("networking.k8s.io", "v1", "IngressClass"),
-	"gatewayclass":                   builtinDetailGVK("gateway.networking.k8s.io", "v1", "GatewayClass"),
-	"customresourcedefinition":       builtinDetailGVK("apiextensions.k8s.io", "v1", "CustomResourceDefinition"),
-	"mutatingwebhookconfiguration":   builtinDetailGVK("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration"),
-	"validatingwebhookconfiguration": builtinDetailGVK("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration"),
+// objectDetailFetcherGVKs maps each typed detail fetcher to the exact GVK it
+// handles. It is fetcher capability metadata, not a resource identity source;
+// dynamic resource identity still resolves through the object catalog. The map
+// is derived from objectDetailFetchers and resourcecontract.BuiltinResources so
+// the GVK identity has a single source of truth.
+var objectDetailFetcherGVKs = buildObjectDetailFetcherGVKs()
+
+func buildObjectDetailFetcherGVKs() map[string]schema.GroupVersionKind {
+	gvks := make(map[string]schema.GroupVersionKind, len(objectDetailFetchers))
+	for kind := range objectDetailFetchers {
+		// HelmRelease uses the synthetic helm.sh identity (isHelmReleaseGVK), not a
+		// built-in contract entry, so it has no exact-GVK gate.
+		if kind == helmReleaseKind {
+			continue
+		}
+		gvks[kind] = resolveDetailFetcherGVK(kind)
+	}
+	return gvks
 }
 
-func builtinDetailGVK(group, version, kind string) schema.GroupVersionKind {
-	return resourcecontract.MustBuiltin(group, version, kind).GVK()
+// resolveDetailFetcherGVK resolves a typed detail fetcher kind to its built-in
+// contract GVK, applying detailFetcherVersionPins when the contract lists the
+// kind under multiple versions. It panics at package initialization on a
+// missing or ambiguous-unpinned kind, mirroring the previous MustBuiltin
+// fail-loud contract.
+func resolveDetailFetcherGVK(kind string) schema.GroupVersionKind {
+	var matches []resourcecontract.BuiltinResource
+	for _, resource := range resourcecontract.BuiltinResources {
+		if strings.EqualFold(resource.Kind, kind) {
+			matches = append(matches, resource)
+		}
+	}
+	pin, pinned := detailFetcherVersionPins[kind]
+	switch {
+	case len(matches) == 0:
+		panic("object detail fetcher kind has no built-in contract entry: " + kind)
+	case pinned:
+		for _, resource := range matches {
+			if resource.Version == pin {
+				return resource.GVK()
+			}
+		}
+		panic("object detail fetcher version pin not in contract: " + kind + "/" + pin)
+	case len(matches) > 1:
+		panic("object detail fetcher kind is ambiguous in contract; add a version pin: " + kind)
+	default:
+		return matches[0].GVK()
+	}
 }
 
 // lookupObjectDetailFetcher returns the configured fetcher for the supplied

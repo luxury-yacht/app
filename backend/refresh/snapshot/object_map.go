@@ -11,34 +11,31 @@ import (
 	"strings"
 	"time"
 
+	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	"github.com/luxury-yacht/app/backend/resources/ingress"
+	"github.com/luxury-yacht/app/backend/resources/ingressclass"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	batchlisters "k8s.io/client-go/listers/batch/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	discoverylisters "k8s.io/client-go/listers/discovery/v1"
-	networklisters "k8s.io/client-go/listers/networking/v1"
-	policylisters "k8s.io/client-go/listers/policy/v1"
-	rbaclisters "k8s.io/client-go/listers/rbac/v1"
-	storagelisters "k8s.io/client-go/listers/storage/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
@@ -73,25 +70,18 @@ type ObjectMapNode struct {
 	ActionFacts       *ObjectMapActionFacts `json:"actionFacts,omitempty"`
 }
 
-// ObjectMapActionFacts carries the state needed to present context-menu
-// actions without deriving meaning from missing graph edges.
-type ObjectMapActionFacts struct {
-	Status               string `json:"status,omitempty"`
-	Unschedulable        *bool  `json:"unschedulable,omitempty"`
-	PortForwardAvailable *bool  `json:"portForwardAvailable,omitempty"`
-	HPAManaged           *bool  `json:"hpaManaged,omitempty"`
-	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
-}
+// ObjectMapActionFacts carries the state needed to present context-menu actions
+// without deriving meaning from missing graph edges. It aliases the neutral
+// objectmap.ActionFacts so per-kind collector declarations can produce it without
+// importing snapshot.
+type ObjectMapActionFacts = objectmap.ActionFacts
 
 // ObjectMapStatus is a compact card-level status indicator. State is the source
 // status value selected by the resource-specific status builder. Presentation is
 // the backend-selected rendering token for migrated resources that need one.
-type ObjectMapStatus struct {
-	State        string `json:"state"`
-	Label        string `json:"label"`
-	Presentation string `json:"presentation,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-}
+// ObjectMapStatus aliases the neutral objectmap.Status so per-kind packages can
+// produce it without importing snapshot.
+type ObjectMapStatus = objectmap.Status
 
 // ObjectMapEdge captures a directed relationship between two graph nodes.
 type ObjectMapEdge struct {
@@ -170,35 +160,13 @@ type objectMapOptions struct {
 }
 
 type objectMapRecord struct {
-	ref                ObjectMapReference
-	creationTimestamp  string
-	status             *ObjectMapStatus
-	actionFacts        *ObjectMapActionFacts
-	owners             []metav1.OwnerReference
-	labels             map[string]string
-	pod                *corev1.Pod
-	service            *corev1.Service
-	slice              *discoveryv1.EndpointSlice
-	pvc                *corev1.PersistentVolumeClaim
-	pv                 *corev1.PersistentVolume
-	storage            *storagev1.StorageClass
-	ingress            *networkingv1.Ingress
-	ingClass           *networkingv1.IngressClass
-	hpa                *autoscalingv2.HorizontalPodAutoscaler
-	pdb                *policyv1.PodDisruptionBudget
-	networkPolicy      *networkingv1.NetworkPolicy
-	clusterRole        *rbacv1.ClusterRole
-	clusterRoleBinding *rbacv1.ClusterRoleBinding
-	gatewayClass       *gatewayv1.GatewayClass
-	gateway            *gatewayv1.Gateway
-	httpRoute          *gatewayv1.HTTPRoute
-	grpcRoute          *gatewayv1.GRPCRoute
-	tlsRoute           *gatewayv1.TLSRoute
-	listenerSet        *gatewayv1.ListenerSet
-	referenceGrant     *gatewayv1.ReferenceGrant
-	backendTLSPolicy   *gatewayv1.BackendTLSPolicy
-	template           *corev1.PodTemplateSpec
-	cronJobTpl         *corev1.PodTemplateSpec
+	ref               ObjectMapReference
+	obj               metav1.Object
+	creationTimestamp string
+	status            *ObjectMapStatus
+	actionFacts       *ObjectMapActionFacts
+	owners            []metav1.OwnerReference
+	labels            map[string]string
 }
 
 type objectMapIndex struct {
@@ -379,48 +347,45 @@ func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
 	if idx == nil || src.shared == nil {
 		return
 	}
-	// Each collector reads from the factory's already-synced informer cache. The
-	// permission gate skips resources the user cannot list+watch — preserving the
-	// old live-list Forbidden skip and, for cluster-scoped types, avoiding a blind
-	// .Lister() that would lazily register an unstarted informer. HPA has no
-	// matching v2 informer, so it stays a live LIST via src.client.
-	collectors := []struct {
-		group, resource string
-		collect         func()
-	}{
-		{"", "pods", func() { idx.collectPods(src.shared.Core().V1().Pods().Lister()) }},
-		{"", "services", func() { idx.collectServices(src.shared.Core().V1().Services().Lister()) }},
-		{"discovery.k8s.io", "endpointslices", func() { idx.collectEndpointSlices(src.shared.Discovery().V1().EndpointSlices().Lister()) }},
-		{"", "persistentvolumeclaims", func() { idx.collectPVCs(src.shared.Core().V1().PersistentVolumeClaims().Lister()) }},
-		{"", "persistentvolumes", func() { idx.collectPVs(src.shared.Core().V1().PersistentVolumes().Lister()) }},
-		{"storage.k8s.io", "storageclasses", func() { idx.collectStorageClasses(src.shared.Storage().V1().StorageClasses().Lister()) }},
-		{"", "configmaps", func() { idx.collectConfigMaps(src.shared.Core().V1().ConfigMaps().Lister()) }},
-		{"", "secrets", func() { idx.collectSecrets(src.shared.Core().V1().Secrets().Lister()) }},
-		{"", "serviceaccounts", func() { idx.collectServiceAccounts(src.shared.Core().V1().ServiceAccounts().Lister()) }},
-		{"", "nodes", func() { idx.collectNodes(src.shared.Core().V1().Nodes().Lister()) }},
-		{"apps", "deployments", func() { idx.collectDeployments(src.shared.Apps().V1().Deployments().Lister()) }},
-		{"apps", "replicasets", func() { idx.collectReplicaSets(src.shared.Apps().V1().ReplicaSets().Lister()) }},
-		{"apps", "statefulsets", func() { idx.collectStatefulSets(src.shared.Apps().V1().StatefulSets().Lister()) }},
-		{"apps", "daemonsets", func() { idx.collectDaemonSets(src.shared.Apps().V1().DaemonSets().Lister()) }},
-		{"batch", "jobs", func() { idx.collectJobs(src.shared.Batch().V1().Jobs().Lister()) }},
-		{"batch", "cronjobs", func() { idx.collectCronJobs(src.shared.Batch().V1().CronJobs().Lister()) }},
-		{"autoscaling", "horizontalpodautoscalers", func() { idx.collectHPAs(src.ctx, src.client) }},
-		{"policy", "poddisruptionbudgets", func() { idx.collectPodDisruptionBudgets(src.shared.Policy().V1().PodDisruptionBudgets().Lister()) }},
-		{"networking.k8s.io", "networkpolicies", func() { idx.collectNetworkPolicies(src.shared.Networking().V1().NetworkPolicies().Lister()) }},
-		{"networking.k8s.io", "ingresses", func() { idx.collectIngresses(src.shared.Networking().V1().Ingresses().Lister()) }},
-		{"networking.k8s.io", "ingressclasses", func() { idx.collectIngressClasses(src.shared.Networking().V1().IngressClasses().Lister()) }},
-		{"rbac.authorization.k8s.io", "clusterroles", func() { idx.collectClusterRoles(src.shared.Rbac().V1().ClusterRoles().Lister()) }},
-		{"rbac.authorization.k8s.io", "clusterrolebindings", func() { idx.collectClusterRoleBindings(src.shared.Rbac().V1().ClusterRoleBindings().Lister()) }},
-	}
-	for _, c := range collectors {
-		if !src.allowed(c.group, c.resource) {
-			idx.warnSkippedPermission(c.resource)
+	// Each kind declares how it is listed (from the factory's already-synced
+	// informer cache) and projected, in its own package; this loops the registry
+	// and names no kind. The permission gate skips resources the user cannot
+	// list+watch, preserving the old live-list Forbidden skip and, for cluster-
+	// scoped types, avoiding a blind .Lister() on an unstarted informer.
+	clusterID := idx.meta.ClusterID
+	for _, collector := range objectMapCollectors {
+		if !src.allowed(collector.Identity.Group, collector.Identity.Resource) {
+			idx.warnSkippedPermission(collector.Identity.Resource)
 			continue
 		}
-		c.collect()
-		if idx.hasListError() {
-			return
+		items, err := collector.List(src.shared)
+		if idx.skipListError(collector.Identity.Resource, err) {
+			if idx.hasListError() {
+				return
+			}
+			continue
 		}
+		for _, obj := range items {
+			rec := &objectMapRecord{
+				ref:               refFromObject(obj, collector.Identity.Group, collector.Identity.Version, collector.Identity.Kind, collector.Identity.Resource, obj.GetNamespace()),
+				obj:               obj,
+				creationTimestamp: objectCreationTimestamp(obj),
+				owners:            obj.GetOwnerReferences(),
+				labels:            cloneStringMap(obj.GetLabels()),
+				status:            collector.Status(clusterID, obj),
+			}
+			if collector.ActionFacts != nil {
+				rec.actionFacts = collector.ActionFacts(obj)
+			}
+			idx.addRecord(rec)
+		}
+	}
+	// HorizontalPodAutoscaler has no matching v2 informer, so it stays a live LIST
+	// via the client rather than reading from the shared informer cache.
+	if src.allowed("autoscaling", "horizontalpodautoscalers") {
+		idx.collectHPAs(src.ctx, src.client)
+	} else {
+		idx.warnSkippedPermission("horizontalpodautoscalers")
 	}
 }
 
@@ -432,50 +397,28 @@ func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatew
 	if idx == nil || client == nil {
 		return
 	}
-	if gatewayKindPresent(presence, "GatewayClass") {
-		idx.collectGatewayClasses(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "Gateway") {
-		idx.collectGateways(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "HTTPRoute") {
-		idx.collectHTTPRoutes(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "GRPCRoute") {
-		idx.collectGRPCRoutes(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "TLSRoute") {
-		idx.collectTLSRoutes(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "ListenerSet") {
-		idx.collectListenerSets(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "ReferenceGrant") {
-		idx.collectReferenceGrants(ctx, client)
-	}
-	if idx.hasListError() {
-		return
-	}
-	if gatewayKindPresent(presence, "BackendTLSPolicy") {
-		idx.collectBackendTLSPolicies(ctx, client)
+	clusterID := idx.meta.ClusterID
+	for _, collector := range objectMapGatewayCollectors {
+		if !gatewayKindPresent(presence, collector.Identity.Kind) {
+			continue
+		}
+		items, err := collector.List(ctx, client)
+		if idx.skipListError(collector.Identity.Resource, err) {
+			if idx.hasListError() {
+				return
+			}
+			continue
+		}
+		for _, obj := range items {
+			idx.addRecord(&objectMapRecord{
+				ref:               refFromObject(obj, collector.Identity.Group, collector.Identity.Version, collector.Identity.Kind, collector.Identity.Resource, obj.GetNamespace()),
+				obj:               obj,
+				creationTimestamp: objectCreationTimestamp(obj),
+				owners:            obj.GetOwnerReferences(),
+				labels:            cloneStringMap(obj.GetLabels()),
+				status:            collector.Status(clusterID, obj),
+			})
+		}
 	}
 }
 
@@ -483,286 +426,10 @@ func gatewayKindPresent(presence objectMapGatewayPresence, kind string) bool {
 	return presence == nil || presence.Has(kind)
 }
 
-func (idx *objectMapIndex) collectPods(lister corelisters.PodLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("pods", err) {
-		return
-	}
-	for _, pod := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
-			creationTimestamp: objectCreationTimestamp(&pod.ObjectMeta),
-			status:            objectMapPodStatus(idx.meta.ClusterID, *pod),
-			actionFacts:       objectMapPortForwardFacts(hasForwardablePodPorts(pod)),
-			owners:            pod.OwnerReferences,
-			labels:            cloneStringMap(pod.Labels),
-			pod:               pod,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectServices(lister corelisters.ServiceLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("services", err) {
-		return
-	}
-	for _, svc := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
-			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
-			status:            objectMapServiceStatus(idx.meta.ClusterID, *svc),
-			actionFacts:       objectMapPortForwardFacts(serviceHasForwardablePorts(svc.Spec.Ports)),
-			owners:            svc.OwnerReferences,
-			labels:            cloneStringMap(svc.Labels),
-			service:           svc,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectEndpointSlices(lister discoverylisters.EndpointSliceLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("endpointslices", err) {
-		return
-	}
-	for _, slice := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&slice.ObjectMeta, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", slice.Namespace),
-			creationTimestamp: objectCreationTimestamp(&slice.ObjectMeta),
-			status:            objectMapEndpointSliceStatus(idx.meta.ClusterID, *slice),
-			owners:            slice.OwnerReferences,
-			labels:            cloneStringMap(slice.Labels),
-			slice:             slice,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectPVCs(lister corelisters.PersistentVolumeClaimLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("persistentvolumeclaims", err) {
-		return
-	}
-	for _, pvc := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&pvc.ObjectMeta, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", pvc.Namespace),
-			creationTimestamp: objectCreationTimestamp(&pvc.ObjectMeta),
-			status:            objectMapPVCStatus(idx.meta.ClusterID, *pvc),
-			owners:            pvc.OwnerReferences,
-			labels:            cloneStringMap(pvc.Labels),
-			pvc:               pvc,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectPVs(lister corelisters.PersistentVolumeLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("persistentvolumes", err) {
-		return
-	}
-	for _, pv := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
-			creationTimestamp: objectCreationTimestamp(&pv.ObjectMeta),
-			status:            objectMapPVStatus(idx.meta.ClusterID, *pv),
-			owners:            pv.OwnerReferences,
-			labels:            cloneStringMap(pv.Labels),
-			pv:                pv,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectStorageClasses(lister storagelisters.StorageClassLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("storageclasses", err) {
-		return
-	}
-	for _, sc := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
-			creationTimestamp: objectCreationTimestamp(&sc.ObjectMeta),
-			status:            objectMapStorageClassStatus(idx.meta.ClusterID, *sc),
-			owners:            sc.OwnerReferences,
-			labels:            cloneStringMap(sc.Labels),
-			storage:           sc,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectConfigMaps(lister corelisters.ConfigMapLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("configmaps", err) {
-		return
-	}
-	for _, cm := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&cm.ObjectMeta, "", "v1", "ConfigMap", "configmaps", cm.Namespace),
-			creationTimestamp: objectCreationTimestamp(&cm.ObjectMeta),
-			status:            objectMapConfigMapStatus(idx.meta.ClusterID, *cm),
-			owners:            cm.OwnerReferences,
-			labels:            cloneStringMap(cm.Labels),
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectSecrets(lister corelisters.SecretLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("secrets", err) {
-		return
-	}
-	for _, secret := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&secret.ObjectMeta, "", "v1", "Secret", "secrets", secret.Namespace),
-			creationTimestamp: objectCreationTimestamp(&secret.ObjectMeta),
-			status:            objectMapSecretStatus(idx.meta.ClusterID, *secret),
-			owners:            secret.OwnerReferences,
-			labels:            cloneStringMap(secret.Labels),
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectServiceAccounts(lister corelisters.ServiceAccountLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("serviceaccounts", err) {
-		return
-	}
-	for _, sa := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&sa.ObjectMeta, "", "v1", "ServiceAccount", "serviceaccounts", sa.Namespace),
-			creationTimestamp: objectCreationTimestamp(&sa.ObjectMeta),
-			status:            objectMapServiceAccountStatus(idx.meta.ClusterID, *sa),
-			owners:            sa.OwnerReferences,
-			labels:            cloneStringMap(sa.Labels),
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectNodes(lister corelisters.NodeLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("nodes", err) {
-		return
-	}
-	for _, node := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
-			creationTimestamp: objectCreationTimestamp(&node.ObjectMeta),
-			status:            objectMapNodeStatus(idx.meta.ClusterID, *node),
-			actionFacts:       objectMapNodeActionFacts(node.Spec.Unschedulable),
-			owners:            node.OwnerReferences,
-			labels:            cloneStringMap(node.Labels),
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectDeployments(lister appslisters.DeploymentLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("deployments", err) {
-		return
-	}
-	for _, deploy := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
-			creationTimestamp: objectCreationTimestamp(&deploy.ObjectMeta),
-			status:            objectMapDeploymentStatus(idx.meta.ClusterID, *deploy),
-			actionFacts:       objectMapScalableWorkloadFacts(deploy.Spec.Replicas, hasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers)),
-			owners:            deploy.OwnerReferences,
-			labels:            cloneStringMap(deploy.Labels),
-			template:          &deploy.Spec.Template,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectReplicaSets(lister appslisters.ReplicaSetLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("replicasets", err) {
-		return
-	}
-	for _, rs := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
-			creationTimestamp: objectCreationTimestamp(&rs.ObjectMeta),
-			status:            objectMapReplicaSetStatus(idx.meta.ClusterID, *rs),
-			actionFacts:       objectMapScalableWorkloadFacts(rs.Spec.Replicas, hasForwardableContainerPorts(rs.Spec.Template.Spec.Containers)),
-			owners:            rs.OwnerReferences,
-			labels:            cloneStringMap(rs.Labels),
-			template:          &rs.Spec.Template,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectStatefulSets(lister appslisters.StatefulSetLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("statefulsets", err) {
-		return
-	}
-	for _, sts := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
-			creationTimestamp: objectCreationTimestamp(&sts.ObjectMeta),
-			status:            objectMapStatefulSetStatus(idx.meta.ClusterID, *sts),
-			actionFacts:       objectMapScalableWorkloadFacts(sts.Spec.Replicas, hasForwardableContainerPorts(sts.Spec.Template.Spec.Containers)),
-			owners:            sts.OwnerReferences,
-			labels:            cloneStringMap(sts.Labels),
-			template:          &sts.Spec.Template,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectDaemonSets(lister appslisters.DaemonSetLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("daemonsets", err) {
-		return
-	}
-	for _, ds := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
-			creationTimestamp: objectCreationTimestamp(&ds.ObjectMeta),
-			status:            objectMapDaemonSetStatus(idx.meta.ClusterID, *ds),
-			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(ds.Spec.Template.Spec.Containers)),
-			owners:            ds.OwnerReferences,
-			labels:            cloneStringMap(ds.Labels),
-			template:          &ds.Spec.Template,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectJobs(lister batchlisters.JobLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("jobs", err) {
-		return
-	}
-	for _, job := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
-			creationTimestamp: objectCreationTimestamp(&job.ObjectMeta),
-			status:            objectMapJobStatus(idx.meta.ClusterID, *job),
-			actionFacts:       objectMapPortForwardFacts(hasForwardableContainerPorts(job.Spec.Template.Spec.Containers)),
-			owners:            job.OwnerReferences,
-			labels:            cloneStringMap(job.Labels),
-			template:          job.Spec.Template.DeepCopy(),
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectCronJobs(lister batchlisters.CronJobLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("cronjobs", err) {
-		return
-	}
-	for _, cron := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&cron.ObjectMeta, "batch", "v1", "CronJob", "cronjobs", cron.Namespace),
-			creationTimestamp: objectCreationTimestamp(&cron.ObjectMeta),
-			status:            objectMapCronJobStatus(idx.meta.ClusterID, *cron),
-			actionFacts:       objectMapCronJobActionFacts(*cron),
-			owners:            cron.OwnerReferences,
-			labels:            cloneStringMap(cron.Labels),
-			cronJobTpl:        cron.Spec.JobTemplate.Spec.Template.DeepCopy(),
-		})
-	}
-}
-
-// collectHPAs is the one typed collector that still issues a live LIST: the shared
-// factory caches autoscaling/v1, but object-map needs the v2 shape, so there is no
-// matching informer to read from.
+// collectHPAs is the one object-map collector that still issues a live LIST: the
+// shared factory caches autoscaling/v1, but the object map needs the v2 shape, so
+// there is no matching informer to read from. It is therefore not declared as an
+// objectmapnode.Collector.
 func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.Interface) {
 	if client == nil {
 		return
@@ -775,262 +442,15 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		hpa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
+			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
+			obj:               &hpa,
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
-			status:            objectMapHPAStatus(idx.meta.ClusterID, hpa),
+			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
 			labels:            cloneStringMap(hpa.Labels),
-			hpa:               &hpa,
 		})
 	}
 }
-
-func (idx *objectMapIndex) collectPodDisruptionBudgets(lister policylisters.PodDisruptionBudgetLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("poddisruptionbudgets", err) {
-		return
-	}
-	for _, pdb := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&pdb.ObjectMeta, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", pdb.Namespace),
-			creationTimestamp: objectCreationTimestamp(&pdb.ObjectMeta),
-			status:            objectMapPodDisruptionBudgetStatus(idx.meta.ClusterID, *pdb),
-			owners:            pdb.OwnerReferences,
-			labels:            cloneStringMap(pdb.Labels),
-			pdb:               pdb,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectNetworkPolicies(lister networklisters.NetworkPolicyLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("networkpolicies", err) {
-		return
-	}
-	for _, policy := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&policy.ObjectMeta, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", policy.Namespace),
-			creationTimestamp: objectCreationTimestamp(&policy.ObjectMeta),
-			status:            objectMapNetworkPolicyStatus(idx.meta.ClusterID, *policy),
-			owners:            policy.OwnerReferences,
-			labels:            cloneStringMap(policy.Labels),
-			networkPolicy:     policy,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectIngresses(lister networklisters.IngressLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("ingresses", err) {
-		return
-	}
-	for _, ing := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&ing.ObjectMeta, "networking.k8s.io", "v1", "Ingress", "ingresses", ing.Namespace),
-			creationTimestamp: objectCreationTimestamp(&ing.ObjectMeta),
-			status:            objectMapIngressStatus(idx.meta.ClusterID, *ing),
-			owners:            ing.OwnerReferences,
-			labels:            cloneStringMap(ing.Labels),
-			ingress:           ing,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectIngressClasses(lister networklisters.IngressClassLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("ingressclasses", err) {
-		return
-	}
-	for _, ingClass := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
-			creationTimestamp: objectCreationTimestamp(&ingClass.ObjectMeta),
-			status:            objectMapIngressClassStatus(idx.meta.ClusterID, *ingClass),
-			owners:            ingClass.OwnerReferences,
-			labels:            cloneStringMap(ingClass.Labels),
-			ingClass:          ingClass,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectClusterRoles(lister rbaclisters.ClusterRoleLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("clusterroles", err) {
-		return
-	}
-	for _, role := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
-			creationTimestamp: objectCreationTimestamp(&role.ObjectMeta),
-			status:            objectMapClusterRoleStatus(idx.meta.ClusterID, *role),
-			owners:            role.OwnerReferences,
-			labels:            cloneStringMap(role.Labels),
-			clusterRole:       role,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectClusterRoleBindings(lister rbaclisters.ClusterRoleBindingLister) {
-	items, err := lister.List(labels.Everything())
-	if idx.skipListError("clusterrolebindings", err) {
-		return
-	}
-	for _, binding := range items {
-		idx.addRecord(&objectMapRecord{
-			ref:                refFromObject(&binding.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", ""),
-			creationTimestamp:  objectCreationTimestamp(&binding.ObjectMeta),
-			status:             objectMapClusterRoleBindingStatus(idx.meta.ClusterID, *binding),
-			owners:             binding.OwnerReferences,
-			labels:             cloneStringMap(binding.Labels),
-			clusterRoleBinding: binding,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectGatewayClasses(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().GatewayClasses().List(ctx, metav1.ListOptions{})
-	if idx.skipListError("gatewayclasses", err) {
-		return
-	}
-	for i := range list.Items {
-		gatewayClass := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&gatewayClass.ObjectMeta, "gateway.networking.k8s.io", "v1", "GatewayClass", "gatewayclasses", ""),
-			creationTimestamp: objectCreationTimestamp(&gatewayClass.ObjectMeta),
-			status:            objectMapGatewayClassStatus(idx.meta.ClusterID, gatewayClass),
-			owners:            gatewayClass.OwnerReferences,
-			labels:            cloneStringMap(gatewayClass.Labels),
-			gatewayClass:      &gatewayClass,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectGateways(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().Gateways(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("gateways", err) {
-		return
-	}
-	for i := range list.Items {
-		gateway := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&gateway.ObjectMeta, "gateway.networking.k8s.io", "v1", "Gateway", "gateways", gateway.Namespace),
-			creationTimestamp: objectCreationTimestamp(&gateway.ObjectMeta),
-			status:            objectMapGatewayStatus(idx.meta.ClusterID, gateway),
-			owners:            gateway.OwnerReferences,
-			labels:            cloneStringMap(gateway.Labels),
-			gateway:           &gateway,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectHTTPRoutes(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().HTTPRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("httproutes", err) {
-		return
-	}
-	for i := range list.Items {
-		route := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes", route.Namespace),
-			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
-			status:            objectMapHTTPRouteStatus(idx.meta.ClusterID, route),
-			owners:            route.OwnerReferences,
-			labels:            cloneStringMap(route.Labels),
-			httpRoute:         &route,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectGRPCRoutes(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().GRPCRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("grpcroutes", err) {
-		return
-	}
-	for i := range list.Items {
-		route := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "GRPCRoute", "grpcroutes", route.Namespace),
-			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
-			status:            objectMapGRPCRouteStatus(idx.meta.ClusterID, route),
-			owners:            route.OwnerReferences,
-			labels:            cloneStringMap(route.Labels),
-			grpcRoute:         &route,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectTLSRoutes(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().TLSRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("tlsroutes", err) {
-		return
-	}
-	for i := range list.Items {
-		route := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&route.ObjectMeta, "gateway.networking.k8s.io", "v1", "TLSRoute", "tlsroutes", route.Namespace),
-			creationTimestamp: objectCreationTimestamp(&route.ObjectMeta),
-			status:            objectMapTLSRouteStatus(idx.meta.ClusterID, route),
-			owners:            route.OwnerReferences,
-			labels:            cloneStringMap(route.Labels),
-			tlsRoute:          &route,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectListenerSets(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().ListenerSets(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("listenersets", err) {
-		return
-	}
-	for i := range list.Items {
-		listenerSet := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&listenerSet.ObjectMeta, "gateway.networking.k8s.io", "v1", "ListenerSet", "listenersets", listenerSet.Namespace),
-			creationTimestamp: objectCreationTimestamp(&listenerSet.ObjectMeta),
-			status:            objectMapListenerSetStatus(idx.meta.ClusterID, listenerSet),
-			owners:            listenerSet.OwnerReferences,
-			labels:            cloneStringMap(listenerSet.Labels),
-			listenerSet:       &listenerSet,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectReferenceGrants(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().ReferenceGrants(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("referencegrants", err) {
-		return
-	}
-	for i := range list.Items {
-		grant := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&grant.ObjectMeta, "gateway.networking.k8s.io", "v1", "ReferenceGrant", "referencegrants", grant.Namespace),
-			creationTimestamp: objectCreationTimestamp(&grant.ObjectMeta),
-			status:            objectMapReferenceGrantStatus(idx.meta.ClusterID, grant),
-			owners:            grant.OwnerReferences,
-			labels:            cloneStringMap(grant.Labels),
-			referenceGrant:    &grant,
-		})
-	}
-}
-
-func (idx *objectMapIndex) collectBackendTLSPolicies(ctx context.Context, client gatewayversioned.Interface) {
-	list, err := client.GatewayV1().BackendTLSPolicies(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if idx.skipListError("backendtlspolicies", err) {
-		return
-	}
-	for i := range list.Items {
-		policy := list.Items[i]
-		idx.addRecord(&objectMapRecord{
-			ref:               refFromObject(&policy.ObjectMeta, "gateway.networking.k8s.io", "v1", "BackendTLSPolicy", "backendtlspolicies", policy.Namespace),
-			creationTimestamp: objectCreationTimestamp(&policy.ObjectMeta),
-			status:            objectMapBackendTLSPolicyStatus(idx.meta.ClusterID, policy),
-			owners:            policy.OwnerReferences,
-			labels:            cloneStringMap(policy.Labels),
-			backendTLSPolicy:  &policy,
-		})
-	}
-}
-
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 	if err == nil {
 		return false
@@ -1100,74 +520,8 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if len(dst.labels) == 0 {
 		dst.labels = src.labels
 	}
-	if src.pod != nil {
-		dst.pod = src.pod
-	}
-	if src.service != nil {
-		dst.service = src.service
-	}
-	if src.slice != nil {
-		dst.slice = src.slice
-	}
-	if src.pvc != nil {
-		dst.pvc = src.pvc
-	}
-	if src.pv != nil {
-		dst.pv = src.pv
-	}
-	if src.storage != nil {
-		dst.storage = src.storage
-	}
-	if src.ingress != nil {
-		dst.ingress = src.ingress
-	}
-	if src.ingClass != nil {
-		dst.ingClass = src.ingClass
-	}
-	if src.hpa != nil {
-		dst.hpa = src.hpa
-	}
-	if src.pdb != nil {
-		dst.pdb = src.pdb
-	}
-	if src.networkPolicy != nil {
-		dst.networkPolicy = src.networkPolicy
-	}
-	if src.clusterRole != nil {
-		dst.clusterRole = src.clusterRole
-	}
-	if src.clusterRoleBinding != nil {
-		dst.clusterRoleBinding = src.clusterRoleBinding
-	}
-	if src.gatewayClass != nil {
-		dst.gatewayClass = src.gatewayClass
-	}
-	if src.gateway != nil {
-		dst.gateway = src.gateway
-	}
-	if src.httpRoute != nil {
-		dst.httpRoute = src.httpRoute
-	}
-	if src.grpcRoute != nil {
-		dst.grpcRoute = src.grpcRoute
-	}
-	if src.tlsRoute != nil {
-		dst.tlsRoute = src.tlsRoute
-	}
-	if src.listenerSet != nil {
-		dst.listenerSet = src.listenerSet
-	}
-	if src.referenceGrant != nil {
-		dst.referenceGrant = src.referenceGrant
-	}
-	if src.backendTLSPolicy != nil {
-		dst.backendTLSPolicy = src.backendTLSPolicy
-	}
-	if src.template != nil {
-		dst.template = src.template
-	}
-	if src.cronJobTpl != nil {
-		dst.cronJobTpl = src.cronJobTpl
+	if src.obj != nil {
+		dst.obj = src.obj
 	}
 }
 
@@ -1177,11 +531,15 @@ func (idx *objectMapIndex) enrichActionFacts() {
 	}
 	managedTargets := make(map[string]struct{})
 	for _, record := range idx.records {
-		if record == nil || record.hpa == nil {
+		if record == nil {
 			continue
 		}
-		model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
-		target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
+		hpa, ok := record.obj.(*autoscalingv2.HorizontalPodAutoscaler)
+		if !ok {
+			continue
+		}
+		facts := hpapkg.BuildFacts(idx.meta.ClusterID, hpa)
+		target := idx.recordForResourceLink(facts.ScaleTarget)
 		if target == nil {
 			continue
 		}
@@ -1202,10 +560,20 @@ func (idx *objectMapIndex) enrichActionFacts() {
 	}
 }
 
+// objectMapGraphByKind is each kind's object-map graph role, keyed by Kind, from
+// the single registry — so the traversal heuristics below name no kind.
+var objectMapGraphByKind = func() map[string]kindspec.ObjectMapGraph {
+	m := make(map[string]kindspec.ObjectMapGraph, len(kindregistry.All))
+	for _, d := range kindregistry.All {
+		m[d.Identity.Kind] = d.Graph
+	}
+	return m
+}()
+
 func isObjectMapScalableWorkload(ref ObjectMapReference) bool {
-	return ref.Group == "apps" &&
-		ref.Version == "v1" &&
-		(ref.Kind == "Deployment" || ref.Kind == "StatefulSet" || ref.Kind == "ReplicaSet")
+	// The apps/v1 guard preserves the historical scope (a same-named CRD is not a
+	// scalable workload); the registry supplies the per-kind classification.
+	return ref.Group == "apps" && ref.Version == "v1" && objectMapGraphByKind[ref.Kind].ScalableWorkload
 }
 
 func objectMapActionTargetKey(ref ObjectMapReference) string {
@@ -1264,214 +632,9 @@ func cloneObjectMapStatus(status *ObjectMapStatus) *ObjectMapStatus {
 	return &clone
 }
 
-func objectMapPortForwardFacts(available bool) *ObjectMapActionFacts {
-	return &ObjectMapActionFacts{PortForwardAvailable: &available}
-}
-
-func objectMapScalableWorkloadFacts(replicas *int32, portForwardAvailable bool) *ObjectMapActionFacts {
-	return &ObjectMapActionFacts{
-		PortForwardAvailable: &portForwardAvailable,
-		DesiredReplicas:      replicas,
-	}
-}
-
-func objectMapNodeActionFacts(unschedulable bool) *ObjectMapActionFacts {
-	return &ObjectMapActionFacts{Unschedulable: &unschedulable}
-}
-
-func objectMapCronJobActionFacts(cron batchv1.CronJob) *ObjectMapActionFacts {
-	available := hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers)
-	facts := &ObjectMapActionFacts{PortForwardAvailable: &available}
-	if cron.Spec.Suspend != nil && *cron.Spec.Suspend {
-		facts.Status = "Suspended"
-	}
-	return facts
-}
-
-func serviceHasForwardablePorts(ports []corev1.ServicePort) bool {
-	for _, port := range ports {
-		if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-			return true
-		}
-	}
-	return false
-}
-
-func objectMapStatus(state, label string, reasons ...string) *ObjectMapStatus {
-	status := &ObjectMapStatus{State: state, Label: label}
-	for _, reason := range reasons {
-		if strings.TrimSpace(reason) != "" {
-			status.Reason = reason
-			break
-		}
-	}
-	return status
-}
-
-func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
-	model := resourcemodel.BuildPodResourceModel(clusterID, &pod)
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
-}
-
-func objectMapServiceStatus(clusterID string, service corev1.Service) *ObjectMapStatus {
-	model := resourcemodel.BuildServiceResourceModel(clusterID, &service, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapEndpointSliceStatus(clusterID string, slice discoveryv1.EndpointSlice) *ObjectMapStatus {
-	model := resourcemodel.BuildEndpointSliceResourceModel(clusterID, &slice)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapPVCStatus(clusterID string, pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
-	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(clusterID, &pvc)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapPVStatus(clusterID string, pv corev1.PersistentVolume) *ObjectMapStatus {
-	model := resourcemodel.BuildPersistentVolumeResourceModel(clusterID, &pv)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapStorageClassStatus(clusterID string, storageClass storagev1.StorageClass) *ObjectMapStatus {
-	model := resourcemodel.BuildStorageClassResourceModel(clusterID, &storageClass)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapConfigMapStatus(clusterID string, configMap corev1.ConfigMap) *ObjectMapStatus {
-	model := resourcemodel.BuildConfigMapResourceModel(clusterID, &configMap, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapStatus {
-	model := resourcemodel.BuildSecretResourceModel(clusterID, &secret, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
-	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
-	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
-}
-
-func objectMapDeploymentStatus(clusterID string, deploy appsv1.Deployment) *ObjectMapStatus {
-	model := resourcemodel.BuildDeploymentResourceModel(clusterID, &deploy)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapReplicaSetStatus(clusterID string, rs appsv1.ReplicaSet) *ObjectMapStatus {
-	model := resourcemodel.BuildReplicaSetResourceModel(clusterID, &rs)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapStatefulSetStatus(clusterID string, sts appsv1.StatefulSet) *ObjectMapStatus {
-	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, &sts)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapDaemonSetStatus(clusterID string, ds appsv1.DaemonSet) *ObjectMapStatus {
-	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, &ds)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapJobStatus(clusterID string, job batchv1.Job) *ObjectMapStatus {
-	model := resourcemodel.BuildJobResourceModel(clusterID, &job)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapCronJobStatus(clusterID string, cron batchv1.CronJob) *ObjectMapStatus {
-	model := resourcemodel.BuildCronJobResourceModel(clusterID, &cron)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapStatusFromResourceModel(model resourcemodel.ResourceModel) *ObjectMapStatus {
-	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
-	status.Presentation = model.Status.Presentation
-	return status
-}
-
-func objectMapHPAStatus(clusterID string, hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapStatus {
-	model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(clusterID, &hpa)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapPodDisruptionBudgetStatus(clusterID string, pdb policyv1.PodDisruptionBudget) *ObjectMapStatus {
-	model := resourcemodel.BuildPodDisruptionBudgetResourceModel(clusterID, &pdb)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapNetworkPolicyStatus(clusterID string, policy networkingv1.NetworkPolicy) *ObjectMapStatus {
-	model := resourcemodel.BuildNetworkPolicyResourceModel(clusterID, &policy)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
-	model := resourcemodel.BuildIngressResourceModel(clusterID, &ingress)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.IngressClass) *ObjectMapStatus {
-	model := resourcemodel.BuildIngressClassResourceModel(clusterID, &ingressClass)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
-	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapClusterRoleBindingStatus(clusterID string, binding rbacv1.ClusterRoleBinding) *ObjectMapStatus {
-	model := resourcemodel.BuildClusterRoleBindingResourceModel(clusterID, &binding)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapGatewayClassStatus(clusterID string, gatewayClass gatewayv1.GatewayClass) *ObjectMapStatus {
-	model := resourcemodel.BuildGatewayClassResourceModel(clusterID, &gatewayClass)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapGatewayStatus(clusterID string, gateway gatewayv1.Gateway) *ObjectMapStatus {
-	model := resourcemodel.BuildGatewayResourceModel(clusterID, &gateway)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapHTTPRouteStatus(clusterID string, route gatewayv1.HTTPRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildHTTPRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapGRPCRouteStatus(clusterID string, route gatewayv1.GRPCRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildGRPCRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapTLSRouteStatus(clusterID string, route gatewayv1.TLSRoute) *ObjectMapStatus {
-	model := resourcemodel.BuildTLSRouteResourceModel(clusterID, &route)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapListenerSetStatus(clusterID string, listenerSet gatewayv1.ListenerSet) *ObjectMapStatus {
-	model := resourcemodel.BuildListenerSetResourceModel(clusterID, &listenerSet)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapReferenceGrantStatus(clusterID string, grant gatewayv1.ReferenceGrant) *ObjectMapStatus {
-	model := resourcemodel.BuildReferenceGrantResourceModel(clusterID, &grant)
-	return objectMapStatusFromResourceModel(model)
-}
-
-func objectMapBackendTLSPolicyStatus(clusterID string, policy gatewayv1.BackendTLSPolicy) *ObjectMapStatus {
-	model := resourcemodel.BuildBackendTLSPolicyResourceModel(clusterID, &policy)
-	return objectMapStatusFromResourceModel(model)
-}
+// Every kind's object-map status projection now lives in its kind package
+// (e.g. statefulset.ObjectMapStatus, gateway.ObjectMapStatus); the collectors
+// call them directly.
 
 func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersionKind, name string) (*objectMapRecord, bool) {
 	if idx == nil {
@@ -1764,66 +927,18 @@ func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 }
 
 func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
-	switch ref.Kind {
-	case "Pod",
-		"Service",
-		"EndpointSlice",
-		"PersistentVolumeClaim",
-		"PersistentVolume",
-		"StorageClass",
-		"ConfigMap",
-		"Secret",
-		"ServiceAccount",
-		"Node",
-		"PodDisruptionBudget",
-		"NetworkPolicy",
-		"IngressClass":
-		return true
-	default:
-		return false
-	}
+	return objectMapGraphByKind[ref.Kind].DirectionalTraversal
 }
 
+// isNamespaceMapSupportedRecord reports whether a record is a node the object map
+// presents. Every object the collectors add carries its source object, and every
+// collected kind is a presented node, so a non-nil obj is the test.
 func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
-	if record == nil {
-		return false
-	}
-	return record.pod != nil ||
-		record.service != nil ||
-		record.slice != nil ||
-		record.pvc != nil ||
-		record.pv != nil ||
-		record.storage != nil ||
-		record.ingress != nil ||
-		record.ingClass != nil ||
-		record.hpa != nil ||
-		record.pdb != nil ||
-		record.networkPolicy != nil ||
-		record.clusterRole != nil ||
-		record.clusterRoleBinding != nil ||
-		record.gatewayClass != nil ||
-		record.gateway != nil ||
-		record.httpRoute != nil ||
-		record.grpcRoute != nil ||
-		record.tlsRoute != nil ||
-		record.listenerSet != nil ||
-		record.referenceGrant != nil ||
-		record.backendTLSPolicy != nil ||
-		record.template != nil ||
-		record.cronJobTpl != nil ||
-		record.ref.Kind == "ConfigMap" ||
-		record.ref.Kind == "Secret" ||
-		record.ref.Kind == "ServiceAccount" ||
-		record.ref.Kind == "Node"
+	return record != nil && record.obj != nil
 }
 
 func stopsNamespaceMapReverseExpansion(ref ObjectMapReference) bool {
-	switch ref.Kind {
-	case "StorageClass", "IngressClass", "GatewayClass":
-		return true
-	default:
-		return false
-	}
+	return objectMapGraphByKind[ref.Kind].StopsReverseExpansion
 }
 
 func compareObjectMapRefs(a, b ObjectMapReference) int {
@@ -1872,144 +987,23 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 	}
 
 	for _, record := range idx.records {
-		if record.service != nil {
-			for _, pod := range idx.matchingPods(record.ref.Namespace, record.service.Spec.Selector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-			for _, slice := range idx.endpointSlicesForService(record.ref.Namespace, record.ref.Name) {
-				relationship := objectMapRelationships[objectMapEdgeEndpoint]
-				add(record, slice, relationship.typ, relationship.label, discoveryv1.LabelServiceName)
-			}
-		}
-		if record.slice != nil {
-			for _, endpoint := range record.slice.Endpoints {
-				if endpoint.TargetRef == nil {
-					continue
+		// Every kind declares its relationship edges in its own package; the
+		// registry dispatches by kind and resolveEdgeTargets resolves each target.
+		if build := objectMapEdgeBuilders[record.ref.Kind]; build != nil {
+			for _, e := range build(idx.meta.ClusterID, record.obj) {
+				relationship := objectMapRelationships[e.Type]
+				label := e.Label
+				if label == "" {
+					label = relationship.label
 				}
-				target := idx.resolveCoreObjectRef(record.ref.Namespace, endpoint.TargetRef)
-				add(record, target, objectMapEdgeEndpoint, "routes to", "endpoints.targetRef")
-			}
-		}
-		if record.pod != nil {
-			idx.addPodEdges(record, add)
-		}
-		if record.pvc != nil && record.pvc.Spec.VolumeName != "" {
-			target := idx.findCore("", "v1", "PersistentVolume", record.pvc.Spec.VolumeName)
-			relationship := objectMapRelationships[objectMapEdgeVolumeBinding]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.pvc != nil && record.pvc.Spec.VolumeName == "" && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
-			target := idx.findStorageClass(*record.pvc.Spec.StorageClassName)
-			relationship := objectMapRelationships[objectMapEdgeStorageClass]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.pv != nil && record.pv.Spec.StorageClassName != "" {
-			target := idx.findStorageClass(record.pv.Spec.StorageClassName)
-			relationship := objectMapRelationships[objectMapEdgeStorageClass]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.ingress != nil {
-			if className, tracedBy := ingressClassName(record.ingress); className != "" {
-				target := idx.findIngressClass(className)
-				add(record, target, objectMapEdgeUses, "uses class", tracedBy)
-			}
-			for _, serviceName := range ingressBackendServices(record.ingress) {
-				target := idx.findCore(record.ref.Namespace, "v1", "Service", serviceName)
-				relationship := objectMapRelationships[objectMapEdgeRoutes]
-				add(record, target, relationship.typ, relationship.label, "spec.backend.service")
-			}
-		}
-		if record.hpa != nil {
-			model := resourcemodel.BuildHorizontalPodAutoscalerResourceModel(idx.meta.ClusterID, record.hpa)
-			target := idx.recordForResourceLink(model.Facts.HorizontalPodAutoscaler.ScaleTarget)
-			relationship := objectMapRelationships[objectMapEdgeScales]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-		}
-		if record.pdb != nil {
-			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, record.pdb.Spec.Selector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-		}
-		if record.networkPolicy != nil {
-			for _, pod := range idx.matchingPodsByLabelSelector(record.ref.Namespace, &record.networkPolicy.Spec.PodSelector) {
-				relationship := objectMapRelationships[objectMapEdgeSelector]
-				add(record, pod, relationship.typ, relationship.label, "spec.podSelector")
-			}
-		}
-		if record.clusterRole != nil && record.clusterRole.AggregationRule != nil {
-			for _, selector := range record.clusterRole.AggregationRule.ClusterRoleSelectors {
-				for _, target := range idx.clusterRolesMatchingSelector(selector) {
-					relationship := objectMapRelationships[objectMapEdgeAggregates]
-					add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
+				tracedBy := e.TracedBy
+				if tracedBy == "" {
+					tracedBy = relationship.defaultTracedBy
+				}
+				for _, target := range idx.resolveEdgeTargets(record, e) {
+					add(record, target, e.Type, label, tracedBy)
 				}
 			}
-		}
-		if record.clusterRoleBinding != nil {
-			model := resourcemodel.BuildClusterRoleBindingResourceModel(idx.meta.ClusterID, record.clusterRoleBinding)
-			target := idx.recordForResourceLink(model.Facts.ClusterRoleBinding.RoleRef)
-			relationship := objectMapRelationships[objectMapEdgeGrants]
-			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			for _, subject := range model.Facts.ClusterRoleBinding.Subjects {
-				if subject.Link == nil {
-					continue
-				}
-				target := idx.recordForResourceLink(*subject.Link)
-				relationship := objectMapRelationships[objectMapEdgeBinds]
-				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
-			}
-		}
-		if record.gatewayClass != nil {
-			model := resourcemodel.BuildGatewayClassResourceModel(idx.meta.ClusterID, record.gatewayClass)
-			if model.Facts.GatewayClass.Parameters != nil {
-				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*model.Facts.GatewayClass.Parameters), relationship.typ, relationship.label, "spec.parametersRef")
-			}
-		}
-		if record.gateway != nil {
-			model := resourcemodel.BuildGatewayResourceModel(idx.meta.ClusterID, record.gateway)
-			if model.Facts.Gateway.Class != nil {
-				relationship := objectMapRelationships[objectMapEdgeUses]
-				add(record, idx.recordForResourceLink(*model.Facts.Gateway.Class), relationship.typ, "uses class", "spec.gatewayClassName")
-			}
-		}
-		if record.httpRoute != nil {
-			model := resourcemodel.BuildHTTPRouteResourceModel(idx.meta.ClusterID, record.httpRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.HTTPRoute.RouteCommonFacts, add)
-		}
-		if record.grpcRoute != nil {
-			model := resourcemodel.BuildGRPCRouteResourceModel(idx.meta.ClusterID, record.grpcRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.GRPCRoute.RouteCommonFacts, add)
-		}
-		if record.tlsRoute != nil {
-			model := resourcemodel.BuildTLSRouteResourceModel(idx.meta.ClusterID, record.tlsRoute)
-			idx.addGatewayRouteEdges(record, model.Facts.TLSRoute.RouteCommonFacts, add)
-		}
-		if record.listenerSet != nil {
-			model := resourcemodel.BuildListenerSetResourceModel(idx.meta.ClusterID, record.listenerSet)
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.recordForResourceLink(model.Facts.ListenerSet.ParentRef), relationship.typ, relationship.label, "spec.parentRef")
-		}
-		if record.referenceGrant != nil {
-			model := resourcemodel.BuildReferenceGrantResourceModel(idx.meta.ClusterID, record.referenceGrant)
-			relationship := objectMapRelationships[objectMapEdgeGrants]
-			for _, targetRef := range model.Facts.ReferenceGrant.To {
-				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.to")
-			}
-		}
-		if record.backendTLSPolicy != nil {
-			model := resourcemodel.BuildBackendTLSPolicyResourceModel(idx.meta.ClusterID, record.backendTLSPolicy)
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			for _, targetRef := range model.Facts.BackendTLSPolicy.TargetRefs {
-				add(record, idx.recordForResourceLink(targetRef), relationship.typ, relationship.label, "spec.targetRefs")
-			}
-		}
-		if record.template != nil {
-			idx.addPodTemplateEdges(record, record.template, add)
-		}
-		if record.cronJobTpl != nil {
-			idx.addPodTemplateEdges(record, record.cronJobTpl, add)
 		}
 	}
 
@@ -2018,95 +1012,6 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 		result = append(result, edge)
 	}
 	return result
-}
-
-func (idx *objectMapIndex) addPodEdges(record *objectMapRecord, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	pod := record.pod
-	if pod.Spec.NodeName != "" {
-		relationship := objectMapRelationships[objectMapEdgeSchedules]
-		add(record, idx.findCore("", "v1", "Node", pod.Spec.NodeName), relationship.typ, relationship.label, relationship.defaultTracedBy)
-	}
-	serviceAccount := pod.Spec.ServiceAccountName
-	if serviceAccount == "" {
-		serviceAccount = "default"
-	}
-	relationship := objectMapRelationships[objectMapEdgeUses]
-	add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), relationship.typ, relationship.label, "spec.serviceAccountName")
-	for _, volume := range pod.Spec.Volumes {
-		idx.addVolumeEdges(record, record.ref.Namespace, volume, add)
-	}
-	for _, container := range append(append([]corev1.Container{}, pod.Spec.InitContainers...), pod.Spec.Containers...) {
-		idx.addContainerEdges(record, record.ref.Namespace, container, add)
-	}
-}
-
-func (idx *objectMapIndex) addPodTemplateEdges(record *objectMapRecord, tpl *corev1.PodTemplateSpec, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	if tpl == nil {
-		return
-	}
-	serviceAccount := tpl.Spec.ServiceAccountName
-	if serviceAccount != "" {
-		relationship := objectMapRelationships[objectMapEdgeUses]
-		add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), relationship.typ, relationship.label, "template.spec.serviceAccountName")
-	}
-	for _, volume := range tpl.Spec.Volumes {
-		idx.addVolumeEdges(record, record.ref.Namespace, volume, add)
-	}
-	for _, container := range append(append([]corev1.Container{}, tpl.Spec.InitContainers...), tpl.Spec.Containers...) {
-		idx.addContainerEdges(record, record.ref.Namespace, container, add)
-	}
-}
-
-func (idx *objectMapIndex) addGatewayRouteEdges(record *objectMapRecord, facts resourcemodel.RouteCommonFacts, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	parentRelationship := objectMapRelationships[objectMapEdgeUses]
-	for _, parentRef := range facts.ParentRefs {
-		add(record, idx.recordForResourceLink(parentRef), parentRelationship.typ, parentRelationship.label, "spec.parentRefs")
-	}
-	backendRelationship := objectMapRelationships[objectMapEdgeRoutes]
-	for _, backendRef := range facts.Backends {
-		add(record, idx.recordForResourceLink(backendRef), backendRelationship.typ, backendRelationship.label, "spec.rules.backendRefs")
-	}
-}
-
-func (idx *objectMapIndex) addVolumeEdges(record *objectMapRecord, namespace string, volume corev1.Volume, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	if volume.ConfigMap != nil && volume.ConfigMap.Name != "" {
-		relationship := objectMapRelationships[objectMapEdgeUses]
-		add(record, idx.findCore(namespace, "v1", "ConfigMap", volume.ConfigMap.Name), relationship.typ, relationship.label, "volume.configMap")
-	}
-	if volume.Secret != nil && volume.Secret.SecretName != "" {
-		relationship := objectMapRelationships[objectMapEdgeUses]
-		add(record, idx.findCore(namespace, "v1", "Secret", volume.Secret.SecretName), relationship.typ, relationship.label, "volume.secret")
-	}
-	if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName != "" {
-		relationship := objectMapRelationships[objectMapEdgeMounts]
-		add(record, idx.findCore(namespace, "v1", "PersistentVolumeClaim", volume.PersistentVolumeClaim.ClaimName), relationship.typ, relationship.label, "volume.persistentVolumeClaim")
-	}
-}
-
-func (idx *objectMapIndex) addContainerEdges(record *objectMapRecord, namespace string, container corev1.Container, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
-	for _, envFrom := range container.EnvFrom {
-		if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name != "" {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.findCore(namespace, "v1", "ConfigMap", envFrom.ConfigMapRef.Name), relationship.typ, relationship.label, "envFrom.configMapRef")
-		}
-		if envFrom.SecretRef != nil && envFrom.SecretRef.Name != "" {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.findCore(namespace, "v1", "Secret", envFrom.SecretRef.Name), relationship.typ, relationship.label, "envFrom.secretRef")
-		}
-	}
-	for _, env := range container.Env {
-		if env.ValueFrom == nil {
-			continue
-		}
-		if env.ValueFrom.ConfigMapKeyRef != nil && env.ValueFrom.ConfigMapKeyRef.Name != "" {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.findCore(namespace, "v1", "ConfigMap", env.ValueFrom.ConfigMapKeyRef.Name), relationship.typ, relationship.label, "env.configMapKeyRef")
-		}
-		if env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name != "" {
-			relationship := objectMapRelationships[objectMapEdgeUses]
-			add(record, idx.findCore(namespace, "v1", "Secret", env.ValueFrom.SecretKeyRef.Name), relationship.typ, relationship.label, "env.secretKeyRef")
-		}
-	}
 }
 
 func (idx *objectMapIndex) resolveOwner(child *objectMapRecord, owner metav1.OwnerReference) *objectMapRecord {
@@ -2148,18 +1053,6 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 	return idx.byIdent[objectMapIdentityKey(namespace, group, version, ref.Kind, ref.Name)]
 }
 
-func (idx *objectMapIndex) findCore(namespace, version, kind, name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey(namespace, "", version, kind, name)]
-}
-
-func (idx *objectMapIndex) findStorageClass(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "storage.k8s.io", "v1", "StorageClass", name)]
-}
-
-func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
-	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
-}
-
 func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
 	if link.Ref != nil {
 		return idx.byIdent[objectMapIdentityKey(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)]
@@ -2177,7 +1070,7 @@ func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSel
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.clusterRole == nil {
+		if record.ref.Kind != clusterrolepkg.Identity.Kind {
 			continue
 		}
 		if parsed.Matches(labels.Set(record.labels)) {
@@ -2193,7 +1086,7 @@ func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]st
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.pod == nil || record.ref.Namespace != namespace {
+		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if labelsMatch(selector, record.labels) {
@@ -2213,7 +1106,7 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 	}
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.pod == nil || record.ref.Namespace != namespace {
+		if record.ref.Kind != podres.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if parsed.Matches(labels.Set(record.labels)) {
@@ -2226,7 +1119,7 @@ func (idx *objectMapIndex) matchingPodsByLabelSelector(namespace string, selecto
 func (idx *objectMapIndex) endpointSlicesForService(namespace, serviceName string) []*objectMapRecord {
 	result := []*objectMapRecord{}
 	for _, record := range idx.records {
-		if record.slice == nil || record.ref.Namespace != namespace {
+		if record.ref.Kind != endpointslice.Identity.Kind || record.ref.Namespace != namespace {
 			continue
 		}
 		if record.labels[discoveryv1.LabelServiceName] == serviceName {
@@ -2245,57 +1138,34 @@ func labelsMatch(selector, labels map[string]string) bool {
 	return true
 }
 
-func ingressClassName(ing *networkingv1.Ingress) (string, string) {
-	if ing == nil {
-		return "", ""
+// resolveEdgeTargets resolves an Edge's target descriptor to the graph records it
+// points at. Selectors and slice endpoints can resolve to several; the rest to one
+// (possibly nil, which add() skips).
+func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectmapspec.Edge) []*objectMapRecord {
+	switch {
+	case e.CoreRef != nil:
+		return []*objectMapRecord{idx.byIdent[objectMapIdentityKey(e.CoreRef.Namespace, e.CoreRef.Group, e.CoreRef.Version, e.CoreRef.Kind, e.CoreRef.Name)]}
+	case e.PodsSelector != nil:
+		return idx.matchingPods(source.ref.Namespace, e.PodsSelector)
+	case e.PodsLabelSelector != nil:
+		return idx.matchingPodsByLabelSelector(source.ref.Namespace, e.PodsLabelSelector)
+	case e.ServiceSlices:
+		return idx.endpointSlicesForService(source.ref.Namespace, source.ref.Name)
+	case e.CoreObjectRef != nil:
+		return []*objectMapRecord{idx.resolveCoreObjectRef(source.ref.Namespace, e.CoreObjectRef)}
+	case e.ClusterRoleSelector != nil:
+		return idx.clusterRolesMatchingSelector(*e.ClusterRoleSelector)
+	default:
+		return []*objectMapRecord{idx.recordForResourceLink(e.Link)}
 	}
-	if ing.Spec.IngressClassName != nil && strings.TrimSpace(*ing.Spec.IngressClassName) != "" {
-		return strings.TrimSpace(*ing.Spec.IngressClassName), "spec.ingressClassName"
-	}
-	if ing.Annotations != nil && strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]) != "" {
-		return strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]), "metadata.annotations[kubernetes.io/ingress.class]"
-	}
-	return "", ""
 }
 
 func isIngressRef(ref ObjectMapReference) bool {
-	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "Ingress"
+	return ref.Group == ingress.Identity.Group && ref.Version == ingress.Identity.Version && ref.Kind == ingress.Identity.Kind
 }
 
 func isIngressClassRef(ref ObjectMapReference) bool {
-	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "IngressClass"
-}
-
-func ingressBackendServices(ing *networkingv1.Ingress) []string {
-	if ing == nil {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	add := func(name string) {
-		if name == "" {
-			return
-		}
-		seen[name] = struct{}{}
-	}
-	if ing.Spec.DefaultBackend != nil && ing.Spec.DefaultBackend.Service != nil {
-		add(ing.Spec.DefaultBackend.Service.Name)
-	}
-	for _, rule := range ing.Spec.Rules {
-		if rule.HTTP == nil {
-			continue
-		}
-		for _, path := range rule.HTTP.Paths {
-			if path.Backend.Service != nil {
-				add(path.Backend.Service.Name)
-			}
-		}
-	}
-	result := make([]string, 0, len(seen))
-	for name := range seen {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
+	return ref.Group == ingressclass.Identity.Group && ref.Version == ingressclass.Identity.Version && ref.Kind == ingressclass.Identity.Kind
 }
 
 func refFromCatalog(item objectcatalog.Summary) ObjectMapReference {
@@ -2312,7 +1182,11 @@ func refFromCatalog(item objectcatalog.Summary) ObjectMapReference {
 	}
 }
 
-func refFromObject(meta *metav1.ObjectMeta, group, version, kind, resource, namespace string) ObjectMapReference {
+// refFromObject builds an object-map reference from any Kubernetes object's metadata.
+// It takes the metav1.Object accessor interface so both concrete *metav1.ObjectMeta
+// (from the HPA collector) and the typed objects the registry collectors list
+// satisfy it.
+func refFromObject(meta metav1.Object, group, version, kind, resource, namespace string) ObjectMapReference {
 	ref := ObjectMapReference{
 		Group:     group,
 		Version:   version,
@@ -2321,20 +1195,24 @@ func refFromObject(meta *metav1.ObjectMeta, group, version, kind, resource, name
 		Namespace: namespace,
 	}
 	if meta != nil {
-		ref.Name = meta.Name
-		ref.UID = string(meta.UID)
+		ref.Name = meta.GetName()
+		ref.UID = string(meta.GetUID())
 		if ref.Namespace == "" {
-			ref.Namespace = meta.Namespace
+			ref.Namespace = meta.GetNamespace()
 		}
 	}
 	return ref
 }
 
-func objectCreationTimestamp(meta *metav1.ObjectMeta) string {
-	if meta == nil || meta.CreationTimestamp.IsZero() {
+func objectCreationTimestamp(meta metav1.Object) string {
+	if meta == nil {
 		return ""
 	}
-	return meta.CreationTimestamp.UTC().Format(time.RFC3339)
+	created := meta.GetCreationTimestamp()
+	if created.IsZero() {
+		return ""
+	}
+	return created.UTC().Format(time.RFC3339)
 }
 
 func objectMapNodeID(ref ObjectMapReference) string {

@@ -106,11 +106,10 @@ func BenchmarkResourceRelationshipIndexLargeSnapshot(b *testing.B) {
 func BenchmarkResourceRelationshipDetailMaterialization(b *testing.B) {
 	fixture := testsupport.LargeResourceRelationshipFixture()
 	relationships := NewResourceRelationshipIndex(fixture.ClusterID, resourceRelationshipIndexOptions(fixture))
-	options := ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks}
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		linkCount := benchmarkReverseLinkDetails(fixture, relationships, options)
+		linkCount := benchmarkReverseLinkDetails(fixture, relationships)
 		if linkCount == 0 {
 			b.Fatal("benchmark fixture did not produce expected reverse links")
 		}
@@ -119,12 +118,11 @@ func BenchmarkResourceRelationshipDetailMaterialization(b *testing.B) {
 
 func BenchmarkResourceRelationshipIndexAndReverseLinkDetails(b *testing.B) {
 	fixture := testsupport.LargeResourceRelationshipFixture()
-	options := ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks}
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		relationships := NewResourceRelationshipIndex(fixture.ClusterID, resourceRelationshipIndexOptions(fixture))
-		linkCount := benchmarkReverseLinkDetails(fixture, relationships, options)
+		linkCount := benchmarkReverseLinkDetails(fixture, relationships)
 		if linkCount == 0 {
 			b.Fatal("benchmark fixture did not produce expected reverse links")
 		}
@@ -134,24 +132,30 @@ func BenchmarkResourceRelationshipIndexAndReverseLinkDetails(b *testing.B) {
 func benchmarkReverseLinkDetails(
 	fixture testsupport.ResourceRelationshipFixture,
 	relationships *ResourceRelationshipIndex,
-	options ResourceModelBuildOptions,
 ) int {
-	configMap := BuildConfigMapResourceModel(fixture.ClusterID, fixture.ConfigMap, relationships, options)
-	secret := BuildSecretResourceModel(fixture.ClusterID, fixture.Secret, relationships, options)
-	pvc := BuildPersistentVolumeClaimResourceModelWithRelationships(fixture.ClusterID, fixture.PersistentVolumeClaim, relationships, options)
-	role := BuildRoleResourceModel(fixture.ClusterID, fixture.Role, relationships, options)
-	clusterRole := BuildClusterRoleResourceModel(fixture.ClusterID, fixture.ClusterRole, relationships, options)
-	serviceAccount := BuildServiceAccountResourceModel(fixture.ClusterID, fixture.ServiceAccount, relationships, options)
+	// ConfigMap/Secret/PVC and the rbac models moved to their per-kind packages;
+	// their reverse links are produced by these ResourceRelationshipIndex methods
+	// (which stay here) — exercise them directly rather than through the moved
+	// model builders (resourcemodel cannot import the kind packages).
+	configMapUsedBy := relationships.ConfigMapUsedBy(fixture.ConfigMap.Namespace, fixture.ConfigMap.Name)
+	secretUsedBy := relationships.SecretUsedBy(fixture.Secret.Namespace, fixture.Secret.Name)
+	pvcMountedBy := relationships.PersistentVolumeClaimMountedBy(fixture.PersistentVolumeClaim.Namespace, fixture.PersistentVolumeClaim.Name)
+	roleUsedBy := relationships.RoleUsedByBindings(fixture.Role.Namespace, fixture.Role.Name)
+	clusterRoleClusterBindings := relationships.ClusterRoleUsedByClusterBindings(fixture.ClusterRole.Name)
+	clusterRoleRoleBindings := relationships.ClusterRoleUsedByRoleBindings(fixture.ClusterRole.Name)
+	saUsedByPods := relationships.ServiceAccountUsedByPods(fixture.ServiceAccount.Namespace, fixture.ServiceAccount.Name)
+	saRoleBindings := relationships.ServiceAccountRoleBindings(fixture.ServiceAccount.Namespace, fixture.ServiceAccount.Name)
+	saClusterRoleBindings := relationships.ServiceAccountClusterRoleBindings(fixture.ServiceAccount.Namespace, fixture.ServiceAccount.Name)
 
-	return len(configMap.Facts.ConfigMap.UsedBy) +
-		len(secret.Facts.Secret.UsedBy) +
-		len(pvc.Facts.PersistentVolumeClaim.MountedBy) +
-		len(role.Facts.Role.UsedByRoleBindings) +
-		len(clusterRole.Facts.ClusterRole.ClusterRoleBindings) +
-		len(clusterRole.Facts.ClusterRole.RoleBindings) +
-		len(serviceAccount.Facts.ServiceAccount.UsedByPods) +
-		len(serviceAccount.Facts.ServiceAccount.RoleBindings) +
-		len(serviceAccount.Facts.ServiceAccount.ClusterRoleBindings)
+	return len(configMapUsedBy) +
+		len(secretUsedBy) +
+		len(pvcMountedBy) +
+		len(roleUsedBy) +
+		len(clusterRoleClusterBindings) +
+		len(clusterRoleRoleBindings) +
+		len(saUsedByPods) +
+		len(saRoleBindings) +
+		len(saClusterRoleBindings)
 }
 
 func resourceRelationshipIndexOptions(fixture testsupport.ResourceRelationshipFixture) ResourceRelationshipIndexOptions {

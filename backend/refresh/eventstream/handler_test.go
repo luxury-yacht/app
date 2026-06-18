@@ -283,7 +283,7 @@ func TestHandlerResumesFromSince(t *testing.T) {
 
 	manager.mu.Lock()
 	buffer := newEventBuffer(2)
-	buffer.add(bufferedEvent{
+	buffer.Add(bufferedEvent{
 		sequence: 1,
 		entry: Entry{
 			Kind:            "Event",
@@ -292,7 +292,7 @@ func TestHandlerResumesFromSince(t *testing.T) {
 			Message:         "first message",
 		},
 	})
-	buffer.add(bufferedEvent{
+	buffer.Add(bufferedEvent{
 		sequence: 2,
 		entry: Entry{
 			Kind:            "Event",
@@ -353,7 +353,7 @@ func TestHandlerFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 
 	manager.mu.Lock()
 	buffer := newEventBuffer(2)
-	buffer.add(bufferedEvent{
+	buffer.Add(bufferedEvent{
 		sequence: 5,
 		entry: Entry{
 			Kind:            "Event",

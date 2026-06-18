@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func workloadResourceModel(
+func WorkloadResourceModel(
 	clusterID, group, version, kind, resource string,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
@@ -28,8 +28,8 @@ func workloadResourceModel(
 		Source: ResourceSourceKubernetes,
 		Scope:  ResourceScopeNamespaced,
 		Metadata: ResourceMetadata{
-			Labels:            copyStringMap(meta.Labels),
-			Annotations:       copyStringMap(meta.Annotations),
+			Labels:            CopyStringMap(meta.Labels),
+			Annotations:       CopyStringMap(meta.Annotations),
 			CreationTimestamp: meta.CreationTimestamp,
 			ResourceVersion:   meta.ResourceVersion,
 			Finalizers:        append([]string(nil), meta.Finalizers...),
@@ -39,26 +39,26 @@ func workloadResourceModel(
 	}
 }
 
-func replicaStatusPresentation(facts WorkloadCommonFacts, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
-	state := replicaState(facts)
+func ReplicaStatusPresentation(facts WorkloadCommonFacts, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+	state := ReplicaState(facts)
 	if facts.DesiredReplicas == 0 {
-		return workloadSourceStatus("Scaled to 0", state, "ScaledToZero", "", "inactive", signals, lifecycle)
+		return WorkloadSourceStatus("Scaled to 0", state, "ScaledToZero", "", "inactive", signals, lifecycle)
 	}
 	if facts.ReadyReplicas >= facts.DesiredReplicas {
-		return workloadSourceStatus("Running", state, "", "", "ready", signals, lifecycle)
+		return WorkloadSourceStatus("Running", state, "", "", "ready", signals, lifecycle)
 	}
 	if facts.ReadyReplicas > 0 || facts.UpdatedReplicas > 0 || facts.CurrentReplicas > 0 {
-		return workloadSourceStatus("Updating", state, "", "", "warning", signals, lifecycle)
+		return WorkloadSourceStatus("Updating", state, "", "", "warning", signals, lifecycle)
 	}
-	return workloadSourceStatus("Pending", state, "", "", "warning", signals, lifecycle)
+	return WorkloadSourceStatus("Pending", state, "", "", "warning", signals, lifecycle)
 }
 
-func deletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
+func DeletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
 	if meta.DeletionTimestamp == nil {
 		return ResourceStatusPresentation{}, false
 	}
 	deletionTimestamp := meta.DeletionTimestamp.Time.Format(time.RFC3339)
-	return workloadSourceStatus(
+	return WorkloadSourceStatus(
 		"Terminating",
 		state,
 		"DeletionTimestamp",
@@ -69,7 +69,7 @@ func deletingWorkloadStatus(meta metav1.ObjectMeta, state string, signals []Reso
 	), true
 }
 
-func workloadConditionStatus(name, state, reason, message, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func WorkloadConditionStatus(name, state, reason, message, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -80,7 +80,7 @@ func workloadConditionStatus(name, state, reason, message, label, presentation s
 	}
 }
 
-func workloadSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func WorkloadSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -92,15 +92,21 @@ func workloadSourceStatus(label, state, reason, message, presentation string, si
 	}
 }
 
-func replicaState(facts WorkloadCommonFacts) string {
+func ReplicaState(facts WorkloadCommonFacts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyReplicas, facts.DesiredReplicas)
 }
 
-func jobState(facts JobFacts) string {
-	return fmt.Sprintf("%d/%d", facts.Succeeded, facts.DesiredReplicas)
+// Int32PtrValue dereferences an optional *int32 spec field, treating nil as 0.
+// Shared by the workload kinds that surface RevisionHistoryLimit and similar
+// pointer-typed fields.
+func Int32PtrValue(p *int32) int32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
-func workloadReplicaSignals(facts WorkloadCommonFacts) []ResourceStatusSignal {
+func WorkloadReplicaSignals(facts WorkloadCommonFacts) []ResourceStatusSignal {
 	return []ResourceStatusSignal{
 		{Type: StatusSignalResourceState, Name: "spec.replicas", Status: strconv.FormatInt(int64(facts.DesiredReplicas), 10)},
 		{Type: StatusSignalResourceState, Name: "status.replicas", Status: strconv.FormatInt(int64(facts.CurrentReplicas), 10)},
@@ -110,7 +116,7 @@ func workloadReplicaSignals(facts WorkloadCommonFacts) []ResourceStatusSignal {
 	}
 }
 
-func workloadLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+func WorkloadLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,

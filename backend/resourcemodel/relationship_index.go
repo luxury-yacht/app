@@ -286,13 +286,13 @@ func appendUniqueLink(values map[namespacedName][]ResourceLink, key namespacedNa
 
 func sortNamespacedLinkMap(values map[namespacedName][]ResourceLink) {
 	for key := range values {
-		sortResourceLinksByObjectName(values[key])
+		SortResourceLinksByObjectName(values[key])
 	}
 }
 
 func sortNamedLinkMap(values map[string][]ResourceLink) {
 	for key := range values {
-		sortResourceLinksByObjectName(values[key])
+		SortResourceLinksByObjectName(values[key])
 	}
 }
 

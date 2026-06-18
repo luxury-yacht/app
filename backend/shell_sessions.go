@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+
 	"github.com/google/uuid"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -229,7 +231,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	if err := a.requireAnyResourcePermission(deps.Context, deps,
 		resourcePermissionCheck{
 			Version:     "v1",
-			Kind:        "Pod",
+			Kind:        podspkg.Identity.Kind,
 			Namespace:   req.Namespace,
 			Name:        req.PodName,
 			Verb:        "get",
@@ -237,7 +239,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		},
 		resourcePermissionCheck{
 			Version:     "v1",
-			Kind:        "Pod",
+			Kind:        podspkg.Identity.Kind,
 			Namespace:   req.Namespace,
 			Name:        req.PodName,
 			Verb:        "create",
@@ -419,7 +421,7 @@ func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
 		Type:        RuntimeOperationShell,
 		ClusterID:   sess.clusterID,
 		ClusterName: sess.clusterName,
-		Target:      runtimeOperationTarget(sess.clusterID, "", "v1", "Pod", sess.namespace, sess.podName),
+		Target:      runtimeOperationTarget(sess.clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, sess.namespace, sess.podName),
 		Status:      "open",
 		StartedAt:   sess.startedAt.Format(time.RFC3339),
 		DisplayName: fmt.Sprintf("Shell %s/%s", sess.namespace, sess.podName),

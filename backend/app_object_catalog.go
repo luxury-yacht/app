@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resources/customresource"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -663,7 +664,7 @@ func hydrateCatalogCustomRow(
 		crdName = row.Resource + "." + row.Group
 	}
 	if row.Namespace != "" {
-		return snapshot.CustomResourceSummaryFromNamespace(snapshot.BuildNamespaceCustomSummary(
+		return snapshot.CustomResourceSummaryFromNamespace(customresource.BuildNamespaceStreamSummary(
 			meta,
 			obj,
 			row.Group,
@@ -673,7 +674,7 @@ func hydrateCatalogCustomRow(
 			row.Namespace,
 		)), true
 	}
-	return snapshot.CustomResourceSummaryFromCluster(snapshot.BuildClusterCustomSummary(
+	return snapshot.CustomResourceSummaryFromCluster(customresource.BuildClusterStreamSummary(
 		meta,
 		obj,
 		row.Group,

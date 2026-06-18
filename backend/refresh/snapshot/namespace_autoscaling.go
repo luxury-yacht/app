@@ -6,15 +6,15 @@ import (
 	"sort"
 	"strings"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
 const (
@@ -22,9 +22,11 @@ const (
 	errNamespaceAutoscalingScopeRequired = "namespace scope is required"
 )
 
-// NamespaceAutoscalingBuilder constructs HPA summaries.
+// NamespaceAutoscalingBuilder constructs HPA summaries by listing the kind's
+// informer indexer and projecting it via the hpa package's stream-summary
+// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
 type NamespaceAutoscalingBuilder struct {
-	hpaLister autoscalinglisters.HorizontalPodAutoscalerLister
+	collectIndexer func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceAutoscalingSnapshot payload for autoscaling tab.
@@ -39,32 +41,14 @@ func namespaceAutoscalingQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "target", "min", "max", "current", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "target", "targetApiVersion"},
-		[]string{"HorizontalPodAutoscaler"},
+		[]string{hpa.Identity.Kind},
 	)
 }
 
-// AutoscalingSummary captures HPA details for display.
-//
-// Target is the human-readable "Kind/Name" string used by the table column.
-// TargetAPIVersion carries the scale target's apiVersion verbatim from
-// hpa.Spec.ScaleTargetRef.APIVersion so the frontend can open the target
-// in the object panel with a fully-qualified GVK — required for CRDs that
-// share a Kind across groups (e.g. two operators each defining a custom
-// scalable resource named DBCluster). Without it the strict object-YAML
-// path hard-fails on CRD HPA targets.
-type AutoscalingSummary struct {
-	ClusterMeta
-	Kind             string `json:"kind"`
-	Name             string `json:"name"`
-	Namespace        string `json:"namespace"`
-	Target           string `json:"target"`
-	TargetAPIVersion string `json:"targetApiVersion,omitempty"`
-	Min              int32  `json:"min"`
-	Max              int32  `json:"max"`
-	Current          int32  `json:"current"`
-	Age              string `json:"age"`
-	AgeTimestamp     int64  `json:"ageTimestamp,omitempty"`
-}
+// AutoscalingSummary captures HPA details for display. The type lives in the
+// streamrows leaf so the hpa package can build it; this alias keeps the
+// snapshot-side name and wire JSON unchanged.
+type AutoscalingSummary = streamrows.AutoscalingSummary
 
 // RegisterNamespaceAutoscalingDomain registers the autoscaling domain.
 func RegisterNamespaceAutoscalingDomain(
@@ -75,7 +59,7 @@ func RegisterNamespaceAutoscalingDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceAutoscalingBuilder{
-		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
+		collectIndexer: unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceAutoscalingDomainName,
@@ -96,41 +80,9 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		return nil, err
 	}
 
-	hpas, err := b.listHPAs(parsedScope.Namespace)
+	resources, sources, version, err := collectDescriptorTableRows[AutoscalingSummary](ctx, namespaceAutoscalingDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
-	}
-
-	return b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, hpas)
-}
-
-func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
-	if namespace == "" {
-		return b.hpaLister.List(labels.Everything())
-	}
-	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceAutoscalingBuilder) buildSnapshot(
-	meta ClusterMeta,
-	scope string,
-	query typedTableQuery,
-	hpas []*autoscalingv1.HorizontalPodAutoscaler,
-) (*refresh.Snapshot, error) {
-	resources := make([]AutoscalingSummary, 0, len(hpas))
-	var version uint64
-
-	for _, hpa := range hpas {
-		if hpa == nil {
-			continue
-		}
-		// Delegate to the shared row builder so the full-snapshot path
-		// and the streaming/incremental update path emit identical row
-		// shapes. See BuildHPASummary in streaming_helpers.go.
-		resources = append(resources, BuildHPASummary(meta, hpa))
-		if v := resourceVersionOrTimestamp(hpa); v > version {
-			version = v
-		}
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
@@ -145,15 +97,15 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		resources,
 		query,
 		autoscalingTableQueryAdapter(),
-		namespaceAutoscalingQueryCapabilities(),
+		capabilitiesWithAvailableKinds(namespaceAutoscalingQueryCapabilities(), sources),
 		config.SnapshotNamespaceAutoscalingEntryLimit,
 		"autoscaling resources",
 		func(resource AutoscalingSummary) string { return resource.Kind },
-		nil,
+		typedTableQueryResourceIssues(ctx, namespaceAutoscalingDomainName, query, sources),
 	)
 	return &refresh.Snapshot{
 		Domain:  namespaceAutoscalingDomainName,
-		Scope:   scope,
+		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
 		Version: version,
 		Payload: NamespaceAutoscalingSnapshot{
 			ClusterMeta:           meta,
@@ -162,45 +114,4 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		},
 		Stats: resolved.Stats,
 	}, nil
-}
-
-func describeHPATargetFacts(facts *resourcemodel.HorizontalPodAutoscalerFacts) string {
-	if facts == nil {
-		return ""
-	}
-	kind, name := resourceLinkKindName(facts.ScaleTarget)
-	return fmt.Sprintf("%s/%s", kind, name)
-}
-
-func hpaMinReplicas(facts *resourcemodel.HorizontalPodAutoscalerFacts) int32 {
-	if facts == nil || facts.MinReplicas == nil {
-		return 1
-	}
-	return *facts.MinReplicas
-}
-
-func scaleTargetAPIVersion(link resourcemodel.ResourceLink) string {
-	if link.Ref != nil {
-		if link.Ref.Group == "" {
-			return link.Ref.Version
-		}
-		return link.Ref.Group + "/" + link.Ref.Version
-	}
-	if link.Display != nil {
-		if link.Display.Group == "" {
-			return link.Display.Version
-		}
-		return link.Display.Group + "/" + link.Display.Version
-	}
-	return ""
-}
-
-func resourceLinkKindName(link resourcemodel.ResourceLink) (string, string) {
-	if link.Ref != nil {
-		return link.Ref.Kind, link.Ref.Name
-	}
-	if link.Display != nil {
-		return link.Display.Kind, link.Display.Name
-	}
-	return "", ""
 }

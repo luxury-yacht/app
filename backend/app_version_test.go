@@ -34,7 +34,7 @@ func TestGetAppInfoDevReadsWails(t *testing.T) {
 	}
 	version := info.Version
 	// Dev builds append a suffix that should be ignored for SemVer validation.
-	if before, ok :=strings.CutSuffix(version, " (dev)"); ok  {
+	if before, ok := strings.CutSuffix(version, " (dev)"); ok {
 		version = before
 	}
 	if !isValidSemver(version) || info.BuildTime != "dev" || info.GitCommit != "dev" || info.IsBeta {

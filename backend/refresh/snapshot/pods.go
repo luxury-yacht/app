@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -19,10 +23,11 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -46,38 +51,13 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces", "statuses", "nodes"},
 		[]string{"name", "namespace", "status", "ready", "owner", "node"},
-		[]string{"Pod"},
+		[]string{podres.Identity.Kind},
 	)
 }
 
-// PodSummary captures essential pod information for UI tables.
-type PodSummary struct {
-	ClusterMeta
-	Name                 string `json:"name"`
-	Namespace            string `json:"namespace"`
-	Node                 string `json:"node"`
-	Status               string `json:"status"`
-	StatusState          string `json:"statusState,omitempty"`
-	StatusPresentation   string `json:"statusPresentation,omitempty"`
-	StatusReason         string `json:"statusReason,omitempty"`
-	Ready                string `json:"ready"`
-	Restarts             int32  `json:"restarts"`
-	Age                  string `json:"age"`
-	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
-	OwnerKind            string `json:"ownerKind"`
-	OwnerName            string `json:"ownerName"`
-	PortForwardAvailable bool   `json:"portForwardAvailable"`
-	// OwnerAPIVersion is the wire-form apiVersion of the controlling owner
-	// (e.g. "apps/v1", "argoproj.io/v1alpha1"). Threaded so the panel can
-	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo.
-	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
-	CPURequest      string `json:"cpuRequest"`
-	CPULimit        string `json:"cpuLimit"`
-	CPUUsage        string `json:"cpuUsage"`
-	MemRequest      string `json:"memRequest"`
-	MemLimit        string `json:"memLimit"`
-	MemUsage        string `json:"memUsage"`
-}
+// PodSummary lives in the streamrows leaf so the pods package can build it; this
+// alias keeps the snapshot-side name and wire JSON unchanged.
+type PodSummary = streamrows.PodSummary
 
 // PodMetricsInfo mirrors metrics poller metadata for pods.
 type PodMetricsInfo struct {
@@ -154,7 +134,8 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
+			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
 			collector.Add(summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -167,7 +148,8 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := buildPodSummary(meta, pod, podUsage, rsMap)
+			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
+			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
 			summaries = append(summaries, summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -218,7 +200,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name))
 		},
 		Namespace: func(pod PodSummary) string { return pod.Namespace },
-		Kind:      func(PodSummary) string { return "Pod" },
+		Kind:      func(PodSummary) string { return podres.Identity.Kind },
 		SearchText: func(pod PodSummary) []string {
 			return []string{
 				pod.Name,
@@ -384,7 +366,7 @@ func matchesWorkload(pod *corev1.Pod, scope workloadScope, rsLister appslisters.
 		if ownerMatchesWorkloadScope(owner.APIVersion, owner.Kind, owner.Name, scope) {
 			return true
 		}
-		if owner.Kind == "ReplicaSet" && scope.kind == "Deployment" && rsLister != nil {
+		if owner.Kind == replicasetpkg.Identity.Kind && scope.kind == deploymentpkg.Identity.Kind && rsLister != nil {
 			rs, err := rsLister.ReplicaSets(pod.Namespace).Get(owner.Name)
 			if err != nil {
 				continue
@@ -420,7 +402,7 @@ func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]str
 			continue
 		}
 		for _, owner := range pod.OwnerReferences {
-			if owner.Controller == nil || !*owner.Controller || owner.Kind != "ReplicaSet" {
+			if owner.Controller == nil || !*owner.Controller || owner.Kind != replicasetpkg.Identity.Kind {
 				continue
 			}
 			if _, exists := result[owner.Name]; exists {
@@ -434,7 +416,7 @@ func (b *PodBuilder) replicasetDeploymentMap(pods []*corev1.Pod) (map[string]str
 				return nil, err
 			}
 			for _, rsOwner := range rs.OwnerReferences {
-				if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == "Deployment" {
+				if rsOwner.Controller != nil && *rsOwner.Controller && rsOwner.Kind == deploymentpkg.Identity.Kind {
 					result[owner.Name] = rsOwner.Name
 					break
 				}
@@ -494,93 +476,11 @@ func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
 	return result
 }
 
-func buildPodSummary(
-	meta ClusterMeta,
-	pod *corev1.Pod,
-	usage map[string]metrics.PodUsage,
-	rsMap map[string]string,
-) PodSummary {
-	model := resourcemodel.BuildPodResourceModel(meta.ClusterID, pod)
-	podFacts := model.Facts.Pod
-	ready := int32(0)
-	total := int32(0)
-	restarts := int32(0)
-	if podFacts != nil {
-		ready = podFacts.ReadyContainers
-		total = podFacts.TotalContainers
-		restarts = podFacts.RestartCount
-	}
-	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
-	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
-	metricKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-	metricsUsage := usage[metricKey]
-
-	return PodSummary{
-		ClusterMeta:          meta,
-		Name:                 pod.Name,
-		Namespace:            pod.Namespace,
-		Node:                 pod.Spec.NodeName,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Ready:                fmt.Sprintf("%d/%d", ready, total),
-		Restarts:             restarts,
-		Age:                  formatAge(pod.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(pod),
-		OwnerKind:            ownerKind,
-		OwnerName:            ownerName,
-		PortForwardAvailable: hasForwardablePodPorts(pod),
-		OwnerAPIVersion:      ownerAPIVersion,
-		CPURequest:           formatCPUMilli(cpuReq),
-		CPULimit:             formatCPUMilli(cpuLim),
-		CPUUsage:             formatCPUMilli(metricsUsage.CPUUsageMilli),
-		MemRequest:           formatMemoryBytes(memReq),
-		MemLimit:             formatMemoryBytes(memLim),
-		MemUsage:             formatMemoryBytes(metricsUsage.MemoryUsageBytes),
-	}
-}
-
 func hasForwardablePodPorts(pod *corev1.Pod) bool {
 	if pod == nil {
 		return false
 	}
-	return hasForwardableContainerPorts(pod.Spec.Containers)
-}
-
-func hasForwardableContainerPorts(containers []corev1.Container) bool {
-	for _, container := range containers {
-		for _, port := range container.Ports {
-			if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// resolvePodOwner returns (kind, name, apiVersion) for the controlling
-// owner of a pod, collapsing ReplicaSets into their parent Deployment.
-// apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
-// owner.APIVersion verbatim otherwise.
-func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string, string) {
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller {
-			continue
-		}
-		kind := owner.Kind
-		name := owner.Name
-		apiVersion := owner.APIVersion
-		if owner.Kind == "ReplicaSet" {
-			if deployment, ok := rsMap[owner.Name]; ok {
-				kind = "Deployment"
-				name = deployment
-				apiVersion = "apps/v1"
-			}
-		}
-		return kind, name, apiVersion
-	}
-	return "None", "None", ""
+	return common.HasForwardableContainerPorts(pod.Spec.Containers)
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {
@@ -593,25 +493,4 @@ func parsePodResourceVersion(pod *corev1.Pod) uint64 {
 		}
 	}
 	return uint64(pod.CreationTimestamp.UnixNano())
-}
-
-func computeResourceTotals(pod *corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64) {
-	if pod == nil {
-		return 0, 0, 0, 0
-	}
-	for _, container := range pod.Spec.Containers {
-		if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-			cpuReq += cpu.MilliValue()
-		}
-		if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-			cpuLim += cpu.MilliValue()
-		}
-		if mem := container.Resources.Requests.Memory(); mem != nil {
-			memReq += mem.Value()
-		}
-		if mem := container.Resources.Limits.Memory(); mem != nil {
-			memLim += mem.Value()
-		}
-	}
-	return cpuReq, cpuLim, memReq, memLim
 }

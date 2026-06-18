@@ -6,43 +6,41 @@
  */
 package backend
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"k8s.io/client-go/kubernetes"
+)
 
 type portForwardTargetCapability struct {
 	Group               string
 	Version             string
 	Reconnect           bool
 	UsesServicePortSpec bool
+	resolvePod          func(ctx context.Context, client kubernetes.Interface, namespace, name string) (string, error)
 }
 
-var portForwardTargetCapabilities = map[string]portForwardTargetCapability{
-	"Pod": {
-		Group:     "",
-		Version:   "v1",
-		Reconnect: false,
-	},
-	"Service": {
-		Group:               "",
-		Version:             "v1",
-		Reconnect:           true,
-		UsesServicePortSpec: true,
-	},
-	"Deployment": {
-		Group:     "apps",
-		Version:   "v1",
-		Reconnect: true,
-	},
-	"StatefulSet": {
-		Group:     "apps",
-		Version:   "v1",
-		Reconnect: true,
-	},
-	"DaemonSet": {
-		Group:     "apps",
-		Version:   "v1",
-		Reconnect: true,
-	},
-}
+// portForwardTargetCapabilities is derived from the single kind registry: every
+// kind with a PortForward facet is a port-forward target, carrying its identity and
+// behaviour. The handlers never list a kind here.
+var portForwardTargetCapabilities = func() map[string]portForwardTargetCapability {
+	m := map[string]portForwardTargetCapability{}
+	for _, d := range kindregistry.All {
+		if d.PortForward == nil {
+			continue
+		}
+		m[d.Identity.Kind] = portForwardTargetCapability{
+			Group:               d.Identity.Group,
+			Version:             d.Identity.Version,
+			Reconnect:           d.PortForward.Reconnect,
+			UsesServicePortSpec: d.PortForward.UsesServicePortSpec,
+			resolvePod:          d.PortForward.ResolvePod,
+		}
+	}
+	return m
+}()
 
 func lookupPortForwardTargetCapability(kind string) (portForwardTargetCapability, bool) {
 	capability, ok := portForwardTargetCapabilities[kind]

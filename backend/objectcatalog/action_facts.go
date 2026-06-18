@@ -3,10 +3,21 @@ package objectcatalog
 import (
 	"strings"
 
-	appsv1 "k8s.io/api/apps/v1"
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -18,46 +29,6 @@ func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *Actio
 		return nil
 	}
 	switch obj := item.(type) {
-	case *corev1.Pod:
-		available := hasForwardableContainerPorts(obj.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *corev1.Service:
-		available := serviceHasForwardablePorts(obj.Spec.Ports)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *corev1.Node:
-		unschedulable := obj.Spec.Unschedulable
-		return &ActionFacts{Unschedulable: &unschedulable}
-	case *appsv1.Deployment:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *appsv1.StatefulSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *appsv1.DaemonSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *appsv1.ReplicaSet:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{
-			PortForwardAvailable: &available,
-			DesiredReplicas:      obj.Spec.Replicas,
-		}
-	case *batchv1.Job:
-		available := hasForwardableContainerPorts(obj.Spec.Template.Spec.Containers)
-		return &ActionFacts{PortForwardAvailable: &available}
-	case *batchv1.CronJob:
-		available := hasForwardableContainerPorts(obj.Spec.JobTemplate.Spec.Template.Spec.Containers)
-		facts := &ActionFacts{PortForwardAvailable: &available}
-		if obj.Spec.Suspend != nil && *obj.Spec.Suspend {
-			facts.Status = "Suspended"
-		}
-		return facts
 	case *autoscalingv1.HorizontalPodAutoscaler:
 		return &ActionFacts{ScaleTarget: actionScaleTargetFromV1HPA(obj)}
 	case *autoscalingv2.HorizontalPodAutoscaler:
@@ -65,7 +36,50 @@ func buildSummaryActionFacts(desc resourceDescriptor, item metav1.Object) *Actio
 	case *unstructuredv1.Unstructured:
 		return buildUnstructuredSummaryActionFacts(desc, obj)
 	default:
+		// Typed built-in kinds reuse their object-map action-facts projection from
+		// the single registry, so the per-kind projection lives once — in the kind
+		// package — instead of being copied here. (HorizontalPodAutoscaler has no
+		// object-map collector; its ScaleTarget is handled above.)
+		return actionFactsFromObjectMap(objectMapActionFacts(desc, item))
+	}
+}
+
+// objectMapActionFactsByKind indexes each kind's registry-declared object-map
+// action-facts projection by GroupKind, so the catalog reuses it rather than
+// re-deriving per-kind facts.
+var objectMapActionFactsByKind = func() map[schema.GroupKind]func(metav1.Object) *objectmap.ActionFacts {
+	m := make(map[schema.GroupKind]func(metav1.Object) *objectmap.ActionFacts)
+	for _, d := range kindregistry.All {
+		if d.Collector != nil && d.Collector.ActionFacts != nil {
+			m[schema.GroupKind{Group: d.Identity.Group, Kind: d.Identity.Kind}] = d.Collector.ActionFacts
+		}
+	}
+	return m
+}()
+
+// objectMapActionFacts runs the registry projection for desc's kind, or returns
+// nil when the kind has none.
+func objectMapActionFacts(desc resourceDescriptor, item metav1.Object) *objectmap.ActionFacts {
+	fn := objectMapActionFactsByKind[schema.GroupKind{Group: desc.Group, Kind: desc.Kind}]
+	if fn == nil {
 		return nil
+	}
+	return fn(item)
+}
+
+// actionFactsFromObjectMap copies the neutral object-map action facts into the
+// catalog's summary action facts (which additionally carries the backend-only HPA
+// ScaleTarget, set on the HPA branch of buildSummaryActionFacts).
+func actionFactsFromObjectMap(f *objectmap.ActionFacts) *ActionFacts {
+	if f == nil {
+		return nil
+	}
+	return &ActionFacts{
+		Status:               f.Status,
+		Unschedulable:        f.Unschedulable,
+		PortForwardAvailable: f.PortForwardAvailable,
+		HPAManaged:           f.HPAManaged,
+		DesiredReplicas:      f.DesiredReplicas,
 	}
 }
 
@@ -74,35 +88,35 @@ func buildUnstructuredSummaryActionFacts(desc resourceDescriptor, item *unstruct
 		return nil
 	}
 	switch {
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Pod":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == podspkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Service":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == servicepkg.Identity.Kind:
 		available := unstructuredServiceHasForwardablePorts(item.Object)
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "" && desc.Version == "v1" && desc.Kind == "Node":
+	case desc.Group == "" && desc.Version == "v1" && desc.Kind == nodespkg.Identity.Kind:
 		unschedulable, _, _ := unstructuredv1.NestedBool(item.Object, "spec", "unschedulable")
 		return &ActionFacts{Unschedulable: &unschedulable}
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "Deployment":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == deploymentpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "StatefulSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == statefulsetpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "ReplicaSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == replicasetpkg.Identity.Kind:
 		return unstructuredScalableWorkloadFacts(item, "spec", "template", "spec", "containers")
-	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == "DaemonSet":
+	case desc.Group == "apps" && desc.Version == "v1" && desc.Kind == daemonsetpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == "Job":
+	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == jobpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "template", "spec", "containers")
 		return &ActionFacts{PortForwardAvailable: &available}
-	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == "CronJob":
+	case desc.Group == "batch" && desc.Version == "v1" && desc.Kind == cronjobpkg.Identity.Kind:
 		available := unstructuredHasForwardableContainerPorts(item.Object, "spec", "jobTemplate", "spec", "template", "spec", "containers")
 		facts := &ActionFacts{PortForwardAvailable: &available}
 		if suspended, found, _ := unstructuredv1.NestedBool(item.Object, "spec", "suspend"); found && suspended {
 			facts.Status = "Suspended"
 		}
 		return facts
-	case desc.Group == "autoscaling" && desc.Kind == "HorizontalPodAutoscaler":
+	case desc.Group == "autoscaling" && desc.Kind == hpapkg.Identity.Kind:
 		if target := unstructuredHPAScaleTarget(item); target != nil {
 			return &ActionFacts{ScaleTarget: target}
 		}
@@ -118,26 +132,6 @@ func unstructuredScalableWorkloadFacts(item *unstructuredv1.Unstructured, contai
 		facts.DesiredReplicas = &value
 	}
 	return facts
-}
-
-func hasForwardableContainerPorts(containers []corev1.Container) bool {
-	for _, container := range containers {
-		for _, port := range container.Ports {
-			if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func serviceHasForwardablePorts(ports []corev1.ServicePort) bool {
-	for _, port := range ports {
-		if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
-			return true
-		}
-	}
-	return false
 }
 
 func unstructuredHasForwardableContainerPorts(obj map[string]any, fields ...string) bool {

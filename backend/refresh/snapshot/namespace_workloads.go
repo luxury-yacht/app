@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+
+	"github.com/luxury-yacht/app/backend/resources/common"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -27,11 +30,17 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/cronjob"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
+	"github.com/luxury-yacht/app/backend/resources/deployment"
+	jobres "github.com/luxury-yacht/app/backend/resources/job"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
+	"github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
 const (
@@ -74,36 +83,15 @@ func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
-		[]string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 	)
 }
 
-// WorkloadSummary mirrors the data required by the workloads table.
-type WorkloadSummary struct {
-	ClusterMeta
-	Kind                 string `json:"kind"`
-	Name                 string `json:"name"`
-	Namespace            string `json:"namespace"`
-	Ready                string `json:"ready"`
-	Status               string `json:"status"`
-	StatusState          string `json:"statusState,omitempty"`
-	StatusPresentation   string `json:"statusPresentation,omitempty"`
-	StatusReason         string `json:"statusReason,omitempty"`
-	Restarts             int32  `json:"restarts"`
-	Age                  string `json:"age"`
-	AgeTimestamp         int64  `json:"ageTimestamp,omitempty"`
-	CPUUsage             string `json:"cpuUsage,omitempty"`
-	CPURequest           string `json:"cpuRequest,omitempty"`
-	CPULimit             string `json:"cpuLimit,omitempty"`
-	MemUsage             string `json:"memUsage,omitempty"`
-	MemRequest           string `json:"memRequest,omitempty"`
-	MemLimit             string `json:"memLimit,omitempty"`
-	PortForwardAvailable bool   `json:"portForwardAvailable"`
-	DesiredReplicas      *int32 `json:"desiredReplicas,omitempty"`
-	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
-	// Nil means HPA coverage was unavailable, so action surfaces must fail closed.
-	HPAManaged *bool `json:"hpaManaged,omitempty"`
-}
+// WorkloadSummary lives in the streamrows leaf so every streaming row type has
+// one home; this alias keeps the snapshot-side name and wire JSON unchanged. The
+// row is a unified cross-kind workload aggregation, so its builder stays in this
+// domain (moving it to a kind package would cycle through resourcecontract).
+type WorkloadSummary = streamrows.WorkloadSummary
 
 // RegisterNamespaceWorkloadsDomain wires the workloads domain into the registry.
 // Only listers for permitted resources are wired; denied resources are left nil
@@ -271,7 +259,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			}
 			summary.HPAManaged = &managed
 		}
-		if summary.Kind != "Pod" {
+		if summary.Kind != podres.Identity.Kind {
 			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
 		}
 		if queryCollector != nil {
@@ -400,17 +388,17 @@ func sortWorkloadSummaries(items []WorkloadSummary) {
 func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource {
 	return []typedTableResourceSource{
 		{
-			Kind:       "Pod",
+			Kind:       podres.Identity.Kind,
 			Group:      "",
 			Resource:   "pods",
 			Available:  b.podLister != nil,
-			QueryKinds: []string{"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
-		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
-		{Kind: "StatefulSet", Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
-		{Kind: "DaemonSet", Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
-		{Kind: "Job", Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
-		{Kind: "CronJob", Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
+		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
+		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
+		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
+		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
+		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
 	}
 }
 
@@ -519,47 +507,47 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	clusterID string,
-	deployment *appsv1.Deployment,
+	deploy *appsv1.Deployment,
 	podsByOwner map[string][]*corev1.Pod,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
 	var pods []*corev1.Pod
-	if deployment != nil {
-		key := workloadOwnerKey("Deployment", deployment.Namespace, deployment.Name)
+	if deploy != nil {
+		key := workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
 	desired := int32(0)
-	if deployment != nil && deployment.Spec.Replicas != nil {
-		desired = *deployment.Spec.Replicas
+	if deploy != nil && deploy.Spec.Replicas != nil {
+		desired = *deploy.Spec.Replicas
 	}
 	ready := int32(0)
-	if deployment != nil {
-		ready = deployment.Status.ReadyReplicas
+	if deploy != nil {
+		ready = deploy.Status.ReadyReplicas
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildDeploymentResourceModel(clusterID, deployment)
+	model := deployment.BuildResourceModel(clusterID, deploy)
 
 	return WorkloadSummary{
-		Kind:                 "Deployment",
-		Name:                 deployment.Name,
-		Namespace:            deployment.Namespace,
+		Kind:                 deployment.Identity.Kind,
+		Name:                 deploy.Name,
+		Namespace:            deploy.Namespace,
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
 		StatusPresentation:   model.Status.Presentation,
 		StatusReason:         model.Status.Reason,
 		Restarts:             resources.Restarts,
-		Age:                  formatAge(deployment.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(deployment),
+		Age:                  formatAge(deploy.CreationTimestamp.Time),
+		AgeTimestamp:         creationTimestampMillis(deploy),
 		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
 		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
 		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
-		DesiredReplicas:      cloneInt32Ptr(deployment.Spec.Replicas),
+		PortForwardAvailable: common.HasForwardableContainerPorts(deploy.Spec.Template.Spec.Containers),
+		DesiredReplicas:      cloneInt32Ptr(deploy.Spec.Replicas),
 	}
 }
 
@@ -571,7 +559,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if stateful != nil {
-		key := workloadOwnerKey("StatefulSet", stateful.Namespace, stateful.Name)
+		key := workloadOwnerKey(statefulset.Identity.Kind, stateful.Namespace, stateful.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -584,10 +572,10 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		ready = stateful.Status.ReadyReplicas
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildStatefulSetResourceModel(clusterID, stateful)
+	model := statefulset.BuildResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
-		Kind:                 "StatefulSet",
+		Kind:                 statefulset.Identity.Kind,
 		Name:                 stateful.Name,
 		Namespace:            stateful.Namespace,
 		Ready:                readyStatus,
@@ -604,7 +592,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
 		DesiredReplicas:      cloneInt32Ptr(stateful.Spec.Replicas),
 	}
 }
@@ -617,7 +605,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if daemon != nil {
-		key := workloadOwnerKey("DaemonSet", daemon.Namespace, daemon.Name)
+		key := workloadOwnerKey(daemonset.Identity.Kind, daemon.Namespace, daemon.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -628,10 +616,10 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		desired = daemon.Status.DesiredNumberScheduled
 	}
 	readyStatus := workloadPodReadyStatus(pods, ready, desired)
-	model := resourcemodel.BuildDaemonSetResourceModel(clusterID, daemon)
+	model := daemonset.BuildResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
-		Kind:                 "DaemonSet",
+		Kind:                 daemonset.Identity.Kind,
 		Name:                 daemon.Name,
 		Namespace:            daemon.Namespace,
 		Ready:                readyStatus,
@@ -648,7 +636,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -660,7 +648,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if job != nil {
-		key := workloadOwnerKey("Job", job.Namespace, job.Name)
+		key := workloadOwnerKey(jobres.Identity.Kind, job.Namespace, job.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -672,10 +660,10 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	if job != nil {
 		completed = job.Status.Succeeded
 	}
-	model := resourcemodel.BuildJobResourceModel(clusterID, job)
+	model := jobres.BuildResourceModel(clusterID, job)
 
 	return WorkloadSummary{
-		Kind:                 "Job",
+		Kind:                 jobres.Identity.Kind,
 		Name:                 job.Name,
 		Namespace:            job.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", completed, desired),
@@ -692,7 +680,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -704,7 +692,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 ) WorkloadSummary {
 	var pods []*corev1.Pod
 	if cron != nil {
-		key := workloadOwnerKey("CronJob", cron.Namespace, cron.Name)
+		key := workloadOwnerKey(cronjob.Identity.Kind, cron.Namespace, cron.Name)
 		pods = podsByOwner[key]
 	}
 	resources := aggregateWorkloadPodResources(pods, usage)
@@ -712,10 +700,10 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	if cron != nil {
 		active = len(cron.Status.Active)
 	}
-	model := resourcemodel.BuildCronJobResourceModel(clusterID, cron)
+	model := cronjob.BuildResourceModel(clusterID, cron)
 
 	return WorkloadSummary{
-		Kind:                 "CronJob",
+		Kind:                 cronjob.Identity.Kind,
 		Name:                 cron.Name,
 		Namespace:            cron.Namespace,
 		Ready:                fmt.Sprintf("%d", active),
@@ -732,17 +720,17 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
 		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
 		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
+		PortForwardAvailable: common.HasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 }
 
 func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
 	resources := aggregateWorkloadPodResources([]*corev1.Pod{pod}, usage)
 	ready := podReadyStatus(pod)
-	model := resourcemodel.BuildPodResourceModel(clusterID, pod)
+	model := podres.BuildResourceModel(clusterID, pod)
 
 	return WorkloadSummary{
-		Kind:                 "Pod",
+		Kind:                 podres.Identity.Kind,
 		Name:                 pod.Name,
 		Namespace:            pod.Namespace,
 		Ready:                ready,
@@ -783,7 +771,7 @@ func aggregateWorkloadPodResources(pods []*corev1.Pod, usage map[string]metrics.
 			continue
 		}
 
-		totals.Restarts += resourcemodel.BuildPodFacts(pod).RestartCount
+		totals.Restarts += podres.BuildFacts(pod).RestartCount
 
 		for _, container := range pod.Spec.Containers {
 			if req := container.Resources.Requests; req != nil {
@@ -825,9 +813,9 @@ func ownerKeyForPod(pod *corev1.Pod) string {
 		if owner.Controller != nil && *owner.Controller {
 			kind := owner.Kind
 			name := owner.Name
-			if owner.Kind == "ReplicaSet" {
+			if owner.Kind == replicasetpkg.Identity.Kind {
 				if base := deploymentNameFromReplicaSet(owner.Name); base != "" {
-					kind = "Deployment"
+					kind = deployment.Identity.Kind
 					name = base
 				}
 			}
@@ -852,7 +840,7 @@ func podReadyStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "0/0"
 	}
-	facts := resourcemodel.BuildPodFacts(pod)
+	facts := podres.BuildFacts(pod)
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
@@ -867,7 +855,7 @@ func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int
 			continue
 		}
 		totalPods++
-		facts := resourcemodel.BuildPodFacts(pod)
+		facts := podres.BuildFacts(pod)
 		if facts.TotalContainers > 0 && facts.ReadyContainers >= facts.TotalContainers {
 			readyPods++
 		}
@@ -951,11 +939,11 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 
 func workloadHPATargetKey(summary WorkloadSummary) string {
 	switch summary.Kind {
-	case "Deployment", "StatefulSet", "DaemonSet":
+	case deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind:
 		return hpaTargetKey("apps", "v1", summary.Kind, summary.Namespace, summary.Name)
-	case "Job", "CronJob":
+	case jobres.Identity.Kind, cronjob.Identity.Kind:
 		return hpaTargetKey("batch", "v1", summary.Kind, summary.Namespace, summary.Name)
-	case "Pod":
+	case podres.Identity.Kind:
 		return hpaTargetKey("", "v1", summary.Kind, summary.Namespace, summary.Name)
 	default:
 		return hpaTargetKey("", "", summary.Kind, summary.Namespace, summary.Name)

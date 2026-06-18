@@ -8,19 +8,19 @@ import (
 )
 
 func TestCollectionSourcePlanCoversInformerRegistries(t *testing.T) {
-	for gr := range sharedInformerListers {
+	for gr := range sharedInformerGroupResources {
 		plan := planCollectionSourceForGroupResource(gr)
 		require.Equalf(t, collectionSourceSharedInformer, plan.source, "%s should use shared informer", gr.String())
 		require.Falsef(t, plan.promotable, "%s informer-backed source should not promote dynamic informer", gr.String())
 	}
 
-	for gr := range gatewayInformerListers {
+	for gr := range gatewayInformerGroupResources {
 		plan := planCollectionSourceForGroupResource(gr)
 		require.Equalf(t, collectionSourceGatewayInformer, plan.source, "%s should use Gateway informer", gr.String())
 		require.Falsef(t, plan.promotable, "%s informer-backed source should not promote dynamic informer", gr.String())
 	}
 
-	for gr := range watchInformerAccessor {
+	for gr := range watchInformerGroupResources {
 		plan := planCollectionSourceForGroupResource(gr)
 		require.Truef(t, plan.watchable, "%s watch handler must be declared in the collection plan", gr.String())
 		require.Equalf(t, collectionSourceSharedInformer, plan.source, "%s watch handler must match shared informer collection", gr.String())

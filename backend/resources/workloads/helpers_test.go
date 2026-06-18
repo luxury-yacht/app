@@ -53,7 +53,7 @@ func TestDescribeContainers(t *testing.T) {
 		},
 	}
 
-	details := describeContainers(containers)
+	details := DescribeContainers(containers)
 	if len(details) != 1 {
 		t.Fatalf("expected 1 container detail, got %d", len(details))
 	}

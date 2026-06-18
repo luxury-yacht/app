@@ -3,7 +3,15 @@
  */
 
 import React from 'react';
-import { resourcemodel, types } from '@wailsjs/go/models';
+import {
+  backendtlspolicy,
+  gateway,
+  gatewayclass,
+  listenerset,
+  referencegrant,
+  resourcemodel,
+  types,
+} from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
@@ -14,12 +22,12 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface GatewayAPIOverviewProps {
-  gatewayDetails?: types.GatewayDetails | null;
-  gatewayClassDetails?: types.GatewayClassDetails | null;
+  gatewayDetails?: gateway.GatewayDetails | null;
+  gatewayClassDetails?: gatewayclass.GatewayClassDetails | null;
   routeDetails?: types.RouteDetails | null;
-  listenerSetDetails?: types.ListenerSetDetails | null;
-  referenceGrantDetails?: types.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
+  listenerSetDetails?: listenerset.ListenerSetDetails | null;
+  referenceGrantDetails?: referencegrant.ReferenceGrantDetails | null;
+  backendTLSPolicyDetails?: backendtlspolicy.BackendTLSPolicyDetails | null;
 }
 
 const conditionVariant = (status: string): StatusChipVariant => {
@@ -313,7 +321,7 @@ const ReferenceGrantDiagram: React.FC<{
 };
 
 const GatewayDetailsOverview: React.FC<{
-  details: types.GatewayDetails;
+  details: gateway.GatewayDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
   const hasAddresses = Boolean(details.addresses?.length);
@@ -356,7 +364,7 @@ const GatewayDetailsOverview: React.FC<{
 };
 
 const GatewayClassOverview: React.FC<{
-  details: types.GatewayClassDetails;
+  details: gatewayclass.GatewayClassDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
   const hasUsedBy = Boolean(details.usedBy?.length);
@@ -443,7 +451,7 @@ const RouteOverview: React.FC<{
 };
 
 const ListenerSetOverview: React.FC<{
-  details: types.ListenerSetDetails;
+  details: listenerset.ListenerSetDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
   const hasListeners = Boolean(details.listeners?.length);
@@ -479,7 +487,7 @@ const ListenerSetOverview: React.FC<{
 };
 
 const ReferenceGrantOverview: React.FC<{
-  details: types.ReferenceGrantDetails;
+  details: referencegrant.ReferenceGrantDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
   const hasGrant = Boolean(details.from?.length) || Boolean(details.to?.length);
@@ -504,7 +512,7 @@ const ReferenceGrantOverview: React.FC<{
 };
 
 const BackendTLSPolicyOverview: React.FC<{
-  details: types.BackendTLSPolicyDetails;
+  details: backendtlspolicy.BackendTLSPolicyDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
   const hasTargetRefs = Boolean(details.targetRefs?.length);

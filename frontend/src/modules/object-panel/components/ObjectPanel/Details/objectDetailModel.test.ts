@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { types } from '@wailsjs/go/models';
+import {
+  configmap,
+  cronjob,
+  deployment,
+  replicaset,
+  secret,
+  service,
+  statefulset,
+  types,
+} from '@wailsjs/go/models';
 import {
   buildObjectDetailModel,
   createObjectDetailModelFromSlots,
@@ -62,7 +71,7 @@ const container = (
 
 describe('objectDetailModel', () => {
   it('maps detail payloads into the matching slot', () => {
-    const cronJob = { suspend: true } as types.CronJobDetails;
+    const cronJob = { suspend: true } as cronjob.CronJobDetails;
 
     const model = buildObjectDetailModel(null, 'cronjob', cronJob);
 
@@ -71,22 +80,22 @@ describe('objectDetailModel', () => {
   });
 
   it('selects workload containers and active pod names', () => {
-    const deployment = {
+    const deploy = {
       desiredReplicas: 3,
       containers: [container({ name: 'api' })],
       initContainers: [container({ name: 'init' })],
       pods: [{ name: 'pod-a' }, { name: '  ' }, { name: 'pod-b' }],
-    } as types.DeploymentDetails;
+    } as deployment.DeploymentDetails;
 
     const model = createObjectDetailModelFromSlots(
       null,
       'deployment',
-      emptySlots({ deploymentDetails: deployment })
+      emptySlots({ deploymentDetails: deploy })
     );
 
     expect(model.containerSection).toEqual({
-      containers: deployment.containers,
-      initContainers: deployment.initContainers,
+      containers: deploy.containers,
+      initContainers: deploy.initContainers,
     });
     expect(model.activePodNames).toEqual(['pod-a', 'pod-b']);
     expect(model.desiredScaleReplicas).toBe(3);
@@ -100,7 +109,7 @@ describe('objectDetailModel', () => {
         configMapDetails: {
           data: { key: 'value' },
           binaryData: { cert: 'base64' },
-        } as unknown as types.ConfigMapDetails,
+        } as unknown as configmap.ConfigMapDetails,
       })
     );
     const secretModel = createObjectDetailModelFromSlots(
@@ -109,7 +118,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         secretDetails: {
           data: { token: 'masked' },
-        } as unknown as types.SecretDetails,
+        } as unknown as secret.SecretDetails,
       })
     );
 
@@ -146,7 +155,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         serviceDetails: {
           ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
-        } as types.ServiceDetails,
+        } as service.ServiceDetails,
       })
     );
     const udpService = createObjectDetailModelFromSlots(
@@ -155,7 +164,7 @@ describe('objectDetailModel', () => {
       emptySlots({
         serviceDetails: {
           ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
-        } as types.ServiceDetails,
+        } as service.ServiceDetails,
       })
     );
 
@@ -170,14 +179,14 @@ describe('objectDetailModel', () => {
       createObjectDetailModelFromSlots(
         null,
         'statefulset',
-        emptySlots({ statefulSetDetails: { desiredReplicas: 2 } as types.StatefulSetDetails })
+        emptySlots({ statefulSetDetails: { desiredReplicas: 2 } as statefulset.StatefulSetDetails })
       ).desiredScaleReplicas
     ).toBe(2);
     expect(
       createObjectDetailModelFromSlots(
         null,
         'replicaset',
-        emptySlots({ replicaSetDetails: { desiredReplicas: 5 } as types.ReplicaSetDetails })
+        emptySlots({ replicaSetDetails: { desiredReplicas: 5 } as replicaset.ReplicaSetDetails })
       ).desiredScaleReplicas
     ).toBe(5);
     expect(createObjectDetailModelFromSlots(null, 'job', emptySlots()).desiredScaleReplicas).toBe(

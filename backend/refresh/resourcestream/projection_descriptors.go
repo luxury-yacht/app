@@ -2,7 +2,21 @@
 // refresh-domain composition contract.
 package resourcestream
 
-import "github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+import (
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/resourcekind"
+	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
+	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
+	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
+	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	endpointslicepkg "github.com/luxury-yacht/app/backend/resources/endpointslice"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
+	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
+	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
+	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
+)
 
 // ProjectionDescriptor documents the row projection contract for a resource
 // stream domain. The descriptor is intentionally metadata-only; stream
@@ -53,10 +67,10 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		SelectorShape:        "clusterId + namespace/name or namespace:*",
 		RowIdentity:          "clusterId + /v1 Pod namespace/name",
 		UpdateIdentity:       "ref (full ResourceRef)",
-		PrimaryResources:     []ResourceDescriptor{core("v1", "Pod", "pods")},
-		RelatedResources:     []ResourceDescriptor{apps("ReplicaSet", "replicasets")},
+		PrimaryResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
+		RelatedResources:     []ResourceDescriptor{fromIdentity(replicasetpkg.Identity)},
 		MetricsDependency:    true,
-		Projection:           "snapshot.BuildPodSummary",
+		Projection:           "pods.BuildStreamSummary",
 		AffectedRowResolver:  "pod event -> pod row, workload row, node row",
 		StaleScopeResolver:   "stalePodScopes",
 		CompleteIsScopeLevel: true,
@@ -68,17 +82,17 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RowIdentity:    "clusterId + full workload GVK namespace/name",
 		UpdateIdentity: "ref (full ResourceRef)",
 		PrimaryResources: []ResourceDescriptor{
-			apps("Deployment", "deployments"),
-			apps("StatefulSet", "statefulsets"),
-			apps("DaemonSet", "daemonsets"),
-			batch("Job", "jobs"),
-			batch("CronJob", "cronjobs"),
-			core("v1", "Pod", "pods"),
+			fromIdentity(deploymentpkg.Identity),
+			fromIdentity(statefulsetpkg.Identity),
+			fromIdentity(daemonsetpkg.Identity),
+			fromIdentity(jobpkg.Identity),
+			fromIdentity(cronjobpkg.Identity),
+			fromIdentity(podspkg.Identity),
 		},
 		RelatedResources: []ResourceDescriptor{
-			core("v1", "Pod", "pods"),
-			apps("ReplicaSet", "replicasets"),
-			autoscaling("HorizontalPodAutoscaler", "horizontalpodautoscalers"),
+			fromIdentity(podspkg.Identity),
+			fromIdentity(replicasetpkg.Identity),
+			fromIdentity(hpapkg.IdentityV1),
 		},
 		MetricsDependency:    true,
 		Projection:           "snapshot.BuildWorkloadSummary / snapshot.BuildStandalonePodWorkloadSummary",
@@ -88,7 +102,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	},
 	domainNamespaceConfig: namespaceDescriptor(
 		domainNamespaceConfig,
-		"snapshot.BuildConfigMapSummary / snapshot.BuildSecretSummary",
+		"configmap.BuildStreamSummary / secret.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceConfig),
 		[]ResourceDescriptor{},
 	),
@@ -99,15 +113,15 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RowIdentity:          "clusterId + full network GVK namespace/name",
 		UpdateIdentity:       "ref (full ResourceRef)",
 		PrimaryResources:     streamResourceDescriptors(domainNamespaceNetwork),
-		RelatedResources:     []ResourceDescriptor{discovery("EndpointSlice", "endpointslices")},
-		Projection:           "snapshot.Build*NetworkSummary",
+		RelatedResources:     []ResourceDescriptor{fromIdentity(endpointslicepkg.Identity)},
+		Projection:           "service/ingress/networkpolicy/endpointslice/gatewayapi BuildStreamSummary",
 		AffectedRowResolver:  "network object and EndpointSlice->Service resolvers",
 		StaleScopeResolver:   "EndpointSlice old/new service resolver",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
 		domainNamespaceRBAC,
-		"snapshot.BuildRoleSummary / BuildRoleBindingSummary / BuildServiceAccountSummary",
+		"role.BuildStreamSummary / rolebinding.BuildStreamSummary / serviceaccount.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceRBAC),
 		[]ResourceDescriptor{},
 	),
@@ -118,7 +132,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RowIdentity:          "clusterId + CRD-backed GVK namespace/name",
 		UpdateIdentity:       "ref (full ResourceRef)",
 		PrimaryResources:     []ResourceDescriptor{},
-		RelatedResources:     []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		RelatedResources:     []ResourceDescriptor{fromIdentity(apiextensionspkg.Identity)},
 		Projection:           "snapshot.BuildNamespaceCustomSummary",
 		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
 		StaleScopeResolver:   "CRD custom stream signature resolver",
@@ -139,40 +153,40 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	},
 	domainNamespaceAutoscaling: namespaceDescriptor(
 		domainNamespaceAutoscaling,
-		"snapshot.BuildHPASummary",
+		"hpa.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceAutoscaling),
 		[]ResourceDescriptor{},
 	),
 	domainNamespaceQuotas: namespaceDescriptor(
 		domainNamespaceQuotas,
-		"snapshot.BuildResourceQuotaSummary / BuildLimitRangeSummary / BuildPodDisruptionBudgetSummary",
+		"resourcequota.BuildStreamSummary / limitrange.BuildStreamSummary / poddisruptionbudget.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceQuotas),
 		[]ResourceDescriptor{},
 	),
 	domainNamespaceStorage: namespaceDescriptor(
 		domainNamespaceStorage,
-		"snapshot.BuildPVCStorageSummary",
+		"persistentvolumeclaim.BuildStreamSummary",
 		streamResourceDescriptors(domainNamespaceStorage),
 		[]ResourceDescriptor{},
 	),
 	domainClusterRBAC: clusterDescriptor(
 		domainClusterRBAC,
-		"snapshot.BuildClusterRoleSummary / BuildClusterRoleBindingSummary",
+		"clusterrole.BuildStreamSummary / clusterrolebinding.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterRBAC),
 	),
 	domainClusterStorage: clusterDescriptor(
 		domainClusterStorage,
-		"snapshot.BuildClusterStorageSummary",
+		"persistentvolume.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterStorage),
 	),
 	domainClusterConfig: clusterDescriptor(
 		domainClusterConfig,
-		"snapshot.BuildCluster*Summary",
+		"storageclass.BuildStreamSummary / ingressclass.BuildStreamSummary / gatewayapi.BuildGatewayClassStreamSummary / admission.Build{Validating,Mutating}StreamSummary",
 		streamResourceDescriptors(domainClusterConfig),
 	),
 	domainClusterCRDs: clusterDescriptor(
 		domainClusterCRDs,
-		"snapshot.BuildClusterCRDSummary",
+		"apiextensions.BuildStreamSummary",
 		streamResourceDescriptors(domainClusterCRDs),
 	),
 	domainClusterCustom: {
@@ -182,7 +196,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RowIdentity:          "clusterId + CRD-backed GVK name",
 		UpdateIdentity:       "ref (full ResourceRef)",
 		PrimaryResources:     []ResourceDescriptor{},
-		RelatedResources:     []ResourceDescriptor{apiextensions("CustomResourceDefinition", "customresourcedefinitions")},
+		RelatedResources:     []ResourceDescriptor{fromIdentity(apiextensionspkg.Identity)},
 		Projection:           "snapshot.BuildClusterCustomSummary",
 		AffectedRowResolver:  "dynamic custom informer and CRD signature resolver",
 		StaleScopeResolver:   "CRD custom stream signature resolver",
@@ -194,8 +208,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		SelectorShape:        "clusterId",
 		RowIdentity:          "clusterId + /v1 Node name",
 		UpdateIdentity:       "ref (full ResourceRef)",
-		PrimaryResources:     []ResourceDescriptor{core("v1", "Node", "nodes")},
-		RelatedResources:     []ResourceDescriptor{core("v1", "Pod", "pods")},
+		PrimaryResources:     []ResourceDescriptor{fromIdentity(nodespkg.Identity)},
+		RelatedResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
 		MetricsDependency:    true,
 		Projection:           "snapshot.BuildNodeSummary",
 		AffectedRowResolver:  "node and pod->node resolvers",
@@ -253,26 +267,8 @@ func streamResourceDescriptors(domain string) []ResourceDescriptor {
 	return descriptors
 }
 
-func core(version, kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Version: version, Kind: kind, Resource: resource}
-}
-
-func apps(kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Group: "apps", Version: "v1", Kind: kind, Resource: resource}
-}
-
-func batch(kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Group: "batch", Version: "v1", Kind: kind, Resource: resource}
-}
-
-func autoscaling(kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Group: "autoscaling", Version: "v1", Kind: kind, Resource: resource}
-}
-
-func discovery(kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Group: "discovery.k8s.io", Version: "v1", Kind: kind, Resource: resource}
-}
-
-func apiextensions(kind, resource string) ResourceDescriptor {
-	return ResourceDescriptor{Group: "apiextensions.k8s.io", Version: "v1", Kind: kind, Resource: resource}
+// fromIdentity builds a stream ResourceDescriptor from a kind package's canonical
+// Identity, so a projection references each kind instead of re-spelling it.
+func fromIdentity(id resourcekind.Identity) ResourceDescriptor {
+	return ResourceDescriptor{Group: id.Group, Version: id.Version, Kind: id.Kind, Resource: id.Resource}
 }

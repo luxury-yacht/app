@@ -7,10 +7,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	grpcroutepkg "github.com/luxury-yacht/app/backend/resources/grpcroute"
+	httproutepkg "github.com/luxury-yacht/app/backend/resources/httproute"
+	tlsroutepkg "github.com/luxury-yacht/app/backend/resources/tlsroute"
+
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -207,16 +212,16 @@ func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFact
 	if presence.Has("GatewayClass") {
 		f.registerInformer(gatewayGroup, "gatewayclasses", gateway.GatewayClasses().Informer())
 	}
-	if presence.Has("Gateway") {
+	if presence.Has(gatewaypkg.Identity.Kind) {
 		f.registerInformer(gatewayGroup, "gateways", gateway.Gateways().Informer())
 	}
-	if presence.Has("HTTPRoute") {
+	if presence.Has(httproutepkg.Identity.Kind) {
 		f.registerInformer(gatewayGroup, "httproutes", gateway.HTTPRoutes().Informer())
 	}
-	if presence.Has("GRPCRoute") {
+	if presence.Has(grpcroutepkg.Identity.Kind) {
 		f.registerInformer(gatewayGroup, "grpcroutes", gateway.GRPCRoutes().Informer())
 	}
-	if presence.Has("TLSRoute") {
+	if presence.Has(tlsroutepkg.Identity.Kind) {
 		f.registerInformer(gatewayGroup, "tlsroutes", gateway.TLSRoutes().Informer())
 	}
 	if presence.Has("ListenerSet") {

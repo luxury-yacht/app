@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
+	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -283,56 +284,12 @@ type aggregateBufferItem struct {
 	Entry    eventstream.Entry
 }
 
-type aggregateEventBuffer struct {
-	items []aggregateBufferItem
-	start int
-	count int
-	max   int
-}
+// aggregateEventBuffer is the per-scope resume buffer; the ring + replay logic is
+// shared via ringbuffer.Buffer.
+type aggregateEventBuffer = ringbuffer.Buffer[aggregateBufferItem]
 
 func newAggregateEventBuffer(max int) *aggregateEventBuffer {
-	return &aggregateEventBuffer{
-		items: make([]aggregateBufferItem, max),
-		max:   max,
-	}
-}
-
-func (b *aggregateEventBuffer) add(item aggregateBufferItem) {
-	if b.max == 0 {
-		return
-	}
-	if b.count < b.max {
-		index := (b.start + b.count) % b.max
-		b.items[index] = item
-		b.count++
-		return
-	}
-	b.items[b.start] = item
-	b.start = (b.start + 1) % b.max
-}
-
-func (b *aggregateEventBuffer) since(sequence uint64) ([]aggregateBufferItem, bool) {
-	if b.count == 0 {
-		return nil, false
-	}
-	oldest := b.items[b.start].Sequence
-	latestIndex := (b.start + b.count - 1) % b.max
-	latest := b.items[latestIndex].Sequence
-	if sequence < oldest {
-		return nil, false
-	}
-	if sequence >= latest {
-		return []aggregateBufferItem{}, true
-	}
-	out := make([]aggregateBufferItem, 0, b.count)
-	for i := 0; i < b.count; i++ {
-		index := (b.start + i) % b.max
-		item := b.items[index]
-		if item.Sequence > sequence {
-			out = append(out, item)
-		}
-	}
-	return out, true
+	return ringbuffer.New(max, func(i aggregateBufferItem) uint64 { return i.Sequence })
 }
 
 // resolveTargets selects the clusters to stream from based on the requested IDs.
@@ -604,7 +561,7 @@ func (h *aggregateEventStreamHandler) bufferAggregateEvent(
 		buffer = newAggregateEventBuffer(config.AggregateEventStreamResumeBufferSize)
 		h.buffers[scope] = buffer
 	}
-	buffer.add(aggregateBufferItem{Sequence: sequence, Entry: entry})
+	buffer.Add(aggregateBufferItem{Sequence: sequence, Entry: entry})
 }
 
 func (h *aggregateEventStreamHandler) bufferSince(
@@ -623,7 +580,7 @@ func (h *aggregateEventStreamHandler) bufferSince(
 	if buffer == nil {
 		return nil, false
 	}
-	return buffer.since(sequence)
+	return buffer.Since(sequence)
 }
 
 func parseAggregateResumeID(r *http.Request) uint64 {
@@ -643,4 +600,3 @@ func parseAggregateResumeID(r *http.Request) uint64 {
 	}
 	return parsed
 }
-

@@ -212,63 +212,27 @@ const (
 )
 
 func clampKubernetesClientQPS(qps int) int {
-	if qps < minKubernetesClientQPS {
-		return minKubernetesClientQPS
-	}
-	if qps > maxKubernetesClientQPS {
-		return maxKubernetesClientQPS
-	}
-	return qps
+	return clampInt(qps, minKubernetesClientQPS, maxKubernetesClientQPS)
 }
 
 func clampKubernetesClientBurst(burst int) int {
-	if burst < minKubernetesClientBurst {
-		return minKubernetesClientBurst
-	}
-	if burst > maxKubernetesClientBurst {
-		return maxKubernetesClientBurst
-	}
-	return burst
+	return clampInt(burst, minKubernetesClientBurst, maxKubernetesClientBurst)
 }
 
 func clampPermissionSSRRFetchConcurrency(limit int) int {
-	if limit < minPermissionSSRRFetchConcurrency {
-		return minPermissionSSRRFetchConcurrency
-	}
-	if limit > maxPermissionSSRRFetchConcurrency {
-		return maxPermissionSSRRFetchConcurrency
-	}
-	return limit
+	return clampInt(limit, minPermissionSSRRFetchConcurrency, maxPermissionSSRRFetchConcurrency)
 }
 
 func clampObjPanelLogsBufferMaxSize(size int) int {
-	if size < minObjPanelLogsBufferMaxSize {
-		return minObjPanelLogsBufferMaxSize
-	}
-	if size > maxObjPanelLogsBufferMaxSize {
-		return maxObjPanelLogsBufferMaxSize
-	}
-	return size
+	return clampInt(size, minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize)
 }
 
 func clampObjPanelLogsTargetPerScopeLimit(limit int) int {
-	if limit < minObjPanelLogsTargetPerScopeLimit {
-		return minObjPanelLogsTargetPerScopeLimit
-	}
-	if limit > maxObjPanelLogsTargetPerScopeLimit {
-		return maxObjPanelLogsTargetPerScopeLimit
-	}
-	return limit
+	return clampInt(limit, minObjPanelLogsTargetPerScopeLimit, maxObjPanelLogsTargetPerScopeLimit)
 }
 
 func clampObjPanelLogsTargetGlobalLimit(limit int) int {
-	if limit < minObjPanelLogsTargetGlobalLimit {
-		return minObjPanelLogsTargetGlobalLimit
-	}
-	if limit > maxObjPanelLogsTargetGlobalLimit {
-		return maxObjPanelLogsTargetGlobalLimit
-	}
-	return limit
+	return clampInt(limit, minObjPanelLogsTargetGlobalLimit, maxObjPanelLogsTargetGlobalLimit)
 }
 
 // settingsKubeconfig captures user-configurable kubeconfig settings.
