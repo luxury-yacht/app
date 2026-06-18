@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

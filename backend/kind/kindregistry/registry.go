@@ -1,5 +1,5 @@
 /*
- * backend/refresh/kindregistry/registry.go
+ * backend/kind/kindregistry/registry.go
  *
  * THE registry. Every built-in kind is registered here exactly once, with its
  * identity and the facets each subsystem needs. The object catalog, resource
@@ -14,8 +14,8 @@
 package kindregistry
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
-	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"

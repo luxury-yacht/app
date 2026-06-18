@@ -8,7 +8,7 @@
 package grpcroute
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )

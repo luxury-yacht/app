@@ -10,7 +10,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 )
 
 var (

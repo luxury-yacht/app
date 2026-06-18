@@ -27,7 +27,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/appbinding"
 )

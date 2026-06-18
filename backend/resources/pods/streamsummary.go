@@ -17,7 +17,7 @@ package pods
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	corev1 "k8s.io/api/core/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"

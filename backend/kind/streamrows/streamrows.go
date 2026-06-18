@@ -1,5 +1,5 @@
 /*
- * backend/refresh/streamrows/streamrows.go
+ * backend/kind/streamrows/streamrows.go
  *
  * Neutral leaf package for streaming-snapshot row types and their shared
  * formatters. It depends only on small leaf utilities (timeutil), never on the

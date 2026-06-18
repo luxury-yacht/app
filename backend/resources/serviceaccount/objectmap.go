@@ -8,7 +8,7 @@
 package serviceaccount
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	corev1 "k8s.io/api/core/v1"
 )
 

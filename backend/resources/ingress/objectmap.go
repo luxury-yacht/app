@@ -7,7 +7,7 @@
 package ingress
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	networkingv1 "k8s.io/api/networking/v1"
 )
 

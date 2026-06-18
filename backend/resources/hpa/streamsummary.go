@@ -12,7 +12,7 @@ package hpa
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 )

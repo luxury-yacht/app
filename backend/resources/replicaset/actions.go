@@ -3,7 +3,7 @@ package replicaset
 import (
 	"context"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )

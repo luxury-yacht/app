@@ -7,7 +7,7 @@
 package poddisruptionbudget
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	policyv1 "k8s.io/api/policy/v1"
 )
 

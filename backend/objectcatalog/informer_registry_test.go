@@ -9,8 +9,8 @@ import (
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 )
 
 // The object catalog is the source of truth for namespace/cluster listings, so a

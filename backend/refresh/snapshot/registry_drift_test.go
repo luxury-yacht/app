@@ -4,8 +4,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 )
 
 // These are the drift guards for the two registry-driven subsystems in this

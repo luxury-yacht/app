@@ -9,7 +9,7 @@
 package poddisruptionbudget
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	policyv1 "k8s.io/api/policy/v1"
 )
 

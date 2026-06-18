@@ -2,7 +2,7 @@
 // relationship graph.
 package snapshot
 
-import "github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+import "github.com/luxury-yacht/app/backend/kind/objectmapspec"
 
 // The edge-type identifiers live in the objectmapspec leaf so kind packages can
 // declare edges of these types; these aliases keep the snapshot-side names.

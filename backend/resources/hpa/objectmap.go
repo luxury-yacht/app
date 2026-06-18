@@ -8,7 +8,7 @@
 package hpa
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 )
 

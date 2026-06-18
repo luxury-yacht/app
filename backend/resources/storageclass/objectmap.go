@@ -7,7 +7,7 @@
 package storageclass
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	storagev1 "k8s.io/api/storage/v1"
 )
 

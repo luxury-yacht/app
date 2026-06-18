@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 )
 
 // informerListFunc returns objects for a namespace (or cluster-wide when empty/all).

@@ -9,7 +9,7 @@
 package admission
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 )
 

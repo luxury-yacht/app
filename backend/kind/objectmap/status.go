@@ -1,5 +1,5 @@
 /*
- * backend/refresh/objectmap/status.go
+ * backend/kind/objectmap/status.go
  *
  * Neutral object-map status type. Lives in its own leaf package (depends only on
  * resourcemodel) so per-kind packages can produce an object-map status from their

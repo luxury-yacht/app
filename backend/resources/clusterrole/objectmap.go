@@ -8,7 +8,7 @@
 package clusterrole
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 

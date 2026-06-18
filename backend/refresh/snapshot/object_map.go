@@ -13,13 +13,13 @@ import (
 
 	clusterrolepkg "github.com/luxury-yacht/app/backend/resources/clusterrole"
 
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/kindspec"
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"

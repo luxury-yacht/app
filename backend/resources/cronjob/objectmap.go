@@ -7,7 +7,7 @@
 package cronjob
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	batchv1 "k8s.io/api/batch/v1"
 )
 

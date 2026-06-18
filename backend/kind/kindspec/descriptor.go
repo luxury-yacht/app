@@ -1,5 +1,5 @@
 /*
- * backend/refresh/kindspec/descriptor.go
+ * backend/kind/kindspec/descriptor.go
  *
  * The single per-kind Descriptor: a kind's identity plus every typed behaviour the
  * app needs from it (stream summary, object-map node + edges, detail binding) and
@@ -18,9 +18,9 @@ package kindspec
 import (
 	"context"
 
-	"github.com/luxury-yacht/app/backend/refresh/objectmapnode"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
-	"github.com/luxury-yacht/app/backend/refresh/streamspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resources/appbinding"
 	"github.com/luxury-yacht/app/backend/resources/common"

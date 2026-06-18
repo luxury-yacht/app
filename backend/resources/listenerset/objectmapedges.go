@@ -1,7 +1,7 @@
 package listenerset
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )

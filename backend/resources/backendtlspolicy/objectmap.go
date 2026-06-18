@@ -7,7 +7,7 @@
 package backendtlspolicy
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 

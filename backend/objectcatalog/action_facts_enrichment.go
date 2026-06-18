@@ -3,7 +3,7 @@ package objectcatalog
 import (
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 

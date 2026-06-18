@@ -1,8 +1,8 @@
 package snapshot
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 )
 
 // objectMapCollectors is every kind read into the object map from the shared

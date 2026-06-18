@@ -3,8 +3,8 @@ package gatewayclass
 import (
 	"context"
 
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"

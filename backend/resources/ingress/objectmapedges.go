@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

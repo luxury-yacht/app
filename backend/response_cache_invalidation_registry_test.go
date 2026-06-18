@@ -3,7 +3,7 @@ package backend
 import (
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 )
 

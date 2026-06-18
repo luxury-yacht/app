@@ -1,8 +1,8 @@
 package snapshot
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/kindregistry"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapspec"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

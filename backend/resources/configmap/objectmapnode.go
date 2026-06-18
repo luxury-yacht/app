@@ -1,8 +1,8 @@
 package configmap
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
-	"github.com/luxury-yacht/app/backend/refresh/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"

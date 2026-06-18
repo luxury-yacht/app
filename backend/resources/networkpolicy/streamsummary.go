@@ -8,7 +8,7 @@
 package networkpolicy
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	networkingv1 "k8s.io/api/networking/v1"
 )
 

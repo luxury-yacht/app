@@ -1,5 +1,5 @@
 /*
- * backend/refresh/streamspec/descriptor.go
+ * backend/kind/streamspec/descriptor.go
  *
  * The per-kind stream Descriptor: everything resource-stream needs to register a
  * kind's informer and project its events into rows, with no per-kind code in the
@@ -13,7 +13,7 @@
 package streamspec
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"

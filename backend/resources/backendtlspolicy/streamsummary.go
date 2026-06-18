@@ -10,7 +10,7 @@ package backendtlspolicy
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 

@@ -1,6 +1,6 @@
 package grpcroute
 
-import "github.com/luxury-yacht/app/backend/refresh/kindspec"
+import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 // Descriptor(s) register grpcroute's kind(s) in the single kind registry
 // (refresh/kindregistry.All): the canonical Identity plus the facets every

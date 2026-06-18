@@ -7,7 +7,7 @@
 package deployment
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	appsv1 "k8s.io/api/apps/v1"
 )
 

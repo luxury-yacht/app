@@ -11,7 +11,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 )
 
 // ClusterMeta carries stable cluster identifiers for snapshot payloads. The type

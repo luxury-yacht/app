@@ -9,7 +9,7 @@
 package role
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	rbacv1 "k8s.io/api/rbac/v1"
 )

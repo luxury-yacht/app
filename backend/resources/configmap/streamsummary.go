@@ -10,7 +10,7 @@
 package configmap
 
 import (
-	"github.com/luxury-yacht/app/backend/refresh/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	corev1 "k8s.io/api/core/v1"
 )
 

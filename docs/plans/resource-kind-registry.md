@@ -1,7 +1,7 @@
 # The Task: one place per kind
 
 > **STATUS 2026-06-16 — DONE (gate-green).** The one registry exists:
-> `backend/refresh/kindregistry.All` ([]`kindspec.Descriptor`, one entry per
+> `backend/kind/kindregistry.All` ([]`kindspec.Descriptor`, one entry per
 > built-in kind). Every dispatch subsystem now loops/derives from it and names no
 > kind itself: object catalog (informer/list/watch), resource-stream, snapshot
 > stream-summary, object-map (collectors + edges), App bindings + generated detail
