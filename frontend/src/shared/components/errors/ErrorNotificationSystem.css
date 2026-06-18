@@ -163,6 +163,7 @@
   color: var(--toast-text-secondary);
 }
 
+.error-notification-copy,
 .error-notification-dismiss {
   color: var(--toast-dismiss-text);
   background: var(--toast-dismiss-bg);
@@ -181,9 +182,20 @@
     color 160ms ease;
 }
 
+.error-notification-copy:hover,
 .error-notification-dismiss:hover {
   background: var(--toast-dismiss-hover-bg);
   color: var(--toast-dismiss-text);
+}
+
+.error-notification-copy--copied,
+.error-notification-copy--copied:hover {
+  color: var(--color-success);
+}
+
+.error-notification-copy--error,
+.error-notification-copy--error:hover {
+  color: var(--color-error, var(--toast-dismiss-text));
 }
 
 /* ==========================================================================
