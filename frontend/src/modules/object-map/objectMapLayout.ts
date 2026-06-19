@@ -425,15 +425,18 @@ const splitColumnIntoKindAwareLanes = (columnNodes: ObjectMapNode[]): ObjectMapN
     currentLane.push(...group);
   };
 
-  for (let index = 1; index <= columnNodes.length; index += 1) {
+  for (let index = 1; index < columnNodes.length; index += 1) {
     const previousKind = columnNodes[index - 1]?.ref.kind;
     const nextKind = columnNodes[index]?.ref.kind;
-    if (index < columnNodes.length && previousKind === nextKind) {
+    if (previousKind === nextKind) {
       continue;
     }
     appendGroup(columnNodes.slice(groupStart, index));
     groupStart = index;
   }
+  // Flush the trailing run: the loop emits a group at each kind boundary and
+  // stops before the last node, so the final same-kind run is still pending.
+  appendGroup(columnNodes.slice(groupStart));
 
   pushCurrentLane();
   return lanes;

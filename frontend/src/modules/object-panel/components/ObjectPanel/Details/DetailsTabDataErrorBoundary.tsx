@@ -11,7 +11,6 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
 }
 
 class DetailsTabDataErrorBoundary extends Component<Props, State> {
@@ -20,8 +19,8 @@ class DetailsTabDataErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -31,7 +30,7 @@ class DetailsTabDataErrorBoundary extends Component<Props, State> {
   componentDidUpdate(prevProps: Props) {
     // Reset error state when props change (e.g., switching between resources)
     if (prevProps.children !== this.props.children && this.state.hasError) {
-      this.setState({ hasError: false, error: undefined });
+      this.setState({ hasError: false });
     }
   }
 

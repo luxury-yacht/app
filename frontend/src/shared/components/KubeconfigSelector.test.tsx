@@ -7,12 +7,13 @@
 
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts';
+
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(),
   EventsOff: vi.fn(),
 }));
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseKubeconfig = vi.fn();
 
