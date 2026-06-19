@@ -37,7 +37,12 @@ re-checked against current code; corrections noted inline.
 - **F1 — DONE (2026-06-19).** ObjectPanel now runs actions through the shared
   `useObjectActionController` (the parallel `panelReducer` + `useObjectPanelActions` + bespoke modals
   are deleted and the ~21-field `DetailsTab` action signature collapsed to two lifecycle callbacks).
-  **X2 (cluster-view half) is the remaining live medium work**; F3 is real but narrow.
+- **X2 (cluster half) — DONE (2026-06-19).** `ClusterResourcesContext` now derives every managed
+  domain's scope from a single `clusterDomainScopes` manifest (via `getScopeForDomain`), consumed by
+  the subscriptions, node callbacks, six handles, active-domain lifecycle hook, startup fetches, and
+  the cleanup-all teardown — so the events-vs-cluster scope rule can no longer drift between the
+  acquire and teardown paths. The **namespace half stays dropped** (duplication count invalid).
+  **F3 is the only remaining candidate; it is real but narrow.**
 - **Pattern-adoption theme:** X2 (cluster), F1, and F3 all share one shape — a good pattern exists
   and one or two holdouts haven't adopted it. Bundling them is a small-PR sweep, not one coherent
   refactor.
@@ -49,7 +54,7 @@ re-checked against current code; corrections noted inline.
 | ID | Candidate | Verdict | Confidence | True scope |
 |----|-----------|---------|-----------|------------|
 | **X1** | Frontend rendering registry | **✅ DONE (2026-06-19)** | — | Shipped on `data-driven-overview`. See `x1-frontend-rendering-registry.md`. |
-| **X2** | Refresh scope/lifecycle unification | **CONFIRMED — cluster half only** | High | Medium. Object panel already centralized; **cluster** views are the real holdout. **Namespace half invalid** (see X2 below). |
+| **X2** | Refresh scope/lifecycle unification | **✅ cluster half DONE (2026-06-19)** | — | `ClusterResourcesContext` unified onto one scope manifest. Namespace half dropped (count invalid). |
 | **F1** | Object-panel action-controller adoption | **✅ DONE (2026-06-19)** | — | ObjectPanel now uses the shared controller; parallel reducer + ~21-prop `DetailsTab` action signature removed. |
 | **F3** | Async data state union | **CONFIRMED (narrow)** | Med-High | ~3–4h. Only LogViewer/NodeLogsTab; other tabs already use the snapshot/Shell unions. Scope smaller than first stated. |
 
@@ -65,6 +70,9 @@ re-checked against current code; corrections noted inline.
   through the shared `useObjectActionController` (via ActionsMenu); the parallel `panelReducer`,
   `useObjectPanelActions`, and bespoke confirmation/scale/rollback modals are deleted, and the
   `DetailsTab` action prop signature collapsed to `onAfterDelete`/`onAfterAction`.
+- **X2 (cluster half) — Refresh scope unification — DONE (2026-06-19).** `ClusterResourcesContext`
+  resolves all managed-domain scopes through one `clusterDomainScopes` manifest; namespace half
+  dropped (duplication count invalid).
 - **Resource-kind registry** — largely complete; remaining items are sanctioned exceptions. See
   `docs/architecture/resource-kind-registry.md`.
 - **View-owned live-window fetch** — `docs/plans/deferred/view-owned-window-fetch.md`. The
@@ -132,9 +140,17 @@ chokepoint — weigh that against the effort before committing.
 
 ## X2 — Refresh scope/lifecycle unification
 
-**Verdict: CONFIRMED for the CLUSTER half only; namespace half INVALID. Confidence: High.**
+**Verdict: cluster half ✅ DONE (2026-06-19); namespace half INVALID (dropped). Confidence: High.**
 
-**What validation found:**
+**Done (cluster half).** `ClusterResourcesContext.tsx` now resolves every managed domain's scope
+through a single memoized `clusterDomainScopes` manifest (accessed via `getScopeForDomain`). The
+domain subscriptions, node load/refresh/reset callbacks, the six resource handles, the active-domain
+lifecycle hook, the startup fetches, and the cleanup-all teardown all read from it, so the
+events-vs-cluster scope rule lives in exactly one place and the acquire/teardown paths cannot drift.
+A characterization test locks the per-domain cleanup scope (events at `<id>|cluster`, others at
+`<id>|`). Full `mage qc:prerelease` green.
+
+**What validation found (original):**
 
 - **Object panel is already centralized** — all 7 scopes computed once in `getObjectPanelScopes()`
   (`objectPanelRef.ts`); the drift-bug comments live in `ObjectPanelContent.tsx` `[verified;
@@ -152,12 +168,13 @@ chokepoint — weigh that against the effort before committing.
 - Backend SSE-handler dedup (the "minor half") is genuinely minor — only
   `refresh_aggregate_eventstream.go` is large (602 LOC) `[verified; re-validated 2026-06-19]`.
 
-**Fix shape (cluster only).** Extract a per-view domain manifest (`domain → computeScope(ref)`) +
-one scope-derivation hook so the active-domain hook, the cleanup-all effect, and the six handles all
-read scope from one source. Kills the dual cluster paths.
+**Fix shape (cluster only) — implemented as described.** A per-view domain manifest
+(`clusterDomainScopes`) + one scope resolver (`getScopeForDomain`) so the active-domain hook, the
+cleanup-all effect, and the six handles read scope from one source. Killed the dual cluster paths.
 
-**Risk: Med.** Touches the critical cleanup-all effect on the cluster surface. Overlaps
-view-owned-window-fetch; sequence with it.
+**Risk: Med (realized safely).** Touched the critical cleanup-all effect; scope string values are
+unchanged, the existing preserve-on-unmount test stayed green, and a new test guards the per-domain
+teardown scope. Overlaps view-owned-window-fetch; sequence any further work with it.
 
 ---
 
@@ -228,9 +245,10 @@ X1 has shipped, so the original "grill X1" path is closed. Two honest paths rema
    of patterns already proven elsewhere:
    - **F1 — ✅ DONE (2026-06-19)** — ObjectPanel wired to `useObjectActionController`; reducer +
      bespoke modals deleted; `DetailsTab` action signature collapsed.
-   - **X2 cluster half** — one scope-derivation source for `ClusterResourcesContext`.
-   - **F3 (~3–4h)** — LogViewer async-union, batched with make-impossible-states.
-   - **Skip** the X2 namespace half (duplication count invalid).
+   - **X2 cluster half — ✅ DONE (2026-06-19)** — `ClusterResourcesContext` unified onto one
+     `clusterDomainScopes` manifest.
+   - **F3 (~3–4h)** — LogViewer async-union, batched with make-impossible-states. *(only remaining)*
+   - **Skipped** the X2 namespace half (duplication count invalid).
 2. **Conclude there is no clean large-scale refactor right now** — the codebase is already
    well-consolidated; bank the validation and revisit when new duplication accrues.
 

@@ -284,12 +284,41 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     [selectedClusterId]
   );
 
-  const nodeDomain = useRefreshScopedDomain('nodes', clusterScope);
-  const rbacDomain = useRefreshScopedDomain('cluster-rbac', clusterScope);
-  const storageDomain = useRefreshScopedDomain('cluster-storage', clusterScope);
-  const configDomain = useRefreshScopedDomain('cluster-config', clusterScope);
-  const crdDomain = useRefreshScopedDomain('cluster-crds', clusterScope);
-  const eventsDomain = useRefreshScopedDomain('cluster-events', clusterEventsScope);
+  // Single source of truth for every managed cluster domain → its scoped key.
+  // The events domain uses the `:cluster` scope suffix; every other managed
+  // domain uses the bare cluster scope. The domain subscriptions, resource
+  // handles, node callbacks, active-domain lifecycle hook, startup fetches, and
+  // the cleanup-all teardown all resolve scope through getScopeForDomain, so
+  // this rule lives in exactly one place and the acquire/teardown paths cannot
+  // drift apart.
+  const clusterDomainScopes = useMemo(() => {
+    const scopes: Partial<Record<RefreshDomain, string>> = {};
+    for (const domain of CLUSTER_DOMAIN_SET) {
+      scopes[domain] = domain === CLUSTER_EVENTS_DOMAIN ? clusterEventsScope : clusterScope;
+    }
+    return scopes;
+  }, [clusterScope, clusterEventsScope]);
+
+  const getScopeForDomain = useCallback(
+    (domain: RefreshDomain) => clusterDomainScopes[domain] ?? clusterScope,
+    [clusterDomainScopes, clusterScope]
+  );
+
+  const nodeDomain = useRefreshScopedDomain('nodes', getScopeForDomain('nodes'));
+  const rbacDomain = useRefreshScopedDomain('cluster-rbac', getScopeForDomain('cluster-rbac'));
+  const storageDomain = useRefreshScopedDomain(
+    'cluster-storage',
+    getScopeForDomain('cluster-storage')
+  );
+  const configDomain = useRefreshScopedDomain(
+    'cluster-config',
+    getScopeForDomain('cluster-config')
+  );
+  const crdDomain = useRefreshScopedDomain('cluster-crds', getScopeForDomain('cluster-crds'));
+  const eventsDomain = useRefreshScopedDomain(
+    'cluster-events',
+    getScopeForDomain('cluster-events')
+  );
   // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
   const permissionClusterId = selectedClusterId || null;
 
@@ -430,24 +459,24 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       void showSpinner;
       await requestRefreshDomain({
         domain: 'nodes',
-        scope: clusterScope,
+        scope: getScopeForDomain('nodes'),
         reason: 'user',
       });
     },
-    [clusterScope]
+    [getScopeForDomain]
   );
 
   const refreshNodes = useCallback(async () => {
     await requestRefreshDomain({
       domain: 'nodes',
-      scope: clusterScope,
+      scope: getScopeForDomain('nodes'),
       reason: 'user',
     });
-  }, [clusterScope]);
+  }, [getScopeForDomain]);
 
   const resetNodes = useCallback(() => {
-    resetRefreshDomain('nodes', clusterScope);
-  }, [clusterScope]);
+    resetRefreshDomain('nodes', getScopeForDomain('nodes'));
+  }, [getScopeForDomain]);
 
   const cancelNodes = useCallback(() => {
     // No explicit cancellation required; orchestrator tracks request lifecycles internally.
@@ -554,13 +583,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     };
   }, [configDomain, crdDomain, eventsDomain, nodeDomain, rbacDomain, storageDomain]);
 
-  // Resolve the scoped key for a cluster domain — events uses a different scope suffix.
-  const getScopeForDomain = useCallback(
-    (domain: RefreshDomain) =>
-      domain === CLUSTER_EVENTS_DOMAIN ? clusterEventsScope : clusterScope,
-    [clusterScope, clusterEventsScope]
-  );
-
   const activeClusterDomain = useMemo(() => {
     if (activeResourceType && QUERY_BACKED_CLUSTER_VIEWS.has(activeResourceType)) {
       return null;
@@ -597,16 +619,21 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, [activeClusterDomain, activeClusterDomainEnabled, activeClusterScope]);
 
   useEffect(() => {
-    // Capture scope values for cleanup to avoid stale closure issues.
-    const scopeForCleanup = clusterScope;
-    const eventsScopeForCleanup = clusterEventsScope;
+    // Capture the scope resolver so the teardown disables each domain at the
+    // scope that was active when the effect ran (avoids stale-closure drift) and
+    // at the same per-domain scope the subscriptions/handles acquired.
+    const resolveScope = getScopeForDomain;
     return () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {
-        const scope = domain === CLUSTER_EVENTS_DOMAIN ? eventsScopeForCleanup : scopeForCleanup;
-        setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState: true });
+        setRefreshDomainEnabled({
+          domain,
+          scope: resolveScope(domain),
+          enabled: false,
+          preserveState: true,
+        });
       });
     };
-  }, [clusterScope, clusterEventsScope]);
+  }, [getScopeForDomain]);
 
   useEffect(() => {
     const handleKubeconfigChanging = () => {
@@ -632,7 +659,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const rbac = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.rbac,
     rbacDomain,
-    clusterScope,
+    getScopeForDomain('cluster-rbac'),
     selectedClusterId,
     isPaused,
     isManualRefreshActive
@@ -640,7 +667,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const storage = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.storage,
     storageDomain,
-    clusterScope,
+    getScopeForDomain('cluster-storage'),
     selectedClusterId,
     isPaused,
     isManualRefreshActive
@@ -648,7 +675,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const config = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.config,
     configDomain,
-    clusterScope,
+    getScopeForDomain('cluster-config'),
     selectedClusterId,
     isPaused,
     isManualRefreshActive
@@ -656,7 +683,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const crds = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.crds,
     crdDomain,
-    clusterScope,
+    getScopeForDomain('cluster-crds'),
     selectedClusterId,
     isPaused,
     isManualRefreshActive
@@ -665,7 +692,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const events = useDescriptorBackedClusterResource<any[]>(
     clusterResourceDescriptors.events,
     eventsDomain,
-    clusterEventsScope,
+    getScopeForDomain('cluster-events'),
     selectedClusterId,
     isPaused,
     isManualRefreshActive

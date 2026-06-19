@@ -216,6 +216,48 @@ describe('ClusterResourcesProvider', () => {
     root = ReactDOM.createRoot(container);
   });
 
+  it('disables each managed cluster domain at its own scope on unmount', async () => {
+    // Single-source scope contract: the cleanup-all teardown must disable
+    // cluster-events at the events scope (<clusterId>|cluster) and every other
+    // managed domain at the bare cluster scope (<clusterId>|) — the same
+    // per-domain scope the subscriptions and handles use. Guards against the
+    // events/cluster scope rule drifting between the subscription and the
+    // teardown paths.
+    const testEventsScope = `${testClusterId}|cluster`;
+
+    await render();
+
+    orchestrator.setScopedDomainEnabled.mockClear();
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    const disabledScopeByDomain = new Map<string, string>();
+    for (const call of orchestrator.setScopedDomainEnabled.mock.calls) {
+      const [domain, scope, enabled] = call as [string, string, boolean, unknown];
+      if (enabled === false) {
+        disabledScopeByDomain.set(domain, scope);
+      }
+    }
+
+    expect(disabledScopeByDomain.get('cluster-events')).toBe(testEventsScope);
+    for (const domain of [
+      'nodes',
+      'cluster-rbac',
+      'cluster-storage',
+      'cluster-config',
+      'cluster-crds',
+    ]) {
+      expect(disabledScopeByDomain.get(domain)).toBe(testClusterScope);
+    }
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
   it('leaves query-backed cluster view live lifecycles to the table adapter', async () => {
     await render();
 
