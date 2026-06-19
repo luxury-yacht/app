@@ -93,22 +93,8 @@ const createBaseProps = (objectData: any, detail: unknown = null): DetailsTabPro
   detailsError: null,
   resourceDeleted: false,
   deletedResourceName: '',
-  canRestart: true,
-  canScale: true,
-  canDelete: true,
-  restartDisabledReason: undefined,
-  scaleDisabledReason: undefined,
-  deleteDisabledReason: undefined,
-  actionLoading: false,
-  actionError: null,
-  scaleReplicas: 2,
-  showScaleInput: false,
-  onRestartClick: vi.fn(),
-  onDeleteClick: vi.fn(),
-  onScaleClick: vi.fn(),
-  onScaleCancel: vi.fn(),
-  onScaleReplicasChange: vi.fn(),
-  onShowScaleInput: vi.fn(),
+  onAfterDelete: vi.fn(),
+  onAfterAction: vi.fn(),
 });
 
 const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -123,7 +109,7 @@ describe('DetailsTab', () => {
     useShortcutMock.mockClear();
   });
 
-  it('passes object identity, the active detail, and action props/handlers to Overview', async () => {
+  it('passes object identity, the active detail, and lifecycle callbacks to Overview', async () => {
     const detail = {
       status: 'Running',
       ready: '1/1',
@@ -135,6 +121,8 @@ describe('DetailsTab', () => {
 
     const { cleanup } = await renderDetailsTab(props);
 
+    // Overview owns the action controller (via ActionsMenu); DetailsTab forwards
+    // the raw detail + identity + the panel lifecycle callbacks only.
     expect(overviewProps()).toMatchObject({
       kind: 'Pod',
       name: 'pod-1',
@@ -142,10 +130,8 @@ describe('DetailsTab', () => {
       activeDetail: detail,
       status: 'Running',
       ready: '1/1',
-      canRestart: true,
-      canDelete: true,
-      onScale: expect.any(Function),
-      onDelete: expect.any(Function),
+      onAfterDelete: props.onAfterDelete,
+      onAfterAction: props.onAfterAction,
     });
     cleanup();
   });
@@ -291,13 +277,12 @@ describe('DetailsTab', () => {
     cleanup();
   });
 
-  it('shows loading overlay, deletion warning, and error messages', async () => {
+  it('shows loading overlay, deletion warning, and detail error messages', async () => {
     const props: DetailsTabProps = {
       ...createBaseProps({ kind: 'Pod', name: 'pod-1', namespace: 'default' }),
       detailsLoading: true,
       resourceDeleted: true,
       deletedResourceName: 'pod-1',
-      actionError: 'boom',
       detailsError: 'fetch failed',
     };
     const { container, cleanup } = await renderDetailsTab(props);
@@ -305,7 +290,6 @@ describe('DetailsTab', () => {
     expect(container.textContent).toContain(
       'pod-1 no longer exists. Please select another resource.'
     );
-    expect(container.textContent).toContain('Error: boom');
     expect(container.textContent).toContain('Error loading details: fetch failed');
     cleanup();
   });

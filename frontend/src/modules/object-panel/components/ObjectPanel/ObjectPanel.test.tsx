@@ -29,8 +29,6 @@ type PanelTestOptions = {
 
 const {
   detailsTabPropsRef,
-  restartModalPropsRef,
-  deleteModalPropsRef,
   logViewerPropsRef,
   shellTabPropsRef,
   eventsTabPropsRef,
@@ -39,8 +37,6 @@ const {
   valuesTabPropsRef,
 } = vi.hoisted(() => ({
   detailsTabPropsRef: { current: null as any },
-  restartModalPropsRef: { current: null as any },
-  deleteModalPropsRef: { current: null as any },
   logViewerPropsRef: { current: null as any },
   shellTabPropsRef: { current: null as any },
   eventsTabPropsRef: { current: null as any },
@@ -153,17 +149,6 @@ vi.mock('@ui/dockable/tabGroupState', () => ({
 // Mock CurrentObjectPanelContext from useObjectPanel
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   CurrentObjectPanelContext: createContext({ objectData: null, panelId: null }),
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
-    if (props?.title === 'Restart Workload') {
-      restartModalPropsRef.current = props;
-    } else {
-      deleteModalPropsRef.current = props;
-    }
-    return null;
-  },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
@@ -288,8 +273,6 @@ describe('ObjectPanel tab availability', () => {
     currentLogPermission = { allowed: true, pending: false };
     currentScopedDomain = { data: null, status: 'idle', error: null };
     detailsTabPropsRef.current = null;
-    restartModalPropsRef.current = null;
-    deleteModalPropsRef.current = null;
     logViewerPropsRef.current = null;
     shellTabPropsRef.current = null;
     eventsTabPropsRef.current = null;
@@ -455,7 +438,9 @@ describe('ObjectPanel tab availability', () => {
     );
   });
 
-  it('confirms deletion through modal and calls backend delete', async () => {
+  it('closes the panel after a delete via onAfterDelete', async () => {
+    // Action execution + modals now live in the shared controller (ActionsMenu);
+    // ObjectPanel only wires the lifecycle callbacks it hands to DetailsTab.
     await renderObjectPanel({
       kind: 'Pod',
       name: 'api',
@@ -464,32 +449,15 @@ describe('ObjectPanel tab availability', () => {
 
     const detailsProps = detailsTabPropsRef.current;
     expect(detailsProps).toBeTruthy();
+
     act(() => {
-      detailsProps.onDeleteClick();
+      detailsProps.onAfterDelete();
     });
 
-    const modalProps = deleteModalPropsRef.current;
-    expect(modalProps?.isOpen).toBe(true);
-
-    await act(async () => {
-      await modalProps.onConfirm();
-    });
-
-    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    });
     expect(mockClosePanel).toHaveBeenCalled();
   });
 
-  it('scales workloads when onScaleClick is triggered', async () => {
+  it('refetches details after a mutating action via onAfterAction', async () => {
     await renderObjectPanel({
       kind: 'Deployment',
       name: 'api',
@@ -503,225 +471,15 @@ describe('ObjectPanel tab availability', () => {
     expect(detailsProps).toBeTruthy();
 
     await act(async () => {
-      await detailsProps.onScaleClick(5);
+      detailsProps.onAfterAction();
+      await Promise.resolve();
     });
 
-    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
-      action: 'scale',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-      replicas: 5,
-    });
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       buildClusterScope(defaultClusterId, 'team-a:apps/v1:deployment:api'),
       expect.objectContaining({ isManual: true })
     );
-  });
-
-  it('restarts workloads using canonical workload kind casing', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      group: 'apps',
-      version: 'v1',
-      scopedDomain: { data: { details: {} }, status: 'idle', error: null },
-    });
-
-    const detailsProps = detailsTabPropsRef.current;
-    expect(detailsProps).toBeTruthy();
-
-    act(() => {
-      detailsProps.onRestartClick();
-    });
-
-    const modalProps = restartModalPropsRef.current;
-    expect(modalProps?.isOpen).toBe(true);
-
-    await act(async () => {
-      await modalProps.onConfirm();
-    });
-
-    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
-      action: 'restart',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-      },
-    });
-  });
-
-  it('initialises the scale input based on desired replicas when shown', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      scopedDomain: {
-        data: {
-          details: {
-            desiredReplicas: 7,
-          },
-        },
-        status: 'ready',
-        error: null,
-      },
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onShowScaleInput();
-    });
-
-    expect(detailsTabPropsRef.current.scaleReplicas).toBe(7);
-    expect(detailsTabPropsRef.current.showScaleInput).toBe(true);
-  });
-
-  it('initialises the scale input from ReplicaSet desired replicas when shown', async () => {
-    await renderObjectPanel({
-      kind: 'ReplicaSet',
-      name: 'api-rs',
-      namespace: 'team-a',
-      scopedDomain: {
-        data: {
-          details: {
-            desiredReplicas: 4,
-          },
-        },
-        status: 'ready',
-        error: null,
-      },
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onShowScaleInput();
-    });
-
-    expect(detailsTabPropsRef.current.scaleReplicas).toBe(4);
-    expect(detailsTabPropsRef.current.showScaleInput).toBe(true);
-  });
-
-  it('surfaces restart errors and reports them through the error handler', async () => {
-    mockApp.RunObjectAction.mockRejectedValueOnce(new Error('restart failed'));
-    const errorSpy = vi.spyOn(mockErrorHandler, 'handle');
-
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      group: 'apps',
-      version: 'v1',
-      scopedDomain: { data: { details: {} }, status: 'idle', error: null },
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onRestartClick();
-    });
-    await act(async () => {
-      await restartModalPropsRef.current.onConfirm();
-    });
-
-    expect(detailsTabPropsRef.current.actionError).toBe('restart failed');
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({ action: 'restartResource' })
-    );
-    errorSpy.mockRestore();
-  });
-
-  it('deletes Helm releases via the specialised backend call', async () => {
-    await renderObjectPanel({
-      kind: 'HelmRelease',
-      name: 'demo',
-      namespace: 'helm-ns',
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onDeleteClick();
-    });
-    await act(async () => {
-      await deleteModalPropsRef.current.onConfirm();
-    });
-
-    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'helm.sh',
-        version: 'v3',
-        kind: 'HelmRelease',
-        namespace: 'helm-ns',
-        name: 'demo',
-      },
-    });
-  });
-
-  it('routes generic kind deletes through RunObjectAction', async () => {
-    await renderObjectPanel({
-      kind: 'ConfigMap',
-      name: 'settings',
-      namespace: 'team-a',
-      group: '',
-      version: 'v1',
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onDeleteClick();
-    });
-    await act(async () => {
-      await deleteModalPropsRef.current.onConfirm();
-    });
-
-    expect(mockApp.RunObjectAction).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'ConfigMap',
-        namespace: 'team-a',
-        name: 'settings',
-      },
-    });
-  });
-
-  it('handles scale errors and keeps the scale input visible', async () => {
-    mockApp.RunObjectAction.mockRejectedValueOnce(new Error('scale failed'));
-    const errorSpy = vi.spyOn(mockErrorHandler, 'handle');
-
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      group: 'apps',
-      version: 'v1',
-      scopedDomain: { data: { details: {} }, status: 'idle', error: null },
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onShowScaleInput();
-    });
-
-    await act(async () => {
-      await detailsTabPropsRef.current.onScaleClick(4);
-    });
-
-    expect(detailsTabPropsRef.current.actionError).toBe('scale failed');
-    expect(detailsTabPropsRef.current.showScaleInput).toBe(true);
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({ action: 'scaleResource' })
-    );
-    errorSpy.mockRestore();
   });
 
   it('renders log viewer props when the Logs tab is selected', async () => {
@@ -865,20 +623,6 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
-  });
-
-  it('ignores scale clicks without an explicit replica count', async () => {
-    await renderObjectPanel({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-    });
-
-    act(() => {
-      detailsTabPropsRef.current.onScaleClick();
-    });
-
-    expect(mockApp.RunObjectAction).not.toHaveBeenCalled();
   });
 
   const detailMappingCases = [

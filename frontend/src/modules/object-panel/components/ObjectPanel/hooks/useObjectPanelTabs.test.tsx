@@ -9,7 +9,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
 import type {
-  PanelAction,
   PanelObjectData,
   ViewType,
   ComputedCapabilities,
@@ -30,7 +29,6 @@ describe('useObjectPanelTabs', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   const resultRef: { current: ReturnType<typeof useObjectPanelTabs> | null } = { current: null };
-  const dispatchMock = vi.fn();
   const setActiveTabMock = vi.fn();
 
   const baseCapabilities: ComputedCapabilities = {
@@ -66,7 +64,6 @@ describe('useObjectPanelTabs', () => {
       isEvent: false,
       isOpen: true,
       setActiveTab: setActiveTabMock,
-      dispatch: dispatchMock as React.Dispatch<PanelAction>,
       currentTab: 'details' as ViewType,
       ...props,
     } satisfies Parameters<typeof useObjectPanelTabs>[0];
@@ -93,7 +90,6 @@ describe('useObjectPanelTabs', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
-    dispatchMock.mockClear();
     setActiveTabMock.mockClear();
     hoistedShortcuts.useShortcut.mockClear();
     hoistedShortcuts.useShortcuts.mockClear();

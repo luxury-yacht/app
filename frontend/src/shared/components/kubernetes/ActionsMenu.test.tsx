@@ -1,8 +1,10 @@
 /**
  * frontend/src/shared/components/kubernetes/ActionsMenu.test.tsx
  *
- * Test suite for ActionsMenu.
- * Covers key behaviors and edge cases for ActionsMenu.
+ * Test suite for ActionsMenu. After F1 the menu delegates execution + modals to
+ * the shared object action controller, so these tests drive the real controller
+ * (mocking only the backend objectActionClient) and assert the run* calls plus
+ * the panel lifecycle callbacks (onAfterDelete / onAfterAction).
  */
 
 import React from 'react';
@@ -16,6 +18,31 @@ import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
+
+// Backend action client spies. The controller calls these to execute actions;
+// asserting them proves the menu now runs actions through the shared path.
+const runObjectRestartMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const runObjectDeleteMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const runObjectScaleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const runCronJobTriggerMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const runCronJobSuspendMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
+vi.mock('@shared/actions/objectActionClient', () => ({
+  buildObjectActionTarget: (object: ObjectActionData, action: string) => ({
+    clusterId: object.clusterId,
+    group: object.group ?? '',
+    version: object.version ?? 'v1',
+    kind: object.kind,
+    namespace: object.namespace,
+    name: object.name,
+    action,
+  }),
+  runObjectRestart: (...args: unknown[]) => runObjectRestartMock(...args),
+  runObjectDelete: (...args: unknown[]) => runObjectDeleteMock(...args),
+  runObjectScale: (...args: unknown[]) => runObjectScaleMock(...args),
+  runCronJobTrigger: (...args: unknown[]) => runCronJobTriggerMock(...args),
+  runCronJobSuspend: (...args: unknown[]) => runCronJobSuspendMock(...args),
+}));
 
 // Spy-backed permission mock so tests can assert that getPermissionKey is
 // called with the full GVK (regression: PR #139 made the backend reject
@@ -42,6 +69,7 @@ vi.mock('@/core/capabilities', () => ({
   },
   getPermissionKey: (...args: Parameters<typeof getPermissionKeySpy>) =>
     getPermissionKeySpy(...args),
+  queryKindPermissions: vi.fn(),
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -80,6 +108,29 @@ const openMenu = (container: HTMLElement) => {
   });
 };
 
+const clickMenuItem = (container: HTMLElement, text: string) => {
+  const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+  const item = items.find((entry) => entry.textContent?.includes(text));
+  expect(item, `menu item "${text}"`).toBeTruthy();
+  act(() => {
+    item?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+};
+
+// Confirm a portaled ConfirmationModal by its exact button text.
+const confirmModal = async (buttonText: string) => {
+  const modal = document.querySelector<HTMLElement>('.confirmation-modal');
+  expect(modal, `confirmation modal for "${buttonText}"`).toBeTruthy();
+  const button = Array.from(modal?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+    (entry) => entry.textContent === buttonText
+  );
+  expect(button, `confirm button "${buttonText}"`).toBeTruthy();
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+  });
+};
+
 const makeObject = (kind: string, overrides?: Partial<ObjectActionData>): ObjectActionData => ({
   kind,
   name: 'test-resource',
@@ -105,6 +156,11 @@ describe('ActionsMenu', () => {
     root = ReactDOM.createRoot(container);
     getPermissionKeySpy.mockClear();
     openWithObjectMock.mockClear();
+    runObjectRestartMock.mockClear();
+    runObjectDeleteMock.mockClear();
+    runObjectScaleMock.mockClear();
+    runCronJobTriggerMock.mockClear();
+    runCronJobSuspendMock.mockClear();
   });
 
   afterEach(() => {
@@ -131,7 +187,6 @@ describe('ActionsMenu', () => {
         group: 'rds.services.k8s.aws',
         version: 'v1alpha1',
       }),
-      onDelete: vi.fn(),
     });
 
     const deleteCalls = getPermissionKeySpy.mock.calls.filter(
@@ -155,55 +210,54 @@ describe('ActionsMenu', () => {
     }
   });
 
-  it('shows restart and delete actions for Deployment and invokes handlers', async () => {
-    const onRestart = vi.fn();
-    const onDelete = vi.fn();
+  it('confirms restart through the controller and runs the backend restart', async () => {
+    const onAfterAction = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment'),
-      onRestart,
-      onDelete,
+      object: makeObject('Deployment', { group: 'apps', version: 'v1' }),
+      onAfterAction,
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    expect(items.length).toBeGreaterThanOrEqual(2);
+    clickMenuItem(container, 'Restart');
+    await confirmModal('Restart');
 
-    // Find and click restart
-    const restartItem = items.find((item) => item.textContent?.includes('Restart'));
-    expect(restartItem).toBeTruthy();
-    act(() => {
-      restartItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(runObjectRestartMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', name: 'test-resource', action: 'restart' })
+    );
+    expect(onAfterAction).toHaveBeenCalled();
+  });
 
-    // Reopen menu and click delete
+  it('confirms delete through the controller, runs the backend delete, and signals close', async () => {
+    const onAfterDelete = vi.fn();
+
+    await renderMenu({ object: makeObject('Deployment'), onAfterDelete });
+
     openMenu(container);
     const deleteItem = container.querySelector<HTMLElement>('.context-menu-item.danger');
     expect(deleteItem).toBeTruthy();
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onDelete).toHaveBeenCalledTimes(1);
+    await confirmModal('Delete');
+
+    expect(runObjectDeleteMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', name: 'test-resource', action: 'delete' })
+    );
+    expect(onAfterDelete).toHaveBeenCalled();
   });
 
   it('opens the scale modal, updates replicas, and applies the change', async () => {
-    const onScale = vi.fn();
+    const onAfterAction = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment', { hpaManaged: false }),
+      object: makeObject('Deployment', { group: 'apps', version: 'v1', hpaManaged: false }),
       currentReplicas: 3,
-      onScale,
+      onAfterAction,
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
-    expect(scaleItem).toBeTruthy();
-
-    act(() => {
-      scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    clickMenuItem(container, 'Scale');
 
     const modal = document.querySelector('.scale-modal');
     expect(modal).toBeTruthy();
@@ -226,39 +280,33 @@ describe('ActionsMenu', () => {
     });
 
     const scaleButton = modal?.querySelector<HTMLButtonElement>('.button.warning');
-    act(() => {
+    await act(async () => {
       scaleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
     });
 
-    expect(onScale).toHaveBeenCalledWith(7);
+    expect(runObjectScaleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
+      7
+    );
+    expect(onAfterAction).toHaveBeenCalled();
   });
 
   it('opens the scale modal with the row desired replica count when no explicit count is passed', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { ready: '2/6', hpaManaged: false }),
-      onScale,
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
-
-    act(() => {
-      scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    clickMenuItem(container, 'Scale');
 
     const input = document.querySelector<HTMLInputElement>('#scale-replicas');
     expect(input?.value).toBe('6');
   });
 
   it('confirms before scaling HPA-managed workloads to zero from the menu', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
-      onScale,
     });
 
     openMenu(container);
@@ -271,26 +319,22 @@ describe('ActionsMenu', () => {
       scaleToZeroItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onScale).not.toHaveBeenCalled();
+    expect(runObjectScaleMock).not.toHaveBeenCalled();
     expect(document.querySelector('.scale-modal')).toBeNull();
     const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
     expect(confirmation?.textContent).toContain('Scale to 0');
 
-    const confirmButton = Array.from(
-      confirmation?.querySelectorAll<HTMLButtonElement>('button') ?? []
-    ).find((button) => button.textContent === 'Scale to 0');
+    await confirmModal('Scale to 0');
 
-    act(() => {
-      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onScale).toHaveBeenCalledWith(0);
+    expect(runObjectScaleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
+      0
+    );
   });
 
   it('shows only Scale to 0 for HPA-managed workloads above zero', async () => {
     await renderMenu({
       object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
-      onScale: vi.fn(),
     });
 
     openMenu(container);
@@ -301,20 +345,12 @@ describe('ActionsMenu', () => {
   });
 
   it('confirms before scaling a regular workload to zero from the scale modal', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { ready: '2/4', hpaManaged: false }),
-      onScale,
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
-
-    act(() => {
-      scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    clickMenuItem(container, 'Scale');
 
     const scaleToZeroButton = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button')
@@ -324,27 +360,21 @@ describe('ActionsMenu', () => {
       scaleToZeroButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onScale).not.toHaveBeenCalled();
+    expect(runObjectScaleMock).not.toHaveBeenCalled();
     const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
     expect(confirmation?.textContent).toContain('Scale to 0');
 
-    const confirmButton = Array.from(
-      confirmation?.querySelectorAll<HTMLButtonElement>('button') ?? []
-    ).find((button) => button.textContent === 'Scale to 0');
+    await confirmModal('Scale to 0');
 
-    act(() => {
-      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onScale).toHaveBeenCalledWith(0);
+    expect(runObjectScaleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
+      0
+    );
   });
 
   it('resumes HPA-managed workloads from zero from the menu', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { ready: '0/0', hpaManaged: true }),
-      onScale,
     });
 
     openMenu(container);
@@ -353,20 +383,21 @@ describe('ActionsMenu', () => {
     expect(resumeItem).toBeTruthy();
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
 
-    act(() => {
+    await act(async () => {
       resumeItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
     });
 
-    expect(onScale).toHaveBeenCalledWith(1);
+    expect(runObjectScaleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
+      1
+    );
   });
 
   it('uses currentReplicas when choosing the HPA-managed menu action', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { hpaManaged: true }),
       currentReplicas: 4,
-      onScale,
     });
 
     openMenu(container);
@@ -377,12 +408,9 @@ describe('ActionsMenu', () => {
   });
 
   it('shows Resume from 0 when currentReplicas is zero', async () => {
-    const onScale = vi.fn();
-
     await renderMenu({
       object: makeObject('Deployment', { ready: '0/4', hpaManaged: true }),
       currentReplicas: 0,
-      onScale,
     });
 
     openMenu(container);
@@ -395,7 +423,6 @@ describe('ActionsMenu', () => {
   it('closes the menu when clicking outside', async () => {
     await renderMenu({
       object: makeObject('Deployment'),
-      onDelete: vi.fn(),
     });
 
     openMenu(container);
@@ -411,7 +438,6 @@ describe('ActionsMenu', () => {
   it('does not show Scale while HPA ownership is unknown', async () => {
     await renderMenu({
       object: makeObject('Deployment', { ready: '2/4' }),
-      onScale: vi.fn(),
     });
 
     openMenu(container);
@@ -532,13 +558,8 @@ describe('ActionsMenu', () => {
 
   describe('CronJob actions', () => {
     it('shows trigger and suspend actions for CronJob', async () => {
-      const onTrigger = vi.fn();
-      const onSuspendToggle = vi.fn();
-
       await renderMenu({
         object: makeObject('CronJob'),
-        onTrigger,
-        onSuspendToggle,
       });
 
       openMenu(container);
@@ -554,7 +575,6 @@ describe('ActionsMenu', () => {
     it('shows Resume instead of Suspend when status is Suspended', async () => {
       await renderMenu({
         object: makeObject('CronJob', { status: 'Suspended' }),
-        onSuspendToggle: vi.fn(),
       });
 
       openMenu(container);
@@ -570,7 +590,6 @@ describe('ActionsMenu', () => {
     it('disables trigger when CronJob is suspended', async () => {
       await renderMenu({
         object: makeObject('CronJob', { status: 'Suspended' }),
-        onTrigger: vi.fn(),
       });
 
       openMenu(container);
@@ -579,52 +598,53 @@ describe('ActionsMenu', () => {
       expect(triggerItem?.classList.contains('disabled')).toBe(true);
     });
 
-    it('calls onSuspendToggle when suspend is clicked', async () => {
-      const onSuspendToggle = vi.fn();
+    it('runs the backend suspend when suspend is clicked', async () => {
+      const onAfterAction = vi.fn();
 
       await renderMenu({
-        object: makeObject('CronJob'),
-        onSuspendToggle,
+        object: makeObject('CronJob', { group: 'batch', version: 'v1' }),
+        onAfterAction,
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
+      clickMenuItem(container, 'Suspend');
 
-      act(() => {
-        suspendItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await act(async () => {
+        await Promise.resolve();
       });
 
-      expect(onSuspendToggle).toHaveBeenCalledTimes(1);
+      expect(runCronJobSuspendMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'CronJob', action: 'suspend' }),
+        true
+      );
+      expect(onAfterAction).toHaveBeenCalled();
     });
 
-    it('shows trigger confirmation modal and calls onTrigger when confirmed', async () => {
-      const onTrigger = vi.fn();
+    it('shows trigger confirmation modal and runs the backend trigger when confirmed', async () => {
+      const onAfterAction = vi.fn();
 
       await renderMenu({
-        object: makeObject('CronJob'),
-        onTrigger,
+        object: makeObject('CronJob', { group: 'batch', version: 'v1' }),
+        onAfterAction,
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
-
-      act(() => {
-        triggerItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
+      clickMenuItem(container, 'Trigger Now');
 
       // Modal is portaled to document.body, not the container
       const modal = document.querySelector('.modal-container');
       expect(modal).toBeTruthy();
 
-      // Click confirm
       const confirmBtn = modal?.querySelector<HTMLButtonElement>('.button:not(.cancel)');
-      act(() => {
+      await act(async () => {
         confirmBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
       });
 
-      expect(onTrigger).toHaveBeenCalledTimes(1);
+      expect(runCronJobTriggerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'CronJob', action: 'trigger' })
+      );
+      expect(onAfterAction).toHaveBeenCalled();
     });
   });
 });

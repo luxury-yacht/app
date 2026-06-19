@@ -6,18 +6,10 @@
  * from the canonical object reference.
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import RollbackModal from '@shared/components/modals/RollbackModal';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import {
-  buildObjectActionTarget,
-  runCronJobSuspend,
-  runCronJobTrigger,
-} from '@shared/actions/objectActionClient';
 import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
-import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import {
   useObjectPanelState,
@@ -33,7 +25,6 @@ import './ObjectPanel.css';
 import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
-import { useObjectPanelActions } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions';
 import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
@@ -44,65 +35,12 @@ import {
   CLUSTER_SCOPE,
   RESOURCE_CAPABILITIES,
 } from '@modules/object-panel/components/ObjectPanel/constants';
-import type {
-  PanelAction,
-  PanelState,
-  ViewType,
-} from '@modules/object-panel/components/ObjectPanel/types';
+import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { DockPosition } from '@ui/dockable';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
 import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
-
-// ============================================================================
-// REDUCER
-// ============================================================================
-// activeTab is intentionally NOT in this reducer — it lives in
-// ObjectPanelStateContext so it survives unmount/remount caused by
-// cluster switching. The reducer's local state is reset on remount,
-// which is the right behavior for modal flags but the wrong behavior
-// for "which tab was the user looking at."
-const INITIAL_PANEL_STATE: PanelState = {
-  actionLoading: false,
-  actionError: null,
-  scaleReplicas: 1,
-  showScaleInput: false,
-  showRestartConfirm: false,
-  showDeleteConfirm: false,
-  showRollbackModal: false,
-  resourceDeleted: false,
-  deletedResourceName: '',
-};
-
-function panelReducer(state: PanelState, action: PanelAction): PanelState {
-  switch (action.type) {
-    case 'SET_ACTION_LOADING':
-      return { ...state, actionLoading: action.payload };
-    case 'SET_ACTION_ERROR':
-      return { ...state, actionError: action.payload };
-    case 'SET_SCALE_REPLICAS':
-      return { ...state, scaleReplicas: action.payload };
-    case 'SHOW_SCALE_INPUT':
-      return { ...state, showScaleInput: action.payload };
-    case 'SHOW_RESTART_CONFIRM':
-      return { ...state, showRestartConfirm: action.payload };
-    case 'SHOW_DELETE_CONFIRM':
-      return { ...state, showDeleteConfirm: action.payload };
-    case 'SHOW_ROLLBACK_MODAL':
-      return { ...state, showRollbackModal: action.payload };
-    case 'SET_RESOURCE_DELETED':
-      return {
-        ...state,
-        resourceDeleted: action.payload.deleted,
-        deletedResourceName: action.payload.name,
-      };
-    case 'RESET_STATE':
-      return { ...INITIAL_PANEL_STATE };
-    default:
-      return state;
-  }
-}
 
 // ============================================================================
 // COMPONENT PROPS
@@ -144,13 +82,14 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const tabTitle = objectData?.name?.trim() || 'Object';
   const tabKindClass = getKindColorClass(objectData?.kind || objectData?.kindAlias || '');
 
-  // Use reducer for transient panel state (modal flags, action loading,
-  // delete confirmation, etc.). The active sub-tab is intentionally NOT
-  // in this reducer — it lives in ObjectPanelStateContext so it survives
-  // unmount/remount caused by cluster switching. The reducer's local
-  // state is reset on remount, which is the right behavior for modal
-  // flags but the wrong behavior for "which tab was the user looking at."
-  const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
+  // Resource-deleted is panel lifecycle state (the object vanished out from
+  // under us, or a user delete closed the panel) — it is local because it
+  // resets correctly on the unmount/remount caused by cluster switching. All
+  // action execution + modals now live in the shared object action controller
+  // (via ActionsMenu), so the panel no longer carries action/modal flags. The
+  // active sub-tab lives in ObjectPanelStateContext so it survives remount.
+  const [resourceDeleted, setResourceDeleted] = useState(false);
+  const [deletedResourceName, setDeletedResourceName] = useState('');
   const activeTab: ViewType = useObjectPanelActiveTab(panelId) ?? 'details';
 
   const {
@@ -209,7 +148,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     objectKind,
     objectData,
     isOpen: isOpen && isActiveTab,
-    resourceDeleted: state.resourceDeleted,
+    resourceDeleted,
   });
 
   const objectIdentityKey = useMemo(() => {
@@ -227,11 +166,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     }
     if (previousIdentityRef.current !== objectIdentityKey) {
       previousIdentityRef.current = objectIdentityKey;
-      if (state.resourceDeleted) {
-        dispatch({ type: 'SET_RESOURCE_DELETED', payload: { deleted: false, name: '' } });
+      if (resourceDeleted) {
+        setResourceDeleted(false);
+        setDeletedResourceName('');
       }
     }
-  }, [objectIdentityKey, state.resourceDeleted]);
+  }, [objectIdentityKey, resourceDeleted]);
 
   const isNotFoundError = useMemo(() => {
     if (!detailsError) {
@@ -246,17 +186,15 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   }, [detailsError]);
 
   useEffect(() => {
-    if (!isNotFoundError || state.resourceDeleted) {
+    if (!isNotFoundError || resourceDeleted) {
       return;
     }
-    dispatch({
-      type: 'SET_RESOURCE_DELETED',
-      payload: { deleted: true, name: objectData?.name ?? '' },
-    });
+    setResourceDeleted(true);
+    setDeletedResourceName(objectData?.name ?? '');
     if (detailScope) {
       resetObjectPanelScopedDomain({ domain: 'object-details', scope: detailScope });
     }
-  }, [detailScope, isNotFoundError, objectData?.name, state.resourceDeleted]);
+  }, [detailScope, isNotFoundError, objectData?.name, resourceDeleted]);
 
   // Wrap setObjectPanelActiveTab into a panelId-bound callback so the hook
   // doesn't have to know about panel identity. The wrapper is stable
@@ -274,34 +212,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     isEvent,
     isOpen,
     setActiveTab,
-    dispatch,
     currentTab: activeTab,
   });
   const visibleActiveTab: ViewType = useMemo(
     () => (availableTabs.some((tab) => tab.id === activeTab) ? activeTab : 'details'),
     [activeTab, availableTabs]
   );
-
-  const {
-    handleAction,
-    setScaleReplicas,
-    showScaleInput: openScaleInput,
-    hideScaleInput: closeScaleInput,
-    showRestartConfirm: openRestartConfirm,
-    hideRestartConfirm: closeRestartConfirm,
-    showDeleteConfirm: openDeleteConfirm,
-    hideDeleteConfirm: closeDeleteConfirm,
-    showRollbackModal: openRollbackModal,
-    hideRollbackModal: closeRollbackModal,
-  } = useObjectPanelActions({
-    objectData,
-    objectKind,
-    isHelmRelease,
-    state,
-    dispatch,
-    close,
-    fetchResourceDetails,
-  });
 
   // Keep DetailsTab props derived from this memoized model, not from the
   // enclosing props object; ObjectPanelContent depends on that stability.
@@ -310,52 +226,17 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     [detailPayload, objectData, objectKind]
   );
 
-  // CronJob trigger handler
-  const handleTriggerClick = useCallback(async () => {
-    if (!objectData?.name || !objectData?.namespace) return;
-    dispatch({ type: 'SET_ACTION_LOADING', payload: true });
-    try {
-      // Multi-cluster rule (AGENTS.md): every backend command must
-      // carry a resolved clusterId.
-      if (!objectData.clusterId) {
-        throw new Error(`Cannot trigger CronJob/${objectData.name}: clusterId is missing`);
-      }
-      await runCronJobTrigger(buildObjectActionTarget(objectData, 'trigger'));
-    } catch (err) {
-      errorHandler.handle(err, { action: 'trigger', kind: 'CronJob', name: objectData.name });
-    } finally {
-      dispatch({ type: 'SET_ACTION_LOADING', payload: false });
-    }
-  }, [objectData, dispatch]);
+  // The shared object action controller (in ActionsMenu) executes every action
+  // and owns its confirmation/scale/rollback/port-forward modals. The panel
+  // only supplies lifecycle hooks: close after a delete, refetch after any
+  // other mutating action.
+  const handleAfterDelete = useCallback(() => {
+    close();
+  }, [close]);
 
-  // CronJob suspend/resume handler
-  const handleSuspendToggle = useCallback(async () => {
-    if (!objectData?.name || !objectData?.namespace) return;
-    const isSuspended = detailModel.cronJobSuspended;
-    dispatch({ type: 'SET_ACTION_LOADING', payload: true });
-    try {
-      // Multi-cluster rule (AGENTS.md): every backend command must
-      // carry a resolved clusterId.
-      if (!objectData.clusterId) {
-        throw new Error(
-          `Cannot ${isSuspended ? 'resume' : 'suspend'} CronJob/${objectData.name}: clusterId is missing`
-        );
-      }
-      await runCronJobSuspend(
-        buildObjectActionTarget(objectData, isSuspended ? 'resume' : 'suspend'),
-        !isSuspended
-      );
-      await fetchResourceDetails('user');
-    } catch (err) {
-      errorHandler.handle(err, {
-        action: isSuspended ? 'resume' : 'suspend',
-        kind: 'CronJob',
-        name: objectData.name,
-      });
-    } finally {
-      dispatch({ type: 'SET_ACTION_LOADING', payload: false });
-    }
-  }, [detailModel, objectData, dispatch, fetchResourceDetails]);
+  const handleAfterAction = useCallback(() => {
+    void fetchResourceDetails('user');
+  }, [fetchResourceDetails]);
 
   const handleTabSelect = useCallback(
     (tab: ViewType) => {
@@ -401,36 +282,10 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         isActive: isOpen && visibleActiveTab === 'details',
         detailsLoading,
         detailsError,
-        resourceDeleted: state.resourceDeleted,
-        deletedResourceName: state.deletedResourceName,
-        canRestart: capabilities.canRestart,
-        canScale: capabilities.canScale,
-        canDelete: capabilities.canDelete,
-        canTrigger: capabilities.canTrigger,
-        canSuspend: capabilities.canSuspend,
-        restartDisabledReason: capabilityReasons.restart,
-        scaleDisabledReason: capabilityReasons.scale,
-        deleteDisabledReason: capabilityReasons.delete,
-        actionLoading: state.actionLoading,
-        actionError: state.actionError,
-        scaleReplicas: state.scaleReplicas,
-        showScaleInput: state.showScaleInput,
-        onRestartClick: openRestartConfirm,
-        onRollbackClick: openRollbackModal,
-        onDeleteClick: openDeleteConfirm,
-        onScaleClick: (replicas?: number) => {
-          if (replicas !== undefined) {
-            setScaleReplicas(replicas);
-            void handleAction('scale', undefined, replicas);
-          }
-        },
-        onScaleCancel: closeScaleInput,
-        onScaleReplicasChange: setScaleReplicas,
-        onShowScaleInput: () => {
-          openScaleInput(detailModel.desiredScaleReplicas);
-        },
-        onTriggerClick: handleTriggerClick,
-        onSuspendToggle: handleSuspendToggle,
+        resourceDeleted,
+        deletedResourceName,
+        onAfterDelete: handleAfterDelete,
+        onAfterAction: handleAfterAction,
       }
     : null;
 
@@ -500,59 +355,14 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
             helmScope={helmScope}
             objectData={objectData}
             objectKind={objectKind}
-            resourceDeleted={state.resourceDeleted}
-            deletedResourceName={state.deletedResourceName}
+            resourceDeleted={resourceDeleted}
+            deletedResourceName={deletedResourceName}
             onClosePanel={close}
             onRefreshDetails={fetchResourceDetails}
             panelId={panelId}
           />
         </CurrentObjectPanelContext.Provider>
       </DockablePanel>
-
-      {/* Confirmation Modals */}
-      <ConfirmationModal
-        isOpen={state.showRestartConfirm}
-        title="Restart Workload"
-        message={`Are you sure you want to restart ${objectData?.kind} "${objectData?.name}"?\n\nThis will trigger a rolling restart of all pods.`}
-        confirmText="Restart"
-        cancelText="Cancel"
-        confirmButtonClass="warning"
-        onConfirm={() => handleAction('restart', 'showRestartConfirm')}
-        onCancel={closeRestartConfirm}
-      />
-
-      <ConfirmationModal
-        isOpen={state.showDeleteConfirm}
-        title={`Delete ${objectData?.kind || 'Resource'}`}
-        message={`Are you sure you want to delete ${objectData?.kind?.toLowerCase() || 'resource'} "${objectData?.name}"?\n\nThis action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        confirmButtonClass="danger"
-        onConfirm={() => handleAction('delete', 'showDeleteConfirm')}
-        onCancel={closeDeleteConfirm}
-      />
-
-      {/* Rollback Modal — opens the revision history picker for rollbackable workloads.
-          Only mounted when objectData has a resolved clusterId + kind + name + namespace —
-          the modal's confirm button issues a backend command and per the multi-cluster
-          rule (AGENTS.md) every command must carry a cluster identity. */}
-      {state.showRollbackModal &&
-        objectData?.clusterId &&
-        objectData.kind &&
-        objectData.version &&
-        objectData.name &&
-        objectData.namespace && (
-          <RollbackModal
-            isOpen={true}
-            onClose={closeRollbackModal}
-            clusterId={objectData.clusterId}
-            namespace={objectData.namespace}
-            group={objectData.group ?? ''}
-            version={objectData.version}
-            name={objectData.name}
-            kind={objectData.kind}
-          />
-        )}
     </CurrentObjectPanelContext.Provider>
   );
 }

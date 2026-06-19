@@ -170,33 +170,3 @@ export interface LogViewerPrefs {
   expandedRows: string[];
   showPreviousContainerLogs: boolean;
 }
-
-export type PanelState = {
-  // Action state. Note: activeTab is NOT here — it lives in
-  // ObjectPanelStateContext (per-cluster) so the user's sub-tab choice
-  // survives unmount/remount caused by cluster switching.
-  actionLoading: boolean;
-  actionError: string | null;
-  scaleReplicas: number;
-  showScaleInput: boolean;
-  showRestartConfirm: boolean;
-  showDeleteConfirm: boolean;
-  showRollbackModal: boolean;
-
-  // Resource deletion state
-  resourceDeleted: boolean;
-  deletedResourceName: string;
-};
-
-export type PanelAction =
-  | { type: 'SET_ACTION_LOADING'; payload: boolean }
-  | { type: 'SET_ACTION_ERROR'; payload: string | null }
-  | { type: 'SET_SCALE_REPLICAS'; payload: number }
-  | { type: 'SHOW_SCALE_INPUT'; payload: boolean }
-  | { type: 'SHOW_RESTART_CONFIRM'; payload: boolean }
-  | { type: 'SHOW_DELETE_CONFIRM'; payload: boolean }
-  | { type: 'SHOW_ROLLBACK_MODAL'; payload: boolean }
-  | { type: 'SET_RESOURCE_DELETED'; payload: { deleted: boolean; name: string } }
-  | { type: 'RESET_STATE' };
-
-export type ResourceAction = 'restart' | 'delete' | 'scale' | 'rollback';

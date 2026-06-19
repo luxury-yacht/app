@@ -33,27 +33,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   detailsError,
   resourceDeleted = false,
   deletedResourceName = '',
-  canRestart,
-  canScale,
-  canDelete,
-  canTrigger,
-  canSuspend,
-  restartDisabledReason,
-  scaleDisabledReason,
-  deleteDisabledReason,
-  actionLoading,
-  actionError,
-  scaleReplicas,
-  showScaleInput,
-  onRestartClick,
-  onRollbackClick,
-  onDeleteClick,
-  onScaleClick,
-  onScaleCancel,
-  onScaleReplicasChange,
-  onShowScaleInput,
-  onTriggerClick,
-  onSuspendToggle,
+  onAfterDelete,
+  onAfterAction,
 }) => {
   const model = detailModel;
   const hasUtilization = useHasUtilization(objectData);
@@ -80,9 +61,6 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           </span>
         </div>
       )}
-
-      {/* Error Display */}
-      {actionError && <div className="action-error">Error: {actionError}</div>}
 
       {/* Details Content */}
       <div className="details-content">
@@ -112,29 +90,10 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             unschedulable={detail?.unschedulable}
             suspend={model.cronJobSuspended}
             desiredReplicas={model.desiredScaleReplicas}
-            canDelete={canDelete}
-            onDelete={onDeleteClick}
-            deleteLoading={actionLoading}
-            canRestart={canRestart}
-            canScale={canScale}
-            canTrigger={canTrigger}
-            canSuspend={canSuspend}
-            deleteDisabledReason={deleteDisabledReason}
-            restartDisabledReason={restartDisabledReason}
-            scaleDisabledReason={scaleDisabledReason}
-            onRestart={onRestartClick}
-            onRollback={onRollbackClick}
-            onScale={(replicas: number) => onScaleClick(replicas)}
-            onScaleCancel={onScaleCancel}
-            onScaleReplicasChange={onScaleReplicasChange}
-            onShowScaleInput={onShowScaleInput}
-            scaleReplicas={scaleReplicas}
-            showScaleInput={showScaleInput}
-            actionLoading={actionLoading}
             objectKind={objectData?.kind}
             portForwardAvailable={portForwardAvailable}
-            onTrigger={onTriggerClick}
-            onSuspendToggle={onSuspendToggle}
+            onAfterDelete={onAfterDelete}
+            onAfterAction={onAfterAction}
           />
         )}
 

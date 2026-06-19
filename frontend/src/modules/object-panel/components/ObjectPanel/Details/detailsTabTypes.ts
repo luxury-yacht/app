@@ -16,27 +16,10 @@ export interface DetailsTabProps {
   detailsError: string | null;
   resourceDeleted?: boolean;
   deletedResourceName?: string;
-  canRestart: boolean;
-  canScale: boolean;
-  canDelete: boolean;
-  canTrigger?: boolean;
-  canSuspend?: boolean;
-  restartDisabledReason?: string;
-  scaleDisabledReason?: string;
-  deleteDisabledReason?: string;
-  actionLoading: boolean;
-  actionError: string | null;
-  scaleReplicas: number;
-  showScaleInput: boolean;
-  onRestartClick: () => void;
-  onRollbackClick?: () => void;
-  onDeleteClick: () => void;
-  onScaleClick: (replicas?: number) => void;
-  onScaleCancel: () => void;
-  onScaleReplicasChange: (value: number) => void;
-  onShowScaleInput: () => void;
-  onTriggerClick?: () => void;
-  onSuspendToggle?: () => void;
+  /** Called after a successful delete so the panel can close. */
+  onAfterDelete: () => void;
+  /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
+  onAfterAction: () => void;
 }
 
 export interface UtilizationData {

@@ -1,18 +1,18 @@
 /**
  * frontend/src/shared/components/kubernetes/ActionsMenu.tsx
  *
- * Actions menu for the Object Panel. Renders a dropdown menu with available
- * actions for the current object through the shared object action controller.
+ * Actions menu for the Object Panel. Renders a dropdown of the available
+ * actions for the current object and delegates ALL execution, permission
+ * gating, and modal handling to the shared object action controller — the
+ * same path grid/map surfaces use. The panel supplies only object-panel
+ * lifecycle callbacks (close after delete, refetch after a mutating action)
+ * and the Node cordon/drain openers.
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { type ObjectActionData } from '@shared/hooks/useObjectActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import ScaleModal from '@shared/components/modals/ScaleModal';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
@@ -32,12 +32,11 @@ interface ActionsMenuProps {
   actionLoading?: boolean;
   // Whether a HorizontalPodAutoscaler manages this workload. Null means unknown.
   hpaManaged?: boolean | null;
-  onRestart?: () => void;
-  onRollback?: () => void;
-  onScale?: (replicas: number) => void;
-  onDelete?: () => void;
-  onTrigger?: () => void;
-  onSuspendToggle?: () => void;
+  /** Called after a successful delete so the panel can close. */
+  onAfterDelete?: () => void;
+  /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
+  onAfterAction?: () => void;
+  /** Node-only: open the cordon/drain modals owned by the caller. */
   onCordon?: () => void;
   onDrain?: () => void;
 }
@@ -48,24 +47,13 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     currentReplicas,
     actionLoading = false,
     hpaManaged = null,
-    onRestart,
-    onRollback,
-    onScale,
-    onDelete,
-    onTrigger,
-    onSuspendToggle,
+    onAfterDelete,
+    onAfterAction,
     onCordon,
     onDrain,
   }) => {
     const { openWithObject } = useObjectPanel();
     const [isOpen, setIsOpen] = useState(false);
-    const [showScaleModal, setShowScaleModal] = useState(false);
-    const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
-    const [showPortForwardModal, setShowPortForwardModal] = useState(false);
-    const [pendingScaleConfirmation, setPendingScaleConfirmation] = useState<{
-      replicas: number;
-    } | null>(null);
-    const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -76,90 +64,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       return parseDesiredReplicas(object?.ready) ?? 0;
     }, [currentReplicas, object?.ready]);
 
-    // Build handlers that open modals or call callbacks
-    const handlers = useMemo(
-      () => ({
-        onRestart: onRestart
-          ? () => {
-              setIsOpen(false);
-              onRestart();
-            }
-          : undefined,
-        onRollback: onRollback
-          ? () => {
-              setIsOpen(false);
-              onRollback();
-            }
-          : undefined,
-        onScale: onScale
-          ? () => {
-              setIsOpen(false);
-              setScaleValue(resolvedCurrentReplicas);
-              setShowScaleModal(true);
-            }
-          : undefined,
-        onScaleToZero: onScale
-          ? () => {
-              setIsOpen(false);
-              setPendingScaleConfirmation({ replicas: 0 });
-            }
-          : undefined,
-        onResumeFromZero: onScale
-          ? () => {
-              setIsOpen(false);
-              onScale(1);
-            }
-          : undefined,
-        onDelete: onDelete
-          ? () => {
-              setIsOpen(false);
-              onDelete();
-            }
-          : undefined,
-        onTrigger: onTrigger
-          ? () => {
-              setIsOpen(false);
-              setShowTriggerConfirm(true);
-            }
-          : undefined,
-        onSuspendToggle: onSuspendToggle
-          ? () => {
-              setIsOpen(false);
-              onSuspendToggle();
-            }
-          : undefined,
-        onPortForward: () => {
-          setIsOpen(false);
-          setShowPortForwardModal(true);
-        },
-        onCordon: onCordon
-          ? () => {
-              setIsOpen(false);
-              onCordon();
-            }
-          : undefined,
-        onDrain: onDrain
-          ? () => {
-              setIsOpen(false);
-              onDrain();
-            }
-          : undefined,
-      }),
-      [
-        onRestart,
-        onRollback,
-        onScale,
-        onDelete,
-        onTrigger,
-        onSuspendToggle,
-        onCordon,
-        onDrain,
-        resolvedCurrentReplicas,
-      ]
-    );
-
-    // Merge hpaManaged flag into the object data for the actions hook.
-    // Unknown must stay unknown so scale actions fail closed.
+    // Merge the resolved replica count and HPA-ownership flag into the object
+    // the controller reasons about. Unknown HPA ownership must stay unknown so
+    // scale actions fail closed.
     const actionObject = useMemo(
       () =>
         object
@@ -175,15 +82,20 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const objectActions = useObjectActionController({
       context: 'object-panel',
       actionLoading,
-      useDefaultHandlers: false,
-      handlerOverrides: handlers,
+      onAfterDelete: onAfterDelete ? () => onAfterDelete() : undefined,
+      onAfterAction: onAfterAction ? () => onAfterAction() : undefined,
       onOpenObjectMap: (target) => {
         setIsOpen(false);
         openWithObject(target, { initialTab: 'map' });
       },
+      perObjectHandlers: {
+        onCordon: onCordon ? () => onCordon() : undefined,
+        onDrain: onDrain ? () => onDrain() : undefined,
+      },
     });
 
-    // Get menu items from the centralized action controller.
+    // Menu items from the centralized controller (permission-gated; execution +
+    // modals owned by the controller).
     const menuItems = useMemo(
       () => objectActions.getMenuItems(actionObject),
       [actionObject, objectActions]
@@ -227,51 +139,10 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       }
     }, [isOpen]);
 
-    // Build a stable port-forward target to avoid unnecessary modal resets.
-    const portForwardTarget: PortForwardTarget | null = useMemo(() => {
-      if (!object) {
-        return null;
-      }
-      const builtinGVK = resolveBuiltinGroupVersion(object.kind);
-      return {
-        kind: object.kind,
-        group: object.group ?? builtinGVK.group ?? '',
-        version: object.version ?? builtinGVK.version ?? '',
-        name: object.name,
-        namespace: object.namespace || '',
-        clusterId: object.clusterId || '',
-        clusterName: object.clusterName || '',
-        ports: [],
-      };
-    }, [object]);
-
     // Don't render if no actions available
     if (menuItems.length === 0) {
       return null;
     }
-
-    const handleScaleApply = () => {
-      setShowScaleModal(false);
-      onScale?.(scaleValue);
-    };
-
-    const handleScaleToZero = () => {
-      setShowScaleModal(false);
-      setPendingScaleConfirmation({ replicas: 0 });
-    };
-
-    const handleScaleConfirmation = () => {
-      const confirmation = pendingScaleConfirmation;
-      setPendingScaleConfirmation(null);
-      if (confirmation) {
-        onScale?.(confirmation.replicas);
-      }
-    };
-
-    const handleTriggerConfirm = () => {
-      setShowTriggerConfirm(false);
-      onTrigger?.();
-    };
 
     return (
       <>
@@ -319,6 +190,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                     data-context-action-id={menuItem.actionId}
                     onClick={() => {
                       if (!menuItem.disabled && menuItem.onClick) {
+                        setIsOpen(false);
                         menuItem.onClick();
                       }
                     }}
@@ -332,50 +204,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           )}
         </div>
 
-        {/* Scale Modal */}
-        <ScaleModal
-          isOpen={showScaleModal}
-          kind={object?.kind || ''}
-          name={object?.name}
-          namespace={object?.namespace}
-          value={scaleValue}
-          loading={actionLoading}
-          onCancel={() => setShowScaleModal(false)}
-          onApply={handleScaleApply}
-          onScaleToZero={handleScaleToZero}
-          onValueChange={setScaleValue}
-        />
-
-        {/* Trigger CronJob Confirmation */}
-        <ConfirmationModal
-          isOpen={showTriggerConfirm}
-          title="Trigger CronJob"
-          message={`Create a new Job from CronJob "${object?.name}" immediately?`}
-          confirmText="Trigger"
-          cancelText="Cancel"
-          onConfirm={handleTriggerConfirm}
-          onCancel={() => setShowTriggerConfirm(false)}
-        />
-
-        <ConfirmationModal
-          isOpen={Boolean(pendingScaleConfirmation)}
-          title="Scale to 0"
-          message={`Scale ${object?.kind?.toLowerCase() || 'workload'} "${object?.name}" to 0 replicas?`}
-          warning="This will stop currently running pods for this workload."
-          confirmText="Scale to 0"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleScaleConfirmation}
-          onCancel={() => setPendingScaleConfirmation(null)}
-        />
-
-        {/* Port Forward Modal */}
-        {showPortForwardModal && portForwardTarget && (
-          <PortForwardModal
-            target={portForwardTarget}
-            onClose={() => setShowPortForwardModal(false)}
-          />
-        )}
+        {/* All action modals (confirm/scale/scale-to-zero/port-forward/rollback)
+            are owned by the shared controller. */}
+        {objectActions.modals}
       </>
     );
   }

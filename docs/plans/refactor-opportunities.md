@@ -1,7 +1,11 @@
 # Large-Scale Refactor Opportunities (validated candidates)
 
-**Status:** Validated by direct code inspection on 2026-06-18. Nothing here is committed. This is
-input to a design/grilling session before any candidate is promoted to a real plan.
+**Status:** Validated by direct code inspection on 2026-06-18; re-validated against current code on
+2026-06-19. **X1 is now DONE** (descriptor-driven Overview shipped on `data-driven-overview` — see
+`docs/plans/x1-frontend-rendering-registry.md`), so it has moved to the "already done" list below.
+Two of the original `[verified]` claims did not survive re-validation (X2 namespace duplication; F3
+LogViewer boolean count) and are corrected inline. The remaining live work is X2's cluster-view
+half, F1, and a narrow F3.
 
 **Purpose:** Identify the _next_ large-scale refactor, comparable in scope to the two already
 done:
@@ -15,36 +19,52 @@ done:
 **How this list was built.** A recon pass surfaced ten candidates from line-count/grep signals; a
 validation pass _read the actual code_ and rendered a verdict on each. The recon pass massively
 overstated the opportunity — seven candidates were dismissed (see the tombstone list at the
-bottom). What remains below are the **three candidates that survived validation**. The headline
-finding: the team has _already_ applied the centralization pattern across most of the codebase, so
-the surviving work is largely "last-mile holdout adoption," not greenfield consolidation.
+bottom). Three candidates survived that validation — but **X1 has since shipped**, so the live work
+is now X2's cluster-view half, F1, and a narrow F3. The headline finding holds: the team has
+_already_ applied the centralization pattern across most of the codebase, so the surviving work is
+largely "last-mile holdout adoption," not greenfield consolidation.
 
-`[verified]` = confirmed by direct inspection on 2026-06-18.
+`[verified]` = confirmed by direct inspection on 2026-06-18. `[re-validated 2026-06-19]` =
+re-checked against current code; corrections noted inline.
 
 ---
 
 ## Bottom line
 
-- **Only ONE survivor is genuinely a _very large-scale_ refactor: X1 (frontend rendering
-  registry)** — and it is _qualified_: a real ~45–50% boilerplate collapse, but a ~20–30%
-  irreducible per-kind widget tail and a real per-kind-DTO design problem. Solid, not
-  transformative.
-- **X2 (~8h) and F3 (~3–4h) are CONFIRMED but medium/small** — applying a pattern already proven
-  elsewhere to the remaining holdout sites. Worth doing; not the scale of the prior two refactors.
-- **Pattern-adoption theme:** X2 and F3 (and the dismissed-but-real F1) all share one shape — a
-  good pattern exists and one or two holdouts haven't adopted it. Bundling them is a small-PR
-  sweep, not one coherent refactor.
+- **X1 (frontend rendering registry) — DONE (2026-06-19).** The one genuinely large-scale survivor
+  shipped on `data-driven-overview`: descriptor-driven Overview + runtime drift-check, ~45–50%
+  boilerplate collapse. See `docs/plans/x1-frontend-rendering-registry.md`. No longer a candidate.
+- **F1 — DONE (2026-06-19).** ObjectPanel now runs actions through the shared
+  `useObjectActionController` (the parallel `panelReducer` + `useObjectPanelActions` + bespoke modals
+  are deleted and the ~21-field `DetailsTab` action signature collapsed to two lifecycle callbacks).
+  **X2 (cluster-view half) is the remaining live medium work**; F3 is real but narrow.
+- **Pattern-adoption theme:** X2 (cluster), F1, and F3 all share one shape — a good pattern exists
+  and one or two holdouts haven't adopted it. Bundling them is a small-PR sweep, not one coherent
+  refactor.
+- **Two corrections from re-validation `[2026-06-19]`:** X2's _namespace_ half rests on a
+  duplication count that isn't real (`normalizeNamespaceScope` has 2 call sites, not ~11) — drop or
+  re-scope it. F3's LogViewer "flag soup" is ~3–4 async/loading booleans amid independent user
+  prefs, not ~6 contradictory ones.
 
 | ID | Candidate | Verdict | Confidence | True scope |
 |----|-----------|---------|-----------|------------|
-| **X1** | Frontend rendering registry | **CONFIRMED (qualified)** | High | Large. ~45–50% collapse, ~20–30% irreducible tail. ⭐ only true large-scale candidate |
-| **X2** | Refresh scope/lifecycle unification | **CONFIRMED (partly solved)** | High | Medium (~8h). Object panel already centralized; cluster + namespace are holdouts |
-| **F3** | Async data state union | **CONFIRMED (narrow)** | Med-High | ~3–4h. Only LogViewer/NodeLogsTab; other tabs already use the snapshot union |
+| **X1** | Frontend rendering registry | **✅ DONE (2026-06-19)** | — | Shipped on `data-driven-overview`. See `x1-frontend-rendering-registry.md`. |
+| **X2** | Refresh scope/lifecycle unification | **CONFIRMED — cluster half only** | High | Medium. Object panel already centralized; **cluster** views are the real holdout. **Namespace half invalid** (see X2 below). |
+| **F1** | Object-panel action-controller adoption | **✅ DONE (2026-06-19)** | — | ObjectPanel now uses the shared controller; parallel reducer + ~21-prop `DetailsTab` action signature removed. |
+| **F3** | Async data state union | **CONFIRMED (narrow)** | Med-High | ~3–4h. Only LogViewer/NodeLogsTab; other tabs already use the snapshot/Shell unions. Scope smaller than first stated. |
 
 ---
 
 ## Do NOT duplicate — already done, in flight, or deliberately deferred
 
+- **X1 — Frontend rendering registry — DONE (2026-06-19).** Descriptor-driven Overview + runtime
+  drift-check shipped on `data-driven-overview`; the ~16 per-kind Overview components and the
+  `useOverviewData`/`DetailSlots` data-plumbing are deleted. See
+  `docs/plans/x1-frontend-rendering-registry.md`.
+- **F1 — Object-panel action-controller adoption — DONE (2026-06-19).** ObjectPanel actions now run
+  through the shared `useObjectActionController` (via ActionsMenu); the parallel `panelReducer`,
+  `useObjectPanelActions`, and bespoke confirmation/scale/rollback modals are deleted, and the
+  `DetailsTab` action prop signature collapsed to `onAfterDelete`/`onAfterAction`.
 - **Resource-kind registry** — largely complete; remaining items are sanctioned exceptions. See
   `docs/architecture/resource-kind-registry.md`.
 - **View-owned live-window fetch** — `docs/plans/deferred/view-owned-window-fetch.md`. The
@@ -56,14 +76,16 @@ the surviving work is largely "last-mile holdout adoption," not greenfield conso
 
 ---
 
-## X1 — Frontend rendering registry (close the registry loop) ⭐ only true large-scale candidate
+## X1 — Frontend rendering registry (close the registry loop) — ✅ DONE (2026-06-19)
 
-**Promoted to a plan:** design resolved and sequenced in
-[`docs/plans/x1-frontend-rendering-registry.md`](./x1-frontend-rendering-registry.md)
-(Architecture A + drift-check; scope includes collapsing the data-plumbing).
+**Status: COMPLETE.** Shipped on `data-driven-overview`: per-kind descriptors drive a generic
+`<OverviewRenderer>`, a runtime drift-check guards DTO-field coverage, and the per-kind
+data-plumbing (`useOverviewData`, the `DetailSlots` union, the `buildDetailSlots` switch) is
+deleted. See [`docs/plans/x1-frontend-rendering-registry.md`](./x1-frontend-rendering-registry.md).
+The analysis below is retained as the historical validation record.
 
-**Verdict: CONFIRMED, but qualified. Confidence: High.** The duplication is real and the fix is
-feasible, but the payoff is smaller and the design harder than recon implied.
+**Verdict (original): CONFIRMED, but qualified. Confidence: High.** The duplication was real and the
+fix feasible, but the payoff was smaller and the design harder than recon implied.
 
 **Problem.** The backend resource-kind registry drives backend dispatch from one descriptor, but
 the **frontend rendering layer was never consolidated**. The object panel hand-writes ~16 per-kind
@@ -110,24 +132,29 @@ chokepoint — weigh that against the effort before committing.
 
 ## X2 — Refresh scope/lifecycle unification
 
-**Verdict: CONFIRMED, but the hard part is already solved. Confidence: High. Scope: medium (~8h).**
+**Verdict: CONFIRMED for the CLUSTER half only; namespace half INVALID. Confidence: High.**
 
 **What validation found:**
 
 - **Object panel is already centralized** — all 7 scopes computed once in `getObjectPanelScopes()`
-  (`objectPanelRef.ts`); a comment documents this was a deliberate fix for a prior drift bug
-  `[verified]`. The _pattern is proven_; X2 is "apply it to the other two surfaces."
-- **Cluster views** (`ClusterResourcesContext.tsx`) compute scopes in one place but consume them via
-  three patterns (active-domain lifecycle hook, a manual cleanup-all effect, six individual handles)
-  — two scope-acquisition paths that can drift `[verified]`.
-- **Namespace views** (`NsResourcesContext.tsx`) repeat `normalizeNamespaceScope(namespace, clusterId)`
-  in ~11 resource hooks — change the derivation and all 11 must update `[verified]`.
+  (`objectPanelRef.ts`); the drift-bug comments live in `ObjectPanelContent.tsx` `[verified;
+  re-validated 2026-06-19]`. The _pattern is proven_; the work is "apply it to the cluster surface."
+- **Cluster views** (`ClusterResourcesContext.tsx`) — the real holdout. Scopes are consumed via
+  three patterns: the active-domain lifecycle hook (`useScopedRefreshDomainLifecycle`, ~line 576,
+  scope via `getScopeForDomain`), a manual cleanup-all effect (~lines 599–609, scope via raw
+  `clusterScope`/`clusterEventsScope`), and six individual resource handles
+  (rbac/storage/config/crds/events/custom) — two scope-acquisition paths that can drift `[verified;
+  re-validated 2026-06-19]`.
+- **Namespace views** (`NsResourcesContext.tsx`) — **claim INVALID `[re-validated 2026-06-19]`.**
+  `normalizeNamespaceScope` is defined once and called **twice** (lines 174, 290), not in ~11 hooks
+  (8 references repo-wide incl. tests). The ~2× duplication does not justify a refactor; **drop the
+  namespace half** or re-justify it on something other than this count.
 - Backend SSE-handler dedup (the "minor half") is genuinely minor — only
-  `refresh_aggregate_eventstream.go` is large.
+  `refresh_aggregate_eventstream.go` is large (602 LOC) `[verified; re-validated 2026-06-19]`.
 
-**Fix shape.** Extract a per-view domain manifest (`domain → computeScope(ref)`) + one
-scope-derivation hook for cluster and one for namespace, mirroring the object-panel pattern. Kills
-the ~11× namespace duplication and the dual cluster paths.
+**Fix shape (cluster only).** Extract a per-view domain manifest (`domain → computeScope(ref)`) +
+one scope-derivation hook so the active-domain hook, the cleanup-all effect, and the six handles all
+read scope from one source. Kills the dual cluster paths.
 
 **Risk: Med.** Touches the critical cleanup-all effect on the cluster surface. Overlaps
 view-owned-window-fetch; sequence with it.
@@ -136,16 +163,22 @@ view-owned-window-fetch; sequence with it.
 
 ## F3 — Async data state union
 
-**Verdict: CONFIRMED, narrow. Confidence: Med-High. Scope: ~3–4h.**
+**Verdict: CONFIRMED, narrow — narrower than first stated. Confidence: Med-High. Scope: ~3–4h.**
 
 Most tabs are already fine: EventsTab/MapTab/YamlTab consume the refresh-store snapshot, which is
-**already a discriminated union** (`status: idle|loading|initialising|updating|error`); ShellTab uses
-its own `status` union `[verified]`. The genuine flag-soup is confined to `LogViewer` (and
-`NodeLogsTab`, which reuses it): `LogViewerState` carries ~6 overlapping booleans that can represent
-contradictory states `[verified]`.
+**already a discriminated union** (`DomainStatus = idle|loading|initialising|updating|ready|error`,
+`core/refresh/store.ts`); ShellTab uses its own union (`ShellStatus =
+idle|connecting|open|closed|error`, `ShellTab.tsx`) `[verified; re-validated 2026-06-19]`. The
+flag-soup is confined to `LogViewer` (and `NodeLogsTab`, which reuses it) — but it is smaller than
+recon implied `[re-validated 2026-06-19]`: `LogViewerState` (`logViewerReducer.ts`) has ~11
+booleans, of which **most are independent user prefs** (wrapText, showAnsiColors,
+highlight/inverse/caseSensitive/regex matches…) that should NOT be unioned. Only ~3–4 are genuine
+async/loading flags (`manualRefreshPending`, `fallbackActive`, `isLoadingPreviousContainerLogs`)
+that can overlap with the stream-snapshot status.
 
-**Fix shape.** Redefine `LogViewerState` with a discriminated async union — but **batch it with the
-make-impossible-states effort** rather than doing it in isolation.
+**Fix shape.** Give LogViewer's ~3–4 async/loading flags a discriminated async union (leave the
+user-pref booleans alone) — and **batch it with the make-impossible-states effort** rather than
+doing it in isolation.
 
 **Risk: Med.** Tight coupling to the refresh-store snapshot contract; LogViewer's fallback/retry
 semantics must not be hidden by a generic union.
@@ -174,10 +207,13 @@ validation pass on them. Each line is the verdict + the only residual real work,
 - **B5 — Permission caching unification — OVERSTATED.** SSAR (per-verb bool), SSRR (rules blob),
   and response-cache (transient GET dedupe) are genuinely different; merging would break the SSRR
   consumer. Residual (~2h): dedup only the shared background-refresh boilerplate.
-- **F1 — Object-panel action dispatcher — OVERSTATED (narrow, but real).** `useObjectActionController`
-  already ships in 15+ surfaces; ObjectPanel is the lone holdout running a parallel reducer + ~19
-  action props. Residual (~4–6h): delete the reducer, wire ObjectPanel to the controller, collapse
-  the `DetailsTab` prop signature. Watch: ObjectPanel owns "close modal on resource-deleted."
+- **F1 — Object-panel action dispatcher — ✅ DONE (2026-06-19).** ObjectPanel was the lone holdout
+  running a parallel `panelReducer` + `useObjectPanelActions` + bespoke modals + a ~21-field action
+  signature on `DetailsTabProps`. Now `ActionsMenu` drives the shared `useObjectActionController`
+  with `useDefaultHandlers: true` (execution + permission gating + all modals centralized), and
+  ObjectPanel supplies only `onAfterDelete` (close) / `onAfterAction` (refetch). The reducer,
+  `useObjectPanelActions`, and the `PanelState`/`PanelAction`/`ResourceAction` types are deleted.
+  Resource-deleted lifecycle state stays local (useState). Full `mage qc:prerelease` green.
 - **F2 — Table config schema — INVALID.** The shared layer already exists
   (`useGridTablePersistence` + `useGridTableBinding` + `useResourceGridTableCommon`); the three
   public grid hooks are intentional thin wrappers. No refactor needed.
@@ -186,15 +222,16 @@ validation pass on them. Each line is the verdict + the only residual real work,
 
 ## Recommendation
 
-Three honest paths:
+X1 has shipped, so the original "grill X1" path is closed. Two honest paths remain:
 
-1. **Grill X1 (frontend rendering registry)** — the only candidate at the scale of the prior two
-   refactors. Accept up front that the payoff is a ~45–50% boilerplate collapse + one rendering
-   chokepoint (not 90%), with a real per-kind-DTO/codegen design question to resolve.
-2. **Do the pattern-adoption sweep** — X2 (~8h) + F3 (~3–4h) + the dismissed-but-real F1 (~4–6h) as
-   small, low-risk PRs retiring the last holdouts of patterns already proven elsewhere.
-3. **Conclude there is no clean large-scale refactor right now** — the codebase is already
+1. **Do the pattern-adoption sweep (recommended)** — small, low-risk PRs retiring the last holdouts
+   of patterns already proven elsewhere:
+   - **F1 — ✅ DONE (2026-06-19)** — ObjectPanel wired to `useObjectActionController`; reducer +
+     bespoke modals deleted; `DetailsTab` action signature collapsed.
+   - **X2 cluster half** — one scope-derivation source for `ClusterResourcesContext`.
+   - **F3 (~3–4h)** — LogViewer async-union, batched with make-impossible-states.
+   - **Skip** the X2 namespace half (duplication count invalid).
+2. **Conclude there is no clean large-scale refactor right now** — the codebase is already
    well-consolidated; bank the validation and revisit when new duplication accrues.
 
-**Open decision:** which path — and if X1, whether its qualified payoff justifies a high-effort,
-high-risk, user-visible refactor.
+**Open decision:** run the sweep (F1 first), or bank it.

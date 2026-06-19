@@ -2,6 +2,12 @@
 
 ### Changed
 
+- The object panel's actions menu (delete, restart, scale, rollback, trigger,
+  suspend, port-forward) now runs through the same shared action controller as
+  the cluster/namespace table views, so confirmation dialogs, the scale modal,
+  and permission gating behave identically everywhere. Action failures now
+  surface through the standard error notifications instead of an inline banner.
+
 ### Fixed
 
 - Browse tables (Storage and other resource views) no longer get stuck on a

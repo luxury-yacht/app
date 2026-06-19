@@ -24,14 +24,10 @@ interface GenericOverviewProps {
   namespace?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
-  onRestart?: () => void;
-  onRollback?: () => void;
-  onScale?: (replicas: number) => void;
-  onDelete?: () => void;
-  onTrigger?: () => void;
-  onSuspendToggle?: () => void;
-  onCordon?: () => void;
-  onDrain?: () => void;
+  /** Called after a successful delete so the panel can close. */
+  onAfterDelete?: () => void;
+  /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
+  onAfterAction?: () => void;
   portForwardAvailable?: boolean;
   [key: string]: any; // Allow any additional fields for generic resources
 }
@@ -224,14 +220,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
           <ActionsMenu
             object={actionObject}
             currentReplicas={currentScaleReplicas}
-            actionLoading={props.actionLoading || props.deleteLoading}
             hpaManaged={hpaManaged}
-            onRestart={props.onRestart}
-            onRollback={props.onRollback}
-            onScale={props.onScale}
-            onDelete={props.onDelete}
-            onTrigger={props.onTrigger}
-            onSuspendToggle={props.onSuspendToggle}
+            onAfterDelete={props.onAfterDelete}
+            onAfterAction={props.onAfterAction}
             onCordon={handleCordon}
             onDrain={onOpenDrain}
           />

@@ -100,7 +100,7 @@ describe('ActionsMenu + real permission store', () => {
     };
 
     await act(async () => {
-      root.render(<ActionsMenu object={actionObject} onDelete={vi.fn()} />);
+      root.render(<ActionsMenu object={actionObject} />);
       await Promise.resolve();
     });
     await flush();

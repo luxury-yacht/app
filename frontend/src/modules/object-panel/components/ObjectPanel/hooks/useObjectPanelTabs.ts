@@ -12,7 +12,6 @@ import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
 import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import type {
   ComputedCapabilities,
-  PanelAction,
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
@@ -24,14 +23,11 @@ interface UseObjectPanelTabsArgs {
   isEvent: boolean;
   isOpen: boolean;
   /**
-   * Persist the active sub-tab. Lifted out of `dispatch` because the
-   * sub-tab now lives in ObjectPanelStateContext (per-cluster) instead
-   * of the ObjectPanel's local useReducer — see ObjectPanel.tsx for the
-   * rationale.
+   * Persist the active sub-tab — it lives in ObjectPanelStateContext
+   * (per-cluster) so it survives the unmount/remount caused by cluster
+   * switching. See ObjectPanel.tsx for the rationale.
    */
   setActiveTab: (tab: ViewType) => void;
-  /** Dispatch for the remaining (transient, non-tab) panel reducer state. */
-  dispatch: React.Dispatch<PanelAction>;
   currentTab: ViewType;
 }
 
@@ -46,7 +42,6 @@ export const useObjectPanelTabs = ({
   isEvent,
   isOpen,
   setActiveTab,
-  dispatch: _dispatch,
   currentTab,
 }: UseObjectPanelTabsArgs): ObjectPanelTabsResult => {
   const objectKind = objectData?.kind?.toLowerCase() ?? null;
