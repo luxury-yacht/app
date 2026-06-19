@@ -29,6 +29,32 @@ from app infrastructure to features to reusable building blocks.
 `hooks/`, `utils/`, and `types/` under a feature directory are local to that
 feature. Promote only when the dependency direction stays clean.
 
+## Object-panel Overview rendering (descriptor-driven)
+
+The object panel's Details → Overview is rendered from per-kind **descriptors**, not bespoke
+per-kind components. To add or change a kind's overview, edit its descriptor — do not write a new
+component.
+
+- `Details/Overview/schema.ts` — descriptor types (`OverviewDescriptor`, ordered `items`:
+  `field | status | widget`, dynamic `label`/`fullWidth`, `mono`, `showSelector`, `OverviewContext`)
+  and `coverageKeys`.
+- `Details/Overview/OverviewRenderer.tsx` — generic renderer; owns the frame (`ResourceHeader` top,
+  `ResourceMetadata` bottom) and renders the descriptor's items in between. No per-kind logic.
+- `Details/Overview/descriptors/<area>.tsx` — one `OverviewDescriptor` per kind. Reads the raw
+  Wails-generated `*Details` DTO by key (`field: keyof DTO`); render fns for complex values and
+  `{kind:'widget'}` for irreducible UI; panel-only values (hpaManaged, drain, cluster identity) come
+  from the `OverviewContext` second arg, not hooks.
+- `Details/Overview/descriptorRegistry.ts` — single source mapping kind → descriptor (production
+  dispatch + drift-check). Register new kinds here.
+- `Details/Overview/driftCheck.test.ts` — runtime guard: every field of `new DtoClass({})` must be
+  accounted for by the descriptor (schema field / `derivedFrom` / status item / widget `consumes` /
+  `coveredElsewhere`). A new backend DTO field fails this test by name until placed.
+- `Details/Overview/registry.ts` — legacy fallback only: `GenericOverview` for custom/unregistered
+  resources + per-kind action `getResourceCapabilities`.
+
+Parity for each kind lives in its `*Overview.test.tsx`, which renders
+`OverviewRenderer(descriptor, dto)` directly.
+
 ## Placement Checklist
 
 When adding frontend code:

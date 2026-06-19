@@ -3,61 +3,17 @@ import {
   configmap,
   cronjob,
   deployment,
+  hpa,
+  ingress,
+  job,
+  nodes,
   replicaset,
   secret,
   service,
   statefulset,
   types,
 } from '@wailsjs/go/models';
-import {
-  buildObjectDetailModel,
-  createObjectDetailModelFromSlots,
-  type DetailSlots,
-} from './objectDetailModel';
-
-const emptySlots = (overrides: Partial<DetailSlots> = {}): DetailSlots => ({
-  podDetails: null,
-  deploymentDetails: null,
-  replicaSetDetails: null,
-  daemonSetDetails: null,
-  statefulSetDetails: null,
-  jobDetails: null,
-  cronJobDetails: null,
-  configMapDetails: null,
-  secretDetails: null,
-  helmReleaseDetails: null,
-  serviceDetails: null,
-  ingressDetails: null,
-  networkPolicyDetails: null,
-  endpointSliceDetails: null,
-  gatewayDetails: null,
-  httpRouteDetails: null,
-  grpcRouteDetails: null,
-  tlsRouteDetails: null,
-  listenerSetDetails: null,
-  referenceGrantDetails: null,
-  backendTLSPolicyDetails: null,
-  pvcDetails: null,
-  pvDetails: null,
-  storageClassDetails: null,
-  serviceAccountDetails: null,
-  roleDetails: null,
-  roleBindingDetails: null,
-  clusterRoleDetails: null,
-  clusterRoleBindingDetails: null,
-  hpaDetails: null,
-  pdbDetails: null,
-  resourceQuotaDetails: null,
-  limitRangeDetails: null,
-  nodeDetails: null,
-  namespaceDetails: null,
-  ingressClassDetails: null,
-  gatewayClassDetails: null,
-  crdDetails: null,
-  mutatingWebhookDetails: null,
-  validatingWebhookDetails: null,
-  ...overrides,
-});
+import { buildObjectDetailModel } from './objectDetailModel';
 
 const container = (
   overrides: Partial<types.PodDetailInfoContainer> = {}
@@ -70,12 +26,12 @@ const container = (
   }) as types.PodDetailInfoContainer;
 
 describe('objectDetailModel', () => {
-  it('maps detail payloads into the matching slot', () => {
+  it('exposes the active detail payload and cronjob suspend', () => {
     const cronJob = { suspend: true } as cronjob.CronJobDetails;
 
     const model = buildObjectDetailModel(null, 'cronjob', cronJob);
 
-    expect(model.slots.cronJobDetails).toBe(cronJob);
+    expect(model.activeDetail).toBe(cronJob);
     expect(model.cronJobSuspended).toBe(true);
   });
 
@@ -87,11 +43,7 @@ describe('objectDetailModel', () => {
       pods: [{ name: 'pod-a' }, { name: '  ' }, { name: 'pod-b' }],
     } as deployment.DeploymentDetails;
 
-    const model = createObjectDetailModelFromSlots(
-      null,
-      'deployment',
-      emptySlots({ deploymentDetails: deploy })
-    );
+    const model = buildObjectDetailModel(null, 'deployment', deploy);
 
     expect(model.containerSection).toEqual({
       containers: deploy.containers,
@@ -102,25 +54,13 @@ describe('objectDetailModel', () => {
   });
 
   it('selects data sections for configmaps and secrets', () => {
-    const configMapModel = createObjectDetailModelFromSlots(
-      null,
-      'configmap',
-      emptySlots({
-        configMapDetails: {
-          data: { key: 'value' },
-          binaryData: { cert: 'base64' },
-        } as unknown as configmap.ConfigMapDetails,
-      })
-    );
-    const secretModel = createObjectDetailModelFromSlots(
-      null,
-      'secret',
-      emptySlots({
-        secretDetails: {
-          data: { token: 'masked' },
-        } as unknown as secret.SecretDetails,
-      })
-    );
+    const configMapModel = buildObjectDetailModel(null, 'configmap', {
+      data: { key: 'value' },
+      binaryData: { cert: 'base64' },
+    } as unknown as configmap.ConfigMapDetails);
+    const secretModel = buildObjectDetailModel(null, 'secret', {
+      data: { token: 'masked' },
+    } as unknown as secret.SecretDetails);
 
     expect(configMapModel.dataSection).toEqual({
       data: { key: 'value' },
@@ -135,38 +75,18 @@ describe('objectDetailModel', () => {
   });
 
   it('detects port-forward availability for pod-like resources and services', () => {
-    const tcpPod = createObjectDetailModelFromSlots(
-      null,
-      'pod',
-      emptySlots({
-        podDetails: { containers: [container({ ports: ['8080/TCP'] })] } as types.PodDetailInfo,
-      })
-    );
-    const udpPod = createObjectDetailModelFromSlots(
-      null,
-      'pod',
-      emptySlots({
-        podDetails: { containers: [container({ ports: ['53/UDP'] })] } as types.PodDetailInfo,
-      })
-    );
-    const tcpService = createObjectDetailModelFromSlots(
-      null,
-      'service',
-      emptySlots({
-        serviceDetails: {
-          ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
-        } as service.ServiceDetails,
-      })
-    );
-    const udpService = createObjectDetailModelFromSlots(
-      null,
-      'service',
-      emptySlots({
-        serviceDetails: {
-          ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
-        } as service.ServiceDetails,
-      })
-    );
+    const tcpPod = buildObjectDetailModel(null, 'pod', {
+      containers: [container({ ports: ['8080/TCP'] })],
+    } as types.PodDetailInfo);
+    const udpPod = buildObjectDetailModel(null, 'pod', {
+      containers: [container({ ports: ['53/UDP'] })],
+    } as types.PodDetailInfo);
+    const tcpService = buildObjectDetailModel(null, 'service', {
+      ports: [{ port: 443, targetPort: 'https', protocol: 'TCP' }],
+    } as service.ServiceDetails);
+    const udpService = buildObjectDetailModel(null, 'service', {
+      ports: [{ port: 53, targetPort: 'dns', protocol: 'UDP' }],
+    } as service.ServiceDetails);
 
     expect(tcpPod.portForwardAvailable).toBe(true);
     expect(udpPod.portForwardAvailable).toBe(false);
@@ -176,21 +96,45 @@ describe('objectDetailModel', () => {
 
   it('selects desired replicas only for scalable workload kinds', () => {
     expect(
-      createObjectDetailModelFromSlots(
-        null,
-        'statefulset',
-        emptySlots({ statefulSetDetails: { desiredReplicas: 2 } as statefulset.StatefulSetDetails })
-      ).desiredScaleReplicas
+      buildObjectDetailModel(null, 'statefulset', {
+        desiredReplicas: 2,
+      } as statefulset.StatefulSetDetails).desiredScaleReplicas
     ).toBe(2);
     expect(
-      createObjectDetailModelFromSlots(
-        null,
-        'replicaset',
-        emptySlots({ replicaSetDetails: { desiredReplicas: 5 } as replicaset.ReplicaSetDetails })
-      ).desiredScaleReplicas
+      buildObjectDetailModel(null, 'replicaset', {
+        desiredReplicas: 5,
+      } as replicaset.ReplicaSetDetails).desiredScaleReplicas
     ).toBe(5);
-    expect(createObjectDetailModelFromSlots(null, 'job', emptySlots()).desiredScaleReplicas).toBe(
-      0
-    );
+    expect(buildObjectDetailModel(null, 'job', {} as job.JobDetails).desiredScaleReplicas).toBe(0);
+  });
+
+  // Derivation exclusions: semantic, NOT structural — the DTO has the field but the section must not
+  // appear. A pure field-presence chokepoint would regress each of these.
+  it('excludes Jobs from the container section even though JobDetails carries containers', () => {
+    const model = buildObjectDetailModel(null, 'job', {
+      containers: [container()],
+    } as unknown as job.JobDetails);
+    expect(model.containerSection).toBeNull();
+  });
+
+  it('does not treat Ingress rules as RBAC roleRules', () => {
+    const model = buildObjectDetailModel(null, 'ingress', {
+      rules: [{ host: 'x' }],
+    } as unknown as ingress.IngressDetails);
+    expect(model.roleRules).toBeUndefined();
+  });
+
+  it('reports zero desired scale replicas for HPA (not scalable via the scale action)', () => {
+    const model = buildObjectDetailModel(null, 'horizontalpodautoscaler', {
+      desiredReplicas: 9,
+    } as hpa.HorizontalPodAutoscalerDetails);
+    expect(model.desiredScaleReplicas).toBe(0);
+  });
+
+  it('does not derive activePodNames for a Node even though NodeDetails carries pods', () => {
+    const model = buildObjectDetailModel(null, 'node', {
+      pods: [{ name: 'p' }],
+    } as unknown as nodes.NodeDetails);
+    expect(model.activePodNames).toBeNull();
   });
 });

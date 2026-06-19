@@ -1,12 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.test.tsx
+ *
+ * Parity oracle for the EndpointSlice Overview migrated onto the descriptor renderer. Renders
+ * <OverviewRenderer descriptor={endpointSliceDescriptor} ...> with EndpointSliceDetails-shaped
+ * fixtures; the cluster identity for building target-pod/node links comes from the context (matching
+ * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EndpointSliceOverview } from './EndpointsOverview';
+import type { endpointslice } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { endpointSliceDescriptor } from './descriptors/endpointslice';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -31,13 +37,18 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+// Cluster identity threaded via the OverviewContext, matching the old useObjectPanel mock.
+const context = { clusterId: 'test-cluster', clusterName: 'test' };
+
 describe('EndpointSliceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof EndpointSliceOverview>) => {
+  const renderComponent = async (dto: endpointslice.EndpointSliceDetails) => {
     await act(async () => {
-      root.render(<EndpointSliceOverview {...props} />);
+      root.render(
+        <OverviewRenderer descriptor={endpointSliceDescriptor} data={dto} context={context} />
+      );
       await Promise.resolve();
     });
   };
@@ -57,27 +68,25 @@ describe('EndpointSliceOverview', () => {
 
   it('renders slice details with address counts', async () => {
     await renderComponent({
-      endpointSliceDetails: {
-        name: 'svc-endpoint-slices',
-        namespace: 'default',
-        addressType: 'IPv4',
-        readyAddresses: Array.from({ length: 12 }, (_, index) => ({
-          ip: `10.0.0.${index + 1}`,
-          hostname: `pod-${index + 1}`,
-          nodeName: `node-${index % 3}`,
-          targetRef: `pod-${index + 1}`,
-        })),
-        notReadyAddresses: Array.from({ length: 6 }, (_, index) => ({
-          ip: `10.0.1.${index + 1}`,
-        })),
-        ports: [
-          { name: 'http', port: 80, protocol: 'TCP', appProtocol: 'http' },
-          { name: 'https', port: 443, protocol: 'TCP' },
-        ],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      name: 'svc-endpoint-slices',
+      namespace: 'default',
+      addressType: 'IPv4',
+      readyAddresses: Array.from({ length: 12 }, (_, index) => ({
+        ip: `10.0.0.${index + 1}`,
+        hostname: `pod-${index + 1}`,
+        nodeName: `node-${index % 3}`,
+        targetRef: `pod-${index + 1}`,
+      })),
+      notReadyAddresses: Array.from({ length: 6 }, (_, index) => ({
+        ip: `10.0.1.${index + 1}`,
+      })),
+      ports: [
+        { name: 'http', port: 80, protocol: 'TCP', appProtocol: 'http' },
+        { name: 'https', port: 443, protocol: 'TCP' },
+      ],
+      labels: {},
+      annotations: {},
+    } as any);
 
     const overview = container;
     expect(overview.textContent).toContain('IPv4');
@@ -94,20 +103,18 @@ describe('EndpointSliceOverview', () => {
 
   it('omits not ready section when no not-ready addresses', async () => {
     await renderComponent({
-      endpointSliceDetails: {
-        name: 'healthy-slice',
-        namespace: 'dev',
-        addressType: 'IPv4',
-        readyAddresses: [
-          { ip: '10.0.0.1', targetRef: 'pod-1', nodeName: 'node-1' },
-          { ip: '10.0.0.2', targetRef: 'pod-2', nodeName: 'node-2' },
-        ],
-        notReadyAddresses: [],
-        ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      name: 'healthy-slice',
+      namespace: 'dev',
+      addressType: 'IPv4',
+      readyAddresses: [
+        { ip: '10.0.0.1', targetRef: 'pod-1', nodeName: 'node-1' },
+        { ip: '10.0.0.2', targetRef: 'pod-2', nodeName: 'node-2' },
+      ],
+      notReadyAddresses: [],
+      ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
+      labels: {},
+      annotations: {},
+    } as any);
 
     expect(container.textContent).toContain('IPv4');
     expect(container.textContent).toContain('2 ready');
@@ -119,17 +126,15 @@ describe('EndpointSliceOverview', () => {
 
   it('displays address with target and node', async () => {
     await renderComponent({
-      endpointSliceDetails: {
-        name: 'test-slice',
-        namespace: 'default',
-        addressType: 'IPv6',
-        readyAddresses: [{ ip: '2001:db8::1', targetRef: 'Pod/my-pod', nodeName: 'worker-1' }],
-        notReadyAddresses: [],
-        ports: [{ port: 8080, protocol: 'TCP' }],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      name: 'test-slice',
+      namespace: 'default',
+      addressType: 'IPv6',
+      readyAddresses: [{ ip: '2001:db8::1', targetRef: 'Pod/my-pod', nodeName: 'worker-1' }],
+      notReadyAddresses: [],
+      ports: [{ port: 8080, protocol: 'TCP' }],
+      labels: {},
+      annotations: {},
+    } as any);
 
     expect(container.textContent).toContain('2001:db8::1');
     expect(container.textContent).toContain('Pod/my-pod');

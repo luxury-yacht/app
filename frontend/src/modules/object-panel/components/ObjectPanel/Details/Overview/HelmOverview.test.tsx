@@ -2,11 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { HelmOverview } from './HelmOverview';
+import { helm } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { helmReleaseDescriptor } from './descriptors/helm';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
@@ -46,9 +47,11 @@ describe('HelmOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof HelmOverview>) => {
+  // The descriptor reads the raw helm.HelmReleaseDetails DTO; tests build one and render it through
+  // the generic OverviewRenderer (the production dispatch path).
+  const renderDescriptor = async (dto: helm.HelmReleaseDetails) => {
     await act(async () => {
-      root.render(<HelmOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={helmReleaseDescriptor} data={dto} />);
       await Promise.resolve();
     });
   };
@@ -75,8 +78,8 @@ describe('HelmOverview', () => {
   };
 
   it('renders helm release details and supports navigation to managed resources', async () => {
-    await renderComponent({
-      helmReleaseDetails: {
+    await renderDescriptor(
+      helm.HelmReleaseDetails.createFrom({
         name: 'api-release',
         namespace: 'prod',
         chart: 'api-chart',
@@ -110,10 +113,10 @@ describe('HelmOverview', () => {
           { revision: 2, status: 'Failed', updated: '2023-10-01', chart: 'api-chart-0.9.0' },
           { revision: 1, status: 'Deployed', updated: '2023-09-01', chart: 'api-chart-0.8.0' },
           { revision: 0, status: 'Pending', updated: '2023-08-01', chart: 'api-chart-0.7.0' },
-        ] as any,
+        ],
         notes: 'Release notes',
-      } as any,
-    });
+      })
+    );
 
     expect(getValueForLabel('Chart')?.textContent).toBe('api-chart');
     expect(
@@ -141,22 +144,24 @@ describe('HelmOverview', () => {
   });
 
   it('falls back to basic props when details are absent', async () => {
-    await renderComponent({
-      name: 'fallback',
-      namespace: 'default',
-      chart: 'fallback-chart',
-      status: 'Pending',
-      labels: {},
-      annotations: {},
-    });
+    await renderDescriptor(
+      helm.HelmReleaseDetails.createFrom({
+        name: 'fallback',
+        namespace: 'default',
+        chart: 'fallback-chart',
+        status: 'Pending',
+        labels: {},
+        annotations: {},
+      })
+    );
 
     expect(getValueForLabel('Chart')?.textContent).toBe('fallback-chart');
     expect(container.textContent).toContain('Pending');
   });
 
   it('does not link managed resources whose scope is unknown', async () => {
-    await renderComponent({
-      helmReleaseDetails: {
+    await renderDescriptor(
+      helm.HelmReleaseDetails.createFrom({
         name: 'api-release',
         namespace: 'prod',
         status: 'Deployed',
@@ -175,8 +180,8 @@ describe('HelmOverview', () => {
             scope: 'cluster',
           },
         ],
-      } as any,
-    });
+      })
+    );
 
     const resourceLinks = container.querySelectorAll('.metadata-pair .object-panel-link');
     expect(resourceLinks).toHaveLength(1);

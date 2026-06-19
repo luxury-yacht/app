@@ -1,15 +1,19 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/StorageOverview.test.tsx
+ *
+ * Exercises the storage descriptors (PVC / PV / StorageClass) through the descriptor-driven
+ * OverviewRenderer. Each case renders the matching descriptor with a DTO-shaped fixture.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { StorageOverview } from './StorageOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const context = { clusterId: defaultClusterId, clusterName: 'alpha' };
 const podRef = (name: string, namespace: string) => ({
   clusterId: defaultClusterId,
   group: '',
@@ -79,9 +83,25 @@ describe('StorageOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof StorageOverview>) => {
+  const renderPvc = async (data: any) => {
     await act(async () => {
-      root.render(<StorageOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={pvcDescriptor} data={data} context={context} />);
+      await Promise.resolve();
+    });
+  };
+
+  const renderPv = async (data: any) => {
+    await act(async () => {
+      root.render(<OverviewRenderer descriptor={pvDescriptor} data={data} context={context} />);
+      await Promise.resolve();
+    });
+  };
+
+  const renderStorageClass = async (data: any) => {
+    await act(async () => {
+      root.render(
+        <OverviewRenderer descriptor={storageClassDescriptor} data={data} context={context} />
+      );
       await Promise.resolve();
     });
   };
@@ -101,7 +121,7 @@ describe('StorageOverview', () => {
   });
 
   it('renders PVC-specific fields', async () => {
-    await renderComponent({
+    await renderPvc({
       kind: 'PersistentVolumeClaim',
       name: 'data',
       namespace: 'storage',
@@ -177,7 +197,7 @@ describe('StorageOverview', () => {
   });
 
   it('surfaces the PVC data source when set (snapshot restore)', async () => {
-    await renderComponent({
+    await renderPvc({
       kind: 'PersistentVolumeClaim',
       name: 'restored',
       namespace: 'storage',
@@ -196,7 +216,7 @@ describe('StorageOverview', () => {
   });
 
   it('renders PV-specific fields including claim reference', async () => {
-    await renderComponent({
+    await renderPv({
       kind: 'PersistentVolume',
       name: 'pv-1',
       capacity: '50Gi',
@@ -252,7 +272,7 @@ describe('StorageOverview', () => {
   });
 
   it('shows the PV status chip and volume source for a CSI-backed PV', async () => {
-    await renderComponent({
+    await renderPv({
       kind: 'PersistentVolume',
       name: 'pv-csi',
       status: 'Bound',
@@ -294,7 +314,7 @@ describe('StorageOverview', () => {
   });
 
   it('renders StorageClass-specific fields', async () => {
-    await renderComponent({
+    await renderStorageClass({
       kind: 'StorageClass',
       name: 'fast',
       provisioner: 'kubernetes.io/aws-ebs',
@@ -334,7 +354,7 @@ describe('StorageOverview', () => {
   });
 
   it('shows the Default chip (True), provisioned count, and mount options', async () => {
-    await renderComponent({
+    await renderStorageClass({
       kind: 'StorageClass',
       name: 'standard',
       provisioner: 'ebs.csi.aws.com',
@@ -342,7 +362,7 @@ describe('StorageOverview', () => {
       volumeBindingMode: 'WaitForFirstConsumer',
       allowVolumeExpansion: false,
       isDefault: true,
-      persistentVolumesCount: 247,
+      persistentVolumes: Array.from({ length: 247 }, (_, i) => `pv-${i}`),
       mountOptions: ['nfsvers=4.1', 'rsize=1048576'],
     });
 

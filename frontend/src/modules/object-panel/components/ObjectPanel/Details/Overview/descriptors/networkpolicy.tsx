@@ -1,17 +1,16 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.tsx
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/networkpolicy.tsx
+ *
+ * NetworkPolicy Overview descriptor (X1 P3a). Presentation ported verbatim from
+ * NetworkPolicyOverview.tsx.
  */
 
 import React from 'react';
 import { networkpolicy } from '@wailsjs/go/models';
-import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
-import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
-import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import './shared/OverviewBlocks.css';
+import type { OverviewDescriptor } from '../schema';
+import '../shared/OverviewBlocks.css';
 
-interface NetworkPolicyOverviewProps {
-  networkPolicyDetails: networkpolicy.NetworkPolicyDetails | null;
-}
+type NetworkPolicyDetails = networkpolicy.NetworkPolicyDetails;
 
 const formatSelector = (selector: Record<string, string>): string =>
   Object.entries(selector)
@@ -99,91 +98,70 @@ const RuleCard: React.FC<{
   );
 };
 
-export const NetworkPolicyOverview: React.FC<NetworkPolicyOverviewProps> = ({
-  networkPolicyDetails,
-}) => {
-  if (!networkPolicyDetails) return null;
-
-  const podSelector = networkPolicyDetails.podSelector as Record<string, string> | undefined;
-  const hasPodSelector = podSelector && Object.keys(podSelector).length > 0;
-
-  return (
-    <>
-      <ResourceHeader
-        kind="NetworkPolicy"
-        name={networkPolicyDetails.name}
-        namespace={networkPolicyDetails.namespace}
+const renderRules = (
+  rules: networkpolicy.NetworkPolicyRule[],
+  direction: 'ingress' | 'egress'
+): React.ReactNode => (
+  <div className="overview-card-list">
+    {rules.map((rule, ruleIndex) => (
+      <RuleCard
+        key={`${direction}-rule-${ruleIndex}`}
+        rule={rule}
+        index={ruleIndex}
+        direction={direction}
       />
+    ))}
+  </div>
+);
 
-      {hasPodSelector ? (
-        <OverviewItem
-          label="Pod Selector"
-          value={
+export const networkPolicyDescriptor: OverviewDescriptor<NetworkPolicyDetails> = {
+  displayKind: 'NetworkPolicy',
+  dtoClass: networkpolicy.NetworkPolicyDetails,
+  schema: {
+    items: [
+      {
+        field: 'podSelector',
+        label: 'Pod Selector',
+        fullWidth: (d) => {
+          const ps = d.podSelector as Record<string, string> | undefined;
+          return !!ps && Object.keys(ps).length > 2;
+        },
+        render: (d) => {
+          const ps = d.podSelector as Record<string, string> | undefined;
+          if (!ps || Object.keys(ps).length === 0) {
+            return 'All pods in namespace';
+          }
+          return (
             <div className="overview-ref-list">
-              {Object.entries(podSelector).map(([k, v]) => (
+              {Object.entries(ps).map(([k, v]) => (
                 <div key={`${k}-${v}`} className="overview-ref-item">
                   {k}={v}
                 </div>
               ))}
             </div>
-          }
-          fullWidth={Object.keys(podSelector).length > 2}
-        />
-      ) : (
-        <OverviewItem label="Pod Selector" value="All pods in namespace" />
-      )}
-
-      <OverviewItem
-        label="Policy Types"
-        value={networkPolicyDetails.policyTypes?.join(', ') || 'None'}
-      />
-
-      {networkPolicyDetails.ingressRules && networkPolicyDetails.ingressRules.length > 0 && (
-        <OverviewItem
-          label="Ingress Rules"
-          value={
-            <div className="overview-card-list">
-              {networkPolicyDetails.ingressRules.map(
-                (rule: networkpolicy.NetworkPolicyRule, ruleIndex: number) => (
-                  <RuleCard
-                    key={`ingress-rule-${ruleIndex}`}
-                    rule={rule}
-                    index={ruleIndex}
-                    direction="ingress"
-                  />
-                )
-              )}
-            </div>
-          }
-          fullWidth
-        />
-      )}
-
-      {networkPolicyDetails.egressRules && networkPolicyDetails.egressRules.length > 0 && (
-        <OverviewItem
-          label="Egress Rules"
-          value={
-            <div className="overview-card-list">
-              {networkPolicyDetails.egressRules.map(
-                (rule: networkpolicy.NetworkPolicyRule, ruleIndex: number) => (
-                  <RuleCard
-                    key={`egress-rule-${ruleIndex}`}
-                    rule={rule}
-                    index={ruleIndex}
-                    direction="egress"
-                  />
-                )
-              )}
-            </div>
-          }
-          fullWidth
-        />
-      )}
-
-      <ResourceMetadata
-        labels={networkPolicyDetails.labels}
-        annotations={networkPolicyDetails.annotations}
-      />
-    </>
-  );
+          );
+        },
+      },
+      {
+        field: 'policyTypes',
+        label: 'Policy Types',
+        render: (d) => d.policyTypes?.join(', ') || 'None',
+      },
+      {
+        field: 'ingressRules',
+        label: 'Ingress Rules',
+        fullWidth: true,
+        hidden: (d) => !(d.ingressRules && d.ingressRules.length > 0),
+        render: (d) => renderRules(d.ingressRules ?? [], 'ingress'),
+      },
+      {
+        field: 'egressRules',
+        label: 'Egress Rules',
+        fullWidth: true,
+        hidden: (d) => !(d.egressRules && d.egressRules.length > 0),
+        render: (d) => renderRules(d.egressRules ?? [], 'egress'),
+      },
+    ],
+  },
+  coveredElsewhere: ['details'],
 };

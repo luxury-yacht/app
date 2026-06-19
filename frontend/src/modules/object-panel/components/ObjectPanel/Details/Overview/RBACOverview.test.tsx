@@ -1,12 +1,30 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/RBACOverview.test.tsx
+ *
+ * Behavioral tests for the RBAC Overview descriptors driving the generic OverviewRenderer (X1).
+ * Each case renders the kind's descriptor against a DTO-shaped fixture and threads cluster identity
+ * via the OverviewContext.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RBACOverview } from './RBACOverview';
+import {
+  clusterrole,
+  clusterrolebinding,
+  role,
+  rolebinding,
+  serviceaccount,
+} from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import {
+  clusterRoleBindingDescriptor,
+  clusterRoleDescriptor,
+  roleBindingDescriptor,
+  roleDescriptor,
+  serviceAccountDescriptor,
+} from './descriptors/rbac';
+import type { OverviewContext, OverviewDescriptor } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -31,12 +49,15 @@ vi.mock('@shared/components/Tooltip', () => ({
   default: ({ children }: any) => <>{children}</>,
 }));
 
-const renderWithProps = async (
+const context: OverviewContext = { clusterId: 'test-cluster', clusterName: 'test' };
+
+const renderDescriptor = async <T,>(
   root: ReactDOM.Root,
-  props: React.ComponentProps<typeof RBACOverview>
+  descriptor: OverviewDescriptor<T>,
+  data: T
 ) => {
   await act(async () => {
-    root.render(<RBACOverview {...props} />);
+    root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
     await Promise.resolve();
   });
 };
@@ -59,14 +80,18 @@ describe('RBACOverview', () => {
   });
 
   it('renders metadata and aggregation/used-by sections for cluster roles', async () => {
-    await renderWithProps(root, {
-      kind: 'ClusterRole',
-      name: 'admin',
-      labels: { team: 'platform' },
-      annotations: { owner: 'rbac-admins' },
-      // Rules render in DetailsTabRBACRules now (a sibling section);
-      // RBACOverview only handles header/aggregation/used-by/metadata.
-    });
+    await renderDescriptor(
+      root,
+      clusterRoleDescriptor,
+      clusterrole.ClusterRoleDetails.createFrom({
+        kind: 'ClusterRole',
+        name: 'admin',
+        labels: { team: 'platform' },
+        annotations: { owner: 'rbac-admins' },
+        // Rules render in DetailsTabRBACRules now (a sibling section);
+        // the descriptor only handles header/aggregation/used-by/metadata.
+      })
+    );
 
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
@@ -77,12 +102,16 @@ describe('RBACOverview', () => {
   });
 
   it('renders labels and annotations for roles', async () => {
-    await renderWithProps(root, {
-      kind: 'Role',
-      name: 'reader',
-      labels: { team: 'platform' },
-      annotations: { owner: 'rbac-admins' },
-    });
+    await renderDescriptor(
+      root,
+      roleDescriptor,
+      role.RoleDetails.createFrom({
+        kind: 'Role',
+        name: 'reader',
+        labels: { team: 'platform' },
+        annotations: { owner: 'rbac-admins' },
+      })
+    );
 
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
@@ -93,17 +122,21 @@ describe('RBACOverview', () => {
   });
 
   it('renders binding role reference and inline subjects list', async () => {
-    await renderWithProps(root, {
-      kind: 'RoleBinding',
-      name: 'bind-reader',
-      labels: { env: 'prod' },
-      annotations: { managedBy: 'luxury-yacht' },
-      roleRef: { kind: 'ClusterRole', name: 'read-only' },
-      subjects: [
-        { kind: 'ServiceAccount', namespace: 'default', name: 'viewer' },
-        { kind: 'User', name: 'alice' },
-      ],
-    });
+    await renderDescriptor(
+      root,
+      roleBindingDescriptor,
+      rolebinding.RoleBindingDetails.createFrom({
+        kind: 'RoleBinding',
+        name: 'bind-reader',
+        labels: { env: 'prod' },
+        annotations: { managedBy: 'luxury-yacht' },
+        roleRef: { kind: 'ClusterRole', name: 'read-only' },
+        subjects: [
+          { kind: 'ServiceAccount', namespace: 'default', name: 'viewer' },
+          { kind: 'User', name: 'alice' },
+        ],
+      })
+    );
 
     expect(container.textContent).toContain('Role Reference');
     expect(container.textContent).toContain('ClusterRole/read-only');
@@ -121,12 +154,16 @@ describe('RBACOverview', () => {
   });
 
   it('flags ServiceAccount subjects in system namespaces with a warning chip', async () => {
-    await renderWithProps(root, {
-      kind: 'ClusterRoleBinding',
-      name: 'bind-system',
-      roleRef: { kind: 'ClusterRole', name: 'cluster-admin' },
-      subjects: [{ kind: 'ServiceAccount', namespace: 'kube-system', name: 'controller' }],
-    });
+    await renderDescriptor(
+      root,
+      clusterRoleBindingDescriptor,
+      clusterrolebinding.ClusterRoleBindingDetails.createFrom({
+        kind: 'ClusterRoleBinding',
+        name: 'bind-system',
+        roleRef: { kind: 'ClusterRole', name: 'cluster-admin' },
+        subjects: [{ kind: 'ServiceAccount', namespace: 'kube-system', name: 'controller' }],
+      })
+    );
 
     const warningChip = Array.from(
       container.querySelectorAll<HTMLElement>('.status-chip--warning')
@@ -135,13 +172,17 @@ describe('RBACOverview', () => {
   });
 
   it('renders cluster role binding metadata', async () => {
-    await renderWithProps(root, {
-      kind: 'ClusterRoleBinding',
-      name: 'bind-admin',
-      labels: { env: 'prod' },
-      annotations: { owner: 'security' },
-      roleRef: { kind: 'ClusterRole', name: 'admin' },
-    });
+    await renderDescriptor(
+      root,
+      clusterRoleBindingDescriptor,
+      clusterrolebinding.ClusterRoleBindingDetails.createFrom({
+        kind: 'ClusterRoleBinding',
+        name: 'bind-admin',
+        labels: { env: 'prod' },
+        annotations: { owner: 'security' },
+        roleRef: { kind: 'ClusterRole', name: 'admin' },
+      })
+    );
 
     expect(container.textContent).toContain('Role Reference');
     expect(container.textContent).toContain('ClusterRole/admin');
@@ -154,15 +195,19 @@ describe('RBACOverview', () => {
   });
 
   it('renders service account specific fields', async () => {
-    await renderWithProps(root, {
-      kind: 'ServiceAccount',
-      name: 'builder',
-      labels: { app: 'builder' },
-      annotations: { note: 'ci-service' },
-      secrets: [{}, {}] as any,
-      imagePullSecrets: [{}] as any,
-      automountServiceAccountToken: true,
-    });
+    await renderDescriptor(
+      root,
+      serviceAccountDescriptor,
+      serviceaccount.ServiceAccountDetails.createFrom({
+        kind: 'ServiceAccount',
+        name: 'builder',
+        labels: { app: 'builder' },
+        annotations: { note: 'ci-service' },
+        secrets: [{}, {}],
+        imagePullSecrets: [{}],
+        automountServiceAccountToken: true,
+      })
+    );
 
     expect(container.textContent).toContain('Secrets');
     expect(container.textContent).toContain('2 secret(s)');

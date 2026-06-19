@@ -1,13 +1,18 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.test.tsx
+ *
+ * DetailsTab composes the Overview (descriptor-driven, rendered by Overview/index) with the sibling
+ * sections (Utilization, Containers, RBACRules, DataSection), each gated by the derived
+ * ObjectDetailModel. Per-kind FIELD rendering is covered by the descriptor tests + driftCheck; this
+ * suite covers the composition contract: what DetailsTab passes to Overview and which sibling
+ * sections appear.
  */
 
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { resourcemodel } from '@wailsjs/go/models';
 import type { DetailsTabProps } from './DetailsTab';
-import { createObjectDetailModelFromSlots, type DetailSlots } from './objectDetailModel';
+import { buildObjectDetailModel } from './objectDetailModel';
 
 const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
@@ -15,20 +20,6 @@ const utilizationMock = vi.fn();
 const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
-
-function resourceRef(
-  overrides: Partial<resourcemodel.ResourceRef> = {}
-): resourcemodel.ResourceRef {
-  return {
-    clusterId: 'cluster-a',
-    group: 'rbac.authorization.k8s.io',
-    version: 'v1',
-    kind: 'ClusterRoleBinding',
-    resource: 'clusterrolebindings',
-    name: 'crb',
-    ...overrides,
-  };
-}
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (options: unknown) => useShortcutMock(options),
@@ -81,12 +72,10 @@ const renderDetailsTab = async (props: DetailsTabProps) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
-
   await act(async () => {
     root.render(<DetailsTab {...props} />);
     await Promise.resolve();
   });
-
   return {
     container,
     cleanup: () => {
@@ -96,358 +85,221 @@ const renderDetailsTab = async (props: DetailsTabProps) => {
   };
 };
 
-const SLOT_KEYS = [
-  'podDetails',
-  'deploymentDetails',
-  'replicaSetDetails',
-  'daemonSetDetails',
-  'statefulSetDetails',
-  'jobDetails',
-  'cronJobDetails',
-  'configMapDetails',
-  'secretDetails',
-  'helmReleaseDetails',
-  'serviceDetails',
-  'ingressDetails',
-  'networkPolicyDetails',
-  'endpointSliceDetails',
-  'gatewayDetails',
-  'httpRouteDetails',
-  'grpcRouteDetails',
-  'tlsRouteDetails',
-  'listenerSetDetails',
-  'referenceGrantDetails',
-  'backendTLSPolicyDetails',
-  'pvcDetails',
-  'pvDetails',
-  'storageClassDetails',
-  'serviceAccountDetails',
-  'roleDetails',
-  'roleBindingDetails',
-  'clusterRoleDetails',
-  'clusterRoleBindingDetails',
-  'hpaDetails',
-  'pdbDetails',
-  'resourceQuotaDetails',
-  'limitRangeDetails',
-  'nodeDetails',
-  'namespaceDetails',
-  'ingressClassDetails',
-  'gatewayClassDetails',
-  'crdDetails',
-  'mutatingWebhookDetails',
-  'validatingWebhookDetails',
-] as const satisfies readonly (keyof DetailSlots)[];
-
-type DetailsTabTestOverrides = Partial<Omit<DetailsTabProps, 'detailModel'>> &
-  Partial<DetailSlots> & {
-    detailModel?: DetailsTabProps['detailModel'];
-  };
-
-const createEmptySlots = (overrides: Partial<DetailSlots> = {}): DetailSlots => ({
-  podDetails: null,
-  deploymentDetails: null,
-  replicaSetDetails: null,
-  daemonSetDetails: null,
-  statefulSetDetails: null,
-  jobDetails: null,
-  cronJobDetails: null,
-  configMapDetails: null,
-  secretDetails: null,
-  helmReleaseDetails: null,
-  serviceDetails: null,
-  ingressDetails: null,
-  networkPolicyDetails: null,
-  endpointSliceDetails: null,
-  pvcDetails: null,
-  pvDetails: null,
-  storageClassDetails: null,
-  serviceAccountDetails: null,
-  roleDetails: null,
-  roleBindingDetails: null,
-  clusterRoleDetails: null,
-  clusterRoleBindingDetails: null,
-  hpaDetails: null,
-  pdbDetails: null,
-  resourceQuotaDetails: null,
-  limitRangeDetails: null,
-  nodeDetails: null,
-  namespaceDetails: null,
-  ingressClassDetails: null,
-  crdDetails: null,
-  mutatingWebhookDetails: null,
-  validatingWebhookDetails: null,
-  ...overrides,
+const createBaseProps = (objectData: any, detail: unknown = null): DetailsTabProps => ({
+  objectData,
+  detailModel: buildObjectDetailModel(objectData, objectData?.kind?.toLowerCase() ?? null, detail),
+  isActive: true,
+  detailsLoading: false,
+  detailsError: null,
+  resourceDeleted: false,
+  deletedResourceName: '',
+  canRestart: true,
+  canScale: true,
+  canDelete: true,
+  restartDisabledReason: undefined,
+  scaleDisabledReason: undefined,
+  deleteDisabledReason: undefined,
+  actionLoading: false,
+  actionError: null,
+  scaleReplicas: 2,
+  showScaleInput: false,
+  onRestartClick: vi.fn(),
+  onDeleteClick: vi.fn(),
+  onScaleClick: vi.fn(),
+  onScaleCancel: vi.fn(),
+  onScaleReplicasChange: vi.fn(),
+  onShowScaleInput: vi.fn(),
 });
 
-const splitTestOverrides = (
-  overrides: DetailsTabTestOverrides
-): { propOverrides: Partial<DetailsTabProps>; slots: DetailSlots } => {
-  const propOverrides = { ...overrides } as Record<string, unknown>;
-  const slots = createEmptySlots();
-  for (const key of SLOT_KEYS) {
-    if (key in propOverrides) {
-      (slots as Record<keyof DetailSlots, unknown>)[key] = propOverrides[key];
-      delete propOverrides[key];
-    }
-  }
-  return { propOverrides: propOverrides as Partial<DetailsTabProps>, slots };
-};
-
-const createBaseProps = (overrides: DetailsTabTestOverrides = {}): DetailsTabProps => {
-  const { propOverrides, slots } = splitTestOverrides(overrides);
-  const objectData = propOverrides.objectData ?? {
-    kind: 'Pod',
-    name: 'pod-1',
-    namespace: 'default',
-    status: 'Running',
-  };
-
-  return {
-    objectData,
-    detailModel:
-      propOverrides.detailModel ??
-      createObjectDetailModelFromSlots(objectData, objectData?.kind?.toLowerCase(), slots),
-    isActive: true,
-    detailsLoading: false,
-    detailsError: null,
-    resourceDeleted: false,
-    deletedResourceName: '',
-    canRestart: true,
-    canScale: true,
-    canDelete: true,
-    restartDisabledReason: undefined,
-    scaleDisabledReason: undefined,
-    deleteDisabledReason: undefined,
-    actionLoading: false,
-    actionError: null,
-    scaleReplicas: 2,
-    showScaleInput: false,
-    onRestartClick: vi.fn(),
-    onDeleteClick: vi.fn(),
-    onScaleClick: vi.fn(),
-    onScaleCancel: vi.fn(),
-    onScaleReplicasChange: vi.fn(),
-    onShowScaleInput: vi.fn(),
-    ...propOverrides,
-  };
-};
-
-type OverviewScenario = {
-  name: string;
-  objectData: Record<string, unknown>;
-  extraProps: DetailsTabTestOverrides;
-  expectedOverview: Record<string, unknown>;
-  expectUtilization?: Record<string, unknown> | null;
-  expectContainers?: boolean;
-  expectData?: Record<string, unknown> | null;
-};
-
-const buildScenarioProps = (scenario: OverviewScenario): DetailsTabProps => {
-  const objectData = {
-    kind: 'Pod',
-    name: 'pod-1',
-    namespace: 'default',
-    status: 'Running',
-    ...scenario.objectData,
-  };
-  return createBaseProps({ ...scenario.extraProps, objectData });
-};
+const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, unknown>;
 
 describe('DetailsTab', () => {
   beforeEach(() => {
     overviewMock.mockClear();
     utilizationMock.mockClear();
     containersMock.mockClear();
+    rbacRulesMock.mockClear();
     dataMock.mockClear();
     useShortcutMock.mockClear();
   });
 
-  it('passes pod overview, utilization, and container data to child components', async () => {
-    const props = createBaseProps({
-      podDetails: {
-        name: 'pod-1',
-        node: 'node-a',
-        nodeIP: '10.0.0.1',
-        podIP: '192.168.0.10',
-        ownerKind: 'Deployment',
-        ownerName: 'web',
-        status: 'Running',
-        ready: '1/1',
-        restarts: 0,
-        qosClass: 'Burstable',
-        serviceAccount: 'default',
-        hostNetwork: false,
-        containers: [{ name: 'app', image: 'example/app:1.0.0' }],
-        initContainers: [{ name: 'init', image: 'busybox' }],
-        cpuUsage: '100m',
-        cpuRequest: '50m',
-        cpuLimit: '200m',
-        memUsage: '128Mi',
-        memRequest: '64Mi',
-        memLimit: '256Mi',
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+  it('passes object identity, the active detail, and action props/handlers to Overview', async () => {
+    const detail = {
+      status: 'Running',
+      ready: '1/1',
+      containers: [{ name: 'app', image: 'example/app:1.0.0' }],
+      cpuUsage: '100m',
+      memUsage: '128Mi',
+    };
+    const props = createBaseProps({ kind: 'Pod', name: 'pod-1', namespace: 'default' }, detail);
 
     const { cleanup } = await renderDetailsTab(props);
-    expect(overviewMock).toHaveBeenCalled();
-    expect(utilizationMock).toHaveBeenCalled();
-    expect(containersMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        containers: expect.arrayContaining([{ name: 'app', image: 'example/app:1.0.0' }]),
-        initContainers: expect.arrayContaining([{ name: 'init', image: 'busybox' }]),
-      })
-    );
-    expect(dataMock).not.toHaveBeenCalled();
 
-    const overviewProps = overviewMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(overviewProps).toMatchObject({
+    expect(overviewProps()).toMatchObject({
       kind: 'Pod',
       name: 'pod-1',
       namespace: 'default',
+      activeDetail: detail,
+      status: 'Running',
+      ready: '1/1',
       canRestart: true,
+      canDelete: true,
       onScale: expect.any(Function),
+      onDelete: expect.any(Function),
     });
     cleanup();
   });
 
-  it('hides utilization for inactive replicasets', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'ReplicaSet', name: 'web-rs', namespace: 'default' },
-      replicaSetDetails: {
-        name: 'web-rs',
-        namespace: 'default',
-        replicas: '1/2',
-        ready: '1/2',
+  it('renders the Containers section for pods/workloads and the Utilization section with metrics', async () => {
+    const props = createBaseProps(
+      { kind: 'Pod', name: 'pod-1', namespace: 'default' },
+      {
+        containers: [{ name: 'app', image: 'example/app:1.0.0' }],
+        initContainers: [{ name: 'init', image: 'busybox' }],
         cpuUsage: '100m',
         cpuRequest: '50m',
-        cpuLimit: '200m',
         memUsage: '128Mi',
         memRequest: '64Mi',
-        memLimit: '256Mi',
-        isActive: false,
-      } as any,
-    });
+      }
+    );
 
+    const { cleanup } = await renderDetailsTab(props);
+    expect(containersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containers: expect.arrayContaining([{ name: 'app', image: 'example/app:1.0.0' }]),
+      })
+    );
+    expect(utilizationMock).toHaveBeenCalled();
+    expect(dataMock).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('hides utilization for inactive replicasets', async () => {
+    const props = createBaseProps(
+      { kind: 'ReplicaSet', name: 'web-rs', namespace: 'default' },
+      { replicas: '1/2', cpuUsage: '100m', memUsage: '128Mi', isActive: false }
+    );
     const { cleanup } = await renderDetailsTab(props);
     expect(utilizationMock).not.toHaveBeenCalled();
     cleanup();
   });
 
   it('passes port-forward availability false for pods with no forwardable ports', async () => {
-    const props = createBaseProps({
-      podDetails: {
-        name: 'pod-1',
-        node: 'node-a',
-        ownerKind: 'Deployment',
-        ownerName: 'web',
-        status: 'Running',
-        ready: '1/1',
-        restarts: 0,
-        qosClass: 'Burstable',
-        serviceAccount: 'default',
-        hostNetwork: false,
-        containers: [{ name: 'app', image: 'example/app:1.0.0', ports: ['53/UDP'] }],
-        initContainers: [],
-        cpuUsage: '100m',
-        cpuRequest: '50m',
-        cpuLimit: '200m',
-        memUsage: '128Mi',
-        memRequest: '64Mi',
-        memLimit: '256Mi',
-        labels: {},
-        annotations: {},
-      } as any,
-    });
-
-    const { cleanup } = await renderDetailsTab(props);
-    expect(overviewMock).toHaveBeenCalledWith(
-      expect.objectContaining({ portForwardAvailable: false })
+    const props = createBaseProps(
+      { kind: 'Pod', name: 'pod-1', namespace: 'default' },
+      { containers: [{ name: 'app', image: 'i', ports: ['53/UDP'] }] }
     );
+    const { cleanup } = await renderDetailsTab(props);
+    expect(overviewProps()).toMatchObject({ portForwardAvailable: false });
     cleanup();
   });
 
   it('passes port-forward availability false for services with no TCP ports', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'Service', name: 'svc-1', namespace: 'default' },
-      serviceDetails: {
-        kind: 'Service',
-        name: 'svc-1',
-        namespace: 'default',
-        type: 'ClusterIP',
-        clusterIP: '10.0.0.10',
-        ports: [{ name: 'dns', port: 53, protocol: 'UDP' }],
-        selector: {},
-        labels: {},
-        annotations: {},
-      } as any,
-    });
-
-    const { cleanup } = await renderDetailsTab(props);
-    expect(overviewMock).toHaveBeenCalledWith(
-      expect.objectContaining({ portForwardAvailable: false })
+    const props = createBaseProps(
+      { kind: 'Service', name: 'svc-1', namespace: 'default' },
+      { ports: [{ name: 'dns', port: 53, protocol: 'UDP' }] }
     );
+    const { cleanup } = await renderDetailsTab(props);
+    expect(overviewProps()).toMatchObject({ portForwardAvailable: false });
     cleanup();
   });
 
-  it('renders data section for config maps', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'ConfigMap', name: 'cfg', namespace: 'default' },
-      configMapDetails: {
-        name: 'cfg',
-        namespace: 'default',
-        data: { key: 'value' },
-        binaryData: {},
-      } as any,
-    });
+  it('renders the data section for config maps and marks secrets', async () => {
+    const cfg = await renderDetailsTab(
+      createBaseProps(
+        { kind: 'ConfigMap', name: 'cfg', namespace: 'default' },
+        { data: { key: 'value' }, binaryData: {} }
+      )
+    );
+    expect(dataMock).toHaveBeenCalledWith(expect.objectContaining({ isSecret: false }));
+    cfg.cleanup();
 
-    const { cleanup } = await renderDetailsTab(props);
-
-    expect(dataMock).toHaveBeenCalled();
-    expect(dataMock.mock.calls[0][0]).toMatchObject({ isSecret: false });
-    cleanup();
+    dataMock.mockClear();
+    const sec = await renderDetailsTab(
+      createBaseProps({ kind: 'Secret', name: 's', namespace: 'default' }, { data: { t: 'x' } })
+    );
+    expect(dataMock).toHaveBeenCalledWith(expect.objectContaining({ isSecret: true }));
+    sec.cleanup();
   });
 
   it('uses node utilization metrics and omits containers when not applicable', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'Node', name: 'node-a', namespace: '' },
-      nodeDetails: {
-        name: 'node-a',
+    const props = createBaseProps(
+      { kind: 'Node', name: 'node-a', namespace: '' },
+      {
         cpuUsage: '2',
         cpuCapacity: '4',
-        cpuAllocatable: '3',
-        cpuRequests: '1',
-        cpuLimits: '3',
         memoryUsage: '8Gi',
         memoryCapacity: '16Gi',
-        memoryAllocatable: '15Gi',
-        memRequests: '4Gi',
-        memLimits: '12Gi',
         podsCount: 50,
         podsCapacity: '110',
-        podsAllocatable: '100',
-      } as any,
-    });
-
+      }
+    );
     const { cleanup } = await renderDetailsTab(props);
-
-    expect(utilizationMock).toHaveBeenCalled();
     expect(utilizationMock.mock.calls[0][0]).toMatchObject({ mode: 'nodeMetrics' });
     expect(containersMock).not.toHaveBeenCalled();
     cleanup();
   });
 
+  it('renders the RBAC rules section for roles', async () => {
+    const props = createBaseProps(
+      { kind: 'Role', name: 'role', namespace: 'ci' },
+      { rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }] }
+    );
+    const { cleanup } = await renderDetailsTab(props);
+    expect(rbacRulesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policyRules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }],
+      })
+    );
+    cleanup();
+  });
+
+  it('omits the Containers section for Jobs (even though Job details carry containers)', async () => {
+    const props = createBaseProps(
+      { kind: 'Job', name: 'job', namespace: 'batch' },
+      { containers: [{ name: 'app', image: 'i' }], duration: '1m' }
+    );
+    const { cleanup } = await renderDetailsTab(props);
+    expect(containersMock).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('passes derived scale/suspend signals for scalable workloads and cronjobs', async () => {
+    const deploy = await renderDetailsTab(
+      createBaseProps(
+        { kind: 'Deployment', name: 'web', namespace: 'apps' },
+        { desiredReplicas: 4 }
+      )
+    );
+    expect(overviewProps()).toMatchObject({ desiredReplicas: 4 });
+    deploy.cleanup();
+
+    overviewMock.mockClear();
+    const cron = await renderDetailsTab(
+      createBaseProps({ kind: 'CronJob', name: 'c', namespace: 'batch' }, { suspend: true })
+    );
+    expect(overviewProps()).toMatchObject({ suspend: true });
+    cron.cleanup();
+  });
+
+  it('still renders the Overview (with null detail) for custom/unknown kinds', async () => {
+    const props = createBaseProps({ kind: 'Widget', name: 'gizmo', namespace: 'weird' }, null);
+    const { cleanup } = await renderDetailsTab(props);
+    expect(overviewProps()).toMatchObject({ kind: 'Widget', name: 'gizmo', activeDetail: null });
+    expect(utilizationMock).not.toHaveBeenCalled();
+    expect(containersMock).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('shows loading overlay, deletion warning, and error messages', async () => {
-    const props = createBaseProps({
+    const props: DetailsTabProps = {
+      ...createBaseProps({ kind: 'Pod', name: 'pod-1', namespace: 'default' }),
       detailsLoading: true,
       resourceDeleted: true,
       deletedResourceName: 'pod-1',
       actionError: 'boom',
       detailsError: 'fetch failed',
-    });
-
+    };
     const { container, cleanup } = await renderDetailsTab(props);
     expect(container.textContent).toContain('Loading pod details...');
     expect(container.textContent).toContain(
@@ -455,827 +307,6 @@ describe('DetailsTab', () => {
     );
     expect(container.textContent).toContain('Error: boom');
     expect(container.textContent).toContain('Error loading details: fetch failed');
-    cleanup();
-  });
-
-  describe('overview data mapping', () => {
-    const scenarios: OverviewScenario[] = [
-      {
-        name: 'Deployment overview includes rollout metadata',
-        objectData: { kind: 'Deployment', name: 'web', namespace: 'apps' },
-        extraProps: {
-          deploymentDetails: {
-            name: 'web',
-            namespace: 'apps',
-            replicas: 3,
-            desiredReplicas: 3,
-            ready: 2,
-            upToDate: 2,
-            available: 2,
-            strategy: 'RollingUpdate',
-            maxSurge: '25%',
-            maxUnavailable: '25%',
-            minReadySeconds: 30,
-            revisionHistory: 10,
-            progressDeadline: '5m',
-            paused: false,
-            rolloutStatus: 'Complete',
-            rolloutMessage: 'All good',
-            observedGeneration: 2,
-            currentRevision: 'rev-1',
-            selector: { matchLabels: { app: 'web' } },
-            conditions: [],
-            replicaSets: [],
-            pods: [{}, {}],
-            cpuUsage: '100m',
-            cpuRequest: '50m',
-            cpuLimit: '200m',
-            memUsage: '256Mi',
-            memRequest: '128Mi',
-            memLimit: '512Mi',
-            containers: [{ name: 'main', image: 'img:v1' }],
-            labels: { app: 'web' },
-            annotations: { team: 'platform' },
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Deployment',
-          name: 'web',
-          desiredReplicas: 3,
-          ready: '2',
-        },
-        expectUtilization: {
-          cpu: expect.objectContaining({ usage: '100m', limit: '200m' }),
-          memory: expect.objectContaining({ usage: '256Mi', limit: '512Mi' }),
-        },
-        expectContainers: true,
-      },
-      {
-        name: 'DaemonSet overview maps readiness',
-        objectData: { kind: 'DaemonSet', name: 'ds', namespace: 'ops' },
-        extraProps: {
-          daemonSetDetails: {
-            name: 'ds',
-            namespace: 'ops',
-            desired: 5,
-            current: 4,
-            ready: 3,
-            upToDate: 4,
-            available: 4,
-            updateStrategy: 'RollingUpdate',
-            numberMisscheduled: 1,
-            labels: {},
-            annotations: {},
-            pods: [{}, {}, {}],
-            cpuUsage: '200m',
-            cpuRequest: '150m',
-            cpuLimit: '500m',
-            memUsage: '300Mi',
-            memRequest: '256Mi',
-            memLimit: '600Mi',
-            containers: [{ name: 'sidecar', image: 'img:v2' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'DaemonSet',
-          desired: 5,
-          ready: '3',
-        },
-        expectUtilization: {
-          cpu: expect.objectContaining({ usage: '200m', limit: '500m' }),
-          memory: expect.objectContaining({ usage: '300Mi', limit: '600Mi' }),
-        },
-        expectContainers: true,
-      },
-      {
-        name: 'StatefulSet overview surfaces pod-management policy',
-        objectData: { kind: 'StatefulSet', name: 'sts', namespace: 'data' },
-        extraProps: {
-          statefulSetDetails: {
-            name: 'sts',
-            namespace: 'data',
-            replicas: 6,
-            desiredReplicas: 6,
-            ready: 5,
-            upToDate: 5,
-            available: 5,
-            updateStrategy: 'RollingUpdate',
-            podManagementPolicy: 'Parallel',
-            labels: {},
-            annotations: {},
-            pods: [{}, {}],
-            cpuUsage: '120m',
-            cpuRequest: '100m',
-            cpuLimit: '300m',
-            memUsage: '256Mi',
-            memRequest: '200Mi',
-            memLimit: '512Mi',
-            containers: [{ name: 'db', image: 'img:v3' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'StatefulSet',
-          podManagementPolicy: 'Parallel',
-          ready: '5',
-        },
-        expectUtilization: {
-          cpu: expect.objectContaining({ usage: '120m', limit: '300m' }),
-          memory: expect.objectContaining({ usage: '256Mi', limit: '512Mi' }),
-        },
-        expectContainers: true,
-      },
-      {
-        name: 'Service overview provides details payload',
-        objectData: { kind: 'Service', name: 'svc', namespace: 'net' },
-        extraProps: {
-          serviceDetails: {
-            name: 'svc',
-            namespace: 'net',
-            clusterIP: '10.0.0.5',
-            ports: [],
-            type: 'ClusterIP',
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Service',
-          serviceDetails: expect.objectContaining({ clusterIP: '10.0.0.5' }),
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'Ingress overview returns TLS data',
-        objectData: { kind: 'Ingress', name: 'ing', namespace: 'net' },
-        extraProps: {
-          ingressDetails: {
-            name: 'ing',
-            namespace: 'net',
-            rules: [],
-            tls: [{ secretName: 'tls' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Ingress',
-          ingressDetails: expect.objectContaining({ tls: [{ secretName: 'tls' }] }),
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'NetworkPolicy overview relays spec',
-        objectData: { kind: 'NetworkPolicy', name: 'np', namespace: 'net' },
-        extraProps: {
-          networkPolicyDetails: {
-            name: 'np',
-            namespace: 'net',
-            policyTypes: ['Ingress'],
-            podSelector: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'NetworkPolicy',
-          networkPolicyDetails: expect.objectContaining({ policyTypes: ['Ingress'] }),
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'EndpointSlice overview surfaces slices',
-        objectData: { kind: 'EndpointSlice', name: 'eps', namespace: 'net' },
-        extraProps: {
-          endpointSliceDetails: {
-            name: 'eps',
-            namespace: 'net',
-            slices: [],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'EndpointSlice',
-          endpointSliceDetails: expect.objectContaining({ slices: [] }),
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'ServiceAccount overview includes bindings',
-        objectData: {
-          kind: 'ServiceAccount',
-          name: 'builder',
-          namespace: 'ci',
-        },
-        extraProps: {
-          serviceAccountDetails: {
-            name: 'builder',
-            namespace: 'ci',
-            secrets: [
-              resourceRef({
-                group: '',
-                version: 'v1',
-                kind: 'Secret',
-                resource: 'secrets',
-                namespace: 'ci',
-                name: 'token',
-              }),
-            ],
-            imagePullSecrets: [],
-            automountServiceAccountToken: true,
-            usedByPods: [
-              resourceRef({
-                group: '',
-                version: 'v1',
-                kind: 'Pod',
-                resource: 'pods',
-                namespace: 'ci',
-                name: 'pod-a',
-              }),
-            ],
-            roleBindings: [
-              resourceRef({
-                kind: 'RoleBinding',
-                resource: 'rolebindings',
-                namespace: 'ci',
-                name: 'rb',
-              }),
-            ],
-            clusterRoleBindings: [resourceRef()],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'ServiceAccount',
-          secrets: [
-            resourceRef({
-              group: '',
-              version: 'v1',
-              kind: 'Secret',
-              resource: 'secrets',
-              namespace: 'ci',
-              name: 'token',
-            }),
-          ],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'Role overview exposes rules',
-        objectData: { kind: 'Role', name: 'role', namespace: 'ci' },
-        extraProps: {
-          roleDetails: {
-            name: 'role',
-            namespace: 'ci',
-            rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }],
-            usedByRoleBindings: [
-              resourceRef({
-                kind: 'RoleBinding',
-                resource: 'rolebindings',
-                namespace: 'ci',
-                name: 'rb',
-              }),
-            ],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Role',
-          policyRules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'RoleBinding overview relays subjects',
-        objectData: { kind: 'RoleBinding', name: 'rb', namespace: 'ci' },
-        extraProps: {
-          roleBindingDetails: {
-            name: 'rb',
-            namespace: 'ci',
-            roleRef: { name: 'role', kind: 'Role' },
-            subjects: [{ name: 'user', kind: 'User' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'RoleBinding',
-          roleRef: expect.objectContaining({ name: 'role' }),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'ClusterRole overview includes aggregation rule',
-        objectData: { kind: 'ClusterRole', name: 'cr', namespace: '' },
-        extraProps: {
-          clusterRoleDetails: {
-            name: 'cr',
-            rules: [],
-            aggregationRule: { clusterRoleSelectors: [] },
-            clusterRoleBindings: [resourceRef()],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'ClusterRole',
-          aggregationRule: expect.any(Object),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'ClusterRoleBinding overview relays subjects',
-        objectData: {
-          kind: 'ClusterRoleBinding',
-          name: 'crb',
-          namespace: '',
-        },
-        extraProps: {
-          clusterRoleBindingDetails: {
-            name: 'crb',
-            roleRef: { name: 'cr', kind: 'ClusterRole' },
-            subjects: [{ name: 'group', kind: 'Group' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'ClusterRoleBinding',
-          roleRef: expect.objectContaining({ name: 'cr' }),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'HorizontalPodAutoscaler overview captures targets',
-        objectData: {
-          kind: 'HorizontalPodAutoscaler',
-          name: 'hpa',
-          namespace: 'autoscale',
-        },
-        extraProps: {
-          hpaDetails: {
-            name: 'hpa',
-            namespace: 'autoscale',
-            scaleTargetRef: { kind: 'Deployment', name: 'web' },
-            minReplicas: 1,
-            maxReplicas: 5,
-            currentReplicas: 2,
-            desiredReplicas: 4,
-            metrics: [],
-            currentMetrics: [],
-            behavior: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'HorizontalPodAutoscaler',
-          scaleTargetRef: expect.objectContaining({ name: 'web' }),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'PodDisruptionBudget overview exposes expectations',
-        objectData: {
-          kind: 'PodDisruptionBudget',
-          name: 'pdb',
-          namespace: 'autoscale',
-        },
-        extraProps: {
-          pdbDetails: {
-            name: 'pdb',
-            namespace: 'autoscale',
-            minAvailable: '1',
-            maxUnavailable: '25%',
-            currentHealthy: 2,
-            desiredHealthy: 3,
-            disruptionsAllowed: 1,
-            expectedPods: 3,
-            selector: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'PodDisruptionBudget',
-          disruptionsAllowed: 1,
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'ResourceQuota overview surfaces usage',
-        objectData: {
-          kind: 'ResourceQuota',
-          name: 'rq',
-          namespace: 'quota',
-        },
-        extraProps: {
-          resourceQuotaDetails: {
-            name: 'rq',
-            namespace: 'quota',
-            hard: { cpu: '4' },
-            used: { cpu: '2' },
-            scopes: ['NotTerminating'],
-            scopeSelector: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'ResourceQuota',
-          hard: expect.objectContaining({ cpu: '4' }),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'LimitRange overview returns limits',
-        objectData: {
-          kind: 'LimitRange',
-          name: 'lr',
-          namespace: 'quota',
-        },
-        extraProps: {
-          limitRangeDetails: {
-            name: 'lr',
-            namespace: 'quota',
-            limits: [{ type: 'Container' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'LimitRange',
-          limits: [{ type: 'Container' }],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'Namespace overview references workload status',
-        objectData: {
-          kind: 'Namespace',
-          name: 'workloads',
-          namespace: '',
-        },
-        extraProps: {
-          namespaceDetails: {
-            name: 'workloads',
-            status: 'Active',
-            hasWorkloads: true,
-            workloadsUnknown: false,
-            labels: { env: 'prod' },
-            annotations: { owner: 'team' },
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Namespace',
-          hasWorkloads: true,
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'IngressClass overview exposes controller',
-        objectData: {
-          kind: 'IngressClass',
-          name: 'nginx',
-          namespace: '',
-        },
-        extraProps: {
-          ingressClassDetails: {
-            name: 'nginx',
-            controller: 'k8s.io/ingress-nginx',
-            isDefault: true,
-            parameters: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'IngressClass',
-          controller: 'k8s.io/ingress-nginx',
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'CustomResourceDefinition overview surfaces versions',
-        objectData: {
-          kind: 'CustomResourceDefinition',
-          name: 'widgets.acme.com',
-          namespace: '',
-        },
-        extraProps: {
-          crdDetails: {
-            name: 'widgets.acme.com',
-            group: 'acme.com',
-            versions: [{ name: 'v1' }],
-            scope: 'Namespaced',
-            names: { plural: 'widgets' },
-            conditions: [],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'CustomResourceDefinition',
-          versions: [{ name: 'v1' }],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'MutatingWebhookConfiguration overview relays webhooks',
-        objectData: {
-          kind: 'MutatingWebhookConfiguration',
-          name: 'mutate',
-          namespace: '',
-        },
-        extraProps: {
-          mutatingWebhookDetails: {
-            name: 'mutate',
-            webhooks: [{ name: 'default' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'MutatingWebhookConfiguration',
-          webhooks: [{ name: 'default' }],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'ValidatingWebhookConfiguration overview relays webhooks',
-        objectData: {
-          kind: 'ValidatingWebhookConfiguration',
-          name: 'validate',
-          namespace: '',
-        },
-        extraProps: {
-          validatingWebhookDetails: {
-            name: 'validate',
-            webhooks: [{ name: 'default' }],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'ValidatingWebhookConfiguration',
-          webhooks: [{ name: 'default' }],
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'Job overview captures duration',
-        objectData: { kind: 'Job', name: 'job', namespace: 'batch' },
-        extraProps: {
-          jobDetails: {
-            name: 'job',
-            namespace: 'batch',
-            completions: 1,
-            parallelism: 1,
-            backoffLimit: 3,
-            succeeded: 1,
-            failed: 0,
-            active: 0,
-            startTime: 'now',
-            completionTime: 'later',
-            duration: '1m',
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Job',
-          duration: '1m',
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'CronJob overview lists schedule',
-        objectData: { kind: 'CronJob', name: 'cron', namespace: 'batch' },
-        extraProps: {
-          cronJobDetails: {
-            name: 'cron',
-            namespace: 'batch',
-            schedule: '* * * * *',
-            suspend: false,
-            activeJobs: 1,
-            lastScheduleTime: 'yesterday',
-            successfulJobsHistory: 3,
-            failedJobsHistory: 1,
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'CronJob',
-          schedule: '* * * * *',
-        },
-        expectUtilization: null,
-        expectContainers: false,
-      },
-      {
-        name: 'PersistentVolumeClaim overview shows mount info',
-        objectData: {
-          kind: 'PersistentVolumeClaim',
-          name: 'pvc',
-          namespace: 'storage',
-        },
-        extraProps: {
-          pvcDetails: {
-            name: 'pvc',
-            namespace: 'storage',
-            status: 'Bound',
-            volumeName: 'pv',
-            capacity: '10Gi',
-            accessModes: ['ReadWriteOnce'],
-            storageClass: 'sc',
-            volumeMode: 'Filesystem',
-            mountedBy: [
-              resourceRef({
-                group: '',
-                version: 'v1',
-                kind: 'Pod',
-                resource: 'pods',
-                namespace: 'storage',
-                name: 'pod',
-              }),
-            ],
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'PersistentVolumeClaim',
-          status: 'Bound',
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'PersistentVolume overview lists claim reference',
-        objectData: {
-          kind: 'PersistentVolume',
-          name: 'pv',
-          namespace: '',
-        },
-        extraProps: {
-          pvDetails: {
-            name: 'pv',
-            capacity: '10Gi',
-            accessModes: ['ReadWriteOnce'],
-            reclaimPolicy: 'Delete',
-            status: 'Bound',
-            claimRef: { namespace: 'storage', name: 'pvc' },
-            storageClass: 'standard',
-            volumeMode: 'Filesystem',
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'PersistentVolume',
-          claimRef: expect.objectContaining({ name: 'pvc' }),
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'StorageClass overview includes provisioner',
-        objectData: {
-          kind: 'StorageClass',
-          name: 'standard',
-          namespace: '',
-        },
-        extraProps: {
-          storageClassDetails: {
-            name: 'standard',
-            provisioner: 'kubernetes.io/aws-ebs',
-            reclaimPolicy: 'Delete',
-            volumeBindingMode: 'WaitForFirstConsumer',
-            allowVolumeExpansion: true,
-            isDefault: true,
-            parameters: {},
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'StorageClass',
-          provisioner: 'kubernetes.io/aws-ebs',
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'HelmRelease overview exposes revision',
-        objectData: {
-          kind: 'HelmRelease',
-          name: 'helm',
-          namespace: 'apps',
-        },
-        extraProps: {
-          helmReleaseDetails: {
-            name: 'helm',
-            namespace: 'apps',
-            chart: 'chart',
-            appVersion: '1.0.0',
-            status: 'deployed',
-            revision: 3,
-            updated: 'now',
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'HelmRelease',
-          revision: 3,
-        },
-        expectUtilization: null,
-      },
-      {
-        name: 'Secret overview marks as secret data',
-        objectData: {
-          kind: 'Secret',
-          name: 'secret',
-          namespace: 'config',
-        },
-        extraProps: {
-          secretDetails: {
-            name: 'secret',
-            namespace: 'config',
-            data: { token: 'abc' },
-          } as any,
-        },
-        expectedOverview: {
-          kind: 'Secret',
-          secretDetails: expect.objectContaining({ name: 'secret' }),
-        },
-        expectUtilization: null,
-        expectData: { isSecret: true },
-      },
-      {
-        name: 'Unknown kind falls back to object metadata',
-        objectData: {
-          kind: 'Widget',
-          name: 'gizmo',
-          namespace: 'weird',
-          status: 'Ready',
-          apiGroup: 'acme.com',
-        },
-        extraProps: {},
-        expectedOverview: {
-          kind: 'Widget',
-          apiGroup: 'acme.com',
-        },
-        expectUtilization: null,
-      },
-    ];
-
-    it.each(scenarios)('%s', async (scenario) => {
-      const { cleanup } = await renderDetailsTab(buildScenarioProps(scenario));
-
-      expect(overviewMock).toHaveBeenCalledWith(expect.objectContaining(scenario.expectedOverview));
-
-      if (scenario.expectUtilization === null) {
-        expect(utilizationMock).not.toHaveBeenCalled();
-      } else if (scenario.expectUtilization) {
-        expect(utilizationMock).toHaveBeenCalledWith(
-          expect.objectContaining(scenario.expectUtilization)
-        );
-      }
-
-      if (scenario.expectContainers === true) {
-        expect(containersMock).toHaveBeenCalled();
-      } else if (scenario.expectContainers === false) {
-        expect(containersMock).not.toHaveBeenCalled();
-      }
-
-      if (scenario.expectData === null) {
-        expect(dataMock).not.toHaveBeenCalled();
-      } else if (scenario.expectData) {
-        expect(dataMock).toHaveBeenCalledWith(expect.objectContaining(scenario.expectData));
-      }
-
-      cleanup();
-    });
-  });
-
-  it('skips utilization when metrics are missing', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'Pod', name: 'pod', namespace: 'default' },
-      podDetails: {
-        name: 'pod',
-        namespace: 'default',
-      } as any,
-    });
-
-    const { cleanup } = await renderDetailsTab(props);
-    expect(utilizationMock).not.toHaveBeenCalled();
-    cleanup();
-  });
-
-  it('falls back to object metrics when detail data is unavailable', async () => {
-    const props = createBaseProps({
-      objectData: {
-        kind: 'Deployment',
-        name: 'web',
-        namespace: 'apps',
-        cpuUsage: '250m',
-        cpuRequest: '100m',
-        cpuLimit: '400m',
-        memUsage: '512Mi',
-        memRequest: '256Mi',
-        memLimit: '1Gi',
-      },
-    });
-
-    const { cleanup } = await renderDetailsTab(props);
-
-    expect(utilizationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cpu: expect.objectContaining({ usage: '250m', limit: '400m' }),
-        memory: expect.objectContaining({ usage: '512Mi', limit: '1Gi' }),
-      })
-    );
-
-    cleanup();
-  });
-
-  it('omits containers section when workloads have no containers', async () => {
-    const props = createBaseProps({
-      objectData: { kind: 'Deployment', name: 'empty', namespace: 'apps' },
-      deploymentDetails: {
-        name: 'empty',
-        namespace: 'apps',
-        replicas: 1,
-        desiredReplicas: 1,
-        ready: 1,
-        upToDate: 1,
-        available: 1,
-        containers: [],
-      } as any,
-    });
-
-    const { cleanup } = await renderDetailsTab(props);
-
-    expect(containersMock).not.toHaveBeenCalled();
     cleanup();
   });
 });

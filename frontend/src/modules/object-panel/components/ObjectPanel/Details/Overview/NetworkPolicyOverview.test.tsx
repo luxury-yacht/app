@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NetworkPolicyOverview } from './NetworkPolicyOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import { networkPolicyDescriptor } from './descriptors/networkpolicy';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -31,9 +31,14 @@ describe('NetworkPolicyOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof NetworkPolicyOverview>) => {
+  const renderComponent = async (props: { networkPolicyDetails: unknown }) => {
     await act(async () => {
-      root.render(<NetworkPolicyOverview {...props} />);
+      root.render(
+        <OverviewRenderer
+          descriptor={networkPolicyDescriptor}
+          data={props.networkPolicyDetails as never}
+        />
+      );
       await Promise.resolve();
     });
   };

@@ -1,105 +1,52 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.tsx
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/helm.tsx
+ *
+ * HelmRelease Overview descriptor (X1). Presentation ported verbatim from HelmOverview.tsx.
  */
 
 import React from 'react';
 import { helm } from '@wailsjs/go/models';
-import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
-import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
-import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
-import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import './shared/LabelsAndAnnotations.css';
-import './HelmOverview.css';
+import type { OverviewDescriptor } from '../schema';
+import '../shared/LabelsAndAnnotations.css';
+import '../HelmOverview.css';
 
-interface HelmOverviewProps {
-  helmReleaseDetails?: helm.HelmReleaseDetails | null;
-  // Fallback props for when details aren't loaded yet (from table data)
-  name?: string;
-  namespace?: string;
-  chart?: string;
-  appVersion?: string;
-  status?: string;
-  statusPresentation?: string;
-  revision?: number;
-  updated?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
+type HelmReleaseDetails = helm.HelmReleaseDetails;
 
-export const HelmOverview: React.FC<HelmOverviewProps> = ({
-  helmReleaseDetails,
-  // Fallback props
-  name,
-  namespace,
-  chart,
-  appVersion,
-  status,
-  statusPresentation,
-  revision,
-  updated,
-  labels,
-  annotations,
-}) => {
+// Number of recent revisions shown before collapsing the rest into a "more" line.
+const HISTORY_LIMIT = 5;
+
+const hasResources = (d: HelmReleaseDetails) => (d.resources?.length ?? 0) > 0;
+const hasHistory = (d: HelmReleaseDetails) => (d.history?.length ?? 0) > 0;
+const hasNotes = (d: HelmReleaseDetails) => Boolean(d.notes);
+const hasExtraSections = (d: HelmReleaseDetails) => hasResources(d) || hasHistory(d) || hasNotes(d);
+
+/**
+ * Managed resources, release history, and release notes. Rendered as a component (not a plain
+ * helper) because the managed-resource links need the active cluster identity from the object
+ * panel context to build fully-qualified object references.
+ */
+const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => {
   const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
   };
 
-  // Use details if available, otherwise fall back to table data
-  const displayName = helmReleaseDetails?.name || name || '-';
-  const displayNamespace = helmReleaseDetails?.namespace || namespace || '-';
-  const displayChart = helmReleaseDetails?.chart || chart || '-';
-  const displayAppVersion = helmReleaseDetails?.appVersion || appVersion;
-  const displayStatus = helmReleaseDetails?.status || status;
-  const displayStatusPresentation = helmReleaseDetails?.statusPresentation || statusPresentation;
-  const displayRevision = helmReleaseDetails?.revision || revision;
-  const displayUpdated = helmReleaseDetails?.updated || updated;
-  const displayLabels = helmReleaseDetails?.labels || labels;
-  const displayAnnotations = helmReleaseDetails?.annotations || annotations;
-
   return (
     <>
-      <ResourceHeader kind="HelmRelease" name={displayName} namespace={displayNamespace} />
-      <ResourceStatus
-        status={displayStatus}
-        statusState={helmReleaseDetails?.statusState}
-        statusPresentation={displayStatusPresentation}
-      />
-
-      {/* Chart Information */}
-      {displayChart && <OverviewItem label="Chart" value={displayChart} />}
-      {helmReleaseDetails?.version && (
-        <OverviewItem label="Chart Version" value={helmReleaseDetails.version} />
-      )}
-      {displayAppVersion && <OverviewItem label="App Version" value={displayAppVersion} />}
-      {displayRevision !== undefined && (
-        <OverviewItem label="Revision" value={displayRevision.toString()} />
-      )}
-      {displayUpdated && <OverviewItem label="Last Updated" value={displayUpdated} />}
-
-      {/* Description */}
-      {helmReleaseDetails?.description && (
-        <OverviewItem label="Description" value={helmReleaseDetails.description} />
-      )}
-
       {/* Separator before additional sections */}
-      {(helmReleaseDetails?.resources && helmReleaseDetails.resources.length > 0) ||
-      (helmReleaseDetails?.history && helmReleaseDetails.history.length > 0) ||
-      helmReleaseDetails?.notes ? (
-        <div className="metadata-section-separator" />
-      ) : null}
+      {hasExtraSections(data) ? <div className="metadata-section-separator" /> : null}
 
       {/* Managed Resources */}
-      {helmReleaseDetails?.resources && helmReleaseDetails.resources.length > 0 && (
+      {data.resources && data.resources.length > 0 && (
         <div className="metadata-section">
           <div className="metadata-label">Managed Resources</div>
           <div className="metadata-pairs">
-            {helmReleaseDetails.resources
+            {data.resources
               .sort((a: helm.HelmResource, b: helm.HelmResource) => a.kind.localeCompare(b.kind))
               .map((resource: helm.HelmResource, idx: number) => {
                 const resourceRef = (() => {
@@ -153,11 +100,11 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
       )}
 
       {/* Release History */}
-      {helmReleaseDetails?.history && helmReleaseDetails.history.length > 0 && (
+      {data.history && data.history.length > 0 && (
         <div className="metadata-section">
           <div className="metadata-label">Release History</div>
           <div className="metadata-pairs">
-            {helmReleaseDetails.history.slice(0, 5).map((h: helm.HelmRevision) => (
+            {data.history.slice(0, HISTORY_LIMIT).map((h: helm.HelmRevision) => (
               <div key={`history-${h.revision}`} className="metadata-pair helm-history-item">
                 <div className="helm-history-header">
                   <span className="metadata-key">Revision {h.revision}:</span>
@@ -175,10 +122,10 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                 )}
               </div>
             ))}
-            {helmReleaseDetails.history.length > 5 && (
+            {data.history.length > HISTORY_LIMIT && (
               <div className="metadata-pair">
                 <span className="metadata-value helm-history-more">
-                  ... and {helmReleaseDetails.history.length - 5} more revision(s)
+                  ... and {data.history.length - HISTORY_LIMIT} more revision(s)
                 </span>
               </div>
             )}
@@ -187,19 +134,48 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
       )}
 
       {/* Release Notes */}
-      {helmReleaseDetails?.notes && (
+      {data.notes && (
         <div className="metadata-section">
           <div className="metadata-label">Release Notes</div>
           <div className="metadata-pairs">
             <div className="metadata-pair">
-              <pre className="metadata-value helm-release-notes">{helmReleaseDetails.notes}</pre>
+              <pre className="metadata-value helm-release-notes">{data.notes}</pre>
             </div>
           </div>
         </div>
       )}
-
-      {/* Labels and Annotations */}
-      <ResourceMetadata labels={displayLabels} annotations={displayAnnotations} />
     </>
   );
+};
+
+export const helmReleaseDescriptor: OverviewDescriptor<HelmReleaseDetails> = {
+  displayKind: 'HelmRelease',
+  dtoClass: helm.HelmReleaseDetails,
+  schema: {
+    items: [
+      { field: 'chart', label: 'Chart', hidden: (d) => !d.chart },
+      { kind: 'status' },
+      { field: 'version', label: 'Chart Version', hidden: (d) => !d.version },
+      { field: 'appVersion', label: 'App Version', hidden: (d) => !d.appVersion },
+      {
+        field: 'revision',
+        label: 'Revision',
+        // Mirror the legacy `displayRevision || revision` truthiness check: a falsy revision
+        // (0 or unset) was never surfaced. The renderer evaluates `render` before `hidden`, so the
+        // value access must itself tolerate the missing case.
+        hidden: (d) => !d.revision,
+        render: (d) => (d.revision ? d.revision.toString() : undefined),
+      },
+      { field: 'updated', label: 'Last Updated', hidden: (d) => !d.updated },
+      { field: 'description', label: 'Description', hidden: (d) => !d.description },
+      {
+        kind: 'widget',
+        consumes: ['resources', 'history', 'notes'],
+        render: (d) => <HelmExtraSections data={d} />,
+      },
+    ],
+  },
+  // typeAlias is an internal table-summary alias and `values` (raw chart values) is not surfaced in
+  // the Overview.
+  coveredElsewhere: ['typeAlias', 'values'],
 };

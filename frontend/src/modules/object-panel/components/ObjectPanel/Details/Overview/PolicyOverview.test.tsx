@@ -1,15 +1,25 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.test.tsx
+ *
+ * Behavioral coverage for the Autoscaling & Policy Overview descriptors (HPA, PDB, ResourceQuota,
+ * LimitRange) rendered through the generic OverviewRenderer.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PolicyOverview } from './PolicyOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import {
+  hpaDescriptor,
+  limitRangeDescriptor,
+  pdbDescriptor,
+  resourceQuotaDescriptor,
+} from './descriptors/policy';
+import type { OverviewContext, OverviewDescriptor } from './schema';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const context: OverviewContext = { clusterId: defaultClusterId, clusterName: 'alpha' };
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -42,13 +52,13 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
   return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
 };
 
-describe('PolicyOverview', () => {
+describe('Policy Overview descriptors', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof PolicyOverview>) => {
+  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
     await act(async () => {
-      root.render(<PolicyOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
@@ -68,34 +78,34 @@ describe('PolicyOverview', () => {
   });
 
   it('renders HPA details and links to scale target', async () => {
-    await renderComponent({
+    await renderDescriptor(hpaDescriptor, {
       kind: 'HorizontalPodAutoscaler',
       name: 'hpa',
       namespace: 'prod',
-      scaleTargetRef: { kind: 'Deployment', name: 'api', apiVersion: 'apps/v1' } as any,
+      scaleTargetRef: { kind: 'Deployment', name: 'api', apiVersion: 'apps/v1' },
       minReplicas: 2,
       maxReplicas: 10,
       currentReplicas: 5,
       metrics: [
         {
           kind: 'Resource',
-          target: { resource: 'cpu', averageUtilization: '80' } as any,
+          target: { resource: 'cpu', averageUtilization: '80' },
         },
         {
           kind: 'Object',
-          target: { metric: 'requests-per-second', value: '100' } as any,
+          target: { metric: 'requests-per-second', value: '100' },
         },
-      ] as any,
+      ],
       currentMetrics: [
         {
           kind: 'Resource',
-          current: { resource: 'cpu', averageUtilization: '60' } as any,
+          current: { resource: 'cpu', averageUtilization: '60' },
         },
         {
           kind: 'Object',
-          current: { metric: 'requests-per-second', value: '90' } as any,
+          current: { metric: 'requests-per-second', value: '90' },
         },
-      ] as any,
+      ],
       behavior: {
         scaleUp: {
           stabilizationWindowSeconds: 0,
@@ -104,8 +114,8 @@ describe('PolicyOverview', () => {
         scaleDown: {
           stabilizationWindowSeconds: 60,
         },
-      } as any,
-    });
+      },
+    } as any);
 
     const targetLink = getValueForLabel(container, 'Target')?.querySelector('.object-panel-link');
     expect(targetLink).toBeTruthy();
@@ -134,7 +144,7 @@ describe('PolicyOverview', () => {
   });
 
   it('renders PDB specific fields', async () => {
-    await renderComponent({
+    await renderDescriptor(pdbDescriptor, {
       kind: 'PodDisruptionBudget',
       minAvailable: '50%',
       maxUnavailable: '1',
@@ -142,7 +152,7 @@ describe('PolicyOverview', () => {
       desiredHealthy: 5,
       disruptionsAllowed: 2,
       selector: { app: 'web' },
-    });
+    } as any);
 
     expect(getValueForLabel(container, 'Min Available')?.textContent).toBe('50%');
     expect(getValueForLabel(container, 'Disruptions Allowed')?.textContent).toBe('2');
@@ -151,45 +161,45 @@ describe('PolicyOverview', () => {
   });
 
   it('renders ResourceQuota hard and used limits', async () => {
-    await renderComponent({
+    await renderDescriptor(resourceQuotaDescriptor, {
       kind: 'ResourceQuota',
       hard: { cpu: '4', memory: '8Gi' },
       used: { cpu: '2', memory: '4Gi' },
-    });
+    } as any);
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('cpu: 4');
     expect(getValueForLabel(container, 'Used')?.textContent).toContain('memory: 4Gi');
   });
 
   it('renders LimitRange summary', async () => {
-    await renderComponent({
+    await renderDescriptor(limitRangeDescriptor, {
       kind: 'LimitRange',
-      limits: [{}, {}, {}] as any,
-    });
+      limits: [{}, {}, {}],
+    } as any);
 
     expect(getValueForLabel(container, 'Limits')?.textContent).toBe('3 limit(s)');
   });
 
   it('handles missing scale target and renders extra current metrics', async () => {
-    await renderComponent({
+    await renderDescriptor(hpaDescriptor, {
       kind: 'HorizontalPodAutoscaler',
       name: 'hpa',
       metrics: [
         {
           kind: 'Resource',
-          target: { resource: 'memory', averageValue: '200Mi' } as any,
+          target: { resource: 'memory', averageValue: '200Mi' },
         },
-      ] as any,
+      ],
       currentMetrics: [
         {
           kind: 'Resource',
-          current: { resource: 'memory', averageValue: '150Mi' } as any,
+          current: { resource: 'memory', averageValue: '150Mi' },
         },
         {
           kind: 'Object',
-          current: { metric: 'queue-depth', value: '3' } as any,
+          current: { metric: 'queue-depth', value: '3' },
         },
-      ] as any,
+      ],
       behavior: {
         scaleUp: {
           stabilizationWindowSeconds: 30,
@@ -198,8 +208,8 @@ describe('PolicyOverview', () => {
         scaleDown: {
           policies: ['invalid-policy-entry'],
         },
-      } as any,
-    });
+      },
+    } as any);
 
     expect(container.querySelector('.object-panel-link')).toBeNull();
     const metricsContent = getValueForLabel(container, 'Metrics');
@@ -216,10 +226,10 @@ describe('PolicyOverview', () => {
   });
 
   it('renders resource quota with only hard limits defined', async () => {
-    await renderComponent({
+    await renderDescriptor(resourceQuotaDescriptor, {
       kind: 'ResourceQuota',
       hard: { pods: '10' },
-    });
+    } as any);
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('pods: 10');
     expect(getValueForLabel(container, 'Used')).toBeNull();

@@ -1,20 +1,24 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.test.tsx
+ *
+ * Exercises the Pod Overview through the descriptor-driven renderer (X1).
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PodOverview } from './PodOverview';
+import { types } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { podDescriptor } from './descriptors/pod';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const defaultClusterName = 'alpha';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
   }),
 }));
 
@@ -55,9 +59,20 @@ describe('PodOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof PodOverview>) => {
+  // Build a PodDetailInfo-shaped DTO from the fields a test cares about. The
+  // generated constructor fills the rest from the source object.
+  const makeDto = (overrides: Record<string, unknown>): types.PodDetailInfo =>
+    types.PodDetailInfo.createFrom(overrides);
+
+  const renderComponent = async (overrides: Record<string, unknown>) => {
     await act(async () => {
-      root.render(<PodOverview {...props} />);
+      root.render(
+        <OverviewRenderer
+          descriptor={podDescriptor}
+          data={makeDto(overrides)}
+          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
+        />
+      );
       await Promise.resolve();
     });
   };
@@ -122,7 +137,8 @@ describe('PodOverview', () => {
     await renderComponent({
       name: 'worker-0',
       namespace: 'cluster',
-      owner: { kind: 'StatefulSet', name: 'worker' },
+      ownerKind: 'StatefulSet',
+      ownerName: 'worker',
     });
 
     const ownerLink = getLinkByText('StatefulSet/worker') ?? getElementByText('StatefulSet/worker');

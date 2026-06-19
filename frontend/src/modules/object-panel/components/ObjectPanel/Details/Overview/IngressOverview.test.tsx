@@ -2,11 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { IngressOverview } from './IngressOverview';
+import type { ingress } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { ingressDescriptor } from './descriptors/ingress';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -46,9 +47,15 @@ describe('IngressOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof IngressOverview>) => {
+  const renderComponent = async (dto: ingress.IngressDetails) => {
     await act(async () => {
-      root.render(<IngressOverview {...props} />);
+      root.render(
+        <OverviewRenderer
+          descriptor={ingressDescriptor}
+          data={dto}
+          context={{ clusterId: 'test-cluster', clusterName: 'test' }}
+        />
+      );
       await Promise.resolve();
     });
   };
@@ -68,42 +75,40 @@ describe('IngressOverview', () => {
 
   it('renders ingress details including rules, TLS, and default backend', async () => {
     await renderComponent({
-      ingressDetails: {
-        name: 'web-ingress',
-        namespace: 'prod',
-        ingressClassName: 'nginx',
-        loadBalancerStatus: ['lb.example.com'],
-        rules: [
-          {
-            host: 'example.com',
-            paths: [
-              {
-                path: '/app',
-                pathType: 'Prefix',
-                backend: { serviceName: 'web', servicePort: 80 },
-              },
-              {
-                path: '/',
-                pathType: 'Prefix',
-                backend: { resource: 'config-service' },
-              },
-            ],
-          },
-        ],
-        tls: [
-          {
-            hosts: ['example.com'],
-            secretName: 'tls-secret',
-          },
-        ],
-        defaultBackend: {
-          serviceName: 'fallback',
-          servicePort: 8080,
+      name: 'web-ingress',
+      namespace: 'prod',
+      ingressClassName: 'nginx',
+      loadBalancerStatus: ['lb.example.com'],
+      rules: [
+        {
+          host: 'example.com',
+          paths: [
+            {
+              path: '/app',
+              pathType: 'Prefix',
+              backend: { serviceName: 'web', servicePort: 80 },
+            },
+            {
+              path: '/',
+              pathType: 'Prefix',
+              backend: { resource: 'config-service' },
+            },
+          ],
         },
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      ],
+      tls: [
+        {
+          hosts: ['example.com'],
+          secretName: 'tls-secret',
+        },
+      ],
+      defaultBackend: {
+        serviceName: 'fallback',
+        servicePort: 8080,
+      },
+      labels: {},
+      annotations: {},
+    } as any);
 
     // Ingress Class is now rendered as a link to the IngressClass panel.
     const ingressClass = getValueForLabel(container, 'Ingress Class');
@@ -130,19 +135,17 @@ describe('IngressOverview', () => {
 
   it('renders rule hosts as browser links with the TLS-derived scheme', async () => {
     await renderComponent({
-      ingressDetails: {
-        name: 'web-ingress',
-        namespace: 'prod',
-        rules: [
-          { host: 'secure.example.com', paths: [] },
-          { host: 'plain.example.com', paths: [] },
-          { host: '*.wild.example.com', paths: [] },
-        ],
-        tls: [{ hosts: ['secure.example.com'], secretName: 'tls-secret' }],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      name: 'web-ingress',
+      namespace: 'prod',
+      rules: [
+        { host: 'secure.example.com', paths: [] },
+        { host: 'plain.example.com', paths: [] },
+        { host: '*.wild.example.com', paths: [] },
+      ],
+      tls: [{ hosts: ['secure.example.com'], secretName: 'tls-secret' }],
+      labels: {},
+      annotations: {},
+    } as any);
 
     const rulesValue = getValueForLabel(container, 'Rules');
     const linkTitles = Array.from(
@@ -167,15 +170,13 @@ describe('IngressOverview', () => {
 
   it('shows a "no address" chip when the load balancer has no addresses yet', async () => {
     await renderComponent({
-      ingressDetails: {
-        name: 'minimal',
-        namespace: 'default',
-        rules: [],
-        tls: [],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      name: 'minimal',
+      namespace: 'default',
+      rules: [],
+      tls: [],
+      labels: {},
+      annotations: {},
+    } as any);
 
     const address = getValueForLabel(container, 'Address');
     expect(address?.textContent).toBe('no address');

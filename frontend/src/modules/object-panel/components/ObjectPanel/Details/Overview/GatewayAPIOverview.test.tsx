@@ -1,12 +1,21 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GatewayAPIOverview.test.tsx
+ *
+ * Exercises the Gateway API Overview descriptors (X1) through the generic OverviewRenderer. Each
+ * case renders the descriptor matching the kind under test with a DTO-shaped fixture as `data` and
+ * the cluster identity threaded via `context`.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GatewayAPIOverview } from './GatewayAPIOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewContext, OverviewDescriptor } from './schema';
+import {
+  gatewayDescriptor,
+  httpRouteDescriptor,
+  referenceGrantDescriptor,
+} from './descriptors/gateway';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -37,13 +46,10 @@ vi.mock('@shared/components/Tooltip', () => ({
   default: ({ children }: any) => <>{children}</>,
 }));
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    objectData: {
-      clusterName: 'prod-cluster',
-    },
-  }),
-}));
+const context: OverviewContext = {
+  clusterId: 'cluster-a',
+  clusterName: 'prod-cluster',
+};
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
@@ -56,9 +62,9 @@ describe('GatewayAPIOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof GatewayAPIOverview>) => {
+  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
     await act(async () => {
-      root.render(<GatewayAPIOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
@@ -77,34 +83,32 @@ describe('GatewayAPIOverview', () => {
   });
 
   it('renders Gateway class, addresses, listeners, and conditions', async () => {
-    await renderComponent({
-      gatewayDetails: {
-        kind: 'Gateway',
-        name: 'edge',
-        namespace: 'prod',
-        gatewayClassRef: {
-          clusterId: 'cluster-a',
-          group: 'gateway.networking.k8s.io',
-          version: 'v1',
-          kind: 'GatewayClass',
-          name: 'shared',
+    await renderDescriptor(gatewayDescriptor, {
+      kind: 'Gateway',
+      name: 'edge',
+      namespace: 'prod',
+      gatewayClassRef: {
+        clusterId: 'cluster-a',
+        group: 'gateway.networking.k8s.io',
+        version: 'v1',
+        kind: 'GatewayClass',
+        name: 'shared',
+      },
+      addresses: ['203.0.113.10'],
+      listeners: [
+        {
+          name: 'https',
+          protocol: 'HTTPS',
+          port: 443,
+          hostname: 'example.com',
+          attachedRoutes: 2,
+          conditions: [{ type: 'Programmed', status: 'True', reason: 'Programmed' }],
         },
-        addresses: ['203.0.113.10'],
-        listeners: [
-          {
-            name: 'https',
-            protocol: 'HTTPS',
-            port: 443,
-            hostname: 'example.com',
-            attachedRoutes: 2,
-            conditions: [{ type: 'Programmed', status: 'True', reason: 'Programmed' }],
-          },
-        ],
-        conditions: [{ type: 'Accepted', status: 'True', reason: 'Accepted' }],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+      ],
+      conditions: [{ type: 'Accepted', status: 'True', reason: 'Accepted' }],
+      labels: {},
+      annotations: {},
+    } as any);
 
     expect(getValueForLabel(container, 'Gateway Class')?.textContent).toContain(
       'GatewayClass shared'
@@ -124,38 +128,36 @@ describe('GatewayAPIOverview', () => {
   });
 
   it('renders HTTP(S) listener hostnames as browser links and leaves others as text', async () => {
-    await renderComponent({
-      gatewayDetails: {
-        kind: 'Gateway',
-        name: 'edge',
-        namespace: 'prod',
-        listeners: [
-          {
-            name: 'https',
-            protocol: 'HTTPS',
-            port: 443,
-            hostname: 'secure.example.com',
-            attachedRoutes: 0,
-          },
-          {
-            name: 'http',
-            protocol: 'HTTP',
-            port: 8080,
-            hostname: 'plain.example.com',
-            attachedRoutes: 0,
-          },
-          {
-            name: 'passthrough',
-            protocol: 'TLS',
-            port: 8443,
-            hostname: 'tls.example.com',
-            attachedRoutes: 0,
-          },
-        ],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+    await renderDescriptor(gatewayDescriptor, {
+      kind: 'Gateway',
+      name: 'edge',
+      namespace: 'prod',
+      listeners: [
+        {
+          name: 'https',
+          protocol: 'HTTPS',
+          port: 443,
+          hostname: 'secure.example.com',
+          attachedRoutes: 0,
+        },
+        {
+          name: 'http',
+          protocol: 'HTTP',
+          port: 8080,
+          hostname: 'plain.example.com',
+          attachedRoutes: 0,
+        },
+        {
+          name: 'passthrough',
+          protocol: 'TLS',
+          port: 8443,
+          hostname: 'tls.example.com',
+          attachedRoutes: 0,
+        },
+      ],
+      labels: {},
+      annotations: {},
+    } as any);
 
     const listenersValue = getValueForLabel(container, 'Listeners');
     const linkTitles = Array.from(
@@ -176,58 +178,56 @@ describe('GatewayAPIOverview', () => {
   });
 
   it('renders route parents, backends, rules, and hostnames', async () => {
-    await renderComponent({
-      routeDetails: {
-        kind: 'HTTPRoute',
-        name: 'web',
-        namespace: 'prod',
-        hostnames: ['example.com'],
-        parentRefs: [
-          {
-            ref: {
-              clusterId: 'cluster-a',
-              group: 'gateway.networking.k8s.io',
-              version: 'v1',
-              kind: 'Gateway',
-              namespace: 'prod',
-              name: 'edge',
-            },
+    await renderDescriptor(httpRouteDescriptor, {
+      kind: 'HTTPRoute',
+      name: 'web',
+      namespace: 'prod',
+      hostnames: ['example.com'],
+      parentRefs: [
+        {
+          ref: {
+            clusterId: 'cluster-a',
+            group: 'gateway.networking.k8s.io',
+            version: 'v1',
+            kind: 'Gateway',
+            namespace: 'prod',
+            name: 'edge',
           },
-        ],
-        backendRefs: [
-          {
-            ref: {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Service',
-              namespace: 'prod',
-              name: 'web-svc',
-            },
+        },
+      ],
+      backendRefs: [
+        {
+          ref: {
+            clusterId: 'cluster-a',
+            group: '',
+            version: 'v1',
+            kind: 'Service',
+            namespace: 'prod',
+            name: 'web-svc',
           },
-        ],
-        rules: [
-          {
-            matches: ['path /app'],
-            backendRefs: [
-              {
-                ref: {
-                  clusterId: 'cluster-a',
-                  group: '',
-                  version: 'v1',
-                  kind: 'Service',
-                  namespace: 'prod',
-                  name: 'web-svc',
-                },
+        },
+      ],
+      rules: [
+        {
+          matches: ['path /app'],
+          backendRefs: [
+            {
+              ref: {
+                clusterId: 'cluster-a',
+                group: '',
+                version: 'v1',
+                kind: 'Service',
+                namespace: 'prod',
+                name: 'web-svc',
               },
-            ],
-          },
-        ],
-        conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+            },
+          ],
+        },
+      ],
+      conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
+      labels: {},
+      annotations: {},
+    } as any);
 
     expect(getValueForLabel(container, 'Hostnames')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Parent Refs')?.textContent).toContain('Gateway prod/edge');
@@ -239,30 +239,27 @@ describe('GatewayAPIOverview', () => {
   });
 
   it('renders display-only refs without object links', async () => {
-    await renderComponent({
-      referenceGrantDetails: {
-        kind: 'ReferenceGrant',
-        name: 'allow-widgets',
-        namespace: 'prod',
-        from: [{ group: 'gateway.networking.k8s.io', kind: 'HTTPRoute', namespace: 'team-a' }],
-        to: [
-          {
-            display: {
-              clusterId: 'cluster-a',
-              group: 'example.io',
-              kind: 'Widget',
-              namespace: 'team-a',
-              name: '',
-            },
+    await renderDescriptor(referenceGrantDescriptor, {
+      kind: 'ReferenceGrant',
+      name: 'allow-widgets',
+      namespace: 'prod',
+      from: [{ group: 'gateway.networking.k8s.io', kind: 'HTTPRoute', namespace: 'team-a' }],
+      to: [
+        {
+          display: {
+            clusterId: 'cluster-a',
+            group: 'example.io',
+            kind: 'Widget',
+            namespace: 'team-a',
+            name: '',
           },
-        ],
-        labels: {},
-        annotations: {},
-      } as any,
-    });
+        },
+      ],
+      labels: {},
+      annotations: {},
+    } as any);
 
-    // Grant renders as a stacked section (label above, diagram below) rather
-    // than a label/value row, so query the diagram directly.
+    // Grant renders the from→to diagram; query it directly.
     const diagram = container.querySelector('.reference-grant-diagram');
     expect(diagram).not.toBeNull();
     expect(diagram?.textContent).toContain('team-a');

@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SecretOverview } from './SecretOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import { secretDescriptor } from './descriptors/secret';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
@@ -64,9 +64,11 @@ describe('SecretOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof SecretOverview>) => {
+  const renderComponent = async (props: { secretDetails: unknown }) => {
     await act(async () => {
-      root.render(<SecretOverview {...props} />);
+      root.render(
+        <OverviewRenderer descriptor={secretDescriptor} data={props.secretDetails as never} />
+      );
       await Promise.resolve();
     });
   };

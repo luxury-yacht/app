@@ -1,12 +1,21 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ClusterResourceOverview.test.tsx
+ *
+ * Renders the cluster-scoped config kinds through the descriptor-driven OverviewRenderer (X1).
+ * Fixtures are DTO-shaped (raw backend field names) rather than the flattened props the legacy
+ * ClusterResourceOverview component consumed.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ClusterResourceOverview } from './ClusterResourceOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import {
+  crdDescriptor,
+  ingressClassDescriptor,
+  namespaceDescriptor,
+  validatingWebhookDescriptor,
+} from './descriptors/clusterresource';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -46,9 +55,15 @@ describe('ClusterResourceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof ClusterResourceOverview>) => {
+  const renderOverview = async (descriptor: any, data: any) => {
     await act(async () => {
-      root.render(<ClusterResourceOverview {...props} />);
+      root.render(
+        <OverviewRenderer
+          descriptor={descriptor}
+          data={data}
+          context={{ clusterId: 'test-cluster', clusterName: 'test' }}
+        />
+      );
       await Promise.resolve();
     });
   };
@@ -67,7 +82,7 @@ describe('ClusterResourceOverview', () => {
   });
 
   it('renders namespace workload summary and status', async () => {
-    await renderComponent({
+    await renderOverview(namespaceDescriptor, {
       kind: 'Namespace',
       name: 'prod',
       status: 'Active',
@@ -81,7 +96,7 @@ describe('ClusterResourceOverview', () => {
   it('renders CRD metadata with actual version names and parenthesized flags', async () => {
     // Realistic multi-version shape: v1 is the primary (storage) version,
     // v1beta1 is served-only, v1alpha1 is served but deprecated.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'widgets.example.com',
       group: 'example.com',
@@ -91,7 +106,7 @@ describe('ClusterResourceOverview', () => {
         { name: 'v1beta1', served: true, storage: false },
         { name: 'v1alpha1', served: true, storage: false, deprecated: true },
       ],
-      names: { kind: 'Widget', plural: 'widgets' } as any,
+      names: { kind: 'Widget', plural: 'widgets' },
       labels: { team: 'platform' },
       annotations: { owner: 'crd-admins' },
     });
@@ -160,7 +175,7 @@ describe('ClusterResourceOverview', () => {
     // Non-primary versions first in the input; primary in the middle.
     // The UI should reorder so the primary renders at the top while the
     // relative order of the non-primary versions is preserved.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'hoist.example.com',
       group: 'example.com',
@@ -171,7 +186,7 @@ describe('ClusterResourceOverview', () => {
         { name: 'v1', served: true, storage: true }, // primary — was last, should render first
         { name: 'v2alpha1', served: true, storage: false },
       ],
-      names: { kind: 'Hoist', plural: 'hoists' } as any,
+      names: { kind: 'Hoist', plural: 'hoists' },
     });
 
     const versionsCell = getValueForLabel(container, 'Versions');
@@ -195,13 +210,13 @@ describe('ClusterResourceOverview', () => {
     // The common case: one version, which is both served and storage.
     // No "(primary)" annotation — the top-of-list position and default
     // text color are the indication.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'gadgets.example.com',
       group: 'example.com',
       scope: 'Cluster',
       versions: [{ name: 'v1', served: true, storage: true }],
-      names: { kind: 'Gadget', plural: 'gadgets' } as any,
+      names: { kind: 'Gadget', plural: 'gadgets' },
     });
 
     const versionsCell = getValueForLabel(container, 'Versions');
@@ -214,7 +229,7 @@ describe('ClusterResourceOverview', () => {
   it('flags a version that is defined but not currently served', async () => {
     // Rare/transient state: a version that has been removed from the
     // served set during a migration but still appears in spec.versions.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'legacy.example.com',
       group: 'example.com',
@@ -223,7 +238,7 @@ describe('ClusterResourceOverview', () => {
         { name: 'v1', served: true, storage: true },
         { name: 'v1alpha1', served: false, storage: false },
       ],
-      names: { kind: 'Legacy', plural: 'legacies' } as any,
+      names: { kind: 'Legacy', plural: 'legacies' },
     });
 
     const versionsCell = getValueForLabel(container, 'Versions');
@@ -238,7 +253,7 @@ describe('ClusterResourceOverview', () => {
     // possible during a CRD retirement cycle. Flags should be joined by
     // a comma inside a single set of parens rather than rendering two
     // separate (deprecated)(not served) groups.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'retiring.example.com',
       group: 'example.com',
@@ -247,7 +262,7 @@ describe('ClusterResourceOverview', () => {
         { name: 'v1', served: true, storage: true },
         { name: 'v1alpha1', served: false, storage: false, deprecated: true },
       ],
-      names: { kind: 'Retiring', plural: 'retirings' } as any,
+      names: { kind: 'Retiring', plural: 'retirings' },
     });
 
     const versionsCell = getValueForLabel(container, 'Versions');
@@ -262,13 +277,13 @@ describe('ClusterResourceOverview', () => {
     // should not crash or show "undefined". OverviewItem collapses rows
     // whose value is undefined/null, so the Versions row is absent
     // entirely rather than showing a stray placeholder.
-    await renderComponent({
+    await renderOverview(crdDescriptor, {
       kind: 'CustomResourceDefinition',
       name: 'empty.example.com',
       group: 'example.com',
       scope: 'Namespaced',
       versions: [],
-      names: { kind: 'Empty', plural: 'empties' } as any,
+      names: { kind: 'Empty', plural: 'empties' },
     });
 
     expect(getValueForLabel(container, 'Versions')).toBeNull();
@@ -278,22 +293,23 @@ describe('ClusterResourceOverview', () => {
   });
 
   it('renders webhook configuration details', async () => {
-    await renderComponent({
+    await renderOverview(validatingWebhookDescriptor, {
       kind: 'ValidatingWebhookConfiguration',
       name: 'policy-webhooks',
-      webhooks: [{}, {}, {}] as any,
+      webhooks: [{}, {}, {}],
     });
 
     expect(getValueForLabel(container, 'Webhooks')?.textContent).toBe('3 webhook(s)');
   });
 
   it('renders ingress class controller information', async () => {
-    await renderComponent({
+    await renderOverview(ingressClassDescriptor, {
       kind: 'IngressClass',
       name: 'nginx',
       controller: 'k8s.io/ingress-nginx',
       isDefault: true,
-      ingressesCount: 12,
+      // The "Used by" count is derived from the length of the ingresses list.
+      ingresses: Array.from({ length: 12 }, (_, i) => `ingress-${i}`),
       labels: { app: 'ingress' },
       annotations: { owner: 'platform' },
     });
@@ -312,7 +328,7 @@ describe('ClusterResourceOverview', () => {
   });
 
   it('renders the IngressClass parameters reference', async () => {
-    await renderComponent({
+    await renderOverview(ingressClassDescriptor, {
       kind: 'IngressClass',
       name: 'nginx',
       controller: 'k8s.io/ingress-nginx',

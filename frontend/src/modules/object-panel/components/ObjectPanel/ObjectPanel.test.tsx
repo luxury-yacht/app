@@ -882,39 +882,39 @@ describe('ObjectPanel tab availability', () => {
   });
 
   const detailMappingCases = [
-    ['DaemonSet', 'daemonSetDetails', { desiredNumberScheduled: 1 }],
-    ['ReplicaSet', 'replicaSetDetails', { replicas: '1/1' }],
-    ['StatefulSet', 'statefulSetDetails', { replicas: 2 }],
-    ['Job', 'jobDetails', { completions: 1 }],
-    ['CronJob', 'cronJobDetails', { schedule: '* * * * *' }],
-    ['ConfigMap', 'configMapDetails', { data: { key: 'value' } }],
-    ['Secret', 'secretDetails', { type: 'Opaque' }],
-    ['Service', 'serviceDetails', { selector: {} }],
-    ['Ingress', 'ingressDetails', { rules: [] }],
-    ['NetworkPolicy', 'networkPolicyDetails', { policyTypes: [] }],
-    ['EndpointSlice', 'endpointSliceDetails', { slices: [] }],
-    ['StorageClass', 'storageClassDetails', { provisioner: 'kubernetes.io/aws-ebs' }],
-    ['ServiceAccount', 'serviceAccountDetails', { secrets: [] }],
-    ['Role', 'roleDetails', { rules: [] }],
-    ['RoleBinding', 'roleBindingDetails', { subjects: [] }],
-    ['ClusterRole', 'clusterRoleDetails', { rules: [] }],
-    ['ClusterRoleBinding', 'clusterRoleBindingDetails', { subjects: [] }],
-    ['HorizontalPodAutoscaler', 'hpaDetails', { currentReplicas: 1 }],
-    ['PodDisruptionBudget', 'pdbDetails', { selector: {} }],
-    ['ResourceQuota', 'resourceQuotaDetails', { hard: {} }],
-    ['LimitRange', 'limitRangeDetails', { limits: [] }],
-    ['PersistentVolume', 'pvDetails', { capacity: {} }],
-    ['PersistentVolumeClaim', 'pvcDetails', { status: 'Bound' }],
-    ['Namespace', 'namespaceDetails', { status: 'Active' }],
-    ['IngressClass', 'ingressClassDetails', { controller: 'example' }],
-    ['CustomResourceDefinition', 'crdDetails', { metadata: { name: 'demo' } }],
-    ['MutatingWebhookConfiguration', 'mutatingWebhookDetails', { webhooks: [] }],
-    ['ValidatingWebhookConfiguration', 'validatingWebhookDetails', { webhooks: [] }],
+    ['DaemonSet', { desiredNumberScheduled: 1 }],
+    ['ReplicaSet', { replicas: '1/1' }],
+    ['StatefulSet', { replicas: 2 }],
+    ['Job', { completions: 1 }],
+    ['CronJob', { schedule: '* * * * *' }],
+    ['ConfigMap', { data: { key: 'value' } }],
+    ['Secret', { type: 'Opaque' }],
+    ['Service', { selector: {} }],
+    ['Ingress', { rules: [] }],
+    ['NetworkPolicy', { policyTypes: [] }],
+    ['EndpointSlice', { slices: [] }],
+    ['StorageClass', { provisioner: 'kubernetes.io/aws-ebs' }],
+    ['ServiceAccount', { secrets: [] }],
+    ['Role', { rules: [] }],
+    ['RoleBinding', { subjects: [] }],
+    ['ClusterRole', { rules: [] }],
+    ['ClusterRoleBinding', { subjects: [] }],
+    ['HorizontalPodAutoscaler', { currentReplicas: 1 }],
+    ['PodDisruptionBudget', { selector: {} }],
+    ['ResourceQuota', { hard: {} }],
+    ['LimitRange', { limits: [] }],
+    ['PersistentVolume', { capacity: {} }],
+    ['PersistentVolumeClaim', { status: 'Bound' }],
+    ['Namespace', { status: 'Active' }],
+    ['IngressClass', { controller: 'example' }],
+    ['CustomResourceDefinition', { metadata: { name: 'demo' } }],
+    ['MutatingWebhookConfiguration', { webhooks: [] }],
+    ['ValidatingWebhookConfiguration', { webhooks: [] }],
   ] as const;
 
   it.each(detailMappingCases)(
-    'assigns detail payloads for %s resources to the correct property',
-    async (kind, property, detailsPayload) => {
+    'exposes the detail payload as the active detail for %s resources',
+    async (kind, detailsPayload) => {
       await renderObjectPanel({
         kind,
         name: 'resource',
@@ -926,11 +926,11 @@ describe('ObjectPanel tab availability', () => {
         },
       });
 
-      expect(detailsTabPropsRef.current.detailModel.slots[property]).toEqual(detailsPayload);
+      expect(detailsTabPropsRef.current.detailModel.activeDetail).toEqual(detailsPayload);
     }
   );
 
-  it('falls back to empty details for unknown kinds', async () => {
+  it('derives no typed detail sections for unknown kinds', async () => {
     await renderObjectPanel({
       kind: 'UnknownKind',
       name: 'mystery',
@@ -942,9 +942,11 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    expect(detailsTabPropsRef.current.detailModel.slots).toMatchObject({
-      podDetails: null,
-      deploymentDetails: null,
-    });
+    const model = detailsTabPropsRef.current.detailModel;
+    expect(model.containerSection).toBeNull();
+    expect(model.dataSection).toBeNull();
+    expect(model.roleRules).toBeUndefined();
+    expect(model.desiredScaleReplicas).toBe(0);
+    expect(model.activePodNames).toBeNull();
   });
 });

@@ -1,12 +1,19 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NodeOverview.test.tsx
+ *
+ * Exercises the Node Overview through the descriptor-driven renderer (X1). The presentation moved
+ * from NodeOverview.tsx into descriptors/node.tsx; the renderer owns the frame and threads the
+ * drain affordance through OverviewContext, so the test drives `OverviewRenderer` with a
+ * NodeDetails-shaped DTO and a context object.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NodeOverview } from './NodeOverview';
+import { nodes } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { nodeDescriptor } from './descriptors/node';
+import type { OverviewContext } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -48,9 +55,9 @@ describe('NodeOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof NodeOverview>) => {
+  const renderNode = async (dto: nodes.NodeDetails, context: OverviewContext = {}) => {
     await act(async () => {
-      root.render(<NodeOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={nodeDescriptor} data={dto} context={context} />);
       await Promise.resolve();
     });
   };
@@ -69,32 +76,34 @@ describe('NodeOverview', () => {
   });
 
   it('renders node details including capacity, runtime, and taints', async () => {
-    await renderComponent({
-      name: 'node-a',
-      status: 'Ready',
-      statusState: 'True',
-      statusPresentation: 'ready',
-      roles: 'control-plane,master',
-      internalIP: '10.0.0.10',
-      externalIP: '34.1.1.1',
-      hostname: 'node-host',
-      podsCapacity: '100',
-      podsCount: 80,
-      kubeletVersion: 'v1.28.0',
-      os: 'linux',
-      architecture: 'amd64',
-      osImage: 'Ubuntu 22.04',
-      containerRuntime: 'containerd://1.7.0',
-      kernelVersion: '5.15.0',
-      storageCapacity: '500Gi',
-      taints: [{ key: 'node-role.kubernetes.io/control-plane', effect: 'NoSchedule' }],
-      conditions: [
-        { kind: 'MemoryPressure', status: 'True' },
-        { kind: 'Ready', status: 'False' },
-      ],
-      labels: {},
-      annotations: {},
-    });
+    await renderNode(
+      nodes.NodeDetails.createFrom({
+        name: 'node-a',
+        status: 'Ready',
+        statusState: 'True',
+        statusPresentation: 'ready',
+        roles: 'control-plane,master',
+        internalIP: '10.0.0.10',
+        externalIP: '34.1.1.1',
+        hostname: 'node-host',
+        podsCapacity: '100',
+        podsCount: 80,
+        kubeletVersion: 'v1.28.0',
+        os: 'linux',
+        architecture: 'amd64',
+        osImage: 'Ubuntu 22.04',
+        containerRuntime: 'containerd://1.7.0',
+        kernelVersion: '5.15.0',
+        storageCapacity: '500Gi',
+        taints: [{ key: 'node-role.kubernetes.io/control-plane', effect: 'NoSchedule' }],
+        conditions: [
+          { kind: 'MemoryPressure', status: 'True' },
+          { kind: 'Ready', status: 'False' },
+        ],
+        labels: {},
+        annotations: {},
+      })
+    );
 
     const rolesValue = getValueForLabel(container, 'Roles');
     expect(rolesValue?.textContent).toContain('control-plane');
@@ -117,15 +126,17 @@ describe('NodeOverview', () => {
   });
 
   it('renders every condition as a status chip with the correct variant', async () => {
-    await renderComponent({
-      name: 'node-b',
-      conditions: [
-        { kind: 'Ready', status: 'True' },
-        { kind: 'MemoryPressure', status: 'False' },
-        { kind: 'DiskPressure', status: 'True', message: 'disk full' },
-        { kind: 'PIDPressure', status: 'Unknown' },
-      ],
-    });
+    await renderNode(
+      nodes.NodeDetails.createFrom({
+        name: 'node-b',
+        conditions: [
+          { kind: 'Ready', status: 'True' },
+          { kind: 'MemoryPressure', status: 'False' },
+          { kind: 'DiskPressure', status: 'True', message: 'disk full' },
+          { kind: 'PIDPressure', status: 'Unknown' },
+        ],
+      })
+    );
 
     const chips = Array.from(container.querySelectorAll<HTMLElement>('.status-chip'));
     expect(chips.map((el) => el.textContent)).toEqual([
@@ -138,5 +149,22 @@ describe('NodeOverview', () => {
     expect(chips[1].className).toContain('status-chip--healthy');
     expect(chips[2].className).toContain('status-chip--unhealthy');
     expect(chips[3].className).toContain('status-chip--warning');
+  });
+
+  it('renders the inline drain affordance when a drain is in progress', async () => {
+    const onOpenDrain = vi.fn();
+    await renderNode(nodes.NodeDetails.createFrom({ name: 'node-c', status: 'Ready' }), {
+      onOpenDrain,
+      drainInProgress: true,
+      clusterId: 'cluster-1',
+      clusterName: 'Cluster One',
+    });
+
+    const drainButton = container.querySelector<HTMLButtonElement>('.node-overview-drain-icon');
+    expect(drainButton).not.toBeNull();
+    act(() => {
+      drainButton?.click();
+    });
+    expect(onOpenDrain).toHaveBeenCalledTimes(1);
   });
 });

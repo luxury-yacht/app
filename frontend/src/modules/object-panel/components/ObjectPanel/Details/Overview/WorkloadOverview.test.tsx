@@ -1,20 +1,34 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/WorkloadOverview.test.tsx
+ *
+ * Behavioural coverage for the workload Overview descriptors (X1). Each case renders the
+ * descriptor-driven OverviewRenderer with a RAW per-kind DTO and the panel context, exercising the
+ * same presentation the legacy WorkloadOverview component produced. Values are read straight off the
+ * DTO (e.g. pod counts come from podMetricsSummary.pods); the hpaManaged flag is threaded through
+ * `context`, not the DTO.
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WorkloadOverview } from './WorkloadOverview';
+import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewContext, OverviewDescriptor } from './schema';
+import {
+  daemonSetDescriptor,
+  deploymentDescriptor,
+  replicaSetDescriptor,
+  statefulSetDescriptor,
+} from './descriptors/workload';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
+const defaultClusterName = 'alpha';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
   }),
 }));
 
@@ -55,9 +69,18 @@ describe('WorkloadOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof WorkloadOverview>) => {
+  const defaultContext: OverviewContext = {
+    clusterId: defaultClusterId,
+    clusterName: defaultClusterName,
+  };
+
+  const renderDescriptor = async <T,>(
+    descriptor: OverviewDescriptor<T>,
+    data: T,
+    context: OverviewContext = defaultContext
+  ) => {
     await act(async () => {
-      root.render(<WorkloadOverview {...props} />);
+      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
@@ -87,28 +110,31 @@ describe('WorkloadOverview', () => {
   });
 
   it('renders deployment-specific status and configuration details', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'frontend',
-      namespace: 'default',
-      ready: '1/3',
-      replicas: '3/3',
-      desiredReplicas: 3,
-      upToDate: 2,
-      available: 1,
-      paused: true,
-      rolloutStatus: 'Degraded',
-      rolloutMessage: 'Progress deadline exceeded',
-      strategy: 'RollingUpdate',
-      maxSurge: '50%',
-      maxUnavailable: '25%',
-      minReadySeconds: 30,
-      progressDeadline: 120,
-      revisionHistory: 5,
-      currentReplicaSet: 'frontend-abc123',
-      currentRevision: '7',
-      selector: { app: 'frontend' },
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'frontend',
+        namespace: 'default',
+        ready: '1/3',
+        replicas: '3/3',
+        desiredReplicas: 3,
+        upToDate: 2,
+        available: 1,
+        paused: true,
+        rolloutStatus: 'Degraded',
+        rolloutMessage: 'Progress deadline exceeded',
+        strategy: 'RollingUpdate',
+        maxSurge: '50%',
+        maxUnavailable: '25%',
+        minReadySeconds: 30,
+        progressDeadline: 120,
+        revisionHistory: 5,
+        currentReplicaSet: 'frontend-abc123',
+        currentRevision: '7',
+        selector: { app: 'frontend' },
+      })
+    );
 
     // Pod-state bar replaces the Replicas / Up-to-date / Available rows.
     expect(container.textContent).toContain('Pods');
@@ -134,18 +160,21 @@ describe('WorkloadOverview', () => {
   });
 
   it('renders backend workload status presentation', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'frontend',
-      namespace: 'default',
-      status: 'Updating',
-      statusState: '1/3',
-      statusPresentation: 'warning',
-      ready: '1/3',
-      replicas: '3/3',
-      desiredReplicas: 3,
-      available: 1,
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'frontend',
+        namespace: 'default',
+        status: 'Updating',
+        statusState: '1/3',
+        statusPresentation: 'warning',
+        ready: '1/3',
+        replicas: '3/3',
+        desiredReplicas: 3,
+        available: 1,
+      })
+    );
 
     const status = container.querySelector('[data-testid="resource-status"]');
     expect(status?.textContent).toBe('Updating');
@@ -154,17 +183,20 @@ describe('WorkloadOverview', () => {
   });
 
   it('uses owned pod summary counts for the pod-state bar', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'frontend',
-      namespace: 'default',
-      ready: '3/3',
-      replicas: '3/3',
-      desiredReplicas: 3,
-      available: 3,
-      podCount: 4,
-      readyPodCount: 3,
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'frontend',
+        namespace: 'default',
+        ready: '3/3',
+        replicas: '3/3',
+        desiredReplicas: 3,
+        available: 3,
+        // podCount -> podMetricsSummary.pods, readyPodCount -> podMetricsSummary.readyPods.
+        podMetricsSummary: { pods: 4, readyPods: 3 },
+      })
+    );
 
     expect(container.textContent).toContain('Pods');
     expect(container.textContent).toContain('3 of 4 ready');
@@ -172,30 +204,36 @@ describe('WorkloadOverview', () => {
   });
 
   it('omits rollout details when the deployment is effectively complete', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'api',
-      strategy: 'RollingUpdate',
-      rolloutStatus: 'progressing',
-      rolloutMessage: 'Deployment successfully progressed',
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'api',
+        strategy: 'RollingUpdate',
+        rolloutStatus: 'progressing',
+        rolloutMessage: 'Deployment successfully progressed',
+      })
+    );
 
     expect(getElementByText('Rollout Status')).toBeUndefined();
     expect(getElementByText('Message')).toBeUndefined();
   });
 
   it('renders daemonset pod-state bar and highlights misscheduled pods', async () => {
-    await renderComponent({
-      kind: 'DaemonSet',
-      name: 'logs-agent',
-      ready: '8/9',
-      desired: 10,
-      current: 9,
-      available: 8,
-      updateStrategy: 'RollingUpdate',
-      maxUnavailable: '10%',
-      numberMisscheduled: 2,
-    });
+    await renderDescriptor(
+      daemonSetDescriptor,
+      new daemonset.DaemonSetDetails({
+        kind: 'DaemonSet',
+        name: 'logs-agent',
+        ready: 8,
+        desired: 10,
+        current: 9,
+        available: 8,
+        updateStrategy: 'RollingUpdate',
+        maxUnavailable: '10%',
+        numberMisscheduled: 2,
+      })
+    );
 
     // Pod-state bar replaces Desired/Current rows.
     expect(container.textContent).toContain('Pods');
@@ -210,15 +248,18 @@ describe('WorkloadOverview', () => {
   });
 
   it('renders replicaset pod-state bar and min-ready', async () => {
-    await renderComponent({
-      kind: 'ReplicaSet',
-      name: 'web-rs',
-      ready: '2/2',
-      replicas: '2/3',
-      desiredReplicas: 3,
-      available: 2,
-      minReadySeconds: 10,
-    });
+    await renderDescriptor(
+      replicaSetDescriptor,
+      new replicaset.ReplicaSetDetails({
+        kind: 'ReplicaSet',
+        name: 'web-rs',
+        ready: '2/2',
+        replicas: '2/3',
+        desiredReplicas: 3,
+        available: 2,
+        minReadySeconds: 10,
+      })
+    );
 
     // Pod-state bar replaces the Replicas/Available rows.
     expect(container.textContent).toContain('Pods');
@@ -229,16 +270,19 @@ describe('WorkloadOverview', () => {
   });
 
   it('renders statefulset service-account link and invokes navigation on click', async () => {
-    await renderComponent({
-      kind: 'StatefulSet',
-      name: 'db',
-      namespace: 'data',
-      serviceAccount: 'db-sa',
-      updateStrategy: 'RollingUpdate',
-      maxUnavailable: '1',
-      podManagementPolicy: 'Parallel',
-      minReadySeconds: 15,
-    });
+    await renderDescriptor(
+      statefulSetDescriptor,
+      new statefulset.StatefulSetDetails({
+        kind: 'StatefulSet',
+        name: 'db',
+        namespace: 'data',
+        serviceAccount: 'db-sa',
+        updateStrategy: 'RollingUpdate',
+        maxUnavailable: '1',
+        podManagementPolicy: 'Parallel',
+        minReadySeconds: 15,
+      })
+    );
 
     const saLink = getLinkByText('db-sa') ?? getElementByText('db-sa');
     expect(saLink).not.toBeUndefined();
@@ -261,19 +305,22 @@ describe('WorkloadOverview', () => {
   });
 
   it('surfaces deployment Available=False and ReplicaFailure conditions', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'broken',
-      ready: '0/3',
-      replicas: '0/3',
-      desiredReplicas: 3,
-      available: 0,
-      conditions: [
-        'Available: False (MinimumReplicasUnavailable) - Deployment does not have minimum availability.',
-        'ReplicaFailure: True (FailedCreate) - pods "broken-7c..." is forbidden: exceeded quota',
-        'Progressing: False (ProgressDeadlineExceeded)',
-      ],
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'broken',
+        ready: '0/3',
+        replicas: '0/3',
+        desiredReplicas: 3,
+        available: 0,
+        conditions: [
+          'Available: False (MinimumReplicasUnavailable) - Deployment does not have minimum availability.',
+          'ReplicaFailure: True (FailedCreate) - pods "broken-7c..." is forbidden: exceeded quota',
+          'Progressing: False (ProgressDeadlineExceeded)',
+        ],
+      })
+    );
 
     expect(container.textContent).toContain('Availability');
     expect(container.textContent).toContain('Unavailable');
@@ -282,18 +329,21 @@ describe('WorkloadOverview', () => {
   });
 
   it('omits availability/replica-failure rows when conditions are healthy', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      name: 'ok',
-      ready: '3/3',
-      replicas: '3/3',
-      desiredReplicas: 3,
-      available: 3,
-      conditions: [
-        'Available: True (MinimumReplicasAvailable)',
-        'Progressing: True (NewReplicaSetAvailable)',
-      ],
-    });
+    await renderDescriptor(
+      deploymentDescriptor,
+      new deployment.DeploymentDetails({
+        kind: 'Deployment',
+        name: 'ok',
+        ready: '3/3',
+        replicas: '3/3',
+        desiredReplicas: 3,
+        available: 3,
+        conditions: [
+          'Available: True (MinimumReplicasAvailable)',
+          'Progressing: True (NewReplicaSetAvailable)',
+        ],
+      })
+    );
 
     expect(getElementByText('Availability')).toBeUndefined();
     expect(getElementByText('Replica Failure')).toBeUndefined();

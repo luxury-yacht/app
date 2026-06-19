@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ServiceOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ServiceOverview } from './ServiceOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import { serviceDescriptor } from './descriptors/service';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -31,9 +31,11 @@ describe('ServiceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof ServiceOverview>) => {
+  const renderComponent = async (props: { serviceDetails: unknown }) => {
     await act(async () => {
-      root.render(<ServiceOverview {...props} />);
+      root.render(
+        <OverviewRenderer descriptor={serviceDescriptor} data={props.serviceDetails as never} />
+      );
       await Promise.resolve();
     });
   };

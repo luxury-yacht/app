@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.test.tsx
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ConfigMapOverview } from './ConfigMapOverview';
+import { OverviewRenderer } from './OverviewRenderer';
+import { configMapDescriptor } from './descriptors/configmap';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
@@ -57,9 +57,11 @@ describe('ConfigMapOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof ConfigMapOverview>) => {
+  const renderComponent = async (props: { configMapDetails: unknown }) => {
     await act(async () => {
-      root.render(<ConfigMapOverview {...props} />);
+      root.render(
+        <OverviewRenderer descriptor={configMapDescriptor} data={props.configMapDetails as never} />
+      );
       await Promise.resolve();
     });
   };

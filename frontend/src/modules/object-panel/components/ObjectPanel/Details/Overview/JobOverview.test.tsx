@@ -1,17 +1,23 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/JobOverview.test.tsx
+ *
+ * Exercises the Job and CronJob Overviews through the descriptor-driven renderer (X1).
  */
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { JobOverview } from './JobOverview';
+import { job, cronjob } from '@wailsjs/go/models';
+import { OverviewRenderer } from './OverviewRenderer';
+import { jobDescriptor, cronJobDescriptor } from './descriptors/job';
+
+const defaultClusterId = 'alpha:ctx';
+const defaultClusterName = 'alpha';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: vi.fn(),
-    objectData: { clusterId: 'alpha:ctx', clusterName: 'alpha' },
+    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
   }),
 }));
 
@@ -43,9 +49,28 @@ describe('JobOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (props: React.ComponentProps<typeof JobOverview>) => {
+  const renderJob = async (overrides: Record<string, unknown>) => {
     await act(async () => {
-      root.render(<JobOverview {...props} />);
+      root.render(
+        <OverviewRenderer
+          descriptor={jobDescriptor}
+          data={job.JobDetails.createFrom(overrides)}
+          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
+        />
+      );
+      await Promise.resolve();
+    });
+  };
+
+  const renderCronJob = async (overrides: Record<string, unknown>) => {
+    await act(async () => {
+      root.render(
+        <OverviewRenderer
+          descriptor={cronJobDescriptor}
+          data={cronjob.CronJobDetails.createFrom(overrides)}
+          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
+        />
+      );
       await Promise.resolve();
     });
   };
@@ -64,7 +89,7 @@ describe('JobOverview', () => {
   });
 
   it('renders job status details including active/failed counts', async () => {
-    await renderComponent({
+    await renderJob({
       kind: 'Job',
       name: 'batch-job',
       completions: 3,
@@ -85,7 +110,7 @@ describe('JobOverview', () => {
   });
 
   it('renders cronjob schedule, status, and history', async () => {
-    await renderComponent({
+    await renderCronJob({
       kind: 'CronJob',
       name: 'cron',
       schedule: '*/5 * * * *',
@@ -94,7 +119,7 @@ describe('JobOverview', () => {
       lastScheduleTime: '2024-01-01T00:00:00Z',
       successfulJobsHistory: 5,
       failedJobsHistory: 2,
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Schedule')?.textContent).toContain('*/5 * * * *');
     expect(getValueForLabel(container, 'Status')?.textContent).toContain('Suspended');
@@ -112,14 +137,14 @@ describe('JobOverview', () => {
   });
 
   it('surfaces cronjob next-run + last-successful in the Runs block', async () => {
-    await renderComponent({
+    await renderCronJob({
       kind: 'CronJob',
       name: 'cron',
       schedule: '0 * * * *',
       nextScheduleTime: '2099-01-01T00:00:00Z',
       lastSuccessfulTime: '2024-01-01T00:00:00Z',
       concurrencyPolicy: 'Forbid',
-    } as any);
+    });
 
     const runs = getValueForLabel(container, 'Runs')?.textContent ?? '';
     expect(runs).toMatch(/Next Scheduledin \d+/);

@@ -9,6 +9,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
+import { getOverviewDescriptor } from './descriptorRegistry';
+import { OverviewRenderer } from './OverviewRenderer';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
@@ -126,8 +128,34 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // scaling is autonomous (e.g. in the Pods caption). Node overviews also
   // get the drain-in-progress signal so they can render the inline icon.
   const renderOverviewContent = () => {
+    // Descriptor-migrated kinds render from the raw active DTO; the rest fall back to the legacy
+    // per-kind component path.
+    const descriptor = getOverviewDescriptor(props.kind);
+    if (descriptor) {
+      return (
+        <OverviewRenderer
+          descriptor={descriptor}
+          data={props.activeDetail}
+          context={{
+            hpaManaged: hpaManaged === true,
+            drainInProgress: Boolean(activeDrainJob),
+            onOpenDrain,
+            clusterId,
+            clusterName,
+          }}
+        />
+      );
+    }
+    // Custom/unregistered kinds use the generic overview, fed the object's generic metadata from
+    // the panel's objectData (the source of truth) since there is no per-kind detail to read.
+    const od = objectData as Record<string, unknown> | null;
+    const meta = (od?.metadata as Record<string, unknown> | undefined) ?? undefined;
     return overviewRegistry.renderComponent({
       ...props,
+      apiGroup: od?.apiGroup,
+      status: props.status ?? od?.status,
+      labels: props.labels ?? od?.labels ?? meta?.labels,
+      annotations: props.annotations ?? od?.annotations ?? meta?.annotations,
       hpaManaged: hpaManaged === true,
       drainInProgress: Boolean(activeDrainJob),
       onOpenDrain,

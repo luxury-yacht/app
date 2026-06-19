@@ -1,0 +1,108 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/OverviewRenderer.tsx
+ *
+ * Generic, descriptor-driven Overview renderer (X1, Architecture A). Renders the fixed frame
+ * (ResourceHeader top, ResourceMetadata bottom) and the descriptor's ordered schema items in
+ * between. No per-kind logic lives here.
+ */
+
+import React from 'react';
+import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
+import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { OverviewItem } from './shared/OverviewItem';
+import type { OverviewContext, OverviewDescriptor, OverviewField, OverviewWidget } from './schema';
+
+/** Frame fields read off any DTO (optional so T is not over-constrained). */
+interface FrameAccess {
+  name?: string;
+  namespace?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+  selector?: Record<string, string>;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+}
+
+interface OverviewRendererProps<T> {
+  descriptor: OverviewDescriptor<T>;
+  data: T | null | undefined;
+  context?: OverviewContext;
+}
+
+function resolve<T, V>(value: V | ((data: T) => V), data: T): V {
+  return typeof value === 'function' ? (value as (data: T) => V)(data) : value;
+}
+
+function renderField<T>(
+  field: OverviewField<T>,
+  data: T,
+  context: OverviewContext,
+  key: React.Key
+): React.ReactElement {
+  const rawValue = field.render
+    ? field.render(data, context)
+    : field.field
+      ? (data[field.field] as React.ReactNode)
+      : undefined;
+  const value = field.mono ? <span className="overview-value-mono">{rawValue}</span> : rawValue;
+  return (
+    <OverviewItem
+      key={key}
+      label={resolve(field.label, data)}
+      value={value}
+      fullWidth={field.fullWidth ? resolve(field.fullWidth, data) : false}
+      hidden={field.hidden ? field.hidden(data) : false}
+    />
+  );
+}
+
+export function OverviewRenderer<T>({
+  descriptor,
+  data,
+  context = {},
+}: OverviewRendererProps<T>): React.ReactElement | null {
+  if (!data) return null;
+  const frame = data as unknown as FrameAccess;
+
+  return (
+    <>
+      <ResourceHeader
+        kind={descriptor.displayKind}
+        name={frame.name ?? ''}
+        namespace={frame.namespace}
+      />
+
+      {descriptor.schema.items.map((item, index) => {
+        const itemKind = (item as { kind?: string }).kind;
+        if (itemKind === 'status') {
+          return (
+            <ResourceStatus
+              key={`status-${index}`}
+              status={frame.status}
+              statusState={frame.statusState}
+              statusPresentation={frame.statusPresentation}
+            />
+          );
+        }
+        if (itemKind === 'widget') {
+          return (
+            <React.Fragment key={`widget-${index}`}>
+              {(item as OverviewWidget<T>).render(data, context)}
+            </React.Fragment>
+          );
+        }
+        const field = item as OverviewField<T>;
+        return renderField(field, data, context, field.field ?? `field-${index}`);
+      })}
+
+      <ResourceMetadata
+        labels={frame.labels}
+        annotations={frame.annotations}
+        selector={frame.selector}
+        showSelector={descriptor.schema.showSelector}
+      />
+    </>
+  );
+}

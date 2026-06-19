@@ -1,5 +1,17 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GatewayAPIOverview.tsx
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/gateway.tsx
+ *
+ * Overview descriptors for the eight Gateway API kinds (X1), one descriptor per kind reading its raw
+ * DTO: Gateway, GatewayClass, ListenerSet, HTTPRoute/GRPCRoute/TLSRoute (one shared schema via
+ * makeRouteDescriptor), ReferenceGrant, and BackendTLSPolicy. Presentation ported from
+ * GatewayAPIOverview.tsx — its per-DTO sub-renderers collapse into per-kind schemas, with the
+ * shared helpers (RefLink, condition/listener/rule rendering, ReferenceGrant diagram) moved here.
+ *
+ * Cluster identity for links comes from the threaded OverviewContext (the legacy component read it
+ * from useObjectPanel), so render functions read `context.clusterName`.
+ *
+ * These DTOs carry `conditions` + `summary` rather than status/statusState, so there is no
+ * `{kind:'status'}` item — conditions render as a field and `summary` is not surfaced.
  */
 
 import React from 'react';
@@ -12,34 +24,29 @@ import {
   resourcemodel,
   types,
 } from '@wailsjs/go/models';
-import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
-import { ExternalHostLinks } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/ExternalHostLinks';
-import { listenerScheme } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/hostLink';
+import { ExternalHostLinks } from '../shared/ExternalHostLinks';
+import { listenerScheme } from '../shared/hostLink';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
-import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import './shared/OverviewBlocks.css';
+import type { OverviewDescriptor } from '../schema';
+import '../shared/OverviewBlocks.css';
 
-interface GatewayAPIOverviewProps {
-  gatewayDetails?: gateway.GatewayDetails | null;
-  gatewayClassDetails?: gatewayclass.GatewayClassDetails | null;
-  routeDetails?: types.RouteDetails | null;
-  listenerSetDetails?: listenerset.ListenerSetDetails | null;
-  referenceGrantDetails?: referencegrant.ReferenceGrantDetails | null;
-  backendTLSPolicyDetails?: backendtlspolicy.BackendTLSPolicyDetails | null;
-}
+type GatewayDetails = gateway.GatewayDetails;
+type GatewayClassDetails = gatewayclass.GatewayClassDetails;
+type ListenerSetDetails = listenerset.ListenerSetDetails;
+type RouteDetails = types.RouteDetails;
+type ReferenceGrantDetails = referencegrant.ReferenceGrantDetails;
+type BackendTLSPolicyDetails = backendtlspolicy.BackendTLSPolicyDetails;
+
+type ObjectRef = resourcemodel.ResourceRef;
+type DisplayRef = resourcemodel.DisplayRef;
 
 const conditionVariant = (status: string): StatusChipVariant => {
   if (status === 'True') return 'healthy';
   if (status === 'False') return 'unhealthy';
   return 'warning';
 };
-
-type ObjectRef = resourcemodel.ResourceRef;
-type DisplayRef = resourcemodel.DisplayRef;
 
 const objectRefLabel = (ref: ObjectRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name ?? '*'}`;
@@ -330,232 +337,205 @@ const ReferenceGrantDiagram: React.FC<{
   );
 };
 
-const GatewayDetailsOverview: React.FC<{
-  details: gateway.GatewayDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasAddresses = Boolean(details.addresses?.length);
-  const hasListeners = Boolean(details.listeners?.length);
-  const hasConditions = Boolean(details.conditions?.length);
-
-  return (
-    <>
-      <ResourceHeader kind="Gateway" name={details.name} namespace={details.namespace} />
-      <OverviewItem
-        label="Gateway Class"
-        value={<RefLink value={details.gatewayClassRef} clusterName={clusterName} />}
-      />
-      <OverviewItem
-        label="Addresses"
-        value={details.addresses?.join(', ')}
-        fullWidth
-        hidden={!hasAddresses}
-      />
-      <OverviewItem
-        label="Listeners"
-        value={<ListenerList listeners={details.listeners} />}
-        fullWidth
-        hidden={!hasListeners}
-      />
-      <OverviewItem
-        label="Conditions"
-        value={<ConditionList conditions={details.conditions} />}
-        fullWidth
-        hidden={!hasConditions}
-      />
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
+export const gatewayDescriptor: OverviewDescriptor<GatewayDetails> = {
+  displayKind: 'Gateway',
+  dtoClass: gateway.GatewayDetails,
+  schema: {
+    items: [
+      {
+        field: 'gatewayClassRef',
+        label: 'Gateway Class',
+        render: (d, context) => (
+          <RefLink value={d.gatewayClassRef} clusterName={context.clusterName} />
+        ),
+      },
+      {
+        field: 'addresses',
+        label: 'Addresses',
+        fullWidth: true,
+        hidden: (d) => !d.addresses?.length,
+        render: (d) => d.addresses?.join(', '),
+      },
+      {
+        field: 'listeners',
+        label: 'Listeners',
+        fullWidth: true,
+        hidden: (d) => !d.listeners?.length,
+        render: (d) => <ListenerList listeners={d.listeners} />,
+      },
+      {
+        field: 'conditions',
+        label: 'Conditions',
+        fullWidth: true,
+        hidden: (d) => !d.conditions?.length,
+        render: (d) => <ConditionList conditions={d.conditions} />,
+      },
+    ],
+  },
+  // `details` (table-summary string) and `summary` (ConditionsSummary) are not surfaced — the
+  // condition chips already convey per-condition state.
+  coveredElsewhere: ['details', 'summary'],
 };
 
-const GatewayClassOverview: React.FC<{
-  details: gatewayclass.GatewayClassDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasUsedBy = Boolean(details.usedBy?.length);
-  const hasConditions = Boolean(details.conditions?.length);
-
-  return (
-    <>
-      <ResourceHeader kind="GatewayClass" name={details.name} />
-      <OverviewItem label="Controller" value={details.controller} fullWidth />
-      <OverviewItem
-        label="Parameters"
-        value={<RefLink value={details.parameters} clusterName={clusterName} />}
-        fullWidth
-        hidden={!details.parameters}
-      />
-      <OverviewItem
-        label="Used By"
-        value={<RefList refs={details.usedBy} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasUsedBy}
-      />
-      <OverviewItem
-        label="Conditions"
-        value={<ConditionList conditions={details.conditions} />}
-        fullWidth
-        hidden={!hasConditions}
-      />
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
+export const gatewayClassDescriptor: OverviewDescriptor<GatewayClassDetails> = {
+  displayKind: 'GatewayClass',
+  dtoClass: gatewayclass.GatewayClassDetails,
+  schema: {
+    items: [
+      { field: 'controller', label: 'Controller', fullWidth: true },
+      {
+        field: 'parameters',
+        label: 'Parameters',
+        fullWidth: true,
+        hidden: (d) => !d.parameters,
+        render: (d, context) => <RefLink value={d.parameters} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'usedBy',
+        label: 'Used By',
+        fullWidth: true,
+        hidden: (d) => !d.usedBy?.length,
+        render: (d, context) => <RefList refs={d.usedBy} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'conditions',
+        label: 'Conditions',
+        fullWidth: true,
+        hidden: (d) => !d.conditions?.length,
+        render: (d) => <ConditionList conditions={d.conditions} />,
+      },
+    ],
+  },
+  coveredElsewhere: ['details', 'summary'],
 };
 
-const RouteOverview: React.FC<{
-  details: types.RouteDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasHostnames = Boolean(details.hostnames?.length);
-  const hasParentRefs = Boolean(details.parentRefs?.length);
-  const hasBackendRefs = Boolean(details.backendRefs?.length);
-  const hasRules = Boolean(details.rules?.length);
-  const hasConditions = Boolean(details.conditions?.length);
-
-  return (
-    <>
-      <ResourceHeader kind={details.kind} name={details.name} namespace={details.namespace} />
-      <OverviewItem
-        label="Hostnames"
-        value={details.hostnames?.join(', ')}
-        fullWidth
-        hidden={!hasHostnames}
-      />
-      <OverviewItem
-        label="Parent Refs"
-        value={<RefList refs={details.parentRefs} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasParentRefs}
-      />
-      <OverviewItem
-        label="Backend Refs"
-        value={<RefList refs={details.backendRefs} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasBackendRefs}
-      />
-      <OverviewItem
-        label="Rules"
-        value={<RouteRulesList rules={details.rules} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasRules}
-      />
-      <OverviewItem
-        label="Conditions"
-        value={<ConditionList conditions={details.conditions} />}
-        fullWidth
-        hidden={!hasConditions}
-      />
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
+export const listenerSetDescriptor: OverviewDescriptor<ListenerSetDetails> = {
+  displayKind: 'ListenerSet',
+  dtoClass: listenerset.ListenerSetDetails,
+  schema: {
+    items: [
+      {
+        field: 'parentRef',
+        label: 'Parent Gateway',
+        render: (d, context) => <RefLink value={d.parentRef} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'listeners',
+        label: 'Listeners',
+        fullWidth: true,
+        hidden: (d) => !d.listeners?.length,
+        render: (d) => <ListenerList listeners={d.listeners} />,
+      },
+      {
+        field: 'conditions',
+        label: 'Conditions',
+        fullWidth: true,
+        hidden: (d) => !d.conditions?.length,
+        render: (d) => <ConditionList conditions={d.conditions} />,
+      },
+    ],
+  },
+  coveredElsewhere: ['details', 'summary'],
 };
 
-const ListenerSetOverview: React.FC<{
-  details: listenerset.ListenerSetDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasListeners = Boolean(details.listeners?.length);
-  const hasConditions = Boolean(details.conditions?.length);
+/**
+ * HTTPRoute, GRPCRoute, and TLSRoute share one RouteDetails shape and presentation; only the
+ * displayed kind differs. The factory builds a descriptor per kind from one schema definition.
+ */
+const makeRouteDescriptor = (displayKind: string): OverviewDescriptor<RouteDetails> => ({
+  displayKind,
+  dtoClass: types.RouteDetails,
+  schema: {
+    items: [
+      {
+        field: 'hostnames',
+        label: 'Hostnames',
+        fullWidth: true,
+        hidden: (d) => !d.hostnames?.length,
+        render: (d) => d.hostnames?.join(', '),
+      },
+      {
+        field: 'parentRefs',
+        label: 'Parent Refs',
+        fullWidth: true,
+        hidden: (d) => !d.parentRefs?.length,
+        render: (d, context) => <RefList refs={d.parentRefs} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'backendRefs',
+        label: 'Backend Refs',
+        fullWidth: true,
+        hidden: (d) => !d.backendRefs?.length,
+        render: (d, context) => <RefList refs={d.backendRefs} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'rules',
+        label: 'Rules',
+        fullWidth: true,
+        hidden: (d) => !d.rules?.length,
+        render: (d, context) => (
+          <RouteRulesList rules={d.rules} clusterName={context.clusterName} />
+        ),
+      },
+      {
+        field: 'conditions',
+        label: 'Conditions',
+        fullWidth: true,
+        hidden: (d) => !d.conditions?.length,
+        render: (d) => <ConditionList conditions={d.conditions} />,
+      },
+    ],
+  },
+  // `age` and `details` are table-summary fields; `summary` is conveyed by the condition chips.
+  coveredElsewhere: ['age', 'details', 'summary'],
+});
 
-  return (
-    <>
-      <ResourceHeader kind="ListenerSet" name={details.name} namespace={details.namespace} />
-      <OverviewItem
-        label="Parent Gateway"
-        value={<RefLink value={details.parentRef} clusterName={clusterName} />}
-      />
-      <OverviewItem
-        label="Listeners"
-        value={<ListenerList listeners={details.listeners} />}
-        fullWidth
-        hidden={!hasListeners}
-      />
-      <OverviewItem
-        label="Conditions"
-        value={<ConditionList conditions={details.conditions} />}
-        fullWidth
-        hidden={!hasConditions}
-      />
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
+export const httpRouteDescriptor = makeRouteDescriptor('HTTPRoute');
+export const grpcRouteDescriptor = makeRouteDescriptor('GRPCRoute');
+export const tlsRouteDescriptor = makeRouteDescriptor('TLSRoute');
+
+export const referenceGrantDescriptor: OverviewDescriptor<ReferenceGrantDetails> = {
+  displayKind: 'ReferenceGrant',
+  dtoClass: referencegrant.ReferenceGrantDetails,
+  schema: {
+    items: [
+      {
+        field: 'from',
+        derivedFrom: ['to'],
+        label: 'Grant',
+        fullWidth: true,
+        hidden: (d) => !(d.from?.length || d.to?.length),
+        // Rendered as a stacked section (label above, diagram below) via fullWidth so the
+        // from→to diagram spans the panel rather than sitting in a narrow value column.
+        render: (d, context) => (
+          <ReferenceGrantDiagram from={d.from} to={d.to} clusterName={context.clusterName} />
+        ),
+      },
+    ],
+  },
+  coveredElsewhere: ['details'],
 };
 
-const ReferenceGrantOverview: React.FC<{
-  details: referencegrant.ReferenceGrantDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasGrant = Boolean(details.from?.length) || Boolean(details.to?.length);
-
-  return (
-    <>
-      <ResourceHeader kind="ReferenceGrant" name={details.name} namespace={details.namespace} />
-      {hasGrant && (
-        <div className="overview-stacked">
-          <div className="overview-label">Grant</div>
-          <ReferenceGrantDiagram from={details.from} to={details.to} clusterName={clusterName} />
-        </div>
-      )}
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
-};
-
-const BackendTLSPolicyOverview: React.FC<{
-  details: backendtlspolicy.BackendTLSPolicyDetails;
-  clusterName?: string;
-}> = ({ details, clusterName }) => {
-  const hasTargetRefs = Boolean(details.targetRefs?.length);
-  const hasConditions = Boolean(details.conditions?.length);
-
-  return (
-    <>
-      <ResourceHeader kind="BackendTLSPolicy" name={details.name} namespace={details.namespace} />
-      <OverviewItem
-        label="Target Refs"
-        value={<RefList refs={details.targetRefs} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasTargetRefs}
-      />
-      <OverviewItem
-        label="Conditions"
-        value={<ConditionList conditions={details.conditions} />}
-        fullWidth
-        hidden={!hasConditions}
-      />
-      <ResourceMetadata labels={details.labels} annotations={details.annotations} />
-    </>
-  );
-};
-
-export const GatewayAPIOverview: React.FC<GatewayAPIOverviewProps> = ({
-  gatewayDetails,
-  gatewayClassDetails,
-  routeDetails,
-  listenerSetDetails,
-  referenceGrantDetails,
-  backendTLSPolicyDetails,
-}) => {
-  const { objectData } = useObjectPanel();
-  const clusterName = objectData?.clusterName ?? undefined;
-
-  if (gatewayDetails) {
-    return <GatewayDetailsOverview details={gatewayDetails} clusterName={clusterName} />;
-  }
-  if (gatewayClassDetails) {
-    return <GatewayClassOverview details={gatewayClassDetails} clusterName={clusterName} />;
-  }
-  if (routeDetails) {
-    return <RouteOverview details={routeDetails} clusterName={clusterName} />;
-  }
-  if (listenerSetDetails) {
-    return <ListenerSetOverview details={listenerSetDetails} clusterName={clusterName} />;
-  }
-  if (referenceGrantDetails) {
-    return <ReferenceGrantOverview details={referenceGrantDetails} clusterName={clusterName} />;
-  }
-  if (backendTLSPolicyDetails) {
-    return <BackendTLSPolicyOverview details={backendTLSPolicyDetails} clusterName={clusterName} />;
-  }
-  return null;
+export const backendTLSPolicyDescriptor: OverviewDescriptor<BackendTLSPolicyDetails> = {
+  displayKind: 'BackendTLSPolicy',
+  dtoClass: backendtlspolicy.BackendTLSPolicyDetails,
+  schema: {
+    items: [
+      {
+        field: 'targetRefs',
+        label: 'Target Refs',
+        fullWidth: true,
+        hidden: (d) => !d.targetRefs?.length,
+        render: (d, context) => <RefList refs={d.targetRefs} clusterName={context.clusterName} />,
+      },
+      {
+        field: 'conditions',
+        label: 'Conditions',
+        fullWidth: true,
+        hidden: (d) => !d.conditions?.length,
+        render: (d) => <ConditionList conditions={d.conditions} />,
+      },
+    ],
+  },
+  coveredElsewhere: ['details', 'summary'],
 };

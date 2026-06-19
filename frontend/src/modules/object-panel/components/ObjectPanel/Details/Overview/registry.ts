@@ -1,308 +1,93 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.ts
+ *
+ * Legacy fallback for Overview rendering. After the X1 descriptor migration, every built-in kind
+ * renders via `descriptorRegistry` (see index.tsx). This module now only provides:
+ *   - the GenericOverview fallback for unregistered/custom-resource kinds, and
+ *   - per-kind action capabilities (`getResourceCapabilities`).
  */
 
 import React from 'react';
-
-// Import all overview components from local directory
-import { ClusterResourceOverview } from './ClusterResourceOverview';
-import { NodeOverview } from './NodeOverview';
-import { ConfigMapOverview } from './ConfigMapOverview';
-import { SecretOverview } from './SecretOverview';
-import { EndpointSliceOverview } from './EndpointsOverview';
-import { GatewayAPIOverview } from './GatewayAPIOverview';
-import { IngressOverview } from './IngressOverview';
-import { NetworkPolicyOverview } from './NetworkPolicyOverview';
-import { ServiceOverview } from './ServiceOverview';
-import { StorageOverview } from './StorageOverview';
-import { JobOverview } from './JobOverview';
-import { PodOverview } from './PodOverview';
-import { WorkloadOverview } from './WorkloadOverview';
-import { HelmOverview } from './HelmOverview';
-import { PolicyOverview } from './PolicyOverview';
-import { RBACOverview } from './RBACOverview';
 import { GenericOverview } from './GenericOverview';
 
-/**
- * Configuration for an overview component
- */
-interface OverviewComponentConfig {
-  kinds: string[];
-  component: React.ComponentType<any>;
-  mapProps?: (props: any) => any;
-  capabilities?: {
-    delete?: boolean;
-    restart?: boolean;
-    scale?: boolean;
-    edit?: boolean;
-    objPanelLogs?: boolean;
-    exec?: boolean;
-    trigger?: boolean;
-    suspend?: boolean;
-  };
+interface OverviewCapabilities {
+  delete?: boolean;
+  restart?: boolean;
+  scale?: boolean;
+  edit?: boolean;
+  objPanelLogs?: boolean;
+  exec?: boolean;
+  trigger?: boolean;
+  suspend?: boolean;
 }
 
+// Per-kind action capabilities, keyed by lowercase kind.
+const CAPABILITIES_BY_KIND: Record<string, OverviewCapabilities> = {
+  // Cluster resources
+  customresourcedefinition: { delete: true, edit: true },
+  ingressclass: { delete: true, edit: true },
+  mutatingwebhookconfiguration: { delete: true, edit: true },
+  namespace: { delete: true, edit: true },
+  validatingwebhookconfiguration: { delete: true, edit: true },
+  // Config
+  configmap: { delete: true, edit: true },
+  secret: { delete: true, edit: true },
+  // Jobs
+  job: { delete: true },
+  cronjob: { delete: true, trigger: true, suspend: true },
+  // Network
+  service: { delete: true, edit: true },
+  ingress: { delete: true, edit: true },
+  endpointslice: { delete: true },
+  networkpolicy: { delete: true, edit: true },
+  // Gateway API
+  gatewayclass: { delete: true, edit: true },
+  gateway: { delete: true, edit: true },
+  listenerset: { delete: true, edit: true },
+  httproute: { delete: true, edit: true },
+  grpcroute: { delete: true, edit: true },
+  tlsroute: { delete: true, edit: true },
+  backendtlspolicy: { delete: true, edit: true },
+  referencegrant: { delete: true, edit: true },
+  // Node
+  node: { edit: true },
+  // Pod
+  pod: { delete: true, objPanelLogs: true, exec: true },
+  // Policy / autoscaling
+  horizontalpodautoscaler: { delete: true, edit: true },
+  limitrange: { delete: true, edit: true },
+  poddisruptionbudget: { delete: true, edit: true },
+  resourcequota: { delete: true, edit: true },
+  // RBAC
+  clusterrole: { delete: true, edit: true },
+  clusterrolebinding: { delete: true, edit: true },
+  role: { delete: true, edit: true },
+  rolebinding: { delete: true, edit: true },
+  serviceaccount: { delete: true, edit: true },
+  // Storage
+  persistentvolume: { delete: true, edit: true },
+  persistentvolumeclaim: { delete: true, edit: true },
+  storageclass: { delete: true, edit: true },
+  // Workloads
+  daemonset: { delete: true, restart: true, scale: true, edit: true },
+  deployment: { delete: true, restart: true, scale: true, edit: true },
+  statefulset: { delete: true, restart: true, scale: true, edit: true },
+  replicaset: { delete: true },
+  // Helm
+  helmrelease: { delete: true },
+};
+
 /**
- * Registry for overview components
+ * Fallback renderer used by index.tsx for kinds without a registered descriptor (custom resources
+ * and anything not yet covered). Renders the generic, field-agnostic overview.
  */
-class OverviewComponentRegistry {
-  private components = new Map<string, OverviewComponentConfig>();
-
-  /**
-   * Register a component configuration
-   */
-  register(config: OverviewComponentConfig) {
-    config.kinds.forEach((kind) => {
-      this.components.set(kind.toLowerCase(), config);
-    });
-  }
-
-  /**
-   * Get component configuration for a kind
-   */
-  getComponent(kind: string): OverviewComponentConfig | undefined {
-    return this.components.get(kind.toLowerCase());
-  }
-
-  /**
-   * Render component for given props
-   */
+export const overviewRegistry = {
   renderComponent(props: any): React.ReactElement {
-    const kind = props.kind?.toLowerCase();
-    const config = this.getComponent(kind);
-
-    if (!config) {
-      return React.createElement(GenericOverview, props);
-    }
-
-    const Component = config.component;
-    const mappedProps = config.mapProps ? config.mapProps(props) : props;
-
-    return React.createElement(Component, mappedProps);
-  }
-}
-
-// Create and configure the registry
-export const overviewRegistry = new OverviewComponentRegistry();
-
-// Register Cluster Resource components
-overviewRegistry.register({
-  kinds: [
-    'customresourcedefinition',
-    'ingressclass',
-    'mutatingwebhookconfiguration',
-    'namespace',
-    'validatingwebhookconfiguration',
-  ],
-  component: ClusterResourceOverview,
-  capabilities: {
-    delete: true,
-    edit: true,
+    return React.createElement(GenericOverview, props);
   },
-});
+};
 
-// Register Config Resource components
-overviewRegistry.register({
-  kinds: ['configmap'],
-  component: ConfigMapOverview,
-  mapProps: (props) => ({ configMapDetails: props.configMapDetails || props }),
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: ['secret'],
-  component: SecretOverview,
-  mapProps: (props) => ({ secretDetails: props.secretDetails || props }),
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-// Register Job component
-overviewRegistry.register({
-  kinds: ['job'],
-  component: JobOverview,
-  capabilities: {
-    delete: true,
-  },
-});
-
-// Register CronJob component with trigger and suspend capabilities
-overviewRegistry.register({
-  kinds: ['cronjob'],
-  component: JobOverview,
-  capabilities: {
-    delete: true,
-    trigger: true,
-    suspend: true,
-  },
-});
-
-// Register Network Resource components
-overviewRegistry.register({
-  kinds: ['service'],
-  component: ServiceOverview,
-  mapProps: (props) => ({ serviceDetails: props.serviceDetails || props }),
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: ['ingress'],
-  component: IngressOverview,
-  mapProps: (props) => ({ ingressDetails: props.ingressDetails || props }),
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: ['endpointslice'],
-  component: EndpointSliceOverview,
-  mapProps: (props) => ({ endpointSliceDetails: props.endpointSliceDetails || props }),
-  capabilities: {
-    delete: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: ['networkpolicy'],
-  component: NetworkPolicyOverview,
-  mapProps: (props) => ({ networkPolicyDetails: props.networkPolicyDetails || props }),
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: [
-    'gatewayclass',
-    'gateway',
-    'listenerset',
-    'httproute',
-    'grpcroute',
-    'tlsroute',
-    'backendtlspolicy',
-    'referencegrant',
-  ],
-  component: GatewayAPIOverview,
-  mapProps: (props) => {
-    const kind = String(props.kind ?? '').toLowerCase();
-
-    if (kind === 'gatewayclass') {
-      return { gatewayClassDetails: props.gatewayClassDetails || props };
-    }
-    if (kind === 'gateway') {
-      return { gatewayDetails: props.gatewayDetails || props };
-    }
-    if (kind === 'listenerset') {
-      return { listenerSetDetails: props.listenerSetDetails || props };
-    }
-    if (kind === 'backendtlspolicy') {
-      return { backendTLSPolicyDetails: props.backendTLSPolicyDetails || props };
-    }
-    if (kind === 'referencegrant') {
-      return { referenceGrantDetails: props.referenceGrantDetails || props };
-    }
-
-    return { routeDetails: props.routeDetails || props };
-  },
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-// Register Node component
-overviewRegistry.register({
-  kinds: ['node'],
-  component: NodeOverview,
-  capabilities: {
-    edit: true,
-  },
-});
-
-// Register Pod component
-overviewRegistry.register({
-  kinds: ['pod'],
-  component: PodOverview,
-  capabilities: {
-    delete: true,
-    objPanelLogs: true,
-    exec: true,
-  },
-});
-
-// Register Policy components
-overviewRegistry.register({
-  kinds: ['horizontalpodautoscaler', 'limitrange', 'poddisruptionbudget', 'resourcequota'],
-  component: PolicyOverview,
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-// Register RBAC components
-overviewRegistry.register({
-  kinds: ['clusterrole', 'clusterrolebinding', 'role', 'rolebinding', 'serviceaccount'],
-  component: RBACOverview,
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-// Register Storage components
-overviewRegistry.register({
-  kinds: ['persistentvolume', 'persistentvolumeclaim', 'storageclass'],
-  component: StorageOverview,
-  capabilities: {
-    delete: true,
-    edit: true,
-  },
-});
-
-// Register Workload components
-overviewRegistry.register({
-  kinds: ['daemonset', 'deployment', 'statefulset'],
-  component: WorkloadOverview,
-  capabilities: {
-    delete: true,
-    restart: true,
-    scale: true,
-    edit: true,
-  },
-});
-
-overviewRegistry.register({
-  kinds: ['replicaset'],
-  component: WorkloadOverview,
-  capabilities: {
-    delete: true,
-  },
-});
-
-// Register Helm component
-overviewRegistry.register({
-  kinds: ['helmrelease'],
-  component: HelmOverview,
-  capabilities: {
-    delete: true,
-  },
-});
-
-// Utility function to get capabilities (used in tests).
-export function getResourceCapabilities(kind: string): OverviewComponentConfig['capabilities'] {
-  const config = overviewRegistry.getComponent(kind);
-  // If no config found (likely a custom resource), enable delete by default
-  return config?.capabilities || { delete: true };
+// Action capabilities for a kind; custom/unknown kinds default to delete-only.
+export function getResourceCapabilities(kind: string): OverviewCapabilities {
+  return CAPABILITIES_BY_KIND[kind.toLowerCase()] || { delete: true };
 }

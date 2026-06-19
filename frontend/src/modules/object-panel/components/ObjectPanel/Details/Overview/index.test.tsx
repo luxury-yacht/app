@@ -18,6 +18,13 @@ vi.mock('./registry', () => ({
   getResourceCapabilities: (kind: unknown) => getResourceCapabilitiesMock(kind),
 }));
 
+// This suite verifies the Overview wrapper's content + ActionsMenu wiring, independent of which
+// kinds have migrated to descriptors. Force the legacy render path so the assertions hold for any
+// kind; the descriptor path is covered by the per-kind descriptor tests.
+vi.mock('./descriptorRegistry', () => ({
+  getOverviewDescriptor: () => undefined,
+}));
+
 const actionsMenuMock = vi.fn((props: unknown) => {
   void props;
   return <div data-testid="actions-menu" />;

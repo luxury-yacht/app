@@ -137,7 +137,11 @@ export function ObjectPanelContent({
 
   const activePodNames = detailTabProps?.detailModel.activePodNames ?? null;
   const availableContainers = detailTabProps?.detailModel.availableContainers ?? EMPTY_CONTAINERS;
-  const cronJobDetails = detailTabProps?.detailModel.slots.cronJobDetails ?? null;
+  // For a CronJob the active detail DTO carries the child jobs (for the Jobs timeline tab).
+  const cronJobDetails =
+    detailTabProps?.detailModel.objectKind === 'cronjob'
+      ? (detailTabProps.detailModel.activeDetail as { jobs?: types.JobSimpleInfo[] } | null)
+      : null;
 
   if (resourceDeleted) {
     return (
