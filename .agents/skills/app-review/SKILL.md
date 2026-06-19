@@ -32,10 +32,66 @@ patterns, weak validation boundaries, or excessive development drag.
 Do not start by hunting for isolated findings. Start by choosing review domains
 and building inventories for them.
 
+## Already Settled (do not re-propose without new evidence)
+
+A 2026-06 large-scale structural-refactor validation pass investigated ten
+candidates and resolved all live ones; its temporary plan
+(`docs/plans/refactor-opportunities.md`) was deleted after completion. Before
+proposing any of the following as a "new" opportunity, you must cite concrete new
+evidence that overturns the recorded verdict.
+
+**Already consolidated (done — re-proposing is duplicate work):**
+
+- Frontend object-panel Overview rendering → one per-kind descriptor registry
+  driving a generic `<OverviewRenderer>` + runtime drift-check
+  (`docs/frontend/component-structure.md` → "Object-panel Overview rendering").
+- Object-panel actions → shared `useObjectActionController` (no panel-local
+  action reducer); see `.agents/skills/object-panel/SKILL.md`.
+- Cluster-view refresh scopes → single `clusterDomainScopes` manifest in
+  `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`.
+- LogViewer async/loading flags → discriminated `LogViewMode` union in
+  `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts`.
+- Resource-kind registry drives object-catalog, table rows, detail dispatch
+  (codegen), object-map, and stream summaries
+  (`docs/architecture/resource-kind-registry.md`; remaining items are sanctioned
+  exceptions).
+
+**Investigated and dismissed (do not re-validate without new evidence):**
+
+- Snapshot query consolidation — INVALID. One query engine
+  (`typed_table_query.go`); `static_table_query.go` is thin adapters with ~0%
+  logical overlap. Only micro-wins (shared numeric CPU/memory/age sort helpers;
+  the namespaced-vs-cluster event adapters are ~80% shared).
+- App concurrency model — non-issue. The App mutexes are independent with no real
+  nested locking (`TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback`).
+- Cluster lifecycle state machine — already centralized in `cluster_lifecycle.go`.
+  Residual only: fold a few inline `authManager.IsValid()` checks into reading
+  lifecycle state.
+- Context & cancellation hub — the multiple context hierarchies are intentional
+  and the `context.Background()` fallbacks mostly legitimate. Residual only:
+  cancel in-flight async recovery/catalog callbacks at shutdown.
+- Permission caching unification — SSAR (per-verb bool), SSRR (rules blob), and
+  the response-cache (transient GET dedupe) are genuinely different; merging
+  breaks the SSRR consumer. Residual (~2h): dedup the shared background-refresh
+  boilerplate only.
+- Table config schema — INVALID. The shared layer already exists
+  (`useGridTablePersistence` + `useGridTableBinding` + `useResourceGridTableCommon`);
+  the three public grid hooks are intentional thin wrappers.
+- Namespace-view scope unification — INVALID. `normalizeNamespaceScope` in
+  `NsResourcesContext.tsx` has 2 call sites (not ~11); there is no duplication
+  worth a refactor.
+
+**Deferred / trigger-gated (not current work):**
+
+- View-owned live-window fetch — `docs/plans/deferred/view-owned-window-fetch.md`
+  (the highest-priority planned refresh-layer refactor).
+- Large-data persistent SQLite catalog store — evidence-triggered; start only if
+  a 100k+-object cluster reports Browse/Custom degradation.
+
 ## First Pass
 
 1. Read `AGENTS.md`, `.agents/README.md`, `.agents/context/code-map.md`, and
-   `.agents/context/app-areas.md`.
+   `.agents/context/app-areas.md`, plus the "Already Settled" list above.
 2. Check repository state with read-only git commands:
    - `git status --short`
    - `git branch --show-current`

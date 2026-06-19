@@ -221,7 +221,6 @@ export function useContainerLogsStreamFallback({
   // --- Fallback manager registration ---
   useEffect(() => {
     if (!fallbackActive || !containerLogsScope || showPreviousContainerLogs) {
-      dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
       if (containerLogsScope) {
         containerLogsFallbackManager.unregister(containerLogsScope);
       }
@@ -297,7 +296,6 @@ export function useContainerLogsStreamFallback({
         error: null,
         scope: containerLogsScope,
       }));
-      dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
 
       // preserveState on enable: see the comment in the main lifecycle
       // effect above — without it, the orchestrator wipes the cached
@@ -345,7 +343,6 @@ export function useContainerLogsStreamFallback({
               : previous.stats,
           scope: containerLogsScope,
         }));
-        dispatch({ type: 'SET_FALLBACK_ERROR', payload: unavailable ? null : message });
         dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: true });
       } finally {
         attemptInFlight = false;

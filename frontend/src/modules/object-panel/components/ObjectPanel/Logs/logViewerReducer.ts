@@ -24,6 +24,22 @@ export interface ParsedLogEntry {
 
 export type CopyFeedback = 'idle' | 'copied' | 'error';
 
+/**
+ * The LogViewer is always in exactly one view mode. Modeling it as a
+ * discriminated union makes the contradictions the old boolean trio allowed
+ * unrepresentable: fallback polling and the previous-container view are mutually
+ * exclusive, and "loading previous logs" only exists inside the previous mode.
+ *  - live:     streaming the current container's logs (or the initial prime)
+ *  - fallback: the stream errored; the snapshot-polling fallback is active
+ *  - previous: showing a previous container's logs (loading until fetched)
+ */
+export type LogViewMode =
+  | { kind: 'live' }
+  | { kind: 'fallback' }
+  | { kind: 'previous'; loading: boolean };
+
+export const LIVE_MODE: LogViewMode = { kind: 'live' };
+
 const TIMESTAMP_MODE_ORDER: LogTimestampMode[] = ['hidden', 'default', 'short', 'localized'];
 
 /**
@@ -55,13 +71,12 @@ export interface LogViewerState {
   parsedContainerLogs: ParsedLogEntry[];
   expandedRows: Set<string>;
 
-  // Loading/status state
+  // Async/status state. `mode` is a discriminated union of the mutually
+  // exclusive view modes (live / fallback / previous) so contradictory
+  // combinations are unrepresentable. The fallback error is intentionally NOT
+  // tracked here — it surfaces through the refresh-store snapshot status.
   copyFeedback: CopyFeedback;
-  manualRefreshPending: boolean;
-  fallbackActive: boolean;
-  fallbackError: string | null;
-  showPreviousContainerLogs: boolean;
-  isLoadingPreviousContainerLogs: boolean;
+  mode: LogViewMode;
 }
 
 export type LogViewerAction =
@@ -92,19 +107,18 @@ export type LogViewerAction =
   | { type: 'SET_PARSED_LOGS'; payload: ParsedLogEntry[] }
   | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
 
-  // Loading/status actions
+  // Async/status actions. These keep their boolean-setter shape (the stream
+  // fallback hook and LogViewer dispatch them) but the reducer maps each to a
+  // `mode` transition.
   | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback }
-  | { type: 'SET_MANUAL_REFRESH_PENDING'; payload: boolean }
   | { type: 'SET_FALLBACK_ACTIVE'; payload: boolean }
-  | { type: 'SET_FALLBACK_ERROR'; payload: string | null }
   | { type: 'SET_SHOW_PREVIOUS_LOGS'; payload: boolean }
   | { type: 'SET_IS_LOADING_PREVIOUS_LOGS'; payload: boolean }
 
   // Compound actions for common operations
   | { type: 'RESET_FOR_NEW_SCOPE'; isWorkload: boolean }
   | { type: 'START_PREVIOUS_LOGS' }
-  | { type: 'STOP_PREVIOUS_LOGS' }
-  | { type: 'CLEAR_FALLBACK' };
+  | { type: 'STOP_PREVIOUS_LOGS' };
 
 export const initialLogViewerState: LogViewerState = {
   // Container state
@@ -132,13 +146,9 @@ export const initialLogViewerState: LogViewerState = {
   parsedContainerLogs: [],
   expandedRows: new Set<string>(),
 
-  // Loading/status state
+  // Async/status state
   copyFeedback: 'idle',
-  manualRefreshPending: false,
-  fallbackActive: false,
-  fallbackError: null,
-  showPreviousContainerLogs: false,
-  isLoadingPreviousContainerLogs: false,
+  mode: LIVE_MODE,
 };
 
 /**
@@ -163,7 +173,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   displayMode: state.displayMode,
   isParsedView: state.displayMode === 'parsed',
   expandedRows: Array.from(state.expandedRows),
-  showPreviousContainerLogs: state.showPreviousContainerLogs,
+  showPreviousContainerLogs: state.mode.kind === 'previous',
 });
 
 /**
@@ -189,7 +199,9 @@ export const applyLogViewerPrefs = (
   regexMatches: prefs.regexMatches ?? false,
   displayMode: prefs.displayMode ?? (prefs.isParsedView ? 'parsed' : 'raw'),
   expandedRows: new Set(prefs.expandedRows),
-  showPreviousContainerLogs: prefs.showPreviousContainerLogs,
+  // Rehydrate into the previous-logs view (not loading — the fetch reprimes on
+  // mount); otherwise the default live mode.
+  mode: prefs.showPreviousContainerLogs ? { kind: 'previous', loading: false } : LIVE_MODE,
 });
 
 export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
@@ -282,19 +294,28 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, expandedRows: next };
     }
 
-    // Loading/status actions
+    // Async/status actions — each maps to a `mode` transition.
     case 'SET_COPY_FEEDBACK':
       return { ...state, copyFeedback: action.payload };
-    case 'SET_MANUAL_REFRESH_PENDING':
-      return { ...state, manualRefreshPending: action.payload };
     case 'SET_FALLBACK_ACTIVE':
-      return { ...state, fallbackActive: action.payload };
-    case 'SET_FALLBACK_ERROR':
-      return { ...state, fallbackError: action.payload };
+      if (action.payload) {
+        // Fallback applies only to the live stream; never interrupt the
+        // previous-logs view (which has no stream to fall back from).
+        return state.mode.kind === 'previous' ? state : { ...state, mode: { kind: 'fallback' } };
+      }
+      return state.mode.kind === 'fallback' ? { ...state, mode: LIVE_MODE } : state;
     case 'SET_SHOW_PREVIOUS_LOGS':
-      return { ...state, showPreviousContainerLogs: action.payload };
+      if (action.payload) {
+        return state.mode.kind === 'previous'
+          ? state
+          : { ...state, mode: { kind: 'previous', loading: false } };
+      }
+      return state.mode.kind === 'previous' ? { ...state, mode: LIVE_MODE } : state;
     case 'SET_IS_LOADING_PREVIOUS_LOGS':
-      return { ...state, isLoadingPreviousContainerLogs: action.payload };
+      // Loading only exists inside the previous-logs mode.
+      return state.mode.kind === 'previous'
+        ? { ...state, mode: { kind: 'previous', loading: action.payload } }
+        : state;
 
     // Compound actions
     case 'RESET_FOR_NEW_SCOPE':
@@ -310,35 +331,12 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         displayMode: 'raw',
         parsedContainerLogs: [],
         expandedRows: new Set<string>(),
-        manualRefreshPending: false,
-        fallbackActive: false,
-        fallbackError: null,
-        showPreviousContainerLogs: false,
-        isLoadingPreviousContainerLogs: false,
+        mode: LIVE_MODE,
       };
     case 'START_PREVIOUS_LOGS':
-      return {
-        ...state,
-        showPreviousContainerLogs: true,
-        fallbackActive: false,
-        fallbackError: null,
-        manualRefreshPending: false,
-        isLoadingPreviousContainerLogs: true,
-      };
+      return { ...state, mode: { kind: 'previous', loading: true } };
     case 'STOP_PREVIOUS_LOGS':
-      return {
-        ...state,
-        showPreviousContainerLogs: false,
-        fallbackError: null,
-        manualRefreshPending: false,
-        isLoadingPreviousContainerLogs: false,
-      };
-    case 'CLEAR_FALLBACK':
-      return {
-        ...state,
-        fallbackActive: false,
-        fallbackError: null,
-      };
+      return { ...state, mode: LIVE_MODE };
 
     default:
       return state;

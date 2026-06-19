@@ -389,10 +389,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     displayMode,
     parsedContainerLogs,
     expandedRows,
-    fallbackActive,
-    showPreviousContainerLogs,
-    isLoadingPreviousContainerLogs,
   } = state;
+  // Derived from the discriminated view mode (the single source of truth for
+  // the mutually-exclusive live / fallback / previous-logs states).
+  const fallbackActive = state.mode.kind === 'fallback';
+  const showPreviousContainerLogs = state.mode.kind === 'previous';
+  const isLoadingPreviousContainerLogs = state.mode.kind === 'previous' && state.mode.loading;
   const showTimestamps = timestampMode !== 'hidden';
   const isParsedView = displayMode === 'parsed';
 
@@ -404,8 +406,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // initializer above pulls these values back out.
   //
   // Deps list every persistent field individually so changes to derived
-  // state (containers, availablePods, parsedContainerLogs, fallbackError, etc.)
-  // don't trigger an unnecessary writeback.
+  // state (containers, availablePods, parsedContainerLogs, view mode, etc.)
+  // don't trigger an unnecessary writeback. The previous-logs view is the only
+  // mode that persists, so depend on that boolean (not the loading sub-state).
   useEffect(() => {
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only persistent fields trigger writeback; `state` is read inside
@@ -424,7 +427,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.regexMatches,
     state.displayMode,
     state.expandedRows,
-    state.showPreviousContainerLogs,
+    showPreviousContainerLogs,
   ]);
 
   const hasPrimedScopeRef = useRef(false);
@@ -763,17 +766,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         const generatedAt = Date.now();
         mapEntriesToSnapshot(mapped, generatedAt, isManual, warnings);
         hasPrimedScopeRef.current = true;
-        dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (isLogDataUnavailable(message)) {
           const generatedAt = Date.now();
           mapEntriesToSnapshot([], generatedAt, isManual, [getLogDataUnavailableMessage(previous)]);
           hasPrimedScopeRef.current = true;
-          dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
           return;
         }
-        dispatch({ type: 'SET_FALLBACK_ERROR', payload: message });
+        // The error surfaces through the refresh-store snapshot status below.
         setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => ({
           ...previous,
           status: 'error',

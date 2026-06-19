@@ -74,6 +74,16 @@ workflow state such as refresh, object identity, permissions, save/cancel,
 reload/merge, drift, managedFields policy, and post-save notices in the
 object-panel wrapper.
 
+Object actions (delete, restart, scale, rollback, trigger, suspend,
+port-forward) run through the shared `useObjectActionController`
+(`frontend/src/shared/hooks`) rendered by `ActionsMenu` — the same controller
+the cluster/namespace tables and object map use. It owns action execution,
+permission gating, and every action modal (confirm/scale/scale-to-zero/rollback/
+port-forward). The object-panel wrapper supplies only lifecycle callbacks
+(`onAfterDelete` to close the panel, `onAfterAction` to refetch) plus the Node
+cordon/drain openers. Do not reintroduce a panel-local action reducer, per-action
+prop drilling through `DetailsTab`, or bespoke action modals.
+
 ## Checklist
 
 - [ ] Object references include `clusterId`, `group`, `version`, `kind`, and
@@ -82,6 +92,8 @@ object-panel wrapper.
 - [ ] Status rendering uses backend presentation fields.
 - [ ] Actions and tabs respect permissions/capabilities and surface denial
       reasons where applicable.
+- [ ] Object actions go through the shared `useObjectActionController` (no
+      panel-local action reducer, prop-drilled handlers, or duplicate modals).
 - [ ] Docked panel state, refresh behavior, and cluster/namespace changes remain
       consistent.
 - [ ] YAML surfaces use `YamlEditor` for editor mechanics and keep workflow

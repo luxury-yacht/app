@@ -35,6 +35,12 @@ The object panel's Details → Overview is rendered from per-kind **descriptors*
 per-kind components. To add or change a kind's overview, edit its descriptor — do not write a new
 component.
 
+This is frontend-owned presentation: the Wails-generated `*Details` DTO classes are the data
+contract; the descriptors live in the view layer and DTO-field coverage is guarded by a runtime
+drift-check (below), not by code-generating descriptors from the backend registry. Do not push
+Overview/UI vocabulary into Go or try to codegen the descriptors — that tradeoff was evaluated and
+deliberately rejected (the backend↔frontend loop is already closed at the generated DTO boundary).
+
 - `Details/Overview/schema.ts` — descriptor types (`OverviewDescriptor`, ordered `items`:
   `field | status | widget`, dynamic `label`/`fullWidth`, `mono`, `showSelector`, `OverviewContext`)
   and `coverageKeys`.
@@ -43,7 +49,8 @@ component.
 - `Details/Overview/descriptors/<area>.tsx` — one `OverviewDescriptor` per kind. Reads the raw
   Wails-generated `*Details` DTO by key (`field: keyof DTO`); render fns for complex values and
   `{kind:'widget'}` for irreducible UI; panel-only values (hpaManaged, drain, cluster identity) come
-  from the `OverviewContext` second arg, not hooks.
+  from the `OverviewContext` second arg, not hooks. Use a field's `hidden(dto)` predicate for
+  quiet-filtering (hide empty rows; no layout jitter).
 - `Details/Overview/descriptorRegistry.ts` — single source mapping kind → descriptor (production
   dispatch + drift-check). Register new kinds here.
 - `Details/Overview/driftCheck.test.ts` — runtime guard: every field of `new DtoClass({})` must be
@@ -51,6 +58,14 @@ component.
   `coveredElsewhere`). A new backend DTO field fails this test by name until placed.
 - `Details/Overview/registry.ts` — legacy fallback only: `GenericOverview` for custom/unregistered
   resources + per-kind action `getResourceCapabilities`.
+- `Details/objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) the renderer consumes,
+  plus the derived sibling sections `DetailsTab` composes (Containers, RBAC rules, ConfigMap/Secret
+  data, active pods, port-forward availability, scale replicas, CronJob suspend). Those derivations
+  are **capability-gated per kind** via `DETAIL_KIND_CONFIG`, NOT inferred from DTO field presence:
+  field names are overloaded across kinds (`rules` on Ingress/Webhook vs RBAC; `containers` on Job;
+  `desiredReplicas` on HPA; `pods` on Node), so shape-inference would mis-derive. Add a new kind's
+  derivations by declaring them in `DETAIL_KIND_CONFIG`; the four overload exclusions are locked by
+  `objectDetailModel.test.ts`.
 
 Parity for each kind lives in its `*Overview.test.tsx`, which renders
 `OverviewRenderer(descriptor, dto)` directly.
