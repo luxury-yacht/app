@@ -40,7 +40,12 @@ function renderField<T>(
   data: T,
   context: OverviewContext,
   key: React.Key
-): React.ReactElement {
+): React.ReactElement | null {
+  // Decide visibility before doing any work: a hidden row is dropped, so evaluating its
+  // render/label/fullWidth resolvers would be wasted — and it would force every conditional
+  // render() to re-guard against the absent value to avoid throwing on a row nobody sees.
+  if (field.hidden?.(data)) return null;
+
   const rawValue = field.render
     ? field.render(data, context)
     : field.field
@@ -53,7 +58,6 @@ function renderField<T>(
       label={resolve(field.label, data)}
       value={value}
       fullWidth={field.fullWidth ? resolve(field.fullWidth, data) : false}
-      hidden={field.hidden ? field.hidden(data) : false}
     />
   );
 }

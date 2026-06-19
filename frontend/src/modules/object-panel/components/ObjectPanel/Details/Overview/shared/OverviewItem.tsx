@@ -8,16 +8,12 @@ interface OverviewItemProps {
   label: string;
   value: React.ReactNode;
   fullWidth?: boolean;
-  hidden?: boolean;
 }
 
-export const OverviewItem: React.FC<OverviewItemProps> = ({
-  label,
-  value,
-  fullWidth = false,
-  hidden = false,
-}) => {
-  if (hidden || value === undefined || value === null) {
+export const OverviewItem: React.FC<OverviewItemProps> = ({ label, value, fullWidth = false }) => {
+  // Collapse the row when there is nothing to show. Conditional rows are dropped upstream by the
+  // renderer's `hidden` predicate; this guards the value-driven case (no value to display).
+  if (value === undefined || value === null) {
     return null;
   }
 

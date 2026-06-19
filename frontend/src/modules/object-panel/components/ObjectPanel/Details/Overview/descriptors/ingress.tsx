@@ -226,7 +226,8 @@ export const ingressDescriptor: OverviewDescriptor<IngressDetails> = {
         field: 'defaultBackend',
         label: 'Default Backend',
         hidden: (d) => !d.defaultBackend,
-        // Guard internally: render() runs even for hidden rows, so return null when absent.
+        // The `hidden` predicate above keeps render() from running when defaultBackend is absent;
+        // the ternary is a defensive belt-and-suspenders for the type narrowing.
         render: (d, context) =>
           d.defaultBackend
             ? renderBackend(d.defaultBackend, d.namespace, clusterMetaOf(context))
