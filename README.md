@@ -5,29 +5,29 @@ Luxury Yacht is a cross-platform GUI desktop app for managing Kubernetes cluster
 ![Screen shot of Luxury Yacht](https://luxury-yacht.app/images/screenshots/object-panel-right-dark.png)
 **New to Luxury Yacht?** Check out the [Features](https://luxury-yacht.app/features) page!
 
-**Luxury Yacht is open source and free for personal and commercial use.** No fees, no subscriptions, no strings attached.
+**Luxury Yacht is open source and free for personal and commercial use.** No fees, no subscriptions, no telemetry.
 
 ## Why Luxury Yacht?
 
-I'm a Kubernetes admin. I've tried most of the other apps in this space. None of them worked quite the way I wanted. I created Luxury Yacht to close those gaps, and make my life (and hopefully yours) a little easier.
+I'm a Kubernetes admin. I've tried most of the other apps in this space. None of them worked quite the way I wanted. I created Luxury Yacht to close those gaps, and make my job (and hopefully yours) a little easier.
 
 Luxury Yacht has all the standard features of a Kubernetes management app. If you've used k9s, Lens, Headlamp, or similar apps, you know what to expect: cluster summary data, real-time metrics, workload status, detailed drilldown info, pod logs, etc.
 
 ### Highlights
 
-Here are some of the things that Luxury Yacht offers that you might not find in other apps.
+Here are some of the features of Luxury Yacht that you might not find in other apps.
 
-- **Maybe the best log viewer you've ever used.** Highlight your search text. Invert to only show lines without the search text. Use regular expressions. Show system timestamps for logs without their own timestamps, or logs that have indecipherable formats like unix epoch time. Customize the timestamp format. Show times in UTC or your local time zone. Toggle support for ASCII color codes. Make JSON logs readable in pretty-print format, or even as a table.
+- **Maybe the best log viewer you've ever used.** Highlight search text. Invert your search to only show lines without the text. Use regular expressions. Show system timestamps for logs without their own timestamps, or logs that have indecipherable formats like unix epoch time. Customize the timestamp format. Show times in UTC or your local time zone. Toggle support for ASCII color codes. Make JSON logs more readable by showing them in tabular or pretty-print format.
 
 - **Object Maps.** Visualize the relationships between objects in your clusters. View a node-level map, an namespace-level map, or drill down to specific objects.
 
-- **Flexible panel layouts.** Organize your info however you like. Dock info panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new floating panel.
+- **Flexible panel layouts.** Organize your info however you like. Dock panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new floating panel.
 
 - **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are.
 
-- **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change appearance mode, and much more.
+- **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change the app's appearance, and much more.
 
-- **Favorites.** Save a filtered view as a favorite for quick access. Favorites can be cluster-specific, or create a generic favorite that works in any cluster.
+- **Favorites.** Save a view (and its filters) as a favorite for quick access. Favorites can be cluster-specific, or create a generic favorite that works in any cluster.
 
 - **Themes per cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
 

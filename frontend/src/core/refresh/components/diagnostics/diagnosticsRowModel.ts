@@ -110,40 +110,37 @@ const EMPTY_RESOURCE_STREAM_STATS: ResourceStreamTelemetrySummary = {
   fallbackCount: 0,
 };
 
-// resolveResourceStreamStats returns the resync/fallback summary for a cluster's
-// resource stream. Cluster-less (legacy) rows merge every cluster's stats so the
-// numbers are never lost; cluster-tagged rows get only their own cluster's.
+// resolveResourceStreamStats returns the per-(cluster, domain) resync/fallback
+// summary for a resource-stream row. Resyncs/fallbacks are tracked per domain,
+// so only a row that names a domain has them; stream-level/legacy rows get none.
 const resolveResourceStreamStats = (
-  byCluster: Record<string, ResourceStreamTelemetrySummary>,
-  clusterId?: string
+  byClusterDomain: Record<string, ResourceStreamTelemetrySummary>,
+  clusterId?: string,
+  domain?: string
 ): ResourceStreamTelemetrySummary => {
-  if (clusterId) {
-    return byCluster[clusterId] ?? EMPTY_RESOURCE_STREAM_STATS;
+  if (clusterId && domain) {
+    return byClusterDomain[`${clusterId}::${domain}`] ?? EMPTY_RESOURCE_STREAM_STATS;
   }
-  const merged: ResourceStreamTelemetrySummary = { resyncCount: 0, fallbackCount: 0 };
-  Object.values(byCluster).forEach((stats) => {
-    merged.resyncCount += stats.resyncCount;
-    merged.fallbackCount += stats.fallbackCount;
-    if (stats.lastResyncAt && stats.lastResyncAt > (merged.lastResyncAt ?? 0)) {
-      merged.lastResyncAt = stats.lastResyncAt;
-      merged.lastResyncReason = stats.lastResyncReason;
-    }
-    if (stats.lastFallbackAt && stats.lastFallbackAt > (merged.lastFallbackAt ?? 0)) {
-      merged.lastFallbackAt = stats.lastFallbackAt;
-      merged.lastFallbackReason = stats.lastFallbackReason;
-    }
-  });
-  return merged;
+  return EMPTY_RESOURCE_STREAM_STATS;
 };
 
 export const buildDiagnosticsStreamRows = (
   telemetrySummary: TelemetrySummary | null,
   filteredRows: ActiveDomainRow[],
-  resourceStreamStatsByCluster: Record<string, ResourceStreamTelemetrySummary>
+  resourceStreamStatsByClusterDomain: Record<string, ResourceStreamTelemetrySummary>
 ): DiagnosticsStreamRow[] => {
   if (!telemetrySummary?.streams?.length) {
     return [];
   }
+
+  // Friendly label per domain id (e.g. "pods" -> "Pods") for the Domain column,
+  // taken from the active refresh-domain rows.
+  const domainLabelById = new Map<string, string>();
+  filteredRows.forEach((row) => {
+    if (!domainLabelById.has(row.domain)) {
+      domainLabelById.set(row.domain, row.label);
+    }
+  });
 
   // Active domains are grouped per (stream, cluster) AND per stream so a
   // cluster-tagged telemetry row lists only its cluster's domains, while a
@@ -180,11 +177,20 @@ export const buildDiagnosticsStreamRows = (
       );
       const lastEventInfo = formatLastUpdated(stream.lastEvent > 0 ? stream.lastEvent : undefined);
       const isResourceStream = stream.name === 'resources';
-      // Per-cluster resync/fallback stats so each cluster's row reflects only its
-      // own recovery activity, not a global value repeated across clusters.
+      // A resource-stream entry that names a domain is a per-domain row; its
+      // resync/fallback stats come from that (cluster, domain). The Domain column
+      // shows the domain (friendly label) for those rows, else the active-domain
+      // list (events/catalog/stream-level rows).
+      const isPerDomainRow = isResourceStream && Boolean(stream.domain);
+      const domainDisplay = stream.domain
+        ? (domainLabelById.get(stream.domain) ?? stream.domain)
+        : activeDomains.length > 0
+          ? activeDomains.join(', ')
+          : '—';
       const resourceStreamStats = resolveResourceStreamStats(
-        resourceStreamStatsByCluster,
-        stream.clusterId
+        resourceStreamStatsByClusterDomain,
+        stream.clusterId,
+        stream.domain
       );
       const lastResyncInfo = resourceStreamStats.lastResyncAt
         ? formatLastUpdated(resourceStreamStats.lastResyncAt)
@@ -193,7 +199,7 @@ export const buildDiagnosticsStreamRows = (
         ? formatLastUpdated(resourceStreamStats.lastFallbackAt)
         : null;
       const resyncsTooltip = (() => {
-        if (!isResourceStream) {
+        if (!isPerDomainRow) {
           return undefined;
         }
         if (resourceStreamStats.lastResyncReason && lastResyncInfo?.tooltip) {
@@ -208,7 +214,7 @@ export const buildDiagnosticsStreamRows = (
         return undefined;
       })();
       const fallbacksTooltip = (() => {
-        if (!isResourceStream) {
+        if (!isPerDomainRow) {
           return undefined;
         }
         if (resourceStreamStats.lastFallbackReason && lastFallbackInfo?.tooltip) {
@@ -223,11 +229,12 @@ export const buildDiagnosticsStreamRows = (
         return undefined;
       })();
       return {
-        // Per-cluster rows must have distinct keys (the backend emits one entry
-        // per (stream, cluster)).
-        rowKey: stream.clusterId ? `${stream.name}::${stream.clusterId}` : stream.name,
+        // Distinct key per (stream, cluster, domain) — the backend emits one
+        // entry per domain plus a stream-level entry.
+        rowKey: `${stream.name}::${stream.clusterId ?? ''}::${stream.domain ?? ''}`,
         label,
         cluster: stream.clusterName ?? '—',
+        domain: domainDisplay,
         activeDomainCount: activeDomains.length,
         activeDomains: activeDomains.length > 0 ? activeDomains.join(', ') : '—',
         activeDomainsTooltip:
@@ -236,9 +243,9 @@ export const buildDiagnosticsStreamRows = (
         delivered: stream.totalMessages,
         dropped: stream.droppedMessages,
         errors: stream.errorCount,
-        resyncs: isResourceStream ? resourceStreamStats.resyncCount : null,
+        resyncs: isPerDomainRow ? resourceStreamStats.resyncCount : null,
         resyncsTooltip,
-        fallbacks: isResourceStream ? resourceStreamStats.fallbackCount : null,
+        fallbacks: isPerDomainRow ? resourceStreamStats.fallbackCount : null,
         fallbacksTooltip,
         lastConnect: lastConnectInfo.display,
         lastConnectTooltip: lastConnectInfo.tooltip,

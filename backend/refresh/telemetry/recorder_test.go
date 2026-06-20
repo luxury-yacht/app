@@ -166,3 +166,30 @@ func TestSnapshotSummaryTagsStreamsWithClusterMeta(t *testing.T) {
 	require.Equal(t, "cluster-1", streams[0].ClusterID)
 	require.Equal(t, "Cluster One", streams[0].ClusterName)
 }
+
+// TestRecordStreamDeliveryForDomainTracksPerDomainCounters proves the resources
+// stream's delivery/error counters can be attributed per resource domain, while
+// stream-level (domain-less) activity stays its own entry — so diagnostics can
+// show one row per domain.
+func TestRecordStreamDeliveryForDomainTracksPerDomainCounters(t *testing.T) {
+	rec := NewRecorder()
+	rec.RecordStreamConnect(StreamResources) // stream-level (socket), no domain
+	rec.RecordStreamDeliveryForDomain(StreamResources, "nodes", 5, 0)
+	rec.RecordStreamDeliveryForDomain(StreamResources, "pods", 3, 1)
+	rec.RecordStreamErrorForDomain(StreamResources, "pods", errors.New("backlog"))
+
+	byDomain := map[string]StreamStatus{}
+	for _, s := range rec.SnapshotSummary().Streams {
+		byDomain[s.Domain] = s
+	}
+
+	require.Equal(t, uint64(5), byDomain["nodes"].TotalMessages)
+	require.Equal(t, uint64(0), byDomain["nodes"].DroppedMessages)
+	require.Equal(t, uint64(3), byDomain["pods"].TotalMessages)
+	require.Equal(t, uint64(1), byDomain["pods"].DroppedMessages)
+	require.Equal(t, "backlog", byDomain["pods"].LastError)
+	// Stream-level connect stays a domain-less entry.
+	require.Equal(t, 1, byDomain[""].ActiveSessions)
+	require.Equal(t, StreamResources, byDomain[""].Name)
+	require.Equal(t, StreamResources, byDomain["nodes"].Name)
+}

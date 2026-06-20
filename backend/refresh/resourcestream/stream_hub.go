@@ -164,10 +164,13 @@ func (h managerStreamHub) broadcast(domain string, scopes []string, update Updat
 
 		if m.telemetry != nil {
 			backpressureEvents := backpressureResets + backpressureDrops
-			m.telemetry.RecordStreamDelivery(telemetry.StreamResources, delivered, backpressureEvents)
+			// Attribute deliveries/drops to the resource domain so diagnostics can
+			// show one Streams row per domain (sessions/connect stay stream-level).
+			m.telemetry.RecordStreamDeliveryForDomain(telemetry.StreamResources, domain, delivered, backpressureEvents)
 			if backpressureEvents > 0 {
-				m.telemetry.RecordStreamError(
+				m.telemetry.RecordStreamErrorForDomain(
 					telemetry.StreamResources,
+					domain,
 					fmt.Errorf(
 						"resource stream backlog reset %d subscriber(s) and dropped %d subscriber(s) for %s/%s",
 						backpressureResets,

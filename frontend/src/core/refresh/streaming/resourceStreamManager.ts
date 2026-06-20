@@ -237,9 +237,10 @@ export type ResourceStreamTelemetrySummary = {
 };
 
 type StreamTelemetry = {
-  // Cluster this subscription's resync/fallback counters belong to, so the
-  // diagnostics Streams view can report them per cluster (multi-cluster aware).
+  // Cluster + resource domain this subscription's resync/fallback counters belong
+  // to, so the diagnostics Streams view can report them per cluster and per domain.
   clusterId: string;
+  domain: string;
   resyncCount: number;
   fallbackCount: number;
   lastResyncAt?: number;
@@ -310,16 +311,16 @@ export class ResourceStreamManager {
     return summary;
   }
 
-  // Per-cluster resync/fallback summaries so the diagnostics Streams table can
-  // attribute recovery activity to the right cluster instead of repeating one
-  // global value on every cluster's row.
-  getTelemetrySummaryByCluster(): Record<string, ResourceStreamTelemetrySummary> {
-    const byCluster: Record<string, ResourceStreamTelemetrySummary> = {};
+  // Per-(cluster, domain) resync/fallback summaries for the per-domain Streams
+  // rows. Keyed `${clusterId}::${domain}` (scopes of a domain are summed).
+  getTelemetrySummaryByClusterDomain(): Record<string, ResourceStreamTelemetrySummary> {
+    const byClusterDomain: Record<string, ResourceStreamTelemetrySummary> = {};
     this.streamTelemetry.forEach((stats) => {
-      const summary = (byCluster[stats.clusterId] ??= { resyncCount: 0, fallbackCount: 0 });
+      const key = `${stats.clusterId}::${stats.domain}`;
+      const summary = (byClusterDomain[key] ??= { resyncCount: 0, fallbackCount: 0 });
       accumulateStreamTelemetry(summary, stats);
     });
-    return byCluster;
+    return byClusterDomain;
   }
 
   // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
@@ -863,6 +864,7 @@ export class ResourceStreamManager {
     }
     const stats: StreamTelemetry = {
       clusterId: subscription.clusterId,
+      domain: subscription.domain,
       resyncCount: 0,
       fallbackCount: 0,
     };

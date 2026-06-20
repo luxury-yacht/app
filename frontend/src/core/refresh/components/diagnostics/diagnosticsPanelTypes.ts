@@ -67,6 +67,9 @@ export interface DiagnosticsStreamRow {
   // Cluster these counters belong to (shown in the leading Cluster column);
   // '—' for legacy cluster-less telemetry.
   cluster: string;
+  // Domain column value: a single resource domain for per-domain resources rows,
+  // else the active-domain list (events/catalog/stream-level rows).
+  domain: string;
   activeDomainCount: number;
   activeDomains: string;
   activeDomainsTooltip?: string;

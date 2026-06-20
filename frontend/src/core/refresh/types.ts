@@ -1160,6 +1160,10 @@ export interface TelemetryMetricsStatus {
 
 export interface TelemetryStreamStatus {
   name: string;
+  // Resource domain these counters belong to (resources stream only); absent for
+  // stream-level/socket activity (sessions/connect) and non-per-domain streams.
+  // Lets diagnostics show one row per domain. Mirrors backend telemetry.StreamStatus.
+  domain?: string;
   // Cluster these counters belong to. The backend emits one entry per
   // (stream, cluster) so diagnostics stays multi-cluster aware; absent only for
   // legacy single-recorder payloads. Mirrors backend telemetry.StreamStatus.

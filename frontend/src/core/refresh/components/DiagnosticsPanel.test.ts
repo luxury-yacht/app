@@ -1053,16 +1053,9 @@ describe('DiagnosticsPanel component', () => {
         lastFallbackAt: now - 2400,
         lastFallbackReason: 'gap detected',
       });
-    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByCluster').mockReturnValue({
-      'cluster-a': {
-        resyncCount: 2,
-        fallbackCount: 1,
-        lastResyncAt: now - 1200,
-        lastResyncReason: 'reset',
-        lastFallbackAt: now - 2400,
-        lastFallbackReason: 'gap detected',
-      },
-    });
+    // Per-domain resync/fallback source for the Streams table. These fixtures
+    // carry no domain, so the resources row is a stream-level row (resyncs null).
+    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByClusterDomain').mockReturnValue({});
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(telemetrySummary);
     fetchSelectionDiagnosticsMock.mockResolvedValueOnce({
@@ -1168,8 +1161,9 @@ describe('DiagnosticsPanel component', () => {
       row.textContent?.includes('Resources')
     );
     const cells = resourcesRow?.querySelectorAll('td') ?? [];
-    expect(cells[7]?.textContent?.trim()).toBe('2');
-    expect(cells[8]?.textContent?.trim()).toBe('1');
+    // No domain on the fixture's resources entry → stream-level row → no per-domain resyncs.
+    expect(cells[7]?.textContent?.trim()).toBe('—');
+    expect(cells[8]?.textContent?.trim()).toBe('—');
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
@@ -1422,16 +1416,7 @@ describe('DiagnosticsPanel component', () => {
         lastFallbackAt: now - 400,
         lastFallbackReason: 'gap detected',
       });
-    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByCluster').mockReturnValue({
-      'cluster-a': {
-        resyncCount: 4,
-        fallbackCount: 2,
-        lastResyncAt: now - 600,
-        lastResyncReason: 'reset',
-        lastFallbackAt: now - 400,
-        lastFallbackReason: 'gap detected',
-      },
-    });
+    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByClusterDomain').mockReturnValue({});
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
@@ -1462,8 +1447,8 @@ describe('DiagnosticsPanel component', () => {
 
     const resourceCells = resourcesRow!.querySelectorAll('td');
     expect(resourceCells[6]?.textContent?.trim()).toBe('1');
-    expect(resourceCells[7]?.textContent?.trim()).toBe('4');
-    expect(resourceCells[8]?.textContent?.trim()).toBe('2');
+    expect(resourceCells[7]?.textContent?.trim()).toBe('—');
+    expect(resourceCells[8]?.textContent?.trim()).toBe('—');
     expect(resourceCells[11]?.textContent?.trim()).toBe('Resource stream disconnected');
 
     await rendered.unmount();

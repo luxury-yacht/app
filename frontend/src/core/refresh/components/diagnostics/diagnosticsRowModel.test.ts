@@ -96,23 +96,79 @@ describe('diagnosticsRowModel', () => {
     expect(buildDiagnosticsStreamRows(null, [], {})).toEqual([]);
   });
 
-  test('builds stream rows with active domain labels and resource recovery stats', () => {
+  test('splits the resources stream into one row per domain with per-domain counters', () => {
+    const rows = buildDiagnosticsStreamRows(
+      telemetry([
+        {
+          name: 'resources',
+          clusterId: 'c1',
+          clusterName: 'kwok',
+          domain: 'nodes',
+          activeSessions: 1,
+          totalMessages: 100,
+          droppedMessages: 3,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: 0,
+        },
+        {
+          name: 'resources',
+          clusterId: 'c1',
+          clusterName: 'kwok',
+          domain: 'pods',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 1,
+          lastConnect: 0,
+          lastEvent: 0,
+          lastError: 'pods backlog',
+        },
+      ]),
+      [
+        { domain: 'nodes', label: 'Nodes', scope: 'kwok (active)' },
+        { domain: 'pods', label: 'Pods', scope: 'kwok (active)' },
+      ],
+      {
+        'c1::nodes': { resyncCount: 7, fallbackCount: 1 },
+        'c1::pods': { resyncCount: 0, fallbackCount: 0 },
+      }
+    );
+
+    // One row per (cluster, domain), each with its own delivered/dropped/errors
+    // and per-domain resyncs/fallbacks; Domain column shows the friendly label.
+    const nodes = rows.find((row) => row.rowKey === 'resources::c1::nodes');
+    const pods = rows.find((row) => row.rowKey === 'resources::c1::pods');
+    expect(nodes).toMatchObject({
+      cluster: 'kwok',
+      label: 'Resources',
+      domain: 'Nodes',
+      delivered: 100,
+      dropped: 3,
+      resyncs: 7,
+      fallbacks: 1,
+    });
+    expect(pods).toMatchObject({
+      cluster: 'kwok',
+      label: 'Resources',
+      domain: 'Pods',
+      delivered: 5,
+      errors: 1,
+      resyncs: 0,
+      fallbacks: 0,
+      lastError: 'pods backlog',
+    });
+  });
+
+  test('keeps the active-domain list and no per-domain resyncs for non-per-domain rows', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     const now = Date.now();
 
     const rows = buildDiagnosticsStreamRows(
       telemetry([
-        {
-          name: 'resources',
-          activeSessions: 2,
-          totalMessages: 10,
-          droppedMessages: 1,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: now - 1000,
-          lastEvent: now - 500,
-        },
         {
           name: 'catalog',
           activeSessions: 1,
@@ -125,132 +181,20 @@ describe('diagnosticsRowModel', () => {
           lastError: 'catalog stalled',
         },
       ]),
-      [
-        {
-          domain: 'namespace-workloads',
-          label: 'Workloads',
-          scope: 'cluster:test-cluster::namespace:team-a',
-        },
-        {
-          domain: 'namespace-workloads',
-          label: 'Workloads',
-          scope: 'cluster:test-cluster::namespace:team-a',
-        },
-        {
-          domain: 'catalog',
-          label: 'Browse Catalog',
-          scope: 'cluster:test-cluster',
-        },
-      ],
-      {
-        'cluster-a': {
-          resyncCount: 4,
-          fallbackCount: 2,
-          lastResyncAt: now - 750,
-          lastResyncReason: 'reset',
-          lastFallbackAt: now - 250,
-          lastFallbackReason: 'gap detected',
-        },
-      }
+      [{ domain: 'catalog', label: 'Browse Catalog', scope: 'cluster:test-cluster' }],
+      {}
     );
 
-    const catalog = rows.find((row) => row.rowKey === 'catalog');
-    const resources = rows.find((row) => row.rowKey === 'resources');
-
+    const catalog = rows.find((row) => row.label === 'Catalog');
     expect(catalog).toMatchObject({
-      label: 'Catalog',
-      activeDomainCount: 1,
-      activeDomains: 'Browse Catalog (cluster:test-cluster)',
+      // Non-per-domain stream: Domain column shows the active-domain list, and
+      // resyncs/fallbacks stay null (only resources per-domain rows have them).
+      domain: 'Browse Catalog (cluster:test-cluster)',
+      delivered: 3,
+      dropped: 2,
       resyncs: null,
       fallbacks: null,
       lastError: 'catalog stalled',
-    });
-    expect(resources).toMatchObject({
-      label: 'Resources',
-      activeDomainCount: 1,
-      activeDomains: 'Workloads (cluster:test-cluster::namespace:team-a)',
-      sessions: 2,
-      delivered: 10,
-      dropped: 1,
-      errors: 0,
-      resyncs: 4,
-      fallbacks: 2,
-      lastError: '—',
-    });
-    expect(resources?.resyncsTooltip).toContain('reset');
-    expect(resources?.fallbacksTooltip).toContain('gap detected');
-  });
-
-  test('builds one cluster-tagged stream row per cluster with per-cluster counters and domains', () => {
-    const rows = buildDiagnosticsStreamRows(
-      telemetry([
-        {
-          name: 'resources',
-          clusterId: 'c1',
-          clusterName: 'kwok',
-          activeSessions: 1,
-          totalMessages: 100,
-          droppedMessages: 3,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: 0,
-          lastEvent: 0,
-        },
-        {
-          name: 'resources',
-          clusterId: 'c2',
-          clusterName: 'kind',
-          activeSessions: 1,
-          totalMessages: 5,
-          droppedMessages: 0,
-          skippedTargets: 0,
-          errorCount: 0,
-          lastConnect: 0,
-          lastEvent: 0,
-        },
-      ]),
-      [
-        {
-          domain: 'nodes',
-          label: 'Nodes',
-          scope: 'kwok (active)',
-          scopeEntries: [{ label: 'Active', clusterName: 'kwok' }],
-        },
-        {
-          domain: 'pods',
-          label: 'Pods',
-          scope: 'kind (active)',
-          scopeEntries: [{ label: 'Active', clusterName: 'kind' }],
-        },
-      ],
-      {
-        c1: { resyncCount: 7, fallbackCount: 1 },
-        c2: { resyncCount: 0, fallbackCount: 0 },
-      }
-    );
-
-    // Distinct keys per cluster (no collision), cluster-labeled, per-cluster
-    // counters + resyncs/fallbacks, and each row lists only its own cluster's
-    // active domains.
-    const kwok = rows.find((row) => row.rowKey === 'resources::c1');
-    const kind = rows.find((row) => row.rowKey === 'resources::c2');
-    expect(kwok).toMatchObject({
-      label: 'Resources',
-      cluster: 'kwok',
-      delivered: 100,
-      dropped: 3,
-      resyncs: 7,
-      fallbacks: 1,
-      activeDomains: 'Nodes (kwok (active))',
-    });
-    expect(kind).toMatchObject({
-      label: 'Resources',
-      cluster: 'kind',
-      delivered: 5,
-      dropped: 0,
-      resyncs: 0,
-      fallbacks: 0,
-      activeDomains: 'Pods (kind (active))',
     });
   });
 
@@ -260,6 +204,7 @@ describe('diagnosticsRowModel', () => {
         rowKey: 'resources',
         label: 'Resources',
         cluster: 'kwok',
+        domain: 'Pods',
         activeDomainCount: 2,
         activeDomains: 'Workloads, Pods',
         sessions: 3,
@@ -278,6 +223,7 @@ describe('diagnosticsRowModel', () => {
         rowKey: 'catalog',
         label: 'Catalog',
         cluster: 'kwok',
+        domain: 'Browse Catalog',
         activeDomainCount: 1,
         activeDomains: 'Browse Catalog',
         sessions: 1,

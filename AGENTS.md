@@ -13,6 +13,21 @@ to this file when working in those directories.
 
 You MUST follow these at all times.
 
+- **GROUND EVERY CLAIM (externally checkable; overrides fluency).** Every
+  statement about how the code or system behaves must, in the same breath,
+  either **(a)** cite the evidence gathered _this turn_ — a `file:line` or the
+  command and its output — or **(b)** be prefixed **`[unverified]`** /
+  **`[assumed]`**. A claim with neither is a violation, no matter how obvious it
+  seems. These words are **banned about code without an inline citation**: dead,
+  unused, safe, complete, done, identical, impossible, fine, simple, just,
+  trivial, no consumers, nothing else, near-zero, tested, verified. To use one,
+  run the check first and cite it, or don't say it. **Never extrapolate one
+  verified fact into a system-level conclusion** — a code path is not runtime
+  behavior, a producer is not its consumers, a microbench is not a system test;
+  each is a separate claim needing its own evidence. If a load-bearing claim
+  isn't backed by a check you ran this turn, run it — or say "I have not verified
+  this" — before stating it. Enforcement does not rely on self-assessment: a
+  reviewer can confirm a violation by the absence of an inline citation alone.
 - **EVERY PART OF THE APP MUST BE MULTI-CLUSTER AWARE.** Data access, refresh
   domains, caches, commands, persistence keys, navigation, events, and object
   actions must carry `clusterId` when operating on cluster data. Fix touched
@@ -22,9 +37,9 @@ You MUST follow these at all times.
   specific Kubernetes object. Do not pass kind-only or name-only references
   across module, API, cache, event, action, or navigation boundaries. Fix
   touched code that violates this before building on top of it.
-- **ALWAYS CHOOSE THE SIMPLEST SOLUTION THAT IS COMPLETE AND CORRECT.** Simple
-  means clear, direct, and maintainable. It does not mean partial, fragile, or
-  narrowly patched around the real problem.
+- **SOLVE THE ROOT PROBLEM WITH THE CLEANEST COMPLETE, CORRECT SOLUTION** — even
+  when that's harder to write than a local patch. "Cleanest" means clear, direct,
+  and maintainable; it never means partial, fragile, or narrowly worked around.
 - **PREFER THE DIFFICULT-BUT-CORRECT FIX OVER THE SIMPLE-BUT-INCOMPLETE FIX.**
   If the correct fix requires tracing shared behavior, centralizing duplicated
   logic, or adjusting tests, do that work instead of adding another local
