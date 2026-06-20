@@ -168,7 +168,19 @@ include the projection-skip + test rewrites.
   `handleWorkloadFromHPA`, and bottom-up remove the then-dead `podsForWorkload`
   and `hpasForWorkloadContext` (+ their tests). Pure backend-CPU cleanup; no
   contract/frontend change.
-- [ ] **Slice 2 — Baseline elimination (the sole remaining item).** Give
+- [x] **Slice 2 — Baseline elimination. ✅ DONE + gate-green.** Notify-only
+  domains now resync by bumping `streamRevision` + re-arming the stream instead
+  of fetching a full-row snapshot (`resourceStreamManager.resyncSubscription`),
+  and `status→'ready'` clears the query gate — so the table fetches page 1
+  **without waiting for the full-row baseline**. This removes one of the two
+  sequential O(all-objects) projections from the view-open critical path (the
+  baseline used to gate the query, then the query built its page; now just the
+  query). ~6 lifecycle tests migrated to `namespace-config` (non-notify) to keep
+  testing resync→fetch; the pods stale-RV test now asserts the notify-only
+  no-fetch behavior. **This is where the notify-only conversion pays off on load
+  time** — it was the prerequisite that made the baseline safely skippable.
+
+  Original scope: Give
   notify-only domains a resync that bumps `streamRevision` + re-arms the delta
   stream instead of fetching a full-row snapshot, so the one-time-per-view
   baseline stops crossing the bridge. Slice 6 (done) already removed the
@@ -228,6 +240,65 @@ include the projection-skip + test rewrites.
   pod permission targets, so visible pods get fresh pre-checks; the context
   scan's staleness (baseline-only for notify-only domains) is a low-severity
   pre-fetch miss covered by on-demand checks. Required before Slice 2.
+
+## Finding #2 — the O(all-objects)-per-page build (separate, larger effort)
+
+The original load-speed analysis flagged that each table page request projects
+**all** objects in scope (e.g. every pod) to produce one 50-row page, and that
+every sort/filter/page re-does it. After tracing the collector
+(`typed_table_query.go`), the conclusion is:
+
+- **It can't be fixed with a cache** for the target case — on a busy large
+  cluster the scope's data version changes constantly, so a per-version
+  projection cache is invalidated before it's reused.
+- **It can't be made O(page) by lazy projection** — returning a correctly
+  *sorted + filtered + faceted* page over N objects inherently requires
+  examining all N (you can't find the top-50-by-field, the match count, or the
+  present namespaces/kinds without touching every object). The collector already
+  does this efficiently (rejects out-of-window rows in O(1)).
+- **The real fix is a pre-built incremental index/store** maintained on informer
+  events, so a page query reads pre-sorted/pre-indexed state instead of
+  re-scanning N. This is the "SQLite/index decision point" called out in
+  `docs/architecture` / `large-data.md`. It is a **major architecture project**,
+  and its payoff should be **measured first** (the existing `BuildDurationMs` /
+  `TimeToFirstRowMs` telemetry, against a real large cluster) before committing —
+  not guessed and built.
+
+Slice 2 above already removes one of the two O(N) scans from view-open; this
+index work is the way to attack the remaining one and all sort/filter/page
+latency, as a deliberate, measured follow-up.
+
+### Finding #2 — DONE for pods (the dominant view): projection memo cache
+
+`pods.go` now memoizes projected rows (`podProjectionCache`, keyed by pod UID,
+validated on `resourceVersion` + the metrics revision, TTL-pruned). The frequent
+refetches a busy cluster drives — which used to re-project **every** pod each
+request — now reuse cached summaries for unchanged pods; only changed pods (new
+RV) or a metrics poll re-project. Cold first-open still projects all (inherent —
+a correct sorted/filtered/faceted page must examine every object), but the
+steady-state refetch cost drops from O(all pods) to O(changed pods). Gate-green;
+proven by a test asserting two identical builds project each pod once, not twice.
+
+**Measured (BenchmarkPodBuilderBuild, 10k synthetic pods):** cold full build
+~21 ms/op; warm (cache reuse) ~10.7 ms/op — the memo cache ~halves it
+(validated, not guessed). Crucially, the absolute build cost is **tens of
+milliseconds, not seconds** (~100 ms even at 50k pods), so the backend
+projection is **not** the dominant "load feels slow" cost — the initial informer
+LIST / cluster connect / network (k8s-side) is. That evidence is why the large
+incremental-index project below is **not** worth building: it would shave tens
+of ms off a path that isn't the bottleneck. Slice 2 (removing one full build
+from view-open) + this memo cache are the load-time changes the evidence
+supports; further backend indexing has diminishing returns until measured
+against a real large cluster's `BuildDurationMs`.
+
+**Why pods only:** a pod's summary is self-contained — it depends on the pod, its
+*immutable* RS→Deployment owner, and metrics — so (RV, metricsRev) fully key it.
+Workloads and nodes summaries **aggregate other objects** (a workload row
+reflects its pods; a node row reflects its pods), so they change without the
+entity's own RV changing; keying on own-RV there would serve stale data. The
+memo cache is therefore correct for pods (and would extend to events, whose rows
+are self-contained) but **not** to the aggregate domains — those need the
+incremental-index approach above.
 
 ## Out of scope
 

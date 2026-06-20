@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
@@ -36,6 +37,111 @@ type PodBuilder struct {
 	podIndexer cache.Indexer
 	rsLister   appslisters.ReplicaSetLister
 	metrics    metrics.Provider
+	// buildSummary projects a pod into its row. It is a field so tests can count
+	// or inject projections; nil defaults to podres.BuildStreamSummaryFromRSMap.
+	buildSummary func(ClusterMeta, *corev1.Pod, int64, int64, map[string]string) PodSummary
+	// projCache memoizes projected rows so the frequent refetches a busy cluster
+	// drives reuse work instead of re-projecting every pod each request. nil for
+	// ad-hoc/test builders (projection runs directly).
+	projCache *podProjectionCache
+}
+
+// newPodBuilder wires a PodBuilder with the projection memo cache enabled.
+func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister, provider metrics.Provider) *PodBuilder {
+	return &PodBuilder{
+		podLister:  podLister,
+		podIndexer: podIndexer,
+		rsLister:   rsLister,
+		metrics:    provider,
+		projCache:  newPodProjectionCache(),
+	}
+}
+
+// projectPod returns a pod's row, reusing a cached projection when the pod's
+// resourceVersion and the metrics revision are both unchanged.
+func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string, metricsRev string) PodSummary {
+	build := func() PodSummary {
+		usage := podUsage[pod.Namespace+"/"+pod.Name]
+		project := b.buildSummary
+		if project == nil {
+			project = podres.BuildStreamSummaryFromRSMap
+		}
+		return project(meta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, rsMap)
+	}
+	if b.projCache == nil {
+		return build()
+	}
+	return b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, metricsRev, build)
+}
+
+// podProjectionCacheTTL bounds the memo cache: entries for pods not seen within
+// the window (e.g. deleted pods) are evicted, so it stays bounded without any
+// informer-event wiring.
+const podProjectionCacheTTL = 2 * time.Minute
+
+type podProjectionEntry struct {
+	resourceVersion string
+	metricsRev      string
+	summary         PodSummary
+	lastAccess      time.Time
+}
+
+// podProjectionCache memoizes pod row projections keyed by pod UID. A summary is
+// reused only when the pod's resourceVersion AND the metrics revision are both
+// unchanged, so it is always accurate: a pod change bumps RV; a metrics poll
+// bumps metricsRev. (The pod's RS->Deployment owner is immutable in practice, so
+// those two keys fully determine the projection.)
+type podProjectionCache struct {
+	mu        sync.Mutex
+	entries   map[string]podProjectionEntry
+	lastPrune time.Time
+}
+
+func newPodProjectionCache() *podProjectionCache {
+	return &podProjectionCache{entries: make(map[string]podProjectionEntry)}
+}
+
+// summaryFor returns the cached projection on a (resourceVersion, metricsRev)
+// hit, otherwise builds, stores, and returns a fresh one. build() runs outside
+// the lock so concurrent scope builds don't serialize on projection; a concurrent
+// miss re-projects once (identical result, last write wins).
+func (c *podProjectionCache) summaryFor(uid, resourceVersion, metricsRev string, build func() PodSummary) PodSummary {
+	now := time.Now()
+	c.mu.Lock()
+	if entry, ok := c.entries[uid]; ok && entry.resourceVersion == resourceVersion && entry.metricsRev == metricsRev {
+		entry.lastAccess = now
+		c.entries[uid] = entry
+		c.mu.Unlock()
+		return entry.summary
+	}
+	c.mu.Unlock()
+
+	summary := build()
+
+	c.mu.Lock()
+	c.entries[uid] = podProjectionEntry{
+		resourceVersion: resourceVersion,
+		metricsRev:      metricsRev,
+		summary:         summary,
+		lastAccess:      now,
+	}
+	c.mu.Unlock()
+	return summary
+}
+
+// prune evicts entries not accessed within the TTL, at most once per window.
+func (c *podProjectionCache) prune(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if now.Sub(c.lastPrune) < podProjectionCacheTTL {
+		return
+	}
+	c.lastPrune = now
+	for uid, entry := range c.entries {
+		if now.Sub(entry.lastAccess) > podProjectionCacheTTL {
+			delete(c.entries, uid)
+		}
+	}
 }
 
 // PodSnapshot is the payload for the pods domain.
@@ -102,12 +208,12 @@ const (
 // RegisterPodDomain registers the pods snapshot domain.
 func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider) error {
 	podInformer := factory.Core().V1().Pods().Informer()
-	builder := &PodBuilder{
-		podLister:  factory.Core().V1().Pods().Lister(),
-		podIndexer: podInformer.GetIndexer(),
-		rsLister:   factory.Apps().V1().ReplicaSets().Lister(),
-		metrics:    provider,
-	}
+	builder := newPodBuilder(
+		factory.Core().V1().Pods().Lister(),
+		podInformer.GetIndexer(),
+		factory.Apps().V1().ReplicaSets().Lister(),
+		provider,
+	)
 	return reg.Register(refresh.DomainConfig{
 		Name:          podDomainName,
 		BuildSnapshot: builder.Build,
@@ -142,6 +248,9 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	if err != nil {
 		return nil, err
 	}
+	if b.projCache != nil {
+		b.projCache.prune(time.Now())
+	}
 
 	rsMap, err := b.replicasetDeploymentMap(pods)
 	if err != nil {
@@ -168,8 +277,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
-			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
+			summary := b.projectPod(meta, pod, podUsage, rsMap, dynamicRevision)
 			countPod(summary)
 			collector.Add(summary)
 			if v := parsePodResourceVersion(pod); v > version {
@@ -183,8 +291,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
-			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
+			summary := b.projectPod(meta, pod, podUsage, rsMap, dynamicRevision)
 			countPod(summary)
 			summaries = append(summaries, summary)
 			if v := parsePodResourceVersion(pod); v > version {

@@ -12,8 +12,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -300,6 +302,123 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.Equal(t, "25m", payload.Rows[0].CPUUsage)
 	require.Equal(t, "32 MB", payload.Rows[0].MemUsage)
 	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
+}
+
+func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodUsage, time.Time) {
+	tb.Helper()
+	now := time.Now()
+	pods := make([]*corev1.Pod, n)
+	usage := map[string]metrics.PodUsage{}
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("pod-%05d", i)
+		ns := fmt.Sprintf("team-%d", i%50)
+		pods[i] = &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         ns,
+				UID:               types.UID(name),
+				ResourceVersion:   fmt.Sprintf("%d", i),
+				CreationTimestamp: metav1.NewTime(now.Add(-time.Duration(i) * time.Second)),
+				OwnerReferences:   []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "rs-" + name, Controller: ptrBool(true)}},
+			},
+			Spec: corev1.PodSpec{
+				NodeName: fmt.Sprintf("node-%d", i%100),
+				Containers: []corev1.Container{{
+					Name: "c",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resourceQuantity("100m"),
+							corev1.ResourceMemory: resourceQuantity("128Mi"),
+						},
+					},
+				}},
+			},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Name: "c", Ready: true, RestartCount: int32(i % 5)}},
+			},
+		}
+		usage[ns+"/"+name] = metrics.PodUsage{CPUUsageMilli: int64(i % 500), MemoryUsageBytes: int64(i) * 1024 * 1024}
+	}
+	return pods, usage, now
+}
+
+// BenchmarkPodBuilderBuildCold measures one full query build (project every pod)
+// for a large scope — the cold-open / cache-miss cost we'd target with an index.
+func BenchmarkPodBuilderBuildCold(b *testing.B) {
+	pods, usage, now := benchmarkPods(b, 10000)
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(b, pods...),
+		rsLister:  testsupport.NewReplicaSetLister(b),
+		metrics:   fakePodMetricsProvider{usage: usage, metadata: metrics.Metadata{CollectedAt: now}},
+	}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
+	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := builder.Build(ctx, scope); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkPodBuilderBuildWarm measures a refetch when nothing changed — the
+// memo cache should reuse projections (the busy-cluster steady state).
+func BenchmarkPodBuilderBuildWarm(b *testing.B) {
+	pods, usage, now := benchmarkPods(b, 10000)
+	builder := newPodBuilder(testsupport.NewPodLister(b, pods...), nil, testsupport.NewReplicaSetLister(b), fakePodMetricsProvider{usage: usage, metadata: metrics.Metadata{CollectedAt: now}})
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
+	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
+	if _, err := builder.Build(ctx, scope); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := builder.Build(ctx, scope); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestPodBuilderReusesProjectionsAcrossBuilds(t *testing.T) {
+	now := time.Now()
+	mkPod := func(name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         "team-a",
+				UID:               types.UID(name + "-uid"),
+				ResourceVersion:   "1",
+				CreationTimestamp: metav1.NewTime(now),
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+	}
+	builder := newPodBuilder(
+		testsupport.NewPodLister(t, mkPod("a"), mkPod("b")),
+		nil,
+		testsupport.NewReplicaSetLister(t),
+		fakePodMetricsProvider{metadata: metrics.Metadata{CollectedAt: now}},
+	)
+	projections := 0
+	builder.buildSummary = func(meta ClusterMeta, pod *corev1.Pod, cpu, mem int64, rsMap map[string]string) PodSummary {
+		projections++
+		return podres.BuildStreamSummaryFromRSMap(meta, pod, cpu, mem, rsMap)
+	}
+
+	first, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	require.Equal(t, 2, projections, "cold build projects every pod once")
+
+	second, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	// Unchanged pods + unchanged metrics revision → cached projections reused; the
+	// busy-cluster refetch no longer re-projects every pod.
+	require.Equal(t, 2, projections, "warm build reuses cached projections")
+
+	require.Equal(t, first.Payload.(PodSnapshot).Rows, second.Payload.(PodSnapshot).Rows)
 }
 
 func TestPodBuilderReportsScopeCounts(t *testing.T) {

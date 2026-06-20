@@ -893,6 +893,19 @@ export class ResourceStreamManager {
     subscription.updateQueue = [];
     subscription.lastSequence = undefined;
 
+    // Notify-only domains carry no row baseline. A resync (initial start, reset,
+    // backpressure, complete/error) just re-arms the delta stream and bumps
+    // streamRevision so the query-backed view refetches its page — no full-row
+    // snapshot is pulled over the bridge, and status→'ready' clears the query
+    // gate so the table stops waiting on a baseline before showing page 1.
+    if (isNotifyOnlyStreamDomain(subscription.domain)) {
+      this.bumpStreamRevisionOnly(subscription, now);
+      this.markResyncComplete(subscription);
+      subscription.pendingReset = false;
+      this.subscribe(subscription);
+      return;
+    }
+
     try {
       const { snapshot, notModified } = await fetchSnapshotForSubscription(subscription);
       if (notModified) {
