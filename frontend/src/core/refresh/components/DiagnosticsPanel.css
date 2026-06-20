@@ -397,7 +397,7 @@
 }
 /* Leading connector makes the child relationship explicit even at a glance. */
 .diagnostics-table td.diagnostics-domain-name::before {
-  content: '↳';
+  content: "↳";
   margin-right: 0.4rem;
   color: var(--color-text-secondary);
 }

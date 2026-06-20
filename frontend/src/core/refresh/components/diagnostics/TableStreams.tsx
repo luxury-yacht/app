@@ -80,16 +80,32 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
     );
   }
   if (row.kind === 'cluster') {
+    // A cluster row is either a group label (domain leaves follow, no metrics) or,
+    // for cluster-leaf streams (catalog), the leaf itself carrying its metrics.
+    if (!row.leaf) {
+      return (
+        <tr className="diagnostics-cluster-row">
+          <td className="diagnostics-cluster-name">{row.cluster}</td>
+          <td />
+          <td />
+          <td />
+          <td />
+          <td />
+          <td />
+          <td />
+        </tr>
+      );
+    }
     return (
       <tr className="diagnostics-cluster-row">
         <td className="diagnostics-cluster-name">{row.cluster}</td>
-        <td />
-        <td />
-        <td />
-        <td />
-        <td />
-        <td />
-        <td />
+        <td>{row.leaf.delivered}</td>
+        <td>{row.leaf.dropped}</td>
+        <td>{row.leaf.errors}</td>
+        <td>—</td>
+        <td>—</td>
+        <td title={row.leaf.lastEventTooltip}>{row.leaf.lastEvent}</td>
+        <td className="diagnostics-error">{row.leaf.lastError}</td>
       </tr>
     );
   }

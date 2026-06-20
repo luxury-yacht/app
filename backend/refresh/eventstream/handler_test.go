@@ -111,12 +111,16 @@ func TestHandlerInitialSnapshotFailure(t *testing.T) {
 	require.Contains(t, rec.BodyString(), "snapshot failed")
 
 	summary := recorder.SnapshotSummary()
-	require.Len(t, summary.Streams, 1)
-	stream := summary.Streams[0]
-	require.Equal(t, telemetry.StreamEvents, stream.Name)
-	require.Equal(t, 0, stream.ActiveSessions)
-	require.Equal(t, uint64(0), stream.TotalMessages)
-	require.GreaterOrEqual(t, stream.ErrorCount, uint64(1))
+	// The snapshot failure is attributed to the "cluster" scope; a stream-level
+	// sessions entry also exists from connect/disconnect.
+	byDomain := map[string]telemetry.StreamStatus{}
+	for _, s := range summary.Streams {
+		byDomain[s.Domain] = s
+	}
+	require.Equal(t, telemetry.StreamEvents, byDomain["cluster"].Name)
+	require.Equal(t, uint64(0), byDomain["cluster"].TotalMessages)
+	require.GreaterOrEqual(t, byDomain["cluster"].ErrorCount, uint64(1))
+	require.Equal(t, 0, byDomain[""].ActiveSessions)
 
 	// Ensure subscription map is cleaned up
 	manager.mu.RLock()
@@ -250,11 +254,17 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	wg.Wait()
 
 	summary := recorder.SnapshotSummary()
-	require.Len(t, summary.Streams, 1)
-	stream := summary.Streams[0]
-	require.Equal(t, uint64(2), stream.TotalMessages)
-	require.Equal(t, 0, stream.ActiveSessions)
-	require.Equal(t, telemetry.StreamEvents, stream.Name)
+	// Delivery is attributed to the event scope, so there are two entries: the
+	// stream-level sessions entry (connect/disconnect) and the per-scope delivery.
+	byDomain := map[string]telemetry.StreamStatus{}
+	for _, s := range summary.Streams {
+		byDomain[s.Domain] = s
+	}
+	require.Equal(t, uint64(2), byDomain["cluster"].TotalMessages)
+	require.Equal(t, telemetry.StreamEvents, byDomain["cluster"].Name)
+	// Sessions stay stream-level; the session closed after cancel.
+	require.Equal(t, 0, byDomain[""].ActiveSessions)
+	require.Equal(t, telemetry.StreamEvents, byDomain[""].Name)
 }
 
 func TestHandlerResumesFromSince(t *testing.T) {

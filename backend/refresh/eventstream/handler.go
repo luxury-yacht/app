@@ -113,19 +113,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 					if err := writeEvent(w, f, payload); err != nil {
 						if h.telemetry != nil {
-							h.telemetry.RecordStreamError(streamName, err)
+							h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 						}
 						return
 					}
 				}
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamDelivery(streamName, len(resumeEvents), 0)
+					h.telemetry.RecordStreamDeliveryForDomain(streamName, params.ScopeKey, len(resumeEvents), 0)
 				}
 			}
 		} else {
 			err := fmt.Errorf("eventstream: resume token expired for domain=%s scope=%s", params.Domain, params.ScopeKey)
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, err)
+				h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 			}
 			h.logger.Warn(err.Error(), logsources.EventStream)
 		}
@@ -135,7 +135,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		snapshotPayload, err := h.service.Build(r.Context(), params.Domain, params.SnapshotScope)
 		if err != nil {
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, err)
+				h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 			}
 			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), logsources.EventStream)
 			status, ok := refresh.PermissionDeniedStatusFromError(err)
@@ -197,12 +197,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		setStreamHeaders()
 		if err := writeEvent(w, f, payload); err != nil {
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, err)
+				h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 			}
 			return
 		}
 		if h.telemetry != nil {
-			h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
+			h.telemetry.RecordStreamDeliveryForDomain(streamName, params.ScopeKey, len(initialEvents), 0)
 		}
 	}
 
@@ -233,12 +233,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := writeEvent(w, f, payload); err != nil {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, err)
+					h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 				}
 				return
 			}
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamDelivery(streamName, len(payload.Events), 0)
+				h.telemetry.RecordStreamDeliveryForDomain(streamName, params.ScopeKey, len(payload.Events), 0)
 			}
 			h.logger.Debug(
 				fmt.Sprintf(
@@ -252,7 +252,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-keepAlive.C:
 			if _, err := w.Write([]byte(": keep-alive\n\n")); err != nil {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, err)
+					h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, err)
 				}
 				return
 			}
@@ -260,7 +260,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-heartbeat.C:
 			if time.Since(lastDelivery) > config.StreamHeartbeatTimeout {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, fmt.Errorf("eventstream heartbeat timeout"))
+					h.telemetry.RecordStreamErrorForDomain(streamName, params.ScopeKey, fmt.Errorf("eventstream heartbeat timeout"))
 				}
 				lastDelivery = time.Now()
 			}

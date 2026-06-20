@@ -91,11 +91,21 @@ export interface DiagnosticsStreamHeaderRow {
   activeDomainCount: number;
 }
 
-// Cluster group label under a stream.
+// Cluster row under a stream. Usually a group label with domain leaves below it
+// (resources/events/container-logs). For streams with no sub-cluster breakdown
+// (catalog), the cluster IS the leaf, so `leaf` carries its per-cluster metrics.
 export interface DiagnosticsStreamClusterRow {
   kind: 'cluster';
   rowKey: string;
   cluster: string;
+  leaf?: {
+    delivered: number;
+    dropped: number;
+    errors: number;
+    lastEvent: string;
+    lastEventTooltip: string;
+    lastError: string;
+  };
 }
 
 // A single (cluster, domain) leaf with its per-domain counters.

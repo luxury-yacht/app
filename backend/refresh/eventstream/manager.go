@@ -300,17 +300,21 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 		m.logWarn("eventstream: subscriber channel full after drop attempt; closing")
 		go m.dropSubscriber(scope, item.id, sub)
 	}
-	m.recordDelivery(delivered, backlogDrops)
+	m.recordDelivery(scope, delivered, backlogDrops)
 }
 
-func (m *Manager) recordDelivery(delivered, backlogDrops int) {
+// recordDelivery attributes delivery/backlog to the event scope (the diagnostics
+// child): "cluster" for cluster-wide events or "namespace:<name>" for a namespace.
+// Sessions/connect stay stream-level (one socket per scope, counted at the stream).
+func (m *Manager) recordDelivery(scope string, delivered, backlogDrops int) {
 	if m.telemetry == nil {
 		return
 	}
-	m.telemetry.RecordStreamDelivery(telemetry.StreamEvents, delivered, backlogDrops)
+	m.telemetry.RecordStreamDeliveryForDomain(telemetry.StreamEvents, scope, delivered, backlogDrops)
 	if backlogDrops > 0 {
-		m.telemetry.RecordStreamError(
+		m.telemetry.RecordStreamErrorForDomain(
 			telemetry.StreamEvents,
+			scope,
 			fmt.Errorf("dropped %d event(s) due to backlog", backlogDrops),
 		)
 	}

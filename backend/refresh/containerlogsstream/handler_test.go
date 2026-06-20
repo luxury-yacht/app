@@ -346,6 +346,46 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Status())
 }
 
+func TestServeHTTPRecordsDeliveryPerLogTarget(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "my-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	client := fake.NewClientset(pod)
+	recorder := telemetry.NewRecorder()
+	handler, err := NewHandler(client, applog.Noop, recorder)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:my-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		return len(parseSSEEvents(rec.Body())) >= 2
+	}, time.Second, 10*time.Millisecond, "expected initial log snapshot")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("log handler did not exit after cancel")
+	}
+
+	// Delivery is attributed to the log target (namespace/object), so diagnostics
+	// can show one container-logs row per open viewer instead of one aggregate.
+	byDomain := map[string]telemetry.StreamStatus{}
+	for _, s := range recorder.SnapshotSummary().Streams {
+		byDomain[s.Domain] = s
+	}
+	require.Equal(t, telemetry.StreamContainerLogs, byDomain["default/my-pod"].Name)
+	require.GreaterOrEqual(t, byDomain["default/my-pod"].TotalMessages, uint64(1))
+}
+
 func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {

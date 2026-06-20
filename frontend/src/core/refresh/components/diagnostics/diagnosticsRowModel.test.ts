@@ -216,6 +216,51 @@ describe('diagnosticsRowModel', () => {
     });
   });
 
+  test('builds a cluster-leaf stream (catalog) as header + one leaf per cluster', () => {
+    const rows = buildDiagnosticsStreamRows(
+      telemetry([
+        {
+          name: 'catalog',
+          clusterId: 'c1',
+          clusterName: 'kwok',
+          activeSessions: 1,
+          totalMessages: 20,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: 0,
+        },
+        {
+          name: 'catalog',
+          clusterId: 'c2',
+          clusterName: 'kind',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 2,
+          skippedTargets: 0,
+          errorCount: 1,
+          lastConnect: 0,
+          lastEvent: 0,
+          lastError: 'catalog stalled',
+        },
+      ]),
+      [],
+      {}
+    );
+
+    // No sub-cluster child → the cluster IS the leaf: header → one cluster leaf
+    // per cluster (sorted), each carrying its own metrics.
+    expect(rows.map((row) => row.kind)).toEqual(['stream', 'cluster', 'cluster']);
+    expect(rows[0]).toMatchObject({ kind: 'stream', label: 'Catalog', sessions: 2 });
+    const kind = rows.find((row) => row.kind === 'cluster' && row.cluster === 'kind');
+    const kwok = rows.find((row) => row.kind === 'cluster' && row.cluster === 'kwok');
+    expect(kind).toMatchObject({
+      leaf: { delivered: 5, dropped: 2, errors: 1, lastError: 'catalog stalled' },
+    });
+    expect(kwok).toMatchObject({ leaf: { delivered: 20, dropped: 0, errors: 0 } });
+  });
+
   test('summarizes the tree: sessions from headers, active domains from leaves', () => {
     const rows: DiagnosticsStreamRow[] = [
       {

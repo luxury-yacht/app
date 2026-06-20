@@ -2,6 +2,13 @@
 
 ### Changed
 
+- The Diagnostics → Streams table is now a hierarchy instead of a flat list.
+  Sessions and Last Connect move up to a per-stream header (each stream is one
+  socket), and delivery/error counts break down by their natural child: the
+  Resources stream by cluster → resource domain, Container Logs by cluster → the
+  pod/object being tailed, Events by cluster → scope (cluster / namespace), and
+  Catalog by cluster. This makes it clear which cluster and which subscription a
+  given backlog or error belongs to.
 - The object panel's actions menu (delete, restart, scale, rollback, trigger,
   suspend, port-forward) now runs through the same shared action controller as
   the cluster/namespace table views, so confirmation dialogs, the scale modal,

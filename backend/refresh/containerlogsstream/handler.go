@@ -83,6 +83,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	streamName := telemetry.StreamContainerLogs
+	// Attribute delivery/errors to the log target so diagnostics show one
+	// container-logs row per open viewer; sessions/connect stay stream-level
+	// (one SSE socket per viewer, counted at the stream).
+	target := logTargetLabel(opts)
 	if h.telemetry != nil {
 		h.telemetry.RecordStreamConnect(streamName)
 		defer h.telemetry.RecordStreamDisconnect(streamName)
@@ -125,7 +129,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	initial, states, pods, selector, warnings, skippedTargets, skipReason, err := h.streamer.tail(ctx, opts, limiterSession)
 	if err != nil {
 		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
+			h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 		}
 		h.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
 		if status := permissionDeniedStatus(err); status != nil {
@@ -167,12 +171,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sequence++
 	if err := writeEvent(w, f, event); err != nil {
 		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
+			h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 		}
 		return
 	}
 	if h.telemetry != nil && len(initial) > 0 {
-		h.telemetry.RecordStreamDelivery(streamName, len(event.Entries), 0)
+		h.telemetry.RecordStreamDeliveryForDomain(streamName, target, len(event.Entries), 0)
 	}
 
 	entriesCh := make(chan Entry, 256)
@@ -185,7 +189,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if r := recover(); r != nil {
 				h.streamer.logger.Error(fmt.Sprintf("containerlogsstream: panic in stream handler: %v", r), logsources.ContainerLogsStream)
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, fmt.Errorf("panic: %v", r))
+					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("panic: %v", r))
 				}
 			}
 			close(entriesCh)
@@ -225,7 +229,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sequence++
 		if writeEvent(w, f, payload) != nil {
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, fmt.Errorf("containerlogsstream: failed to write warning update"))
+				h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("containerlogsstream: failed to write warning update"))
 			}
 			return true
 		}
@@ -250,13 +254,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			batch = nil
 			if err := writeEvent(w, f, event); err != nil {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, err)
+					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 				}
 				return true
 			}
 		}
 		if h.telemetry != nil {
-			h.telemetry.RecordStreamDelivery(streamName, delivered, pendingDropped)
+			h.telemetry.RecordStreamDeliveryForDomain(streamName, target, delivered, pendingDropped)
 		}
 		if pendingDropped > 0 && !transportDropObserved {
 			transportDropObserved = true
@@ -295,12 +299,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			sequence++
 			if writeEvent(w, f, errPayload) != nil {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, err)
+					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 				}
 				return
 			}
 			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, err)
+				h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 			}
 		case warnings, ok := <-warningsCh:
 			if !ok {
@@ -314,7 +318,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				flushBatch()
 				if h.telemetry != nil && pendingDropped > 0 {
-					h.telemetry.RecordStreamDelivery(streamName, 0, pendingDropped)
+					h.telemetry.RecordStreamDeliveryForDomain(streamName, target, 0, pendingDropped)
 				}
 				return
 			}
@@ -339,7 +343,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-keepAlive.C:
 			if _, err := w.Write([]byte(": keep-alive\n\n")); err != nil {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, err)
+					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
 				}
 				return
 			}
@@ -347,7 +351,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-heartbeat.C:
 			if time.Since(lastDelivery) > config.StreamHeartbeatTimeout {
 				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, fmt.Errorf("containerlogsstream heartbeat timeout"))
+					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("containerlogsstream heartbeat timeout"))
 				}
 				lastDelivery = time.Now()
 			}
@@ -368,7 +372,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if h.telemetry != nil && len(batch) == 0 {
-				h.telemetry.RecordStreamDelivery(streamName, 0, pendingDropped)
+				h.telemetry.RecordStreamDeliveryForDomain(streamName, target, 0, pendingDropped)
 				pendingDropped = 0
 			}
 		}
@@ -403,6 +407,16 @@ func writeEvent(w http.ResponseWriter, f http.Flusher, payload EventPayload) err
 	}
 	f.Flush()
 	return nil
+}
+
+// logTargetLabel identifies the object a log stream is tailing, so container-logs
+// telemetry can be attributed per stream (one diagnostics row per open viewer).
+func logTargetLabel(opts Options) string {
+	target := opts.Namespace + "/" + opts.Name
+	if opts.Container != "" {
+		target += "/" + opts.Container
+	}
+	return target
 }
 
 func parseOptions(r *http.Request) (Options, error) {

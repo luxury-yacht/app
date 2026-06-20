@@ -208,6 +208,45 @@ export const buildDiagnosticsStreamRows = (
       activeDomainCount: domainEntries.length,
     });
 
+    // Streams with no sub-cluster breakdown (e.g. catalog): the cluster is the
+    // leaf, so each cluster's entry becomes a cluster-leaf row carrying its own
+    // metrics. Only split out per-cluster rows when there's more than one cluster
+    // — a single cluster adds nothing the header doesn't already show.
+    if (domainEntries.length === 0) {
+      const byClusterLeaf = new Map<string, TelemetryStreamStatus[]>();
+      streamLevel.forEach((entry) => {
+        const cluster = entry.clusterName ?? '—';
+        const list = byClusterLeaf.get(cluster) ?? [];
+        list.push(entry);
+        byClusterLeaf.set(cluster, list);
+      });
+      if (byClusterLeaf.size > 1) {
+        [...byClusterLeaf.keys()].sort().forEach((cluster) => {
+          const clusterEntries = byClusterLeaf.get(cluster) ?? [];
+          const leafLastEvent = formatLastUpdated(
+            maxOf(clusterEntries.map((e) => e.lastEvent)) || undefined
+          );
+          const leafErrors = clusterEntries
+            .map((e) => e.lastError?.trim())
+            .filter((value): value is string => Boolean(value));
+          rows.push({
+            kind: 'cluster',
+            rowKey: `cluster::${streamName}::${cluster}`,
+            cluster,
+            leaf: {
+              delivered: clusterEntries.reduce((acc, e) => acc + e.totalMessages, 0),
+              dropped: clusterEntries.reduce((acc, e) => acc + e.droppedMessages, 0),
+              errors: clusterEntries.reduce((acc, e) => acc + e.errorCount, 0),
+              lastEvent: leafLastEvent.display,
+              lastEventTooltip: leafLastEvent.tooltip,
+              lastError: leafErrors.length ? leafErrors[leafErrors.length - 1] : '—',
+            },
+          });
+        });
+      }
+      return;
+    }
+
     // Group the per-domain leaves by cluster.
     const byCluster = new Map<string, TelemetryStreamStatus[]>();
     domainEntries.forEach((entry) => {

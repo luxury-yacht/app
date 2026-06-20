@@ -283,3 +283,36 @@ func TestEventBufferDetectsExpiredResumeAfterOverflow(t *testing.T) {
 		t.Fatalf("unexpected resume events: %+v", events)
 	}
 }
+
+func TestBroadcastRecordsDeliveryPerScope(t *testing.T) {
+	client := fake.NewClientset()
+	factory := informers.NewSharedInformerFactory(client, 0)
+	informer := factory.Core().V1().Events()
+	recorder := telemetry.NewRecorder()
+	manager := NewManager(informer, applog.Noop, recorder, "cluster-a")
+
+	ch, cancel := manager.Subscribe("namespace:demo")
+	defer cancel()
+
+	manager.broadcast("namespace:demo", Entry{Kind: "Event", Name: "live", Message: "m"})
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for event delivery")
+	}
+
+	// Delivery is attributed to the event scope so diagnostics show one events row
+	// per scope (cluster / namespace:<name>) instead of one aggregate.
+	var got telemetry.StreamStatus
+	for _, s := range recorder.SnapshotSummary().Streams {
+		if s.Domain == "namespace:demo" {
+			got = s
+		}
+	}
+	if got.Name != telemetry.StreamEvents {
+		t.Fatalf("expected events delivery attributed to scope namespace:demo, got streams %+v", recorder.SnapshotSummary().Streams)
+	}
+	if got.TotalMessages < 1 {
+		t.Fatalf("expected >=1 delivered for scope namespace:demo, got %d", got.TotalMessages)
+	}
+}
