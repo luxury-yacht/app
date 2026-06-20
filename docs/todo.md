@@ -1,0 +1,11 @@
+- Build a plugin architecture
+  - AI
+    - Conversational support to perform functions of the app
+  - ArgoCD
+    - Make ArgoCD CRDs built-in objects
+    - Show Argo status of supported objects
+  - Helm
+    - Make Helm CRDs built-in objects
+    - Lift the helm-specific features out of the core app
+  - Karpenter
+    - Make Karpenter CRDs build-in objects

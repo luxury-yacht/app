@@ -286,10 +286,15 @@ func (a *App) buildRefreshMux(
 		return nil, nil, err
 	}
 
+	// Diagnostics telemetry must be multi-cluster aware: aggregate every active
+	// cluster's recorder (each stamps its own clusterId) instead of reporting one
+	// picked cluster's counters. Re-scoped on cluster open/close via Update below.
+	aggregateTelemetryHandler := newAggregateTelemetry(clusterOrder, subsystems)
+
 	mux := system.BuildRefreshMux(system.MuxConfig{
 		SnapshotService: aggregateService,
 		ManualQueue:     aggregateQueue,
-		Telemetry:       sharedTelemetry,
+		Telemetry:       aggregateTelemetryHandler,
 		Metrics:         nil, // Don't tie metrics to a single cluster.
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
@@ -309,6 +314,7 @@ func (a *App) buildRefreshMux(
 		containerLogs: aggregateContainerLogs,
 		catalog:       aggregateCatalog,
 		resources:     aggregateResources,
+		telemetry:     aggregateTelemetryHandler,
 	}
 	return mux, aggregates, nil
 }
@@ -321,12 +327,18 @@ type refreshAggregateHandlers struct {
 	containerLogs *aggregateContainerLogsStreamHandler
 	catalog       *aggregateCatalogStreamHandler
 	resources     *aggregateResourceStreamHandler
+	telemetry     *aggregateTelemetry
 }
 
 // Update refreshes aggregate endpoint wiring without rebuilding the HTTP server.
 func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) error {
 	if h == nil {
 		return nil
+	}
+	if h.telemetry != nil {
+		// Re-scope diagnostics telemetry to the new active cluster set so a
+		// closed cluster's counters stop being reported.
+		h.telemetry.Update(clusterOrder, subsystems)
 	}
 	if h.resources != nil {
 		if err := h.resources.Update(subsystems); err != nil {

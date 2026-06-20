@@ -2510,6 +2510,33 @@ describe('ResourceStreamManager', () => {
     expect(manager.getTelemetrySummary()).toEqual({ resyncCount: 0, fallbackCount: 0 });
   });
 
+  test('groups resync/fallback telemetry by cluster so diagnostics stays multi-cluster aware', () => {
+    const manager = new ResourceStreamManager();
+    const internal = manager as unknown as {
+      streamTelemetry: Map<string, Record<string, unknown>>;
+    };
+    internal.streamTelemetry.set('c1::nodes::path:c1|', {
+      clusterId: 'c1',
+      resyncCount: 2,
+      fallbackCount: 1,
+      lastResyncAt: 100,
+      lastResyncReason: 'reset',
+    });
+    internal.streamTelemetry.set('c2::pods::path:c2|', {
+      clusterId: 'c2',
+      resyncCount: 5,
+      fallbackCount: 0,
+    });
+
+    const byCluster = manager.getTelemetrySummaryByCluster();
+    expect(byCluster.c1).toMatchObject({
+      resyncCount: 2,
+      fallbackCount: 1,
+      lastResyncReason: 'reset',
+    });
+    expect(byCluster.c2).toMatchObject({ resyncCount: 5, fallbackCount: 0 });
+  });
+
   test('accepts newer updates after stale resource versions when sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

@@ -1160,6 +1160,11 @@ export interface TelemetryMetricsStatus {
 
 export interface TelemetryStreamStatus {
   name: string;
+  // Cluster these counters belong to. The backend emits one entry per
+  // (stream, cluster) so diagnostics stays multi-cluster aware; absent only for
+  // legacy single-recorder payloads. Mirrors backend telemetry.StreamStatus.
+  clusterId?: string;
+  clusterName?: string;
   activeSessions: number;
   totalMessages: number;
   droppedMessages: number;

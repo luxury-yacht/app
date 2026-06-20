@@ -1053,6 +1053,16 @@ describe('DiagnosticsPanel component', () => {
         lastFallbackAt: now - 2400,
         lastFallbackReason: 'gap detected',
       });
+    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByCluster').mockReturnValue({
+      'cluster-a': {
+        resyncCount: 2,
+        fallbackCount: 1,
+        lastResyncAt: now - 1200,
+        lastResyncReason: 'reset',
+        lastFallbackAt: now - 2400,
+        lastFallbackReason: 'gap detected',
+      },
+    });
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(telemetrySummary);
     fetchSelectionDiagnosticsMock.mockResolvedValueOnce({
@@ -1158,8 +1168,8 @@ describe('DiagnosticsPanel component', () => {
       row.textContent?.includes('Resources')
     );
     const cells = resourcesRow?.querySelectorAll('td') ?? [];
-    expect(cells[6]?.textContent?.trim()).toBe('2');
-    expect(cells[7]?.textContent?.trim()).toBe('1');
+    expect(cells[7]?.textContent?.trim()).toBe('2');
+    expect(cells[8]?.textContent?.trim()).toBe('1');
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
@@ -1412,6 +1422,16 @@ describe('DiagnosticsPanel component', () => {
         lastFallbackAt: now - 400,
         lastFallbackReason: 'gap detected',
       });
+    vi.spyOn(resourceStreamManager, 'getTelemetrySummaryByCluster').mockReturnValue({
+      'cluster-a': {
+        resyncCount: 4,
+        fallbackCount: 2,
+        lastResyncAt: now - 600,
+        lastResyncReason: 'reset',
+        lastFallbackAt: now - 400,
+        lastFallbackReason: 'gap detected',
+      },
+    });
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
@@ -1435,16 +1455,16 @@ describe('DiagnosticsPanel component', () => {
     expect(resourcesRow).toBeDefined();
 
     const catalogCells = catalogRow!.querySelectorAll('td');
-    expect(catalogCells[5]?.textContent?.trim()).toBe('1');
-    expect(catalogCells[6]?.textContent?.trim()).toBe('—');
+    expect(catalogCells[6]?.textContent?.trim()).toBe('1');
     expect(catalogCells[7]?.textContent?.trim()).toBe('—');
-    expect(catalogCells[10]?.textContent?.trim()).toBe('Catalog stream disconnected');
+    expect(catalogCells[8]?.textContent?.trim()).toBe('—');
+    expect(catalogCells[11]?.textContent?.trim()).toBe('Catalog stream disconnected');
 
     const resourceCells = resourcesRow!.querySelectorAll('td');
-    expect(resourceCells[5]?.textContent?.trim()).toBe('1');
-    expect(resourceCells[6]?.textContent?.trim()).toBe('4');
-    expect(resourceCells[7]?.textContent?.trim()).toBe('2');
-    expect(resourceCells[10]?.textContent?.trim()).toBe('Resource stream disconnected');
+    expect(resourceCells[6]?.textContent?.trim()).toBe('1');
+    expect(resourceCells[7]?.textContent?.trim()).toBe('4');
+    expect(resourceCells[8]?.textContent?.trim()).toBe('2');
+    expect(resourceCells[11]?.textContent?.trim()).toBe('Resource stream disconnected');
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();

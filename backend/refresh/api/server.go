@@ -31,7 +31,7 @@ var (
 type Server struct {
 	snapshots refresh.SnapshotService
 	queue     refresh.ManualQueue
-	telemetry *telemetry.Recorder
+	telemetry telemetry.Summarizer
 	metrics   metricsController
 }
 
@@ -43,7 +43,7 @@ type metricsController interface {
 func NewServer(
 	snapshots refresh.SnapshotService,
 	queue refresh.ManualQueue,
-	recorder *telemetry.Recorder,
+	recorder telemetry.Summarizer,
 	metrics metricsController,
 ) *Server {
 	return &Server{

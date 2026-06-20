@@ -93,12 +93,7 @@ describe('diagnosticsRowModel', () => {
   });
 
   test('returns empty stream rows when telemetry is unavailable', () => {
-    expect(
-      buildDiagnosticsStreamRows(null, [], {
-        resyncCount: 0,
-        fallbackCount: 0,
-      })
-    ).toEqual([]);
+    expect(buildDiagnosticsStreamRows(null, [], {})).toEqual([]);
   });
 
   test('builds stream rows with active domain labels and resource recovery stats', () => {
@@ -148,12 +143,14 @@ describe('diagnosticsRowModel', () => {
         },
       ],
       {
-        resyncCount: 4,
-        fallbackCount: 2,
-        lastResyncAt: now - 750,
-        lastResyncReason: 'reset',
-        lastFallbackAt: now - 250,
-        lastFallbackReason: 'gap detected',
+        'cluster-a': {
+          resyncCount: 4,
+          fallbackCount: 2,
+          lastResyncAt: now - 750,
+          lastResyncReason: 'reset',
+          lastFallbackAt: now - 250,
+          lastFallbackReason: 'gap detected',
+        },
       }
     );
 
@@ -184,11 +181,85 @@ describe('diagnosticsRowModel', () => {
     expect(resources?.fallbacksTooltip).toContain('gap detected');
   });
 
+  test('builds one cluster-tagged stream row per cluster with per-cluster counters and domains', () => {
+    const rows = buildDiagnosticsStreamRows(
+      telemetry([
+        {
+          name: 'resources',
+          clusterId: 'c1',
+          clusterName: 'kwok',
+          activeSessions: 1,
+          totalMessages: 100,
+          droppedMessages: 3,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: 0,
+        },
+        {
+          name: 'resources',
+          clusterId: 'c2',
+          clusterName: 'kind',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 0,
+          skippedTargets: 0,
+          errorCount: 0,
+          lastConnect: 0,
+          lastEvent: 0,
+        },
+      ]),
+      [
+        {
+          domain: 'nodes',
+          label: 'Nodes',
+          scope: 'kwok (active)',
+          scopeEntries: [{ label: 'Active', clusterName: 'kwok' }],
+        },
+        {
+          domain: 'pods',
+          label: 'Pods',
+          scope: 'kind (active)',
+          scopeEntries: [{ label: 'Active', clusterName: 'kind' }],
+        },
+      ],
+      {
+        c1: { resyncCount: 7, fallbackCount: 1 },
+        c2: { resyncCount: 0, fallbackCount: 0 },
+      }
+    );
+
+    // Distinct keys per cluster (no collision), cluster-labeled, per-cluster
+    // counters + resyncs/fallbacks, and each row lists only its own cluster's
+    // active domains.
+    const kwok = rows.find((row) => row.rowKey === 'resources::c1');
+    const kind = rows.find((row) => row.rowKey === 'resources::c2');
+    expect(kwok).toMatchObject({
+      label: 'Resources',
+      cluster: 'kwok',
+      delivered: 100,
+      dropped: 3,
+      resyncs: 7,
+      fallbacks: 1,
+      activeDomains: 'Nodes (kwok (active))',
+    });
+    expect(kind).toMatchObject({
+      label: 'Resources',
+      cluster: 'kind',
+      delivered: 5,
+      dropped: 0,
+      resyncs: 0,
+      fallbacks: 0,
+      activeDomains: 'Pods (kind (active))',
+    });
+  });
+
   test('summarizes stream row counts', () => {
     const rows: DiagnosticsStreamRow[] = [
       {
         rowKey: 'resources',
         label: 'Resources',
+        cluster: 'kwok',
         activeDomainCount: 2,
         activeDomains: 'Workloads, Pods',
         sessions: 3,
@@ -206,6 +277,7 @@ describe('diagnosticsRowModel', () => {
       {
         rowKey: 'catalog',
         label: 'Catalog',
+        cluster: 'kwok',
         activeDomainCount: 1,
         activeDomains: 'Browse Catalog',
         sessions: 1,

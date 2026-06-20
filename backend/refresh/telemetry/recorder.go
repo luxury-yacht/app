@@ -56,6 +56,14 @@ type Summary struct {
 	Connection ConnectionStats  `json:"connection"`
 }
 
+// Summarizer produces a telemetry Summary. *Recorder is the single-cluster
+// implementation; the multi-cluster aggregate (backend.aggregateTelemetry)
+// merges per-cluster recorders behind the same interface so the diagnostics
+// endpoint can serve either without caring which.
+type Summarizer interface {
+	SnapshotSummary() Summary
+}
+
 // CatalogStatus captures telemetry for the object catalog service.
 type CatalogStatus struct {
 	Enabled             bool   `json:"enabled"`
@@ -378,6 +386,10 @@ func (r *Recorder) SnapshotSummary() Summary {
 	}
 	for _, value := range r.streams {
 		stream := *value
+		// Each recorder is per-cluster; tag its streams so the aggregate
+		// diagnostics view attributes counters to the right cluster.
+		stream.ClusterID = r.clusterID
+		stream.ClusterName = r.clusterName
 		out.Streams = append(out.Streams, stream)
 	}
 	return out
@@ -385,7 +397,13 @@ func (r *Recorder) SnapshotSummary() Summary {
 
 // StreamStatus captures health metrics for streaming transports (events/logs/resources).
 type StreamStatus struct {
-	Name            string `json:"name"`
+	Name string `json:"name"`
+	// ClusterID/ClusterName identify which cluster these stream counters belong
+	// to. Stamped from the recorder's cluster at SnapshotSummary time (each
+	// recorder is per-cluster) so a multi-cluster diagnostics view shows or
+	// aggregates per-cluster instead of folding clusters under one stream name.
+	ClusterID       string `json:"clusterId,omitempty"`
+	ClusterName     string `json:"clusterName,omitempty"`
 	ActiveSessions  int    `json:"activeSessions"`
 	TotalMessages   uint64 `json:"totalMessages"`
 	DroppedMessages uint64 `json:"droppedMessages"`

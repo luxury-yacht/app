@@ -64,6 +64,9 @@ export interface DiagnosticsRow {
 export interface DiagnosticsStreamRow {
   rowKey: string;
   label: string;
+  // Cluster these counters belong to (shown in the leading Cluster column);
+  // '—' for legacy cluster-less telemetry.
+  cluster: string;
   activeDomainCount: number;
   activeDomains: string;
   activeDomainsTooltip?: string;

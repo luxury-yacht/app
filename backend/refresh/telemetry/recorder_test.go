@@ -152,3 +152,17 @@ func TestStreamTelemetry(t *testing.T) {
 	s = rec.SnapshotSummary().Streams[0]
 	require.Equal(t, "pipe closed", s.LastError) // last error persists until overwritten
 }
+
+// TestSnapshotSummaryTagsStreamsWithClusterMeta proves stream telemetry carries
+// the recorder's cluster identity, so a multi-cluster diagnostics view can show
+// (or aggregate) per-cluster counters instead of folding clusters together.
+func TestSnapshotSummaryTagsStreamsWithClusterMeta(t *testing.T) {
+	rec := NewRecorder()
+	rec.SetClusterMeta("cluster-1", "Cluster One")
+	rec.RecordStreamDelivery(StreamResources, 5, 0)
+
+	streams := rec.SnapshotSummary().Streams
+	require.Len(t, streams, 1)
+	require.Equal(t, "cluster-1", streams[0].ClusterID)
+	require.Equal(t, "Cluster One", streams[0].ClusterName)
+}

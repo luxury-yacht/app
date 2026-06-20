@@ -45,7 +45,12 @@ const STREAM_LABELS: Record<string, string> = {
   'container-logs': 'Container Logs',
 };
 
-type ActiveDomainRow = Pick<DiagnosticsRow, 'domain' | 'label' | 'scope'>;
+type ActiveDomainRow = Pick<DiagnosticsRow, 'domain' | 'label' | 'scope' | 'scopeEntries'>;
+
+// activeDomainCluster derives the cluster a domain row belongs to from its
+// Active scope entry, so per-cluster stream rows list only their own domains.
+const activeDomainCluster = (row: ActiveDomainRow): string =>
+  row.scopeEntries?.find((entry) => entry.label === 'Active')?.clusterName ?? '';
 
 const diagnosticsRowIdentity = (row: DiagnosticsRow): string =>
   [row.domain, row.label, row.namespace, row.scope, row.role].join('\u0000');
@@ -100,15 +105,50 @@ export const dedupeDiagnosticsRows = (rows: DiagnosticsRow[]): DiagnosticsRow[] 
   return Array.from(byIdentity.values());
 };
 
+const EMPTY_RESOURCE_STREAM_STATS: ResourceStreamTelemetrySummary = {
+  resyncCount: 0,
+  fallbackCount: 0,
+};
+
+// resolveResourceStreamStats returns the resync/fallback summary for a cluster's
+// resource stream. Cluster-less (legacy) rows merge every cluster's stats so the
+// numbers are never lost; cluster-tagged rows get only their own cluster's.
+const resolveResourceStreamStats = (
+  byCluster: Record<string, ResourceStreamTelemetrySummary>,
+  clusterId?: string
+): ResourceStreamTelemetrySummary => {
+  if (clusterId) {
+    return byCluster[clusterId] ?? EMPTY_RESOURCE_STREAM_STATS;
+  }
+  const merged: ResourceStreamTelemetrySummary = { resyncCount: 0, fallbackCount: 0 };
+  Object.values(byCluster).forEach((stats) => {
+    merged.resyncCount += stats.resyncCount;
+    merged.fallbackCount += stats.fallbackCount;
+    if (stats.lastResyncAt && stats.lastResyncAt > (merged.lastResyncAt ?? 0)) {
+      merged.lastResyncAt = stats.lastResyncAt;
+      merged.lastResyncReason = stats.lastResyncReason;
+    }
+    if (stats.lastFallbackAt && stats.lastFallbackAt > (merged.lastFallbackAt ?? 0)) {
+      merged.lastFallbackAt = stats.lastFallbackAt;
+      merged.lastFallbackReason = stats.lastFallbackReason;
+    }
+  });
+  return merged;
+};
+
 export const buildDiagnosticsStreamRows = (
   telemetrySummary: TelemetrySummary | null,
   filteredRows: ActiveDomainRow[],
-  resourceStreamStats: ResourceStreamTelemetrySummary
+  resourceStreamStatsByCluster: Record<string, ResourceStreamTelemetrySummary>
 ): DiagnosticsStreamRow[] => {
   if (!telemetrySummary?.streams?.length) {
     return [];
   }
 
+  // Active domains are grouped per (stream, cluster) AND per stream so a
+  // cluster-tagged telemetry row lists only its cluster's domains, while a
+  // legacy (cluster-less) row still shows all of them.
+  const activeDomainRowsByStreamCluster = new Map<string, string[]>();
   const activeDomainRowsByStream = new Map<string, string[]>();
   filteredRows.forEach((row) => {
     const streamName = DOMAIN_STREAM_MAP[row.domain];
@@ -116,22 +156,36 @@ export const buildDiagnosticsStreamRows = (
       return;
     }
     const scopedLabel = row.scope && row.scope !== '-' ? `${row.label} (${row.scope})` : row.label;
-    const streamRowsForName = activeDomainRowsByStream.get(streamName) ?? [];
-    if (!streamRowsForName.includes(scopedLabel)) {
-      streamRowsForName.push(scopedLabel);
-      activeDomainRowsByStream.set(streamName, streamRowsForName);
-    }
+    const pushUnique = (map: Map<string, string[]>, key: string): void => {
+      const existing = map.get(key) ?? [];
+      if (!existing.includes(scopedLabel)) {
+        existing.push(scopedLabel);
+        map.set(key, existing);
+      }
+    };
+    pushUnique(activeDomainRowsByStream, streamName);
+    pushUnique(activeDomainRowsByStreamCluster, `${streamName}::${activeDomainCluster(row)}`);
   });
 
   return telemetrySummary.streams
     .map((stream) => {
       const label = STREAM_LABELS[stream.name] ?? stream.name;
-      const activeDomains = activeDomainRowsByStream.get(stream.name) ?? [];
+      // Multi-cluster awareness: the cluster is shown in its own leading column,
+      // and a cluster-tagged row lists only that cluster's active domains.
+      const activeDomains = stream.clusterName
+        ? (activeDomainRowsByStreamCluster.get(`${stream.name}::${stream.clusterName}`) ?? [])
+        : (activeDomainRowsByStream.get(stream.name) ?? []);
       const lastConnectInfo = formatLastUpdated(
         stream.lastConnect > 0 ? stream.lastConnect : undefined
       );
       const lastEventInfo = formatLastUpdated(stream.lastEvent > 0 ? stream.lastEvent : undefined);
       const isResourceStream = stream.name === 'resources';
+      // Per-cluster resync/fallback stats so each cluster's row reflects only its
+      // own recovery activity, not a global value repeated across clusters.
+      const resourceStreamStats = resolveResourceStreamStats(
+        resourceStreamStatsByCluster,
+        stream.clusterId
+      );
       const lastResyncInfo = resourceStreamStats.lastResyncAt
         ? formatLastUpdated(resourceStreamStats.lastResyncAt)
         : null;
@@ -169,8 +223,11 @@ export const buildDiagnosticsStreamRows = (
         return undefined;
       })();
       return {
-        rowKey: stream.name,
+        // Per-cluster rows must have distinct keys (the backend emits one entry
+        // per (stream, cluster)).
+        rowKey: stream.clusterId ? `${stream.name}::${stream.clusterId}` : stream.name,
         label,
+        cluster: stream.clusterName ?? '—',
         activeDomainCount: activeDomains.length,
         activeDomains: activeDomains.length > 0 ? activeDomains.join(', ') : '—',
         activeDomainsTooltip:

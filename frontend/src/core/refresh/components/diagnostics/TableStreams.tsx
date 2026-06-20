@@ -31,6 +31,7 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
         <table className="diagnostics-table">
           <thead>
             <tr>
+              <th>Cluster</th>
               <th>Stream</th>
               <th>Active Domains</th>
               <th>Sessions</th>
@@ -47,11 +48,12 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
           <tbody>
             {rows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={11}>{resolvedEmptyMessage}</td>
+                <td colSpan={12}>{resolvedEmptyMessage}</td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.rowKey}>
+                  <td>{row.cluster}</td>
                   <td>
                     <span className="diagnostics-domain" title={row.rowKey}>
                       {row.label}

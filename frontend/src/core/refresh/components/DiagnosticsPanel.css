@@ -354,10 +354,17 @@
   font-weight: 600;
 }
 
-.diagnostics-error {
+/*
+ * Error-message cells wrap so the full error is readable (overriding the
+ * table's default nowrap). overflow-wrap:anywhere breaks long unbreakable
+ * tokens at the column edge without the harsh mid-word breaks of
+ * word-break:break-all. Higher specificity (table td.diagnostics-error) is
+ * required to win over `.diagnostics-table td { white-space: nowrap }`.
+ */
+.diagnostics-table td.diagnostics-error {
   max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--color-error-text, var(--color-error));
 }
 

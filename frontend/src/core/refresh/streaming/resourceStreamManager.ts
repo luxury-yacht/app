@@ -237,12 +237,33 @@ export type ResourceStreamTelemetrySummary = {
 };
 
 type StreamTelemetry = {
+  // Cluster this subscription's resync/fallback counters belong to, so the
+  // diagnostics Streams view can report them per cluster (multi-cluster aware).
+  clusterId: string;
   resyncCount: number;
   fallbackCount: number;
   lastResyncAt?: number;
   lastResyncReason?: string;
   lastFallbackAt?: number;
   lastFallbackReason?: string;
+};
+
+// accumulateStreamTelemetry folds one subscription's stats into a running summary
+// (shared by the global and per-cluster summaries).
+const accumulateStreamTelemetry = (
+  summary: ResourceStreamTelemetrySummary,
+  stats: StreamTelemetry
+): void => {
+  summary.resyncCount += stats.resyncCount;
+  summary.fallbackCount += stats.fallbackCount;
+  if (stats.lastResyncAt && stats.lastResyncAt > (summary.lastResyncAt ?? 0)) {
+    summary.lastResyncAt = stats.lastResyncAt;
+    summary.lastResyncReason = stats.lastResyncReason;
+  }
+  if (stats.lastFallbackAt && stats.lastFallbackAt > (summary.lastFallbackAt ?? 0)) {
+    summary.lastFallbackAt = stats.lastFallbackAt;
+    summary.lastFallbackReason = stats.lastFallbackReason;
+  }
 };
 
 export class ResourceStreamManager {
@@ -285,21 +306,20 @@ export class ResourceStreamManager {
       resyncCount: 0,
       fallbackCount: 0,
     };
-
-    this.streamTelemetry.forEach((stats) => {
-      summary.resyncCount += stats.resyncCount;
-      summary.fallbackCount += stats.fallbackCount;
-      if (stats.lastResyncAt && stats.lastResyncAt > (summary.lastResyncAt ?? 0)) {
-        summary.lastResyncAt = stats.lastResyncAt;
-        summary.lastResyncReason = stats.lastResyncReason;
-      }
-      if (stats.lastFallbackAt && stats.lastFallbackAt > (summary.lastFallbackAt ?? 0)) {
-        summary.lastFallbackAt = stats.lastFallbackAt;
-        summary.lastFallbackReason = stats.lastFallbackReason;
-      }
-    });
-
+    this.streamTelemetry.forEach((stats) => accumulateStreamTelemetry(summary, stats));
     return summary;
+  }
+
+  // Per-cluster resync/fallback summaries so the diagnostics Streams table can
+  // attribute recovery activity to the right cluster instead of repeating one
+  // global value on every cluster's row.
+  getTelemetrySummaryByCluster(): Record<string, ResourceStreamTelemetrySummary> {
+    const byCluster: Record<string, ResourceStreamTelemetrySummary> = {};
+    this.streamTelemetry.forEach((stats) => {
+      const summary = (byCluster[stats.clusterId] ??= { resyncCount: 0, fallbackCount: 0 });
+      accumulateStreamTelemetry(summary, stats);
+    });
+    return byCluster;
   }
 
   // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
@@ -842,6 +862,7 @@ export class ResourceStreamManager {
       return existing;
     }
     const stats: StreamTelemetry = {
+      clusterId: subscription.clusterId,
       resyncCount: 0,
       fallbackCount: 0,
     };
