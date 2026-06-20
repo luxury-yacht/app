@@ -881,11 +881,13 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       return;
     }
 
+    // pods and namespace-workloads are notify-only: their live rows are
+    // baseline-static (and absent once the baseline is dropped), so they are
+    // excluded here. Visible pods get fresh permission pre-checks from NsViewPods's
+    // per-view query-row scan; workloads fall back to on-demand permission checks.
     const activeDomainData =
       activeKey === 'browse'
         ? [
-            workloads.data,
-            pods.data,
             config.data,
             network.data,
             rbac.data,
@@ -896,8 +898,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           ]
         : [
             {
-              pods: pods.data,
-              workloads: workloads.data,
+              pods: [],
+              workloads: [],
               config: config.data,
               network: network.data,
               rbac: rbac.data,
@@ -934,8 +936,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     activeResourceType,
     currentNamespace,
     namespaceClusterId,
-    workloads.data,
-    pods.data,
     config.data,
     network.data,
     rbac.data,

@@ -707,6 +707,14 @@ export interface PodMetricsInfo {
 export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
   rows: PodSnapshotEntry[];
   metrics?: PodMetricsInfo;
+  // Scope-level counts (all pods in scope, before search/pagination) so a
+  // query-backed view shows total/unhealthy badges and can decide whether a
+  // pending health filter has matches — without retaining the live row set.
+  // healthCounts keys match the "health" filter modes ('unhealthy', 'restarts',
+  // 'not-ready'). Mirrors snapshot.PodSnapshot. See
+  // docs/plans/notify-only-query-backed-streams.md.
+  totalCount?: number;
+  healthCounts?: Record<string, number>;
 }
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {

@@ -100,7 +100,6 @@ describe('NamespaceResourcesViews', () => {
     await renderView({
       namespace: 'team-a',
       activeTab: 'pods',
-      nsPods: [{ name: 'api', namespace: 'team-a' }],
       objectPanel: <div data-testid="object-panel" />,
     });
 
@@ -110,7 +109,6 @@ describe('NamespaceResourcesViews', () => {
       : undefined;
     expect(podsCall).toMatchObject({
       namespace: 'team-a',
-      data: [{ name: 'api', namespace: 'team-a' }],
     });
     expect(container.querySelector('[data-testid="object-panel"]')).toBeTruthy();
   });

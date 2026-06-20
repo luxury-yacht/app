@@ -595,13 +595,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for namespace pods', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewPods
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[podRow('local-pod', '1h') as any]}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
@@ -829,13 +823,7 @@ describe('query-backed leaf first load', () => {
 
   it('issues a namespace-scoped typed query on first load for namespace pods', async () => {
     await expectQueryFirstLoad({
-      element: (
-        <NsViewPods
-          namespace="team-a"
-          data={[podRow('local-pod', '1h') as any]}
-          showNamespaceColumn={false}
-        />
-      ),
+      element: <NsViewPods namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
@@ -1059,13 +1047,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace pods',
-      element: (
-        <NsViewPods
-          namespace={ALL_NAMESPACES_SCOPE}
-          data={[podRow('pod', '1h') as any]}
-          showNamespaceColumn={true}
-        />
-      ),
+      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { rows: [] },
       expected: [
         'age',

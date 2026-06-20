@@ -168,10 +168,24 @@ include the projection-skip + test rewrites.
   `handleWorkloadFromHPA`, and bottom-up remove the then-dead `podsForWorkload`
   and `hpasForWorkloadContext` (+ their tests). Pure backend-CPU cleanup; no
   contract/frontend change.
-- [ ] **Slice 2 — Baseline elimination.** Settle the `queryEnabled` gate for
-  notify-only domains without the full-row HTTP snapshot (version/count-only
-  baseline or a stream baseline-complete signal), so the last full-row transfer
-  is removed.
+- [ ] **Slice 2 — Baseline elimination (the sole remaining item).** Give
+  notify-only domains a resync that bumps `streamRevision` + re-arms the delta
+  stream instead of fetching a full-row snapshot, so the one-time-per-view
+  baseline stops crossing the bridge. Slice 6 (done) already removed the
+  permission scan's dependency on the live rows, so the data going null is safe.
+  - Production change is small + contained: one notify-only branch in
+    `resourceStreamManager.resyncSubscription` (status→'ready' clears the query
+    gate; `applyShadowUpdates` already no-ops without a baseline, so drift is
+    safe). Prototyped and works.
+  - **Cost is the test cascade, not the prod code:** ~7 lifecycle tests
+    (resync/reset/reconnect/visibility/complete-error) plus the RV/sequence
+    tests currently exercise resync→fetch using notify-only domains
+    (`namespace-workloads`/`pods`); they must move to a non-notify domain
+    (`namespace-config`), which re-introduces the collection-merge subtleties
+    seen with `cluster-rbac` (RV-aware merge dropping a regressed row). Done as a
+    focused pass to keep the lifecycle coverage correct.
+  - Value is **initial-load only** (one full-row fetch per view-open); the
+    dominant *continuous*-stream cost is already eliminated by the slices above.
 - [x] **Slice 3 — Extend to `nodes`.** ✅ Done: `nodes` flagged notify-only
   (contract + Go set + parity); node handlers (`handleNode`, `handleNodeFromPod`)
   resolve + notify via `broadcastNodeNotification`; dead `podsForNode`, `listPods`,
@@ -190,16 +204,30 @@ include the projection-skip + test rewrites.
 - [ ] **Slice 4 — Pods count metadata (backend).** Emit `totalCount` +
   `unhealthyCount` on `PodSnapshotPayload` meta (cheap: the query build already
   iterates all pods). TDD on the builder.
-- [ ] **Slice 5 — Pods count consumers (frontend).** `NsViewPods` unhealthy
-  count + stored-filter-restore validation read query meta instead of full live
-  `data`.
+- [x] **Slice 4 — Pods count metadata (backend).** ✅ `PodSnapshot.TotalCount` +
+  `HealthCounts` (per `health` mode), computed via the shared `podSummaryUnhealthy`
+  helper / query predicate during the existing build loop. Gate-green.
+- [x] **Slice 5 — Pods count consumers (frontend).** ✅ `NsViewPods` unhealthy
+  count + total badge read `queryPayload` meta (mirrored into state); backend
+  `healthCounts` added to `PodSnapshotPayload`. Gate-green.
+- [x] **Slice 7 — Flip `pods` notify-only + remove `data` plumbing.** ✅ `pods`
+  flagged notify-only (contract + set + parity); pod stream tests assert
+  notify-only; the filter-restore guard reads `queryPayload.healthCounts` (not
+  live rows); the `data` prop removed from `NsViewPods` and its chain
+  (`AllNamespacesView`, `NsResourcesViews`, `NsResourcesManager`). Gate-green.
+  - **Slice 7c (pod stream build-skip) — NOT pursued.** Unlike workloads/nodes
+    (build produced only a row; scope was trivial), the pod build computes the
+    broadcast multi-scope (namespace/node/**owner via RS→Deployment**), so it is
+    load-bearing. The chokepoint already drops the `Row` (the bridge goal); a
+    build-skip would need a parallel scope-field resolver with real divergence
+    risk for only a modest per-event CPU saving. Determined out of scope.
 - [ ] **Slice 6 — Permission-target source.** Replace the `NsResourcesContext`
-  full-row `(clusterId, namespace)` scan with a lightweight `ref`-derived
-  presence index (or per-view collection from query rows), so it no longer
-  depends on retained rows.
-- [ ] **Slice 7 — Flip `pods` notify-only + remove dead code.** Drop the now-
-  vestigial `data` prop plumbing (`AllNamespacesView` → `NsViewPods`,
-  `NsResourcesContext` pods row exposure) bottom-up.
+  full-row `(clusterId, namespace)` scan with per-view query-row collection (the
+  `NsViewPods` pattern) so it no longer reads retained rows. **Lower priority
+  than the plan first assumed**: `NsViewPods` already scans its query rows for
+  pod permission targets, so visible pods get fresh pre-checks; the context
+  scan's staleness (baseline-only for notify-only domains) is a low-severity
+  pre-fetch miss covered by on-demand checks. Required before Slice 2.
 
 ## Out of scope
 

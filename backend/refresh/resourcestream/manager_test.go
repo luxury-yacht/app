@@ -113,7 +113,8 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, "namespace:default", update.Scope)
 		require.Equal(t, "pod-1", update.Ref.Name)
 		require.Equal(t, "default", update.Ref.Namespace)
-		require.NotNil(t, update.Row)
+		// pods is notify-only: the live stream carries the change signal, not the row.
+		require.Nil(t, update.Row)
 	default:
 		t.Fatal("expected update to be delivered")
 	}
@@ -1089,7 +1090,7 @@ func TestManagerPodMoveDeletesOldNodePodScope(t *testing.T) {
 	newNodeUpdate := requireNextUpdate(t, newNodeSub)
 	require.Equal(t, MessageTypeModified, newNodeUpdate.Type)
 	require.Equal(t, "pod-1", newNodeUpdate.Ref.Name)
-	require.NotNil(t, newNodeUpdate.Row)
+	require.Nil(t, newNodeUpdate.Row)
 }
 
 func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
@@ -1183,19 +1184,18 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 	require.Equal(t, MessageTypeDeleted, oldUpdate.Type)
 	require.Equal(t, "pod-1", oldUpdate.Ref.Name)
 
+	// pods is notify-only: a ReplicaSet owner change still re-notifies the affected
+	// pod on the old/new/namespace scopes (reactive wiring), but carries no row —
+	// the query-backed table refetches and rebuilds the owner columns.
 	newUpdate := requireNextUpdate(t, newSub)
 	require.Equal(t, MessageTypeModified, newUpdate.Type)
-	newRow, ok := newUpdate.Row.(snapshot.PodSummary)
-	require.True(t, ok)
-	require.Equal(t, "Deployment", newRow.OwnerKind)
-	require.Equal(t, "web-new", newRow.OwnerName)
+	require.Equal(t, "pod-1", newUpdate.Ref.Name)
+	require.Nil(t, newUpdate.Row)
 
 	namespaceUpdate := requireNextUpdate(t, namespaceSub)
 	require.Equal(t, MessageTypeModified, namespaceUpdate.Type)
-	namespaceRow, ok := namespaceUpdate.Row.(snapshot.PodSummary)
-	require.True(t, ok)
-	require.Equal(t, "Deployment", namespaceRow.OwnerKind)
-	require.Equal(t, "web-new", namespaceRow.OwnerName)
+	require.Equal(t, "pod-1", namespaceUpdate.Ref.Name)
+	require.Nil(t, namespaceUpdate.Row)
 }
 
 func TestManagerBackpressureTriggersReset(t *testing.T) {

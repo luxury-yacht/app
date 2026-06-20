@@ -387,7 +387,7 @@ describe('resourceStreamManager helpers', () => {
 });
 
 describe('ResourceStreamManager', () => {
-  test('applies pod updates and preserves metrics', () => {
+  test('pod delta is notify-only: bumps streamRevision and leaves rows untouched', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -435,6 +435,8 @@ describe('ResourceStreamManager', () => {
         name: 'pod-a',
         namespace: 'default',
         ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
+        // The backend ships no row for notify-only pods; even if one slipped through
+        // the frontend must not apply it. The query-backed table refetches instead.
         row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
       })
     );
@@ -442,9 +444,10 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('pods', storeScope);
+    // streamRevision bumps (refetch trigger); the seeded row is left untouched.
+    expect(state.streamRevision).toBe(1);
+    expect(state.data?.rows?.[0]?.status).toBe('Running');
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
-    expect(state.data?.rows?.[0]?.memUsage).toBe('40Mi');
-    expect(state.data?.rows?.[0]?.status).toBe('Pending');
   });
 
   test('notify-only domain delta bumps streamRevision and never retains rows', () => {
@@ -2125,9 +2128,12 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // pods is notify-only: both deltas are accepted (sequence advances despite the
+    // resourceVersion regressing), so each flush bumps streamRevision — and the
+    // regression does not trigger a resync.
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     const state = getScopedDomainState('pods', storeScope);
-    expect(state.data?.rows?.[0]?.status).toBe('NotReady');
+    expect(state.streamRevision).toBe(2);
   });
 
   test('accepts updates when snapshot version exceeds safe integer limits', async () => {
@@ -2584,8 +2590,11 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // pods is notify-only: the stale-then-newer deltas (sequence advancing) are
+    // accepted and bump streamRevision, and the stale resourceVersion does not
+    // trigger a second snapshot fetch (no resync).
     const state = getScopedDomainState('pods', storeScope);
-    expect(state.data?.rows?.[0]?.status).toBe('Ready');
+    expect(state.streamRevision ?? 0).toBeGreaterThanOrEqual(1);
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });
 

@@ -41,8 +41,7 @@ interface NamespaceResourcesViewsProps {
   activeTab: NamespaceViewType;
   onTabChange?: (tab: NamespaceViewType) => void;
 
-  // Pods data
-  nsPods?: any[];
+  // Pods metrics (pod rows are query-backed; the live pod row set is not threaded in)
   nsPodsMetrics?: PodMetricsInfo | null;
 
   // Workloads kind filter options
@@ -76,7 +75,6 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   activeTab,
   onTabChange: _onTabChange,
 
-  nsPods = [],
   nsPodsMetrics = null,
 
   objectPanel,
@@ -110,7 +108,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Pods" reset={reset} />}
           >
-            <NsViewPods namespace={namespace} data={nsPods} metrics={nsPodsMetrics} />
+            <NsViewPods namespace={namespace} metrics={nsPodsMetrics} />
           </ErrorBoundary>
         );
       case 'workloads':

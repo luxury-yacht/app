@@ -198,7 +198,7 @@ describe('AllNamespacesView', () => {
 
     const props = getLatestProps('pods-view');
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.data).toBe(samplePods);
+    // Pod rows are query-backed; the view no longer takes a live-rows `data` prop.
     expect(props.metrics).toEqual(metrics);
     expect(props.showNamespaceColumn).toBe(true);
   });

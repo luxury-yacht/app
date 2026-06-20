@@ -341,6 +341,7 @@
     },
     "pods": {
       "behaviorClass": "resource-stream-table",
+      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",

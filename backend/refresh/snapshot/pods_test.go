@@ -302,6 +302,51 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
 }
 
+func TestPodBuilderReportsScopeCounts(t *testing.T) {
+	now := time.Now()
+	healthy := func(name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         "team-a",
+				ResourceVersion:   "1",
+				CreationTimestamp: metav1.NewTime(now),
+			},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Name: "c", Ready: true}},
+			},
+		}
+	}
+	evicted := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "evicted",
+			Namespace:         "team-a",
+			ResourceVersion:   "2",
+			CreationTimestamp: metav1.NewTime(now),
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, healthy("ok-1"), healthy("ok-2"), evicted),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics:   fakePodMetricsProvider{metadata: metrics.Metadata{CollectedAt: now}},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	payload, ok := snapshot.Payload.(PodSnapshot)
+	require.True(t, ok)
+
+	// Scope-level counts travel on the payload so a query-backed (notify-only)
+	// view can show unhealthy/total badges without retaining the live row set.
+	require.Equal(t, 3, payload.TotalCount)
+	require.Equal(t, 1, payload.HealthCounts["unhealthy"])
+	require.Equal(t, 0, payload.HealthCounts["restarts"])
+	require.Equal(t, 0, payload.HealthCounts["not-ready"])
+}
+
 func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	now := time.Now()
 	podA := &corev1.Pod{

@@ -44,6 +44,28 @@ type PodSnapshot struct {
 	ResourceQueryEnvelope
 	Rows    []PodSummary   `json:"rows"`
 	Metrics PodMetricsInfo `json:"metrics"`
+	// TotalCount is the number of pods in the requested scope (before search/
+	// pagination). HealthCounts holds the per-filter-mode counts (keys match the
+	// "health" query predicate: "unhealthy", "restarts", "not-ready"). Together
+	// they let a query-backed view show total/unhealthy badges and decide whether
+	// a pending health filter has matches — without retaining the live row set.
+	// See docs/plans/notify-only-query-backed-streams.md.
+	TotalCount   int            `json:"totalCount"`
+	HealthCounts map[string]int `json:"healthCounts"`
+}
+
+// podHealthFilterModes are the "health" predicate values whose scope counts the
+// frontend needs (badge + pending-filter restore). Counting via the predicate
+// keeps each count consistent with the filter it gates.
+var podHealthFilterModes = []string{"unhealthy", "restarts", "not-ready"}
+
+// podSummaryUnhealthy reports whether a pod row should count as unhealthy. It is
+// the single source for the "unhealthy" notion shared by the scope count and the
+// "show unhealthy" query predicate, so the badge and the filter stay consistent.
+func podSummaryUnhealthy(pod PodSummary) bool {
+	presentation := strings.ToLower(strings.TrimSpace(pod.StatusPresentation))
+	return presentation == "warning" || presentation == "error" ||
+		presentation == "not-ready" || presentation == "terminating"
 }
 
 func podQueryCapabilities() ResourceQueryCapabilities {
@@ -126,16 +148,29 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 
+	adapter := podTableQueryAdapter()
+	totalCount := 0
+	healthCounts := map[string]int{}
+	countPod := func(summary PodSummary) {
+		totalCount++
+		for _, mode := range podHealthFilterModes {
+			if adapter.Predicate(summary, "health", mode) {
+				healthCounts[mode]++
+			}
+		}
+	}
+
 	var version uint64
 	var page typedTableQueryPage[PodSummary]
 	if query.Enabled {
-		collector := newTypedTableQueryCollector(query, podTableQueryAdapter())
+		collector := newTypedTableQueryCollector(query, adapter)
 		for _, pod := range pods {
 			if pod == nil {
 				continue
 			}
 			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
 			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
+			countPod(summary)
 			collector.Add(summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -150,6 +185,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			}
 			podMetricsUsage := podUsage[pod.Namespace+"/"+pod.Name]
 			summary := podres.BuildStreamSummaryFromRSMap(meta, pod, podMetricsUsage.CPUUsageMilli, podMetricsUsage.MemoryUsageBytes, rsMap)
+			countPod(summary)
 			summaries = append(summaries, summary)
 			if v := parsePodResourceVersion(pod); v > version {
 				version = v
@@ -185,6 +221,8 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			ResourceQueryEnvelope: typedQueryEnvelope(podDomainName, page, podQueryCapabilities()),
 			Rows:                  page.Rows,
 			Metrics:               metricsInfo,
+			TotalCount:            totalCount,
+			HealthCounts:          healthCounts,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(page.Rows),
@@ -223,8 +261,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 					status := strings.ToLower(strings.TrimSpace(pod.Status))
 					return ok && total > 0 && ready < total && status != "completed"
 				case "unhealthy":
-					presentation := strings.ToLower(strings.TrimSpace(pod.StatusPresentation))
-					return presentation == "warning" || presentation == "error" || presentation == "not-ready" || presentation == "terminating"
+					return podSummaryUnhealthy(pod)
 				default:
 					return true
 				}

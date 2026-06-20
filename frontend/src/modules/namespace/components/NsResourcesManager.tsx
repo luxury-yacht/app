@@ -257,8 +257,7 @@ export function NamespaceResourcesManager({
       namespace={namespace}
       activeTab={activeTab || 'workloads'}
       onTabChange={onTabChange}
-      // Pods data
-      nsPods={pods?.data || []}
+      // Pods metrics (pod rows are query-backed)
       nsPodsMetrics={podsMetrics}
       // Workloads data
       // Config data

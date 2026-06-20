@@ -48,7 +48,6 @@ import type { PodSnapshotPayload } from '@/core/refresh/types';
 
 interface PodsViewProps {
   namespace: string;
-  data: PodSnapshotEntry[];
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
@@ -114,7 +113,7 @@ export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry)
  * GridTable component for namespace Pods
  */
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
-  ({ namespace, data, showNamespaceColumn = false, metrics }) => {
+  ({ namespace, showNamespaceColumn = false, metrics }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
@@ -125,6 +124,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
 
     const [activePodFilter, setActivePodFilter] = useState<PodsFilterMode | null>(null);
+    // Scope-level pod counts, mirrored from the query payload once each page lands
+    // (see the effect after the query hook). Held as state so the unhealthy toggle
+    // — which is built before the hook and passed into it — can read them.
+    const [scopeCounts, setScopeCounts] = useState<{ total: number; unhealthy: number }>({
+      total: 0,
+      unhealthy: 0,
+    });
 
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
@@ -466,7 +472,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [activePodFilter]
     );
 
-    const unhealthyCount = useMemo(() => data.filter((pod) => isPodUnhealthy(pod)).length, [data]);
+    // Scope counts come from the query payload (backend, scope-level), mirrored
+    // into state below once the query page lands, so they stay correct for a
+    // query-backed/notify-only view without retaining the live row set.
+    const unhealthyCount = scopeCounts.unhealthy;
+    const scopeTotalCount = scopeCounts.total;
 
     const handleToggleUnhealthy = useCallback(() => {
       setActivePodFilter((prev) => (prev ? null : 'unhealthy'));
@@ -481,7 +491,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         ? 'Show all pods'
         : isAllNamespaces
           ? 'Show unhealthy pods'
-          : `Show unhealthy pods (${unhealthyCount}/${data.length})`;
+          : `Show unhealthy pods (${unhealthyCount}/${scopeTotalCount})`;
 
       return {
         type: 'toggle',
@@ -492,7 +502,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         title,
         ariaLabel: title,
       };
-    }, [activePodFilter, data.length, handleToggleUnhealthy, isAllNamespaces, unhealthyCount]);
+    }, [activePodFilter, scopeTotalCount, handleToggleUnhealthy, isAllNamespaces, unhealthyCount]);
 
     const getTrailingFilterActions = useCallback(
       () => (unhealthyToggle ? [unhealthyToggle] : []),
@@ -503,6 +513,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       gridTableProps: resolvedGridTableProps,
       favModal,
       source,
+      queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
@@ -528,6 +539,22 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // Non-display reads come from the single source of truth (the controller
     // source); the wrapper no longer re-exposes rows/error separately.
     const displayedPods = source.rows;
+
+    // Mirror the backend scope counts into state once each query page lands, so
+    // the unhealthy toggle (built above, before the hook) reflects current totals
+    // without depending on the live row set.
+    const payloadTotalCount = queryPayload?.totalCount;
+    const payloadUnhealthyCount = queryPayload?.healthCounts?.unhealthy;
+    useEffect(() => {
+      setScopeCounts({ total: payloadTotalCount ?? 0, unhealthy: payloadUnhealthyCount ?? 0 });
+    }, [payloadTotalCount, payloadUnhealthyCount]);
+
+    // The pending-filter guard (single namespace) reads the per-mode scope counts
+    // from the latest query payload, not the live row set (pods is notify-only, so
+    // live rows are static at baseline). A ref keeps the guard effect from
+    // re-running on every count change.
+    const healthCountsRef = useRef<Record<string, number>>({});
+    healthCountsRef.current = queryPayload?.healthCounts ?? {};
 
     const visiblePermissionTargets = useMemo(() => {
       if (!isAllNamespaces) {
@@ -575,7 +602,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           return;
         }
         if (!isAllNamespaces) {
-          const matchingCount = data.filter((pod) => matchesPodsFilter(request.filter, pod)).length;
+          // Skip restoring a filter that the backend reports has no matches in this
+          // scope. Only block when the count is known to be 0; when it hasn't loaded
+          // yet, allow activation (the query settles into a quiet "no matches" state).
+          const matchingCount = healthCountsRef.current[request.filter];
           if (matchingCount === 0) {
             return;
           }
@@ -608,7 +638,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         }
         applyPendingFilter({ scope, filter }, true);
       });
-    }, [data, isAllNamespaces, namespace, selectedClusterId]);
+    }, [isAllNamespaces, namespace, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {

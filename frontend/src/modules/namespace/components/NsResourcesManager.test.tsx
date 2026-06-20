@@ -131,7 +131,7 @@ describe('NamespaceResourcesManager', () => {
 
     const props = viewPropsRef.current;
     expect(props).toBeTruthy();
-    expect(props.nsPods).toEqual(['pods-row']);
+    // Pod rows are query-backed; only the pods metrics meta is threaded through.
     expect(props.nsPodsMetrics).toBe(resourceStates.pods.metrics);
     // The Kinds dropdown vocabulary is backend-owned (query capabilities); the
     // manager forwards no kind lists.

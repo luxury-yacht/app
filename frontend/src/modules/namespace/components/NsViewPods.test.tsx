@@ -367,7 +367,7 @@ describe('NsViewPods', () => {
   });
 
   const renderPods = async (
-    props: Partial<React.ComponentProps<typeof NsViewPods>> = {},
+    props: Partial<React.ComponentProps<typeof NsViewPods>> & { data?: PodSnapshotEntry[] } = {},
     { skipDefaultQueryMock = false }: { skipDefaultQueryMock?: boolean } = {}
   ) => {
     // Include cluster metadata so GridTable key extraction stays cluster-scoped.
@@ -425,16 +425,27 @@ describe('NsViewPods', () => {
               namespaces: [effectiveNamespace],
               kinds: ['Pod'],
               facetsExact: true,
+              // Scope counts mirror the backend: over all scope pods (effectiveData),
+              // not the health-filtered page, so the unhealthy badge stays correct.
+              totalCount: effectiveData.length,
+              healthCounts: {
+                unhealthy: effectiveData.filter((pod) => matchesPodsFilter('unhealthy', pod))
+                  .length,
+                restarts: effectiveData.filter((pod) => matchesPodsFilter('restarts', pod)).length,
+                'not-ready': effectiveData.filter((pod) => matchesPodsFilter('not-ready', pod))
+                  .length,
+              },
             },
           },
         });
       });
     }
 
+    // `data` is a test-only input that seeds the query mock above; pod rows are
+    // query-backed now, so it is not a NsViewPods prop.
+    const { data: _seedData, ...viewProps } = props;
     await act(async () => {
-      root.render(
-        <NsViewPods namespace="team-a" data={defaultPods} metrics={metrics} {...props} />
-      );
+      root.render(<NsViewPods namespace="team-a" metrics={metrics} {...viewProps} />);
       await Promise.resolve();
     });
     return effectiveData;

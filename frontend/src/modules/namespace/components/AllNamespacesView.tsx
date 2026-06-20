@@ -166,7 +166,6 @@ const AllNamespacesPodsView: React.FC = () => {
   return (
     <NsViewPods
       namespace={ALL_NAMESPACES_SCOPE}
-      data={podsResource.data ?? []}
       showNamespaceColumn
       metrics={podsResource.metrics}
     />
