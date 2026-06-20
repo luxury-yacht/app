@@ -23,7 +23,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -147,27 +146,18 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 	if node == nil {
 		return
 	}
-	pods, err := m.podsForNode(node.Name)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
+	// nodes is notify-only: emit the change signal and let the query-backed table
+	// refetch. The node row is rebuilt by the snapshot/query builder.
+	m.broadcastNodeNotification(node, updateType)
+}
 
-	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.nodeMetricsSnapshot(), m.podMetricsSnapshot())
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
+// broadcastNodeNotification emits a row-less node change notification on the
+// cluster scope. nodes is notify-only (see notify_only.go): the query-backed
+// table refetches on the bare signal and drift keys off Ref, so no NodeSummary
+// is projected.
+func (m *Manager) broadcastNodeNotification(node metav1.Object, updateType MessageType) {
 	ref := m.resourceRefForObject(node, nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNodes, node, ref, summary)
-
+	update := m.newObjectRowUpdate(updateType, domainNodes, node, ref, nil)
 	m.broadcast(domainNodes, []string{""}, update)
 }
 
@@ -177,32 +167,10 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	namespace := workload.GetNamespace()
-	ownerKey := snapshot.WorkloadOwnerKey(kind, namespace, workload.GetName())
-	pods, err := m.podsForWorkload(namespace, ownerKey)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	podUsage := m.podMetricsSnapshot()
-	hpas := m.hpasForWorkloadContext(namespace, nil, updateType)
-	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, podUsage, hpas...)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	ref := m.workloadRef(workload, kind)
-	update := m.newObjectRowUpdate(updateType, domainWorkloads, workload, ref, summary)
-
-	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	// namespace-workloads is notify-only: emit the change signal (Ref/RV) and let
+	// the query-backed table refetch. The row is rebuilt by the snapshot/query
+	// builder, so no per-event WorkloadSummary is projected here.
+	m.broadcastWorkloadNotification(workload, m.workloadRef(workload, kind), workload.GetNamespace(), "", updateType)
 }
 
 func (m *Manager) workloadRef(workload metav1.Object, kind string) resourcemodel.ResourceRef {
@@ -245,60 +213,20 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 		return
 	}
 
-	pods, err := m.podsForWorkload(namespace, ownerKey)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	hpas := m.hpasForWorkloadContext(namespace, nil, updateType)
-	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, usage, hpas...)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	ref := m.workloadRef(workload, kind)
-	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, workload, ref, summary)
-	update.ResourceVersion = pod.ResourceVersion
-	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	// A pod change means its owner workload's row may have changed; notify so the
+	// query-backed table refetches. The pod's resourceVersion carries the change.
+	m.broadcastWorkloadNotification(workload, m.workloadRef(workload, kind), namespace, pod.ResourceVersion, MessageTypeModified)
 }
 
-func (m *Manager) broadcastWorkloadRow(kind, namespace, name, resourceVersion string, hpas []*autoscalingv1.HorizontalPodAutoscaler) {
+func (m *Manager) broadcastWorkloadRow(kind, namespace, name, resourceVersion string) {
 	workload, err := m.lookupWorkload(kind, namespace, name)
 	if err != nil || workload == nil {
 		return
 	}
-	ownerKey := snapshot.WorkloadOwnerKey(kind, namespace, name)
-	pods, err := m.podsForWorkload(namespace, ownerKey)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, m.podMetricsSnapshot(), hpas...)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-	ref := m.workloadRef(workload, kind)
-	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, workload, ref, summary)
-	update.ResourceVersion = resourceVersion
-	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	m.broadcastWorkloadNotification(workload, m.workloadRef(workload, kind), namespace, resourceVersion, MessageTypeModified)
 }
 
-func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVersion string, hpas []*autoscalingv1.HorizontalPodAutoscaler) {
+func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVersion string) {
 	if m.podLister == nil {
 		return
 	}
@@ -306,14 +234,11 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 	if err != nil || pod == nil {
 		return
 	}
-	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, m.podMetricsSnapshot(), hpas...)
 	ref := m.resourceRefForObject(pod, podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource)
-	update := m.newObjectRowUpdate(MessageTypeModified, domainWorkloads, pod, ref, summary)
-	update.ResourceVersion = resourceVersion
-	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	m.broadcastWorkloadNotification(pod, ref, namespace, resourceVersion, MessageTypeModified)
 }
 
-func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType MessageType, usage map[string]metrics.PodUsage) {
+func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType MessageType, _ map[string]metrics.PodUsage) {
 	if pod == nil {
 		return
 	}
@@ -321,12 +246,21 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 		updateType = MessageTypeDeleted
 	}
 
-	hpas := m.hpasForWorkloadContext(pod.Namespace, nil, updateType)
-	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage, hpas...)
 	ref := m.resourceRefForObject(pod, podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainWorkloads, pod, ref, summary)
+	m.broadcastWorkloadNotification(pod, ref, pod.Namespace, "", updateType)
+}
 
-	m.broadcast(domainWorkloads, scopesForNamespace(pod.Namespace), update)
+// broadcastWorkloadNotification emits a row-less workload change notification on
+// the namespace scope. namespace-workloads is notify-only (see notify_only.go):
+// the query-backed table refetches on the bare signal and drift keys off Ref, so
+// no WorkloadSummary is projected. resourceVersion overrides the object's own RV
+// when the trigger differs from the workload (a pod or HPA event).
+func (m *Manager) broadcastWorkloadNotification(obj metav1.Object, ref resourcemodel.ResourceRef, namespace, resourceVersion string, updateType MessageType) {
+	update := m.newObjectRowUpdate(updateType, domainWorkloads, obj, ref, nil)
+	if resourceVersion != "" {
+		update.ResourceVersion = resourceVersion
+	}
+	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
 }
 
 func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
@@ -348,26 +282,8 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 		return
 	}
 
-	pods, err := m.podsForNode(node.Name)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.nodeMetricsSnapshot(), m.podMetricsSnapshot())
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	ref := m.resourceRefForObject(node, nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource)
-	update := m.newObjectRowUpdate(MessageTypeModified, domainNodes, node, ref, summary)
-	m.broadcast(domainNodes, []string{""}, update)
+	// A pod change affects its node's row; notify so the query-backed table refetches.
+	m.broadcastNodeNotification(node, MessageTypeModified)
 }
 
 // podStreamRow resolves a pod's current usage and builds its row via the pods

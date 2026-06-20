@@ -98,6 +98,13 @@ export interface ScopeContract {
 
 export interface DomainInventoryEntry {
   behaviorClass: RefreshBehaviorClass;
+  /**
+   * When true, the live resource stream carries only change notifications
+   * (Ref/ResourceVersion/Sequence) — no row payload. The table is query-backed,
+   * so the frontend bumps streamRevision to refetch and never retains/sorts the
+   * streamed rows. Backend parity: resourcestream.notifyOnlyStreamDomains.
+   */
+  notifyOnly?: boolean;
   scopeContract: ScopeContract;
   singleCluster: true;
   payloadOwner: string;

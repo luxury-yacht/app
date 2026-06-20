@@ -21,6 +21,7 @@ import {
   getResourceStreamDomainDescriptor,
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
+  isNotifyOnlyStreamDomain,
   isSupportedDomain,
   type ResourceDomain,
 } from './resourceStreamDomains';
@@ -713,7 +714,35 @@ export class ResourceStreamManager {
 
     // Always update shadow keys so drift checks can compare snapshots to streamed changes.
     this.applyShadowUpdates(subscription, updates);
+
+    // Notify-only domains carry no row payload — the query-backed table refetches
+    // on the bare signal. Bump streamRevision (the refetch trigger) and leave the
+    // stored rows untouched; never run the retain/merge/sort row path.
+    if (isNotifyOnlyStreamDomain(subscription.domain)) {
+      this.bumpStreamRevisionOnly(subscription, now);
+      return;
+    }
+
     this.applyRowUpdates(subscription, updates, now);
+  }
+
+  // bumpStreamRevisionOnly advances the live-data identity for a notify-only
+  // domain without touching its rows. The third component of liveDomainVersion
+  // (streamRevision) changes, so the query-backed view refetches its page; the
+  // streamed deltas carried no rows to apply. Coalescing (UPDATE_COALESCE_MS)
+  // collapses a burst — e.g. an informer resync — into a single bump/refetch.
+  private bumpStreamRevisionOnly(subscription: StreamSubscription, now: number): void {
+    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      streamRevision: (previous.streamRevision ?? 0) + 1,
+      lastUpdated: now,
+      lastAutoRefresh: now,
+      error: null,
+      isManual: false,
+      scope: subscription.reportScope,
+    }));
+    this.clearStreamError(subscription.clusterId);
   }
 
   private applyRowUpdates(

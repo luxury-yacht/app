@@ -67,6 +67,7 @@
     },
     "nodes": {
       "behaviorClass": "resource-stream-table",
+      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -179,6 +180,7 @@
     },
     "namespace-workloads": {
       "behaviorClass": "resource-stream-table",
+      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",

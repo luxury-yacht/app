@@ -53,7 +53,9 @@ func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj met
 
 func (m *Manager) newObjectRowUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef, row interface{}) Update {
 	update := m.newObjectUpdate(updateType, domain, obj, ref)
-	if updateType != MessageTypeDeleted {
+	// Deletes never carry a row; notify-only domains never carry one either —
+	// their query-backed views consume only the change signal (see notify_only.go).
+	if updateType != MessageTypeDeleted && !isNotifyOnlyStreamDomain(domain) {
 		update.Row = row
 	}
 	return update

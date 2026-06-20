@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
 	appslisters "k8s.io/client-go/listers/apps/v1"
-	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
@@ -62,8 +61,6 @@ import (
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
-
-const podNodeIndexName = "pods:node"
 
 const (
 	domainPods                 = "pods"
@@ -171,7 +168,6 @@ type Manager struct {
 	dynamicClient dynamic.Interface
 
 	podLister        corelisters.PodLister
-	podIndexer       cache.Indexer
 	nodeLister       corelisters.NodeLister
 	serviceLister    corelisters.ServiceLister
 	sliceLister      discoverylisters.EndpointSliceLister
@@ -181,7 +177,6 @@ type Manager struct {
 	daemonLister     appslisters.DaemonSetLister
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
-	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
 
 	customInformerMu sync.Mutex
 	customInformers  map[string]*customResourceInformer
@@ -235,9 +230,6 @@ func NewManager(
 	shared := factory.SharedInformerFactory()
 	if shared == nil {
 		return mgr
-	}
-	if mgr.canListWatch("autoscaling", "horizontalpodautoscalers") {
-		mgr.hpaLister = shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister()
 	}
 
 	mgr.registerPodStreams(factory)
@@ -833,7 +825,7 @@ func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
 	update := m.newObjectRowUpdate(updateType, domainNamespaceAutoscaling, hpa, ref, hpapkg.BuildStreamSummary(m.clusterMeta, hpa))
 
 	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
-	m.handleWorkloadFromHPA(hpa, updateType)
+	m.handleWorkloadFromHPA(hpa)
 }
 
 func (m *Manager) handleHPAEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
@@ -850,22 +842,23 @@ func (m *Manager) handleHPAEvent(oldObj interface{}, newObj interface{}, updateT
 			return
 		}
 		if hpaWorkloadKey(oldHPA) != hpaWorkloadKey(newHPA) {
-			m.handleWorkloadFromHPA(oldHPA, MessageTypeDeleted)
+			m.handleWorkloadFromHPA(oldHPA)
 		}
 	}
 }
 
-func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscaler, updateType MessageType) {
+func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscaler) {
 	namespace, kind, name, ok := hpaWorkloadTarget(hpa)
 	if !ok {
 		return
 	}
-	hpas := m.hpasForWorkloadContext(namespace, hpa, updateType)
+	// notify-only: signal the targeted workload so its query-backed row refetches
+	// (and picks up the new/removed HPA context from the snapshot builder).
 	if kind == podspkg.Identity.Kind {
-		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion, hpas)
+		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion)
 		return
 	}
-	m.broadcastWorkloadRow(kind, namespace, name, hpa.ResourceVersion, hpas)
+	m.broadcastWorkloadRow(kind, namespace, name, hpa.ResourceVersion)
 }
 
 func hpaWorkloadTarget(hpa *autoscalingv1.HorizontalPodAutoscaler) (namespace, kind, name string, ok bool) {
@@ -902,13 +895,6 @@ func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
 		return map[string]metrics.PodUsage{}
 	}
 	return m.metrics.LatestPodUsage()
-}
-
-func (m *Manager) nodeMetricsSnapshot() map[string]metrics.NodeUsage {
-	if m.metrics == nil {
-		return map[string]metrics.NodeUsage{}
-	}
-	return m.metrics.LatestNodeUsage()
 }
 
 func (m *Manager) broadcast(domain string, scopes []string, update Update) {
@@ -1056,109 +1042,6 @@ func (m *Manager) triggerResync(sub *subscription, update Update) bool {
 	default:
 		return false
 	}
-}
-
-func (m *Manager) podsForNode(node string) ([]*corev1.Pod, error) {
-	if node == "" {
-		return nil, nil
-	}
-
-	if m.podIndexer != nil {
-		items, err := m.podIndexer.ByIndex(podNodeIndexName, node)
-		if err == nil {
-			return convertPodIndexerItems(items), nil
-		}
-	}
-
-	pods, err := m.listPods("")
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]*corev1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		if pod != nil && pod.Spec.NodeName == node {
-			filtered = append(filtered, pod)
-		}
-	}
-	return filtered, nil
-}
-
-func (m *Manager) podsForWorkload(namespace, ownerKey string) ([]*corev1.Pod, error) {
-	if ownerKey == "" {
-		return nil, nil
-	}
-	pods, err := m.listPods(namespace)
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]*corev1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		if snapshot.WorkloadOwnerKeyForPod(pod) == ownerKey {
-			filtered = append(filtered, pod)
-		}
-	}
-	return filtered, nil
-}
-
-func (m *Manager) listPods(namespace string) ([]*corev1.Pod, error) {
-	if m.podLister == nil {
-		return nil, errors.New("pod lister unavailable")
-	}
-	if namespace == "" {
-		return m.podLister.List(labels.Everything())
-	}
-	return m.podLister.Pods(namespace).List(labels.Everything())
-}
-
-func (m *Manager) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
-	if m.hpaLister == nil {
-		return nil, nil
-	}
-	if namespace == "" {
-		return m.hpaLister.List(labels.Everything())
-	}
-	return m.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
-}
-
-func (m *Manager) hpasForWorkloadContext(
-	namespace string,
-	eventHPA *autoscalingv1.HorizontalPodAutoscaler,
-	eventType MessageType,
-) []*autoscalingv1.HorizontalPodAutoscaler {
-	hpas, err := m.listHPAs(namespace)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list hpas for namespace %s failed: %v", namespace, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		hpas = nil
-	}
-	if eventHPA == nil {
-		return hpas
-	}
-
-	filtered := make([]*autoscalingv1.HorizontalPodAutoscaler, 0, len(hpas)+1)
-	found := false
-	for _, hpa := range hpas {
-		if hpa == nil {
-			continue
-		}
-		same := hpa.UID == eventHPA.UID || (hpa.Namespace == eventHPA.Namespace && hpa.Name == eventHPA.Name)
-		if same {
-			found = true
-			if eventType == MessageTypeDeleted {
-				continue
-			}
-		}
-		filtered = append(filtered, hpa)
-	}
-	if eventType != MessageTypeDeleted && !found {
-		filtered = append(filtered, eventHPA)
-	}
-	return filtered
 }
 
 func (m *Manager) listEndpointSlicesForService(namespace, service string) ([]*discoveryv1.EndpointSlice, error) {
@@ -1436,17 +1319,4 @@ func isHelmReleaseObject(name string, labels map[string]string, secretType strin
 		}
 	}
 	return strings.HasPrefix(name, resourcemodel.HelmReleaseNamePrefix)
-}
-
-func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
-	if len(items) == 0 {
-		return []*corev1.Pod{}
-	}
-	out := make([]*corev1.Pod, 0, len(items))
-	for _, item := range items {
-		if pod, ok := item.(*corev1.Pod); ok && pod != nil {
-			out = append(out, pod)
-		}
-	}
-	return out
 }

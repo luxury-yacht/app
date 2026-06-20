@@ -993,6 +993,18 @@ export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
 export const isCompleteResyncStreamDomain = (domain: ResourceDomain): boolean =>
   COMPLETE_RESYNC_STREAM_DOMAINS.has(domain);
 
+// Notify-only domains stream change signals without row payloads (the table is
+// query-backed). Their flushed deltas bump streamRevision to trigger a refetch
+// and never retain/sort rows. Backend parity: resourcestream.notifyOnlyStreamDomains.
+export const NOTIFY_ONLY_STREAM_DOMAINS = new Set<ResourceDomain>(
+  Object.entries(refreshDomainContract.domainInventory)
+    .filter(([domain, inventory]) => inventory.notifyOnly === true && isSupportedDomain(domain))
+    .map(([domain]) => domain as ResourceDomain)
+);
+
+export const isNotifyOnlyStreamDomain = (domain: ResourceDomain): boolean =>
+  NOTIFY_ONLY_STREAM_DOMAINS.has(domain);
+
 export const normalizeResourceScope = (domain: ResourceDomain, scope: string): string => {
   const descriptor = getResourceStreamDomainDescriptor(domain);
   switch (descriptor.scopeKind) {

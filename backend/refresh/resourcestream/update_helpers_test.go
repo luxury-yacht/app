@@ -97,6 +97,34 @@ func TestManagerNewObjectRowUpdateOmitsRowsForDeletes(t *testing.T) {
 	require.Equal(t, ref, *deleted.Ref)
 }
 
+func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyDomains(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
+	}
+	object := &metav1.ObjectMeta{
+		Name:            "web",
+		Namespace:       "default",
+		UID:             "web-uid",
+		ResourceVersion: "77",
+	}
+	row := map[string]string{"name": "web"}
+	ref := manager.resourceRefForObject(object, "apps", "v1", "Deployment", "deployments")
+
+	// A notify-only domain ships change notifications without the projected row:
+	// even ADDED/MODIFIED omit Row, while identity (Ref) and ResourceVersion still
+	// travel so drift detection and the query-backed refetch trigger keep working.
+	for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
+		update := manager.newObjectRowUpdate(updateType, domainWorkloads, object, ref, row)
+		require.Nilf(t, update.Row, "notify-only domain must omit Row for %s", updateType)
+		require.Equal(t, "77", update.ResourceVersion)
+		require.Equal(t, ref, *update.Ref)
+	}
+
+	// A non-notify-only domain still carries the row on add/modify.
+	configUpdate := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceConfig, object, ref, row)
+	require.Equal(t, row, configUpdate.Row)
+}
+
 func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},

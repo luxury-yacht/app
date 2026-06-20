@@ -9,10 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { refreshDomainContract } from '../domainRegistry';
 import {
   COMPLETE_RESYNC_STREAM_DOMAINS,
+  NOTIFY_ONLY_STREAM_DOMAINS,
   RESOURCE_STREAM_DOMAINS,
   getResourceStreamDomainDescriptor,
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
+  isNotifyOnlyStreamDomain,
   isSupportedDomain,
   normalizeResourceScope,
   resourceStreamDomainDescriptors,
@@ -307,6 +309,14 @@ describe('resource stream domain descriptors', () => {
     expect(Array.from(COMPLETE_RESYNC_STREAM_DOMAINS)).toEqual(['namespace-helm']);
     EXPECTED_DOMAINS.forEach((domain) => {
       expect(isCompleteResyncStreamDomain(domain)).toBe(domain === 'namespace-helm');
+    });
+  });
+
+  it('derives notify-only resource stream domains from the shared inventory', () => {
+    const notifyOnly = new Set<string>(['namespace-workloads', 'nodes']);
+    expect([...NOTIFY_ONLY_STREAM_DOMAINS].sort()).toEqual([...notifyOnly].sort());
+    EXPECTED_DOMAINS.forEach((domain) => {
+      expect(isNotifyOnlyStreamDomain(domain)).toBe(notifyOnly.has(domain));
     });
   });
 

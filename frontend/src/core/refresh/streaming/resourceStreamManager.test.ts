@@ -447,6 +447,40 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]?.status).toBe('Pending');
   });
 
+  test('notify-only domain delta bumps streamRevision and never retains rows', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-workloads', storeScope);
+
+    // namespace-workloads is notify-only: the backend ships the change signal
+    // (Ref/ResourceVersion) without a row. The frontend must bump streamRevision
+    // — so the query-backed table refetches — and leave the row list untouched.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'namespace-workloads',
+        scope: 'namespace:default',
+        resourceVersion: '7',
+        name: 'web',
+        namespace: 'default',
+        kind: 'Deployment',
+        ref: resourceRef({ group: 'apps', kind: 'Deployment', namespace: 'default', name: 'web' }),
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('namespace-workloads', storeScope);
+    expect(state.streamRevision).toBe(1);
+    expect(state.data?.rows ?? []).toEqual([]);
+  });
+
   test('ignores unchanged workload update messages without replacing the workload list', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
@@ -1993,9 +2027,9 @@ describe('ResourceStreamManager', () => {
     const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('nodes', storeScope);
+    ).ensureSubscriptions('cluster-rbac', storeScope);
 
-    setScopedDomainState('nodes', storeScope, () => ({
+    setScopedDomainState('cluster-rbac', storeScope, () => ({
       status: 'ready',
       data: { rows: [], clusterId: 'test-cluster' },
       stats: null,
@@ -2008,20 +2042,20 @@ describe('ResourceStreamManager', () => {
       'cluster-a',
       JSON.stringify({
         type: 'ADDED',
-        domain: 'nodes',
+        domain: 'cluster-rbac',
         resourceVersion: '11',
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+        ref: resourceRef({ kind: 'ClusterRole', name: 'role-a' }),
+        row: { name: 'role-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
 
     vi.advanceTimersByTime(200);
 
-    const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('node-a');
+    const state = getScopedDomainState('cluster-rbac', storeScope);
+    expect(state.data?.rows?.[0]?.name).toBe('role-a');
   });
 
-  test('does not create an initial empty nodes payload from pre-baseline stream updates', () => {
+  test('does not create an initial empty payload from pre-baseline stream updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -2029,21 +2063,21 @@ describe('ResourceStreamManager', () => {
     const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('nodes', storeScope);
+    ).ensureSubscriptions('cluster-rbac', storeScope);
 
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
         type: 'DELETED',
-        domain: 'nodes',
+        domain: 'cluster-rbac',
         resourceVersion: '11',
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
+        ref: resourceRef({ kind: 'ClusterRole', name: 'role-a' }),
       })
     );
 
     vi.advanceTimersByTime(200);
 
-    const state = getScopedDomainState('nodes', storeScope);
+    const state = getScopedDomainState('cluster-rbac', storeScope);
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
   });
@@ -2053,22 +2087,23 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('nodes', storeScope);
+    ).ensureSubscriptions('pods', storeScope);
 
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
         type: 'ADDED',
-        domain: 'nodes',
-        scope: '',
-        name: 'node-a',
+        domain: 'pods',
+        scope: 'namespace:default',
+        name: 'pod-a',
+        namespace: 'default',
         resourceVersion: '10',
         sequence: 1,
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+        ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
+        row: { name: 'pod-a', namespace: 'default', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
     vi.advanceTimersByTime(200);
@@ -2077,20 +2112,21 @@ describe('ResourceStreamManager', () => {
       'cluster-a',
       JSON.stringify({
         type: 'MODIFIED',
-        domain: 'nodes',
-        scope: '',
-        name: 'node-a',
+        domain: 'pods',
+        scope: 'namespace:default',
+        name: 'pod-a',
+        namespace: 'default',
         resourceVersion: '5',
         sequence: 2,
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' },
+        ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
+        row: { name: 'pod-a', namespace: 'default', status: 'NotReady', clusterId: 'cluster-a' },
       })
     );
 
     vi.advanceTimersByTime(200);
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    const state = getScopedDomainState('nodes', storeScope);
+    const state = getScopedDomainState('pods', storeScope);
     expect(state.data?.rows?.[0]?.status).toBe('NotReady');
   });
 
@@ -2102,12 +2138,12 @@ describe('ResourceStreamManager', () => {
     const storeScope = buildClusterScope('cluster-a', '');
     (
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('nodes', storeScope);
+    ).ensureSubscriptions('cluster-rbac', storeScope);
 
     // Use an unsafe integer to mirror large resourceVersion values from the backend.
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
-        domain: 'nodes',
+        domain: 'cluster-rbac',
         scope: '',
         version: Number.MAX_SAFE_INTEGER + 2,
         checksum: 'etag',
@@ -2119,24 +2155,24 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
-    await manager.refreshOnce('nodes', storeScope);
+    await manager.refreshOnce('cluster-rbac', storeScope);
 
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
         type: 'ADDED',
-        domain: 'nodes',
+        domain: 'cluster-rbac',
         scope: '',
         resourceVersion: '1',
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+        ref: resourceRef({ kind: 'ClusterRole', name: 'role-a' }),
+        row: { name: 'role-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
 
     vi.advanceTimersByTime(200);
 
-    const state = getScopedDomainState('nodes', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('node-a');
+    const state = getScopedDomainState('cluster-rbac', storeScope);
+    expect(state.data?.rows?.[0]?.name).toBe('role-a');
   });
 
   test('resyncs on reset messages', async () => {
@@ -2473,36 +2509,44 @@ describe('ResourceStreamManager', () => {
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
-        domain: 'nodes',
-        scope: '',
+        domain: 'pods',
+        scope: 'namespace:default',
         version: 10,
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
-        payload: { rows: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        payload: {
+          rows: [
+            { name: 'pod-a', namespace: 'default', status: 'NotReady', clusterId: 'cluster-a' },
+          ],
+        },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
       notModified: false,
     });
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
-        domain: 'nodes',
-        scope: '',
+        domain: 'pods',
+        scope: 'namespace:default',
         version: 11,
         checksum: 'etag-2',
         generatedAt: Date.now(),
         sequence: 2,
-        payload: { rows: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        payload: {
+          rows: [
+            { name: 'pod-a', namespace: 'default', status: 'NotReady', clusterId: 'cluster-a' },
+          ],
+        },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
       notModified: false,
     });
 
-    await manager.start('nodes', storeScope);
+    await manager.start('pods', storeScope);
     await flushPromises();
 
     vi.advanceTimersByTime(1100);
@@ -2510,13 +2554,14 @@ describe('ResourceStreamManager', () => {
       'cluster-a',
       JSON.stringify({
         type: 'MODIFIED',
-        domain: 'nodes',
-        scope: '',
+        domain: 'pods',
+        scope: 'namespace:default',
         resourceVersion: '5',
         sequence: 1,
-        name: 'node-a',
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'Unknown', clusterId: 'cluster-a' },
+        name: 'pod-a',
+        namespace: 'default',
+        ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
+        row: { name: 'pod-a', namespace: 'default', status: 'Unknown', clusterId: 'cluster-a' },
       })
     );
 
@@ -2526,19 +2571,20 @@ describe('ResourceStreamManager', () => {
       'cluster-a',
       JSON.stringify({
         type: 'MODIFIED',
-        domain: 'nodes',
-        scope: '',
+        domain: 'pods',
+        scope: 'namespace:default',
         resourceVersion: '12',
         sequence: 2,
-        name: 'node-a',
-        ref: resourceRef({ kind: 'Node', name: 'node-a' }),
-        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+        name: 'pod-a',
+        namespace: 'default',
+        ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
+        row: { name: 'pod-a', namespace: 'default', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
 
     vi.advanceTimersByTime(200);
 
-    const state = getScopedDomainState('nodes', storeScope);
+    const state = getScopedDomainState('pods', storeScope);
     expect(state.data?.rows?.[0]?.status).toBe('Ready');
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });

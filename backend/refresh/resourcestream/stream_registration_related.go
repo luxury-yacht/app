@@ -14,7 +14,6 @@ func (m *Manager) registerPodStreams(factory *informer.Factory) {
 	if m.canListWatch("", "pods") {
 		podInformer := shared.Core().V1().Pods()
 		m.podLister = podInformer.Lister()
-		m.podIndexer = podInformer.Informer().GetIndexer()
 		m.addRelatedResourceEventHandler(podInformer.Informer(), (*Manager).handlePodEvent)
 	}
 }
