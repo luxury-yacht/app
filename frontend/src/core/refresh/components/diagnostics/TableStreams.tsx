@@ -31,16 +31,12 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
         <table className="diagnostics-table">
           <thead>
             <tr>
-              <th>Cluster</th>
-              <th>Stream</th>
-              <th>Domain</th>
-              <th>Sessions</th>
+              <th>Name</th>
               <th>Delivered</th>
               <th>Dropped</th>
               <th>Errors</th>
               <th>Resyncs</th>
               <th>Fallbacks</th>
-              <th>Last Connect</th>
               <th>Last Event</th>
               <th>Last Error</th>
             </tr>
@@ -48,33 +44,65 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
           <tbody>
             {rows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={12}>{resolvedEmptyMessage}</td>
+                <td colSpan={8}>{resolvedEmptyMessage}</td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.rowKey}>
-                  <td>{row.cluster}</td>
-                  <td>
-                    <span className="diagnostics-domain" title={row.rowKey}>
-                      {row.label}
-                    </span>
-                  </td>
-                  <td title={row.activeDomainsTooltip ?? ''}>{row.domain}</td>
-                  <td>{row.sessions}</td>
-                  <td>{row.delivered}</td>
-                  <td>{row.dropped}</td>
-                  <td>{row.errors}</td>
-                  <td title={row.resyncsTooltip ?? ''}>{row.resyncs ?? '—'}</td>
-                  <td title={row.fallbacksTooltip ?? ''}>{row.fallbacks ?? '—'}</td>
-                  <td title={row.lastConnectTooltip}>{row.lastConnect}</td>
-                  <td title={row.lastEventTooltip}>{row.lastEvent}</td>
-                  <td className="diagnostics-error">{row.lastError}</td>
-                </tr>
-              ))
+              rows.map((row) => <StreamTableRow key={row.rowKey} row={row} />)
             )}
           </tbody>
         </table>
       </div>
     </div>
+  );
+};
+
+// StreamTableRow renders one node of the streams tree: a stream header
+// (socket-level: Sessions/Last Connect live here, since one socket spans all
+// clusters), a cluster group label, or a per-domain leaf.
+const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
+  if (row.kind === 'stream') {
+    return (
+      <tr className="diagnostics-stream-row">
+        <td className="diagnostics-stream-name" title={row.rowKey}>
+          <span className="diagnostics-domain">{row.label}</span>
+          <span className="diagnostics-stream-socket" title={row.lastConnectTooltip}>
+            {` · Sessions ${row.sessions} · Last Connect ${row.lastConnect}`}
+          </span>
+        </td>
+        <td>{row.delivered}</td>
+        <td>{row.dropped}</td>
+        <td>{row.errors}</td>
+        <td>—</td>
+        <td>—</td>
+        <td title={row.lastEventTooltip}>{row.lastEvent}</td>
+        <td className="diagnostics-error">{row.lastError}</td>
+      </tr>
+    );
+  }
+  if (row.kind === 'cluster') {
+    return (
+      <tr className="diagnostics-cluster-row">
+        <td className="diagnostics-cluster-name">{row.cluster}</td>
+        <td />
+        <td />
+        <td />
+        <td />
+        <td />
+        <td />
+        <td />
+      </tr>
+    );
+  }
+  return (
+    <tr className="diagnostics-domain-row">
+      <td className="diagnostics-domain-name">{row.domain}</td>
+      <td>{row.delivered}</td>
+      <td>{row.dropped}</td>
+      <td>{row.errors}</td>
+      <td title={row.resyncsTooltip ?? ''}>{row.resyncs ?? '—'}</td>
+      <td title={row.fallbacksTooltip ?? ''}>{row.fallbacks ?? '—'}</td>
+      <td title={row.lastEventTooltip}>{row.lastEvent}</td>
+      <td className="diagnostics-error">{row.lastError}</td>
+    </tr>
   );
 };

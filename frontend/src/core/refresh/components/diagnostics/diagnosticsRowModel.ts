@@ -29,12 +29,12 @@ import type {
   CapabilityBatchRow,
   CapabilityDescriptorActivityDetails,
   DiagnosticsRow,
+  DiagnosticsStreamHeaderRow,
   DiagnosticsStreamRow,
   KubernetesAPIClientRow,
   PermissionRow,
   SummaryCardData,
 } from './diagnosticsPanelTypes';
-import { DOMAIN_STREAM_MAP } from './diagnosticsPanelConfig';
 import { formatDurationMs, formatLastUpdated } from './diagnosticsPanelUtils';
 
 // Stream labels shown in the diagnostics streams section.
@@ -45,12 +45,8 @@ const STREAM_LABELS: Record<string, string> = {
   'container-logs': 'Container Logs',
 };
 
-type ActiveDomainRow = Pick<DiagnosticsRow, 'domain' | 'label' | 'scope' | 'scopeEntries'>;
-
-// activeDomainCluster derives the cluster a domain row belongs to from its
-// Active scope entry, so per-cluster stream rows list only their own domains.
-const activeDomainCluster = (row: ActiveDomainRow): string =>
-  row.scopeEntries?.find((entry) => entry.label === 'Active')?.clusterName ?? '';
+// The Streams tree only needs each active domain's id + friendly label.
+type ActiveDomainRow = Pick<DiagnosticsRow, 'domain' | 'label'>;
 
 const diagnosticsRowIdentity = (row: DiagnosticsRow): string =>
   [row.domain, row.label, row.namespace, row.scope, row.role].join('\u0000');
@@ -124,6 +120,27 @@ const resolveResourceStreamStats = (
   return EMPTY_RESOURCE_STREAM_STATS;
 };
 
+// recoveryTooltip formats the resync/fallback hover for a per-domain row.
+const recoveryTooltip = (
+  reason: string | undefined,
+  at: number | undefined,
+  fallbackPrefix: string
+): string | undefined => {
+  const info = at ? formatLastUpdated(at) : null;
+  if (reason && info?.tooltip) {
+    return `${reason} (${info.tooltip})`;
+  }
+  if (reason) {
+    return reason;
+  }
+  if (info?.tooltip) {
+    return `${fallbackPrefix} ${info.tooltip}`;
+  }
+  return undefined;
+};
+
+const maxOf = (values: number[]): number => values.reduce((max, v) => (v > max ? v : max), 0);
+
 export const buildDiagnosticsStreamRows = (
   telemetrySummary: TelemetrySummary | null,
   filteredRows: ActiveDomainRow[],
@@ -133,8 +150,7 @@ export const buildDiagnosticsStreamRows = (
     return [];
   }
 
-  // Friendly label per domain id (e.g. "pods" -> "Pods") for the Domain column,
-  // taken from the active refresh-domain rows.
+  // Friendly label per domain id (e.g. "pods" -> "Pods"), from the active rows.
   const domainLabelById = new Map<string, string>();
   filteredRows.forEach((row) => {
     if (!domainLabelById.has(row.domain)) {
@@ -142,128 +158,121 @@ export const buildDiagnosticsStreamRows = (
     }
   });
 
-  // Active domains are grouped per (stream, cluster) AND per stream so a
-  // cluster-tagged telemetry row lists only its cluster's domains, while a
-  // legacy (cluster-less) row still shows all of them.
-  const activeDomainRowsByStreamCluster = new Map<string, string[]>();
-  const activeDomainRowsByStream = new Map<string, string[]>();
-  filteredRows.forEach((row) => {
-    const streamName = DOMAIN_STREAM_MAP[row.domain];
-    if (!streamName) {
-      return;
-    }
-    const scopedLabel = row.scope && row.scope !== '-' ? `${row.label} (${row.scope})` : row.label;
-    const pushUnique = (map: Map<string, string[]>, key: string): void => {
-      const existing = map.get(key) ?? [];
-      if (!existing.includes(scopedLabel)) {
-        existing.push(scopedLabel);
-        map.set(key, existing);
-      }
-    };
-    pushUnique(activeDomainRowsByStream, streamName);
-    pushUnique(activeDomainRowsByStreamCluster, `${streamName}::${activeDomainCluster(row)}`);
+  // Group telemetry entries by stream name (one stream = one socket).
+  const byStream = new Map<string, TelemetryStreamStatus[]>();
+  telemetrySummary.streams.forEach((entry) => {
+    const list = byStream.get(entry.name) ?? [];
+    list.push(entry);
+    byStream.set(entry.name, list);
   });
 
-  return telemetrySummary.streams
-    .map((stream) => {
-      const label = STREAM_LABELS[stream.name] ?? stream.name;
-      // Multi-cluster awareness: the cluster is shown in its own leading column,
-      // and a cluster-tagged row lists only that cluster's active domains.
-      const activeDomains = stream.clusterName
-        ? (activeDomainRowsByStreamCluster.get(`${stream.name}::${stream.clusterName}`) ?? [])
-        : (activeDomainRowsByStream.get(stream.name) ?? []);
-      const lastConnectInfo = formatLastUpdated(
-        stream.lastConnect > 0 ? stream.lastConnect : undefined
-      );
-      const lastEventInfo = formatLastUpdated(stream.lastEvent > 0 ? stream.lastEvent : undefined);
-      const isResourceStream = stream.name === 'resources';
-      // A resource-stream entry that names a domain is a per-domain row; its
-      // resync/fallback stats come from that (cluster, domain). The Domain column
-      // shows the domain (friendly label) for those rows, else the active-domain
-      // list (events/catalog/stream-level rows).
-      const isPerDomainRow = isResourceStream && Boolean(stream.domain);
-      const domainDisplay = stream.domain
-        ? (domainLabelById.get(stream.domain) ?? stream.domain)
-        : activeDomains.length > 0
-          ? activeDomains.join(', ')
-          : '—';
-      const resourceStreamStats = resolveResourceStreamStats(
-        resourceStreamStatsByClusterDomain,
-        stream.clusterId,
-        stream.domain
-      );
-      const lastResyncInfo = resourceStreamStats.lastResyncAt
-        ? formatLastUpdated(resourceStreamStats.lastResyncAt)
-        : null;
-      const lastFallbackInfo = resourceStreamStats.lastFallbackAt
-        ? formatLastUpdated(resourceStreamStats.lastFallbackAt)
-        : null;
-      const resyncsTooltip = (() => {
-        if (!isPerDomainRow) {
-          return undefined;
-        }
-        if (resourceStreamStats.lastResyncReason && lastResyncInfo?.tooltip) {
-          return `${resourceStreamStats.lastResyncReason} (${lastResyncInfo.tooltip})`;
-        }
-        if (resourceStreamStats.lastResyncReason) {
-          return resourceStreamStats.lastResyncReason;
-        }
-        if (lastResyncInfo?.tooltip) {
-          return `Last resync ${lastResyncInfo.tooltip}`;
-        }
-        return undefined;
-      })();
-      const fallbacksTooltip = (() => {
-        if (!isPerDomainRow) {
-          return undefined;
-        }
-        if (resourceStreamStats.lastFallbackReason && lastFallbackInfo?.tooltip) {
-          return `${resourceStreamStats.lastFallbackReason} (${lastFallbackInfo.tooltip})`;
-        }
-        if (resourceStreamStats.lastFallbackReason) {
-          return resourceStreamStats.lastFallbackReason;
-        }
-        if (lastFallbackInfo?.tooltip) {
-          return `Last fallback ${lastFallbackInfo.tooltip}`;
-        }
-        return undefined;
-      })();
-      return {
-        // Distinct key per (stream, cluster, domain) — the backend emits one
-        // entry per domain plus a stream-level entry.
-        rowKey: `${stream.name}::${stream.clusterId ?? ''}::${stream.domain ?? ''}`,
-        label,
-        cluster: stream.clusterName ?? '—',
-        domain: domainDisplay,
-        activeDomainCount: activeDomains.length,
-        activeDomains: activeDomains.length > 0 ? activeDomains.join(', ') : '—',
-        activeDomainsTooltip:
-          activeDomains.length > 0 ? activeDomains.join('\n') : 'No active domains',
-        sessions: stream.activeSessions,
-        delivered: stream.totalMessages,
-        dropped: stream.droppedMessages,
-        errors: stream.errorCount,
-        resyncs: isPerDomainRow ? resourceStreamStats.resyncCount : null,
-        resyncsTooltip,
-        fallbacks: isPerDomainRow ? resourceStreamStats.fallbackCount : null,
-        fallbacksTooltip,
-        lastConnect: lastConnectInfo.display,
-        lastConnectTooltip: lastConnectInfo.tooltip,
-        lastEvent: lastEventInfo.display,
-        lastEventTooltip: lastEventInfo.tooltip,
-        lastError: stream.lastError?.trim() || '—',
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const streamNames = [...byStream.keys()].sort((a, b) =>
+    (STREAM_LABELS[a] ?? a).localeCompare(STREAM_LABELS[b] ?? b)
+  );
+
+  const rows: DiagnosticsStreamRow[] = [];
+  streamNames.forEach((streamName) => {
+    const entries = byStream.get(streamName) ?? [];
+    // Stream-level (socket) entries carry no domain; per-domain entries do.
+    const streamLevel = entries.filter((entry) => !entry.domain);
+    const domainEntries = entries.filter((entry) => entry.domain);
+
+    // Header = socket-level: Sessions/Last Connect are the single socket's, and
+    // delivered/dropped/errors here is stream-level (events/catalog delivery, or
+    // the resources socket backlog) — per-domain delivery is on the leaves.
+    const lastConnectInfo = formatLastUpdated(
+      maxOf(entries.map((e) => e.lastConnect)) || undefined
+    );
+    const headerLastEventInfo = formatLastUpdated(
+      maxOf(streamLevel.map((e) => e.lastEvent)) || undefined
+    );
+    const headerLastErrors = streamLevel
+      .map((e) => e.lastError?.trim())
+      .filter((value): value is string => Boolean(value));
+    const headerLastError = headerLastErrors.length
+      ? headerLastErrors[headerLastErrors.length - 1]
+      : '—';
+    rows.push({
+      kind: 'stream',
+      rowKey: `stream::${streamName}`,
+      label: STREAM_LABELS[streamName] ?? streamName,
+      sessions: entries.reduce((acc, e) => acc + e.activeSessions, 0),
+      lastConnect: lastConnectInfo.display,
+      lastConnectTooltip: lastConnectInfo.tooltip,
+      delivered: streamLevel.reduce((acc, e) => acc + e.totalMessages, 0),
+      dropped: streamLevel.reduce((acc, e) => acc + e.droppedMessages, 0),
+      errors: streamLevel.reduce((acc, e) => acc + e.errorCount, 0),
+      lastEvent: headerLastEventInfo.display,
+      lastEventTooltip: headerLastEventInfo.tooltip,
+      lastError: headerLastError,
+      activeDomainCount: domainEntries.length,
+    });
+
+    // Group the per-domain leaves by cluster.
+    const byCluster = new Map<string, TelemetryStreamStatus[]>();
+    domainEntries.forEach((entry) => {
+      const cluster = entry.clusterName ?? '—';
+      const list = byCluster.get(cluster) ?? [];
+      list.push(entry);
+      byCluster.set(cluster, list);
+    });
+
+    [...byCluster.keys()].sort().forEach((cluster) => {
+      rows.push({ kind: 'cluster', rowKey: `cluster::${streamName}::${cluster}`, cluster });
+      const labelFor = (entry: TelemetryStreamStatus): string =>
+        domainLabelById.get(entry.domain ?? '') ?? entry.domain ?? '';
+      (byCluster.get(cluster) ?? [])
+        .slice()
+        .sort((a, b) => labelFor(a).localeCompare(labelFor(b)))
+        .forEach((entry) => {
+          const stats = resolveResourceStreamStats(
+            resourceStreamStatsByClusterDomain,
+            entry.clusterId,
+            entry.domain
+          );
+          const lastEventInfo = formatLastUpdated(
+            entry.lastEvent > 0 ? entry.lastEvent : undefined
+          );
+          rows.push({
+            kind: 'domain',
+            rowKey: `domain::${streamName}::${entry.clusterId ?? ''}::${entry.domain ?? ''}`,
+            cluster,
+            domain: labelFor(entry),
+            delivered: entry.totalMessages,
+            dropped: entry.droppedMessages,
+            errors: entry.errorCount,
+            resyncs: stats.resyncCount,
+            resyncsTooltip: recoveryTooltip(
+              stats.lastResyncReason,
+              stats.lastResyncAt,
+              'Last resync'
+            ),
+            fallbacks: stats.fallbackCount,
+            fallbacksTooltip: recoveryTooltip(
+              stats.lastFallbackReason,
+              stats.lastFallbackAt,
+              'Last fallback'
+            ),
+            lastEvent: lastEventInfo.display,
+            lastEventTooltip: lastEventInfo.tooltip,
+            lastError: entry.lastError?.trim() || '—',
+          });
+        });
+    });
+  });
+  return rows;
 };
 
 export const buildDiagnosticsStreamSummary = (streamRows: DiagnosticsStreamRow[]): string => {
   if (streamRows.length === 0) {
     return 'No stream telemetry available';
   }
-  const sessionTotal = streamRows.reduce((acc, row) => acc + row.sessions, 0);
-  const domainTotal = streamRows.reduce((acc, row) => acc + row.activeDomainCount, 0);
-  return `Sessions: ${sessionTotal} • Streams: ${streamRows.length} • Active Domains: ${domainTotal}`;
+  const headers = streamRows.filter(
+    (row): row is DiagnosticsStreamHeaderRow => row.kind === 'stream'
+  );
+  const sessionTotal = headers.reduce((acc, row) => acc + row.sessions, 0);
+  const domainTotal = streamRows.filter((row) => row.kind === 'domain').length;
+  return `Sessions: ${sessionTotal} • Streams: ${headers.length} • Active Domains: ${domainTotal}`;
 };
 
 const formatQPS = (value: number): string => {

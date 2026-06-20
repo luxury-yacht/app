@@ -373,6 +373,35 @@
   color: var(--color-text);
 }
 
+/* Streams tree: stream header → cluster group → per-domain leaf. The
+   indentation selectors must out-specify `.diagnostics-table td` (0,1,1), which
+   sets `padding` via shorthand — a bare `.diagnostics-domain-name` (0,1,0) would
+   lose and the indent would not apply. */
+.diagnostics-stream-row td {
+  border-top: 1px solid var(--color-border, var(--color-bg-secondary));
+}
+.diagnostics-stream-name {
+  font-weight: 600;
+}
+.diagnostics-stream-socket {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.diagnostics-table td.diagnostics-cluster-name {
+  padding-left: 1.6rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.diagnostics-table td.diagnostics-domain-name {
+  padding-left: 3rem;
+}
+/* Leading connector makes the child relationship explicit even at a glance. */
+.diagnostics-table td.diagnostics-domain-name::before {
+  content: '↳';
+  margin-right: 0.4rem;
+  color: var(--color-text-secondary);
+}
+
 .diagnostics-table-stack {
   display: flex;
   flex-direction: column;
