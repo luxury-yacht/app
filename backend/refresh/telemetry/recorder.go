@@ -417,7 +417,10 @@ type StreamStatus struct {
 	LastConnect     int64  `json:"lastConnect"`
 	LastEvent       int64  `json:"lastEvent"`
 	LastError       string `json:"lastError,omitempty"`
-	LastSkipReason  string `json:"lastSkipReason,omitempty"`
+	// LastErrorAt is when LastError occurred (unix ms), so diagnostics can show
+	// the relative age of the last error next to its message.
+	LastErrorAt    int64  `json:"lastErrorAt,omitempty"`
+	LastSkipReason string `json:"lastSkipReason,omitempty"`
 }
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
@@ -504,6 +507,7 @@ func streamErrorMutator(err error) func(*StreamStatus) {
 	return func(status *StreamStatus) {
 		status.ErrorCount++
 		status.LastError = err.Error()
+		status.LastErrorAt = time.Now().UnixMilli()
 	}
 }
 

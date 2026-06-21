@@ -1177,6 +1177,9 @@ export interface TelemetryStreamStatus {
   lastConnect: number;
   lastEvent: number;
   lastError?: string;
+  // When the last error occurred (unix ms); lets diagnostics show its relative
+  // age. Mirrors backend telemetry.StreamStatus.LastErrorAt.
+  lastErrorAt?: number;
   lastSkipReason?: string;
 }
 

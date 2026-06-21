@@ -41,6 +41,7 @@ describe('DiagnosticsStreamsTable', () => {
         lastEvent: '1s',
         lastEventTooltip: '1s',
         lastError: 'pods backlog',
+        lastErrorAt: 1_700_000_000_000,
       },
     ];
 
@@ -52,15 +53,21 @@ describe('DiagnosticsStreamsTable', () => {
     const placeholderCell = bodyRows[0].querySelectorAll('td')[7];
     const errorCell = bodyRows[1].querySelectorAll('td')[7];
 
-    // Placeholder: plain cell — neither the red error class nor the warning class.
+    // Placeholder: plain cell — neither the red error class nor the warning class,
+    // and no relative-age element.
     expect(placeholderCell.textContent?.trim()).toBe('—');
     expect(placeholderCell.classList.contains('diagnostics-error')).toBe(false);
     expect(placeholderCell.classList.contains('diagnostics-error-warning')).toBe(false);
+    expect(placeholderCell.querySelector('.diagnostics-error-age')).toBeNull();
 
-    // Actual error: warning class, never the red error class.
-    expect(errorCell.textContent?.trim()).toBe('pods backlog');
+    // Actual error: warning class (never red), the message, and the relative age
+    // of when it occurred.
+    expect(errorCell.textContent).toContain('pods backlog');
     expect(errorCell.classList.contains('diagnostics-error-warning')).toBe(true);
     expect(errorCell.classList.contains('diagnostics-error')).toBe(false);
+    const ageEl = errorCell.querySelector('.diagnostics-error-age');
+    expect(ageEl).not.toBeNull();
+    expect((ageEl?.textContent ?? '').trim().length).toBeGreaterThan(0);
 
     await act(async () => {
       root.unmount();

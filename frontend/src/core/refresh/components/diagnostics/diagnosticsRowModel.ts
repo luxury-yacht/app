@@ -141,6 +141,26 @@ const recoveryTooltip = (
 
 const maxOf = (values: number[]): number => values.reduce((max, v) => (v > max ? v : max), 0);
 
+// mostRecentError returns the latest error (message + when it occurred) across
+// entries, so a stream header or cluster-leaf row shows the most recent of its
+// children's errors together with its relative age.
+const mostRecentError = (entries: TelemetryStreamStatus[]): { message: string; at?: number } => {
+  let message = '—';
+  let at = 0;
+  entries.forEach((entry) => {
+    const trimmed = entry.lastError?.trim();
+    if (!trimmed) {
+      return;
+    }
+    const when = entry.lastErrorAt ?? 0;
+    if (message === '—' || when >= at) {
+      message = trimmed;
+      at = when;
+    }
+  });
+  return { message, at: at > 0 ? at : undefined };
+};
+
 export const buildDiagnosticsStreamRows = (
   telemetrySummary: TelemetrySummary | null,
   filteredRows: ActiveDomainRow[],
@@ -186,12 +206,7 @@ export const buildDiagnosticsStreamRows = (
     const headerLastEventInfo = formatLastUpdated(
       maxOf(streamLevel.map((e) => e.lastEvent)) || undefined
     );
-    const headerLastErrors = streamLevel
-      .map((e) => e.lastError?.trim())
-      .filter((value): value is string => Boolean(value));
-    const headerLastError = headerLastErrors.length
-      ? headerLastErrors[headerLastErrors.length - 1]
-      : '—';
+    const headerError = mostRecentError(streamLevel);
     rows.push({
       kind: 'stream',
       rowKey: `stream::${streamName}`,
@@ -204,7 +219,8 @@ export const buildDiagnosticsStreamRows = (
       errors: streamLevel.reduce((acc, e) => acc + e.errorCount, 0),
       lastEvent: headerLastEventInfo.display,
       lastEventTooltip: headerLastEventInfo.tooltip,
-      lastError: headerLastError,
+      lastError: headerError.message,
+      lastErrorAt: headerError.at,
       activeDomainCount: domainEntries.length,
     });
 
@@ -226,9 +242,7 @@ export const buildDiagnosticsStreamRows = (
           const leafLastEvent = formatLastUpdated(
             maxOf(clusterEntries.map((e) => e.lastEvent)) || undefined
           );
-          const leafErrors = clusterEntries
-            .map((e) => e.lastError?.trim())
-            .filter((value): value is string => Boolean(value));
+          const leafError = mostRecentError(clusterEntries);
           rows.push({
             kind: 'cluster',
             rowKey: `cluster::${streamName}::${cluster}`,
@@ -239,7 +253,8 @@ export const buildDiagnosticsStreamRows = (
               errors: clusterEntries.reduce((acc, e) => acc + e.errorCount, 0),
               lastEvent: leafLastEvent.display,
               lastEventTooltip: leafLastEvent.tooltip,
-              lastError: leafErrors.length ? leafErrors[leafErrors.length - 1] : '—',
+              lastError: leafError.message,
+              lastErrorAt: leafError.at,
             },
           });
         });
@@ -295,6 +310,7 @@ export const buildDiagnosticsStreamRows = (
             lastEvent: lastEventInfo.display,
             lastEventTooltip: lastEventInfo.tooltip,
             lastError: entry.lastError?.trim() || '—',
+            lastErrorAt: entry.lastError?.trim() ? entry.lastErrorAt : undefined,
           });
         });
     });

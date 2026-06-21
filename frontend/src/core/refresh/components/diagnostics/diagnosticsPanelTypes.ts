@@ -87,6 +87,8 @@ export interface DiagnosticsStreamHeaderRow {
   lastEvent: string;
   lastEventTooltip: string;
   lastError: string;
+  // When the last error occurred (unix ms), for the relative age in the column.
+  lastErrorAt?: number;
   // Number of per-domain child rows under this stream (for the section summary).
   activeDomainCount: number;
 }
@@ -105,6 +107,7 @@ export interface DiagnosticsStreamClusterRow {
     lastEvent: string;
     lastEventTooltip: string;
     lastError: string;
+    lastErrorAt?: number;
   };
 }
 
@@ -124,6 +127,7 @@ export interface DiagnosticsStreamDomainRow {
   lastEvent: string;
   lastEventTooltip: string;
   lastError: string;
+  lastErrorAt?: number;
 }
 
 export interface KubernetesAPIClientRow {

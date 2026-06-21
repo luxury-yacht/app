@@ -139,6 +139,7 @@ describe('diagnosticsRowModel', () => {
           lastConnect: 0,
           lastEvent: 0,
           lastError: 'pods backlog',
+          lastErrorAt: 1700,
         },
       ]),
       [
@@ -181,6 +182,7 @@ describe('diagnosticsRowModel', () => {
       resyncs: 0,
       fallbacks: 0,
       lastError: 'pods backlog',
+      lastErrorAt: 1700,
     });
   });
 

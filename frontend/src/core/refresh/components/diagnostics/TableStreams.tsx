@@ -7,6 +7,7 @@
 
 import React from 'react';
 import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
+import { formatLastUpdated } from './diagnosticsPanelUtils';
 
 interface DiagnosticsStreamsTableProps {
   rows: DiagnosticsStreamRow[];
@@ -56,11 +57,21 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
   );
 };
 
-// LastErrorCell colours an actual error with the warning colour; the "—"
-// placeholder renders as a plain cell so it keeps the default text colour.
-const LastErrorCell: React.FC<{ value: string }> = ({ value }) => {
+// LastErrorCell colours an actual error with the warning colour and appends the
+// relative age of when it occurred; the "—" placeholder renders as a plain cell
+// so it keeps the default text colour and shows no age.
+const LastErrorCell: React.FC<{ value: string; at?: number }> = ({ value, at }) => {
   const hasError = Boolean(value) && value !== '—';
-  return <td className={hasError ? 'diagnostics-error-warning' : undefined}>{value}</td>;
+  if (!hasError) {
+    return <td>{value}</td>;
+  }
+  const age = at ? formatLastUpdated(at) : null;
+  return (
+    <td className="diagnostics-error-warning" title={age?.tooltip}>
+      {value}
+      {age ? <span className="diagnostics-error-age"> · {age.display}</span> : null}
+    </td>
+  );
 };
 
 // StreamTableRow renders one node of the streams tree: a stream header
@@ -82,7 +93,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>—</td>
         <td>—</td>
         <td title={row.lastEventTooltip}>{row.lastEvent}</td>
-        <LastErrorCell value={row.lastError} />
+        <LastErrorCell value={row.lastError} at={row.lastErrorAt} />
       </tr>
     );
   }
@@ -112,7 +123,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>—</td>
         <td>—</td>
         <td title={row.leaf.lastEventTooltip}>{row.leaf.lastEvent}</td>
-        <LastErrorCell value={row.leaf.lastError} />
+        <LastErrorCell value={row.leaf.lastError} at={row.leaf.lastErrorAt} />
       </tr>
     );
   }
@@ -125,7 +136,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
       <td title={row.resyncsTooltip ?? ''}>{row.resyncs ?? '—'}</td>
       <td title={row.fallbacksTooltip ?? ''}>{row.fallbacks ?? '—'}</td>
       <td title={row.lastEventTooltip}>{row.lastEvent}</td>
-      <LastErrorCell value={row.lastError} />
+      <LastErrorCell value={row.lastError} at={row.lastErrorAt} />
     </tr>
   );
 };

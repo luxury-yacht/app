@@ -375,6 +375,11 @@
 .diagnostics-table td.diagnostics-error-warning {
   color: var(--color-warning, #f59e0b);
 }
+/* The relative age of the last error, shown muted next to the message. */
+.diagnostics-error-age {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
 
 .diagnostics-domain {
   font-weight: 600;

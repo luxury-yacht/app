@@ -146,6 +146,7 @@ func TestStreamTelemetry(t *testing.T) {
 	require.Equal(t, uint64(5), s.SkippedTargets)
 	require.Equal(t, uint64(2), s.ErrorCount) // one from dropped, one from explicit error
 	require.Equal(t, "pipe closed", s.LastError)
+	require.Greater(t, s.LastErrorAt, int64(0)) // the time the last error occurred is stamped
 	require.Equal(t, "per-scope target cap", s.LastSkipReason)
 
 	rec.RecordStreamDelivery(StreamContainerLogs, 1, 0)
