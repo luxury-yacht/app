@@ -361,11 +361,19 @@
  * word-break:break-all. Higher specificity (table td.diagnostics-error) is
  * required to win over `.diagnostics-table td { white-space: nowrap }`.
  */
-.diagnostics-table td.diagnostics-error {
+.diagnostics-table td.diagnostics-error,
+.diagnostics-table td.diagnostics-error-warning {
   max-width: 240px;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+.diagnostics-table td.diagnostics-error {
   color: var(--color-error-text, var(--color-error));
+}
+/* Streams: an actual error uses the warning colour (not red); the "—" placeholder
+   is rendered as a plain cell with no error class, so it stays the default colour. */
+.diagnostics-table td.diagnostics-error-warning {
+  color: var(--color-warning, #f59e0b);
 }
 
 .diagnostics-domain {

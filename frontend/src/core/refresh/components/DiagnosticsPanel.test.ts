@@ -1166,6 +1166,9 @@ describe('DiagnosticsPanel component', () => {
     // are per-domain only, so the header shows '—'.
     expect(cells[4]?.textContent?.trim()).toBe('—');
     expect(cells[5]?.textContent?.trim()).toBe('—');
+    // The Last Error placeholder is a plain cell — no error colour for '—'.
+    expect(cells[7]?.textContent?.trim()).toBe('—');
+    expect(cells[7]?.classList.contains('diagnostics-error-warning')).toBe(false);
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
@@ -1454,6 +1457,8 @@ describe('DiagnosticsPanel component', () => {
     expect(resourceCells[4]?.textContent?.trim()).toBe('—');
     expect(resourceCells[5]?.textContent?.trim()).toBe('—');
     expect(resourceCells[7]?.textContent?.trim()).toBe('Resource stream disconnected');
+    // An actual error is coloured with the warning class (not red, not the placeholder).
+    expect(resourceCells[7]?.classList.contains('diagnostics-error-warning')).toBe(true);
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();

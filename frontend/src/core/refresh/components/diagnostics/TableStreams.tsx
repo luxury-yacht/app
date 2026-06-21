@@ -56,6 +56,13 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
   );
 };
 
+// LastErrorCell colours an actual error with the warning colour; the "—"
+// placeholder renders as a plain cell so it keeps the default text colour.
+const LastErrorCell: React.FC<{ value: string }> = ({ value }) => {
+  const hasError = Boolean(value) && value !== '—';
+  return <td className={hasError ? 'diagnostics-error-warning' : undefined}>{value}</td>;
+};
+
 // StreamTableRow renders one node of the streams tree: a stream header
 // (socket-level: Sessions/Last Connect live here, since one socket spans all
 // clusters), a cluster group label, or a per-domain leaf.
@@ -75,7 +82,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>—</td>
         <td>—</td>
         <td title={row.lastEventTooltip}>{row.lastEvent}</td>
-        <td className="diagnostics-error">{row.lastError}</td>
+        <LastErrorCell value={row.lastError} />
       </tr>
     );
   }
@@ -105,7 +112,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>—</td>
         <td>—</td>
         <td title={row.leaf.lastEventTooltip}>{row.leaf.lastEvent}</td>
-        <td className="diagnostics-error">{row.leaf.lastError}</td>
+        <LastErrorCell value={row.leaf.lastError} />
       </tr>
     );
   }
@@ -118,7 +125,7 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
       <td title={row.resyncsTooltip ?? ''}>{row.resyncs ?? '—'}</td>
       <td title={row.fallbacksTooltip ?? ''}>{row.fallbacks ?? '—'}</td>
       <td title={row.lastEventTooltip}>{row.lastEvent}</td>
-      <td className="diagnostics-error">{row.lastError}</td>
+      <LastErrorCell value={row.lastError} />
     </tr>
   );
 };
