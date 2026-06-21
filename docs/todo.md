@@ -8,4 +8,4 @@
     - Make Helm CRDs built-in objects
     - Lift the helm-specific features out of the core app
   - Karpenter
-    - Make Karpenter CRDs build-in objects
+    - Make Karpenter CRDs built-in objects
