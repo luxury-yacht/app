@@ -2,6 +2,13 @@
 
 ### Changed
 
+- Large-cluster resource tables (all-namespaces pods, namespace workloads, and
+  cluster nodes) are lighter and open faster. These views render a
+  server-paginated query, not the live stream, so their live subscription now
+  delivers only the "something changed, refetch" signal — the full row set it
+  used to ship across the bridge, retain, and re-sort on every update is no
+  longer sent, and the one-time full-row fetch on opening the view is skipped.
+  The effect grows with cluster size and churn; small clusters are unaffected.
 - The Diagnostics → Streams table is now a hierarchy instead of a flat list.
   Sessions and Last Connect move up to a per-stream header (each stream is one
   socket), and delivery/error counts break down by their natural child: the

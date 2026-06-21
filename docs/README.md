@@ -19,6 +19,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | --- | --- |
 | How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
+| When can a query-backed domain's live stream skip shipping/retaining rows? | [architecture/notify-only-streams.md](architecture/notify-only-streams.md) |
 | What owns object existence and GVK/GVR identity? | [architecture/catalog.md](architecture/catalog.md) |
 | What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
 | How is per-kind behavior declared and dispatched, and where does the kind vocabulary live? | [architecture/resource-kind-registry.md](architecture/resource-kind-registry.md) |

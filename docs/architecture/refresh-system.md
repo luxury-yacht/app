@@ -74,6 +74,9 @@ Use behavior classes to preserve correctness, not to force inheritance:
 - snapshot domains replace a full payload for one scope
 - resource-stream table domains apply snapshot baselines plus row updates
 - complete-resync streams use stream messages as resync signals
+- notify-only streams ship the change signal without rows, for query-backed
+  domains that never render live rows (see
+  [notify-only-streams.md](notify-only-streams.md))
 - catalog, event, and log streams have source-specific reducers
 - detail, graph, Helm, YAML, and operation-state domains keep their own payload
   semantics

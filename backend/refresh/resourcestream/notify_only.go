@@ -13,10 +13,10 @@ package resourcestream
 // detection keeps working because shadow keys are built from Ref, not Row, and
 // deletes already travel row-less today.
 //
-// Note: the upstream row projection (e.g. BuildWorkloadSummary in the workload
-// handlers) still runs and its result is dropped here at the row chokepoint;
-// skipping that redundant build is a separate backend-projection cleanup (see
-// docs/plans/notify-only-query-backed-streams.md).
+// Note: pods still build the upstream row projection and it is dropped here at
+// the chokepoint (the pod build computes load-bearing broadcast scope); the
+// workloads/nodes handlers skip the build. See
+// docs/architecture/notify-only-streams.md.
 //
 // Source of truth: refresh-domain-contract.json domainInventory[*].notifyOnly.
 // notify_only_parity_test.go asserts this set matches the contract.
