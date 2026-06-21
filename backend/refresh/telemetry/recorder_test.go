@@ -154,6 +154,24 @@ func TestStreamTelemetry(t *testing.T) {
 	require.Equal(t, "pipe closed", s.LastError) // last error persists until overwritten
 }
 
+func TestStreamBacklogStampsAndClearsLastErrorAt(t *testing.T) {
+	rec := NewRecorder()
+
+	// A dropped delivery records a "subscriber backlog" error; it must stamp
+	// LastErrorAt so the diagnostics UI can show the backlog error's age.
+	rec.RecordStreamDelivery(StreamResources, 0, 2)
+	s := rec.SnapshotSummary().Streams[0]
+	require.Equal(t, "subscriber backlog", s.LastError)
+	require.Greater(t, s.LastErrorAt, int64(0))
+
+	// A subsequent clean delivery clears the backlog error and its timestamp,
+	// rather than leaving a stale LastErrorAt behind.
+	rec.RecordStreamDelivery(StreamResources, 1, 0)
+	s = rec.SnapshotSummary().Streams[0]
+	require.Equal(t, "", s.LastError)
+	require.Equal(t, int64(0), s.LastErrorAt)
+}
+
 // TestSnapshotSummaryTagsStreamsWithClusterMeta proves stream telemetry carries
 // the recorder's cluster identity, so a multi-cluster diagnostics view can show
 // (or aggregate) per-cluster counters instead of folding clusters together.

@@ -476,12 +476,14 @@ func streamDeliveryMutator(delivered, dropped int) func(*StreamStatus) {
 			status.LastEvent = now
 			if dropped <= 0 && status.LastError == "subscriber backlog" {
 				status.LastError = ""
+				status.LastErrorAt = 0
 			}
 		}
 		if dropped > 0 {
 			status.DroppedMessages += uint64(dropped)
 			status.ErrorCount++
 			status.LastError = "subscriber backlog"
+			status.LastErrorAt = now
 			status.LastEvent = now
 		}
 	}
