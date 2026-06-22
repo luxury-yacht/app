@@ -42,11 +42,16 @@ type Cursor struct {
 	Direction Direction `json:"d"`
 	Limit     int       `json:"l"`
 
-	// Position holds the sort-key component value(s) of the last row on the page,
-	// in sort order. UID is the final, always-unique tiebreak. Together they are the
-	// keyset seek position for the next page. Empty Position + empty UID = first page.
+	// Position holds the sort-key component value(s) of the boundary row this cursor
+	// pins, in sort order. UID is the final, always-unique tiebreak. Together they are
+	// the keyset seek position. Empty Position + empty UID = first page.
 	Position []string `json:"p,omitempty"`
 	UID      string   `json:"u,omitempty"`
+
+	// Backward marks a prev-page cursor: the engine walks the sort order DOWNWARD from
+	// Position (collecting the rows immediately before it) instead of upward. It is a
+	// navigation property, not part of the query shape, so Validate ignores it.
+	Backward bool `json:"b,omitempty"`
 
 	// Revision is the store LSN the page was read at — a staleness/consistency guard
 	// the executor may use to detect that the underlying data moved under the cursor.

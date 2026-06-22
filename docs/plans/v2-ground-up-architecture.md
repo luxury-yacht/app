@@ -77,7 +77,11 @@ domains" — that undercounted; the engine-cutover set is 16, all now done.) **N
 roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
 1. **Browse/catalog onto the engine** — the last subsystem on its own query path + the SECOND cursor codec.
-   Cutting it over finishes the "one query engine" goal and lets that codec be deleted too.
+   ✅ Engine prerequisite done (backward/prev-page pagination in `querypage.Store`). REMAINING: a maintained
+   `querypage.Store[Summary]` fed from `setItem`/`deleteItem`, the schema (kindidentity facet + CustomOnly +
+   age-flip + composite default sort), serve via `store.Query` (direct, prev/next), map → `QueryResult`,
+   then delete the catalog chunk-scan + cursor codec. Intricate (the two-scan UnfilteredTotal + 100k
+   approximate-facet threshold) — gate it with a new-serve==old-serve equivalence test.
 2. **Maintained stores for the cutover-only domains** (network, workloads, nodes, helm, crds — they serve via
    the engine but still list+project per Build) — the per-request-reprojection perf win. network needs the
    Service↔EndpointSlice relationship; workloads the synthesized standalone-pods. Plus the pods O(log N+page)
@@ -940,8 +944,14 @@ reasons; **nothing required is incomplete here.**
   rbac, events, crds}, nodes, pods. The engine handles query **predicates** (`applyTypedTableQueryViaStore`
   builds the store from the matched set). The bespoke **`typedTableQueryCollector` + the old non-engine
   `resolveTypedSnapshotPage` are DELETED**; `applyTypedTableQuery` remains only as the equivalence-test oracle.
-  **REMAINING here:** Browse/catalog (the SECOND cursor codec) is still on its own path — cut it to the engine,
-  then that codec can go too.
+  **REMAINING here:** Browse/catalog (the SECOND cursor codec) is still on its own path. ✅ **Engine
+  prerequisite built: backward (prev-page) keyset pagination** (`querypage.Store` now returns `PrevCursor`
+  + walks `DescendLessOrEqual` for prev pages; TDD-gated; forward path byte-unchanged) — Browse has explicit
+  Prev/Next buttons the forward-only engine couldn't serve. The serve cutover itself is INTRICATE (not a thin
+  swap): the catalog's kind filter is identity-key based (group/version/kind → expand to a `kindidentity`
+  facet), plus CustomOnly (binary facet), the age-flip sort, the composite `kind/namespace/name` default sort,
+  the two-scan UnfilteredTotal, and the 100k approximate-facet threshold all need mapping. Catalog ingestion
+  is incremental (`setItem`/`deleteItem`), so a maintained `querypage.Store[Summary]` can be fed cleanly.
 - 🔶 **Metrics as a separate column (§3.6).** ✅ Realized for `pods`: the maintained pod store holds row data
   with CPU/Mem ZEROED (informer-fed); fresh metrics are overlaid at serve from `LatestPodUsage()`, so a metrics
   poll never touches the store. (nodes carries its metrics in the per-Build rows — fine at node scale.)

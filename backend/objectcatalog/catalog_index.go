@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
 type catalogIndex struct {
@@ -28,6 +30,13 @@ type catalogIndex struct {
 	queryIndex        catalogQueryIndex
 	queryIndexBuilt   bool
 	cachesReady       bool
+
+	// queryEngineStore is the shared querypage engine view of the catalog. It is
+	// rebuilt wholesale from the published chunks in publishStreamingState, so its
+	// rows always equal the chunk-scan executor's candidate set, and queryViaEngine
+	// serves byte-identically to the legacy chunk path. (Named distinctly from the
+	// Service.queryStore CatalogQueryStore to avoid an embedded-field ambiguity.)
+	queryEngineStore *querypage.Store[Summary]
 
 	lastFirstBatchLatency time.Duration
 }
@@ -73,6 +82,29 @@ func newCatalogIndex() catalogIndex {
 func (idx *catalogIndex) reset() {
 	*idx = newCatalogIndex()
 	idx.cachesReady = true
+	// A reset catalog serves an empty engine view, not a nil one, so a query
+	// after a "no resources discovered" sync returns an empty page (not a fall
+	// back to the slow uncached path).
+	idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
+}
+
+// rebuildQueryStore replaces the maintained querypage store with one holding exactly
+// the items in the published chunks. The chunks are the authoritative query state
+// (the legacy executor scans them), so a wholesale rebuild here keeps the engine view
+// equal to the chunk-scan candidate set at every publish. The store is keyed by the
+// catalog identity chain (schema UID), which is unique per published summary, so no
+// chunk item is dropped.
+func (idx *catalogIndex) rebuildQueryStore(chunks []*summaryChunk) {
+	store := querypage.NewStore(newCatalogQueryStoreSchema())
+	for _, chunk := range chunks {
+		if chunk == nil {
+			continue
+		}
+		for _, item := range chunk.items {
+			store.Upsert(item)
+		}
+	}
+	idx.queryEngineStore = store
 }
 
 func (idx *catalogIndex) snapshot() []Summary {
@@ -253,6 +285,7 @@ func (idx *catalogIndex) publishStreamingState(
 	copy(chunkSnapshot, chunks)
 	idx.sortedChunks = chunkSnapshot
 	idx.chunksNeedSort = false
+	idx.rebuildQueryStore(chunkSnapshot)
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
 	// Invalidate the query index instead of rebuilding it: initial sync

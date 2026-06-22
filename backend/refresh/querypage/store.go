@@ -32,10 +32,12 @@ type Query struct {
 }
 
 // Page is one page of results plus the (unfiltered) facet counts, the total number
-// of rows matching filters+search, and the cursor for the next page ("" when last).
+// of rows matching filters+search, and the cursors for the next/prev page ("" when
+// there is no page in that direction).
 type Page[R any] struct {
 	Rows       []R
 	NextCursor string
+	PrevCursor string
 	Facets     map[string]map[string]int
 	Total      int
 }
@@ -246,46 +248,83 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	}
 
 	hasPivot := !cur.IsFirstPage()
+	backward := hasPivot && cur.Backward
 	pivot := indexEntry{uid: cur.UID}
 	if hasPivot && len(cur.Position) > 0 {
 		pivot.val = cur.Position[0]
 	}
 
-	// Collect up to limit+1 matching rows so we can tell whether a next page exists.
-	rows := make([]R, 0, limit+1)
+	// Collect up to limit+1 matching entries from the pivot, in walk order, so the
+	// limit+1th tells us whether a further page exists on the walked side.
 	entries := make([]indexEntry, 0, limit+1)
 	collect := func(e indexEntry) bool {
 		if hasPivot && e.val == pivot.val && e.uid == pivot.uid {
-			return true // the exact cursor position was already returned last page
+			return true // the boundary row itself already appeared on the adjacent page
 		}
-		row := s.rows[e.uid]
-		if !s.rowMatches(row, q) {
+		if !s.rowMatches(s.rows[e.uid], q) {
 			return true
 		}
-		rows = append(rows, row)
 		entries = append(entries, e)
-		return len(rows) <= limit
+		return len(entries) <= limit
 	}
 
-	// One index per direction, both walked ascending: the desc index already
-	// orders value-descending with ascending UID ties, so a single forward walk
-	// reproduces the live typed-table order for either direction.
+	// One index per direction, both ordered so a forward (Ascend) walk reproduces the
+	// live total order. A prev-page request walks the SAME index downward
+	// (DescendLessOrEqual), collecting the rows immediately before the pivot.
 	index := si.forDirection(q.Direction)
-	if hasPivot {
+	switch {
+	case backward:
+		index.DescendLessOrEqual(pivot, collect)
+	case hasPivot:
 		index.AscendGreaterOrEqual(pivot, collect)
-	} else {
+	default:
 		index.Ascend(collect)
 	}
 
-	next := ""
-	if len(rows) > limit { // collected limit+1 -> there is at least one more row
-		rows = rows[:limit]
+	// overflow == a further page exists on the side we walked.
+	overflow := len(entries) > limit
+	if overflow {
 		entries = entries[:limit]
-		le := entries[len(entries)-1]
-		nc := FirstPage(q.ClusterID, q.Signature, q.Sort, q.Direction, limit)
-		nc.Position = []string{le.val}
-		nc.UID = le.uid
-		next = nc.Encode()
+	}
+	if backward {
+		// The downward walk produced reverse order; flip to forward (display) order.
+		for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+			entries[i], entries[j] = entries[j], entries[i]
+		}
+	}
+
+	rows := make([]R, len(entries))
+	for i, e := range entries {
+		rows[i] = s.rows[e.uid]
+	}
+
+	// Boundary cursors. NextCursor pins the last row (forward), PrevCursor pins the
+	// first row (backward). Existence on the WALKED side comes from `overflow`; on the
+	// side we came FROM, a page always exists (we navigated here from it): a forward
+	// page reached via a non-first cursor has a prev; a backward page always has a next.
+	pin := func(e indexEntry, back bool) string {
+		c := FirstPage(q.ClusterID, q.Signature, q.Sort, q.Direction, limit)
+		c.Position = []string{e.val}
+		c.UID = e.uid
+		c.Backward = back
+		return c.Encode()
+	}
+	next, prev := "", ""
+	if len(entries) > 0 {
+		first, last := entries[0], entries[len(entries)-1]
+		if backward {
+			if overflow {
+				prev = pin(first, true)
+			}
+			next = pin(last, false)
+		} else {
+			if overflow {
+				next = pin(last, false)
+			}
+			if hasPivot {
+				prev = pin(first, true)
+			}
+		}
 	}
 
 	total := len(s.rows)
@@ -307,5 +346,5 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		facets[name] = m
 	}
 
-	return Page[R]{Rows: rows, NextCursor: next, Facets: facets, Total: total}, nil
+	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total}, nil
 }

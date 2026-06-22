@@ -20,21 +20,11 @@ func (store inMemoryCatalogQueryStore) QueryCatalog(opts QueryOptions) (QueryRes
 	if store.service == nil {
 		return QueryResult{}, false
 	}
-	kindMatcher := newKindMatcher(opts.Kinds)
-	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
-	searchMatcher := newSearchMatcher(opts.Search)
-
-	// Write lock: the first query after a publish builds the memoized query
-	// index (publishes only invalidate it; see ensureQueryIndex).
-	store.service.mu.Lock()
-	store.service.catalogIndex.ensureQueryIndex()
-	cachedState := store.service.catalogIndex.cachedQueryState()
-	store.service.mu.Unlock()
-
-	if len(cachedState.chunks) == 0 {
-		return QueryResult{}, false
-	}
-
-	executor := store.service.newCatalogQueryExecutor(opts, cachedState, kindMatcher, namespaceMatcher, searchMatcher)
-	return executor.executeCached(), true
+	// Serve through the shared querypage engine (queryViaEngine). It reads the
+	// maintained store that publishStreamingState keeps equal to the published
+	// chunks, so it returns the same result the legacy chunk-scan executor did —
+	// proven by the equivalence gate (query_engine_equivalence_test.go). A nil/empty
+	// store returns ok=false, so Query falls back to the uncached snapshot path,
+	// preserving the prior "no chunks yet" behavior.
+	return store.service.queryViaEngine(opts)
 }
