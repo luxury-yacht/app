@@ -22,43 +22,21 @@ type catalogIndex struct {
 	exact map[catalogObjectIdentity]string
 	uid   map[string]string
 
-	sortedChunks      []*summaryChunk
-	chunksNeedSort    bool
+	// cachedKinds/cachedNamespaces/cachedDescriptors are the publish-time facet lists
+	// the engine serve reads for the no-filter and namespace-filter facet cases.
 	cachedKinds       []KindInfo
 	cachedNamespaces  []string
 	cachedDescriptors []Descriptor
-	queryIndex        catalogQueryIndex
-	queryIndexBuilt   bool
 	cachesReady       bool
 
-	// queryEngineStore is the shared querypage engine view of the catalog. It is
-	// rebuilt wholesale from the published chunks in publishStreamingState, so its
-	// rows always equal the chunk-scan executor's candidate set, and queryViaEngine
-	// serves byte-identically to the legacy chunk path. (Named distinctly from the
-	// Service.queryStore CatalogQueryStore to avoid an embedded-field ambiguity.)
+	// queryEngineStore is the shared querypage engine view of the catalog. It is the
+	// authoritative query state: rebuilt wholesale from the published summaries in
+	// publishStreamingState and maintained for Browse/object-catalog queries via
+	// queryViaEngine. (Named distinctly from the Service.queryStore CatalogQueryStore
+	// to avoid an embedded-field ambiguity.)
 	queryEngineStore *querypage.Store[Summary]
 
 	lastFirstBatchLatency time.Duration
-}
-
-type catalogIndexedSummaryRef struct {
-	chunk int
-	item  int
-}
-
-type catalogQueryIndex struct {
-	byNamespace        map[string][]catalogIndexedSummaryRef
-	byKind             map[string][]catalogIndexedSummaryRef
-	byNamespaceAndKind map[string][]catalogIndexedSummaryRef
-	kindsByNamespace   map[string]map[string]bool
-}
-
-type catalogCachedQueryState struct {
-	chunks      []*summaryChunk
-	kinds       []KindInfo
-	namespaces  []string
-	descriptors []Descriptor
-	queryIndex  catalogQueryIndex
 }
 
 type catalogObjectIdentity struct {
@@ -82,16 +60,15 @@ func newCatalogIndex() catalogIndex {
 func (idx *catalogIndex) reset() {
 	*idx = newCatalogIndex()
 	idx.cachesReady = true
-	// A reset catalog serves an empty engine view, not a nil one, so a query
-	// after a "no resources discovered" sync returns an empty page (not a fall
-	// back to the slow uncached path).
+	// A reset catalog serves an empty engine view, not a nil one, so a query after a
+	// "no resources discovered" sync returns an empty page rather than rebuilding an
+	// ephemeral store from the (also empty) items snapshot.
 	idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
 }
 
 // rebuildQueryStore replaces the maintained querypage store with one holding exactly
-// the items in the published chunks. The chunks are the authoritative query state
-// (the legacy executor scans them), so a wholesale rebuild here keeps the engine view
-// equal to the chunk-scan candidate set at every publish. The store is keyed by the
+// the items in the published chunks. A wholesale rebuild here keeps the engine view
+// equal to the published summary set at every publish. The store is keyed by the
 // catalog identity chain (schema UID), which is unique per published summary, so no
 // chunk item is dropped.
 func (idx *catalogIndex) rebuildQueryStore(chunks []*summaryChunk) {
@@ -175,44 +152,6 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
-// ensureQueryIndex sorts the chunks (when a watch-flush rebuild deferred it)
-// and builds the query index on demand. Publishes only invalidate, so the cost
-// is paid at most once per data change — and only when a catalog consumer
-// actually queries (never while Browse/Custom views are closed). Callers must
-// hold the service write lock.
-func (idx *catalogIndex) ensureQueryIndex() {
-	if idx.chunksNeedSort {
-		sorted := make([]*summaryChunk, len(idx.sortedChunks))
-		for i, chunk := range idx.sortedChunks {
-			items := append([]Summary(nil), chunk.items...)
-			sortSummaries(items)
-			sorted[i] = &summaryChunk{items: items}
-		}
-		idx.sortedChunks = sorted
-		idx.chunksNeedSort = false
-	}
-	if idx.queryIndexBuilt {
-		return
-	}
-	idx.queryIndex = buildCatalogQueryIndex(idx.sortedChunks)
-	idx.queryIndexBuilt = true
-}
-
-func (idx *catalogIndex) cachedQueryState() catalogCachedQueryState {
-	chunks := make([]*summaryChunk, len(idx.sortedChunks))
-	copy(chunks, idx.sortedChunks)
-	return catalogCachedQueryState{
-		chunks:     chunks,
-		kinds:      append([]KindInfo(nil), idx.cachedKinds...),
-		namespaces: append([]string(nil), idx.cachedNamespaces...),
-		// Chunks are immutable once published and the query index is replaced
-		// wholesale on rebuild (never mutated in place), so the maps are shared
-		// with the executor instead of deep-copied per query.
-		descriptors: append([]Descriptor(nil), idx.cachedDescriptors...),
-		queryIndex:  idx.queryIndex,
-	}
-}
-
 func (idx *catalogIndex) cachesAreReady() bool {
 	return idx.cachesReady
 }
@@ -283,66 +222,23 @@ func (idx *catalogIndex) publishStreamingState(
 ) {
 	chunkSnapshot := make([]*summaryChunk, len(chunks))
 	copy(chunkSnapshot, chunks)
-	idx.sortedChunks = chunkSnapshot
-	idx.chunksNeedSort = false
 	idx.rebuildQueryStore(chunkSnapshot)
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
-	// Invalidate the query index instead of rebuilding it: initial sync
-	// publishes once per emitted batch and watch flushes publish every 200ms
-	// under churn — rebuilding here made that quadratic across a sync and
-	// charged full re-index cost even with no catalog consumer open. The index
-	// is built lazily in ensureQueryIndex when a query needs it.
-	idx.queryIndex = catalogQueryIndex{}
-	idx.queryIndexBuilt = false
 	if descriptors != nil {
 		idx.cachedDescriptors = append([]Descriptor(nil), descriptors...)
 	}
 	idx.cachesReady = ready
 }
 
-func buildCatalogQueryIndex(chunks []*summaryChunk) catalogQueryIndex {
-	index := catalogQueryIndex{
-		byNamespace:        make(map[string][]catalogIndexedSummaryRef),
-		byKind:             make(map[string][]catalogIndexedSummaryRef),
-		byNamespaceAndKind: make(map[string][]catalogIndexedSummaryRef),
-		kindsByNamespace:   make(map[string]map[string]bool),
-	}
-	for chunkIdx, chunk := range chunks {
-		if chunk == nil {
-			continue
-		}
-		for itemIdx, item := range chunk.items {
-			ref := catalogIndexedSummaryRef{chunk: chunkIdx, item: itemIdx}
-			namespaceKey := catalogQueryNamespaceIndexKey(item.Namespace, item.Scope)
-			index.byNamespace[namespaceKey] = append(index.byNamespace[namespaceKey], ref)
-			if item.Kind != "" {
-				kinds := index.kindsByNamespace[namespaceKey]
-				if kinds == nil {
-					kinds = make(map[string]bool)
-					index.kindsByNamespace[namespaceKey] = kinds
-				}
-				kinds[item.Kind] = item.Scope == ScopeNamespace
-			}
-			for _, kindKey := range catalogQueryKindIndexKeys(item) {
-				index.byKind[kindKey] = append(index.byKind[kindKey], ref)
-				compound := catalogQueryCompoundIndexKey(namespaceKey, kindKey)
-				index.byNamespaceAndKind[compound] = append(index.byNamespaceAndKind[compound], ref)
-			}
-		}
-	}
-	return index
-}
-
+// catalogQueryNamespaceIndexKey is the namespace facet representation: "cluster" for
+// cluster-scoped or empty-namespace rows, else the lowercased namespace. The engine
+// schema's namespace facet and the namespace filter keys agree on this representation.
 func catalogQueryNamespaceIndexKey(namespace string, scope Scope) string {
 	if scope == ScopeCluster || namespace == "" {
 		return "cluster"
 	}
 	return strings.ToLower(strings.TrimSpace(namespace))
-}
-
-func catalogQueryCompoundIndexKey(namespace, kind string) string {
-	return namespace + "\x00" + kind
 }
 
 func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
@@ -365,9 +261,6 @@ func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descrip
 	}
 
 	idx.publishStreamingState(chunks, kindSet, namespaceSet, descriptors, true)
-	// Sorting all N items per watch flush (200ms under churn) is deferred to
-	// the first query, alongside the index build (ensureQueryIndex).
-	idx.chunksNeedSort = true
 	idx.rebuildLookupIndexes()
 }
 

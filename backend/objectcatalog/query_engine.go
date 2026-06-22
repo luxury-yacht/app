@@ -2,11 +2,11 @@
  * backend/objectcatalog/query_engine.go
  *
  * Serves catalog Browse/object-catalog queries through the shared querypage.Store
- * engine. A *querypage.Store[Summary] is maintained alongside the chunk state (fed
- * wholesale from each published chunk set), and queryViaEngine maps a QueryOptions
+ * engine — the catalog's single query implementation. A *querypage.Store[Summary] is
+ * maintained from each published summary set, and queryViaEngine maps a QueryOptions
  * onto a querypage.Query and the resulting Page back onto a QueryResult. The encoded
- * sort/UID values fold in the catalog's exact identity tiebreak so the engine orders
- * rows byte-identically to the legacy chunk-scan executor.
+ * sort/UID values fold in the catalog's identity chain (compareCatalogIdentity) as the
+ * tiebreak so the engine orders rows by the catalog's canonical order.
  */
 
 package objectcatalog
@@ -44,10 +44,10 @@ const (
 const catalogEngineFieldSep = "\x00"
 
 // newCatalogQueryStoreSchema returns the querypage Schema describing how the engine
-// reads a Summary: a unique UID, the catalog's sort orders, the facet dimensions,
-// and the searchable text. The encoded values reproduce the legacy comparators in
-// helpers.go exactly (including the age newest-first flip and the identity-chain
-// tiebreak), so a querypage page lays rows out identically to the chunk-scan executor.
+// reads a Summary: a unique UID, the catalog's sort orders, the facet dimensions, and
+// the searchable text. The encoded values reproduce the catalog's canonical order
+// (the age newest-first flip and the compareCatalogIdentity tiebreak in helpers.go), so
+// a querypage page lays rows out in the catalog's canonical order.
 func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 	return querypage.Schema[Summary]{
 		// UID is the catalog's full identity chain (kind/namespace/name/group/version/
@@ -61,15 +61,15 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			// value (engine descLess), matching the catalog's -compareCatalogIdentity.
 			catalogEngineSortDefault: catalogEngineUID,
 			// Explicit-field sorts break ties by the ascending identity chain in both
-			// directions (helpers.go compareSummariesForCatalogQueryWithOptions). The
-			// engine's UID tiebreak (== the identity chain) supplies exactly that, so
-			// the encoded value is just the field value.
+			// directions. The engine's UID tiebreak (== the identity chain,
+			// compareCatalogIdentity) supplies exactly that, so the encoded value is
+			// just the field value.
 			catalogEngineSortKind:      func(s Summary) string { return s.Kind },
 			catalogEngineSortNamespace: func(s Summary) string { return s.Namespace },
 			catalogEngineSortName:      func(s Summary) string { return s.Name },
 			// Both "age" and "creationtimestamp" sort newest-first when ascending: the
-			// catalog flips BOTH (catalogQuerySortFieldIsAge covers age AND
-			// creationtimestamp), so "asc" means newest first. Encoding the creation
+			// catalog flips BOTH age AND creationtimestamp, so "asc" means newest first.
+			// Encoding the creation
 			// timestamp inverted makes an ascending walk produce newest-first; a desc
 			// walk (engine descLess) then yields oldest-first, matching the legacy "desc".
 			catalogEngineSortAge:               func(s Summary) string { return catalogEngineInvertTimestamp(s.CreationTimestamp) },
@@ -184,9 +184,8 @@ func catalogEngineDirection(direction string) querypage.Direction {
 }
 
 // catalogEngineSignature pins a cursor to its query shape so a cursor minted for one
-// filter/sort/scope can never mispage a different one. It mirrors
-// catalogQuerySignature's fields (limit, search, kinds, namespaces, customOnly, sort)
-// so the cursor binds to exactly the same query identity the legacy codec used.
+// filter/sort/scope can never mispage a different one. It folds in limit, search, kinds,
+// namespaces, customOnly, and sort, so the cursor binds to exactly that query identity.
 func catalogEngineSignature(opts QueryOptions, limit int) string {
 	kinds := normalizeQueryValues(opts.Kinds)
 	namespaces := normalizeQueryValues(opts.Namespaces)
@@ -239,11 +238,11 @@ func catalogEngineNamespaceFilterValues(namespaces []string) []string {
 	return catalogQueryNamespaceFilterKeys(namespaces)
 }
 
-// queryViaEngine serves a catalog query through the maintained querypage store. It is
-// the equivalence-gated replacement for the chunk-scan executor (executeCached):
-// fed the same published state, it returns the same QueryResult (items/order,
-// totals, facets, pagination). It is read-only over the store snapshot taken under
-// the service read lock, so it never blocks ingestion for longer than a snapshot copy.
+// queryViaEngine serves a catalog query through the maintained querypage store — the
+// catalog's single query implementation. Fed the published state, it returns the
+// QueryResult (items/order, totals, facets, pagination). It is read-only over the store
+// snapshot taken under the service read lock, so it never blocks ingestion for longer
+// than a snapshot copy.
 func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RLock()
 	store := s.catalogIndex.queryEngineStore
@@ -253,20 +252,25 @@ func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RUnlock()
 
 	// An empty engine store means no chunks have been published (or the catalog was
-	// reset). The legacy QueryCatalog returned ok=false here so Query fell back to the
-	// uncached snapshot path; queryViaEngineFromSnapshot now serves that case on the
-	// same engine, so the catalog has ONE query implementation.
+	// reset). queryViaEngineFromSnapshot serves that case on the same engine from the
+	// items-map snapshot, so the catalog has ONE query implementation.
 	if store == nil || store.Len() == 0 {
 		return s.queryViaEngineFromSnapshot(opts, descriptors)
 	}
-	return s.queryViaEngineWithStore(opts, store, store.Snapshot(), descriptors, cachedKinds, cachedNamespaces), true
+	// Maintained-store path: facets resolve from the publish-time cached kinds/namespaces
+	// lists (catalogEngineFacets).
+	rows := store.Snapshot()
+	resolveFacets := func(metadataExact bool) ([]KindInfo, []string) {
+		return catalogEngineFacets(rows, opts, cachedKinds, cachedNamespaces, metadataExact)
+	}
+	return s.queryViaEngineWithStore(opts, store, rows, descriptors, resolveFacets), true
 }
 
 // queryViaEngineFromSnapshot serves a query when no chunks have been published, by
-// building an ephemeral engine store from the items-map snapshot. It replaces the
-// legacy queryWithoutCache + its bespoke cursor codec. Facet lists are derived from
-// the snapshot rows (there is no publish-time cached facet list), matching the legacy
-// fallback's fresh kindSet/namespaceSet computation.
+// building an ephemeral engine store from the items-map snapshot. Its facets are the
+// full in-scope kind/namespace sets (catalogEngineSnapshotFacets), NOT the filter-scoped
+// match sets the maintained-store path uses — a deliberate, distinct facet contract for
+// the snapshot path (see catalogEngineSnapshotFacets).
 func (s *Service) queryViaEngineFromSnapshot(opts QueryOptions, descriptors []Descriptor) (QueryResult, bool) {
 	rows := s.Snapshot()
 	if len(descriptors) == 0 {
@@ -276,21 +280,22 @@ func (s *Service) queryViaEngineFromSnapshot(opts QueryOptions, descriptors []De
 	for _, row := range rows {
 		store.Upsert(row)
 	}
-	// No cached facet lists: the snapshot path derives Kinds/Namespaces from the
-	// matched rows, the same way the legacy queryWithoutCache did.
-	return s.queryViaEngineWithStore(opts, store, rows, descriptors, nil, nil), true
+	resolveFacets := func(metadataExact bool) ([]KindInfo, []string) {
+		return catalogEngineSnapshotFacets(rows, opts, metadataExact)
+	}
+	return s.queryViaEngineWithStore(opts, store, rows, descriptors, resolveFacets), true
 }
 
 // queryViaEngineWithStore maps a query onto a prepared store + row set and the Page
 // back onto a QueryResult. Both the maintained-store and ephemeral-snapshot paths use
-// it, so the catalog serves every query through one engine mapping.
+// it (each supplying its own facet resolver), so the catalog serves every query
+// through one engine mapping.
 func (s *Service) queryViaEngineWithStore(
 	opts QueryOptions,
 	store *querypage.Store[Summary],
 	rows []Summary,
 	descriptors []Descriptor,
-	cachedKinds []KindInfo,
-	cachedNamespaces []string,
+	resolveFacets func(metadataExact bool) ([]KindInfo, []string),
 ) QueryResult {
 	limit := clampQueryLimit(opts.Limit)
 	sortKey := catalogEngineSortKey(normalizeCatalogQuerySortField(opts.SortField))
@@ -299,11 +304,11 @@ func (s *Service) queryViaEngineWithStore(
 
 	filters := s.catalogEngineFilters(rows, opts)
 
-	// CursorInvalid mirrors the legacy validateCatalogQueryCursor: a non-empty
-	// continue token that fails to decode or pin to this exact query shape is
-	// rejected, and the engine restarts at page 1 (NextCursor/PrevCursor are recomputed
-	// from the first page). The engine's own Query also resets a mismatched cursor, so
-	// the page is correct regardless; this flag only tells the frontend to reset.
+	// CursorInvalid: a non-empty continue token that fails to decode or pin to this
+	// exact query shape is rejected, and the engine restarts at page 1 (NextCursor/
+	// PrevCursor are recomputed from the first page). The engine's own Query also resets
+	// a mismatched cursor, so the page is correct regardless; this flag only tells the
+	// frontend to reset.
 	cursorInvalid := false
 	cursorToken := opts.Continue
 	if cursorToken != "" {
@@ -331,8 +336,8 @@ func (s *Service) queryViaEngineWithStore(
 	}
 
 	// A valid backward cursor that yields no rows means every predecessor was deleted
-	// since the token was issued — an un-navigable dead end. The legacy path flags this
-	// as cursorInvalid so the client resets to page 1 (see pageCatalogChunksPrevious).
+	// since the token was issued — an un-navigable dead end. Flag it as cursorInvalid so
+	// the client resets to page 1.
 	if !cursorInvalid && cursorToken != "" && len(page.Rows) == 0 {
 		if cur, decodeErr := querypage.Decode(cursorToken); decodeErr == nil && cur.Backward {
 			cursorInvalid = true
@@ -342,7 +347,7 @@ func (s *Service) queryViaEngineWithStore(
 	unfilteredTotal, unfilteredExact := s.catalogEngineUnfilteredTotal(store, opts, page.Total)
 	metadataExact := page.Total <= catalogQueryExactMetadataThreshold
 
-	kinds, namespaces := catalogEngineFacets(rows, opts, cachedKinds, cachedNamespaces, metadataExact)
+	kinds, namespaces := resolveFacets(metadataExact)
 
 	return QueryResult{
 		Items:           page.Rows,
@@ -402,16 +407,15 @@ func (s *Service) catalogEngineUnfilteredTotal(store *querypage.Store[Summary], 
 	return page.Total, page.Total <= catalogQueryExactMetadataThreshold
 }
 
-// catalogEngineFacets reproduces the legacy metadata.resolve() Kinds/Namespaces facet
-// scoping over the store snapshot. It is sourced from the same rows the chunk-scan
-// observed, so the resulting facet sets match the legacy path exactly:
+// catalogEngineFacets derives the maintained-store path's Kinds/Namespaces facets over
+// the store snapshot, using the publish-time cached lists:
 //   - Kinds: customOnly → kinds among custom matches; namespace filter → kinds present
 //     in the filtered namespaces; otherwise the full cached kinds list.
 //   - Namespaces: the full cached namespaces list (or, when none were cached but matches
 //     contribute namespaces, the matched namespaces).
 //
-// When the match count exceeds the exact-metadata threshold the legacy observe() stops
-// contributing match facets; metadataExact carries that, so the facet derivation matches.
+// When the match count exceeds the exact-metadata threshold the match-facet contribution
+// is dropped; metadataExact carries that, so the facet derivation stays consistent.
 func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindInfo, cachedNamespaces []string, metadataExact bool) ([]KindInfo, []string) {
 	kindMatcher := newKindMatcher(opts.Kinds)
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
@@ -463,4 +467,45 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 	}
 
 	return kinds, namespaces
+}
+
+// catalogEngineSnapshotFacets derives the ephemeral-snapshot path's facets (it has no
+// publish-time cached facet lists). Unlike the maintained-store path (catalogEngineFacets),
+// the Namespaces facet is the FULL in-scope namespace set (every custom-matched namespace
+// in the snapshot), independent of the kind/namespace/search filter — so a cluster-scope
+// filter still surfaces the cluster's namespaces in the facet list. Kinds are the full
+// custom-matched kind set, scoped to the filtered namespaces only when a namespace filter
+// is active. CustomOnly is honored solely by customMatcher gating the universe — there is
+// no separate CustomOnly kind branch.
+func catalogEngineSnapshotFacets(rows []Summary, opts QueryOptions, metadataExact bool) ([]KindInfo, []string) {
+	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
+	customMatcher := newCustomOnlyMatcher(opts.CustomOnly)
+	hasNamespaceFilter := len(opts.Namespaces) > 0
+
+	kindSet := make(map[string]bool)
+	namespaceSet := make(map[string]struct{})
+	namespaceKinds := make(map[string]bool)
+
+	if metadataExact {
+		for _, item := range rows {
+			if !customMatcher(item) {
+				continue
+			}
+			if item.Kind != "" {
+				kindSet[item.Kind] = item.Scope == ScopeNamespace
+			}
+			if item.Namespace != "" {
+				namespaceSet[item.Namespace] = struct{}{}
+			}
+			if hasNamespaceFilter && namespaceMatcher(item.Namespace, item.Scope) && item.Kind != "" {
+				namespaceKinds[item.Kind] = item.Scope == ScopeNamespace
+			}
+		}
+	}
+
+	kindSource := kindSet
+	if hasNamespaceFilter {
+		kindSource = namespaceKinds
+	}
+	return snapshotSortedKindInfos(kindSource), snapshotSortedKeys(namespaceSet)
 }

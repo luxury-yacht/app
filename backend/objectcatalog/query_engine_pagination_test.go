@@ -1,11 +1,12 @@
 /*
- * backend/objectcatalog/query_engine_equivalence_test.go
+ * backend/objectcatalog/query_engine_pagination_test.go
  *
- * THE EQUIVALENCE GATE for the querypage-engine cutover. It proves queryViaEngine
- * returns the same QueryResult as the legacy chunk-scan executor (Service.Query via
- * executeCached) fed the SAME published state, across a matrix of sorts × directions ×
- * filter shapes × full forward AND backward pagination. The cutover (pointing
- * Service.Query at the engine) is only safe while this passes.
+ * Pagination + facet correctness for the querypage-engine catalog serve. The cutover
+ * is complete (Service.Query routes through queryViaEngine; the legacy chunk-scan
+ * executor it was equivalence-gated against is deleted), so this exercises the ONE
+ * serve path across a matrix of sorts × directions × filter shapes, asserting forward
+ * pagination is complete (every matching row exactly once) and backward pagination via
+ * PreviousToken reproduces the forward pages exactly, with stable totals and facets.
  */
 
 package objectcatalog
@@ -92,39 +93,6 @@ func kindInfoKey(infos []KindInfo) []string {
 	return keys
 }
 
-// assertResultsEquivalent checks the load-bearing fields of two QueryResults match.
-func assertResultsEquivalent(t *testing.T, label string, old, got QueryResult) {
-	t.Helper()
-	if oldUIDs, gotUIDs := pageUIDs(old.Items), pageUIDs(got.Items); !equalStrings(oldUIDs, gotUIDs) {
-		t.Fatalf("%s: page items differ\n old=%v\n new=%v", label, oldUIDs, gotUIDs)
-	}
-	if old.TotalItems != got.TotalItems {
-		t.Fatalf("%s: TotalItems differ old=%d new=%d", label, old.TotalItems, got.TotalItems)
-	}
-	if old.UnfilteredTotal != got.UnfilteredTotal {
-		t.Fatalf("%s: UnfilteredTotal differ old=%d new=%d", label, old.UnfilteredTotal, got.UnfilteredTotal)
-	}
-	if old.TotalIsExact != got.TotalIsExact {
-		t.Fatalf("%s: TotalIsExact differ old=%t new=%t", label, old.TotalIsExact, got.TotalIsExact)
-	}
-	if old.FacetsExact != got.FacetsExact {
-		t.Fatalf("%s: FacetsExact differ old=%t new=%t", label, old.FacetsExact, got.FacetsExact)
-	}
-	if old.CursorInvalid != got.CursorInvalid {
-		t.Fatalf("%s: CursorInvalid differ old=%t new=%t", label, old.CursorInvalid, got.CursorInvalid)
-	}
-	if !equalStrings(kindInfoKey(old.Kinds), kindInfoKey(got.Kinds)) {
-		t.Fatalf("%s: Kinds facet differ\n old=%v\n new=%v", label, kindInfoKey(old.Kinds), kindInfoKey(got.Kinds))
-	}
-	oldNs := append([]string(nil), old.Namespaces...)
-	gotNs := append([]string(nil), got.Namespaces...)
-	sort.Strings(oldNs)
-	sort.Strings(gotNs)
-	if !equalStrings(oldNs, gotNs) {
-		t.Fatalf("%s: Namespaces facet differ\n old=%v\n new=%v", label, oldNs, gotNs)
-	}
-}
-
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -137,11 +105,12 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// TestQueryViaEngineEquivalentToChunkScan is the gate. For every sort × direction ×
-// filter shape it walks the full result forward via ContinueToken and backward via
-// PreviousToken, asserting the engine result equals the legacy chunk-scan result at
-// every page.
-func TestQueryViaEngineEquivalentToChunkScan(t *testing.T) {
+// TestCatalogQueryPaginationComplete exercises the single engine serve across the full
+// matrix of sorts × directions × filter shapes. For each it asserts forward pagination
+// visits every matching row exactly once (== TotalItems, no duplicates) and backward
+// pagination via PreviousToken reproduces the forward pages exactly, with the totals
+// and facet sets stable across every page.
+func TestCatalogQueryPaginationComplete(t *testing.T) {
 	svc := newEquivalenceService(t, equivalenceSummaries())
 
 	sorts := []struct {
@@ -179,80 +148,86 @@ func TestQueryViaEngineEquivalentToChunkScan(t *testing.T) {
 				base.SortDirection = s.dir
 				base.Limit = limit
 				label := s.field + "/" + s.dir + "/" + shape.name + "/limit=" + itoa(limit)
-				assertPaginationEquivalent(t, svc, base, label)
+				assertPaginationComplete(t, svc, base, label)
 			}
 		}
 	}
 }
 
-// assertPaginationEquivalent walks forward to the end collecting every page, then
-// walks back to the start via PreviousToken, asserting each page matches the legacy
-// path.
-func assertPaginationEquivalent(t *testing.T, svc *Service, base QueryOptions, label string) {
+// assertPaginationComplete walks forward to the end recording every page, asserting
+// the run is complete (every matching row once, in a stable order, count == TotalItems)
+// with stable totals/facets, then walks back via PreviousToken and asserts each prev
+// page reproduces the forward page exactly.
+func assertPaginationComplete(t *testing.T, svc *Service, base QueryOptions, label string) {
 	t.Helper()
 
-	// Forward. Each path is driven with ITS OWN continue token (the two codecs differ
-	// while both paths coexist), and the resulting page N is compared positionally.
-	// Per-page tokens are recorded indexed by page number so the backward walk can
-	// drive each path with the exact PreviousToken that page returned.
-	oldToken, engineToken := "", ""
-	oldPrevTokens := []string{}    // oldPrevTokens[page]    = page's legacy PreviousToken
-	enginePrevTokens := []string{} // enginePrevTokens[page] = page's engine PreviousToken
-	enginePages := [][]string{}
+	token := ""
+	prevTokens := []string{}  // prevTokens[page] = that page's PreviousToken
+	pages := [][]string{}     // pages[page]      = that page's row UIDs
+	seen := map[string]bool{} // every UID across the whole run (dup detection)
+	wantTotal, wantKinds, wantNs := -1, []string(nil), []string(nil)
+	collected := 0
+
 	for page := 0; page < 100; page++ {
-		oldOpts := base
-		oldOpts.Continue = oldToken
-		old := svc.Query(oldOpts)
+		opts := base
+		opts.Continue = token
+		result := svc.Query(opts)
 
-		engineOpts := base
-		engineOpts.Continue = engineToken
-		got, ok := svc.queryViaEngine(engineOpts)
-		if !ok {
-			t.Fatalf("%s page %d: queryViaEngine returned not-ok", label, page)
+		// Totals and facet sets are a property of the query, not the page, so they
+		// must be identical on every page of the run.
+		kinds := kindInfoKey(result.Kinds)
+		ns := append([]string(nil), result.Namespaces...)
+		sort.Strings(ns)
+		if page == 0 {
+			wantTotal, wantKinds, wantNs = result.TotalItems, kinds, ns
+		} else {
+			if result.TotalItems != wantTotal {
+				t.Fatalf("%s page %d: TotalItems drifted %d -> %d", label, page, wantTotal, result.TotalItems)
+			}
+			if !equalStrings(kinds, wantKinds) {
+				t.Fatalf("%s page %d: Kinds facet drifted\n want=%v\n got=%v", label, page, wantKinds, kinds)
+			}
+			if !equalStrings(ns, wantNs) {
+				t.Fatalf("%s page %d: Namespaces facet drifted\n want=%v\n got=%v", label, page, wantNs, ns)
+			}
 		}
-		assertResultsEquivalent(t, label+" fwd#"+itoa(page), old, got)
 
-		enginePages = append(enginePages, pageUIDs(got.Items))
-		oldPrevTokens = append(oldPrevTokens, old.PreviousToken)
-		enginePrevTokens = append(enginePrevTokens, got.PreviousToken)
-		if (old.ContinueToken == "") != (got.ContinueToken == "") {
-			t.Fatalf("%s fwd#%d: ContinueToken presence differs old=%q new=%q",
-				label, page, old.ContinueToken, got.ContinueToken)
+		uids := pageUIDs(result.Items)
+		for _, uid := range uids {
+			if seen[uid] {
+				t.Fatalf("%s page %d: row %q returned on more than one page", label, page, uid)
+			}
+			seen[uid] = true
 		}
-		if old.ContinueToken == "" {
+		if len(uids) > base.Limit {
+			t.Fatalf("%s page %d: page size %d exceeds limit %d", label, page, len(uids), base.Limit)
+		}
+		collected += len(uids)
+		pages = append(pages, uids)
+		prevTokens = append(prevTokens, result.PreviousToken)
+
+		if result.ContinueToken == "" {
 			break
 		}
-		oldToken = old.ContinueToken
-		engineToken = got.ContinueToken
+		token = result.ContinueToken
 	}
 
-	// Backward: page back from the last page via each path's own PreviousToken and
-	// assert the legacy prev page equals the engine prev page positionally, AND that
-	// the engine's prev page reproduces the forward page recorded on the way out.
-	for page := len(enginePrevTokens) - 1; page > 0; page-- {
-		oldPrev := oldPrevTokens[page]
-		enginePrev := enginePrevTokens[page]
-		if (oldPrev == "") != (enginePrev == "") {
-			t.Fatalf("%s prev#%d: PreviousToken presence differs old=%q new=%q",
-				label, page, oldPrev, enginePrev)
-		}
-		if enginePrev == "" {
-			continue
-		}
-		oldOpts := base
-		oldOpts.Continue = oldPrev
-		oldResult := svc.Query(oldOpts)
+	if collected != wantTotal {
+		t.Fatalf("%s: forward pagination returned %d rows, TotalItems=%d", label, collected, wantTotal)
+	}
 
-		engineOpts := base
-		engineOpts.Continue = enginePrev
-		gotResult, ok := svc.queryViaEngine(engineOpts)
-		if !ok {
-			t.Fatalf("%s prev#%d: queryViaEngine returned not-ok", label, page)
+	// Backward: each non-first page's PreviousToken must reproduce the page before it.
+	for page := len(prevTokens) - 1; page > 0; page-- {
+		prev := prevTokens[page]
+		if prev == "" {
+			t.Fatalf("%s prev#%d: expected a PreviousToken on a non-first page", label, page)
 		}
-		assertResultsEquivalent(t, label+" prev#"+itoa(page), oldResult, gotResult)
-		if !equalStrings(enginePages[page-1], pageUIDs(gotResult.Items)) {
-			t.Fatalf("%s eng-prev#%d: backward page != forward page\n fwd=%v\n back=%v",
-				label, page, enginePages[page-1], pageUIDs(gotResult.Items))
+		opts := base
+		opts.Continue = prev
+		result := svc.Query(opts)
+		if got := pageUIDs(result.Items); !equalStrings(pages[page-1], got) {
+			t.Fatalf("%s prev#%d: backward page != forward page\n fwd=%v\n back=%v",
+				label, page, pages[page-1], got)
 		}
 	}
 }

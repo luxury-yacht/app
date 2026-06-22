@@ -22,9 +22,8 @@ func (store inMemoryCatalogQueryStore) QueryCatalog(opts QueryOptions) (QueryRes
 	}
 	// Serve through the shared querypage engine (queryViaEngine). It reads the
 	// maintained store that publishStreamingState keeps equal to the published
-	// chunks, so it returns the same result the legacy chunk-scan executor did —
-	// proven by the equivalence gate (query_engine_equivalence_test.go). A nil/empty
-	// store returns ok=false, so Query falls back to the uncached snapshot path,
-	// preserving the prior "no chunks yet" behavior.
+	// summaries; when no summaries have been published it serves the items-map
+	// snapshot on the same engine. Either way it returns a result (ok=true), so
+	// the catalog has one query implementation.
 	return store.service.queryViaEngine(opts)
 }

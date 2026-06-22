@@ -66,22 +66,19 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** Phase 3 is essentially DONE for typed tables — **ALL 16 typed-table domains now serve
-through the one querypage engine** (the 10 collectDescriptorTableRows domains + namespace-events +
-cluster-events + cluster-crds + nodes + helm + pods), each equivalence-gated byte-identical to the live
-executor; the engine handles predicates; engine fuzz-proven. **`pods` is on a maintained store with metrics
-as a separate column** (zeroed in the store, overlaid fresh at serve — a metrics poll never touches the
-store). The bespoke **`typedTableQueryCollector` and the old `resolveTypedSnapshotPage` are DELETED**;
-`applyTypedTableQuery` remains only as the equivalence-test oracle. (Earlier ledger entries said "10 typed
-domains" — that undercounted; the engine-cutover set is 16, all now done.) **Next** (complete remaining
+**Where we are:** Phase 3 is DONE — the **"one query engine" goal is met**: ALL 16 typed-table domains AND
+Browse/object-catalog now serve through the single `querypage` engine. The bespoke **`typedTableQueryCollector`,
+the old `resolveTypedSnapshotPage`, AND the catalog chunk-scan + catalog cursor codec are all DELETED**; the
+engine grew **predicates** (matched-set build) and **backward/prev-page pagination** (for Browse's Prev/Next);
+`applyTypedTableQuery` remains only as the typed-table equivalence oracle. **`pods` is on a maintained store
+with metrics as a separate column** (zeroed in the store, overlaid fresh at serve — a metrics poll never
+touches the store). (Earlier ledger entries said "10 typed domains" — that undercounted; the set is 16.)
+**Next** (complete remaining
 roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Browse/catalog onto the engine** — the last subsystem on its own query path + the SECOND cursor codec.
-   ✅ Engine prerequisite done (backward/prev-page pagination in `querypage.Store`). REMAINING: a maintained
-   `querypage.Store[Summary]` fed from `setItem`/`deleteItem`, the schema (kindidentity facet + CustomOnly +
-   age-flip + composite default sort), serve via `store.Query` (direct, prev/next), map → `QueryResult`,
-   then delete the catalog chunk-scan + cursor codec. Intricate (the two-scan UnfilteredTotal + 100k
-   approximate-facet threshold) — gate it with a new-serve==old-serve equivalence test.
+1. ✅ **Browse/catalog onto the engine — DONE.** Both old cursor codecs + the collector are gone; every
+   typed table AND Browse serve through `querypage`. (Follow-up worth doing: a stronger catalog
+   correctness test — the cutover landed without a full new-vs-old matrix; see the §Migration caveat.)
 2. **Maintained stores for the cutover-only domains** (network, workloads, nodes, helm, crds — they serve via
    the engine but still list+project per Build) — the per-request-reprojection perf win. network needs the
    Service↔EndpointSlice relationship; workloads the synthesized standalone-pods. Plus the pods O(log N+page)
@@ -944,14 +941,19 @@ reasons; **nothing required is incomplete here.**
   rbac, events, crds}, nodes, pods. The engine handles query **predicates** (`applyTypedTableQueryViaStore`
   builds the store from the matched set). The bespoke **`typedTableQueryCollector` + the old non-engine
   `resolveTypedSnapshotPage` are DELETED**; `applyTypedTableQuery` remains only as the equivalence-test oracle.
-  **REMAINING here:** Browse/catalog (the SECOND cursor codec) is still on its own path. ✅ **Engine
-  prerequisite built: backward (prev-page) keyset pagination** (`querypage.Store` now returns `PrevCursor`
-  + walks `DescendLessOrEqual` for prev pages; TDD-gated; forward path byte-unchanged) — Browse has explicit
-  Prev/Next buttons the forward-only engine couldn't serve. The serve cutover itself is INTRICATE (not a thin
-  swap): the catalog's kind filter is identity-key based (group/version/kind → expand to a `kindidentity`
-  facet), plus CustomOnly (binary facet), the age-flip sort, the composite `kind/namespace/name` default sort,
-  the two-scan UnfilteredTotal, and the 100k approximate-facet threshold all need mapping. Catalog ingestion
-  is incremental (`setItem`/`deleteItem`), so a maintained `querypage.Store[Summary]` can be fed cleanly.
+- ✅ **Browse/object-catalog cut over to the engine — COMPLETE.** `objectcatalog.Service.Query` serves from a
+  maintained `querypage.Store[Summary]` (fed incrementally via `setItem`/`deleteItem`), using the new backward
+  (prev-page) keyset pagination (`querypage.Store` returns `PrevCursor` + walks `DescendLessOrEqual`;
+  TDD-gated; forward path byte-unchanged — Browse has explicit Prev/Next buttons). The bespoke **catalog
+  chunk-scan executor + the catalog cursor codec (`catalogQueryCursor`/`encode|decodeCatalogQueryCursor`) +
+  the lazy query index are DELETED** (~770 lines). Kind filter → `kindidentity` facet, CustomOnly → `custom`
+  facet, age-flip + composite default sort in the schema, two-scan UnfilteredTotal + 100k approximate
+  threshold preserved. **This was partly pre-existing in the working tree (a half-finished `queryViaEngine`
+  path, 2 tests broken) — now finished**: fixed a real namespace-facet divergence, completed + deleted the
+  dead path. CAVEAT: the old chunk path was already bypassed before completion, so correctness rests on the
+  existing catalog behavior tests (which caught the facet bug) + a pagination-completeness test, NOT a full
+  new-vs-old matrix. Gate green (`mage qc:prerelease` exit 0). **The "one query engine" goal is now met:
+  every typed table AND Browse serve through `querypage`; both old cursor codecs + the collector are gone.**
 - 🔶 **Metrics as a separate column (§3.6).** ✅ Realized for `pods`: the maintained pod store holds row data
   with CPU/Mem ZEROED (informer-fed); fresh metrics are overlaid at serve from `LatestPodUsage()`, so a metrics
   poll never touches the store. (nodes carries its metrics in the per-Build rows — fine at node scale.)

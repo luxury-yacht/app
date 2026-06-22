@@ -146,12 +146,13 @@ func TestServiceQueryIndexRebuiltAfterLaterPublish(t *testing.T) {
 	}
 }
 
-// The uncached fallback path must report the unfiltered scope total like the
-// cached path does, or the "showing N of M" banner reads "N of 0".
-func TestQueryWithoutCacheReportsUnfilteredTotal(t *testing.T) {
+// The snapshot serve path (no chunks published) must report the unfiltered scope
+// total like the maintained-store path does, or the "showing N of M" banner reads
+// "N of 0".
+func TestQueryFromSnapshotReportsUnfilteredTotal(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
-	// Populate items WITHOUT publishing chunks: the cached store reports no
-	// chunks, so Query falls back to queryWithoutCache.
+	// Populate items WITHOUT publishing chunks: the engine store is empty, so Query
+	// serves from the items-map snapshot (queryViaEngineFromSnapshot).
 	svc.items = map[string]Summary{
 		"a": {Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-a", Scope: ScopeNamespace},
 		"b": {Kind: "Service", Version: "v1", Resource: "services", Namespace: "default", Name: "bravo", UID: "uid-b", Scope: ScopeNamespace},

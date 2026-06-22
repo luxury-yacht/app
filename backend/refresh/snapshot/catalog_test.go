@@ -700,22 +700,6 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 		)
 	}
 
-	sortedChunksField := value.FieldByName("sortedChunks")
-	if !sortedChunksField.IsValid() {
-		t.Fatal("catalog service sortedChunks field not found")
-	}
-	chunkType := sortedChunksField.Type().Elem()
-	chunkValue := reflect.New(chunkType.Elem())
-	itemsField := chunkValue.Elem().FieldByName("items")
-	itemsSlice := reflect.MakeSlice(itemsField.Type(), len(summaries), len(summaries))
-	for idx, summary := range summaries {
-		itemsSlice.Index(idx).Set(reflect.ValueOf(summary))
-	}
-	setUnexportedField(itemsField, itemsSlice.Interface())
-	chunkSlice := reflect.MakeSlice(sortedChunksField.Type(), 1, 1)
-	chunkSlice.Index(0).Set(chunkValue)
-	setUnexportedField(sortedChunksField, chunkSlice.Interface())
-
 	kindsField := value.FieldByName("cachedKinds")
 	if !kindsField.IsValid() {
 		t.Fatal("catalog service cachedKinds field not found")

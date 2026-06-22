@@ -163,55 +163,20 @@ func containsVerb(verbs []string, target string) bool {
 	return false
 }
 
-// sortSummaries sorts summaries by kind, namespace, and name.
+// sortSummaries orders summaries by the catalog identity chain (kind, namespace,
+// name, then the full GVK+UID). The streaming aggregator uses it to keep each
+// published chunk deterministically ordered; the querypage engine re-sorts every
+// row through its own indexes, so this only affects chunk-local determinism.
 func sortSummaries(items []Summary) {
 	sort.Slice(items, func(i, j int) bool {
-		return compareSummariesForCatalogQuery(items[i], items[j]) < 0
+		return compareCatalogIdentity(items[i], items[j]) < 0
 	})
-}
-
-func compareSummariesForCatalogQuery(left, right Summary) int {
-	return compareSummariesForCatalogQueryWithOptions(left, right, QueryOptions{})
-}
-
-func compareSummariesForCatalogQueryWithOptions(left, right Summary, opts QueryOptions) int {
-	field := normalizeCatalogQuerySortField(opts.SortField)
-	direction := normalizeCatalogQuerySortDirection(opts.SortDirection)
-	if field != catalogQueryDefaultSort {
-		leftValue := catalogQuerySortValue(left, field)
-		rightValue := catalogQuerySortValue(right, field)
-		descending := direction == "desc"
-		if catalogQuerySortFieldIsAge(field) {
-			// "Age ascending" = newest first, matching the typed tables (they
-			// encode age as a negated timestamp). The raw timestamp string
-			// orders oldest-first, so the comparison flips.
-			descending = !descending
-		}
-		if descending {
-			leftValue, rightValue = rightValue, leftValue
-		}
-		if leftValue < rightValue {
-			return -1
-		}
-		if leftValue > rightValue {
-			return 1
-		}
-		// Explicit-field sorts break ties by the ascending identity chain
-		// regardless of direction, so the keyset stays deterministic.
-		return compareCatalogIdentity(left, right)
-	}
-	// The default sort IS the identity chain (kind/namespace/name/...), so a
-	// desc request reverses the whole composite order.
-	cmp := compareCatalogIdentity(left, right)
-	if direction == "desc" {
-		return -cmp
-	}
-	return cmp
 }
 
 // compareCatalogIdentity is the stable ascending total order over a summary's
 // kind/namespace/name and full GVK+UID identity. It is the catalog's default
-// ordering and the keyset tiebreak for every other sort field.
+// ordering; the engine schema's default sort key (catalogEngineUID) encodes the
+// same chain so an engine page lays rows out in this order.
 func compareCatalogIdentity(left, right Summary) int {
 	for _, pair := range [][2]string{
 		{left.Kind, right.Kind},
@@ -230,30 +195,6 @@ func compareCatalogIdentity(left, right Summary) int {
 		}
 	}
 	return 0
-}
-
-func catalogQuerySortValue(item Summary, field string) string {
-	switch field {
-	case "kind":
-		return item.Kind
-	case "namespace":
-		return item.Namespace
-	case "name":
-		return item.Name
-	case "age", "creationtimestamp", "creation-timestamp":
-		return item.CreationTimestamp
-	default:
-		return ""
-	}
-}
-
-func catalogQuerySortFieldIsAge(field string) bool {
-	switch field {
-	case "age", "creationtimestamp", "creation-timestamp":
-		return true
-	default:
-		return false
-	}
 }
 
 // snapshotSortedKeys returns a sorted slice of keys from a set.

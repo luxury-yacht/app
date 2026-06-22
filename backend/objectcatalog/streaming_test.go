@@ -59,8 +59,8 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 	if !svc.cachesReady {
 		t.Fatalf("expected cachesReady to be true after finalize")
 	}
-	if len(svc.sortedChunks) != 1 || len(svc.sortedChunks[0].items) != 1 {
-		t.Fatalf("expected sortedChunks to be populated, got %#v", svc.sortedChunks)
+	if svc.queryEngineStore == nil || svc.queryEngineStore.Len() != 1 {
+		t.Fatalf("expected the query engine store to hold the published item, got %#v", svc.queryEngineStore)
 	}
 	if len(svc.cachedKinds) != 1 || svc.cachedKinds[0].Kind != "Pod" {
 		t.Fatalf("expected cachedKinds to include Pod, got %#v", svc.cachedKinds)
