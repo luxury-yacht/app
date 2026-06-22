@@ -10,11 +10,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
@@ -28,6 +30,17 @@ const (
 // summaries by listing each registered kind from its informer indexer.
 type NamespaceQuotasBuilder struct {
 	collectIndexer func(streamspec.Descriptor) cache.Indexer
+	// maintained, when set, is an informer-fed store the builder serves rows from
+	// instead of listing + re-projecting per request. nil falls back to the list path.
+	maintained *typedMaintainedStore[QuotaSummary]
+}
+
+// quotasQuerypageSchema derives the querypage Schema for the quotas table from the
+// existing typed-table adapter, via the shared generic schema builder. It REUSES the
+// adapter's exact comparable sort-value encoder and row key, so the querypage engine
+// orders rows byte-identically to the live typed-table executor.
+func quotasQuerypageSchema() querypage.Schema[QuotaSummary] {
+	return querypageSchemaFromAdapter(quotaTableQueryAdapter(), []string{"name", "kind", "namespace", "details", "age"})
 }
 
 // NamespaceQuotasSnapshot payload for quotas tab.
@@ -61,17 +74,60 @@ func RegisterNamespaceQuotasDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
+	clusterMeta ClusterMeta,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
+	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName)
+
+	// Maintain a per-cluster store fed by each available quota kind's informer.
+	// Handlers are registered BEFORE the factory starts, so the snapshot sync gate
+	// guarantees the store is populated before the first Build serves from it.
+	maintained := newTypedMaintainedStore(clusterMeta, quotasQuerypageSchema(), quotaTableQueryAdapter())
+	for _, d := range kindregistry.StreamDescriptorsForDomain(namespaceQuotasDomainName) {
+		if collectIndexer(d) == nil || d.Informer == nil {
+			continue
+		}
+		desc := d
+		if _, err := d.Informer(factory).AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { maintained.ingest(desc, obj) },
+			UpdateFunc: func(_, newObj interface{}) { maintained.ingest(desc, newObj) },
+			DeleteFunc: func(obj interface{}) { maintained.evict(desc, obj) },
+		}); err != nil {
+			return fmt.Errorf("%s: register %s handler: %w", namespaceQuotasDomainName, d.Resource, err)
+		}
+	}
+
 	builder := &NamespaceQuotasBuilder{
-		collectIndexer: sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName),
+		collectIndexer: collectIndexer,
+		maintained:     maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceQuotasDomainName,
 		BuildSnapshot: builder.Build,
 	})
+}
+
+// quotasSources computes per-descriptor availability for THIS request (indexer
+// present AND runtimeResourceAllowed), returning the snapshot sources and a
+// Kind→available map — the same gating collectDescriptorTableRows applies, so the
+// maintained-store path and the list path agree on which kinds are visible.
+func (b *NamespaceQuotasBuilder) quotasSources(ctx context.Context) ([]typedTableResourceSource, map[string]bool) {
+	descriptors := kindregistry.StreamDescriptorsForDomain(namespaceQuotasDomainName)
+	sources := make([]typedTableResourceSource, 0, len(descriptors))
+	available := make(map[string]bool, len(descriptors))
+	for _, d := range descriptors {
+		ok := b.collectIndexer(d) != nil && runtimeResourceAllowed(ctx, namespaceQuotasDomainName, d.Group, d.Resource)
+		sources = append(sources, typedTableResourceSource{
+			Kind:      d.Kind,
+			Group:     d.Group,
+			Resource:  d.Resource,
+			Available: ok,
+		})
+		available[d.Kind] = ok
+	}
+	return sources, available
 }
 
 // Build assembles quota summaries for the namespace by looping the kind collectors.
@@ -87,9 +143,22 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	resources, sources, version, err := collectDescriptorTableRows[QuotaSummary](ctx, namespaceQuotasDomainName, b.collectIndexer, meta, parsedScope.Namespace)
-	if err != nil {
-		return nil, err
+	var resources []QuotaSummary
+	var sources []typedTableResourceSource
+	var version uint64
+	if b.maintained != nil {
+		// Serve projected rows straight from the informer-fed store (no re-listing /
+		// re-projecting); availability + sources mirror the list path exactly.
+		var available map[string]bool
+		sources, available = b.quotasSources(ctx)
+		resources = b.maintained.rows(parsedScope.Namespace, available)
+		version = b.maintained.snapshotVersion()
+	} else {
+		var err error
+		resources, sources, version, err = collectDescriptorTableRows[QuotaSummary](ctx, namespaceQuotasDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
@@ -100,11 +169,12 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 	})
 
 	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources)
-	resolved := resolveTypedSnapshotPage(
+	resolved := resolveTypedSnapshotPageViaStore(
 		namespaceQuotasDomainName,
 		resources,
 		query,
 		quotaTableQueryAdapter(),
+		quotasQuerypageSchema(),
 		capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources),
 		config.SnapshotNamespaceQuotasEntryLimit,
 		"quota resources",

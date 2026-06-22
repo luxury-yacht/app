@@ -240,13 +240,20 @@ func (m *typedMaintainedStore[T]) ingest(d streamspec.Descriptor, obj interface{
 	m.bumpVersion(item)
 }
 
-// evict removes a deleted object by its row key (kind/namespace/name).
+// evict removes a deleted object by its row key. It projects the object via the
+// descriptor's StreamRow closure and derives the key through the adapter's own Key
+// function — the SAME key Upsert stored it under — so namespaced and cluster-scoped
+// domains (which key rows differently) both delete correctly, with no per-kind branch.
 func (m *typedMaintainedStore[T]) evict(d streamspec.Descriptor, obj interface{}) {
 	item, ok := maintainedUnwrap(obj).(metav1.Object)
 	if !ok {
 		return
 	}
-	m.store.Delete(namespacedTableKey(d.Kind, item.GetNamespace(), item.GetName()))
+	row, ok := d.StreamRow(m.meta, item).(T)
+	if !ok {
+		return
+	}
+	m.store.Delete(m.adapter.Key(row))
 }
 
 func (m *typedMaintainedStore[T]) bumpVersion(o metav1.Object) {

@@ -361,6 +361,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 		}),
@@ -377,6 +378,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterClusterStorageDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 			deniedReason: "core/persistentvolumes",
@@ -405,6 +407,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterNamespaceAutoscalingDomain(
 				deps.registry,
 				deps.informerFactory.SharedInformerFactory(),
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 			)
 		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{
@@ -460,6 +463,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 		}),
@@ -471,6 +475,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 		}),
@@ -479,6 +484,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterNamespaceStorageDomain(
 				deps.registry,
 				deps.informerFactory.SharedInformerFactory(),
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 			)
 		}),
 

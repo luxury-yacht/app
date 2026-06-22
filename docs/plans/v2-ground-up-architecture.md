@@ -66,14 +66,15 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** mid-**Phase 3** (engine, fuzz-proven) and **Phase 4 started** — the config
-maintained store is LIVE. **Next** (complete remaining roadmap with per-item status in
+**Where we are:** Phase 3 + Phase 4 well underway — **7 of ~9 typed domains are live on the engine
+cutover + maintained store** (config, namespace-{storage,quotas,rbac,autoscaling}, cluster-{storage,rbac}),
+each equivalence-gated; engine fuzz-proven. **Next** (complete remaining roadmap with per-item status in
 [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Generalize the maintained store** to the larger typed domains (workloads, network, storage,
-   rbac, quotas, autoscaling) using the proven config pattern — Schema from adapter → row + Build
-   equivalence gate → wire informer handlers + Build branch. There the avoided per-request
-   re-projection is the real perf win (config N is small, so config proved the pattern).
+1. **Finish the remaining typed domains:** `namespace-network` (hybrid — maintained store must also cover
+   its bespoke `listServices` rows), `cluster-config` (needs GatewayClass's `GatewayInformer` wired into the
+   handler loop, or accept it stays on the list path), and `namespace-workloads`. Then Browse/catalog; then
+   DELETE the typed full-sort + the two old cursor codecs.
 2. The columnar SoA backend for the engine (memory win); the metrics column family.
 3. Then: trigram-accelerated search in the engine; persistence/mmap spill (low priority at 74 B/object).
 
@@ -926,9 +927,10 @@ reasons; **nothing required is incomplete here.**
   benchmarked @1M ✅; **Prototype #2 (fuzz `apply(ops)==recompute`, 40×800 ops) ✅** — Risk #2
   closed. **REMAINING:** swap the current per-Build store for the **columnar SoA backend** from
   `storebench` (the memory/perf win).
-- 🔶 **Cut typed tables + Browse to the one engine.** ✅ `namespace-config` (**1 of ~9** typed
-  domains) — proven 84-combo equivalent, live. **REMAINING:** workloads, network, storage, rbac,
-  quotas, autoscaling (same template: derive Schema → prove equivalence → swap `Build`), then
+- 🔶 **Cut typed tables + Browse to the one engine.** ✅ **7 of ~9 typed domains live + equivalence-gated:**
+  config, namespace-{storage, quotas, rbac, autoscaling}, cluster-{storage, rbac} (each via
+  `resolveTypedSnapshotPageViaStore`, proven byte-equivalent to the bespoke executor). **REMAINING:**
+  `cluster-config` (GatewayClass informer — see Phase 4), `namespace-network` (hybrid), workloads, then
   Browse/catalog; then DELETE the typed full-sort, the catalog chunk scan, and the two old cursor codecs.
 - ⏳ Model metrics as a **separate column family + metric indexes on `metricsRevision`** (§3.6).
 
@@ -944,13 +946,17 @@ reasons; **nothing required is incomplete here.**
   on the fuzz-proven engine. Gate green (backend + tsc + vitest 3234 + knip + trivy).
 - ✅ **Machinery genericized** (`querypage_typed.go`): `typedMaintainedStore[T]`,
   `applyTypedTableQueryViaStore[T]`, `resolveTypedSnapshotPageViaStore[T]`, `querypageSchemaFromAdapter[T]`
-  — config slimmed to a 14-line schema wrapper; config's equivalence tests pass UNCHANGED
-  (behavior-preserving). Each new domain is now a thin adapter (schema + the same Build/registration wiring).
-  **REMAINING:** apply to the other typed domains — per-domain assessment needed. The *clean
-  descriptor-driven* domains (storage/autoscaling/quotas/rbac, like config) are a thin apply; *hybrid*
-  builders (e.g. `namespace-network`: descriptor rows + bespoke `listServices`, `namespace_network.go:147,209`)
-  need the maintained store to also cover their non-descriptor row sources. The perf win lands on the larger
-  domains (config N is small — config proved the pattern + the generic infra).
+  — config slimmed to a 14-line schema wrapper; each domain is a thin adapter.
+- ✅ **Applied to ALL clean descriptor-driven typed domains** (2026-06-22) — **7 live on the maintained
+  store + engine cutover:** config, namespace-{storage, quotas, rbac, autoscaling}, cluster-{storage, rbac}.
+  Each behind its own equivalence gate (maintained `rows` == list path; Build payload byte-identical).
+  Fixed a generic `evict` bug surfaced by the cluster-scoped gate (delete key now via `adapter.Key`, so
+  namespaced+cluster-scoped both delete right — byte-identical for namespaced). Gate green
+  (`mage qc:preRelease` EXIT 0: race tests, vitest 3234, knip, trivy).
+  **REMAINING:** `cluster-config` — EXCLUDED by the gate (GatewayClass registers `GatewayInformer` not
+  `Informer`, so handlers can't feed it; left on the list path). `namespace-network` — hybrid (descriptor
+  rows + bespoke `listServices`, `namespace_network.go:147,209`); needs the maintained store to also cover
+  its non-descriptor sources. Plus Browse/catalog. config N is small — the perf win is on the larger domains.
 - ⏳ Replace the eager ~30-informer factory, the catalog's `factory.ForResource` + on-demand
   promotion informers (`collect.go:308`), and the CRD-definitions watch (`watch.go:306-309`) with the
   one registry-driven WatchList-projection path (capability-probe + watchdog), feeding the log.
