@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
@@ -41,6 +42,13 @@ func clusterCRDQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kind", "typeAlias", "name", "group", "scope", "details", "storageVersion"},
 		[]string{apiextensions.Identity.Kind},
 	)
+}
+
+// crdsQuerypageSchema derives the querypage Schema for the CRD table from its
+// typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
+// engine orders rows byte-identically to the live executor.
+func crdsQuerypageSchema() querypage.Schema[ClusterCRDEntry] {
+	return querypageSchemaFromAdapter(clusterCRDTableQueryAdapter(), []string{"name", "kind", "group", "scope", "details", "version", "age"})
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.
@@ -104,11 +112,12 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		return entries[i].Name < entries[j].Name
 	})
 
-	resolved := resolveTypedSnapshotPage(
+	resolved := resolveTypedSnapshotPageViaStore(
 		clusterCRDDomainName,
 		entries,
 		query,
 		clusterCRDTableQueryAdapter(),
+		crdsQuerypageSchema(),
 		clusterCRDQueryCapabilities(),
 		config.SnapshotClusterCRDEntryLimit,
 		"CRDs",

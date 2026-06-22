@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -56,6 +57,13 @@ func nodeQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
 		nil, // no kind filtering
 	)
+}
+
+// nodesQuerypageSchema derives the querypage Schema for the nodes table from its
+// typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
+// engine orders rows byte-identically to the live executor.
+func nodesQuerypageSchema() querypage.Schema[NodeSummary] {
+	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"})
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -339,39 +347,39 @@ func buildNodeSnapshotFromUsage(
 	metricsInfo.SuccessCount = metricsMeta.SuccessCount
 	metricsInfo.FailureCount = metricsMeta.FailureCount
 
+	// The metrics revision rides on the query so the envelope's dynamic ref (and
+	// metric-sorted keyset cursor) advance with each metrics tick.
+	query.DynamicRevision = dynamicRevision
+	resolved := resolveTypedSnapshotPageViaStore(
+		"nodes",
+		items,
+		query,
+		nodeTableQueryAdapter(),
+		nodesQuerypageSchema(),
+		nodeQueryCapabilities(),
+		config.SnapshotClusterNodesEntryLimit,
+		"nodes",
+		func(NodeSummary) string { return nodepkg.Identity.Kind },
+		nil,
+	)
+	// The window snapshot is the canonical unscoped refresh payload; only the
+	// query page publishes the request scope.
+	snapshotScope := ""
 	if query.Enabled {
-		query.DynamicRevision = dynamicRevision
-		page := applyTypedTableQuery(items, query, nodeTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  "nodes",
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
-			Payload: NodeSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope("nodes", page, nodeQueryCapabilities()),
-				Rows:                  page.Rows,
-				Metrics:               metricsInfo,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	var totalItems int
-	items, totalItems = truncateSnapshotWindow(items, config.SnapshotClusterNodesEntryLimit)
-
-	snap := &refresh.Snapshot{
+	return &refresh.Snapshot{
 		Domain:  "nodes",
-		Scope:   "",
+		Scope:   snapshotScope,
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope("nodes", totalItems, totalItems == len(items), snapshotSortedKinds(items, func(NodeSummary) string { return nodepkg.Identity.Kind }), nodeQueryCapabilities()),
-			Rows:                  items,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 			Metrics:               metricsInfo,
 		},
-		Stats: snapshotWindowStats(len(items), totalItems, "nodes"),
-	}
-	return snap, nil
+		Stats: resolved.Stats,
+	}, nil
 }
 
 func nodeUsageOrEmpty(m map[string]metrics.NodeUsage) map[string]metrics.NodeUsage {

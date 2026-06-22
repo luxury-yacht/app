@@ -66,20 +66,24 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** Phase 3 + Phase 4 well underway — **ALL 10 typed-table domains are cut over to the engine**
-(config, namespace-{storage,quotas,rbac,autoscaling,network,workloads}, cluster-{config,storage,rbac}), each
-equivalence-gated; **8 also on the maintained store**; the engine handles predicates; engine fuzz-proven.
-The **events domains are cut over too** — the ONLY remaining `typedTableQueryCollector` user is `pods`.
-**Next** (complete remaining roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
+**Where we are:** Phase 3 is essentially DONE for typed tables — **ALL 16 typed-table domains now serve
+through the one querypage engine** (the 10 collectDescriptorTableRows domains + namespace-events +
+cluster-events + cluster-crds + nodes + helm + pods), each equivalence-gated byte-identical to the live
+executor; the engine handles predicates; engine fuzz-proven. **`pods` is on a maintained store with metrics
+as a separate column** (zeroed in the store, overlaid fresh at serve — a metrics poll never touches the
+store). The bespoke **`typedTableQueryCollector` and the old `resolveTypedSnapshotPage` are DELETED**;
+`applyTypedTableQuery` remains only as the equivalence-test oracle. (Earlier ledger entries said "10 typed
+domains" — that undercounted; the engine-cutover set is 16, all now done.) **Next** (complete remaining
+roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Move `pods` off the `typedTableQueryCollector` onto the engine** (events are done) — pods is the big
-   perf win and needs a maintained store (pod-scale; per-Build materialization is not viable), so it pulls
-   in the metrics column family too. Then DELETE the old `typedTableQueryCollector` + the bespoke cursor
-   codec (the last blocker to one query path).
-2. **Maintained stores for `network` + `workloads`** (currently cutover-only) — network needs the
-   Service↔EndpointSlice relationship; both are the per-request-reprojection perf win.
-3. **Browse/catalog** onto the engine (the second cursor codec); the **columnar SoA backend** (memory win);
-   then trigram-accelerated search; persistence/mmap spill (low priority at 74 B/object).
+1. **Browse/catalog onto the engine** — the last subsystem on its own query path + the SECOND cursor codec.
+   Cutting it over finishes the "one query engine" goal and lets that codec be deleted too.
+2. **Maintained stores for the cutover-only domains** (network, workloads, nodes, helm, crds — they serve via
+   the engine but still list+project per Build) — the per-request-reprojection perf win. network needs the
+   Service↔EndpointSlice relationship; workloads the synthesized standalone-pods. Plus the pods O(log N+page)
+   optimization (query the persistent store's indexes directly instead of Snapshot()+rebuild).
+3. The **columnar SoA backend** (memory win); then trigram-accelerated search; persistence/mmap spill
+   (low priority at 74 B/object).
 
 ## Provenance & confidence
 
@@ -930,18 +934,20 @@ reasons; **nothing required is incomplete here.**
   benchmarked @1M ✅; **Prototype #2 (fuzz `apply(ops)==recompute`, 40×800 ops) ✅** — Risk #2
   closed. **REMAINING:** swap the current per-Build store for the **columnar SoA backend** from
   `storebench` (the memory/perf win).
-- 🔶 **Cut typed tables + Browse to the one engine.** ✅ **ALL 10 typed-table domains cut over to the engine
-  (`resolveTypedSnapshotPageViaStore`), each equivalence-gated byte-identical to the bespoke executor:**
-  config, namespace-{storage, quotas, rbac, autoscaling, network, workloads}, cluster-{config, storage, rbac}.
-  (8 also on the maintained store; network + workloads are cutover-only — network awaits its
-  Service↔EndpointSlice relationship store, workloads is serve-only.) The engine now handles query
-  **predicates** too (`applyTypedTableQueryViaStore` builds the store from the matched set; workloads' `health`
-  filter was the driver). ✅ **`namespace-events` + `cluster-events` also cut over** (off the collector,
-  same materialize pattern; equivalence-gated). **REMAINING:** only `pods` still uses the
-  `typedTableQueryCollector` — and it needs a maintained store (pod-scale; per-Build materialization is not
-  viable), which pulls in the metrics column family. Once pods is off the collector, DELETE the
-  `typedTableQueryCollector` + the bespoke cursor codec. Then Browse/catalog (the second cursor codec).
-- ⏳ Model metrics as a **separate column family + metric indexes on `metricsRevision`** (§3.6).
+- ✅ **Typed tables cut over to the one engine — COMPLETE (16/16 domains).** Every typed-table domain serves
+  via `resolveTypedSnapshotPageViaStore`, each equivalence-gated byte-identical to the live executor: config,
+  namespace-{storage, quotas, rbac, autoscaling, network, workloads, events, helm}, cluster-{config, storage,
+  rbac, events, crds}, nodes, pods. The engine handles query **predicates** (`applyTypedTableQueryViaStore`
+  builds the store from the matched set). The bespoke **`typedTableQueryCollector` + the old non-engine
+  `resolveTypedSnapshotPage` are DELETED**; `applyTypedTableQuery` remains only as the equivalence-test oracle.
+  **REMAINING here:** Browse/catalog (the SECOND cursor codec) is still on its own path — cut it to the engine,
+  then that codec can go too.
+- 🔶 **Metrics as a separate column (§3.6).** ✅ Realized for `pods`: the maintained pod store holds row data
+  with CPU/Mem ZEROED (informer-fed); fresh metrics are overlaid at serve from `LatestPodUsage()`, so a metrics
+  poll never touches the store. (nodes carries its metrics in the per-Build rows — fine at node scale.)
+  **REMAINING:** the O(log N+page) optimization — query the persistent store's indexes DIRECTLY instead of
+  `Snapshot()`+rebuild (today pods is the same O(N)/Build as before, just off the collector); and metric
+  indexes on `metricsRevision` if/when metric-sorted pods need sub-O(N).
 
 ### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED
 

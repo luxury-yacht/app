@@ -28,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -44,6 +45,12 @@ type PodBuilder struct {
 	// drives reuse work instead of re-projecting every pod each request. nil for
 	// ad-hoc/test builders (projection runs directly).
 	projCache *podProjectionCache
+	// maintained, when set, is an informer-fed store of pod rows with metrics
+	// ZEROED. Namespace-scoped Builds serve rows straight from it (overlaying fresh
+	// metrics at serve) instead of listing + re-projecting. Node/workload scopes
+	// still take the list path because they need live owner-reference / NodeName
+	// matching the store's rows do not carry. nil falls back to the list path.
+	maintained *typedMaintainedStore[PodSummary]
 }
 
 // newPodBuilder wires a PodBuilder with the projection memo cache enabled.
@@ -192,6 +199,17 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 	)
 }
 
+// podQuerypageSchema derives the querypage Schema for the pods table from its
+// typed-table adapter, reusing the adapter's exact sort-value encoder and row key so
+// the engine orders rows byte-identically to the live executor. The sort fields
+// mirror the sortable fields published by podQueryCapabilities.
+func podQuerypageSchema() querypage.Schema[PodSummary] {
+	return querypageSchemaFromAdapter(
+		podTableQueryAdapter(),
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
+	)
+}
+
 // PodSummary lives in the streamrows leaf so the pods package can build it; this
 // alias keeps the snapshot-side name and wire JSON unchanged.
 type PodSummary = streamrows.PodSummary
@@ -215,7 +233,7 @@ const (
 )
 
 // RegisterPodDomain registers the pods snapshot domain.
-func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider) error {
+func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider, clusterMeta ClusterMeta) error {
 	podInformer := factory.Core().V1().Pods().Informer()
 	builder := newPodBuilder(
 		factory.Core().V1().Pods().Lister(),
@@ -223,6 +241,43 @@ func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFac
 		factory.Apps().V1().ReplicaSets().Lister(),
 		provider,
 	)
+
+	// Maintain a per-cluster store of pod rows with metrics ZEROED, fed by the pod
+	// informer. Fresh CPU/mem are overlaid at serve (see Build), so a metrics poll
+	// never touches the store. The handler is registered on the SAME pod informer
+	// BEFORE the factory starts, so the snapshot sync gate guarantees the store is
+	// populated before the first Build serves from it. A pod stream-broadcast handler
+	// is also registered on this informer elsewhere; this is an additional handler.
+	maintained := newTypedMaintainedStore(clusterMeta, podQuerypageSchema(), podTableQueryAdapter())
+	adapter := podTableQueryAdapter()
+	rsLister := builder.rsLister
+	// projectPodRow unwraps a possible DeletedFinalStateUnknown tombstone, asserts a
+	// pod, and projects its row with metrics ZEROED — serve overlays the fresh sample.
+	projectPodRow := func(obj interface{}) (*corev1.Pod, PodSummary, bool) {
+		pod, ok := maintainedUnwrap(obj).(*corev1.Pod)
+		if !ok {
+			return nil, PodSummary{}, false
+		}
+		return pod, podres.BuildStreamSummary(clusterMeta, pod, 0, 0, rsLister), true
+	}
+	upsert := func(obj interface{}) {
+		if pod, row, ok := projectPodRow(obj); ok {
+			maintained.upsertRow(row, pod)
+		}
+	}
+	if _, err := podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    upsert,
+		UpdateFunc: func(_, newObj interface{}) { upsert(newObj) },
+		DeleteFunc: func(obj interface{}) {
+			if _, row, ok := projectPodRow(obj); ok {
+				maintained.deleteKey(adapter.Key(row))
+			}
+		},
+	}); err != nil {
+		return fmt.Errorf("%s: register pod maintained-store handler: %w", podDomainName, err)
+	}
+	builder.maintained = maintained
+
 	return reg.Register(refresh.DomainConfig{
 		Name:          podDomainName,
 		BuildSnapshot: builder.Build,
@@ -253,15 +308,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 
-	pods, err := b.collectPods(baseScope)
-	if err != nil {
-		return nil, err
-	}
-	if b.projCache != nil {
-		b.projCache.prune(time.Now())
-	}
-
-	rsMap, err := b.replicasetDeploymentMap(pods)
+	summaries, version, err := b.collectSummaries(meta, baseScope, podUsage)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +316,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	adapter := podTableQueryAdapter()
 	totalCount := 0
 	healthCounts := map[string]int{}
-	countPod := func(summary PodSummary) {
+	for _, summary := range summaries {
 		totalCount++
 		for _, mode := range podHealthFilterModes {
 			if adapter.Predicate(summary, "health", mode) {
@@ -278,43 +325,31 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		}
 	}
 
-	var version uint64
-	var page typedTableQueryPage[PodSummary]
-	if query.Enabled {
-		collector := newTypedTableQueryCollector(query, adapter)
-		for _, pod := range pods {
-			if pod == nil {
-				continue
-			}
-			summary := b.projectPod(meta, pod, podUsage, rsMap)
-			countPod(summary)
-			collector.Add(summary)
-			if v := parsePodResourceVersion(pod); v > version {
-				version = v
-			}
+	// Pre-sort by (namespace, name) so the window branch (which truncates input
+	// order) matches the prior window behavior; the query branch re-sorts via the
+	// engine and ignores this order.
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Namespace == summaries[j].Namespace {
+			return summaries[i].Name < summaries[j].Name
 		}
-		page = collector.Page()
-	} else {
-		summaries := make([]PodSummary, 0, len(pods))
-		for _, pod := range pods {
-			if pod == nil {
-				continue
-			}
-			summary := b.projectPod(meta, pod, podUsage, rsMap)
-			countPod(summary)
-			summaries = append(summaries, summary)
-			if v := parsePodResourceVersion(pod); v > version {
-				version = v
-			}
-		}
-		sort.Slice(summaries, func(i, j int) bool {
-			if summaries[i].Namespace == summaries[j].Namespace {
-				return summaries[i].Name < summaries[j].Name
-			}
-			return summaries[i].Namespace < summaries[j].Namespace
-		})
-		page = applyTypedTableQuery(summaries, query, podTableQueryAdapter())
-	}
+		return summaries[i].Namespace < summaries[j].Namespace
+	})
+
+	// Serve the query branch through the querypage engine (proven byte-equivalent to
+	// the bespoke typed-table executor in querypage_pods_test.go); the window branch
+	// and all envelope wiring are unchanged.
+	resolved := resolveTypedSnapshotPageViaStore(
+		podDomainName,
+		summaries,
+		query,
+		adapter,
+		podQuerypageSchema(),
+		podQueryCapabilities(),
+		config.SnapshotNamespacePodsEntryLimit,
+		"pods",
+		func(PodSummary) string { return podres.Identity.Kind },
+		nil,
+	)
 
 	metricsInfo := PodMetricsInfo{Stale: true}
 	if !metadata.CollectedAt.IsZero() {
@@ -334,18 +369,78 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
 		Payload: PodSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedQueryEnvelope(podDomainName, page, podQueryCapabilities()),
-			Rows:                  page.Rows,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 			Metrics:               metricsInfo,
 			TotalCount:            totalCount,
 			HealthCounts:          healthCounts,
 		},
-		Stats: refresh.SnapshotStats{
-			ItemCount: len(page.Rows),
-		},
+		Stats: resolved.Stats,
 	}
 
 	return snapshot, nil
+}
+
+// collectSummaries returns the in-scope pod rows (metrics overlaid) and the
+// snapshot version. A namespace scope with a maintained store is served straight
+// from RAM: rows carry zeroed metrics, so the fresh sample is overlaid here. Node
+// and workload scopes — which need live owner-reference / NodeName matching the
+// store rows do not carry — and any builder without a store take the list +
+// re-project path, which projects metrics inline.
+func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
+	if namespace, ok := podStoreServableNamespace(baseScope); ok && b.maintained != nil {
+		rows := b.maintained.rows(namespace, map[string]bool{podres.Identity.Kind: true})
+		// Overlay the fresh metrics sample onto each stored (zeroed) row, using the
+		// SAME key and format funcs the list path's projectPod uses.
+		for i := range rows {
+			usage := podUsage[rows[i].Namespace+"/"+rows[i].Name]
+			rows[i].CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
+			rows[i].MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+		}
+		return rows, b.maintained.snapshotVersion(), nil
+	}
+
+	pods, err := b.collectPods(baseScope)
+	if err != nil {
+		return nil, 0, err
+	}
+	if b.projCache != nil {
+		b.projCache.prune(time.Now())
+	}
+	rsMap, err := b.replicasetDeploymentMap(pods)
+	if err != nil {
+		return nil, 0, err
+	}
+	summaries := make([]PodSummary, 0, len(pods))
+	var version uint64
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		summaries = append(summaries, b.projectPod(meta, pod, podUsage, rsMap))
+		if v := parsePodResourceVersion(pod); v > version {
+			version = v
+		}
+	}
+	return summaries, version, nil
+}
+
+// podStoreServableNamespace reports whether baseScope is a namespace scope the
+// maintained store can serve, returning the namespace to filter by ("" for all
+// namespaces). Node and workload scopes are not store-servable.
+func podStoreServableNamespace(baseScope string) (string, bool) {
+	value, ok := strings.CutPrefix(baseScope, namespaceScopeKey+":")
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	if value == "all" || value == "*" {
+		return "", true
+	}
+	return value, true
 }
 
 func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {

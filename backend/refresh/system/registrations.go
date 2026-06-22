@@ -490,7 +490,12 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		directRegistration("pods", func() error {
-			return snapshot.RegisterPodDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.metricsProvider)
+			return snapshot.RegisterPodDomain(
+				deps.registry,
+				deps.informerFactory.SharedInformerFactory(),
+				deps.metricsProvider,
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+			)
 		}),
 
 		directRegistration("object-details", func() error {

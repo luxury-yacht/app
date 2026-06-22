@@ -1,10 +1,10 @@
 /*
  * backend/refresh/snapshot/typed_table_query_benchmark_test.go
  *
- * Benchmarks the typed-table query hot paths: the streaming collector
- * (Add per row + Page) and the one-shot apply path, at realistic row counts.
- * The collector runs per tick and per keystroke on the largest tables (pods),
- * so per-row cost dominates UI latency on big clusters.
+ * Benchmarks the one-shot apply path — the oracle the querypage-engine
+ * equivalence tests compare against — at realistic row counts. apply runs per
+ * keystroke and per tick on the largest tables (pods), so per-row cost dominates
+ * UI latency on big clusters.
  */
 
 package snapshot
@@ -45,26 +45,6 @@ func benchmarkTypedQuery(sortField string) typedTableQuery {
 			Limit:         100,
 			Search:        "pod",
 		},
-	}
-}
-
-func BenchmarkTypedTableQueryCollector(b *testing.B) {
-	rows := benchmarkTypedQueryRows(100_000)
-	for _, sortField := range []string{"name", "cpu"} {
-		b.Run(sortField, func(b *testing.B) {
-			query := benchmarkTypedQuery(sortField)
-			b.ReportAllocs()
-			for i := 0; i < b.N; i += 1 {
-				collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
-				for _, row := range rows {
-					collector.Add(row)
-				}
-				page := collector.Page()
-				if len(page.Rows) != query.Request.Limit {
-					b.Fatalf("expected a full page, got %d rows", len(page.Rows))
-				}
-			}
-		})
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +75,17 @@ func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"name", "namespace", "chart", "appVersion", "status", "description"},
 		[]string{"HelmRelease"},
 	)
+}
+
+// helmQuerypageSchema derives the querypage Schema for the helm table from its
+// typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
+// engine orders rows byte-identically to the live executor. The sort-field names are
+// lowercased to match how applyTypedTableQueryViaStore looks them up
+// (strings.ToLower(SortField)); "appversion" is the only field whose request name is
+// camelCase ("appVersion"), so a verbatim key would miss and the engine would fall
+// back to name order.
+func helmQuerypageSchema() querypage.Schema[NamespaceHelmSummary] {
+	return querypageSchemaFromAdapter(helmTableQueryAdapter(), []string{"name", "kind", "namespace", "chart", "appversion", "status", "revision", "updated", "age"})
 }
 
 // RegisterNamespaceHelmDomain registers the namespace helm domain.
@@ -156,34 +168,28 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 	})
 
 	snapshotScope := refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
-	if query.Enabled {
-		page := applyTypedTableQuery(summaries, query, helmTableQueryAdapter())
-		return &refresh.Snapshot{
-			Domain:  namespaceHelmDomainName,
-			Scope:   snapshotScope,
-			Version: version,
-			Payload: NamespaceHelmSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceHelmDomainName, page, namespaceHelmQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
-	var totalItems int
-	summaries, totalItems = truncateSnapshotWindow(summaries, config.SnapshotNamespaceHelmEntryLimit)
-
+	resolved := resolveTypedSnapshotPageViaStore(
+		namespaceHelmDomainName,
+		summaries,
+		query,
+		helmTableQueryAdapter(),
+		helmQuerypageSchema(),
+		namespaceHelmQueryCapabilities(),
+		config.SnapshotNamespaceHelmEntryLimit,
+		"Helm releases",
+		func(NamespaceHelmSummary) string { return "HelmRelease" },
+		nil,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
 		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceHelmSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceHelmDomainName, totalItems, totalItems == len(summaries), snapshotSortedKinds(summaries, func(NamespaceHelmSummary) string { return "HelmRelease" }), namespaceHelmQueryCapabilities()),
-			Rows:                  summaries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: snapshotWindowStats(len(summaries), totalItems, "Helm releases"),
+		Stats: resolved.Stats,
 	}, nil
 }
 

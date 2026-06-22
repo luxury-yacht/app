@@ -94,6 +94,10 @@ const (
 	// SnapshotNamespaceWorkloadsEntryLimit caps namespace workload snapshot rows.
 	SnapshotNamespaceWorkloadsEntryLimit = 1000
 
+	// SnapshotNamespacePodsEntryLimit caps namespace pod snapshot rows before the
+	// non-query window becomes partial.
+	SnapshotNamespacePodsEntryLimit = 1000
+
 	// SnapshotNamespaceConfigEntryLimit caps namespace config snapshot rows.
 	SnapshotNamespaceConfigEntryLimit = 1000
 

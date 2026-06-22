@@ -2,10 +2,7 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"net/url"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -100,18 +97,6 @@ func TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges(t *testing.T) 
 	if len(nextPage.Rows) != 1 || nextPage.Rows[0].key != "default/b" {
 		t.Fatalf("expected second row after dynamic revision change, got %+v", nextPage.Rows)
 	}
-
-	collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
-	for _, row := range rows {
-		collector.Add(row)
-	}
-	collectorPage := collector.Page()
-	if collectorPage.CursorInvalid {
-		t.Fatal("expected bounded collector to keep dynamic cursor valid")
-	}
-	if len(collectorPage.Rows) != 1 || collectorPage.Rows[0].key != "default/b" {
-		t.Fatalf("expected bounded collector second row after dynamic revision change, got %+v", collectorPage.Rows)
-	}
 }
 
 // typedQueryMissingMetricRow models a numeric sort field that some rows are
@@ -149,8 +134,7 @@ func typedQueryMissingMetricAdapter() typedTableQueryAdapter[typedQueryMissingMe
 // TestTypedTableQueryPaginationHasNoGapsWithMissingSortValues guards the keyset
 // contract: the page sort and the cursor boundary must use one comparable value,
 // so paging a field where some rows lack a value still visits every row exactly
-// once with no duplicates or gaps. Covers both the in-memory and streaming
-// collector paths, ascending and descending.
+// once with no duplicates or gaps, ascending and descending.
 func TestTypedTableQueryPaginationHasNoGapsWithMissingSortValues(t *testing.T) {
 	rows := []typedQueryMissingMetricRow{
 		{key: "a", metric: 30, hasMetric: true},
@@ -163,13 +147,6 @@ func TestTypedTableQueryPaginationHasNoGapsWithMissingSortValues(t *testing.T) {
 	fetchers := map[string]func(typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow]{
 		"apply": func(query typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow] {
 			return applyTypedTableQuery(rows, query, typedQueryMissingMetricAdapter())
-		},
-		"collector": func(query typedTableQuery) typedTableQueryPage[typedQueryMissingMetricRow] {
-			collector := newTypedTableQueryCollector(query, typedQueryMissingMetricAdapter())
-			for _, row := range rows {
-				collector.Add(row)
-			}
-			return collector.Page()
 		},
 	}
 
@@ -291,32 +268,6 @@ func TestTypedTableQueryReportsUnfilteredTotalSeparateFromFiltered(t *testing.T)
 	}
 	if page.UnfilteredTotal != 3 {
 		t.Fatalf("unfiltered total should be the pre-filter row count; got %d, want 3", page.UnfilteredTotal)
-	}
-}
-
-func TestTypedTableQueryCollectorReportsUnfilteredTotal(t *testing.T) {
-	query := typedTableQuery{
-		Enabled: true,
-		Request: ResourceQueryRequest{
-			ClusterID:     "cluster-a",
-			Table:         "workloads",
-			Search:        "a",
-			SortField:     "name",
-			SortDirection: "asc",
-			Limit:         50,
-		},
-	}
-	collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
-	collector.Add(typedQueryTestRow{key: "default/a", name: "a", namespace: "default", kind: "Deployment"})
-	collector.Add(typedQueryTestRow{key: "default/b", name: "b", namespace: "default", kind: "Deployment"})
-	collector.Add(typedQueryTestRow{key: "default/c", name: "c", namespace: "default", kind: "Deployment"})
-
-	page := collector.Page()
-	if page.Total != 1 {
-		t.Fatalf("filtered total should be the search match count; got %d, want 1", page.Total)
-	}
-	if page.UnfilteredTotal != 3 {
-		t.Fatalf("unfiltered total should count every item added before filtering; got %d, want 3", page.UnfilteredTotal)
 	}
 }
 
@@ -492,104 +443,6 @@ func TestTypedQueryEnvelopeFlagsUnsupportedSortField(t *testing.T) {
 	)
 	if len(supported.Issues) != 0 {
 		t.Fatalf("expected no issues for a supported sort field, got %+v", supported.Issues)
-	}
-
-	// The collector path records the requested field identically.
-	collector := newTypedTableQueryCollector(queryFor("bogus"), typedQueryTestAdapter())
-	for _, row := range rows {
-		collector.Add(row)
-	}
-	collected := typedQueryEnvelope("pods", collector.Page(), capabilities)
-	if len(collected.Issues) == 0 {
-		t.Fatal("expected the collector page to flag the unsupported sort field too")
-	}
-}
-
-// The collector (streaming/window path) and applyTypedTableQuery (static path)
-// must produce IDENTICAL pages for the same input: rows, order, cursor token,
-// totals, and facets. The keyset cursor contract depends on both paths walking
-// the exact same (sort value, row key) order.
-func TestTypedTableQueryCollectorMatchesApplyPath(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
-	rows := make([]typedQueryTestRow, 0, 500)
-	namespaces := []string{"default", "kube-system", "team-a", "team-b"}
-	kinds := []string{"Pod", "Deployment", "Service"}
-	for i := 0; i < 500; i += 1 {
-		namespace := namespaces[rng.Intn(len(namespaces))]
-		// Duplicate names across namespaces exercise the key tiebreak.
-		name := fmt.Sprintf("row-%03d", rng.Intn(200))
-		rows = append(rows, typedQueryTestRow{
-			key:       fmt.Sprintf("%s/%s-%d", namespace, name, i),
-			name:      name,
-			namespace: namespace,
-			kind:      kinds[rng.Intn(len(kinds))],
-			cpu:       float64(rng.Intn(50)), // duplicates exercise numeric ties
-		})
-	}
-
-	baseQuery := func(sortField, direction, cursor string) typedTableQuery {
-		return typedTableQuery{
-			Enabled: true,
-			Request: ResourceQueryRequest{
-				ClusterID:     "cluster-a",
-				Table:         "pods",
-				SortField:     sortField,
-				SortDirection: direction,
-				Limit:         50,
-				Continue:      cursor,
-				Namespaces:    []string{"default", "team-a", "team-b"},
-				Search:        "row",
-			},
-		}
-	}
-
-	comparePages := func(t *testing.T, query typedTableQuery) typedTableQueryPage[typedQueryTestRow] {
-		t.Helper()
-		applied := applyTypedTableQuery(rows, query, typedQueryTestAdapter())
-		collector := newTypedTableQueryCollector(query, typedQueryTestAdapter())
-		for _, row := range rows {
-			collector.Add(row)
-		}
-		collected := collector.Page()
-
-		appliedKeys := make([]string, 0, len(applied.Rows))
-		for _, row := range applied.Rows {
-			appliedKeys = append(appliedKeys, row.key)
-		}
-		collectedKeys := make([]string, 0, len(collected.Rows))
-		for _, row := range collected.Rows {
-			collectedKeys = append(collectedKeys, row.key)
-		}
-		if !reflect.DeepEqual(appliedKeys, collectedKeys) {
-			t.Fatalf("row order diverged:\napply:   %v\ncollect: %v", appliedKeys, collectedKeys)
-		}
-		if applied.Continue != collected.Continue {
-			t.Fatalf("continue token diverged: apply %q vs collect %q", applied.Continue, collected.Continue)
-		}
-		if applied.Total != collected.Total || applied.UnfilteredTotal != collected.UnfilteredTotal {
-			t.Fatalf(
-				"totals diverged: apply %d/%d vs collect %d/%d",
-				applied.Total, applied.UnfilteredTotal, collected.Total, collected.UnfilteredTotal,
-			)
-		}
-		if !reflect.DeepEqual(applied.Namespaces, collected.Namespaces) ||
-			!reflect.DeepEqual(applied.Kinds, collected.Kinds) {
-			t.Fatalf("facets diverged: apply %v/%v vs collect %v/%v",
-				applied.Namespaces, applied.Kinds, collected.Namespaces, collected.Kinds)
-		}
-		return applied
-	}
-
-	for _, sortField := range []string{"name", "cpu"} {
-		for _, direction := range []string{"asc", "desc"} {
-			t.Run(fmt.Sprintf("%s-%s", sortField, direction), func(t *testing.T) {
-				first := comparePages(t, baseQuery(sortField, direction, ""))
-				if first.Continue == "" {
-					t.Fatal("expected a continue token for page 2")
-				}
-				comparePages(t, baseQuery(sortField, direction, first.Continue))
-			})
-		}
 	}
 }
 

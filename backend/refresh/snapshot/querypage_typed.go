@@ -303,6 +303,22 @@ func registerMaintainedHandlers[T any](
 	return nil
 }
 
+// upsertRow ingests an already-projected row directly, bumping the store version
+// from the source object's resourceVersion. Domains whose row projection is not
+// expressible as the descriptor's StreamRow closure (e.g. pods, whose row carries
+// metrics overlaid at serve and a ReplicaSet→Deployment owner collapse) project the
+// row themselves and feed it here instead of through ingest.
+func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
+	m.store.Upsert(row)
+	m.bumpVersion(o)
+}
+
+// deleteKey removes a row by its adapter key. Self-projecting domains derive the
+// key from their projected row (adapter.Key) and call this directly.
+func (m *typedMaintainedStore[T]) deleteKey(key string) {
+	m.store.Delete(key)
+}
+
 // ingest projects an added/updated object via the descriptor's StreamRow closure
 // and upserts it — generic over the domain's kinds, no per-kind branch.
 func (m *typedMaintainedStore[T]) ingest(d streamspec.Descriptor, obj interface{}) {
