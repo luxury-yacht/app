@@ -605,60 +605,11 @@ describe('ResourceStreamManager', () => {
     expect(nextState.data?.rows?.[0]).toBe(existingWorkload);
   });
 
-  test('applies namespace config updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
-
-    setScopedDomainState('namespace-config', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-config',
-        scope: 'namespace:default',
-        resourceVersion: '3',
-        name: 'config-a',
-        namespace: 'default',
-        kind: 'ConfigMap',
-        ref: resourceRef({ kind: 'ConfigMap', namespace: 'default', name: 'config-a' }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'ConfigMap',
-          typeAlias: 'CM',
-          name: 'config-a',
-          namespace: 'default',
-          data: 2,
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('config-a');
-  });
-
   // The typed query refetches only when the live-data identity
   // (version/checksum/streamRevision) changes. Streamed row updates do not carry
   // a new backend snapshot version, so they must bump streamRevision or the
   // query-backed views never see streamed changes.
-  test('streamed row updates bump streamRevision; identical updates do not', () => {
+  test('streamed updates bump streamRevision (notify-only: no content suppression)', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -711,15 +662,15 @@ describe('ResourceStreamManager', () => {
     expect(afterAdd.version).toBe(7);
     expect(afterAdd.checksum).toBe('abc');
 
-    // An identical update changes nothing, so the revision must not churn.
+    // Notify-only ships no rows to compare, so each coalesced stream batch bumps the
+    // revision (the resulting query refetch is debounced and visually silent).
     manager.handleMessage('cluster-a', updateMessage({ ...configRow }, '4'));
     vi.advanceTimersByTime(200);
-    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(1);
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(2);
 
-    // A real change bumps it again.
     manager.handleMessage('cluster-a', updateMessage({ ...configRow, data: 3 }, '5'));
     vi.advanceTimersByTime(200);
-    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(2);
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision).toBe(3);
   });
 
   test('applies updates when cluster id mismatches but scope is unique', () => {
@@ -768,8 +719,10 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // The update routes to the matching subscription (unique scope despite the
+    // cluster-id mismatch) and, being notify-only, bumps the refetch signal.
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.rows?.[0]?.clusterId).toBe('cluster-a');
+    expect(state.streamRevision).toBe(1);
   });
 
   test('applies updates when scope includes a cluster prefix', () => {
@@ -817,253 +770,10 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // A cluster-prefixed scope still routes to the subscription; notify-only bumps
+    // the refetch signal.
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('config-a');
-  });
-
-  test('applies namespace network updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-network', storeScope);
-
-    setScopedDomainState('namespace-network', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-network',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'svc-a',
-        namespace: 'default',
-        kind: 'Service',
-        ref: resourceRef({ kind: 'Service', namespace: 'default', name: 'svc-a' }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'Service',
-          name: 'svc-a',
-          namespace: 'default',
-          details: 'Type: ClusterIP',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-network', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('svc-a');
-  });
-
-  test('applies namespace rbac updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-rbac', storeScope);
-
-    setScopedDomainState('namespace-rbac', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-rbac',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'role-a',
-        namespace: 'default',
-        kind: 'Role',
-        ref: resourceRef({
-          group: 'rbac.authorization.k8s.io',
-          kind: 'Role',
-          namespace: 'default',
-          name: 'role-a',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'Role',
-          name: 'role-a',
-          namespace: 'default',
-          details: 'Rules: 1',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-rbac', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('role-a');
-  });
-
-  test('applies namespace custom updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-custom', storeScope);
-
-    setScopedDomainState('namespace-custom', storeScope, () => ({
-      status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-custom',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'widget-a',
-        namespace: 'default',
-        kind: 'Widget',
-        ref: resourceRef({
-          group: 'example.com',
-          version: 'v1',
-          kind: 'Widget',
-          namespace: 'default',
-          name: 'widget-a',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'Widget',
-          name: 'widget-a',
-          namespace: 'default',
-          apiGroup: 'example.com',
-          age: '1m',
-          labels: { app: 'demo' },
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-custom', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('widget-a');
-  });
-
-  test('keeps same-kind namespace custom resources from different API groups distinct', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-custom', storeScope);
-
-    setScopedDomainState('namespace-custom', storeScope, () => ({
-      status: 'ready',
-      data: { resources: [], clusterId: 'cluster-a' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    const common = {
-      type: 'ADDED',
-      domain: 'namespace-custom',
-      scope: 'namespace:default',
-      namespace: 'default',
-      kind: 'Widget',
-      name: 'shared',
-    };
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        ...common,
-        resourceVersion: '4',
-        apiGroup: 'alpha.example.com',
-        apiVersion: 'v1',
-        ref: resourceRef({
-          group: 'alpha.example.com',
-          version: 'v1',
-          kind: 'Widget',
-          namespace: 'default',
-          name: 'shared',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          namespace: 'default',
-          apiGroup: 'alpha.example.com',
-          apiVersion: 'v1',
-          kind: 'Widget',
-          name: 'shared',
-          age: '1m',
-        },
-      })
-    );
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        ...common,
-        resourceVersion: '5',
-        apiGroup: 'beta.example.com',
-        apiVersion: 'v1',
-        ref: resourceRef({
-          group: 'beta.example.com',
-          version: 'v1',
-          kind: 'Widget',
-          namespace: 'default',
-          name: 'shared',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          namespace: 'default',
-          apiGroup: 'beta.example.com',
-          apiVersion: 'v1',
-          kind: 'Widget',
-          name: 'shared',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const rows = getScopedDomainState('namespace-custom', storeScope).data?.resources ?? [];
-    expect(rows.map((row) => row.apiGroup).sort()).toEqual([
-      'alpha.example.com',
-      'beta.example.com',
-    ]);
+    expect(state.streamRevision).toBe(1);
   });
 
   test('reuses namespace custom rows when an unchanged update is applied', async () => {
@@ -1188,290 +898,6 @@ describe('ResourceStreamManager', () => {
     const nextState = getScopedDomainState('namespace-custom', storeScope);
     expect(nextState.data?.resources).toBe(previousRows);
     expect(nextState.data?.resources?.[0]).toBe(existingResource);
-  });
-
-  test('resyncs namespace helm updates instead of mutating rows directly', async () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-helm', storeScope);
-
-    const existingRow = {
-      clusterId: 'cluster-a',
-      clusterName: 'cluster-a',
-      name: 'release-a',
-      namespace: 'default',
-      chart: 'demo-1.0.0',
-      appVersion: '1.0.0',
-      status: 'deployed',
-      revision: 1,
-      updated: '2024-01-01T00:00:00Z',
-      age: '2m',
-    };
-    const snapshotRow = {
-      ...existingRow,
-      status: 'superseded',
-      revision: 2,
-      age: '1m',
-    };
-    const rowUpdate = {
-      ...existingRow,
-      status: 'targeted-row-update',
-      revision: 3,
-    };
-
-    setScopedDomainState('namespace-helm', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [existingRow], clusterId: 'cluster-a' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'namespace-helm',
-        scope: 'namespace:default',
-        version: 5,
-        checksum: 'helm-resync',
-        generatedAt: Date.now(),
-        payload: {
-          rows: [snapshotRow],
-          clusterId: 'cluster-a',
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'MODIFIED',
-        domain: 'namespace-helm',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'release-a',
-        namespace: 'default',
-        ref: resourceRef({
-          group: 'helm.sh',
-          version: 'v3',
-          kind: 'HelmRelease',
-          namespace: 'default',
-          name: 'release-a',
-        }),
-        row: rowUpdate,
-      })
-    );
-
-    await flushPromises();
-
-    const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
-    expect(state.data?.rows?.[0]?.status).toBe('superseded');
-    expect(state.data?.rows?.[0]?.revision).toBe(2);
-    expect(state.data?.rows?.[0]?.status).not.toBe('targeted-row-update');
-  });
-
-  test('resyncs namespace helm COMPLETE messages as scope-level changes', async () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-helm', storeScope);
-
-    const existingRow = {
-      clusterId: 'cluster-a',
-      clusterName: 'cluster-a',
-      name: 'release-a',
-      namespace: 'default',
-      chart: 'demo-1.0.0',
-      appVersion: '1.0.0',
-      status: 'deployed',
-      revision: 1,
-      updated: '2024-01-01T00:00:00Z',
-      age: '2m',
-    };
-    const snapshotRow = {
-      ...existingRow,
-      status: 'failed',
-      revision: 4,
-      age: '1m',
-    };
-
-    setScopedDomainState('namespace-helm', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [existingRow], clusterId: 'cluster-a' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'namespace-helm',
-        scope: 'namespace:default',
-        version: 6,
-        checksum: 'helm-complete',
-        generatedAt: Date.now(),
-        payload: {
-          rows: [snapshotRow],
-          clusterId: 'cluster-a',
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      notModified: false,
-    });
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'COMPLETE',
-        domain: 'namespace-helm',
-        scope: 'namespace:default',
-        resourceVersion: '6',
-        ref: resourceRef({
-          group: 'helm.sh',
-          version: 'v3',
-          kind: 'HelmRelease',
-          namespace: 'default',
-          name: 'release-a',
-        }),
-      })
-    );
-
-    await flushPromises();
-
-    const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
-    expect(state.data?.rows?.[0]?.status).toBe('failed');
-    expect(state.data?.rows?.[0]?.revision).toBe(4);
-  });
-
-  test('reuses namespace helm rows when an identical helm snapshot is applied', () => {
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-helm', storeScope);
-
-    const sharedRow = {
-      clusterId: 'cluster-a',
-      clusterName: 'cluster-a',
-      name: 'release-a',
-      namespace: 'default',
-      chart: 'demo-1.0.0',
-      appVersion: '1.0.0',
-      status: 'deployed',
-      revision: 1,
-      updated: '2024-01-01T00:00:00Z',
-      age: '1m',
-    };
-
-    setScopedDomainState('namespace-helm', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [sharedRow], clusterId: 'cluster-a' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.rows;
-
-    (
-      manager as unknown as {
-        applySnapshot: (
-          subscription: Record<string, unknown>,
-          snapshot: Record<string, unknown>
-        ) => void;
-      }
-    ).applySnapshot(
-      {
-        domain: 'namespace-helm',
-        reportScope: storeScope,
-        clusterId: 'cluster-a',
-      },
-      {
-        generatedAt: Date.now(),
-        version: 7,
-        checksum: 'helm-checksum',
-        payload: {
-          rows: [{ ...sharedRow }],
-          clusterId: 'cluster-a',
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      }
-    );
-
-    const state = getScopedDomainState('namespace-helm', storeScope);
-    expect(state.data?.rows).toBe(previousRows);
-    expect(state.data?.rows?.[0]).toBe(sharedRow);
-  });
-
-  test('applies namespace autoscaling updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-autoscaling', storeScope);
-
-    setScopedDomainState('namespace-autoscaling', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-autoscaling',
-        scope: 'namespace:default',
-        resourceVersion: '4',
-        name: 'hpa-a',
-        namespace: 'default',
-        kind: 'HorizontalPodAutoscaler',
-        ref: resourceRef({
-          group: 'autoscaling',
-          version: 'v2',
-          kind: 'HorizontalPodAutoscaler',
-          namespace: 'default',
-          name: 'hpa-a',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'HorizontalPodAutoscaler',
-          name: 'hpa-a',
-          namespace: 'default',
-          target: 'Deployment/web',
-          min: 1,
-          max: 4,
-          current: 2,
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-autoscaling', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('hpa-a');
   });
 
   test('reuses namespace autoscaling rows when an unchanged update is applied', () => {
@@ -1603,461 +1029,6 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]).toBe(sharedRow);
   });
 
-  test('applies namespace quotas updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-quotas', storeScope);
-
-    setScopedDomainState('namespace-quotas', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-quotas',
-        scope: 'namespace:default',
-        resourceVersion: '5',
-        name: 'quota-a',
-        namespace: 'default',
-        kind: 'ResourceQuota',
-        ref: resourceRef({ kind: 'ResourceQuota', namespace: 'default', name: 'quota-a' }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'ResourceQuota',
-          name: 'quota-a',
-          namespace: 'default',
-          details: 'Hard: 0, Used: 0',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-quotas', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('quota-a');
-  });
-
-  test('applies namespace storage updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-storage', storeScope);
-
-    setScopedDomainState('namespace-storage', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'namespace-storage',
-        scope: 'namespace:default',
-        resourceVersion: '6',
-        name: 'pvc-a',
-        namespace: 'default',
-        kind: 'PersistentVolumeClaim',
-        ref: resourceRef({
-          kind: 'PersistentVolumeClaim',
-          namespace: 'default',
-          name: 'pvc-a',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'PersistentVolumeClaim',
-          name: 'pvc-a',
-          namespace: 'default',
-          capacity: '1Gi',
-          status: 'Bound',
-          storageClass: 'standard',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('namespace-storage', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('pvc-a');
-  });
-
-  test('applies cluster rbac updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
-
-    setScopedDomainState('cluster-rbac', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-rbac',
-        scope: '',
-        resourceVersion: '7',
-        name: 'cluster-role',
-        kind: 'ClusterRole',
-        ref: resourceRef({
-          group: 'rbac.authorization.k8s.io',
-          kind: 'ClusterRole',
-          name: 'cluster-role',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'ClusterRole',
-          name: 'cluster-role',
-          details: 'Rules: 1',
-          age: '1m',
-          typeAlias: 'CR',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('cluster-role');
-  });
-
-  test('preserves rows with missing clusterId when merging cluster rbac updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
-
-    setScopedDomainState('cluster-rbac', storeScope, () => ({
-      status: 'ready',
-      data: {
-        rows: [
-          {
-            kind: 'ClusterRole',
-            name: 'legacy-row',
-            details: 'Rules: 1',
-            age: '2m',
-            typeAlias: 'CR',
-          } as any,
-        ],
-        clusterId: 'test-cluster',
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-rbac',
-        scope: '',
-        resourceVersion: '8',
-        name: 'cluster-role',
-        kind: 'ClusterRole',
-        ref: resourceRef({
-          group: 'rbac.authorization.k8s.io',
-          kind: 'ClusterRole',
-          name: 'cluster-role',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'ClusterRole',
-          name: 'cluster-role',
-          details: 'Rules: 2',
-          age: '1m',
-          typeAlias: 'CR',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.rows?.map((row) => row.name)).toEqual(['cluster-role', 'legacy-row']);
-  });
-
-  test('applies cluster storage updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-storage', storeScope);
-
-    setScopedDomainState('cluster-storage', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-storage',
-        scope: '',
-        resourceVersion: '7',
-        name: 'pv-a',
-        kind: 'PersistentVolume',
-        ref: resourceRef({ kind: 'PersistentVolume', name: 'pv-a' }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'PersistentVolume',
-          name: 'pv-a',
-          capacity: '1Gi',
-          accessModes: 'ReadWriteOnce',
-          status: 'Bound',
-          claim: 'default/app',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-storage', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('pv-a');
-  });
-
-  test('applies cluster config updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-config', storeScope);
-
-    setScopedDomainState('cluster-config', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-config',
-        scope: '',
-        resourceVersion: '7',
-        name: 'standard',
-        kind: 'StorageClass',
-        ref: resourceRef({
-          group: 'storage.k8s.io',
-          kind: 'StorageClass',
-          name: 'standard',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'StorageClass',
-          name: 'standard',
-          details: 'kubernetes.io/aws-ebs',
-          isDefault: true,
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-config', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('standard');
-  });
-
-  test('applies cluster crds updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-crds', storeScope);
-
-    setScopedDomainState('cluster-crds', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-crds',
-        scope: '',
-        resourceVersion: '7',
-        name: 'widgets.example.com',
-        kind: 'CustomResourceDefinition',
-        ref: resourceRef({
-          group: 'apiextensions.k8s.io',
-          kind: 'CustomResourceDefinition',
-          resource: 'customresourcedefinitions',
-          name: 'widgets.example.com',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'CustomResourceDefinition',
-          name: 'widgets.example.com',
-          group: 'example.com',
-          scope: 'Namespaced',
-          details: 'Versions: v1',
-          age: '1m',
-          typeAlias: 'CRD',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-crds', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('widgets.example.com');
-  });
-
-  test('applies cluster custom updates', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-custom', storeScope);
-
-    setScopedDomainState('cluster-custom', storeScope, () => ({
-      status: 'ready',
-      data: { resources: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-custom',
-        scope: '',
-        resourceVersion: '7',
-        name: 'cluster-widget',
-        kind: 'Widget',
-        ref: resourceRef({
-          group: 'example.com',
-          kind: 'Widget',
-          name: 'cluster-widget',
-        }),
-        row: {
-          clusterId: 'cluster-a',
-          clusterName: 'cluster-a',
-          kind: 'Widget',
-          name: 'cluster-widget',
-          apiGroup: 'example.com',
-          age: '1m',
-        },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-custom', storeScope);
-    expect(state.data?.resources?.[0]?.name).toBe('cluster-widget');
-  });
-
-  test('applies cluster updates when scope is omitted', () => {
-    vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
-
-    setScopedDomainState('cluster-rbac', storeScope, () => ({
-      status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope: storeScope,
-    }));
-
-    manager.handleMessage(
-      'cluster-a',
-      JSON.stringify({
-        type: 'ADDED',
-        domain: 'cluster-rbac',
-        resourceVersion: '11',
-        ref: resourceRef({ kind: 'ClusterRole', name: 'role-a' }),
-        row: { name: 'role-a', status: 'Ready', clusterId: 'cluster-a' },
-      })
-    );
-
-    vi.advanceTimersByTime(200);
-
-    const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('role-a');
-  });
-
   test('does not create an initial empty payload from pre-baseline stream updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
@@ -2080,9 +1051,12 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // Notify-only: a pre-baseline update bumps the refetch signal (status→ready)
+    // without ever materializing a row payload.
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.status).toBe('idle');
+    expect(state.status).toBe('ready');
     expect(state.data).toBeNull();
+    expect(state.streamRevision).toBe(1);
   });
 
   test('accepts updates even when resource versions regress if sequences advance', async () => {
@@ -2177,8 +1151,10 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
+    // A large (unsafe-integer) snapshot version doesn't break update handling; the
+    // notify-only delta still bumps the refetch signal.
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.data?.rows?.[0]?.name).toBe('role-a');
+    expect(state.streamRevision).toBe(1);
   });
 
   test('resyncs on reset messages', async () => {
@@ -2213,7 +1189,10 @@ describe('ResourceStreamManager', () => {
 
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalled();
+    // Notify-only resync re-arms the stream and bumps streamRevision (no snapshot fetch).
+    expect(
+      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
+    ).toBeGreaterThan(0);
   });
 
   test('resyncs after connection errors', async () => {
@@ -2241,9 +1220,9 @@ describe('ResourceStreamManager', () => {
 
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalled();
+    // Notify-only recovers by re-arming the stream + bumping streamRevision (no fetch).
     const state = getScopedDomainState('namespace-config', storeScope);
-    expect(state.status).toBe('ready');
+    expect(state.streamRevision ?? 0).toBeGreaterThan(0);
   });
 
   test('does not resync on connection error when resume sequence exists', async () => {
@@ -2333,8 +1312,8 @@ describe('ResourceStreamManager', () => {
     const secondSocket = createdSockets[1];
     expect(secondSocket).toBeDefined();
     secondSocket.onopen?.(new Event('open'));
+    // Reconnect re-subscribes the stream; notify-only needs no snapshot fetch.
     expect(secondSocket.send).toHaveBeenCalled();
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
   test('suspends and resumes streams for visibility changes', async () => {
@@ -2372,8 +1351,8 @@ describe('ResourceStreamManager', () => {
     (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
     await flushPromises();
 
+    // Resume re-opens + re-subscribes the stream; notify-only needs no snapshot fetch.
     expect(createdSockets[1]).toBeDefined();
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
   test('treats the first reset after subscribe as an acknowledgement', async () => {
@@ -2410,7 +1389,9 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    // The first reset acks the subscription and bumps the refetch signal so the
+    // query-backed view fetches page 1.
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0).toBe(1);
 
     vi.advanceTimersByTime(1100);
     manager.handleMessage(
@@ -2423,7 +1404,10 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    // A later reset is a real resync: it re-arms the stream and bumps streamRevision.
+    expect(
+      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
+    ).toBeGreaterThan(0);
   });
 
   test('resyncs on complete and error stream messages', async () => {
@@ -2462,7 +1446,10 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    // COMPLETE triggers a notify-only resync: re-arm + bump streamRevision (no fetch).
+    expect(
+      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
+    ).toBeGreaterThan(0);
 
     manager.handleMessage(
       'cluster-a',
@@ -2475,7 +1462,10 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(3);
+    // ERROR also resyncs (re-arm + bump); it does not refetch a snapshot.
+    expect(
+      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
+    ).toBeGreaterThan(0);
     expect(manager.getHealthStatus('pods', storeScope)).not.toBe('healthy');
   });
 

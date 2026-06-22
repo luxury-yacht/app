@@ -25,7 +25,7 @@ import {
   isSupportedDomain,
   type ResourceDomain,
 } from './resourceStreamDomains';
-import { applyResourceRowUpdates, mergeSnapshotRows } from './resourceStreamRows';
+import { mergeSnapshotRows } from './resourceStreamRows';
 import { ResourceStreamConnection } from './resourceStreamConnection';
 import {
   ResourceStreamSubscriptionStore,
@@ -727,24 +727,11 @@ export class ResourceStreamManager {
     if (subscription.updateQueue.length === 0) {
       return;
     }
-    const updates = subscription.updateQueue.splice(
-      0,
-      subscription.updateQueue.length
-    ) as UpdateMessage[];
-    const now = Date.now();
-
-    // Always update shadow keys so drift checks can compare snapshots to streamed changes.
-    this.applyShadowUpdates(subscription, updates);
-
-    // Notify-only domains carry no row payload — the query-backed table refetches
-    // on the bare signal. Bump streamRevision (the refetch trigger) and leave the
-    // stored rows untouched; never run the retain/merge/sort row path.
-    if (isNotifyOnlyStreamDomain(subscription.domain)) {
-      this.bumpStreamRevisionOnly(subscription, now);
-      return;
-    }
-
-    this.applyRowUpdates(subscription, updates, now);
+    subscription.updateQueue = [];
+    // Every streamed domain is query-backed: the table refetches on the bare
+    // signal. Bump streamRevision (the refetch trigger); streamed deltas carry no
+    // rows to apply, so there is no retain/merge/sort path.
+    this.bumpStreamRevisionOnly(subscription, Date.now());
   }
 
   // bumpStreamRevisionOnly advances the live-data identity for a notify-only
@@ -764,74 +751,6 @@ export class ResourceStreamManager {
       scope: subscription.reportScope,
     }));
     this.clearStreamError(subscription.clusterId);
-  }
-
-  private applyRowUpdates(
-    subscription: StreamSubscription,
-    updates: UpdateMessage[],
-    now: number
-  ): void {
-    const descriptor = getResourceStreamDomainDescriptor(subscription.domain);
-    const collection = descriptor.collection;
-
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => {
-      const currentPayload = previous.data ?? collection.emptyPayload(subscription.clusterId);
-      const existingRows = collection.getRows(currentPayload);
-      const nextRows = applyResourceRowUpdates(
-        existingRows,
-        updates,
-        subscription.clusterId,
-        collection,
-        subscription.preserveMetrics
-      );
-
-      if (!previous.data && nextRows.length === 0) {
-        return previous;
-      }
-
-      if (previous.data && nextRows === existingRows) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        status: 'ready',
-        data:
-          nextRows === existingRows
-            ? currentPayload
-            : collection.withRows(currentPayload, nextRows),
-        stats: updateStats(previous.stats, nextRows.length),
-        // Streamed changes carry no new backend snapshot version/checksum, so
-        // bump the stream revision — the third component of the live-data
-        // identity — or query-backed views never refetch on streamed changes.
-        streamRevision: (previous.streamRevision ?? 0) + 1,
-        lastUpdated: now,
-        lastAutoRefresh: now,
-        error: null,
-        isManual: false,
-        scope: subscription.reportScope,
-      };
-    });
-    this.clearStreamError(subscription.clusterId);
-  }
-
-  private applyShadowUpdates(subscription: StreamSubscription, updates: UpdateMessage[]): void {
-    if (!subscription.hasBaseline) {
-      return;
-    }
-
-    const collection = getResourceStreamDomainDescriptor(subscription.domain).collection;
-    updates.forEach((update) => {
-      const key = collection.buildUpdateKey(update, subscription.clusterId);
-      if (!key) {
-        return;
-      }
-      if (update.type === MESSAGE_TYPES.deleted) {
-        subscription.shadowKeys.delete(key);
-      } else {
-        subscription.shadowKeys.add(key);
-      }
-    });
   }
 
   // Track resync activity so diagnostics can surface stream health.
