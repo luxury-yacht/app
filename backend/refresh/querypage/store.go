@@ -47,11 +47,47 @@ type indexEntry struct {
 	uid string
 }
 
-func indexEntryLess(a, b indexEntry) bool {
+// ascLess orders ascending by value, tie-broken by UID ascending.
+func ascLess(a, b indexEntry) bool {
 	if a.val != b.val {
 		return a.val < b.val
 	}
 	return a.uid < b.uid
+}
+
+// descLess orders DESCENDING by value but keeps the UID tiebreak ASCENDING. This
+// matches the live typed-table total order (typed_table_query.go:313) exactly, so a
+// descending page lays tied rows out identically — a drop-in cutover, not a reorder.
+// Maintaining one index per direction lets every query walk it the same ascending
+// way (Ascend / AscendGreaterOrEqual), regardless of sort direction.
+func descLess(a, b indexEntry) bool {
+	if a.val != b.val {
+		return a.val > b.val
+	}
+	return a.uid < b.uid
+}
+
+// sortIndex holds both direction orderings for one sort key.
+type sortIndex struct {
+	asc  *btree.BTreeG[indexEntry]
+	desc *btree.BTreeG[indexEntry]
+}
+
+func (si *sortIndex) forDirection(d Direction) *btree.BTreeG[indexEntry] {
+	if d == Descending {
+		return si.desc
+	}
+	return si.asc
+}
+
+func (si *sortIndex) insert(e indexEntry) {
+	si.asc.ReplaceOrInsert(e)
+	si.desc.ReplaceOrInsert(e)
+}
+
+func (si *sortIndex) remove(e indexEntry) {
+	si.asc.Delete(e)
+	si.desc.Delete(e)
 }
 
 // Store is the generic Query → Page engine for one kind. It holds rows by UID, a
@@ -62,20 +98,24 @@ type Store[R any] struct {
 	mu     sync.RWMutex
 	schema Schema[R]
 	rows   map[string]R
-	idx    map[string]*btree.BTreeG[indexEntry]
+	idx    map[string]*sortIndex
 	facets map[string]map[string]int
 }
 
-// NewStore builds an empty store for a schema, creating one index per sort key.
+// NewStore builds an empty store for a schema, creating a per-direction index per
+// sort key.
 func NewStore[R any](schema Schema[R]) *Store[R] {
 	s := &Store[R]{
 		schema: schema,
 		rows:   make(map[string]R),
-		idx:    make(map[string]*btree.BTreeG[indexEntry], len(schema.SortKeys)),
+		idx:    make(map[string]*sortIndex, len(schema.SortKeys)),
 		facets: make(map[string]map[string]int, len(schema.Facets)),
 	}
 	for name := range schema.SortKeys {
-		s.idx[name] = btree.NewG[indexEntry](32, indexEntryLess)
+		s.idx[name] = &sortIndex{
+			asc:  btree.NewG[indexEntry](32, ascLess),
+			desc: btree.NewG[indexEntry](32, descLess),
+		}
 	}
 	for name := range schema.Facets {
 		s.facets[name] = make(map[string]int)
@@ -114,7 +154,7 @@ func (s *Store[R]) Len() int {
 
 func (s *Store[R]) reindex(uid string, row R) {
 	for name, get := range s.schema.SortKeys {
-		s.idx[name].ReplaceOrInsert(indexEntry{val: get(row), uid: uid})
+		s.idx[name].insert(indexEntry{val: get(row), uid: uid})
 	}
 	for name, get := range s.schema.Facets {
 		s.facets[name][get(row)]++
@@ -123,7 +163,7 @@ func (s *Store[R]) reindex(uid string, row R) {
 
 func (s *Store[R]) deindex(uid string, row R) {
 	for name, get := range s.schema.SortKeys {
-		s.idx[name].Delete(indexEntry{val: get(row), uid: uid})
+		s.idx[name].remove(indexEntry{val: get(row), uid: uid})
 	}
 	for name, get := range s.schema.Facets {
 		v := get(row)
@@ -161,7 +201,7 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	index, ok := s.idx[q.Sort]
+	si, ok := s.idx[q.Sort]
 	if !ok {
 		return Page[R]{}, fmt.Errorf("querypage: unknown sort %q", q.Sort)
 	}
@@ -200,15 +240,14 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		return len(rows) <= limit
 	}
 
-	switch {
-	case q.Direction == Descending && !hasPivot:
-		index.Descend(collect)
-	case q.Direction == Descending:
-		index.DescendLessOrEqual(pivot, collect)
-	case !hasPivot:
-		index.Ascend(collect)
-	default:
+	// One index per direction, both walked ascending: the desc index already
+	// orders value-descending with ascending UID ties, so a single forward walk
+	// reproduces the live typed-table order for either direction.
+	index := si.forDirection(q.Direction)
+	if hasPivot {
 		index.AscendGreaterOrEqual(pivot, collect)
+	} else {
+		index.Ascend(collect)
 	}
 
 	next := ""
