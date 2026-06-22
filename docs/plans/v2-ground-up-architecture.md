@@ -1001,12 +1001,19 @@ reasons; **nothing required is incomplete here.**
   rows (the build is already on the engine; the maintained store needs the cross-kind standalone determination).
   Also nodes/helm/crds still list+project per Build. The perf win is on the larger domains. (Browse/catalog is
   DONE — its own maintained `querypage.Store` + direct `store.Query`.)
-- ⏳ Replace the eager ~30-informer factory, the catalog's `factory.ForResource` + on-demand
-  promotion informers (`collect.go:308`), and the CRD-definitions watch (`watch.go:306-309`) with the
-  one registry-driven WatchList-projection path (capability-probe + watchdog), feeding the log.
-- ⏳ Lifecycle state machine, process-wide governor (incl. pausing the metrics poller on background
-  clusters), mmap spill, and the four-stage cold-start contract. Largest phase; swaps the data source
-  under a stable seam.
+- 🔶 **Ingestion cutover — STARTED.** ✅ **Projection-at-intake** (`informer/projection.go`): factory-wide
+  `informers.WithTransform(stripManagedFields)` discards `managedFields` (30-50% of a Pod's bytes) before any
+  object enters a cache — the core memory lever. Gate green: full informer + snapshot + objectcatalog suites
+  pass UNCHANGED (no table/catalog/maintained-store consumer reads managedFields; detail views fetch fresh).
+  **REMAINING:** the WatchList watchdog wired into the factory's per-GVR sync (client-go already WatchLists via
+  the default gate; the watchdog needs production wiring — client-go's reflector doesn't expose a clean hook,
+  so this is the hard part); consolidate the catalog's `factory.ForResource`/on-demand promotion (`collect.go:308`)
+  + the CRD watch (`watch.go:306`) into the one factory; gateway-factory transform; the deeper
+  project-to-column-tuple (discard the typed object entirely — a larger rewrite of StreamRow/catalog consumers).
+- ⏳ **Lifecycle state machine, process-wide governor** (Foreground/Background/Cold + GOMEMLIMIT + pause the
+  metrics poller on background clusters), **mmap spill**, four-stage cold-start. NOTE: these are NEW RUNTIME
+  subsystems — the state-machine/poller-pause/spill *logic* is unit-buildable, but the thing they exist for
+  (bounding RAM across many large clusters, real failover) is only provable against real clusters under load.
 
 ### Prototype gates — status
 
@@ -1015,7 +1022,12 @@ reasons; **nothing required is incomplete here.**
   40 seeds × 800 Upsert/Delete ops (sort-key swaps, key collisions, delete/recreate) × random
   paginated queries, all equal to a from-scratch recompute. (Risks #3/#9 — metrics-join — land with
   the metrics column family.)
-- ⏳ **#3 WatchList watchdog + LIST fallback** (risk #5) with bookmark-strip fault injection.
+- ✅ **#3 WatchList watchdog + LIST fallback** (risk #5) — GREEN: `storebench/watchlist.go` models
+  WatchList initial sync (ADDED events + `initial-events-end` bookmark) + a per-GVR watchdog. Bookmark-strip
+  fault injection (`watchlist_test.go`, race-tested) proves a GVR ALWAYS reaches readiness with its full
+  object set — via WatchList when the bookmark arrives, via the authoritative LIST when it's stripped or the
+  watch stalls. Mitigates the Teleport #64188 hang. (Risk #5 closed at the prototype level; the production
+  watchdog wires `time.After` for the deadline this models as an injected channel.)
 
 ---
 

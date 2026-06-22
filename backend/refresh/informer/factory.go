@@ -120,7 +120,8 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	if resync <= 0 {
 		resync = config.RefreshResyncInterval
 	}
-	kubeFactory := informers.NewSharedInformerFactory(client, resync)
+	// Projection-at-intake: strip managedFields before any object enters the cache.
+	kubeFactory := informers.NewSharedInformerFactoryWithOptions(client, resync, informers.WithTransform(stripManagedFields))
 	result := &Factory{
 		kubeClient:         client,
 		resync:             resync,
@@ -188,7 +189,7 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	result.registerInformer("", "events", kubeFactory.Core().V1().Events().Informer())
 
 	if apiextClient != nil {
-		result.apiextFactory = apiextinformers.NewSharedInformerFactory(apiextClient, resync)
+		result.apiextFactory = apiextinformers.NewSharedInformerFactoryWithOptions(apiextClient, resync, apiextinformers.WithTransform(stripManagedFields))
 		result.registerClusterInformer("apiextensions.k8s.io", "customresourcedefinitions", func() cache.SharedIndexInformer {
 			return result.apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
 		})
