@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
@@ -49,6 +50,21 @@ func clusterEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kinds"},
 		[]string{"kind", "name", "type", "source", "reason", "object", "message"},
 		nil, // open kind set (involved-object kinds); no kind dropdown
+	)
+}
+
+// clusterEventsQuerypageSchema derives the querypage Schema for the cluster events
+// table from its typed-table adapter (reusing the adapter's exact sort encoder +
+// row key), so the engine orders rows byte-identically to the live executor. The
+// sort fields mirror the sortable fields published by clusterEventsQueryCapabilities.
+func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
+	// Sort field names are lowercased to match the engine's lowercased sort-field
+	// lookup (applyTypedTableQueryViaStore lowercases the request field before
+	// indexing SortKeys); the adapter's SortValue lowercases the field internally,
+	// so "objecttype"/"objectname" still resolve to the right encoders.
+	return querypageSchemaFromAdapter(
+		clusterEventTableQueryAdapter(),
+		[]string{"name", "kind", "type", "source", "reason", "object", "objecttype", "objectname", "message", "age"},
 	)
 }
 
@@ -109,16 +125,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	// The query path streams entries through the bounded collector (top-K
-	// insert, no full materialization or sort); the window path still collects
-	// the slice it truncates below.
-	var collector *typedTableQueryCollector[ClusterEventEntry]
-	var entries []ClusterEventEntry
-	if query.Enabled {
-		collector = newTypedTableQueryCollector(query, clusterEventTableQueryAdapter())
-	} else {
-		entries = make([]ClusterEventEntry, 0, len(events))
-	}
+	entries := make([]ClusterEventEntry, 0, len(events))
 	var version uint64
 	for _, evt := range events {
 		if evt == nil {
@@ -160,31 +167,15 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}
-		if collector != nil {
-			collector.Add(entry)
-		} else {
-			entries = append(entries, entry)
-		}
+		entries = append(entries, entry)
 		if v := resourceVersionOrTimestamp(evt); v > version {
 			version = v
 		}
 	}
 
-	if query.Enabled {
-		page := collector.Page()
-		return &refresh.Snapshot{
-			Domain:  clusterEventsDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: version,
-			Payload: ClusterEventsSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(clusterEventsDomainName, page, clusterEventsQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
+	// Window-mode order is most-recent-first with a deterministic name tiebreak.
+	// Apply it before resolving so the engine's query branch (which sorts by the
+	// request's SortField) and the window branch both serve a stable order.
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].AgeTimestamp != entries[j].AgeTimestamp {
 			return entries[i].AgeTimestamp > entries[j].AgeTimestamp
@@ -192,29 +183,34 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		return entries[i].Name < entries[j].Name
 	})
 
-	originalCount := len(entries)
-	if originalCount > config.SnapshotClusterEventsLimit {
-		entries = entries[:config.SnapshotClusterEventsLimit]
+	resolved := resolveTypedSnapshotPageViaStore(
+		clusterEventsDomainName,
+		entries,
+		query,
+		clusterEventTableQueryAdapter(),
+		clusterEventsQuerypageSchema(),
+		clusterEventsQueryCapabilities(),
+		config.SnapshotClusterEventsLimit,
+		"events",
+		func(e ClusterEventEntry) string { return e.Kind },
+		nil,
+	)
+	// The query branch echoes the raw request scope; the window branch leaves the
+	// scope empty (matching the pre-cutover returns for this cluster-scoped domain).
+	snapshotScope := ""
+	if query.Enabled {
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	stats := refresh.SnapshotStats{
-		ItemCount: len(entries),
-	}
-	if originalCount > len(entries) {
-		stats.Truncated = true
-		stats.TotalItems = originalCount
-		stats.Warnings = []string{fmt.Sprintf("Showing most recent %d of %d events", len(entries), originalCount)}
-	}
-
 	return &refresh.Snapshot{
 		Domain:  clusterEventsDomainName,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: ClusterEventsSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(clusterEventsDomainName, originalCount, originalCount == len(entries), snapshotSortedKinds(entries, func(event ClusterEventEntry) string { return event.Kind }), clusterEventsQueryCapabilities()),
-			Rows:                  entries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: stats,
+		Stats: resolved.Stats,
 	}, nil
 }
 

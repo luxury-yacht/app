@@ -69,13 +69,13 @@ sections it references._
 **Where we are:** Phase 3 + Phase 4 well underway — **ALL 10 typed-table domains are cut over to the engine**
 (config, namespace-{storage,quotas,rbac,autoscaling,network,workloads}, cluster-{config,storage,rbac}), each
 equivalence-gated; **8 also on the maintained store**; the engine handles predicates; engine fuzz-proven.
-The only remaining old-executor users are the COLLECTOR-based domains (pods, events). **Next** (complete
-remaining roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
+The **events domains are cut over too** — the ONLY remaining `typedTableQueryCollector` user is `pods`.
+**Next** (complete remaining roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Move `pods` + `events` off the `typedTableQueryCollector` onto the engine** — pods is the big perf
-   win and needs a maintained store (pod-scale; per-Build materialization is not viable), so it pulls in
-   the metrics column family too. Then DELETE the old `typedTableQueryCollector` + the bespoke cursor codec
-   (the last blocker to one query path).
+1. **Move `pods` off the `typedTableQueryCollector` onto the engine** (events are done) — pods is the big
+   perf win and needs a maintained store (pod-scale; per-Build materialization is not viable), so it pulls
+   in the metrics column family too. Then DELETE the old `typedTableQueryCollector` + the bespoke cursor
+   codec (the last blocker to one query path).
 2. **Maintained stores for `network` + `workloads`** (currently cutover-only) — network needs the
    Service↔EndpointSlice relationship; both are the per-request-reprojection perf win.
 3. **Browse/catalog** onto the engine (the second cursor codec); the **columnar SoA backend** (memory win);
@@ -936,10 +936,11 @@ reasons; **nothing required is incomplete here.**
   (8 also on the maintained store; network + workloads are cutover-only — network awaits its
   Service↔EndpointSlice relationship store, workloads is serve-only.) The engine now handles query
   **predicates** too (`applyTypedTableQueryViaStore` builds the store from the matched set; workloads' `health`
-  filter was the driver). **REMAINING:** the COLLECTOR-based domains `pods` + `namespace-events` +
-  `cluster-events` still use the old `typedTableQueryCollector` (pods needs a maintained store — pod-scale —
-  not per-Build materialization). Then Browse/catalog; then DELETE the typed full-sort + the two old cursor
-  codecs (blocked until pods/events are off the collector).
+  filter was the driver). ✅ **`namespace-events` + `cluster-events` also cut over** (off the collector,
+  same materialize pattern; equivalence-gated). **REMAINING:** only `pods` still uses the
+  `typedTableQueryCollector` — and it needs a maintained store (pod-scale; per-Build materialization is not
+  viable), which pulls in the metrics column family. Once pods is off the collector, DELETE the
+  `typedTableQueryCollector` + the bespoke cursor codec. Then Browse/catalog (the second cursor codec).
 - ⏳ Model metrics as a **separate column family + metric indexes on `metricsRevision`** (§3.6).
 
 ### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED

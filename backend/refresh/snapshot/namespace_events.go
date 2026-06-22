@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
@@ -42,6 +43,22 @@ func namespaceEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "type", "source", "reason", "object", "message"},
 		nil, // open kind set (involved-object kinds); no kind dropdown
+	)
+}
+
+// namespaceEventsQuerypageSchema derives the querypage Schema for the namespace
+// events table from its typed-table adapter (reusing the adapter's exact sort
+// encoder + row key), so the engine orders rows byte-identically to the live
+// executor. The sort fields mirror the sortable fields published by
+// namespaceEventsQueryCapabilities.
+func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
+	// Sort field names are lowercased to match the engine's lowercased sort-field
+	// lookup (applyTypedTableQueryViaStore lowercases the request field before
+	// indexing SortKeys); the adapter's SortValue lowercases the field internally,
+	// so "objecttype"/"objectname" still resolve to the right encoders.
+	return querypageSchemaFromAdapter(
+		namespacedEventTableQueryAdapter(),
+		[]string{"name", "kind", "namespace", "type", "source", "reason", "object", "objecttype", "objectname", "message", "age"},
 	)
 }
 
@@ -132,16 +149,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	}
 	events = filtered
 
-	// The query path streams summaries through the bounded collector (top-K
-	// insert, no full materialization or sort); the window path still collects
-	// the slice it truncates below.
-	var collector *typedTableQueryCollector[EventSummary]
-	var summaries []EventSummary
-	if query.Enabled {
-		collector = newTypedTableQueryCollector(query, namespacedEventTableQueryAdapter())
-	} else {
-		summaries = make([]EventSummary, 0, len(events))
-	}
+	summaries := make([]EventSummary, 0, len(events))
 	var version uint64
 
 	for _, event := range events {
@@ -172,31 +180,15 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Age:              formatAge(timestamp),
 			AgeTimestamp:     timestamp.UnixMilli(),
 		}
-		if collector != nil {
-			collector.Add(summary)
-		} else {
-			summaries = append(summaries, summary)
-		}
+		summaries = append(summaries, summary)
 		if v := resourceVersionOrTimestamp(event); v > version {
 			version = v
 		}
 	}
 
-	if query.Enabled {
-		page := collector.Page()
-		return &refresh.Snapshot{
-			Domain:  namespaceEventsDomainName,
-			Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-			Version: version,
-			Payload: NamespaceEventsSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceEventsDomainName, page, namespaceEventsQueryCapabilities()),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{ItemCount: len(page.Rows)},
-		}, nil
-	}
-
+	// Window-mode order is most-recent-first with a deterministic name tiebreak.
+	// Apply it before resolving so the engine's query branch (which sorts by the
+	// request's SortField) and the window branch both serve a stable order.
 	sort.Slice(summaries, func(i, j int) bool {
 		if summaries[i].AgeTimestamp != summaries[j].AgeTimestamp {
 			return summaries[i].AgeTimestamp > summaries[j].AgeTimestamp
@@ -204,29 +196,33 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		return summaries[i].Name < summaries[j].Name
 	})
 
-	originalCount := len(summaries)
-	if originalCount > config.SnapshotNamespaceEventsLimit {
-		summaries = summaries[:config.SnapshotNamespaceEventsLimit]
+	resolved := resolveTypedSnapshotPageViaStore(
+		namespaceEventsDomainName,
+		summaries,
+		query,
+		namespacedEventTableQueryAdapter(),
+		namespaceEventsQuerypageSchema(),
+		namespaceEventsQueryCapabilities(),
+		config.SnapshotNamespaceEventsLimit,
+		"events",
+		func(e EventSummary) string { return e.Kind },
+		nil,
+	)
+	// The query branch echoes the raw request scope; the window branch reports the
+	// canonical namespace scope (matching the pre-cutover returns).
+	snapshotScope := parsedScope.CanonicalScope
+	if query.Enabled {
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
-
-	stats := refresh.SnapshotStats{
-		ItemCount: len(summaries),
-	}
-	if originalCount > len(summaries) {
-		stats.Truncated = true
-		stats.TotalItems = originalCount
-		stats.Warnings = []string{fmt.Sprintf("Showing most recent %d of %d events", len(summaries), originalCount)}
-	}
-
 	return &refresh.Snapshot{
 		Domain:  namespaceEventsDomainName,
-		Scope:   parsedScope.CanonicalScope,
+		Scope:   snapshotScope,
 		Version: version,
 		Payload: NamespaceEventsSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceEventsDomainName, originalCount, originalCount == len(summaries), snapshotSortedKinds(summaries, func(event EventSummary) string { return event.Kind }), namespaceEventsQueryCapabilities()),
-			Rows:                  summaries,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: stats,
+		Stats: resolved.Stats,
 	}, nil
 }
