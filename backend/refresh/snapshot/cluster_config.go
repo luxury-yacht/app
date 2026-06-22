@@ -11,11 +11,13 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
@@ -28,6 +30,17 @@ const clusterConfigDomainName = "cluster-config"
 // listing each registered kind (shared- or Gateway-API-factory) from its indexer.
 type ClusterConfigBuilder struct {
 	collectIndexer func(streamspec.Descriptor) cache.Indexer
+	// maintained, when set, is an informer-fed store the builder serves rows from
+	// instead of listing + re-projecting per request. nil falls back to the list path.
+	maintained *typedMaintainedStore[ClusterConfigEntry]
+}
+
+// clusterConfigQuerypageSchema derives the querypage Schema for the cluster config
+// table from the existing typed-table adapter, via the shared generic schema builder.
+// It REUSES the adapter's exact comparable sort-value encoder and row key, so the
+// querypage engine orders rows byte-identically to the live typed-table executor.
+func clusterConfigQuerypageSchema() querypage.Schema[ClusterConfigEntry] {
+	return querypageSchemaFromAdapter(clusterConfigTableQueryAdapter(), []string{"name", "kind", "details", "age"})
 }
 
 // ClusterConfigSnapshot represents the payload exposed to the UI. It embeds the
@@ -60,8 +73,9 @@ func RegisterClusterConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
+	clusterMeta ClusterMeta,
 ) error {
-	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed)
+	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed, clusterMeta)
 }
 
 func RegisterClusterConfigDomainWithGatewayAPI(
@@ -69,12 +83,24 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
+	clusterMeta ClusterMeta,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
+	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName)
+
+	// Maintain a per-cluster store fed by each available config kind's informer
+	// (shared factory for StorageClass/IngressClass/webhooks, Gateway-API factory
+	// for GatewayClass).
+	maintained := newTypedMaintainedStore(clusterMeta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
+	if err := registerMaintainedHandlers(maintained, clusterConfigDomainName, collectIndexer, factory, gatewayFactory); err != nil {
+		return err
+	}
+
 	builder := &ClusterConfigBuilder{
-		collectIndexer: factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName),
+		collectIndexer: collectIndexer,
+		maintained:     maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterConfigDomainName,
@@ -82,21 +108,52 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	})
 }
 
+// clusterConfigSources computes per-descriptor availability for THIS request (indexer
+// present AND runtimeResourceAllowed), returning the snapshot sources and a
+// Kind→available map — the same gating collectDescriptorTableRows applies, so the
+// maintained-store path and the list path agree on which kinds are visible.
+func (b *ClusterConfigBuilder) clusterConfigSources(ctx context.Context) ([]typedTableResourceSource, map[string]bool) {
+	descriptors := kindregistry.StreamDescriptorsForDomain(clusterConfigDomainName)
+	sources := make([]typedTableResourceSource, 0, len(descriptors))
+	available := make(map[string]bool, len(descriptors))
+	for _, d := range descriptors {
+		ok := b.collectIndexer(d) != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, d.Group, d.Resource)
+		sources = append(sources, typedTableResourceSource{
+			Kind:      d.Kind,
+			Group:     d.Group,
+			Resource:  d.Resource,
+			Available: ok,
+		})
+		available[d.Kind] = ok
+	}
+	return sources, available
+}
+
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterConfigDomainName, "")
 	if err != nil {
 		return nil, err
 	}
-	return b.buildFromListers(ctx, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query)
-}
 
-func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope string, query typedTableQuery) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	entries, sources, version, err := collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
-	if err != nil {
-		return nil, err
+	var entries []ClusterConfigEntry
+	var sources []typedTableResourceSource
+	var version uint64
+	if b.maintained != nil {
+		// Serve projected rows straight from the informer-fed store (no re-listing /
+		// re-projecting); availability + sources mirror the list path exactly. The
+		// domain is cluster-scoped, so the store is queried for all rows ("").
+		var available map[string]bool
+		sources, available = b.clusterConfigSources(ctx)
+		entries = b.maintained.rows("", available)
+		version = b.maintained.snapshotVersion()
+	} else {
+		entries, sources, version, err = collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -107,11 +164,12 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	})
 	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources)
 
-	resolved := resolveTypedSnapshotPage(
+	resolved := resolveTypedSnapshotPageViaStore(
 		clusterConfigDomainName,
 		entries,
 		query,
 		clusterConfigTableQueryAdapter(),
+		clusterConfigQuerypageSchema(),
 		capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
 		config.SnapshotClusterConfigEntryLimit,
 		"cluster configuration resources",
@@ -122,7 +180,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context, scope strin
 	// query page publishes the request scope.
 	snapshotScope := ""
 	if query.Enabled {
-		snapshotScope = scope
+		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,

@@ -75,21 +75,9 @@ func RegisterNamespaceConfigDomain(
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName)
 
 	// Maintain a per-cluster store fed by each available config kind's informer.
-	// Handlers are registered BEFORE the factory starts, so the snapshot sync gate
-	// guarantees the store is populated before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, configQuerypageSchema(), configTableQueryAdapter())
-	for _, d := range kindregistry.StreamDescriptorsForDomain(namespaceConfigDomainName) {
-		if collectIndexer(d) == nil || d.Informer == nil {
-			continue
-		}
-		desc := d
-		if _, err := d.Informer(factory).AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { maintained.ingest(desc, obj) },
-			UpdateFunc: func(_, newObj interface{}) { maintained.ingest(desc, newObj) },
-			DeleteFunc: func(obj interface{}) { maintained.evict(desc, obj) },
-		}); err != nil {
-			return fmt.Errorf("%s: register %s handler: %w", namespaceConfigDomainName, d.Resource, err)
-		}
+	if err := registerMaintainedHandlers(maintained, namespaceConfigDomainName, collectIndexer, factory, nil); err != nil {
+		return err
 	}
 
 	builder := &NamespaceConfigBuilder{

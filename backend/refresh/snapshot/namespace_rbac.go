@@ -79,21 +79,9 @@ func RegisterNamespaceRBACDomain(
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName)
 
 	// Maintain a per-cluster store fed by each available RBAC kind's informer.
-	// Handlers are registered BEFORE the factory starts, so the snapshot sync gate
-	// guarantees the store is populated before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, rbacQuerypageSchema(), rbacTableQueryAdapter())
-	for _, d := range kindregistry.StreamDescriptorsForDomain(namespaceRBACDomainName) {
-		if collectIndexer(d) == nil || d.Informer == nil {
-			continue
-		}
-		desc := d
-		if _, err := d.Informer(factory).AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { maintained.ingest(desc, obj) },
-			UpdateFunc: func(_, newObj interface{}) { maintained.ingest(desc, newObj) },
-			DeleteFunc: func(obj interface{}) { maintained.evict(desc, obj) },
-		}); err != nil {
-			return fmt.Errorf("%s: register %s handler: %w", namespaceRBACDomainName, d.Resource, err)
-		}
+	if err := registerMaintainedHandlers(maintained, namespaceRBACDomainName, collectIndexer, factory, nil); err != nil {
+		return err
 	}
 
 	builder := &NamespaceRBACBuilder{

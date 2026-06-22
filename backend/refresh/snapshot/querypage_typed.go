@@ -7,8 +7,11 @@ import (
 	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -223,6 +226,54 @@ func newTypedMaintainedStore[T any](meta ClusterMeta, schema querypage.Schema[T]
 		meta:    meta,
 		adapter: adapter,
 	}
+}
+
+// descriptorInformer resolves a descriptor to its informer from whichever factory
+// it uses: the shared factory (most kinds) or the Gateway-API factory (Gateway-API
+// kinds). It returns nil when the descriptor has no informer for an available
+// factory, so the caller skips registering a handler for it.
+func descriptorInformer(d streamspec.Descriptor, factory informers.SharedInformerFactory, gatewayFactory gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer {
+	if d.Informer != nil && factory != nil {
+		return d.Informer(factory)
+	}
+	if d.GatewayInformer != nil && gatewayFactory != nil {
+		return d.GatewayInformer(gatewayFactory)
+	}
+	return nil
+}
+
+// registerMaintainedHandlers wires the maintained store's ingest/evict into each of
+// the domain's registered kinds' informers — generic over the domain's kinds, with
+// no per-kind branch. It loops the stream descriptor registry, skipping any kind
+// whose indexer was not registered (collectIndexer returns nil) or whose informer is
+// unavailable (descriptorInformer returns nil). Handlers are registered BEFORE the
+// factory starts, so the snapshot sync gate guarantees the store is populated before
+// the first Build serves from it.
+func registerMaintainedHandlers[T any](
+	maintained *typedMaintainedStore[T],
+	domainName string,
+	collectIndexer func(streamspec.Descriptor) cache.Indexer,
+	factory informers.SharedInformerFactory,
+	gatewayFactory gatewayinformers.SharedInformerFactory,
+) error {
+	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
+		if collectIndexer(d) == nil {
+			continue
+		}
+		inf := descriptorInformer(d, factory, gatewayFactory)
+		if inf == nil {
+			continue
+		}
+		desc := d
+		if _, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { maintained.ingest(desc, obj) },
+			UpdateFunc: func(_, newObj interface{}) { maintained.ingest(desc, newObj) },
+			DeleteFunc: func(obj interface{}) { maintained.evict(desc, obj) },
+		}); err != nil {
+			return fmt.Errorf("%s: register %s handler: %w", domainName, d.Resource, err)
+		}
+	}
+	return nil
 }
 
 // ingest projects an added/updated object via the descriptor's StreamRow closure
