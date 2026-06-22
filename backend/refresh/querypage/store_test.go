@@ -164,7 +164,7 @@ func TestFilterByFacet(t *testing.T) {
 	}
 	all := paginate(t, s, Query{
 		ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 5,
-		Filters: map[string]string{"namespace": "kube-system"},
+		Filters: map[string][]string{"namespace": {"kube-system"}},
 	})
 	if len(all) != 10 {
 		t.Fatalf("filtered got %d rows, want 10", len(all))
@@ -219,7 +219,7 @@ func TestFacetsAndTotal(t *testing.T) {
 		t.Fatalf("facet status=Running = %d, want 20", got)
 	}
 	// Filtered total reflects the filter.
-	fpage, err := s.Query(Query{ClusterID: "c", Signature: "sig2", Sort: "name", Direction: Ascending, Limit: 5, Filters: map[string]string{"status": "Pending"}})
+	fpage, err := s.Query(Query{ClusterID: "c", Signature: "sig2", Sort: "name", Direction: Ascending, Limit: 5, Filters: map[string][]string{"status": {"Pending"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

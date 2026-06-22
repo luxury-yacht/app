@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -107,6 +108,92 @@ func TestConfigQuerypageFacetsMatchKinds(t *testing.T) {
 	for k, c := range want {
 		if page.Facets["kind"][k] != c {
 			t.Fatalf("facet kind=%s = %d, want %d", k, page.Facets["kind"][k], c)
+		}
+	}
+}
+
+// TestConfigQueryViaStoreEquivalent is the full-envelope cutover gate: the
+// engine-backed serve path must produce the SAME page as the live applyTypedTableQuery
+// — identical rows across full pagination, totals, and facet value lists — for a broad
+// matrix of sorts × directions × namespace/kind filters × searches.
+func TestConfigQueryViaStoreEquivalent(t *testing.T) {
+	adapter := configTableQueryAdapter()
+	items := makeConfigRows(250)
+
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[ConfigSummary], base typedTableQuery) ([]string, typedTableQueryPage[ConfigSummary]) {
+		q := base
+		var keys []string
+		var first typedTableQueryPage[ConfigSummary]
+		for i := 0; ; i++ {
+			if i > 1000 {
+				t.Fatal("pagination did not terminate")
+			}
+			page := serve(q)
+			if i == 0 {
+				first = page
+			}
+			for _, r := range page.Rows {
+				keys = append(keys, adapter.Key(r))
+			}
+			if page.Continue == "" {
+				break
+			}
+			q.Request.Continue = page.Continue
+		}
+		return keys, first
+	}
+
+	type filt struct {
+		ns     []string
+		kinds  []string
+		search string
+	}
+	sorts := []string{"", "name", "kind", "namespace", "data", "age"}
+	dirs := []string{"asc", "desc"}
+	filts := []filt{
+		{},
+		{ns: []string{"default"}},
+		{ns: []string{"default", "app"}},
+		{kinds: []string{"Secret"}},
+		{ns: []string{"kube-system"}, kinds: []string{"ConfigMap"}},
+		{search: "cfg-01"},
+		{search: "secret"},
+	}
+
+	for _, sf := range sorts {
+		for _, d := range dirs {
+			for _, f := range filts {
+				base := typedTableQuery{
+					Enabled: true,
+					Request: ResourceQueryRequest{
+						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
+						Namespaces: f.ns, Kinds: f.kinds, Search: f.search,
+					},
+				}
+				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[ConfigSummary] {
+					return applyTypedTableQuery(items, q, adapter)
+				}, base)
+				engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[ConfigSummary] {
+					return applyConfigTableQueryViaStore(items, q)
+				}, base)
+
+				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v search=%q", sf, d, f.ns, f.kinds, f.search)
+				if !slices.Equal(liveKeys, engineKeys) {
+					t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
+				}
+				if liveFirst.Total != engineFirst.Total {
+					t.Fatalf("%s: total live=%d engine=%d", label, liveFirst.Total, engineFirst.Total)
+				}
+				if liveFirst.UnfilteredTotal != engineFirst.UnfilteredTotal {
+					t.Fatalf("%s: unfilteredTotal live=%d engine=%d", label, liveFirst.UnfilteredTotal, engineFirst.UnfilteredTotal)
+				}
+				if !slices.Equal(liveFirst.Namespaces, engineFirst.Namespaces) {
+					t.Fatalf("%s: namespace facets live=%v engine=%v", label, liveFirst.Namespaces, engineFirst.Namespaces)
+				}
+				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
+					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
+				}
+			}
 		}
 	}
 }

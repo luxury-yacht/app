@@ -97,11 +97,13 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 	sortConfigSummaries(resources)
 
 	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
-	resolved := resolveTypedSnapshotPage(
+	// Serve the query branch through the querypage engine (proven byte-equivalent to
+	// the bespoke typed-table executor in querypage_config_test.go); the window branch
+	// and all envelope wiring are unchanged.
+	resolved := resolveConfigSnapshotPageViaStore(
 		namespaceConfigDomainName,
 		resources,
 		query,
-		configTableQueryAdapter(),
 		capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources),
 		config.SnapshotNamespaceConfigEntryLimit,
 		"config resources",

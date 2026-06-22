@@ -26,9 +26,9 @@ type Query struct {
 	Sort      string // a key in Schema.SortKeys
 	Direction Direction
 	Limit     int
-	Search    string            // case-insensitive substring filter over SearchText
-	Filters   map[string]string // facet filters: facet name -> required value
-	Cursor    string            // opaque continueToken from a previous Page
+	Search    string              // case-insensitive substring filter over SearchText
+	Filters   map[string][]string // facet filters: facet name -> allowed values (set membership; OR within, AND across facets)
+	Cursor    string              // opaque continueToken from a previous Page
 }
 
 // Page is one page of results plus the (unfiltered) facet counts, the total number
@@ -176,9 +176,23 @@ func (s *Store[R]) deindex(uid string, row R) {
 }
 
 func (s *Store[R]) rowMatches(row R, q Query) bool {
-	for fname, want := range q.Filters {
+	for fname, allowed := range q.Filters {
+		if len(allowed) == 0 {
+			continue
+		}
 		get := s.schema.Facets[fname]
-		if get == nil || get(row) != want {
+		if get == nil {
+			return false
+		}
+		v := get(row)
+		matched := false
+		for _, a := range allowed {
+			if v == a {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}

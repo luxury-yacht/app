@@ -1,6 +1,6 @@
 # Luxury Yacht v2 — Ground-Up Architecture (Design + Migration)
 
-Status: **Forward-looking design proposal. Not started.** This is a clean-sheet
+Status: **In progress — see the Build Status ledger below.** This is a clean-sheet
 architecture for handling very large clusters (100k–1M+ objects, many GVRs,
 multiple clusters open), loading data as fast as possible, and keeping updates
 near real-time. It is written as a phased *evolution* of the current app, not a
@@ -16,6 +16,60 @@ It reacts to, and would consolidate, the contracts in:
 - [`docs/architecture/catalog.md`](../architecture/catalog.md)
 - [`docs/architecture/multi-cluster.md`](../architecture/multi-cluster.md)
 - [`docs/architecture/data-access.md`](../architecture/data-access.md)
+
+## Build status (live ledger)
+
+_Updated 2026-06-21. The running record of what is actually built vs. designed —
+keep this current as work lands. Per-step detail (file:line, benchmarks) is in the
+sections it references._
+
+**Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
+
+- ✅ **Phase 1 — delivery-model collapse.** All 15 `resource-stream-table` domains are
+  notify-only (one delivery model); the live-row row-update merge path
+  (`applyRowUpdates`/`applyShadowUpdates`/`applyResourceRowUpdates`) is deleted.
+  `namespace-helm` stays complete-resync — a **justified exception** (scope-level
+  synthesized HelmReleases), so "one model for all 16" does not fully hold.
+- ✅ **Prototype #1 — store gate: GO.** `backend/refresh/storebench/` at 1M objects:
+  write 0.7µs (1 idx)/1.7µs (2 idx) 0-alloc; keyset page 3.5µs (vs naive full-sort 270ms);
+  reads-under-concurrent-churn 6.4µs (`-race` clean); trigram search 38–555µs; memory
+  74 B/object (~54 clusters/4GB). Owned-columnar + interning + multi-index (no SQLite/cgo)
+  validated across write/read/concurrency/search/memory. (Detail under §Risks #1.)
+
+**Engine build** — production `backend/refresh/querypage/`:
+
+- ✅ **Step 1 — unified value-keyed cursor** (`cursor.go`): one codec replacing the
+  typed-table + catalog cursors; tested.
+- ✅ **Step 2 — generic `Store[R]` Query→Page engine** (`store.go`): schema-driven (zero
+  per-kind code), per-direction keyset indexes, facets/filters/search/pagination.
+  Benchmarked @1M: write 2.7→5.2µs, query 17.6µs and **depth-independent**.
+- ✅ **Step 3 — exact-order parity + config schema**: per-direction indexes reproduce the live
+  `typedTableSortedItemLess` tie-break exactly; `configQuerypageSchema()` derives from the live
+  adapter (reusing its sort encoder + key). Ordering equivalence proven.
+- ✅ **Step 4 — FIRST LIVE CUTOVER**: `snapshot/namespace_config.go::Build` now serves its query
+  branch through the engine (`resolveConfigSnapshotPageViaStore`). Proven byte-equivalent over
+  **84 query combos** (rows across full pagination + Total + UnfilteredTotal + facet lists); full
+  backend suite green. NOTE: this is **unification** (per-Build store rebuild; config N is small) —
+  the perf win needs the maintained store (Next #1).
+
+**Dropped or deferred (with reason — these are NOT pending work, do not re-attempt as patches):**
+
+- ❌ helm → notify-only (genuinely complete-resync — kept as the one exception).
+- ❌ SSAR→SSRR (remaining callers are legitimately cluster-scoped / resourceName-specific).
+- ❌ h2c transport (the webview's browser `fetch` can't use HTTP/2 cleartext); 🔻 MessagePack/Worker
+  decode (marginal at ≤1000-row pages — the big payloads it would help were already eliminated).
+- ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
+  from-scratch-architecture, only land with the real engine.
+
+**Where we are:** mid-**Phase 3** (the engine). **Next** (immediate; the complete remaining
+roadmap with per-item status is in [§Migration phases](#migration-phases--value-early-no-big-bang)):
+
+1. **Maintained store for config** — feed a per-cluster `Store[ConfigSummary]` from ConfigMap/Secret
+   informer Add/Update/Delete events (project via `descriptor.StreamRow`), populated-before-serve via
+   the informer sync gate. Converts the cutover from unification → the actual perf win.
+2. **Migrate the other typed domains** (workloads, network, storage, rbac, quotas, autoscaling) via the
+   proven template: derive Schema from the adapter → prove 84-combo equivalence → swap `Build`.
+3. Then: trigram-accelerated search in the engine; persistence/mmap spill (low priority at 74 B/object).
 
 ## Provenance & confidence
 
@@ -802,68 +856,87 @@ real call.
 
 ## Migration phases — value early, no big-bang
 
-The notify-only work (merged to `main`, PR #235) already proves the spine's
-frontend half (query-backed view + cheap signal + server page). Evolve, don't
-rewrite. Each phase ships independently, is gated by `mage qc:prerelease`, and
-leaves the app correct and faster than before.
+**This is the authoritative "what's left" roadmap.** The ledger at the top is the
+short summary; this section is the full list with per-item status.
 
-### Phase 0 — Seam-preserving plumbing (no behavior change)
+Status legend: ✅ done · 🔶 in progress · ⏳ not started · ❌ dropped (with reason).
+Phases are **not strictly sequential** in practice: we shipped Phase 1, then
+Prototype #1, then went straight into Phase 3 (the engine); Phase 2 was dropped as
+incremental work. **We are currently mid-Phase-3.** Each item is gated by
+`mage qc:prerelease` and leaves the app correct and faster than before.
 
-- [ ] *(optional)* Migrate `gorilla/websocket` → `coder/websocket` behind the
-  `wsConn` seam (`handler.go:24`); `handler_test.go` green first. Low priority —
-  gorilla is maintained again; do this only if the coder API/binary framing is
-  wanted for the delta protocol.
-- [ ] Wrap the loopback server in h2c; switch page bodies to MessagePack + Web
-  Worker decode.
-- [ ] Convert the remaining per-object SSAR callers (`objectcatalog/sync.go:40,86`,
-  `resource_permission.go:70`) onto the existing SSRR-cached path. (`QueryPermissions`
-  is already SSRR-first — `app_permissions.go:107`.)
+### Phase 0 — Seam-preserving plumbing — ✅ no required work outstanding
 
-### Phase 1 — Universalize notify-only (delete the live-row path)
+Phase 0 items are **independent optional plumbing, not prerequisites** for Phases 1/3 — which
+is why they sit untouched while later phases progressed (the "Phase 0" number overstated their
+priority). On re-evaluation (2026-06-21) all three remaining items are dropped or deferred with
+reasons; **nothing required is incomplete here.**
 
-- [ ] Make "page + DOORBELL" the *only* delivery model for all 16 streamed domains.
-- [ ] Delete `applyResourceRowUpdates`, `mergeSnapshotRows`, `sortRows`, the
-  per-domain `collection` descriptors, `notifyOnlyStreamDomains` + parity
-  scaffolding, the shadow-key drift detection, and the global `notify()` fan-out.
-- [ ] **Outcome:** removes the measured ~26 ms@50k-per-flush hot path; shippable
-  value before any store change.
+- ❌ **h2c on the loopback server — DROPPED.** The refresh server is consumed by the webview's
+  **browser `fetch`** (`client.ts:190`); browsers only negotiate HTTP/2 over TLS+ALPN and do not
+  do HTTP/2 cleartext, so the multiplexing benefit can't reach this client.
+- 🔻 **MessagePack + Web Worker decode — DEFERRED (low value now).** Pages are bounded at ≤1000
+  rows (`typed_table_query.go:18`), so a page is small and `JSON.parse` is sub-millisecond; Worker
+  offload is marginal. It would have mattered for the old full-row snapshots, which the
+  notify-only/query-backed migration already eliminated. Revisit only if a page payload grows large.
+- 🔻 **`gorilla/websocket` → `coder/websocket` — DEFERRED (optional).** Gated on wanting binary
+  framing for a delta protocol that doesn't exist yet; gorilla is maintained again.
+- ❌ **SSAR→SSRR cleanup — DROPPED (2026-06-21).** The remaining callers are legitimately NOT
+  SSRR-expressible — `objectcatalog/sync.go:40,86` does cluster-wide `list` checks (no namespace)
+  and `resource_permission.go:70` does resourceName+subresource checks; SSRR is namespace-rule scoped.
 
-### Phase 2 — The LSN clock + the metrics split
+### Phase 1 — Universalize notify-only — ✅ DONE (with one justified exception)
 
-- [ ] Promote the per-(domain,scope) sequence to one per-cluster LSN shared by
-  `Cursor.Snapshot` and the WS object signal; add the out-of-order page guard
-  keyed to it.
-- [ ] **Decouple metrics (§3.6):** remove the `metricsRev` term from the snapshot
-  version (`table_window.go:19`, `snapshotVersionWithDynamicRevision`) and from the
-  projection-cache key (`pods.go:108-111`); give metrics their own `metricsRevision`
-  and a metric sub-channel; render metric cells from that channel. This is mostly a
-  backend change behind the existing payload contract and removes the whole-fleet
-  re-projection per poll on its own.
+- ✅ "page + signal" is the only delivery model for the **15** `resource-stream-table` domains.
+  `namespace-helm` stays complete-resync — a justified exception (scope-level *synthesized*
+  HelmReleases), so "all 16" does not literally hold.
+- 🔶 Live-row path deletion PARTIAL: `applyRowUpdates`/`applyShadowUpdates`/
+  `applyResourceRowUpdates` deleted; but `mergeSnapshotRows`, the per-domain `collection`s, the
+  `notifyOnly` flag, and drift detection REMAIN — helm's complete-resync still uses `applySnapshot`
+  + collections. Full deletion only lands once the engine subsumes helm (Phase 3).
+- ✅ Outcome shipped: the measured ~26 ms@50k-per-flush merge+sort is off the path for the 15.
 
-### Phase 3 — The store, behind the existing `CatalogQueryStore` seam
+### Phase 2 — The LSN clock + the metrics split — ❌ DROPPED as incremental work
 
-- [ ] Run the write-path benchmark (Prototype #1).
-- [ ] Build the owned columnar engine behind the *unchanged* `Query → Page` seam,
-  with the property test (Prototype #2) as the gate. (If the benchmark missed:
-  degrade the engine and/or add a pure-Go `bbolt`/Badger spill — no cgo/SQL.)
-- [ ] Model metrics as a **separate column family + metric indexes maintained on
-  metricsRevision** (§3.6), so metric sorts/filters read the metric index and never
-  re-project object rows.
-- [ ] Cut typed tables and Browse over to the one engine; delete the typed
-  full-sort, the catalog chunk scan, the second unfiltered scan, the two cursor
-  codecs, and the 100k cliff. Backend-only; frontend already speaks the contract
-  from Phase 1.
+- ❌ **LSN clock** — the four ordering signals (per-(domain,scope) seq, per-object RV,
+  `liveDomainVersion`, snapshot `Sequence`) live in four layers; unifying them is a from-scratch
+  restructure, not a tweak. Lands (if at all) WITH the engine, not before.
+- ❌ **Metrics-signal decouple** — no pre-store value: `liveDomainVersion`'s only consumer is the
+  query-backed refetch, which must refetch on a metrics change anyway. Folds into Phase 3's metrics
+  column family. (The pods projection-cache split — keying on `(uid, RV)` so a metrics poll doesn't
+  re-project the fleet — WAS done earlier as a safe standalone slice.)
 
-### Phase 4 — Ingestion to WatchList + projection + spill
+### Phase 3 — The store, behind the `Query → Page` seam — 🔶 IN PROGRESS ← we are here
 
-- [ ] Replace the eager ~30-informer shared factory, the catalog's
-  `factory.ForResource` + on-demand promotion informers (`collect.go:308`), and the
-  CRD-definitions watch handler (`watch.go:306-309`) with the one registry-driven
-  WatchList-projection path (capability-probe + watchdog), feeding the log.
-- [ ] Add the lifecycle state machine, the process-wide governor (incl. pausing the
-  metrics poller on background clusters), mmap spill, and the four-stage cold-start
-  contract. Largest phase, but the spine, contracts, and frontend are already in
-  place — it swaps the data source under a stable seam.
+- ✅ **Prototype #1** (write-path benchmark) — GREEN, GO. (Detail in the prototype list above / §Risks #1.)
+- 🔶 **The engine** — `backend/refresh/querypage/`: unified cursor ✅; generic schema-driven
+  `Store[R]` Query→Page (per-direction keyset indexes, facets, filters, search, pagination) ✅;
+  benchmarked @1M ✅. **REMAINING:** swap the current per-Build store for the **columnar SoA
+  backend** from `storebench` (the memory/perf win); build **Prototype #2** (the fuzzed
+  `apply(deltas)==recompute` property harness) as the formal correctness gate.
+- 🔶 **Cut typed tables + Browse to the one engine.** ✅ `namespace-config` (**1 of ~9** typed
+  domains) — proven 84-combo equivalent, live. **REMAINING:** workloads, network, storage, rbac,
+  quotas, autoscaling (same template: derive Schema → prove equivalence → swap `Build`), then
+  Browse/catalog; then DELETE the typed full-sort, the catalog chunk scan, and the two old cursor codecs.
+- ⏳ Model metrics as a **separate column family + metric indexes on `metricsRevision`** (§3.6).
+
+### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED
+
+- ⏳ **Per-cluster maintained store** (feed config's `Store` from ConfigMap/Secret informer
+  Add/Update/Delete events, populated-before-serve via the sync gate) — the first concrete step;
+  turns the config cutover from *unification* into the *perf win*. Then generalize across domains.
+- ⏳ Replace the eager ~30-informer factory, the catalog's `factory.ForResource` + on-demand
+  promotion informers (`collect.go:308`), and the CRD-definitions watch (`watch.go:306-309`) with the
+  one registry-driven WatchList-projection path (capability-probe + watchdog), feeding the log.
+- ⏳ Lifecycle state machine, process-wide governor (incl. pausing the metrics poller on background
+  clusters), mmap spill, and the four-stage cold-start contract. Largest phase; swaps the data source
+  under a stable seam.
+
+### Prototype gates — status
+
+- ✅ **#1 Write-path benchmark** — GREEN (see above).
+- ⏳ **#2 Property / replay-equivalence harness** (risks #2, #3, #9) — the engine's formal correctness gate.
+- ⏳ **#3 WatchList watchdog + LIST fallback** (risk #5) with bookmark-strip fault injection.
 
 ---
 
