@@ -23,7 +23,7 @@ jobs:
       node_version: ${{ steps.env.outputs.node_version }}
       wails_version: ${{ steps.env.outputs.wails_version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -48,7 +48,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -108,7 +108,7 @@ jobs:
       WAILS_VERSION: ${{ needs.prepare.outputs.wails_version }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -173,7 +173,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-toolchain
@@ -201,7 +201,7 @@ jobs:
       - release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-toolchain
