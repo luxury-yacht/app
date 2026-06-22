@@ -124,43 +124,60 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		return nil, err
 	}
 
-	var resources []AutoscalingSummary
-	var sources []typedTableResourceSource
+	sortAutoscalingSummaries := func(resources []AutoscalingSummary) {
+		sort.Slice(resources, func(i, j int) bool {
+			if resources[i].Namespace == resources[j].Namespace {
+				return resources[i].Name < resources[j].Name
+			}
+			return resources[i].Namespace < resources[j].Namespace
+		})
+	}
+
+	var resolved typedSnapshotPage[AutoscalingSummary]
 	var version uint64
 	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly.
-		var available map[string]bool
-		sources, available = b.autoscalingSources(ctx)
-		resources = b.maintained.rows(parsedScope.Namespace, available)
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
+		sources, available := b.autoscalingSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			parsedScope.Namespace,
+			autoscalingTableQueryAdapter(),
+			autoscalingQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceAutoscalingQueryCapabilities(), sources),
+			config.SnapshotNamespaceAutoscalingEntryLimit,
+			"autoscaling resources",
+			func(resource AutoscalingSummary) string { return resource.Kind },
+			func() []AutoscalingSummary {
+				rows := b.maintained.rows(parsedScope.Namespace, available)
+				sortAutoscalingSummaries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, namespaceAutoscalingDomainName, query, sources),
+		)
 		version = b.maintained.snapshotVersion()
 	} else {
-		var err error
-		resources, sources, version, err = collectDescriptorTableRows[AutoscalingSummary](ctx, namespaceAutoscalingDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		resources, sources, v, err := collectDescriptorTableRows[AutoscalingSummary](ctx, namespaceAutoscalingDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
 		}
+		version = v
+		sortAutoscalingSummaries(resources)
+		resolved = resolveTypedSnapshotPageViaStore(
+			namespaceAutoscalingDomainName,
+			resources,
+			query,
+			autoscalingTableQueryAdapter(),
+			autoscalingQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceAutoscalingQueryCapabilities(), sources),
+			config.SnapshotNamespaceAutoscalingEntryLimit,
+			"autoscaling resources",
+			func(resource AutoscalingSummary) string { return resource.Kind },
+			typedTableQueryResourceIssues(ctx, namespaceAutoscalingDomainName, query, sources),
+		)
 	}
-
-	sort.Slice(resources, func(i, j int) bool {
-		if resources[i].Namespace == resources[j].Namespace {
-			return resources[i].Name < resources[j].Name
-		}
-		return resources[i].Namespace < resources[j].Namespace
-	})
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceAutoscalingDomainName,
-		resources,
-		query,
-		autoscalingTableQueryAdapter(),
-		autoscalingQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceAutoscalingQueryCapabilities(), sources),
-		config.SnapshotNamespaceAutoscalingEntryLimit,
-		"autoscaling resources",
-		func(resource AutoscalingSummary) string { return resource.Kind },
-		typedTableQueryResourceIssues(ctx, namespaceAutoscalingDomainName, query, sources),
-	)
 	return &refresh.Snapshot{
 		Domain:  namespaceAutoscalingDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

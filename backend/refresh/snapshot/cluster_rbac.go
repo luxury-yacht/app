@@ -122,45 +122,61 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	if err != nil {
 		return nil, err
 	}
-	var entries []ClusterRBACEntry
-	var sources []typedTableResourceSource
-	var version uint64
-	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly. The
-		// domain is cluster-scoped, so the store is queried for all rows ("").
-		var available map[string]bool
-		sources, available = b.clusterRBACSources(ctx)
-		entries = b.maintained.rows("", available)
-		version = b.maintained.snapshotVersion()
-	} else {
-		var err error
-		entries, sources, version, err = collectDescriptorTableRows[ClusterRBACEntry](ctx, clusterRBACDomainName, b.collectIndexer, meta, "")
-		if err != nil {
-			return nil, err
-		}
+	sortClusterRBACEntries := func(entries []ClusterRBACEntry) {
+		sort.Slice(entries, func(i, j int) bool {
+			if entries[i].Kind == entries[j].Kind {
+				return entries[i].Name < entries[j].Name
+			}
+			return entries[i].Kind < entries[j].Kind
+		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Kind == entries[j].Kind {
-			return entries[i].Name < entries[j].Name
+	var resolved typedSnapshotPage[ClusterRBACEntry]
+	var version uint64
+	if b.maintained != nil {
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store. The
+		// domain is cluster-scoped, so the store is queried for all rows ("").
+		sources, available := b.clusterRBACSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			"",
+			clusterRBACTableQueryAdapter(),
+			clusterRBACQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterRBACQueryCapabilities(), sources),
+			config.SnapshotClusterRBACEntryLimit,
+			"cluster RBAC resources",
+			func(entry ClusterRBACEntry) string { return entry.Kind },
+			func() []ClusterRBACEntry {
+				rows := b.maintained.rows("", available)
+				sortClusterRBACEntries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, sources),
+		)
+		version = b.maintained.snapshotVersion()
+	} else {
+		entries, sources, v, listErr := collectDescriptorTableRows[ClusterRBACEntry](ctx, clusterRBACDomainName, b.collectIndexer, meta, "")
+		if listErr != nil {
+			return nil, listErr
 		}
-		return entries[i].Kind < entries[j].Kind
-	})
-	issues := typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, sources)
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		clusterRBACDomainName,
-		entries,
-		query,
-		clusterRBACTableQueryAdapter(),
-		clusterRBACQuerypageSchema(),
-		capabilitiesWithAvailableKinds(clusterRBACQueryCapabilities(), sources),
-		config.SnapshotClusterRBACEntryLimit,
-		"cluster RBAC resources",
-		func(entry ClusterRBACEntry) string { return entry.Kind },
-		issues,
-	)
+		version = v
+		sortClusterRBACEntries(entries)
+		resolved = resolveTypedSnapshotPageViaStore(
+			clusterRBACDomainName,
+			entries,
+			query,
+			clusterRBACTableQueryAdapter(),
+			clusterRBACQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterRBACQueryCapabilities(), sources),
+			config.SnapshotClusterRBACEntryLimit,
+			"cluster RBAC resources",
+			func(entry ClusterRBACEntry) string { return entry.Kind },
+			typedTableQueryResourceIssues(ctx, clusterRBACDomainName, query, sources),
+		)
+	}
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.
 	snapshotScope := ""

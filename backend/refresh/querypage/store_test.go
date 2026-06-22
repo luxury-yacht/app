@@ -228,6 +228,59 @@ func TestFacetsAndTotal(t *testing.T) {
 	}
 }
 
+func TestScopeCountsMatchQueryTotal(t *testing.T) {
+	s := NewStore(podSchema())
+	for i := 0; i < 30; i++ {
+		st := "Running"
+		ns := "default"
+		if i%3 == 0 {
+			st = "Pending"
+		}
+		if i%5 == 0 {
+			ns = "kube-system"
+		}
+		s.Upsert(podRow{uid: fmt.Sprintf("u%02d", i), namespace: ns, name: fmt.Sprintf("pod-%02d", i), status: st, cpu: int64(i)})
+	}
+
+	// No base filters / no search: Scope total equals the whole store, and the per-facet
+	// counts equal the maintained facet counters.
+	facets, total := s.Scope(nil, "")
+	if total != 30 {
+		t.Fatalf("scope total = %d, want 30", total)
+	}
+	if facets["status"]["Pending"] != 10 || facets["status"]["Running"] != 20 {
+		t.Fatalf("scope status facets = %v, want Pending=10 Running=20", facets["status"])
+	}
+
+	// A base filter restricts the scope total and every facet count to the matching set,
+	// matching Query's filtered Total exactly.
+	base := map[string][]string{"status": {"Pending"}}
+	fpage, err := s.Query(Query{ClusterID: "c", Signature: "s", Sort: "name", Direction: Ascending, Limit: 5, Filters: base})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sFacets, sTotal := s.Scope(base, "")
+	if sTotal != fpage.Total {
+		t.Fatalf("scope total %d != query total %d", sTotal, fpage.Total)
+	}
+	if sFacets["status"]["Pending"] != fpage.Total {
+		t.Fatalf("scope status=Pending = %d, want %d", sFacets["status"]["Pending"], fpage.Total)
+	}
+	if _, present := sFacets["status"]["Running"]; present {
+		t.Fatalf("scope should not count filtered-out values, got %v", sFacets["status"])
+	}
+
+	// Search narrows the scope the same way Query's filtered Total does.
+	searchPage, err := s.Query(Query{ClusterID: "c", Signature: "s2", Sort: "name", Direction: Ascending, Limit: 5, Search: "pod-0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, searchTotal := s.Scope(nil, "pod-0")
+	if searchTotal != searchPage.Total {
+		t.Fatalf("scope search total %d != query total %d", searchTotal, searchPage.Total)
+	}
+}
+
 func TestFacetsDecrementOnDelete(t *testing.T) {
 	s := NewStore(podSchema())
 	for i := 0; i < 6; i++ {

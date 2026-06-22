@@ -121,41 +121,58 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 		return nil, err
 	}
 
-	var entries []ClusterStorageEntry
-	var sources []typedTableResourceSource
-	var version uint64
-	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly. The
-		// domain is cluster-scoped, so the store is queried for all rows ("").
-		var available map[string]bool
-		sources, available = b.clusterStorageSources(ctx)
-		entries = b.maintained.rows("", available)
-		version = b.maintained.snapshotVersion()
-	} else {
-		var err error
-		entries, sources, version, err = collectDescriptorTableRows[ClusterStorageEntry](ctx, clusterStorageDomainName, b.collectIndexer, meta, "")
-		if err != nil {
-			return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)
-		}
+	sortClusterStorageEntries := func(entries []ClusterStorageEntry) {
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Name < entries[j].Name
+		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
-	})
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		clusterStorageDomainName,
-		entries,
-		query,
-		clusterStorageTableQueryAdapter(),
-		clusterStorageQuerypageSchema(),
-		capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
-		config.SnapshotClusterStorageEntryLimit,
-		"persistent volumes",
-		func(entry ClusterStorageEntry) string { return entry.Kind },
-		typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
-	)
+	var resolved typedSnapshotPage[ClusterStorageEntry]
+	var version uint64
+	if b.maintained != nil {
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store. The
+		// domain is cluster-scoped, so the store is queried for all rows ("").
+		sources, available := b.clusterStorageSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			"",
+			clusterStorageTableQueryAdapter(),
+			clusterStorageQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
+			config.SnapshotClusterStorageEntryLimit,
+			"persistent volumes",
+			func(entry ClusterStorageEntry) string { return entry.Kind },
+			func() []ClusterStorageEntry {
+				rows := b.maintained.rows("", available)
+				sortClusterStorageEntries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
+		)
+		version = b.maintained.snapshotVersion()
+	} else {
+		entries, sources, v, listErr := collectDescriptorTableRows[ClusterStorageEntry](ctx, clusterStorageDomainName, b.collectIndexer, meta, "")
+		if listErr != nil {
+			return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", listErr)
+		}
+		version = v
+		sortClusterStorageEntries(entries)
+		resolved = resolveTypedSnapshotPageViaStore(
+			clusterStorageDomainName,
+			entries,
+			query,
+			clusterStorageTableQueryAdapter(),
+			clusterStorageQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
+			config.SnapshotClusterStorageEntryLimit,
+			"persistent volumes",
+			func(entry ClusterStorageEntry) string { return entry.Kind },
+			typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
+		)
+	}
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.
 	snapshotScope := ""

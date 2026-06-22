@@ -124,43 +124,60 @@ func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, err
 	}
 
-	var resources []StorageSummary
-	var sources []typedTableResourceSource
+	sortStorageSummaries := func(resources []StorageSummary) {
+		sort.Slice(resources, func(i, j int) bool {
+			if resources[i].Namespace == resources[j].Namespace {
+				return resources[i].Name < resources[j].Name
+			}
+			return resources[i].Namespace < resources[j].Namespace
+		})
+	}
+
+	var resolved typedSnapshotPage[StorageSummary]
 	var version uint64
 	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly.
-		var available map[string]bool
-		sources, available = b.storageSources(ctx)
-		resources = b.maintained.rows(parsedScope.Namespace, available)
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
+		sources, available := b.storageSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			parsedScope.Namespace,
+			storageTableQueryAdapter(),
+			storageQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
+			config.SnapshotNamespaceStorageEntryLimit,
+			"storage resources",
+			func(resource StorageSummary) string { return resource.Kind },
+			func() []StorageSummary {
+				rows := b.maintained.rows(parsedScope.Namespace, available)
+				sortStorageSummaries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
+		)
 		version = b.maintained.snapshotVersion()
 	} else {
-		var err error
-		resources, sources, version, err = collectDescriptorTableRows[StorageSummary](ctx, namespaceStorageDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		resources, sources, v, err := collectDescriptorTableRows[StorageSummary](ctx, namespaceStorageDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
 		}
+		version = v
+		sortStorageSummaries(resources)
+		resolved = resolveTypedSnapshotPageViaStore(
+			namespaceStorageDomainName,
+			resources,
+			query,
+			storageTableQueryAdapter(),
+			storageQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
+			config.SnapshotNamespaceStorageEntryLimit,
+			"storage resources",
+			func(resource StorageSummary) string { return resource.Kind },
+			typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
+		)
 	}
-
-	sort.Slice(resources, func(i, j int) bool {
-		if resources[i].Namespace == resources[j].Namespace {
-			return resources[i].Name < resources[j].Name
-		}
-		return resources[i].Namespace < resources[j].Namespace
-	})
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceStorageDomainName,
-		resources,
-		query,
-		storageTableQueryAdapter(),
-		storageQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
-		config.SnapshotNamespaceStorageEntryLimit,
-		"storage resources",
-		func(resource StorageSummary) string { return resource.Kind },
-		typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
-	)
 	return &refresh.Snapshot{
 		Domain:  namespaceStorageDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

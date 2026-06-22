@@ -187,6 +187,199 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	}
 }
 
+// maintainedScopeBase builds the querypage facet filters that pin a maintained
+// store query to THIS request's visible scope: the available kinds for the request
+// (optionally intersected with the user's kind filter) and, for a namespaced domain,
+// the namespace (optionally intersected with the user's namespace filter). All values
+// are lowered+trimmed to match the schema's facet extractor, which lowers+trims too.
+//
+// userKinds/userNamespaces are the request's kind/namespace filters. When a user list
+// is empty the scope is just the available kinds / the domain namespace; when it is
+// non-empty the effective filter is the intersection (AND), exactly as the live
+// matcher applies namespace AND kind. An intersection that is empty yields a filter
+// that matches nothing, mirroring the matcher rejecting every row.
+func maintainedScopeBase(availableKinds map[string]bool, namespace string, userKinds, userNamespaces []string, includeUser bool) map[string][]string {
+	base := map[string][]string{}
+
+	available := make([]string, 0, len(availableKinds))
+	for kind, ok := range availableKinds {
+		if ok {
+			available = append(available, strings.ToLower(strings.TrimSpace(kind)))
+		}
+	}
+	base["kind"] = available
+	if includeUser {
+		if uk := lowerTrimAll(userKinds); len(uk) > 0 {
+			base["kind"] = intersectLowered(available, uk)
+		}
+	}
+
+	if namespace != "" {
+		base["namespace"] = []string{strings.ToLower(strings.TrimSpace(namespace))}
+		if includeUser {
+			if un := lowerTrimAll(userNamespaces); len(un) > 0 {
+				base["namespace"] = intersectLowered(base["namespace"], un)
+			}
+		}
+	} else if includeUser {
+		if un := lowerTrimAll(userNamespaces); len(un) > 0 {
+			base["namespace"] = un
+		}
+	}
+	return base
+}
+
+// intersectLowered returns the values in `a` that also appear in `b` (both already
+// lowered+trimmed). An empty result is preserved as a non-nil empty slice so the
+// caller can distinguish "no values, match nothing" from "no filter".
+func intersectLowered(a, b []string) []string {
+	allow := make(map[string]struct{}, len(b))
+	for _, v := range b {
+		allow[v] = struct{}{}
+	}
+	out := make([]string, 0, len(a))
+	for _, v := range a {
+		if _, ok := allow[v]; ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// maintainedFacetValues maps a Scope facet count map (keyed by the schema's
+// lowered+trimmed facet value) back to the original-cased display facet list,
+// byte-identically to collectTypedTableFacet over the matched rows. casing maps a
+// lowered facet value to the original-cased value the rows carry; a value absent from
+// it (e.g. a namespace, already lowercase) is displayed as-is. Empty/"—" values are
+// dropped to match addTypedTableFacetValue.
+func maintainedFacetValues(counts map[string]int, casing map[string]string) []string {
+	out := make([]string, 0, len(counts))
+	for value := range counts {
+		display := value
+		if original, ok := casing[value]; ok {
+			display = original
+		}
+		display = strings.TrimSpace(display)
+		if display == "" || display == "—" {
+			continue
+		}
+		out = append(out, display)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// resolveMaintainedDirect serves a typed-table query (or window) straight from the
+// persistent maintained store, querying it in place (O(log N + page)) instead of
+// snapshotting every row and rebuilding a fresh per-Build store. Its output is
+// byte-identical to resolveTypedSnapshotPageViaStore(domain, store.rows(namespace,
+// availableKinds), …): same page rows/order, Total (matched count), UnfilteredTotal
+// (in-scope rows before the user's filters/search), facet value lists, and cursor.
+//
+// The kind facet list is mapped back to original casing from availableKinds (whose
+// keys are the original-cased Kind the rows carry — the descriptor identity), so it
+// matches collectTypedTableFacet's output without reconstructing the matched rows.
+func resolveMaintainedDirect[T any](
+	store *querypage.Store[T],
+	query typedTableQuery,
+	availableKinds map[string]bool,
+	namespace string,
+	adapter typedTableQueryAdapter[T],
+	schema querypage.Schema[T],
+	capabilities ResourceQueryCapabilities,
+	windowLimit int,
+	windowNoun string,
+	kindOf func(T) string,
+	windowRows func() []T,
+	issues []ResourceQueryIssue,
+) typedSnapshotPage[T] {
+	if !query.Enabled {
+		// Window mode reproduces the truncated, domain-sorted local window exactly via
+		// the existing path. windowRows supplies the scope-filtered rows already in the
+		// domain's canonical sort order (the same order the list path produces), so the
+		// truncated window is byte-identical. This runs only off the paged hot path.
+		return resolveTypedSnapshotPageViaStore(
+			query.Request.Table, windowRows(), query, adapter, schema,
+			capabilities, windowLimit, windowNoun, kindOf, issues,
+		)
+	}
+
+	sortField := strings.ToLower(strings.TrimSpace(query.Request.SortField))
+	if _, ok := schema.SortKeys[sortField]; !ok {
+		sortField = "name"
+	}
+	dir := querypage.Ascending
+	if strings.EqualFold(query.Request.SortDirection, "desc") {
+		dir = querypage.Descending
+	}
+	limit := query.Request.Limit
+	sig := typedQuerySignature(sortField, dir, limit, query.Request)
+	searchLower := strings.ToLower(strings.TrimSpace(query.Request.Search))
+
+	token := ""
+	cursorInvalid := false
+	if query.Request.Continue != "" {
+		if cur, err := querypage.Decode(query.Request.Continue); err != nil ||
+			cur.Validate(query.Request.ClusterID, sig, sortField, dir, limit) != nil {
+			cursorInvalid = true
+		} else {
+			token = query.Request.Continue
+		}
+	}
+
+	// The page query honors the request's full visible scope (available ∩ user kinds,
+	// namespace ∩ user namespaces) plus search, walking the FULL sort index and
+	// skipping non-matching rows. Because the matched rows keep their relative order in
+	// the full index, the page rows, order, and boundary cursor are identical to a
+	// matched-only store queried with no filters.
+	pageBase := maintainedScopeBase(availableKinds, namespace, query.Request.Kinds, query.Request.Namespaces, true)
+	page, _ := store.Query(querypage.Query{
+		ClusterID: query.Request.ClusterID,
+		Signature: sig,
+		Sort:      sortField,
+		Direction: dir,
+		Limit:     limit,
+		// Request.Search is already trimmed at parse time (resourceQueryRequestFromValues);
+		// Query lowercases internally, matching the live matcher's needle exactly.
+		Search:  query.Request.Search,
+		Filters: pageBase,
+		Cursor:  token,
+	})
+
+	// Facets + Total are over the user-matched set (page query's scope). UnfilteredTotal
+	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
+	// the count of in-scope rows the list path passed in as `items`.
+	matchedFacets, matchedTotal := store.Scope(pageBase, searchLower)
+	scopeOnlyBase := maintainedScopeBase(availableKinds, namespace, nil, nil, false)
+	_, unfilteredTotal := store.Scope(scopeOnlyBase, "")
+
+	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
+	// identity), so lowered facet value -> original casing for the kind facet list.
+	kindCasing := make(map[string]string, len(availableKinds))
+	for kind := range availableKinds {
+		kindCasing[strings.ToLower(strings.TrimSpace(kind))] = kind
+	}
+
+	resultPage := typedTableQueryPage[T]{
+		Rows:            page.Rows,
+		Continue:        page.NextCursor,
+		CursorInvalid:   cursorInvalid,
+		Total:           matchedTotal,
+		UnfilteredTotal: unfilteredTotal,
+		TotalIsExact:    true,
+		FacetsExact:     true,
+		Namespaces:      maintainedFacetValues(matchedFacets["namespace"], nil),
+		Kinds:           maintainedFacetValues(matchedFacets["kind"], kindCasing),
+		Dynamic:         query.dynamicRef(),
+		SortField:       query.Request.SortField,
+	}
+	return typedSnapshotPage[T]{
+		Envelope: typedQueryEnvelope(query.Request.Table, resultPage, capabilities).withDegraded(len(issues) == 0, issues),
+		Rows:     resultPage.Rows,
+		Stats:    refresh.SnapshotStats{ItemCount: len(resultPage.Rows)},
+	}
+}
+
 // resolveTypedSnapshotPageViaStore mirrors resolveTypedSnapshotPage but serves the
 // query branch through the querypage engine. The window branch and all envelope
 // wiring are unchanged, so the snapshot payload is byte-identical apart from the

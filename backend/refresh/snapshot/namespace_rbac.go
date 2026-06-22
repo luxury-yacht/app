@@ -129,38 +129,51 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	var resources []RBACSummary
-	var sources []typedTableResourceSource
+	var resolved typedSnapshotPage[RBACSummary]
 	var version uint64
 	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly.
-		var available map[string]bool
-		sources, available = b.rbacSources(ctx)
-		resources = b.maintained.rows(parsedScope.Namespace, available)
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
+		sources, available := b.rbacSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			parsedScope.Namespace,
+			rbacTableQueryAdapter(),
+			rbacQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceRBACQueryCapabilities(), sources),
+			config.SnapshotNamespaceRBACEntryLimit,
+			"RBAC resources",
+			func(resource RBACSummary) string { return resource.Kind },
+			func() []RBACSummary {
+				rows := b.maintained.rows(parsedScope.Namespace, available)
+				sortRBACSummaries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, sources),
+		)
 		version = b.maintained.snapshotVersion()
 	} else {
-		var err error
-		resources, sources, version, err = collectDescriptorTableRows[RBACSummary](ctx, namespaceRBACDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		resources, sources, v, err := collectDescriptorTableRows[RBACSummary](ctx, namespaceRBACDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		version = v
+		sortRBACSummaries(resources)
+		resolved = resolveTypedSnapshotPageViaStore(
+			namespaceRBACDomainName,
+			resources,
+			query,
+			rbacTableQueryAdapter(),
+			rbacQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceRBACQueryCapabilities(), sources),
+			config.SnapshotNamespaceRBACEntryLimit,
+			"RBAC resources",
+			func(resource RBACSummary) string { return resource.Kind },
+			typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, sources),
+		)
 	}
-
-	sortRBACSummaries(resources)
-	issues := typedTableQueryResourceIssues(ctx, namespaceRBACDomainName, query, sources)
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceRBACDomainName,
-		resources,
-		query,
-		rbacTableQueryAdapter(),
-		rbacQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceRBACQueryCapabilities(), sources),
-		config.SnapshotNamespaceRBACEntryLimit,
-		"RBAC resources",
-		func(resource RBACSummary) string { return resource.Kind },
-		issues,
-	)
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

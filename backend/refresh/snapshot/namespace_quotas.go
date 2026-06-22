@@ -131,44 +131,60 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	var resources []QuotaSummary
-	var sources []typedTableResourceSource
+	sortQuotaSummaries := func(resources []QuotaSummary) {
+		sort.Slice(resources, func(i, j int) bool {
+			if resources[i].Namespace == resources[j].Namespace {
+				return resources[i].Name < resources[j].Name
+			}
+			return resources[i].Namespace < resources[j].Namespace
+		})
+	}
+
+	var resolved typedSnapshotPage[QuotaSummary]
 	var version uint64
 	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly.
-		var available map[string]bool
-		sources, available = b.quotasSources(ctx)
-		resources = b.maintained.rows(parsedScope.Namespace, available)
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
+		sources, available := b.quotasSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			parsedScope.Namespace,
+			quotaTableQueryAdapter(),
+			quotasQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources),
+			config.SnapshotNamespaceQuotasEntryLimit,
+			"quota resources",
+			func(resource QuotaSummary) string { return resource.Kind },
+			func() []QuotaSummary {
+				rows := b.maintained.rows(parsedScope.Namespace, available)
+				sortQuotaSummaries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources),
+		)
 		version = b.maintained.snapshotVersion()
 	} else {
-		var err error
-		resources, sources, version, err = collectDescriptorTableRows[QuotaSummary](ctx, namespaceQuotasDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		resources, sources, v, err := collectDescriptorTableRows[QuotaSummary](ctx, namespaceQuotasDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		version = v
+		sortQuotaSummaries(resources)
+		resolved = resolveTypedSnapshotPageViaStore(
+			namespaceQuotasDomainName,
+			resources,
+			query,
+			quotaTableQueryAdapter(),
+			quotasQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources),
+			config.SnapshotNamespaceQuotasEntryLimit,
+			"quota resources",
+			func(resource QuotaSummary) string { return resource.Kind },
+			typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources),
+		)
 	}
-
-	sort.Slice(resources, func(i, j int) bool {
-		if resources[i].Namespace == resources[j].Namespace {
-			return resources[i].Name < resources[j].Name
-		}
-		return resources[i].Namespace < resources[j].Namespace
-	})
-
-	issues := typedTableQueryResourceIssues(ctx, namespaceQuotasDomainName, query, sources)
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceQuotasDomainName,
-		resources,
-		query,
-		quotaTableQueryAdapter(),
-		quotasQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceQuotasQueryCapabilities(), sources),
-		config.SnapshotNamespaceQuotasEntryLimit,
-		"quota resources",
-		func(resource QuotaSummary) string { return resource.Kind },
-		issues,
-	)
 	return &refresh.Snapshot{
 		Domain:  namespaceQuotasDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

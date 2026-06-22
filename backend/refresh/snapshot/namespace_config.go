@@ -124,42 +124,55 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, err
 	}
 
-	var resources []ConfigSummary
-	var sources []typedTableResourceSource
+	var resolved typedSnapshotPage[ConfigSummary]
 	var version uint64
 	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly.
-		var available map[string]bool
-		sources, available = b.configSources(ctx)
-		resources = b.maintained.rows(parsedScope.Namespace, available)
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
+		// availability + sources mirror the list path exactly.
+		sources, available := b.configSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			parsedScope.Namespace,
+			configTableQueryAdapter(),
+			configQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources),
+			config.SnapshotNamespaceConfigEntryLimit,
+			"config resources",
+			func(resource ConfigSummary) string { return resource.Kind },
+			func() []ConfigSummary {
+				rows := b.maintained.rows(parsedScope.Namespace, available)
+				sortConfigSummaries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources),
+		)
 		version = b.maintained.snapshotVersion()
 	} else {
-		var err error
-		resources, sources, version, err = collectDescriptorTableRows[ConfigSummary](ctx, namespaceConfigDomainName, b.collectIndexer, meta, parsedScope.Namespace)
+		resources, sources, v, err := collectDescriptorTableRows[ConfigSummary](ctx, namespaceConfigDomainName, b.collectIndexer, meta, parsedScope.Namespace)
 		if err != nil {
 			return nil, err
 		}
+		version = v
+		sortConfigSummaries(resources)
+		// Serve the query branch through the querypage engine (proven byte-equivalent to
+		// the bespoke typed-table executor in querypage_config_test.go); the window branch
+		// and all envelope wiring are unchanged.
+		resolved = resolveTypedSnapshotPageViaStore(
+			namespaceConfigDomainName,
+			resources,
+			query,
+			configTableQueryAdapter(),
+			configQuerypageSchema(),
+			capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources),
+			config.SnapshotNamespaceConfigEntryLimit,
+			"config resources",
+			func(resource ConfigSummary) string { return resource.Kind },
+			typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources),
+		)
 	}
-
-	sortConfigSummaries(resources)
-
-	issues := typedTableQueryResourceIssues(ctx, namespaceConfigDomainName, query, sources)
-	// Serve the query branch through the querypage engine (proven byte-equivalent to
-	// the bespoke typed-table executor in querypage_config_test.go); the window branch
-	// and all envelope wiring are unchanged.
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceConfigDomainName,
-		resources,
-		query,
-		configTableQueryAdapter(),
-		configQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceConfigQueryCapabilities(), sources),
-		config.SnapshotNamespaceConfigEntryLimit,
-		"config resources",
-		func(resource ConfigSummary) string { return resource.Kind },
-		issues,
-	)
 	return &refresh.Snapshot{
 		Domain:  namespaceConfigDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

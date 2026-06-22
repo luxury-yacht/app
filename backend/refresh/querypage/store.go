@@ -92,24 +92,35 @@ func (si *sortIndex) remove(e indexEntry) {
 	si.desc.Delete(e)
 }
 
-// Store is the generic Query → Page engine for one kind. It holds rows by UID, a
-// b-tree keyset index per sort order, and exact facet counters, all maintained
-// incrementally on Upsert/Delete. It is generic over R via the Schema extractors —
-// the engine carries no per-kind logic.
+// Store is the generic Query → Page engine for one kind. It holds rows in an
+// interned columnar store keyed by UID, a b-tree keyset index per sort order, and
+// exact facet counters, all maintained incrementally on Upsert/Delete. It is generic
+// over R via the Schema extractors — the engine carries no per-kind logic.
+//
+// Row storage is a columnStore (see columnar.go): a structure-of-arrays with
+// dictionary-interned string columns and a recycled rowId arena, replacing a plain
+// map[string]R. To avoid an O(N)-reconstruction-per-query regression, the Schema's
+// match inputs (facet values + lowercased SearchText) are extracted ONCE per row at
+// Upsert time and cached by rowId in `matchByRowID`, so Query filters/searches and
+// the filtered-Total scan read those cached values instead of reconstructing rows.
+// Full rows are reconstructed via the codec only for the page actually returned, for
+// Snapshot, and for the deindex of a replaced/deleted row.
 type Store[R any] struct {
 	mu     sync.RWMutex
 	schema Schema[R]
-	rows   map[string]R
+	rows   *columnStore[R]
+	match  map[uint32]matchValues // by rowId: precomputed facet values + lowercased search text
 	idx    map[string]*sortIndex
 	facets map[string]map[string]int
 }
 
 // NewStore builds an empty store for a schema, creating a per-direction index per
-// sort key.
+// sort key and the columnar row store (codec built by reflecting over R's zero value).
 func NewStore[R any](schema Schema[R]) *Store[R] {
 	s := &Store[R]{
 		schema: schema,
-		rows:   make(map[string]R),
+		rows:   newColumnStore[R](newRowCodec[R]()),
+		match:  make(map[uint32]matchValues),
 		idx:    make(map[string]*sortIndex, len(schema.SortKeys)),
 		facets: make(map[string]map[string]int, len(schema.Facets)),
 	}
@@ -130,10 +141,11 @@ func (s *Store[R]) Upsert(row R) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	uid := s.schema.UID(row)
-	if old, ok := s.rows[uid]; ok {
+	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
 	}
-	s.rows[uid] = row
+	rowID := s.rows.put(uid, row)
+	s.match[rowID] = extractMatchValues(s.schema, row)
 	s.reindex(uid, row)
 }
 
@@ -141,9 +153,10 @@ func (s *Store[R]) Upsert(row R) {
 func (s *Store[R]) Delete(uid string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if old, ok := s.rows[uid]; ok {
+	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
-		delete(s.rows, uid)
+		rowID, _ := s.rows.delete(uid)
+		delete(s.match, rowID)
 	}
 }
 
@@ -151,19 +164,20 @@ func (s *Store[R]) Delete(uid string) {
 func (s *Store[R]) Len() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.rows)
+	return s.rows.len()
 }
 
 // Snapshot returns a copy of every stored row (unordered) under a read lock. It
 // lets a caller hand the store's current rows to another consumer (e.g. a
-// scope-filtered re-query) without exposing the internal map.
+// scope-filtered re-query) without exposing the internal store.
 func (s *Store[R]) Snapshot() []R {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]R, 0, len(s.rows))
-	for _, r := range s.rows {
+	out := make([]R, 0, s.rows.len())
+	s.rows.forEach(func(_ string, r R) bool {
 		out = append(out, r)
-	}
+		return true
+	})
 	return out
 }
 
@@ -190,16 +204,30 @@ func (s *Store[R]) deindex(uid string, row R) {
 	}
 }
 
-func (s *Store[R]) rowMatches(row R, q Query) bool {
-	for fname, allowed := range q.Filters {
+// matchValuesMatches tests a query's filters + search against a row's precomputed
+// match cache (facet values + lowercased search text), so no row is reconstructed to
+// answer a filter/search. `searchLower` is the query's search term, pre-lowered once
+// by the caller. It mirrors the previous rowMatches semantics exactly.
+func (s *Store[R]) matchValuesMatches(mv matchValues, q Query, searchLower string) bool {
+	// Query's filters + search are exactly a scope base + search, so the two share one
+	// matcher (scopeMatchesBase) and can never diverge.
+	return s.scopeMatchesBase(mv, q.Filters, searchLower)
+}
+
+// scopeMatchesBase tests a row's cached match values against a base filter set +
+// search using the SAME logic as matchValuesMatches. It takes the base filters and a
+// pre-lowered search directly (rather than a full Query) so Scope and Query share one
+// matcher and can never diverge. Filters here carry the same semantics as Query.Filters
+// (OR within a facet, AND across facets); an empty allowed list for a facet is ignored.
+func (s *Store[R]) scopeMatchesBase(mv matchValues, base map[string][]string, searchLower string) bool {
+	for fname, allowed := range base {
 		if len(allowed) == 0 {
 			continue
 		}
-		get := s.schema.Facets[fname]
-		if get == nil {
+		if _, isFacet := s.schema.Facets[fname]; !isFacet {
 			return false
 		}
-		v := get(row)
+		v := mv.facets[fname]
 		matched := false
 		for _, a := range allowed {
 			if v == a {
@@ -211,15 +239,44 @@ func (s *Store[R]) rowMatches(row R, q Query) bool {
 			return false
 		}
 	}
-	if q.Search != "" {
+	if searchLower != "" {
 		if s.schema.SearchText == nil {
 			return false
 		}
-		if !strings.Contains(strings.ToLower(s.schema.SearchText(row)), strings.ToLower(q.Search)) {
+		if !strings.Contains(mv.searchText, searchLower) {
 			return false
 		}
 	}
 	return true
+}
+
+// Scope returns, over the rows matching `base` filters + `search`, the per-facet
+// value→count map and the total — computed from the by-rowId match cache WITHOUT
+// reconstructing any row. Same filter/search semantics as Query (OR within a facet,
+// AND across facets; case-insensitive substring search). The facet values are the
+// raw values the schema's facet extractor produced (e.g. lowercased), matching the
+// stored match cache. This is the cheap O(N)-no-reconstruction count a direct serve
+// uses for facets + UnfilteredTotal.
+func (s *Store[R]) Scope(base map[string][]string, search string) (map[string]map[string]int, int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	searchLower := strings.ToLower(search)
+	counts := make(map[string]map[string]int, len(s.schema.Facets))
+	for name := range s.schema.Facets {
+		counts[name] = make(map[string]int)
+	}
+	total := 0
+	for _, mv := range s.match {
+		if !s.scopeMatchesBase(mv, base, searchLower) {
+			continue
+		}
+		total++
+		for name, value := range mv.facets {
+			counts[name][value]++
+		}
+	}
+	return counts, total
 }
 
 // Query executes a page request: it seeks to the cursor position in the chosen
@@ -254,6 +311,21 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		pivot.val = cur.Position[0]
 	}
 
+	// Lower the search term once; matchValuesMatches compares it against each row's
+	// pre-lowered cached SearchText, so neither side is re-lowered per row.
+	searchLower := strings.ToLower(q.Search)
+
+	// matchesUID tests the query against a uid's cached match values (facets + search)
+	// without reconstructing the row. A uid present in the sort index always has a
+	// cached entry (maintained in lockstep by Upsert/Delete).
+	matchesUID := func(uid string) bool {
+		rowID, ok := s.rows.rowID(uid)
+		if !ok {
+			return false
+		}
+		return s.matchValuesMatches(s.match[rowID], q, searchLower)
+	}
+
 	// Collect up to limit+1 matching entries from the pivot, in walk order, so the
 	// limit+1th tells us whether a further page exists on the walked side.
 	entries := make([]indexEntry, 0, limit+1)
@@ -261,7 +333,7 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		if hasPivot && e.val == pivot.val && e.uid == pivot.uid {
 			return true // the boundary row itself already appeared on the adjacent page
 		}
-		if !s.rowMatches(s.rows[e.uid], q) {
+		if !matchesUID(e.uid) {
 			return true
 		}
 		entries = append(entries, e)
@@ -293,9 +365,11 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		}
 	}
 
+	// Reconstruct full rows ONLY for the page actually returned (not for every scanned
+	// or filtered row), via the codec.
 	rows := make([]R, len(entries))
 	for i, e := range entries {
-		rows[i] = s.rows[e.uid]
+		rows[i], _ = s.rows.get(e.uid)
 	}
 
 	// Boundary cursors. NextCursor pins the last row (forward), PrevCursor pins the
@@ -327,11 +401,13 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		}
 	}
 
-	total := len(s.rows)
+	// Total: the unfiltered live count, or a column-only scan over the cached match
+	// values when filters/search are present (no row reconstruction).
+	total := s.rows.len()
 	if len(q.Filters) > 0 || q.Search != "" {
 		total = 0
-		for _, row := range s.rows {
-			if s.rowMatches(row, q) {
+		for _, mv := range s.match {
+			if s.matchValuesMatches(mv, q, searchLower) {
 				total++
 			}
 		}

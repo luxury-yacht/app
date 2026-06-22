@@ -66,25 +66,28 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** Phase 3 is DONE — the **"one query engine" goal is met**: ALL 16 typed-table domains AND
-Browse/object-catalog now serve through the single `querypage` engine. The bespoke **`typedTableQueryCollector`,
-the old `resolveTypedSnapshotPage`, AND the catalog chunk-scan + catalog cursor codec are all DELETED**; the
-engine grew **predicates** (matched-set build) and **backward/prev-page pagination** (for Browse's Prev/Next);
+**Where we are:** **Phase 3 DONE** — all 16 typed-table domains AND Browse/object-catalog serve through the
+single `querypage` engine, whose store is now the **columnar SoA backend** (interned columns + reflect codec,
+property-test gated; ~12% row-memory win — modest because projection already captured the big win, but it's
+the on-disk SoA format for Phase 4 spill). The 8 maintained domains query the persistent store DIRECTLY
+(O(log N+page)). The bespoke **`typedTableQueryCollector`, the old `resolveTypedSnapshotPage`, AND the catalog
+chunk-scan + cursor codec are all DELETED**; the engine grew **predicates** + **backward/prev-page pagination**;
 `applyTypedTableQuery` remains only as the typed-table equivalence oracle. **`pods` is on a maintained store
 with metrics as a separate column** (zeroed in the store, overlaid fresh at serve — a metrics poll never
 touches the store). (Earlier ledger entries said "10 typed domains" — that undercounted; the set is 16.)
 **Next** (complete remaining
 roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. ✅ **Browse/catalog onto the engine — DONE.** Both old cursor codecs + the collector are gone; every
-   typed table AND Browse serve through `querypage`. (Follow-up worth doing: a stronger catalog
-   correctness test — the cutover landed without a full new-vs-old matrix; see the §Migration caveat.)
-2. **Maintained stores for the cutover-only domains** (network, workloads, nodes, helm, crds — they serve via
-   the engine but still list+project per Build) — the per-request-reprojection perf win. network needs the
-   Service↔EndpointSlice relationship; workloads the synthesized standalone-pods. Plus the pods O(log N+page)
-   optimization (query the persistent store's indexes directly instead of Snapshot()+rebuild).
-3. The **columnar SoA backend** (memory win); then trigram-accelerated search; persistence/mmap spill
-   (low priority at 74 B/object).
+**Phases 0–3 are DONE.** Phase 4 (ingestion to WatchList + projection + spill) is the remaining build. Next:
+1. **Phase 4 — WatchList-projection ingestion**: replace the eager ~30-informer factory + the catalog's
+   `factory.ForResource`/on-demand promotion + the CRD watch with one registry-driven WatchList-projection
+   path (capability-probe + watchdog). Prototype #3 (WatchList watchdog + LIST fallback) first.
+2. **Phase 4 — lifecycle + governor + mmap spill + four-stage cold-start.** The columnar SoA is already the
+   on-disk format, so spill is `mmap`ing the column files per `(cluster,gvr)`.
+3. **Smaller, optional:** maintained stores for the cutover-only domains (network relationship, workloads
+   synthesized pods, nodes/helm/crds — they serve via the engine but still list+project per Build); pods'
+   direct query + metric indexes on `metricsRevision` (profile-driven); a stronger catalog correctness test;
+   trigram-accelerated search.
 
 ## Provenance & confidence
 
@@ -927,14 +930,21 @@ reasons; **nothing required is incomplete here.**
   column family. (The pods projection-cache split — keying on `(uid, RV)` so a metrics poll doesn't
   re-project the fleet — WAS done earlier as a safe standalone slice.)
 
-### Phase 3 — The store, behind the `Query → Page` seam — 🔶 IN PROGRESS ← we are here
+### Phase 3 — The store, behind the `Query → Page` seam — ✅ DONE (2026-06-22)
 
 - ✅ **Prototype #1** (write-path benchmark) — GREEN, GO. (Detail in the prototype list above / §Risks #1.)
-- 🔶 **The engine** — `backend/refresh/querypage/`: unified cursor ✅; generic schema-driven
-  `Store[R]` Query→Page (per-direction keyset indexes, facets, filters, search, pagination) ✅;
-  benchmarked @1M ✅; **Prototype #2 (fuzz `apply(ops)==recompute`, 40×800 ops) ✅** — Risk #2
-  closed. **REMAINING:** swap the current per-Build store for the **columnar SoA backend** from
-  `storebench` (the memory/perf win).
+- ✅ **The engine** — `backend/refresh/querypage/`: unified cursor ✅; generic schema-driven `Store[R]`
+  Query→Page (per-direction keyset indexes, facets, filters, search, pagination) ✅; **backward/prev-page
+  pagination** ✅; benchmarked @1M ✅; **Prototype #2 fuzz ✅**. **Columnar SoA backend LIVE** (`columnar.go`):
+  a reflect-built `rowCodec[R]` interns string columns → uint32 dict ids, packs numeric/bool columns
+  (zero-pointer), and stores exotic fields (maps/slices/pointers) via an exact deep-copy fallback so
+  `Decode(Encode(R))==R`; recycled-rowId arena; adaptive promotion drops the dict for ≥90%-unique columns; a
+  by-rowId match cache answers filter/search/facet/total with NO row reconstruction (only the returned page is
+  rebuilt). **Property-test gated airtight** — the fuzz, backward test, ALL 16 typed-domain equivalence tests,
+  and the catalog all pass UNCHANGED through it. **MEASURED MEMORY WIN: modest — 241 vs 275 B/row (~12%)**, NOT
+  the dramatic figure the budget implied, because the big win (storing the projected Summary, not the raw
+  object) was already achieved by projection; the columnar adds interning + is the on-disk SoA format that
+  enables Phase 4 mmap spill.
 - ✅ **Typed tables cut over to the one engine — COMPLETE (16/16 domains).** Every typed-table domain serves
   via `resolveTypedSnapshotPageViaStore`, each equivalence-gated byte-identical to the live executor: config,
   namespace-{storage, quotas, rbac, autoscaling, network, workloads, events, helm}, cluster-{config, storage,
@@ -954,12 +964,16 @@ reasons; **nothing required is incomplete here.**
   existing catalog behavior tests (which caught the facet bug) + a pagination-completeness test, NOT a full
   new-vs-old matrix. Gate green (`mage qc:prerelease` exit 0). **The "one query engine" goal is now met:
   every typed table AND Browse serve through `querypage`; both old cursor codecs + the collector are gone.**
-- 🔶 **Metrics as a separate column (§3.6).** ✅ Realized for `pods`: the maintained pod store holds row data
+- ✅ **Metrics as a separate column (§3.6).** Realized for `pods`: the maintained pod store holds row data
   with CPU/Mem ZEROED (informer-fed); fresh metrics are overlaid at serve from `LatestPodUsage()`, so a metrics
   poll never touches the store. (nodes carries its metrics in the per-Build rows — fine at node scale.)
-  **REMAINING:** the O(log N+page) optimization — query the persistent store's indexes DIRECTLY instead of
-  `Snapshot()`+rebuild (today pods is the same O(N)/Build as before, just off the collector); and metric
-  indexes on `metricsRevision` if/when metric-sorted pods need sub-O(N).
+- ✅ **Direct persistent-store querying** — the 8 maintained typed domains (config, namespace-{storage,
+  quotas,rbac,autoscaling}, cluster-{config,storage,rbac}) now query their persistent store DIRECTLY
+  (`store.Query` page = O(log N+page); `store.Scope` counts facets/totals over the by-rowId match cache with
+  NO reconstruction) instead of `Snapshot()`+rebuild — byte-identical (all 8 `…MatchesListPath` gates pass
+  unchanged). **DEFERRED (explicitly conditional, not blocking Phase 3):** pods' own direct query (its
+  metric-sorts need fresh-metric ordering + the serve overlay — a targeted future opt), and metric indexes on
+  `metricsRevision` ("if/when metric-sorted pods need sub-O(N)" — profile-driven).
 
 ### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED
 
@@ -983,9 +997,10 @@ reasons; **nothing required is incomplete here.**
   -scoped both delete right). Gate green (`mage qc:prerelease` EXIT 0: race tests, vitest 3234, knip, trivy).
   **REMAINING:** `namespace-network` — hybrid (descriptor rows + bespoke `listServices`/EndpointSlices, where
   a Service row depends on its EndpointSlices, `namespace_network.go:130,147,159`); needs the maintained
-  store to also feed those relationship-dependent sources. `namespace-workloads` — custom
-  `typedTableQueryCollector` Build with synthesized standalone-pod rows. Plus Browse/catalog. The perf win
-  is on the larger domains.
+  store to also feed those relationship-dependent sources. `namespace-workloads` — synthesized standalone-pod
+  rows (the build is already on the engine; the maintained store needs the cross-kind standalone determination).
+  Also nodes/helm/crds still list+project per Build. The perf win is on the larger domains. (Browse/catalog is
+  DONE — its own maintained `querypage.Store` + direct `store.Query`.)
 - ⏳ Replace the eager ~30-informer factory, the catalog's `factory.ForResource` + on-demand
   promotion informers (`collect.go:308`), and the CRD-definitions watch (`watch.go:306-309`) with the
   one registry-driven WatchList-projection path (capability-probe + watchdog), feeding the log.

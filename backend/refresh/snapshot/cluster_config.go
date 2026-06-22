@@ -138,44 +138,61 @@ func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	var entries []ClusterConfigEntry
-	var sources []typedTableResourceSource
-	var version uint64
-	if b.maintained != nil {
-		// Serve projected rows straight from the informer-fed store (no re-listing /
-		// re-projecting); availability + sources mirror the list path exactly. The
-		// domain is cluster-scoped, so the store is queried for all rows ("").
-		var available map[string]bool
-		sources, available = b.clusterConfigSources(ctx)
-		entries = b.maintained.rows("", available)
-		version = b.maintained.snapshotVersion()
-	} else {
-		entries, sources, version, err = collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
-		if err != nil {
-			return nil, err
-		}
+	sortClusterConfigEntries := func(entries []ClusterConfigEntry) {
+		sort.Slice(entries, func(i, j int) bool {
+			if entries[i].Kind == entries[j].Kind {
+				return entries[i].Name < entries[j].Name
+			}
+			return entries[i].Kind < entries[j].Kind
+		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Kind == entries[j].Kind {
-			return entries[i].Name < entries[j].Name
+	var resolved typedSnapshotPage[ClusterConfigEntry]
+	var version uint64
+	if b.maintained != nil {
+		// Serve the query straight from the informer-fed store, querying it in place
+		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store. The
+		// domain is cluster-scoped, so the store is queried for all rows ("").
+		sources, available := b.clusterConfigSources(ctx)
+		resolved = resolveMaintainedDirect(
+			b.maintained.store,
+			query,
+			available,
+			"",
+			clusterConfigTableQueryAdapter(),
+			clusterConfigQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
+			config.SnapshotClusterConfigEntryLimit,
+			"cluster configuration resources",
+			func(entry ClusterConfigEntry) string { return entry.Kind },
+			func() []ClusterConfigEntry {
+				rows := b.maintained.rows("", available)
+				sortClusterConfigEntries(rows)
+				return rows
+			},
+			typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources),
+		)
+		version = b.maintained.snapshotVersion()
+	} else {
+		entries, sources, v, listErr := collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
+		if listErr != nil {
+			return nil, listErr
 		}
-		return entries[i].Kind < entries[j].Kind
-	})
-	issues := typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources)
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		clusterConfigDomainName,
-		entries,
-		query,
-		clusterConfigTableQueryAdapter(),
-		clusterConfigQuerypageSchema(),
-		capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
-		config.SnapshotClusterConfigEntryLimit,
-		"cluster configuration resources",
-		func(entry ClusterConfigEntry) string { return entry.Kind },
-		issues,
-	)
+		version = v
+		sortClusterConfigEntries(entries)
+		resolved = resolveTypedSnapshotPageViaStore(
+			clusterConfigDomainName,
+			entries,
+			query,
+			clusterConfigTableQueryAdapter(),
+			clusterConfigQuerypageSchema(),
+			capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
+			config.SnapshotClusterConfigEntryLimit,
+			"cluster configuration resources",
+			func(entry ClusterConfigEntry) string { return entry.Kind },
+			typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources),
+		)
+	}
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.
 	snapshotScope := ""

@@ -194,3 +194,82 @@ func TestNamespaceConfigBuilderMaintainedMatchesListPath(t *testing.T) {
 			"scope %q: maintained Build payload must equal the list Build payload", scope)
 	}
 }
+
+// TestNamespaceConfigDirectServeEdgeScopesMatchListPath hardens the direct-serve path
+// against edge scopes the byte-identity contract must still honor: a search with
+// surrounding whitespace (the live matcher trims; the direct page query must too), a
+// descending sort, a mixed-case kind filter, and multi-page cursor round-trips. It is
+// kept separate from the cutover gate above so that test stays unchanged.
+func TestNamespaceConfigDirectServeEdgeScopesMatchListPath(t *testing.T) {
+	cmDesc := configDescriptor(t, "configmaps")
+	secDesc := configDescriptor(t, "secrets")
+
+	cms := []*corev1.ConfigMap{
+		cmObj("default", "alpha", "1", map[string]string{"a": "1"}),
+		cmObj("default", "beta", "2", map[string]string{"a": "1", "b": "2"}),
+		cmObj("default", "alphabet", "3", nil),
+		cmObj("kube-system", "gamma", "4", nil),
+		cmObj("app", "alpine", "5", nil),
+	}
+	secs := []*corev1.Secret{
+		secObj("default", "alpha-secret", "6", map[string][]byte{"t": []byte("x")}),
+		secObj("kube-system", "s-two", "7", nil),
+		secObj("app", "alpha-token", "8", nil),
+	}
+
+	cmIdx := newNamespaceIndexer()
+	secIdx := newNamespaceIndexer()
+	maintained := newTypedMaintainedStore(ClusterMeta{}, configQuerypageSchema(), configTableQueryAdapter())
+	for _, cm := range cms {
+		require.NoError(t, cmIdx.Add(cm))
+		maintained.ingest(cmDesc, cm)
+	}
+	for _, s := range secs {
+		require.NoError(t, secIdx.Add(s))
+		maintained.ingest(secDesc, s)
+	}
+
+	collect := configCollectIndexer(cmIdx, secIdx)
+	listBuilder := &NamespaceConfigBuilder{collectIndexer: collect}
+	maintainedBuilder := &NamespaceConfigBuilder{collectIndexer: collect, maintained: maintained}
+
+	// Single-shot scopes: whitespace-padded search, descending sort, mixed-case kind
+	// filter, and a kind+search combination.
+	for _, scope := range []string{
+		"cluster-a|namespace:all?search=%20alpha%20",                // padded search must trim
+		"cluster-a|namespace:all?sortField=name&sortDirection=desc", // descending
+		"cluster-a|namespace:all?kinds=configmap",                   // lower-cased kind filter
+		"cluster-a|namespace:all?kinds=ConfigMap&search=alpha",      // kind + search
+		"cluster-a|namespace:default?kinds=Secret&kinds=ConfigMap",  // multi-kind
+	} {
+		listSnap, err := listBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "list build %q", scope)
+		maintSnap, err := maintainedBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "maintained build %q", scope)
+		require.Equal(t,
+			listSnap.Payload.(NamespaceConfigSnapshot),
+			maintSnap.Payload.(NamespaceConfigSnapshot),
+			"scope %q: direct serve must equal list path", scope)
+	}
+
+	// Multi-page cursor round-trip: page through the full ascending set limit=2 and
+	// require each page's payload (rows, facets, totals, continue token) to match.
+	scope := "cluster-a|namespace:all?limit=2&sortField=name&sortDirection=asc"
+	for guard := 0; guard < 50; guard++ {
+		listSnap, err := listBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "list build %q", scope)
+		maintSnap, err := maintainedBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "maintained build %q", scope)
+
+		listPayload := listSnap.Payload.(NamespaceConfigSnapshot)
+		maintPayload := maintSnap.Payload.(NamespaceConfigSnapshot)
+		require.Equal(t, listPayload, maintPayload, "paged scope %q must match", scope)
+
+		next := listPayload.ResourceQueryEnvelope.Continue
+		if next == "" {
+			return
+		}
+		scope = "cluster-a|namespace:all?limit=2&sortField=name&sortDirection=asc&continue=" + next
+	}
+	t.Fatal("pagination did not terminate")
+}
