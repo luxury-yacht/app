@@ -52,11 +52,12 @@ func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj met
 }
 
 func (m *Manager) newObjectRowUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef, row interface{}) Update {
-	update := m.newObjectUpdate(updateType, domain, obj, ref)
-	// Deletes never carry a row; notify-only domains never carry one either —
-	// their query-backed views consume only the change signal (see notify_only.go).
-	if updateType != MessageTypeDeleted && !isNotifyOnlyStreamDomain(domain) {
-		update.Row = row
-	}
-	return update
+	// Every streamed table is query-backed: the visible page is fetched over HTTP
+	// and the live subscription exists only to learn WHEN to refetch. The stream
+	// therefore ships only the change signal (Ref + ResourceVersion); the projected
+	// row is never sent. The row argument is retained so the guardrail test can keep
+	// policing that callers pass a projector-derived value, and because some callers
+	// (e.g. pods) still build the projection for load-bearing broadcast scope.
+	_ = row
+	return m.newObjectUpdate(updateType, domain, obj, ref)
 }

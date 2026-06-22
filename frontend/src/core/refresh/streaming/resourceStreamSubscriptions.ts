@@ -48,9 +48,6 @@ export type StreamSubscription = {
   resyncInFlight: boolean;
   lastResyncAt: number;
   preserveMetrics: boolean;
-  shadowKeys: Set<string>;
-  hasBaseline: boolean;
-  driftDetected: boolean;
 };
 
 type PendingUnsubscribe = {
@@ -252,9 +249,6 @@ export class ResourceStreamSubscriptionStore {
       resyncInFlight: false,
       lastResyncAt: 0,
       preserveMetrics: getResourceStreamDomainDescriptor(domain).preserveMetrics,
-      shadowKeys: new Set(),
-      hasBaseline: false,
-      driftDetected: false,
     };
     this.subscriptions.set(key, subscription);
     this.logInfo(

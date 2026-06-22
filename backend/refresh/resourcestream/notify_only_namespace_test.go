@@ -11,10 +11,9 @@ import (
 
 // The namespace resource tables (config/rbac/network/quotas/storage/autoscaling) are
 // query-backed (their NsView* components render the backend /query page), so the live
-// stream ships only the change signal, not the projected Row — the notify-only
-// treatment the cluster tables and pods/nodes/workloads already use. Completing Phase 1
-// means these flip too; namespace-custom (catalog-backed) and namespace-helm
-// (complete-resync) stay row-bearing.
+// stream ships only the change signal, not the projected Row — like every streamed
+// table. namespace-custom (catalog-backed) and namespace-helm (complete-resync) omit
+// the Row too; nothing renders the streamed rows anymore.
 func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyNamespaceDomains(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
@@ -39,7 +38,7 @@ func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyNamespaceDomains(t *test
 		ref := manager.resourceRefForObject(object, "", "v1", "Resource", "resources")
 		for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
 			update := manager.newObjectRowUpdate(updateType, domain, object, ref, row)
-			require.Nilf(t, update.Row, "%s is notify-only; must omit Row for %s", domain, updateType)
+			require.Nilf(t, update.Row, "%s is query-backed; must omit Row for %s", domain, updateType)
 		}
 	}
 }

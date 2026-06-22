@@ -11,10 +11,10 @@ import (
 
 // cluster-config tables are query-backed (ClusterViewConfig renders the backend
 // /query page via useQueryBackedClusterResourceGridTable), so the live stream only
-// needs to ship the change signal, not the projected row — the notify-only
-// treatment pods, nodes, and namespace-workloads already use. Flipping cluster-config
-// must omit Row on add/modify while identity (Ref) and ResourceVersion still travel,
-// so shadow-key drift detection and the query-backed refetch trigger keep working.
+// needs to ship the change signal, not the projected row — like every other streamed
+// table. cluster-config must omit Row on add/modify while identity (Ref) and
+// ResourceVersion still travel, so shadow-key drift detection and the query-backed
+// refetch trigger keep working.
 func TestManagerNewObjectRowUpdateOmitsRowsForClusterConfig(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
@@ -30,7 +30,7 @@ func TestManagerNewObjectRowUpdateOmitsRowsForClusterConfig(t *testing.T) {
 
 	for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
 		update := manager.newObjectRowUpdate(updateType, domainClusterConfig, object, ref, row)
-		require.Nilf(t, update.Row, "cluster-config is notify-only; must omit Row for %s", updateType)
+		require.Nilf(t, update.Row, "cluster-config is query-backed; must omit Row for %s", updateType)
 		require.Equal(t, "42", update.ResourceVersion)
 		require.Equal(t, ref, *update.Ref)
 	}
@@ -54,7 +54,7 @@ func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyClusterDomains(t *testin
 		ref := manager.resourceRefForObject(object, "", "v1", "Resource", "resources")
 		for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
 			update := manager.newObjectRowUpdate(updateType, domain, object, ref, row)
-			require.Nilf(t, update.Row, "%s is notify-only; must omit Row for %s", domain, updateType)
+			require.Nilf(t, update.Row, "%s is query-backed; must omit Row for %s", domain, updateType)
 		}
 	}
 }

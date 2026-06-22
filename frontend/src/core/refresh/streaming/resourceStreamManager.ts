@@ -1,11 +1,12 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamManager.ts
  *
- * Coordinates resource WebSocket subscriptions, row delivery, resyncs, and
- * stream fallback behavior for refresh domains that receive live updates.
+ * Coordinates resource WebSocket subscriptions and resyncs for refresh domains
+ * that receive live change signals. Every streamed table is query-backed, so a
+ * delta (or a resync) bumps streamRevision to trigger a refetch rather than
+ * delivering rows over the bridge.
  */
 
-import { fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
 import { setScopedDomainState } from '../store';
 import type { PermissionDeniedStatus } from '../types';
 import { stripClusterScope } from '../clusterScope';
@@ -13,19 +14,15 @@ import { eventBus } from '@/core/events';
 import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
-  logAppLogsWarn,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
-  getResourceStreamDomainDescriptor,
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
-  isNotifyOnlyStreamDomain,
   isSupportedDomain,
   type ResourceDomain,
 } from './resourceStreamDomains';
-import { mergeSnapshotRows } from './resourceStreamRows';
 import { ResourceStreamConnection } from './resourceStreamConnection';
 import {
   ResourceStreamSubscriptionStore,
@@ -42,23 +39,11 @@ import {
   type ResourceStreamHealthStatus,
 } from './resourceStreamHealth';
 
-export {
-  normalizeResourceScope,
-  sortNodeRows,
-  sortPodRows,
-  sortWorkloadRows,
-} from './resourceStreamDomains';
-export {
-  mergeNodeMetricsRow,
-  mergePodMetricsRow,
-  mergeWorkloadMetricsRow,
-} from './resourceStreamRows';
+export { normalizeResourceScope } from './resourceStreamDomains';
 
 const UPDATE_COALESCE_MS = 150;
 const RESYNC_COOLDOWN_MS = 1000;
 const RESYNC_MESSAGE = 'Stream resyncing';
-const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
-const DRIFT_SAMPLE_SIZE = 5;
 // Linger stream stops briefly to avoid rapid subscribe/unsubscribe churn.
 const STREAM_UNSUBSCRIBE_DEBOUNCE_MS = 500;
 // Cap queued updates to avoid unbounded memory growth under bursty streams.
@@ -66,10 +51,6 @@ const MAX_UPDATE_QUEUE = 1000;
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream, cluster);
-};
-
-const logWarning = (message: string, cluster?: AppLogsClusterMeta): void => {
-  logAppLogsWarn(message, APP_LOG_SOURCES.ResourceStream, cluster);
 };
 
 const MESSAGE_TYPES = {
@@ -186,47 +167,6 @@ const parseResourceVersion = (value?: string | number): bigint | null => {
 // Stream sequence parsing mirrors resourceVersion semantics for resume tokens.
 const parseStreamSequence = (value?: string | number): bigint | null => parseResourceVersion(value);
 
-type KeyDiff = {
-  missingKeys: number;
-  extraKeys: number;
-  missingSample: string[];
-  extraSample: string[];
-};
-
-const diffKeySets = (expected: Set<string>, actual: Set<string>, sampleLimit: number): KeyDiff => {
-  const missingSample: string[] = [];
-  const extraSample: string[] = [];
-  let missingKeys = 0;
-  let extraKeys = 0;
-
-  expected.forEach((key) => {
-    if (!actual.has(key)) {
-      missingKeys += 1;
-      if (missingSample.length < sampleLimit) {
-        missingSample.push(key);
-      }
-    }
-  });
-
-  actual.forEach((key) => {
-    if (!expected.has(key)) {
-      extraKeys += 1;
-      if (extraSample.length < sampleLimit) {
-        extraSample.push(key);
-      }
-    }
-  });
-
-  return { missingKeys, extraKeys, missingSample, extraSample };
-};
-
-const updateStats = (stats: SnapshotStats | null, itemCount: number): SnapshotStats => {
-  if (!stats) {
-    return { itemCount, buildDurationMs: 0 };
-  }
-  return { ...stats, itemCount };
-};
-
 export type ResourceStreamTelemetrySummary = {
   resyncCount: number;
   fallbackCount: number;
@@ -279,7 +219,6 @@ export class ResourceStreamManager {
   private lastConnectionError = '';
   private streamHealth = new ResourceStreamHealthStore();
   private errorNotifier = new StreamErrorNotifier();
-  private consecutiveErrors = new Map<string, number>();
   private visibility = new StreamVisibilityController<StreamSubscription>({
     captureActive: () => Array.from(this.subscriptions.values()),
     suspendActive: () => {
@@ -460,11 +399,7 @@ export class ResourceStreamManager {
         return;
       }
       this.subscribe(subscription);
-      if (
-        subscription.lastSequence &&
-        !subscription.resyncInFlight &&
-        !subscription.driftDetected
-      ) {
+      if (subscription.lastSequence && !subscription.resyncInFlight) {
         // Clear resync state when a resume-capable stream reconnects.
         this.markResyncComplete(subscription);
       }
@@ -573,9 +508,6 @@ export class ResourceStreamManager {
     status: ResourceStreamHealthStatus;
     reason: string;
   } {
-    if (subscription.driftDetected) {
-      return { status: 'unhealthy', reason: 'drift detected' };
-    }
     if (this.connectionStatus !== 'connected') {
       const reason = this.lastConnectionError || 'stream disconnected';
       return { status: 'unhealthy', reason };
@@ -678,9 +610,6 @@ export class ResourceStreamManager {
     if (subscription.resyncInFlight) {
       return;
     }
-    if (subscription.driftDetected) {
-      return;
-    }
     if (isCompleteResyncStreamDomain(subscription.domain)) {
       this.markSubscriptionDelivery(subscription);
       void this.resyncSubscription(subscription, 'complete-only update');
@@ -764,14 +693,6 @@ export class ResourceStreamManager {
     stats.lastResyncReason = reason;
   }
 
-  // Track snapshot fallbacks when drift forces streaming to stop.
-  private recordFallback(subscription: StreamSubscription, reason: string): void {
-    const stats = this.ensureStreamTelemetry(subscription);
-    stats.fallbackCount += 1;
-    stats.lastFallbackAt = Date.now();
-    stats.lastFallbackReason = reason;
-  }
-
   private shouldTrackResync(reason: string): boolean {
     return reason !== 'initial' && reason !== 'manual refresh';
   }
@@ -804,9 +725,6 @@ export class ResourceStreamManager {
     if (subscription.resyncInFlight) {
       return;
     }
-    if (subscription.driftDetected) {
-      return;
-    }
     const now = Date.now();
     if (
       !force &&
@@ -835,155 +753,19 @@ export class ResourceStreamManager {
     subscription.updateQueue = [];
     subscription.lastSequence = undefined;
 
-    // Notify-only domains carry no row baseline. A resync (initial start, reset,
-    // backpressure, complete/error) just re-arms the delta stream and bumps
-    // streamRevision so the query-backed view refetches its page — no full-row
-    // snapshot is pulled over the bridge, and status→'ready' clears the query
-    // gate so the table stops waiting on a baseline before showing page 1.
-    if (isNotifyOnlyStreamDomain(subscription.domain)) {
-      this.bumpStreamRevisionOnly(subscription, now);
-      this.markResyncComplete(subscription);
-      subscription.pendingReset = false;
-      this.subscribe(subscription);
-      return;
-    }
-
-    try {
-      const { snapshot, notModified } = await fetchSnapshotForSubscription(subscription);
-      if (notModified) {
-        this.markResyncComplete(subscription);
-        subscription.pendingReset = false;
-        if (subscription.driftDetected) {
-          this.unsubscribe(subscription, false);
-          return;
-        }
-        this.subscribe(subscription);
-        return;
-      }
-      if (!snapshot) {
-        throw new Error('resource stream snapshot missing');
-      }
-      this.applySnapshot(subscription, snapshot);
-      const snapshotVersion = parseResourceVersion(snapshot.version);
-      if (
-        snapshotVersion &&
-        (!subscription.resourceVersion || snapshotVersion > subscription.resourceVersion)
-      ) {
-        subscription.resourceVersion = snapshotVersion;
-      }
-      subscription.pendingReset = false;
-      if (subscription.driftDetected) {
-        this.unsubscribe(subscription, false);
-        return;
-      }
-      this.subscribe(subscription);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.setStreamError(subscription, message);
-    } finally {
-      subscription.resyncInFlight = false;
-      this.updateHealthForScope(subscription.domain, subscription.reportScope);
-    }
-  }
-
-  private applySnapshot(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
-    // Drift detection compares streamed keys against the latest snapshot.
-    this.updateShadowBaseline(subscription, snapshot);
-
-    const generatedAt = snapshot.generatedAt || Date.now();
-    const descriptor = getResourceStreamDomainDescriptor(subscription.domain);
-    const collection = descriptor.collection;
-    const payload = snapshot.payload;
-
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => {
-      const previousRows = previous.data ? collection.getRows(previous.data) : [];
-      const incomingRows = collection.getRows(payload);
-      const mergedRows = mergeSnapshotRows(
-        previousRows,
-        incomingRows,
-        subscription.clusterId,
-        collection
-      );
-      const nextPayload = collection.withRows(payload, mergedRows);
-
-      return {
-        ...previous,
-        status: 'ready',
-        data: nextPayload,
-        stats: updateStats(snapshot.stats ?? previous.stats ?? null, mergedRows.length),
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.reportScope,
-      };
-    });
-    this.clearStreamError(subscription.clusterId);
-  }
-
-  private updateShadowBaseline(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
-    const snapshotKeys = getResourceStreamDomainDescriptor(subscription.domain).buildSnapshotKeys(
-      snapshot.payload,
-      subscription.clusterId
-    );
-
-    if (subscription.hasBaseline && !subscription.driftDetected) {
-      const streamCount = subscription.shadowKeys.size;
-      const snapshotCount = snapshotKeys.size;
-      const diff = diffKeySets(snapshotKeys, subscription.shadowKeys, DRIFT_SAMPLE_SIZE);
-      if (diff.missingKeys > 0 || diff.extraKeys > 0) {
-        this.flagDrift(subscription, {
-          reason: 'snapshot mismatch',
-          streamCount,
-          snapshotCount,
-          missingKeys: diff.missingKeys,
-          extraKeys: diff.extraKeys,
-          missingSample: diff.missingSample,
-          extraSample: diff.extraSample,
-        });
-      }
-    }
-
-    subscription.shadowKeys = snapshotKeys;
-    subscription.hasBaseline = true;
-  }
-
-  private flagDrift(
-    subscription: StreamSubscription,
-    details: {
-      reason: string;
-      streamCount: number;
-      snapshotCount: number;
-      missingKeys: number;
-      extraKeys: number;
-      missingSample: string[];
-      extraSample: string[];
-    }
-  ): void {
-    if (subscription.driftDetected) {
-      return;
-    }
-    this.recordFallback(subscription, details.reason);
-    subscription.driftDetected = true;
+    // Every streamed table is query-backed. A resync (initial start, reset,
+    // backpressure, complete/error, manual refresh) re-arms the delta stream and
+    // bumps streamRevision so the view refetches its page — no full-row snapshot is
+    // pulled over the bridge, and status→'ready' clears the query gate so the table
+    // stops waiting on a baseline before showing page 1. (helm's backend stays
+    // complete-resync; its complete-resync signal lands here and triggers a refetch
+    // exactly like the 15 row-update domains.)
+    this.bumpStreamRevisionOnly(subscription, now);
+    this.markResyncComplete(subscription);
+    subscription.pendingReset = false;
+    subscription.resyncInFlight = false;
+    this.subscribe(subscription);
     this.updateHealthForScope(subscription.domain, subscription.reportScope);
-
-    eventBus.emit('refresh:resource-stream-drift', {
-      domain: subscription.domain,
-      scope: subscription.reportScope,
-      reason: details.reason,
-      streamCount: details.streamCount,
-      snapshotCount: details.snapshotCount,
-      missingKeys: details.missingKeys,
-      extraKeys: details.extraKeys,
-    });
-
-    logWarning(
-      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.reportScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`,
-      { clusterId: subscription.clusterId }
-    );
   }
 
   private markResyncComplete(subscription: StreamSubscription): void {
@@ -1009,46 +791,12 @@ export class ResourceStreamManager {
     }));
   }
 
-  private setStreamError(subscription: StreamSubscription, message: string): void {
-    this.recordSubscriptionError(subscription, message);
-    const key = `${subscription.clusterId}::${subscription.domain}::${subscription.storeScope}`;
-    const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
-    this.consecutiveErrors.set(key, attempts);
-    const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
-
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
-      ...previous,
-      status: isTerminal ? 'error' : previous.status,
-      error: isTerminal ? message : previous.error,
-      scope: subscription.reportScope,
-    }));
-
-    if (isTerminal) {
-      this.notifyStreamError(subscription.clusterId, message);
-    }
-    this.updateHealthForScope(subscription.domain, subscription.reportScope);
-  }
-
   private clearStreamError(clusterId: string): void {
     this.errorNotifier.clear('resource-stream', clusterId);
-    const errorKeys = Array.from(this.consecutiveErrors.keys()).filter((key) =>
-      key.startsWith(clusterId)
-    );
-    errorKeys.forEach((key) => this.consecutiveErrors.delete(key));
   }
 
   private clearAllStreamErrors(): void {
     this.errorNotifier.clearAll();
-    this.consecutiveErrors.clear();
-  }
-
-  private notifyStreamError(clusterId: string, message: string): void {
-    this.errorNotifier.notify({
-      source: 'resource-stream',
-      domain: 'resource-stream',
-      scope: clusterId || 'global',
-      message,
-    });
   }
 
   private stopAll(reset: boolean): void {
@@ -1062,18 +810,8 @@ export class ResourceStreamManager {
     this.lastConnectionError = '';
     this.streamHealth.clear();
     this.errorNotifier.clearAll();
-    this.consecutiveErrors.clear();
     this.streamTelemetry.clear();
   }
 }
-
-const fetchSnapshotForSubscription = async (
-  subscription: StreamSubscription
-): Promise<{ snapshot?: Snapshot<any>; notModified: boolean }> => {
-  const { snapshot, notModified } = await fetchSnapshot(subscription.domain, {
-    scope: subscription.storeScope,
-  });
-  return { snapshot, notModified };
-};
 
 export const resourceStreamManager = new ResourceStreamManager();

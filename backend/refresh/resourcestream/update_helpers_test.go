@@ -72,7 +72,7 @@ func TestManagerResourceRefForObjectValidationRejectsIncompleteIdentity(t *testi
 	require.Error(t, resourcemodel.ValidateResourceRef(manager.resourceRefForObject(configMap, "", "v1", "Deployment", "deployments")))
 }
 
-func TestManagerNewObjectRowUpdateOmitsRowsForDeletes(t *testing.T) {
+func TestManagerNewObjectRowUpdateAlwaysOmitsRows(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
 	}
@@ -87,8 +87,9 @@ func TestManagerNewObjectRowUpdateOmitsRowsForDeletes(t *testing.T) {
 	row := map[string]string{"name": "secret"}
 
 	ref := manager.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
+	// Every streamed table is query-backed now, so adds omit Row too — not just deletes.
 	added := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceHelm, secret, ref, row)
-	require.Equal(t, row, added.Row)
+	require.Nil(t, added.Row)
 
 	deleted := manager.newObjectRowUpdate(MessageTypeDeleted, domainNamespaceHelm, secret, ref, row)
 	require.Nil(t, deleted.Row)
@@ -97,7 +98,7 @@ func TestManagerNewObjectRowUpdateOmitsRowsForDeletes(t *testing.T) {
 	require.Equal(t, ref, *deleted.Ref)
 }
 
-func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyDomains(t *testing.T) {
+func TestManagerNewObjectRowUpdateOmitsRowsForEveryDomain(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
 	}
@@ -110,19 +111,18 @@ func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyDomains(t *testing.T) {
 	row := map[string]string{"name": "web"}
 	ref := manager.resourceRefForObject(object, "apps", "v1", "Deployment", "deployments")
 
-	// A notify-only domain ships change notifications without the projected row:
-	// even ADDED/MODIFIED omit Row, while identity (Ref) and ResourceVersion still
-	// travel so drift detection and the query-backed refetch trigger keep working.
-	for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
-		update := manager.newObjectRowUpdate(updateType, domainWorkloads, object, ref, row)
-		require.Nilf(t, update.Row, "notify-only domain must omit Row for %s", updateType)
-		require.Equal(t, "77", update.ResourceVersion)
-		require.Equal(t, ref, *update.Ref)
+	// Every streamed table is query-backed, so the stream ships change notifications
+	// without the projected row: even ADDED/MODIFIED omit Row, while identity (Ref)
+	// and ResourceVersion still travel so drift detection and the query-backed refetch
+	// trigger keep working. This holds for the previously row-bearing helm domain too.
+	for _, domain := range []string{domainWorkloads, domainNamespaceHelm} {
+		for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
+			update := manager.newObjectRowUpdate(updateType, domain, object, ref, row)
+			require.Nilf(t, update.Row, "%s must omit Row for %s", domain, updateType)
+			require.Equal(t, "77", update.ResourceVersion)
+			require.Equal(t, ref, *update.Ref)
+		}
 	}
-
-	// A non-notify-only (row-bearing) domain still carries the row on add/modify.
-	helmUpdate := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceHelm, object, ref, row)
-	require.Equal(t, row, helmUpdate.Row)
 }
 
 func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
@@ -175,13 +175,9 @@ func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 			require.Equal(t, tt.version, update.Ref.Version)
 			require.Equal(t, tt.resource, update.Ref.Resource)
 			require.Equal(t, ref, *update.Ref)
-			// Notify-only domains (e.g. cluster-rbac) ship the change signal and
-			// metadata without the projected Row; row-bearing domains still carry it.
-			if isNotifyOnlyStreamDomain(tt.domain) {
-				require.Nil(t, update.Row)
-			} else {
-				require.Equal(t, row, update.Row)
-			}
+			// Every domain ships the change signal and metadata without the
+			// projected Row; the query-backed table refetches the visible page.
+			require.Nil(t, update.Row)
 		})
 	}
 }

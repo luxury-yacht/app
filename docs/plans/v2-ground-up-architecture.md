@@ -25,11 +25,14 @@ sections it references._
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
 
-- ✅ **Phase 1 — delivery-model collapse.** All 15 `resource-stream-table` domains are
-  notify-only (one delivery model); the live-row row-update merge path
-  (`applyRowUpdates`/`applyShadowUpdates`/`applyResourceRowUpdates`) is deleted.
-  `namespace-helm` stays complete-resync — a **justified exception** (scope-level
-  synthesized HelmReleases), so "one model for all 16" does not fully hold.
+- ✅ **Phase 1 — delivery-model collapse, COMPLETE.** All 16 streamed domains are signal-only:
+  a delta/resync bumps streamRevision → the query-backed view refetches; no domain renders live
+  stream rows. The **entire live-row path is deleted** (applySnapshot, mergeSnapshotRows, the 16
+  collections, sort fns, drift detection, the whole `resourceStreamRows.ts`), backend row-omission
+  is **universal** (`newObjectRowUpdate` never ships a row), and the `notifyOnly` flag + parity test
+  + contract field are gone. helm's *backend* stays `complete-resync-stream` (a stream-semantics
+  detail — synthesized HelmReleases — not a delivery difference). Verified green: full backend
+  `go test`, tsc, vitest 391 files / 3234 passed, `mage qc:prerelease`.
 - ✅ **Prototype #1 — store gate: GO.** `backend/refresh/storebench/` at 1M objects:
   write 0.7µs (1 idx)/1.7µs (2 idx) 0-alloc; keyset page 3.5µs (vs naive full-sort 270ms);
   reads-under-concurrent-churn 6.4µs (`-race` clean); trigram search 38–555µs; memory
@@ -54,7 +57,9 @@ sections it references._
 
 **Dropped or deferred (with reason — these are NOT pending work, do not re-attempt as patches):**
 
-- ❌ helm → notify-only (genuinely complete-resync — kept as the one exception).
+- ❌ helm *backend* → notify-only/resource-stream-table behaviorClass (genuinely complete-resync;
+  behaviorClass stays). NOTE: helm's *frontend* IS signal-only like the 15 (Phase 1 is complete) —
+  only its backend stream semantics differ; this is not pending work.
 - ❌ SSAR→SSRR (remaining callers are legitimately cluster-scoped / resourceName-specific).
 - ❌ h2c transport (the webview's browser `fetch` can't use HTTP/2 cleartext); 🔻 MessagePack/Worker
   decode (marginal at ≤1000-row pages — the big payloads it would help were already eliminated).
@@ -885,16 +890,22 @@ reasons; **nothing required is incomplete here.**
   SSRR-expressible — `objectcatalog/sync.go:40,86` does cluster-wide `list` checks (no namespace)
   and `resource_permission.go:70` does resourceName+subresource checks; SSRR is namespace-rule scoped.
 
-### Phase 1 — Universalize notify-only — ✅ DONE (with one justified exception)
+### Phase 1 — Universalize notify-only (delete the live-row path) — ✅ DONE
 
-- ✅ "page + signal" is the only delivery model for the **15** `resource-stream-table` domains.
-  `namespace-helm` stays complete-resync — a justified exception (scope-level *synthesized*
-  HelmReleases), so "all 16" does not literally hold.
-- 🔶 Live-row path deletion PARTIAL: `applyRowUpdates`/`applyShadowUpdates`/
-  `applyResourceRowUpdates` deleted; but `mergeSnapshotRows`, the per-domain `collection`s, the
-  `notifyOnly` flag, and drift detection REMAIN — helm's complete-resync still uses `applySnapshot`
-  + collections. Full deletion only lands once the engine subsumes helm (Phase 3).
-- ✅ Outcome shipped: the measured ~26 ms@50k-per-flush merge+sort is off the path for the 15.
+- ✅ "page + signal" is the only **delivery** model for ALL 16 streamed domains. helm's frontend is
+  now signal-only too (a complete-resync signal bumps streamRevision → refetch, exactly like the 15);
+  only helm's *backend stream semantics* stay `complete-resync-stream` (it ships a resync signal, not
+  row deltas — its rows are scope-level *synthesized* HelmReleases). That's a backend detail, not a
+  delivery-model difference: no domain renders live stream rows anymore.
+- ✅ Live-row path **fully deleted**: `applyRowUpdates`/`applyShadowUpdates`/`applyResourceRowUpdates`,
+  `applySnapshot`, `mergeSnapshotRows`, `sortRows`, all 16 per-domain `collection`s, the shadow-key
+  drift detection, and the resync-fetch error path — gone, plus the whole `resourceStreamRows.ts`
+  module. (helm joined the bump-only resync path, which made the rest unreachable; tsc-guided cascade.)
+- ✅ Backend row-omission is now **universal** — `newObjectRowUpdate` never ships a row; the
+  `notifyOnlyStreamDomains` flag, `isNotifyOnlyStreamDomain`, the parity test, and the contract
+  `notifyOnly` field are deleted. (`behaviorClass`/`coverageContract` untouched.)
+- ✅ Outcome: the measured ~26 ms@50k-per-flush merge+sort is gone for every streamed table; verified
+  green — full backend `go test`, frontend tsc clean, vitest 391 files / 3234 passed.
 
 ### Phase 2 — The LSN clock + the metrics split — ❌ DROPPED as incremental work
 

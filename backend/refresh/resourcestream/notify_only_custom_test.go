@@ -11,9 +11,9 @@ import (
 
 // The custom resource-stream domains are catalog-backed in production (the Custom
 // tabs render the catalog customOnly query, not these resource-stream rows), so
-// their streamed rows are legacy/unused. Flipping them notify-only ships the change
-// signal without the Row, removing the last resource-stream-table live-row consumers
-// so the live-row path can be deleted (Phase 1).
+// their streamed rows are legacy/unused. Like every streamed table they ship the
+// change signal without the Row, removing the last resource-stream-table live-row
+// consumers so the live-row path can be deleted (Phase 1).
 func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyCustomDomains(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
@@ -30,7 +30,7 @@ func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyCustomDomains(t *testing
 		ref := manager.resourceRefForObject(object, "example.com", "v1", "Widget", "widgets")
 		for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
 			update := manager.newObjectRowUpdate(updateType, domain, object, ref, row)
-			require.Nilf(t, update.Row, "%s is notify-only; must omit Row for %s", domain, updateType)
+			require.Nilf(t, update.Row, "%s is query-backed; must omit Row for %s", domain, updateType)
 		}
 	}
 }

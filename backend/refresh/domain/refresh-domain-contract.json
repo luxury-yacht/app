@@ -67,7 +67,6 @@
     },
     "nodes": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -84,7 +83,6 @@
     },
     "cluster-config": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -101,7 +99,6 @@
     },
     "cluster-crds": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -118,7 +115,6 @@
     },
     "cluster-custom": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -151,7 +147,6 @@
     },
     "cluster-rbac": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -168,7 +163,6 @@
     },
     "cluster-storage": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -185,7 +179,6 @@
     },
     "namespace-workloads": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -202,7 +195,6 @@
     },
     "namespace-autoscaling": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -219,7 +211,6 @@
     },
     "namespace-config": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -236,7 +227,6 @@
     },
     "namespace-custom": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -285,7 +275,6 @@
     },
     "namespace-network": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -302,7 +291,6 @@
     },
     "namespace-quotas": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -319,7 +307,6 @@
     },
     "namespace-rbac": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -336,7 +323,6 @@
     },
     "namespace-storage": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",
@@ -353,7 +339,6 @@
     },
     "pods": {
       "behaviorClass": "resource-stream-table",
-      "notifyOnly": true,
       "scopeContract": {
         "kind": "resource-stream-selector",
         "clusterPrefix": "required",

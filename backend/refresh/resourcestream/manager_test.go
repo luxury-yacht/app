@@ -113,7 +113,7 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, "namespace:default", update.Scope)
 		require.Equal(t, "pod-1", update.Ref.Name)
 		require.Equal(t, "default", update.Ref.Namespace)
-		// pods is notify-only: the live stream carries the change signal, not the row.
+		// pods is query-backed: the live stream carries the change signal, not the row.
 		require.Nil(t, update.Row)
 	default:
 		t.Fatal("expected update to be delivered")
@@ -150,7 +150,7 @@ func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceConfig, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "9", "cfg-uid", "cfg-1", "default", "ConfigMap")
-		require.Nil(t, update.Row) // namespace-config is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-config is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected config update to be delivered")
 	}
@@ -185,7 +185,7 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceRBAC, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "4", "role-uid", "role-1", "default", "Role")
-		require.Nil(t, update.Row) // namespace-rbac is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-rbac is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected rbac update to be delivered")
 	}
@@ -284,7 +284,7 @@ func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainClusterRBAC, update.Domain)
 		require.Equal(t, "", update.Scope)
 		requireUpdateObjectMetadata(t, update, "10", "cr-uid", "cluster-role-1", "", "ClusterRole")
-		require.Nil(t, update.Row) // cluster-rbac is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // cluster-rbac is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected cluster rbac update to be delivered")
 	}
@@ -317,7 +317,7 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceQuotas, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "7", "quota-uid", "quota-1", "default", "ResourceQuota")
-		require.Nil(t, update.Row) // namespace-quotas is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-quotas is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected quotas update to be delivered")
 	}
@@ -354,7 +354,7 @@ func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceNetwork, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "3", "svc-uid", "svc-1", "default", "Service")
-		require.Nil(t, update.Row) // namespace-network is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-network is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected network update to be delivered")
 	}
@@ -387,9 +387,9 @@ func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainClusterConfig, update.Domain)
 		require.Equal(t, "", update.Scope)
 		requireUpdateObjectMetadata(t, update, "2", "sc-uid", "fast", "", "StorageClass")
-		// cluster-config is notify-only: the change signal (Ref + ResourceVersion)
-		// is delivered so the query-backed table refetches, but the projected Row is
-		// omitted because nothing renders the streamed rows.
+		// cluster-config is query-backed: the change signal (Ref + ResourceVersion)
+		// is delivered so the table refetches, but the projected Row is omitted
+		// because nothing renders the streamed rows.
 		require.Nil(t, update.Row)
 	default:
 		t.Fatal("expected cluster config update to be delivered")
@@ -426,7 +426,7 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceStorage, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "2", "pvc-uid", "pvc-1", "default", "PersistentVolumeClaim")
-		require.Nil(t, update.Row) // namespace-storage is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-storage is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected storage update to be delivered")
 	}
@@ -461,7 +461,7 @@ func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainClusterStorage, update.Domain)
 		require.Equal(t, "", update.Scope)
 		requireUpdateObjectMetadata(t, update, "5", "pv-uid", "pv-1", "", "PersistentVolume")
-		require.Nil(t, update.Row) // cluster-storage is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // cluster-storage is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected cluster storage update to be delivered")
 	}
@@ -506,7 +506,7 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, "Widget", update.Ref.Kind)
 		require.Equal(t, "example.com", update.Ref.Group)
 		require.Equal(t, "v1", update.Ref.Version)
-		require.Nil(t, update.Row) // namespace-custom is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-custom is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected custom update to be delivered")
 	}
@@ -714,7 +714,7 @@ func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, "Widget", update.Ref.Kind)
 		require.Equal(t, "example.com", update.Ref.Group)
 		require.Equal(t, "v1", update.Ref.Version)
-		require.Nil(t, update.Row) // cluster-custom is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // cluster-custom is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected cluster custom update to be delivered")
 	}
@@ -760,7 +760,7 @@ func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, "", update.Scope)
 		require.Equal(t, "widgets.example.com", update.Ref.Name)
 		require.Equal(t, "CustomResourceDefinition", update.Ref.Kind)
-		require.Nil(t, update.Row) // cluster-crds is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // cluster-crds is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected cluster CRD update to be delivered")
 	}
@@ -916,7 +916,7 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceAutoscaling, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "3", "hpa-uid", "hpa-1", "default", "HorizontalPodAutoscaler")
-		require.Nil(t, update.Row) // namespace-autoscaling is notify-only: change signal ships without the Row
+		require.Nil(t, update.Row) // namespace-autoscaling is query-backed: change signal ships without the Row
 	default:
 		t.Fatal("expected autoscaling update to be delivered")
 	}
@@ -950,7 +950,7 @@ func TestManagerWorkloadEventBroadcastsNotifyOnly(t *testing.T) {
 	require.Equal(t, "namespace:default", update.Scope)
 	require.Equal(t, "web", update.Ref.Name)
 	require.Equal(t, "Deployment", update.Ref.Kind)
-	// namespace-workloads is notify-only: the live stream carries the change
+	// namespace-workloads is query-backed: the live stream carries the change
 	// signal, not the row. HPA context in the row is covered in the snapshot path.
 	require.Nil(t, update.Row)
 }
@@ -1187,7 +1187,7 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 	require.Equal(t, MessageTypeDeleted, oldUpdate.Type)
 	require.Equal(t, "pod-1", oldUpdate.Ref.Name)
 
-	// pods is notify-only: a ReplicaSet owner change still re-notifies the affected
+	// pods is query-backed: a ReplicaSet owner change still re-notifies the affected
 	// pod on the old/new/namespace scopes (reactive wiring), but carries no row —
 	// the query-backed table refetches and rebuilds the owner columns.
 	newUpdate := requireNextUpdate(t, newSub)
@@ -1421,7 +1421,7 @@ func TestManagerNodeUpdateFromPod(t *testing.T) {
 		require.Equal(t, domainNodes, update.Domain)
 		require.Equal(t, "node-a", update.Ref.Name)
 		require.Equal(t, "Node", update.Ref.Kind)
-		// nodes is notify-only: the change signal carries no row.
+		// nodes is query-backed: the change signal carries no row.
 		require.Nil(t, update.Row)
 	default:
 		t.Fatal("expected node update to be delivered")
