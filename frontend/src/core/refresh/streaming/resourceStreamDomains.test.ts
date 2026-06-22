@@ -313,7 +313,23 @@ describe('resource stream domain descriptors', () => {
   });
 
   it('derives notify-only resource stream domains from the shared inventory', () => {
-    const notifyOnly = new Set<string>(['pods', 'namespace-workloads', 'nodes']);
+    const notifyOnly = new Set<string>([
+      'pods',
+      'namespace-workloads',
+      'nodes',
+      'cluster-config',
+      'cluster-rbac',
+      'cluster-storage',
+      'cluster-crds',
+      'namespace-config',
+      'namespace-rbac',
+      'namespace-network',
+      'namespace-quotas',
+      'namespace-storage',
+      'namespace-autoscaling',
+      'namespace-custom',
+      'cluster-custom',
+    ]);
     expect([...NOTIFY_ONLY_STREAM_DOMAINS].sort()).toEqual([...notifyOnly].sort());
     EXPECTED_DOMAINS.forEach((domain) => {
       expect(isNotifyOnlyStreamDomain(domain)).toBe(notifyOnly.has(domain));

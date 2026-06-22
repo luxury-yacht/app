@@ -21,9 +21,21 @@ package resourcestream
 // Source of truth: refresh-domain-contract.json domainInventory[*].notifyOnly.
 // notify_only_parity_test.go asserts this set matches the contract.
 var notifyOnlyStreamDomains = map[string]bool{
-	domainPods:      true,
-	domainWorkloads: true,
-	domainNodes:     true,
+	domainPods:                 true,
+	domainWorkloads:            true,
+	domainNodes:                true,
+	domainClusterConfig:        true,
+	domainClusterRBAC:          true,
+	domainClusterStorage:       true,
+	domainClusterCRDs:          true,
+	domainNamespaceConfig:      true,
+	domainNamespaceRBAC:        true,
+	domainNamespaceNetwork:     true,
+	domainNamespaceQuotas:      true,
+	domainNamespaceStorage:     true,
+	domainNamespaceAutoscaling: true,
+	domainNamespaceCustom:      true,
+	domainClusterCustom:        true,
 }
 
 // isNotifyOnlyStreamDomain reports whether the domain's stream omits row

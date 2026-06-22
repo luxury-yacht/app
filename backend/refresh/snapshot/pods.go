@@ -57,21 +57,31 @@ func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rs
 	}
 }
 
-// projectPod returns a pod's row, reusing a cached projection when the pod's
-// resourceVersion and the metrics revision are both unchanged.
-func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string, metricsRev string) PodSummary {
+// projectPod returns a pod's row. The object row (status, facts, owner, resource
+// totals) is reused while the pod's resourceVersion is unchanged; CPU/mem are
+// overlaid from the current metrics sample on every call, so a metrics poll never
+// re-projects the row. Metrics advance on their own cadence, so they are not part
+// of the projection-cache key.
+func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string) PodSummary {
+	usage := podUsage[pod.Namespace+"/"+pod.Name]
 	build := func() PodSummary {
-		usage := podUsage[pod.Namespace+"/"+pod.Name]
 		project := b.buildSummary
 		if project == nil {
 			project = podres.BuildStreamSummaryFromRSMap
 		}
 		return project(meta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, rsMap)
 	}
+	var summary PodSummary
 	if b.projCache == nil {
-		return build()
+		summary = build()
+	} else {
+		summary = b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, build)
 	}
-	return b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, metricsRev, build)
+	// Overlay the current metrics sample onto the (possibly cached) object row, so
+	// a metrics poll refreshes CPU/mem without rebuilding the rest of the row.
+	summary.CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
+	summary.MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+	return summary
 }
 
 // podProjectionCacheTTL bounds the memo cache: entries for pods not seen within
@@ -81,16 +91,16 @@ const podProjectionCacheTTL = 2 * time.Minute
 
 type podProjectionEntry struct {
 	resourceVersion string
-	metricsRev      string
 	summary         PodSummary
 	lastAccess      time.Time
 }
 
-// podProjectionCache memoizes pod row projections keyed by pod UID. A summary is
-// reused only when the pod's resourceVersion AND the metrics revision are both
-// unchanged, so it is always accurate: a pod change bumps RV; a metrics poll
-// bumps metricsRev. (The pod's RS->Deployment owner is immutable in practice, so
-// those two keys fully determine the projection.)
+// podProjectionCache memoizes pod OBJECT row projections keyed by pod UID. A
+// summary is reused while the pod's resourceVersion is unchanged: a pod change
+// bumps RV, and the RS->Deployment owner is immutable in practice, so RV fully
+// determines the object projection. Metrics are NOT part of the key — CPU/mem are
+// overlaid onto the cached row per request (see projectPod), so a metrics poll
+// reuses the object projection instead of rebuilding it.
 type podProjectionCache struct {
 	mu        sync.Mutex
 	entries   map[string]podProjectionEntry
@@ -101,14 +111,14 @@ func newPodProjectionCache() *podProjectionCache {
 	return &podProjectionCache{entries: make(map[string]podProjectionEntry)}
 }
 
-// summaryFor returns the cached projection on a (resourceVersion, metricsRev)
-// hit, otherwise builds, stores, and returns a fresh one. build() runs outside
-// the lock so concurrent scope builds don't serialize on projection; a concurrent
+// summaryFor returns the cached object projection on a resourceVersion hit,
+// otherwise builds, stores, and returns a fresh one. build() runs outside the
+// lock so concurrent scope builds don't serialize on projection; a concurrent
 // miss re-projects once (identical result, last write wins).
-func (c *podProjectionCache) summaryFor(uid, resourceVersion, metricsRev string, build func() PodSummary) PodSummary {
+func (c *podProjectionCache) summaryFor(uid, resourceVersion string, build func() PodSummary) PodSummary {
 	now := time.Now()
 	c.mu.Lock()
-	if entry, ok := c.entries[uid]; ok && entry.resourceVersion == resourceVersion && entry.metricsRev == metricsRev {
+	if entry, ok := c.entries[uid]; ok && entry.resourceVersion == resourceVersion {
 		entry.lastAccess = now
 		c.entries[uid] = entry
 		c.mu.Unlock()
@@ -121,7 +131,6 @@ func (c *podProjectionCache) summaryFor(uid, resourceVersion, metricsRev string,
 	c.mu.Lock()
 	c.entries[uid] = podProjectionEntry{
 		resourceVersion: resourceVersion,
-		metricsRev:      metricsRev,
 		summary:         summary,
 		lastAccess:      now,
 	}
@@ -277,7 +286,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := b.projectPod(meta, pod, podUsage, rsMap, dynamicRevision)
+			summary := b.projectPod(meta, pod, podUsage, rsMap)
 			countPod(summary)
 			collector.Add(summary)
 			if v := parsePodResourceVersion(pod); v > version {
@@ -291,7 +300,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 			if pod == nil {
 				continue
 			}
-			summary := b.projectPod(meta, pod, podUsage, rsMap, dynamicRevision)
+			summary := b.projectPod(meta, pod, podUsage, rsMap)
 			countPod(summary)
 			summaries = append(summaries, summary)
 			if v := parsePodResourceVersion(pod); v > version {

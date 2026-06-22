@@ -881,31 +881,25 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       return;
     }
 
-    // pods and namespace-workloads are notify-only: their live rows are
-    // baseline-static (and absent once the baseline is dropped), so they are
-    // excluded here. Visible pods get fresh permission pre-checks from NsViewPods's
-    // per-view query-row scan; workloads fall back to on-demand permission checks.
+    // Notify-only domains carry no live rows (their baseline is dropped), so they
+    // contribute nothing to the permission pre-fetch and are excluded here: pods,
+    // namespace-workloads, and the namespace config/rbac/network/storage/autoscaling/
+    // quotas tables. Visible pods get fresh permission pre-checks from NsViewPods's
+    // per-view query-row scan; the rest fall back to on-demand permission checks.
+    // Row-bearing domains (helm, events) still seed namespace targets.
     const activeDomainData =
       activeKey === 'browse'
-        ? [
-            config.data,
-            network.data,
-            rbac.data,
-            storage.data,
-            autoscaling.data,
-            quotas.data,
-            events.data,
-          ]
+        ? [events.data]
         : [
             {
               pods: [],
               workloads: [],
-              config: config.data,
-              network: network.data,
-              rbac: rbac.data,
-              storage: storage.data,
-              autoscaling: autoscaling.data,
-              quotas: quotas.data,
+              config: [],
+              network: [],
+              rbac: [],
+              storage: [],
+              autoscaling: [],
+              quotas: [],
               custom: [],
               helm: helm.data,
               events: events.data,

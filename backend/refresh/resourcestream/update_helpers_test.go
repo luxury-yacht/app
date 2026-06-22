@@ -87,10 +87,10 @@ func TestManagerNewObjectRowUpdateOmitsRowsForDeletes(t *testing.T) {
 	row := map[string]string{"name": "secret"}
 
 	ref := manager.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
-	added := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceConfig, secret, ref, row)
+	added := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceHelm, secret, ref, row)
 	require.Equal(t, row, added.Row)
 
-	deleted := manager.newObjectRowUpdate(MessageTypeDeleted, domainNamespaceConfig, secret, ref, row)
+	deleted := manager.newObjectRowUpdate(MessageTypeDeleted, domainNamespaceHelm, secret, ref, row)
 	require.Nil(t, deleted.Row)
 	require.Equal(t, "secret", deleted.Ref.Name)
 	require.Equal(t, "default", deleted.Ref.Namespace)
@@ -120,9 +120,9 @@ func TestManagerNewObjectRowUpdateOmitsRowsForNotifyOnlyDomains(t *testing.T) {
 		require.Equal(t, ref, *update.Ref)
 	}
 
-	// A non-notify-only domain still carries the row on add/modify.
-	configUpdate := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceConfig, object, ref, row)
-	require.Equal(t, row, configUpdate.Row)
+	// A non-notify-only (row-bearing) domain still carries the row on add/modify.
+	helmUpdate := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceHelm, object, ref, row)
+	require.Equal(t, row, helmUpdate.Row)
 }
 
 func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
@@ -175,7 +175,13 @@ func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 			require.Equal(t, tt.version, update.Ref.Version)
 			require.Equal(t, tt.resource, update.Ref.Resource)
 			require.Equal(t, ref, *update.Ref)
-			require.Equal(t, row, update.Row)
+			// Notify-only domains (e.g. cluster-rbac) ship the change signal and
+			// metadata without the projected Row; row-bearing domains still carry it.
+			if isNotifyOnlyStreamDomain(tt.domain) {
+				require.Nil(t, update.Row)
+			} else {
+				require.Equal(t, row, update.Row)
+			}
 		})
 	}
 }
