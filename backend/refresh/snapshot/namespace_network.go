@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	"github.com/luxury-yacht/app/backend/resources/gateway"
@@ -64,6 +65,13 @@ func namespaceNetworkQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kind", "name", "namespace", "details"},
 		[]string{service.Identity.Kind, ingress.Identity.Kind, endpointslice.Identity.Kind, networkpolicy.Identity.Kind, gateway.Identity.Kind, httproute.Identity.Kind, grpcroute.Identity.Kind, tlsroute.Identity.Kind, listenerset.Identity.Kind, referencegrant.Identity.Kind, backendtlspolicy.Identity.Kind},
 	)
+}
+
+// networkQuerypageSchema derives the querypage Schema for the network table from its
+// typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
+// engine orders rows byte-identically to the live executor.
+func networkQuerypageSchema() querypage.Schema[NetworkSummary] {
+	return querypageSchemaFromAdapter(networkTableQueryAdapter(), []string{"name", "kind", "namespace", "details", "age"})
 }
 
 // NetworkSummary lives in the streamrows leaf so the kind packages can build it;
@@ -182,11 +190,12 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	}, descriptorSources...)
 
 	issues := typedTableQueryResourceIssues(ctx, namespaceNetworkDomainName, query, sources)
-	resolved := resolveTypedSnapshotPage(
+	resolved := resolveTypedSnapshotPageViaStore(
 		namespaceNetworkDomainName,
 		resources,
 		query,
 		networkTableQueryAdapter(),
+		networkQuerypageSchema(),
 		capabilitiesWithAvailableKinds(namespaceNetworkQueryCapabilities(), sources),
 		config.SnapshotNamespaceNetworkEntryLimit,
 		"network resources",

@@ -58,26 +58,55 @@ func lowerTrimAll(in []string) []string {
 }
 
 // typedQuerySignature pins a cursor to its query shape so a cursor issued for one
-// filter/sort can never mispage a different one (it is rejected → CursorInvalid).
-// It iterates the present filter keys in sorted order, so the signature is stable
-// regardless of map iteration order and works for any typed table's facet set.
-func typedQuerySignature(sortField string, dir querypage.Direction, limit int, filters map[string][]string, search string) string {
+// filter/sort/predicate set can never mispage a different one (it is rejected →
+// CursorInvalid). It folds every request field that changes the matched set —
+// namespaces, kinds, search, and predicates — into a stable string, sorting each
+// list so map/slice ordering can never perturb the signature. The leading
+// sort/dir/limit and the trailing search segment are written byte-identically to
+// the original filter-map form, so a cursor minted before predicates were folded
+// in (no namespaces/kinds/predicates present) still validates unchanged.
+func typedQuerySignature(sortField string, dir querypage.Direction, limit int, request ResourceQueryRequest) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s|%s|%d|", sortField, dir, limit)
-	keys := make([]string, 0, len(filters))
-	for k := range filters {
-		keys = append(keys, k)
+	// Mirror the historical sorted-key filter map: emit "kind=" before "namespace="
+	// only when the corresponding list is non-empty, so an empty filter set produces
+	// no segment at all (byte-identical to the pre-predicate signature).
+	if v := lowerTrimAll(request.Kinds); len(v) > 0 {
+		sort.Strings(v)
+		b.WriteString("kind=")
+		b.WriteString(strings.Join(v, ","))
+		b.WriteByte(';')
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		b.WriteString(k)
-		b.WriteByte('=')
-		b.WriteString(strings.Join(filters[k], ","))
+	if v := lowerTrimAll(request.Namespaces); len(v) > 0 {
+		sort.Strings(v)
+		b.WriteString("namespace=")
+		b.WriteString(strings.Join(v, ","))
+		b.WriteByte(';')
+	}
+	if preds := typedQueryPredicateSignatureParts(request.Predicates); len(preds) > 0 {
+		b.WriteString("predicates=")
+		b.WriteString(strings.Join(preds, ","))
 		b.WriteByte(';')
 	}
 	b.WriteString("search=")
-	b.WriteString(strings.ToLower(strings.TrimSpace(search)))
+	b.WriteString(strings.ToLower(strings.TrimSpace(request.Search)))
 	return b.String()
+}
+
+// typedQueryPredicateSignatureParts encodes each predicate as "Field|Op|Value" and
+// sorts them so the signature is independent of predicate order. Predicates narrow
+// the matched set, so two queries that differ only in predicates must not share a
+// cursor.
+func typedQueryPredicateSignatureParts(predicates []ResourceQueryPredicate) []string {
+	if len(predicates) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, len(predicates))
+	for _, p := range predicates {
+		parts = append(parts, fmt.Sprintf("%s|%s|%s", p.Field, p.Op, p.Value))
+	}
+	sort.Strings(parts)
+	return parts
 }
 
 // applyTypedTableQueryViaStore answers a typed table query through the querypage
@@ -91,8 +120,22 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		return applyTypedTableQuery(items, query, adapter)
 	}
 
-	store := querypage.NewStore(schema)
+	// Apply the FULL live matcher first — namespace + kind + search + predicates —
+	// so the engine sees only the matched set. Building the store from `matched`
+	// (rather than all items and re-filtering inside Query) is what makes the engine
+	// honor predicates: the engine's Filters/Search cover only its facet dimensions,
+	// not the adapter's predicate function, so a predicate the engine never sees must
+	// already have been excluded here.
+	matcher := newTypedTableQueryMatcher(query, adapter)
+	matched := make([]T, 0, len(items))
 	for _, it := range items {
+		if matcher.Matches(it) {
+			matched = append(matched, it)
+		}
+	}
+
+	store := querypage.NewStore(schema)
+	for _, it := range matched {
 		store.Upsert(it)
 	}
 
@@ -105,14 +148,7 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		dir = querypage.Descending
 	}
 	limit := query.Request.Limit
-	filters := map[string][]string{}
-	if v := lowerTrimAll(query.Request.Namespaces); len(v) > 0 {
-		filters["namespace"] = v
-	}
-	if v := lowerTrimAll(query.Request.Kinds); len(v) > 0 {
-		filters["kind"] = v
-	}
-	sig := typedQuerySignature(sortField, dir, limit, filters, query.Request.Search)
+	sig := typedQuerySignature(sortField, dir, limit, query.Request)
 
 	token := ""
 	cursorInvalid := false
@@ -125,25 +161,16 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		}
 	}
 
+	// The store already holds only matched rows, so Query needs Sort/Direction/
+	// Limit/Cursor only — no Filters/Search (they were applied by the matcher).
 	page, _ := store.Query(querypage.Query{
 		ClusterID: query.Request.ClusterID,
 		Signature: sig,
 		Sort:      sortField,
 		Direction: dir,
 		Limit:     limit,
-		Search:    query.Request.Search,
-		Filters:   filters,
 		Cursor:    token,
 	})
-
-	// Facets + totals match the live path exactly: same matcher, same collector.
-	matcher := newTypedTableQueryMatcher(query, adapter)
-	matched := make([]T, 0, len(items))
-	for _, it := range items {
-		if matcher.Matches(it) {
-			matched = append(matched, it)
-		}
-	}
 
 	return typedTableQueryPage[T]{
 		Rows:            page.Rows,

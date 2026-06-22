@@ -66,18 +66,20 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** Phase 3 + Phase 4 well underway — **8 of ~9 typed domains are live on the engine
-cutover + maintained store** (config, namespace-{storage,quotas,rbac,autoscaling}, cluster-{config,storage,rbac}),
-each equivalence-gated; the handler-registration loop is de-duplicated into one generic helper that also
-handles Gateway-API informers; engine fuzz-proven. **Next** (complete remaining roadmap with per-item status in
-[§Migration phases](#migration-phases--value-early-no-big-bang)):
+**Where we are:** Phase 3 + Phase 4 well underway — **ALL 10 typed-table domains are cut over to the engine**
+(config, namespace-{storage,quotas,rbac,autoscaling,network,workloads}, cluster-{config,storage,rbac}), each
+equivalence-gated; **8 also on the maintained store**; the engine handles predicates; engine fuzz-proven.
+The only remaining old-executor users are the COLLECTOR-based domains (pods, events). **Next** (complete
+remaining roadmap with per-item status in [§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Finish the remaining typed domains:** `namespace-network` (hybrid — maintained store must also cover
-   its bespoke `listServices` rows), `cluster-config` (needs GatewayClass's `GatewayInformer` wired into the
-   handler loop, or accept it stays on the list path), and `namespace-workloads`. Then Browse/catalog; then
-   DELETE the typed full-sort + the two old cursor codecs.
-2. The columnar SoA backend for the engine (memory win); the metrics column family.
-3. Then: trigram-accelerated search in the engine; persistence/mmap spill (low priority at 74 B/object).
+1. **Move `pods` + `events` off the `typedTableQueryCollector` onto the engine** — pods is the big perf
+   win and needs a maintained store (pod-scale; per-Build materialization is not viable), so it pulls in
+   the metrics column family too. Then DELETE the old `typedTableQueryCollector` + the bespoke cursor codec
+   (the last blocker to one query path).
+2. **Maintained stores for `network` + `workloads`** (currently cutover-only) — network needs the
+   Service↔EndpointSlice relationship; both are the per-request-reprojection perf win.
+3. **Browse/catalog** onto the engine (the second cursor codec); the **columnar SoA backend** (memory win);
+   then trigram-accelerated search; persistence/mmap spill (low priority at 74 B/object).
 
 ## Provenance & confidence
 
@@ -928,11 +930,16 @@ reasons; **nothing required is incomplete here.**
   benchmarked @1M ✅; **Prototype #2 (fuzz `apply(ops)==recompute`, 40×800 ops) ✅** — Risk #2
   closed. **REMAINING:** swap the current per-Build store for the **columnar SoA backend** from
   `storebench` (the memory/perf win).
-- 🔶 **Cut typed tables + Browse to the one engine.** ✅ **8 of ~9 typed domains live + equivalence-gated:**
-  config, namespace-{storage, quotas, rbac, autoscaling}, cluster-{config, storage, rbac} (each via
-  `resolveTypedSnapshotPageViaStore`, proven byte-equivalent to the bespoke executor). **REMAINING:**
-  `namespace-network` (hybrid), workloads, then Browse/catalog; then DELETE the typed full-sort, the
-  catalog chunk scan, and the two old cursor codecs.
+- 🔶 **Cut typed tables + Browse to the one engine.** ✅ **ALL 10 typed-table domains cut over to the engine
+  (`resolveTypedSnapshotPageViaStore`), each equivalence-gated byte-identical to the bespoke executor:**
+  config, namespace-{storage, quotas, rbac, autoscaling, network, workloads}, cluster-{config, storage, rbac}.
+  (8 also on the maintained store; network + workloads are cutover-only — network awaits its
+  Service↔EndpointSlice relationship store, workloads is serve-only.) The engine now handles query
+  **predicates** too (`applyTypedTableQueryViaStore` builds the store from the matched set; workloads' `health`
+  filter was the driver). **REMAINING:** the COLLECTOR-based domains `pods` + `namespace-events` +
+  `cluster-events` still use the old `typedTableQueryCollector` (pods needs a maintained store — pod-scale —
+  not per-Build materialization). Then Browse/catalog; then DELETE the typed full-sort + the two old cursor
+  codecs (blocked until pods/events are off the collector).
 - ⏳ Model metrics as a **separate column family + metric indexes on `metricsRevision`** (§3.6).
 
 ### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED

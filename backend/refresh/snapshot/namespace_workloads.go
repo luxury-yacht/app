@@ -35,6 +35,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -243,10 +244,6 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		version         uint64
 		processedOwners = map[string]struct{}{}
 	)
-	var queryCollector *typedTableQueryCollector[WorkloadSummary]
-	if query.Enabled {
-		queryCollector = newTypedTableQueryCollector(query, workloadTableQueryAdapter())
-	}
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
 		summary.ClusterMeta = meta
@@ -262,11 +259,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if summary.Kind != podres.Identity.Kind {
 			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
 		}
-		if queryCollector != nil {
-			queryCollector.Add(summary)
-		} else {
-			items = append(items, summary)
-		}
+		items = append(items, summary)
 		if obj == nil {
 			return
 		}
@@ -331,42 +324,30 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, pod)
 	}
 
-	if query.Enabled {
-		page := queryCollector.Page()
-		exact := len(issues) == 0
-		return &refresh.Snapshot{
-			Domain:  namespaceWorkloadsDomainName,
-			Scope:   scope,
-			Version: version,
-			Payload: NamespaceWorkloadsSnapshot{
-				ClusterMeta:           meta,
-				ResourceQueryEnvelope: typedQueryEnvelope(namespaceWorkloadsDomainName, page, b.queryCapabilities()).withDegraded(exact, issues),
-				Rows:                  page.Rows,
-			},
-			Stats: refresh.SnapshotStats{
-				ItemCount: len(page.Rows),
-			},
-		}, nil
-	}
-
 	sortWorkloadSummaries(items)
 
-	totalItems := len(items)
-	if totalItems > config.SnapshotNamespaceWorkloadsEntryLimit {
-		items = items[:config.SnapshotNamespaceWorkloadsEntryLimit]
-	}
-	stats := snapshotWindowStats(len(items), totalItems, "workloads")
-
+	resolved := resolveTypedSnapshotPageViaStore(
+		namespaceWorkloadsDomainName,
+		items,
+		query,
+		workloadTableQueryAdapter(),
+		workloadsQuerypageSchema(),
+		b.queryCapabilities(),
+		config.SnapshotNamespaceWorkloadsEntryLimit,
+		"workloads",
+		func(r WorkloadSummary) string { return r.Kind },
+		issues,
+	)
 	return &refresh.Snapshot{
 		Domain:  namespaceWorkloadsDomainName,
 		Scope:   scope,
 		Version: version,
 		Payload: NamespaceWorkloadsSnapshot{
 			ClusterMeta:           meta,
-			ResourceQueryEnvelope: typedWindowEnvelope(namespaceWorkloadsDomainName, totalItems, !stats.Truncated && len(issues) == 0, snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }), b.queryCapabilities()).withIssues(issues),
-			Rows:                  items,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
 		},
-		Stats: stats,
+		Stats: resolved.Stats,
 	}, nil
 }
 
@@ -421,6 +402,17 @@ func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
 		return ""
 	}
 	return strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+}
+
+// workloadsQuerypageSchema derives the querypage Schema for the workloads table
+// from its typed-table adapter, reusing the adapter's exact sort-value encoder and
+// row key so the engine orders rows byte-identically to the live executor. The sort
+// fields mirror the sortable fields published by namespaceWorkloadsQueryCapabilities.
+func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
+	return querypageSchemaFromAdapter(
+		workloadTableQueryAdapter(),
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
+	)
 }
 
 func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
