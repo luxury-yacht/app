@@ -414,6 +414,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 		}),

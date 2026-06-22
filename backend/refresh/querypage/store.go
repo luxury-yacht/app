@@ -152,6 +152,19 @@ func (s *Store[R]) Len() int {
 	return len(s.rows)
 }
 
+// Snapshot returns a copy of every stored row (unordered) under a read lock. It
+// lets a caller hand the store's current rows to another consumer (e.g. a
+// scope-filtered re-query) without exposing the internal map.
+func (s *Store[R]) Snapshot() []R {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]R, 0, len(s.rows))
+	for _, r := range s.rows {
+		out = append(out, r)
+	}
+	return out
+}
+
 func (s *Store[R]) reindex(uid string, row R) {
 	for name, get := range s.schema.SortKeys {
 		s.idx[name].insert(indexEntry{val: get(row), uid: uid})

@@ -88,12 +88,12 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 					capabilityFunc = node.Name.Name
 				}
 				// resolveTypedSnapshotPage (and the engine-backed
-				// resolveConfigSnapshotPageViaStore) wrap both canonical envelope
+				// resolveTypedSnapshotPageViaStore) wrap both canonical envelope
 				// constructors, so they satisfy the same guarantee.
 				if bodyCallsFunc(node.Body, "typedQueryEnvelope") ||
 					bodyCallsFunc(node.Body, "typedWindowEnvelope") ||
 					bodyCallsFunc(node.Body, "resolveTypedSnapshotPage") ||
-					bodyCallsFunc(node.Body, "resolveConfigSnapshotPageViaStore") {
+					bodyCallsFunc(node.Body, "resolveTypedSnapshotPageViaStore") {
 					usesHelper = true
 				}
 			case *ast.TypeSpec:

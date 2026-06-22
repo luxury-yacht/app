@@ -8,12 +8,6 @@
 
 const valueOrEmpty = (value: string | null | undefined): string => value ?? '';
 
-export const buildPodRowKey = (
-  clusterId: string | null | undefined,
-  namespace: string | null | undefined,
-  name: string | null | undefined
-): string => `${valueOrEmpty(clusterId)}::${valueOrEmpty(namespace)}::${valueOrEmpty(name)}`;
-
 export const buildKindedNamespacedRowKey = (
   clusterId: string | null | undefined,
   namespace: string | null | undefined,
@@ -42,21 +36,6 @@ export const buildClusterNameRowKey = (
   clusterId: string | null | undefined,
   name: string | null | undefined
 ): string => `${valueOrEmpty(clusterId)}::${valueOrEmpty(name)}`;
-
-export const buildKindedClusterRowKey = (
-  clusterId: string | null | undefined,
-  kind: string | null | undefined,
-  name: string | null | undefined
-): string => `${valueOrEmpty(clusterId)}::${valueOrEmpty(kind)}::${valueOrEmpty(name)}`;
-
-export const buildVersionedClusterRowKey = (
-  clusterId: string | null | undefined,
-  group: string | null | undefined,
-  version: string | null | undefined,
-  kind: string | null | undefined,
-  name: string | null | undefined
-): string =>
-  `${valueOrEmpty(clusterId)}::${valueOrEmpty(group)}::${valueOrEmpty(version)}::${valueOrEmpty(kind)}::${valueOrEmpty(name)}`;
 
 export const buildCatalogResourceRowKey = (
   clusterId: string | null | undefined,

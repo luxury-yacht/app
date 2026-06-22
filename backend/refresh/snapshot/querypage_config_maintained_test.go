@@ -1,0 +1,196 @@
+package snapshot
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
+
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/resources/configmap"
+)
+
+func cmObj(ns, name, rv string, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv},
+		Data:       data,
+	}
+}
+
+func secObj(ns, name, rv string, data map[string][]byte) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv},
+		Data:       data,
+		Type:       corev1.SecretTypeOpaque,
+	}
+}
+
+func findConfigRow(rows []ConfigSummary, kind, ns, name string) *ConfigSummary {
+	for i := range rows {
+		if rows[i].Kind == kind && rows[i].Namespace == ns && rows[i].Name == name {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
+func configDescriptor(t *testing.T, resource string) streamspec.Descriptor {
+	t.Helper()
+	for _, d := range kindregistry.StreamDescriptorsForDomain(namespaceConfigDomainName) {
+		if d.Resource == resource {
+			return d
+		}
+	}
+	t.Fatalf("no namespace-config descriptor for resource %q", resource)
+	return streamspec.Descriptor{}
+}
+
+func newNamespaceIndexer() cache.Indexer {
+	return cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+	})
+}
+
+// TestConfigMaintainedStoreIngestion proves the informer-fed store reflects
+// Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
+// rows identically to a direct BuildStreamSummary.
+func TestConfigMaintainedStoreIngestion(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	cmDesc := configDescriptor(t, "configmaps")
+	secDesc := configDescriptor(t, "secrets")
+	store := newTypedMaintainedStore(meta, configQuerypageSchema(), configTableQueryAdapter())
+	available := map[string]bool{"ConfigMap": true, "Secret": true}
+
+	store.ingest(cmDesc, cmObj("default", "cm-a", "10", map[string]string{"k": "v"}))
+	store.ingest(cmDesc, cmObj("default", "cm-b", "12", map[string]string{"k1": "v1", "k2": "v2"}))
+	store.ingest(cmDesc, cmObj("kube-system", "cm-c", "8", nil))
+	store.ingest(secDesc, secObj("default", "sec-a", "15", map[string][]byte{"t": []byte("x")}))
+
+	require.Equal(t, uint64(15), store.snapshotVersion(), "version tracks max resourceVersion")
+	require.Len(t, store.rows("default", available), 3)
+	require.Len(t, store.rows("", available), 4)
+	require.Len(t, store.rows("kube-system", available), 1)
+
+	want := configmap.BuildStreamSummary(meta, cmObj("default", "cm-a", "10", map[string]string{"k": "v"}))
+	got := findConfigRow(store.rows("default", available), "ConfigMap", "default", "cm-a")
+	require.NotNil(t, got, "cm-a present")
+	require.Equal(t, want, *got, "projection matches BuildStreamSummary")
+
+	// Update cm-a in place: new resourceVersion + an extra data key, no duplicate.
+	store.ingest(cmDesc, cmObj("default", "cm-a", "20", map[string]string{"k": "v", "k2": "v2"}))
+	require.Equal(t, uint64(20), store.snapshotVersion())
+	upd := findConfigRow(store.rows("default", available), "ConfigMap", "default", "cm-a")
+	require.NotNil(t, upd)
+	require.Equal(t, 2, upd.Data)
+	require.Len(t, store.rows("default", available), 3, "in-place update, no duplicate")
+
+	// Delete cm-b directly; delete sec-a via a tombstone.
+	store.evict(cmDesc, cmObj("default", "cm-b", "21", nil))
+	store.evict(secDesc, cache.DeletedFinalStateUnknown{Key: "default/sec-a", Obj: secObj("default", "sec-a", "22", nil)})
+	require.Nil(t, findConfigRow(store.rows("default", available), "ConfigMap", "default", "cm-b"))
+	require.Nil(t, findConfigRow(store.rows("default", available), "Secret", "default", "sec-a"))
+	require.Len(t, store.rows("default", available), 1, "only cm-a remains")
+}
+
+// TestConfigMaintainedStoreMatchesListPath is the SAFETY GATE for the live cutover:
+// fed the same objects, the maintained store's rows must equal exactly
+// what the current list path (collectDescriptorTableRows over a fake indexer)
+// produces, for every namespace scope.
+func TestConfigMaintainedStoreMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	cmDesc := configDescriptor(t, "configmaps")
+	secDesc := configDescriptor(t, "secrets")
+
+	cms := []*corev1.ConfigMap{
+		cmObj("default", "alpha", "1", map[string]string{"a": "1"}),
+		cmObj("default", "beta", "2", map[string]string{"a": "1", "b": "2"}),
+		cmObj("kube-system", "gamma", "3", nil),
+		cmObj("app", "delta", "4", map[string]string{"x": "y"}),
+	}
+	secs := []*corev1.Secret{
+		secObj("default", "s-one", "5", map[string][]byte{"t": []byte("x")}),
+		secObj("kube-system", "s-two", "6", nil),
+	}
+
+	cmIdx := newNamespaceIndexer()
+	secIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, configQuerypageSchema(), configTableQueryAdapter())
+	for _, cm := range cms {
+		require.NoError(t, cmIdx.Add(cm))
+		store.ingest(cmDesc, cm)
+	}
+	for _, s := range secs {
+		require.NoError(t, secIdx.Add(s))
+		store.ingest(secDesc, s)
+	}
+
+	collect := configCollectIndexer(cmIdx, secIdx)
+	available := map[string]bool{"ConfigMap": true, "Secret": true}
+	for _, ns := range []string{"default", "kube-system", "app", ""} {
+		listed, _, _, err := collectDescriptorTableRows[ConfigSummary](
+			context.Background(), namespaceConfigDomainName, collect, meta, ns,
+		)
+		require.NoError(t, err)
+		require.ElementsMatch(t, listed, store.rows(ns, available),
+			"maintained store rows must equal the list path for namespace %q", ns)
+	}
+}
+
+// TestNamespaceConfigBuilderMaintainedMatchesListPath is the end-to-end cutover
+// proof: fed the same objects, a builder serving from the maintained store produces
+// a byte-identical snapshot payload to the list-path builder, across window, query,
+// filter, and search scopes. (Uses zero ClusterMeta so both project identically; the
+// Snapshot.Version differs by design — both are valid refetch triggers.)
+func TestNamespaceConfigBuilderMaintainedMatchesListPath(t *testing.T) {
+	cmDesc := configDescriptor(t, "configmaps")
+	secDesc := configDescriptor(t, "secrets")
+
+	cms := []*corev1.ConfigMap{
+		cmObj("default", "alpha", "1", map[string]string{"a": "1"}),
+		cmObj("default", "beta", "2", map[string]string{"a": "1", "b": "2"}),
+		cmObj("kube-system", "gamma", "3", nil),
+	}
+	secs := []*corev1.Secret{
+		secObj("default", "s-one", "5", map[string][]byte{"t": []byte("x")}),
+		secObj("kube-system", "s-two", "6", nil),
+	}
+
+	cmIdx := newNamespaceIndexer()
+	secIdx := newNamespaceIndexer()
+	maintained := newTypedMaintainedStore(ClusterMeta{}, configQuerypageSchema(), configTableQueryAdapter())
+	for _, cm := range cms {
+		require.NoError(t, cmIdx.Add(cm))
+		maintained.ingest(cmDesc, cm)
+	}
+	for _, s := range secs {
+		require.NoError(t, secIdx.Add(s))
+		maintained.ingest(secDesc, s)
+	}
+
+	collect := configCollectIndexer(cmIdx, secIdx)
+	listBuilder := &NamespaceConfigBuilder{collectIndexer: collect}
+	maintainedBuilder := &NamespaceConfigBuilder{collectIndexer: collect, maintained: maintained}
+
+	scopes := []string{
+		"namespace:default",
+		"namespace:all",
+		"cluster-a|namespace:default?limit=2&sortField=name&sortDirection=asc",
+		"cluster-a|namespace:default?limit=50&kinds=Secret",
+		"cluster-a|namespace:all?search=alpha",
+	}
+	for _, scope := range scopes {
+		listSnap, err := listBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "list build %q", scope)
+		maintSnap, err := maintainedBuilder.Build(context.Background(), scope)
+		require.NoError(t, err, "maintained build %q", scope)
+
+		require.Equal(t,
+			listSnap.Payload.(NamespaceConfigSnapshot),
+			maintSnap.Payload.(NamespaceConfigSnapshot),
+			"scope %q: maintained Build payload must equal the list Build payload", scope)
+	}
+}

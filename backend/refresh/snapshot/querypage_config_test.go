@@ -174,7 +174,7 @@ func TestConfigQueryViaStoreEquivalent(t *testing.T) {
 					return applyTypedTableQuery(items, q, adapter)
 				}, base)
 				engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[ConfigSummary] {
-					return applyConfigTableQueryViaStore(items, q)
+					return applyTypedTableQueryViaStore(items, q, adapter, configQuerypageSchema())
 				}, base)
 
 				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v search=%q", sf, d, f.ns, f.kinds, f.search)

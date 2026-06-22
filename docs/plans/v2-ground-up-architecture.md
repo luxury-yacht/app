@@ -66,14 +66,15 @@ sections it references._
 - ❌ metrics-signal decouple (no pre-store value) and ❌ LSN clock as incremental tweaks — these are
   from-scratch-architecture, only land with the real engine.
 
-**Where we are:** mid-**Phase 3** (the engine). **Next** (immediate; the complete remaining
-roadmap with per-item status is in [§Migration phases](#migration-phases--value-early-no-big-bang)):
+**Where we are:** mid-**Phase 3** (engine, fuzz-proven) and **Phase 4 started** — the config
+maintained store is LIVE. **Next** (complete remaining roadmap with per-item status in
+[§Migration phases](#migration-phases--value-early-no-big-bang)):
 
-1. **Maintained store for config** — feed a per-cluster `Store[ConfigSummary]` from ConfigMap/Secret
-   informer Add/Update/Delete events (project via `descriptor.StreamRow`), populated-before-serve via
-   the informer sync gate. Converts the cutover from unification → the actual perf win.
-2. **Migrate the other typed domains** (workloads, network, storage, rbac, quotas, autoscaling) via the
-   proven template: derive Schema from the adapter → prove 84-combo equivalence → swap `Build`.
+1. **Generalize the maintained store** to the larger typed domains (workloads, network, storage,
+   rbac, quotas, autoscaling) using the proven config pattern — Schema from adapter → row + Build
+   equivalence gate → wire informer handlers + Build branch. There the avoided per-request
+   re-projection is the real perf win (config N is small, so config proved the pattern).
+2. The columnar SoA backend for the engine (memory win); the metrics column family.
 3. Then: trigram-accelerated search in the engine; persistence/mmap spill (low priority at 74 B/object).
 
 ## Provenance & confidence
@@ -922,9 +923,9 @@ reasons; **nothing required is incomplete here.**
 - ✅ **Prototype #1** (write-path benchmark) — GREEN, GO. (Detail in the prototype list above / §Risks #1.)
 - 🔶 **The engine** — `backend/refresh/querypage/`: unified cursor ✅; generic schema-driven
   `Store[R]` Query→Page (per-direction keyset indexes, facets, filters, search, pagination) ✅;
-  benchmarked @1M ✅. **REMAINING:** swap the current per-Build store for the **columnar SoA
-  backend** from `storebench` (the memory/perf win); build **Prototype #2** (the fuzzed
-  `apply(deltas)==recompute` property harness) as the formal correctness gate.
+  benchmarked @1M ✅; **Prototype #2 (fuzz `apply(ops)==recompute`, 40×800 ops) ✅** — Risk #2
+  closed. **REMAINING:** swap the current per-Build store for the **columnar SoA backend** from
+  `storebench` (the memory/perf win).
 - 🔶 **Cut typed tables + Browse to the one engine.** ✅ `namespace-config` (**1 of ~9** typed
   domains) — proven 84-combo equivalent, live. **REMAINING:** workloads, network, storage, rbac,
   quotas, autoscaling (same template: derive Schema → prove equivalence → swap `Build`), then
@@ -933,9 +934,23 @@ reasons; **nothing required is incomplete here.**
 
 ### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED
 
-- ⏳ **Per-cluster maintained store** (feed config's `Store` from ConfigMap/Secret informer
-  Add/Update/Delete events, populated-before-serve via the sync gate) — the first concrete step;
-  turns the config cutover from *unification* into the *perf win*. Then generalize across domains.
+- ✅ **Per-cluster maintained store — LIVE for config.** `namespace-config` now serves Build from an
+  informer-fed `configMaintainedStore` (generic `ingest`/`evict` via the descriptor's `StreamRow`/`Kind`,
+  tombstone unwrap, max-resourceVersion tracking, per-request availability filter) instead of
+  list+re-project. Handlers registered in `RegisterNamespaceConfigDomain` before factory start (sync gate
+  guarantees populated-before-serve); `clusterMeta` threaded from `registrations.go`. PROVEN: rows
+  `ElementsMatch` the list path, AND the full Build payload is **byte-identical** to the list-path Build
+  across window/query/filter/search scopes (`TestNamespaceConfigBuilderMaintainedMatchesListPath`); rests
+  on the fuzz-proven engine. Gate green (backend + tsc + vitest 3234 + knip + trivy).
+- ✅ **Machinery genericized** (`querypage_typed.go`): `typedMaintainedStore[T]`,
+  `applyTypedTableQueryViaStore[T]`, `resolveTypedSnapshotPageViaStore[T]`, `querypageSchemaFromAdapter[T]`
+  — config slimmed to a 14-line schema wrapper; config's equivalence tests pass UNCHANGED
+  (behavior-preserving). Each new domain is now a thin adapter (schema + the same Build/registration wiring).
+  **REMAINING:** apply to the other typed domains — per-domain assessment needed. The *clean
+  descriptor-driven* domains (storage/autoscaling/quotas/rbac, like config) are a thin apply; *hybrid*
+  builders (e.g. `namespace-network`: descriptor rows + bespoke `listServices`, `namespace_network.go:147,209`)
+  need the maintained store to also cover their non-descriptor row sources. The perf win lands on the larger
+  domains (config N is small — config proved the pattern + the generic infra).
 - ⏳ Replace the eager ~30-informer factory, the catalog's `factory.ForResource` + on-demand
   promotion informers (`collect.go:308`), and the CRD-definitions watch (`watch.go:306-309`) with the
   one registry-driven WatchList-projection path (capability-probe + watchdog), feeding the log.
@@ -946,7 +961,10 @@ reasons; **nothing required is incomplete here.**
 ### Prototype gates — status
 
 - ✅ **#1 Write-path benchmark** — GREEN (see above).
-- ⏳ **#2 Property / replay-equivalence harness** (risks #2, #3, #9) — the engine's formal correctness gate.
+- ✅ **#2 Property / replay-equivalence harness** (risk #2) — GREEN: `store_property_test.go` fuzzes
+  40 seeds × 800 Upsert/Delete ops (sort-key swaps, key collisions, delete/recreate) × random
+  paginated queries, all equal to a from-scratch recompute. (Risks #3/#9 — metrics-join — land with
+  the metrics column family.)
 - ⏳ **#3 WatchList watchdog + LIST fallback** (risk #5) with bookmark-strip fault injection.
 
 ---
