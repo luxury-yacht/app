@@ -144,11 +144,14 @@ func TestStreamSummaryDomainKindsDoNotDrift(t *testing.T) {
 }
 
 func TestStreamCustomHandlerKindsDoNotDrift(t *testing.T) {
-	// These kinds keep a bespoke live-stream handler (ConfigMap/Secret also trigger
-	// a Helm-release refresh; HPA has no autoscaling/v2 shared informer). The
-	// snapshot side still streams them via the registry, so dropping the flag would
-	// silently double-stream them — guard the set.
+	// HPA keeps a bespoke live-stream handler (no autoscaling/v2 shared informer). The
+	// snapshot side still streams it via the registry, so dropping the flag would
+	// silently double-stream it — guard the set. ConfigMap/Secret previously carried
+	// this flag only for their Helm-release refresh side-effect; that is now served by
+	// the dedicated helm-storage source and the kinds are owned-reflector ingest kinds,
+	// so their live notify comes from the generic ingest notify sink, not a custom
+	// handler.
 	assertKindSet(t, "custom stream handlers",
-		[]string{"ConfigMap", "HorizontalPodAutoscaler", "Secret"},
+		[]string{"HorizontalPodAutoscaler"},
 		registryKinds(func(d kindspec.Descriptor) bool { return d.Stream != nil && d.Stream.CustomStreamHandler }))
 }

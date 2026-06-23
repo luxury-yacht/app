@@ -24,7 +24,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -88,17 +87,29 @@ func helmQuerypageSchema() querypage.Schema[NamespaceHelmSummary] {
 	return querypageSchemaFromAdapter(helmTableQueryAdapter(), []string{"name", "kind", "namespace", "chart", "appversion", "status", "revision", "updated", "age"})
 }
 
-// RegisterNamespaceHelmDomain registers the namespace helm domain.
+// HelmStorageSource supplies the full typed helm-release Secrets the namespace-helm
+// builder decodes. ConfigMap/Secret are cut to the ingest path so the shared
+// informer factory no longer caches them as typed objects; the dedicated
+// label-filtered (owner=helm) helm-storage source holds the release subset instead.
+// *informer.HelmStorageSource satisfies it.
+type HelmStorageSource interface {
+	SecretLister() corelisters.SecretLister
+	SecretsHasSynced() cache.InformerSynced
+}
+
+// RegisterNamespaceHelmDomain registers the namespace helm domain. helmStorage is the
+// dedicated label-filtered helm-storage source (full typed release objects) the
+// builder lists from, replacing the shared secrets informer the cutover removed.
 func RegisterNamespaceHelmDomain(
 	reg *domain.Registry,
-	informerFactory informers.SharedInformerFactory,
+	helmStorage HelmStorageSource,
 ) error {
-	if informerFactory == nil {
-		return fmt.Errorf("shared informer factory is nil")
+	if helmStorage == nil {
+		return fmt.Errorf("helm storage source is nil")
 	}
 	builder := &NamespaceHelmBuilder{
-		secretLister:  informerFactory.Core().V1().Secrets().Lister(),
-		secretsSynced: informerFactory.Core().V1().Secrets().Informer().HasSynced,
+		secretLister:  helmStorage.SecretLister(),
+		secretsSynced: helmStorage.SecretsHasSynced(),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceHelmDomainName,

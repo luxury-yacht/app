@@ -48,7 +48,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
-	"github.com/luxury-yacht/app/backend/resources/configmap"
 	cronjobpkg "github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
@@ -58,7 +57,6 @@ import (
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
 	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
-	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
@@ -245,7 +243,7 @@ func NewManager(
 	}
 
 	mgr.registerPodStreams(factory, ingestManager)
-	mgr.registerConfigStreams(factory)
+	mgr.registerHelmStorageStreams(factory)
 	mgr.registerNetworkStreams(factory)
 	mgr.registerDescriptorStreams(factory)
 	mgr.registerAutoscalingStreams(factory)
@@ -618,17 +616,17 @@ func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Updat
 	return m.streamHub().resume(selector, since)
 }
 
+// handleConfigMap and handleSecret fire the Helm-release refresh signal for one
+// release-storage object. ConfigMap and Secret are owned-reflector ingest kinds, so
+// the namespace-config table's live notify is driven by the generic ingest notify
+// sink (registerIngestNotifyStreams); these handlers carry ONLY the helm-release
+// side-effect, fed by the dedicated label-filtered helm-storage informers
+// (registerHelmStorageStreams) which hold the full typed release objects.
 func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	cm := configMapFromObject(obj)
 	if cm == nil {
 		return
 	}
-
-	summary := configmap.BuildStreamSummary(m.clusterMeta, cm)
-	ref := m.resourceRefForObject(cm, configmap.Identity.Group, configmap.Identity.Version, configmap.Identity.Kind, configmap.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, cm, ref, summary)
-
-	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
 	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
 }
 
@@ -656,12 +654,6 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	if secret == nil {
 		return
 	}
-
-	summary := secretpkg.BuildStreamSummary(m.clusterMeta, secret)
-	ref := m.resourceRefForObject(secret, secretpkg.Identity.Group, secretpkg.Identity.Version, secretpkg.Identity.Kind, secretpkg.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceConfig, secret, ref, summary)
-
-	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
 	m.maybeBroadcastHelmRefresh(secret, updateType)
 }
 

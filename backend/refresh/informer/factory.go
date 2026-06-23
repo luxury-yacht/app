@@ -58,6 +58,13 @@ type Factory struct {
 	permissionMu      sync.RWMutex
 
 	runtimePermissions *permissions.Checker
+
+	// helmStorage is the label-filtered (owner=helm) informer set over Secrets and
+	// ConfigMaps that holds the FULL typed helm-release objects. ConfigMap/Secret are
+	// cut to the ingest path so the shared factory no longer caches them as typed
+	// objects; this dedicated source serves the three helm consumers that still need
+	// the typed object. nil before New finishes wiring it.
+	helmStorage *HelmStorageSource
 }
 
 // informerSyncState tracks one informer's progress toward its initial sync.
@@ -137,8 +144,11 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// the namespace workload tracker, the object catalog, the object map, the
 	// response-cache invalidator). The ReplicaSet informer below stays registered — the
 	// pod reflector resolves a pod's Deployment owner through it at projection time.
-	result.registerInformer("", "configmaps", kubeFactory.Core().V1().ConfigMaps().Informer())
-	result.registerInformer("", "secrets", kubeFactory.Core().V1().Secrets().Informer())
+	//
+	// configmaps and secrets are owned-reflector ingest kinds too: the shared factory no
+	// longer caches them as typed objects. The helm consumers that still need the typed
+	// release object read the dedicated label-filtered helm-storage source (below)
+	// instead of a full configmaps/secrets informer.
 	result.registerInformer("", "services", kubeFactory.Core().V1().Services().Informer())
 	result.registerInformer("discovery.k8s.io", "endpointslices", kubeFactory.Discovery().V1().EndpointSlices().Informer())
 	result.registerClusterInformer("", "namespaces", func() cache.SharedIndexInformer {
@@ -170,7 +180,24 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 
 	result.processPendingClusterInformers()
 
+	// Stand up the helm-storage source (label-filtered owner=helm Secrets+ConfigMaps,
+	// full typed objects) for the three helm consumers that still need the typed
+	// release object after configmaps/secrets are cut. Its informers join the sync
+	// gate; Start runs its factory alongside the shared one.
+	result.helmStorage = result.newHelmStorageSource()
+
 	return result
+}
+
+// HelmStorage returns the label-filtered helm-storage source backing the three
+// helm consumers (namespace-helm lister, resource-stream helm-refresh signal,
+// response-cache helm eviction). It is non-nil once New finishes; its accessors
+// return nil informers/listers for a kind the identity cannot list/watch.
+func (f *Factory) HelmStorage() *HelmStorageSource {
+	if f == nil {
+		return nil
+	}
+	return f.helmStorage
 }
 
 const gatewayGroup = "gateway.networking.k8s.io"
@@ -223,6 +250,9 @@ func (f *Factory) Start(ctx context.Context) error {
 		}
 		if f.gatewayFactory != nil {
 			go f.gatewayFactory.Start(ctx.Done())
+		}
+		if f.helmStorage != nil && f.helmStorage.factory != nil {
+			go f.helmStorage.factory.Start(ctx.Done())
 		}
 
 		synced := f.waitForCachesToSettle(ctx)
@@ -400,6 +430,7 @@ func (f *Factory) Shutdown() error {
 	f.factory = nil
 	f.apiextFactory = nil
 	f.gatewayFactory = nil
+	f.helmStorage = nil
 	f.pendingClusterInformers = nil
 
 	return nil

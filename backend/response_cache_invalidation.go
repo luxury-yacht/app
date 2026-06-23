@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -81,6 +82,14 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 			subsystem.IngestManager.AddCatalogSink(gvr, sink)
 		}
 	}
+
+	// The ingest Catalog-half sink evicts a cut kind's own detail entry, but the Helm
+	// cache eviction switches on the typed Secret/ConfigMap (release labels/type) the
+	// catalog Summary can't carry. ConfigMap/Secret are cut, so that typed object now
+	// lives only in the dedicated label-filtered helm-storage source — register the Helm
+	// eviction on its informers so a release secret/configmap change still drops the
+	// cached Helm release/manifest/values.
+	a.registerHelmCacheInvalidation(subsystem.InformerFactory.HelmStorage(), selectionKey)
 
 	// Every detail-cacheable kind drives response-cache eviction. The kind registry
 	// is the single source; the informer is read generically from the factory its
@@ -288,6 +297,29 @@ func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string
 	a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
 	if gvk, ok := objectDetailFetcherGVKs[strings.ToLower(strings.TrimSpace(kind))]; ok {
 		a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+	}
+}
+
+// registerHelmCacheInvalidation wires Helm-release cache eviction onto the
+// label-filtered helm-storage informers (Secrets + ConfigMaps holding the full
+// typed release objects). It replaces the shared configmap/secret informer handler
+// the cutover removed: every release-storage change drops the cached Helm
+// release/manifest/values for that release. A nil source or nil informer (the
+// identity cannot list/watch that kind) is a no-op.
+func (a *App) registerHelmCacheInvalidation(helm *informer.HelmStorageSource, selectionKey string) {
+	if a == nil || a.responseCache == nil || helm == nil {
+		return
+	}
+	handler := cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
+		UpdateFunc: func(_, newObj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(newObj)) },
+		DeleteFunc: func(obj interface{}) { a.invalidateHelmCacheIfNeeded(selectionKey, unwrapCacheTombstone(obj)) },
+	}
+	if inf := helm.SecretInformer(); inf != nil {
+		inf.AddEventHandler(handler)
+	}
+	if inf := helm.ConfigMapInformer(); inf != nil {
+		inf.AddEventHandler(handler)
 	}
 }
 

@@ -4,6 +4,7 @@
 - Diagnostics panel Streams table is now a hierarchy instead of a flat list. Delivery/error counts break down by cluster and scope.
 - The object panel's actions menu (delete, restart, scale, rollback, trigger, suspend, port-forward) now runs through the same shared action controller as the cluster/namespace table views, so confirmation dialogs, the scale modal, and permission gating behave identically everywhere. Action failures now surface through the standard error notifications instead of an inline banner.
 - Object-panel Overviews are now rendered from a single data-driven descriptor per resource kind instead of bespoke per-kind components.
+- ConfigMaps and Secrets now use less memory per connected cluster. Their objects are projected to the rows the app needs at ingest time instead of caching the full typed object, so a cluster with many (often large) ConfigMaps/Secrets holds far less in memory. Only Helm release records — a small, label-filtered subset — keep their full object, since the Helm view and Helm cache eviction still read it.
 
 ### Fixed
 

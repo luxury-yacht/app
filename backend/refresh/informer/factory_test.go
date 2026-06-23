@@ -329,6 +329,77 @@ func TestIsTerminalWatchError(t *testing.T) {
 	}
 }
 
+func TestNewFactoryRegistersHelmStorageNotFullConfigInformers(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	// configmaps + secrets are cut to the ingest path: the shared factory must not
+	// register a full informer for either, but the helm-storage source DOES register
+	// a label-filtered (owner=helm) informer for each under the same readiness key.
+	helm := factory.HelmStorage()
+	if helm == nil {
+		t.Fatal("expected helm-storage source to be wired")
+	}
+	if helm.SecretInformer() == nil {
+		t.Fatal("expected helm-storage Secret informer")
+	}
+	if helm.ConfigMapInformer() == nil {
+		t.Fatal("expected helm-storage ConfigMap informer")
+	}
+	if helm.SecretLister() == nil {
+		t.Fatal("expected helm-storage Secret lister for the namespace-helm builder")
+	}
+
+	factory.syncStatesMu.Lock()
+	defer factory.syncStatesMu.Unlock()
+	secretStates := 0
+	configStates := 0
+	for _, state := range factory.syncStates {
+		switch state.key {
+		case "core/secrets":
+			secretStates++
+		case "core/configmaps":
+			configStates++
+		}
+	}
+	// Exactly one informer per kind: the helm-storage filtered informer. A second
+	// (the removed full informer) would mean the typed object is still cached.
+	if secretStates != 1 {
+		t.Fatalf("expected exactly one core/secrets informer (helm-storage filtered), got %d", secretStates)
+	}
+	if configStates != 1 {
+		t.Fatalf("expected exactly one core/configmaps informer (helm-storage filtered), got %d", configStates)
+	}
+}
+
+// TestHelmStorageSourceSkipsDeniedKinds proves the helm-storage source creates no
+// filtered informer for a kind the identity cannot list/watch — a denied secret
+// never opens a watch — and reports synced so the helm builder serves empty.
+func TestHelmStorageSourceSkipsDeniedKinds(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, resource, _ string) (bool, error) {
+		return resource != "secrets", nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	helm := factory.HelmStorage()
+	if helm == nil {
+		t.Fatal("expected helm-storage source to be wired")
+	}
+	if helm.SecretInformer() != nil {
+		t.Fatal("expected no helm-storage Secret informer when secrets are denied")
+	}
+	if !helm.SecretsHasSynced()() {
+		t.Fatal("expected SecretsHasSynced to report synced when no secret informer was created")
+	}
+	if helm.ConfigMapInformer() == nil {
+		t.Fatal("expected helm-storage ConfigMap informer when configmaps are allowed")
+	}
+}
+
 func newMinimalFactory(checker *permissions.Checker) *Factory {
 	return &Factory{
 		kubeClient:         fake.NewClientset(),

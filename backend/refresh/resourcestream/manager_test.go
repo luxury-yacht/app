@@ -120,41 +120,10 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
-func TestManagerConfigUpdateBroadcasts(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-	}
-
-	sub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
-	require.NoError(t, err)
-
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "cfg-1",
-			Namespace:       "default",
-			UID:             "cfg-uid",
-			ResourceVersion: "9",
-		},
-		Data: map[string]string{
-			"key": "value",
-		},
-	}
-
-	manager.handleConfigMap(cm, MessageTypeAdded)
-
-	select {
-	case update := <-sub.Updates:
-		require.Equal(t, MessageTypeAdded, update.Type)
-		require.Equal(t, domainNamespaceConfig, update.Domain)
-		require.Equal(t, "namespace:default", update.Scope)
-		requireUpdateObjectMetadata(t, update, "9", "cfg-uid", "cfg-1", "default", "ConfigMap")
-		require.Nil(t, update.Row) // namespace-config is query-backed: change signal ships without the Row
-	default:
-		t.Fatal("expected config update to be delivered")
-	}
-}
+// The namespace-config live notify is now driven by the generic ingest notify sink
+// (ConfigMap/Secret are owned-reflector ingest kinds), proven in ingest_notify_test.go.
+// The resource-stream handleConfigMap/handleSecret handlers carry only the Helm-release
+// refresh side-effect, covered by the Helm broadcast tests below.
 
 func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{

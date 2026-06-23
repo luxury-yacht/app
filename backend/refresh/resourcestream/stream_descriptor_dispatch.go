@@ -25,8 +25,9 @@ func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 	gatewayShared := factory.GatewayInformerFactory()
 	ingestOwned := kindregistry.IngestOwnedGVRs()
 	for _, d := range kindregistry.StreamDescriptors() {
-		// Kinds with a bespoke streaming handler (registerConfigStreams etc.) are
-		// registered there; their descriptor exists only for the snapshot side.
+		// Kinds with a bespoke streaming handler (HorizontalPodAutoscaler, via
+		// registerAutoscalingStreams) are registered there; their descriptor exists
+		// only for the snapshot side.
 		if d.CustomStreamHandler {
 			continue
 		}

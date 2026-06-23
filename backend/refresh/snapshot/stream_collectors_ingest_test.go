@@ -131,6 +131,7 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 		{namespaceQuotasDomainName, sharedFactoryIndexers(nil, allowAll(namespaceQuotasDomainName), namespaceQuotasDomainName, ingestManager)},
 		{namespaceRBACDomainName, sharedFactoryIndexers(nil, allowAll(namespaceRBACDomainName), namespaceRBACDomainName, ingestManager)},
 		{namespaceStorageDomainName, unconditionalSharedIndexers(nil, namespaceStorageDomainName, ingestManager)},
+		{namespaceConfigDomainName, sharedFactoryIndexers(nil, allowAll(namespaceConfigDomainName), namespaceConfigDomainName, ingestManager)},
 		{clusterRBACDomainName, sharedFactoryIndexers(nil, allowAll(clusterRBACDomainName), clusterRBACDomainName, ingestManager)},
 		{clusterStorageDomainName, unconditionalSharedIndexers(nil, clusterStorageDomainName, ingestManager)},
 		{clusterConfigDomainName, factoryIndexers(nil, nil, allowAll(clusterConfigDomainName), clusterConfigDomainName, ingestManager)},

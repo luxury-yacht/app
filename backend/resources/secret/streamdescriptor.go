@@ -1,10 +1,12 @@
 /*
  * backend/resources/secret/streamdescriptor.go
  *
- * Secret's resource-stream registry entry. Live streaming is handled by a bespoke
- * handler in resourcestream (it also drives a Helm-release refresh), so
- * CustomStreamHandler is set and registerDescriptorStreams skips it; this
- * descriptor exists so the namespace-config snapshot can loop the registry.
+ * Secret's resource-stream registry entry. Secret is an owned-reflector ingest
+ * kind (IngestOwned), so its namespace-config live notify is driven by the generic
+ * ingest notify sink (registerIngestNotifyStreams), not a shared-informer handler.
+ * The Helm-release refresh side-effect that previously forced a bespoke
+ * CustomStreamHandler is now served by the dedicated helm-storage source. The
+ * Informer accessor stays so any uncut path can still resolve the kind.
  */
 
 package secret
@@ -20,13 +22,12 @@ import (
 
 // StreamDescriptor registers Secret for the namespace-config snapshot domain.
 var StreamDescriptor = streamspec.Descriptor{
-	Group:               Identity.Group,
-	Version:             Identity.Version,
-	Kind:                Identity.Kind,
-	Resource:            Identity.Resource,
-	Domain:              "namespace-config",
-	ClusterScoped:       !Identity.Namespaced,
-	CustomStreamHandler: true,
+	Group:         Identity.Group,
+	Version:       Identity.Version,
+	Kind:          Identity.Kind,
+	Resource:      Identity.Resource,
+	Domain:        "namespace-config",
+	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.Secret))
 	},

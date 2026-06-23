@@ -426,6 +426,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -450,7 +451,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("namespace-helm", func() error {
 			return snapshot.RegisterNamespaceHelmDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
+				deps.informerFactory.HelmStorage(),
 			)
 		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{
