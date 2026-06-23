@@ -180,6 +180,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
 		GatewayInformerFactory:       subsystem.InformerFactory.GatewayInformerFactory(),
 		PermissionChecker:            subsystem.InformerFactory,
+		IngestSource:                 subsystem.IngestManager,
 		CapabilityFactory: func() *capabilities.Service {
 			return capabilities.NewService(capabilities.Dependencies{
 				Common:             commonDeps,

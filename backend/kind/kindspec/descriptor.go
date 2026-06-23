@@ -101,6 +101,15 @@ type Descriptor struct {
 	// cached detail/YAML/Helm responses. The factory is implied by the kind's group.
 	DetailCacheable bool
 
+	// IngestOwned marks a kind cut over to the owned-reflector ingestion path: its
+	// objects are projected at intake by an ingest reflector and the shared informer
+	// factory no longer caches it as a typed object. Every subsystem that would
+	// otherwise read this kind from the shared informer (the typed-table maintained
+	// store, the object catalog, the object map, the response-cache invalidator)
+	// instead reads the ingest projections. Adding the next domain to the ingest path
+	// is flipping this facet on its kinds — the consumers are already generic over it.
+	IngestOwned bool
+
 	// Stream is the directly-streamed-table descriptor; nil when the kind is not
 	// streamed via the generic descriptor dispatch (it streams via a bespoke path
 	// or not at all).

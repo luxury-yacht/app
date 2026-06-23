@@ -32,6 +32,12 @@ import (
 var errInformerNotSynced = errors.New("catalog informer cache not yet synced")
 
 func (s *Service) collectResource(ctx context.Context, index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+	// Ingest-owned (cut) kinds are no longer cached by the shared informer factory;
+	// their Summaries come from the ingest manager (projected at intake) instead of a
+	// shared/dynamic lister, for every namespace scope.
+	if summaries, handled, err := s.collectViaIngest(index, desc, namespaces, agg); handled {
+		return summaries, err
+	}
 	if summaries, handled, err := s.collectViaSharedInformer(index, desc, namespaces, agg); handled {
 		return summaries, err
 	}
@@ -403,14 +409,24 @@ func (s *Service) stopPromotedInformers() {
 }
 
 func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summary {
+	return summaryFromObject(s.clusterID, s.clusterName, desc, item)
+}
+
+// summaryFromObject is the catalog's pure object → Summary projection: it depends
+// only on the cluster identity, the resource descriptor, and the object. The
+// Service's buildSummary delegates here so the same projection serves both the
+// live collect path and the ingest Catalog-half projector (SummaryProjector), which
+// runs before any Service exists. Keeping it one function guarantees the ingest
+// path's Summaries are byte-identical to the shared-informer collect path's.
+func summaryFromObject(clusterID, clusterName string, desc resourceDescriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		creationTimestamp = ts.UTC().Format(time.RFC3339)
 	}
 
 	summary := Summary{
-		ClusterID:         s.clusterID,
-		ClusterName:       s.clusterName,
+		ClusterID:         clusterID,
+		ClusterName:       clusterName,
 		Kind:              desc.Kind,
 		Group:             desc.Group,
 		Version:           desc.Version,

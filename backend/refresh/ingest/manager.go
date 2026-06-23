@@ -43,11 +43,33 @@ const gatewayGroup = "gateway.networking.k8s.io"
 // apiextensionsGroup is the API group served by the apiextensions client.
 const apiextensionsGroup = "apiextensions.k8s.io"
 
+// CatalogProjector projects a reflector-decoded object to its object-catalog row.
+// It is supplied per kind by the catalog so the catalog half of the bundle is
+// built at intake, alongside the table half, from one ingestion.
+type CatalogProjector func(obj metav1.Object) interface{}
+
+// ObjectMapProjector projects a reflector-decoded object to its object-map graph
+// node. It is supplied per kind (built from the kind's descriptor collector + edges)
+// so the object-map half of the bundle is built at intake. The clusterID is closed
+// over from the manager's meta so the projector matches the object-map's signature.
+type ObjectMapProjector func(obj metav1.Object) interface{}
+
 // entry is one ingested kind: the reflector that drives intake and the store
 // that holds its projected rows.
 type entry struct {
+	desc      streamspec.Descriptor
 	store     *ProjectingStore
 	reflector *ProjectingReflector
+
+	// catalogProject, when set, builds the bundle's Catalog half for this kind.
+	// It is registered before Start via RegisterCatalogProjector and read by the
+	// store's projection; nil leaves the Catalog half nil.
+	catalogProject CatalogProjector
+
+	// objectMapProject, when set, builds the bundle's ObjectMap half for this kind.
+	// It is registered before Start via RegisterObjectMapProjector and read by the
+	// store's projection; nil leaves the ObjectMap half nil.
+	objectMapProject ObjectMapProjector
 }
 
 // IngestManager owns one ProjectingStore + ProjectingReflector per built-in
@@ -109,30 +131,41 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 		return
 	}
 
-	store := NewProjectingStore(projectionFor(m.meta, desc))
+	e := &entry{desc: desc}
+	e.store = NewProjectingStore(projectionFor(m.meta, e))
 	lw := cache.NewListWatchFromClient(restClient, gvr.Resource, metav1.NamespaceAll, fields.Everything())
 	// ToListWatcherWithWatchListSemantics lets the reflector use WatchList when the
 	// client advertises support and fall back to LIST+WATCH otherwise — exactly as
 	// the generated informers do. The client argument is the typed group client so
 	// its WatchList capability is detected.
 	wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
-	reflector := NewProjectingReflector(gvk.String(), wrapped, example, store, resyncDisabled)
+	e.reflector = NewProjectingReflector(gvk.String(), wrapped, example, e.store, resyncDisabled)
 
-	m.entries[gvr] = &entry{store: store, reflector: reflector}
+	m.entries[gvr] = e
 }
 
-// projectionFor returns the ProjectFunc for a descriptor: it asserts the
-// reflector-decoded object to metav1.Object and runs the kind's StreamRow, so the
-// store keeps only the projected Summary. The concrete type assertion lives in
-// the kind package's StreamRow closure; the manager handles only metav1.Object.
-func projectionFor(meta streamrows.ClusterMeta, desc streamspec.Descriptor) ProjectFunc {
-	streamRow := desc.StreamRow
+// projectionFor returns the ProjectFunc for an entry: it asserts the
+// reflector-decoded object to metav1.Object, runs the kind's StreamRow for the
+// bundle's Table half, and runs the entry's catalog projector (when registered)
+// for the Catalog half — so one ingestion serves both consumers and the store
+// keeps only the bundle, never the typed object. The concrete type assertion
+// lives in the kind package's StreamRow closure; the manager handles only
+// metav1.Object.
+func projectionFor(meta streamrows.ClusterMeta, e *entry) ProjectFunc {
+	streamRow := e.desc.StreamRow
 	return func(obj interface{}) (interface{}, error) {
 		m, err := metaObjectOf(obj)
 		if err != nil {
 			return nil, err
 		}
-		return streamRow(meta, m), nil
+		bundle := Bundle{Table: streamRow(meta, m)}
+		if e.catalogProject != nil {
+			bundle.Catalog = e.catalogProject(m)
+		}
+		if e.objectMapProject != nil {
+			bundle.ObjectMap = e.objectMapProject(m)
+		}
+		return bundle, nil
 	}
 }
 
@@ -277,6 +310,114 @@ func (m *IngestManager) StoreFor(gvr schema.GroupVersionResource) *ProjectingSto
 		return e.store
 	}
 	return nil
+}
+
+// RegisterCatalogProjector sets the catalog projector for gvr so the store builds
+// the bundle's Catalog half from each intake. It is a no-op when the manager has
+// no entry for gvr. It must be called before Start so every object — including the
+// initial relist — carries the catalog half. Reports whether an entry was found.
+func (m *IngestManager) RegisterCatalogProjector(gvr schema.GroupVersionResource, project CatalogProjector) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.catalogProject = project
+	return true
+}
+
+// RegisterObjectMapProjector sets the object-map projector for gvr so the store
+// builds the bundle's ObjectMap half from each intake. It is a no-op when the
+// manager has no entry for gvr. It must be called before Start so every object —
+// including the initial relist — carries the object-map half. Reports whether an
+// entry was found.
+func (m *IngestManager) RegisterObjectMapProjector(gvr schema.GroupVersionResource, project ObjectMapProjector) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.objectMapProject = project
+	return true
+}
+
+// AddSink registers a Table-half sink for gvr's store so a consumer (a maintained
+// store, a response-cache invalidator) is fed incrementally as the reflector
+// mutates it. Multiple sinks may be registered per gvr. It is a no-op when the
+// manager has no entry for gvr. It must be called before Start so no mutation is
+// missed. Reports whether an entry was found.
+func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.store.AddSink(sink)
+	return true
+}
+
+// AddCatalogSink registers a Catalog-half sink for gvr's store so the object catalog
+// is fed the kind's Summary incrementally as the reflector mutates it, without
+// reading the shared informer. It is a no-op when the manager has no entry for gvr.
+// It must be called before Start so no mutation is missed. Reports whether an entry
+// was found.
+func (m *IngestManager) AddCatalogSink(gvr schema.GroupVersionResource, sink Sink) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.store.AddCatalogSink(sink)
+	return true
+}
+
+// TableRows returns the Table half of every projected row for gvr (the
+// directly-streamed/summary-table rows), or nil when the manager has no entry for
+// gvr.
+func (m *IngestManager) TableRows(gvr schema.GroupVersionResource) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.TableRows()
+}
+
+// CatalogRows returns the Catalog half of every projected row for gvr (the
+// object-catalog Summaries), or nil when the manager has no entry for gvr or no
+// catalog projector was registered.
+func (m *IngestManager) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.CatalogRows()
+}
+
+// ObjectMapRows returns the ObjectMap half of every projected row for gvr (the
+// object-map graph nodes), or nil when the manager has no entry for gvr or no
+// object-map projector was registered.
+func (m *IngestManager) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.ObjectMapRows()
+}
+
+// HasSyncedFor reports whether gvr's store has completed its initial relist, or
+// false when the manager has no entry for gvr. Consumers that read only specific
+// GVRs (the catalog reading the quotas kinds) gate on these rather than the
+// whole-manager HasSynced.
+func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return false
+	}
+	return store.HasSynced()
 }
 
 // resyncDisabled documents that ingest reflectors run with no periodic resync:

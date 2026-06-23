@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
@@ -74,26 +75,36 @@ func RegisterClusterConfigDomain(
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
-	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed, clusterMeta)
+	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed, clusterMeta, ingestManager)
 }
 
+// RegisterClusterConfigDomainWithGatewayAPI registers the cluster-config domain.
+//
+// This domain is MIXED: StorageClass, IngressClass, and the admission webhook kinds
+// are owned-reflector ingest kinds (IngestOwned), fed from the ingest reflectors'
+// Table-half Sink; GatewayClass is NOT cut and is still fed from the Gateway-API
+// informer via registerMaintainedHandlers (which skips the ingest-owned kinds). When
+// ingestManager is nil (a unit test) the cut kinds have no feed.
 func RegisterClusterConfigDomainWithGatewayAPI(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName)
 
-	// Maintain a per-cluster store fed by each available config kind's informer
-	// (shared factory for StorageClass/IngressClass/webhooks, Gateway-API factory
-	// for GatewayClass).
+	// Maintain a per-cluster store fed by each available config kind's source: the
+	// ingest Sink for the cut kinds (StorageClass/IngressClass/webhooks), the
+	// Gateway-API informer handler for the uncut GatewayClass.
 	maintained := newTypedMaintainedStore(clusterMeta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
+	feedMaintainedFromIngest(maintained, clusterConfigDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, clusterConfigDomainName, collectIndexer, factory, gatewayFactory); err != nil {
 		return err
 	}

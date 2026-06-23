@@ -286,17 +286,26 @@ func makeHandler(gr schema.GroupResource, notifier *watchNotifier, svc *Service)
 	}
 }
 
-// registerWatchHandlers attaches event handlers to shared informers.
+// registerWatchHandlers attaches event handlers to shared informers, and registers
+// an ingest Catalog-half sink for each ingest-owned (cut) kind instead — those kinds
+// are no longer cached by the shared factory, so their incremental catalog updates
+// flow from the ingest reflector rather than a factory informer handler.
 func registerWatchHandlers(
 	factory informers.SharedInformerFactory,
 	apiextFactory apiextinformers.SharedInformerFactory,
 	notifier *watchNotifier,
 	svc *Service,
 ) {
+	svc.registerIngestCatalogSinks()
 	if factory == nil {
 		return
 	}
 	for gr, gvr := range watchInformerGroupResources {
+		if isIngestOwned(gr) {
+			// Cut kind: its incremental updates come from the ingest sink registered
+			// above, not from a shared-informer handler (the factory no longer caches it).
+			continue
+		}
 		generic, err := factory.ForResource(gvr)
 		if err != nil {
 			continue
@@ -307,6 +316,20 @@ func registerWatchHandlers(
 		crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
 		gr := schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}
 		crdInformer.AddEventHandler(makeHandler(gr, notifier, svc))
+	}
+}
+
+// registerIngestCatalogSinks registers a Catalog-half sink with the ingest manager
+// for every ingest-owned (cut) kind, so the live catalog index stays current between
+// full collects without reading the shared informer. It is a no-op when no ingest
+// source is configured (the uncut configuration).
+func (s *Service) registerIngestCatalogSinks() {
+	source := s.deps.IngestSource
+	if source == nil {
+		return
+	}
+	for gvr := range catalogIngestOwnedGVRs {
+		source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
 	}
 }
 

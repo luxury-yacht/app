@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/role"
 	"github.com/luxury-yacht/app/backend/resources/rolebinding"
@@ -67,19 +68,28 @@ type RBACSummary = streamrows.RBACSummary
 // serves, their informers, and their row builders all come from the shared stream
 // descriptor registry; only informers for permitted resources are registered, so
 // denied resources are skipped gracefully.
+//
+// Role, RoleBinding, and ServiceAccount are owned-reflector ingest kinds (IngestOwned):
+// when ingestManager is non-nil their maintained-store feed comes from the ingest
+// reflectors' Table-half Sink and registerMaintainedHandlers skips them (the shared
+// factory no longer caches them). When ingestManager is nil (a unit test) the store has
+// no feed for the cut kinds.
 func RegisterNamespaceRBACDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName)
 
-	// Maintain a per-cluster store fed by each available RBAC kind's informer.
+	// Maintain a per-cluster store fed by each available RBAC kind's source: the
+	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, rbacQuerypageSchema(), rbacTableQueryAdapter())
+	feedMaintainedFromIngest(maintained, namespaceRBACDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceRBACDomainName, collectIndexer, factory, nil); err != nil {
 		return err
 	}

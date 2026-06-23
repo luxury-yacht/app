@@ -163,42 +163,15 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	result.registerInformer("apps", "daemonsets", kubeFactory.Apps().V1().DaemonSets().Informer())
 	result.registerInformer("batch", "jobs", kubeFactory.Batch().V1().Jobs().Informer())
 	result.registerInformer("batch", "cronjobs", kubeFactory.Batch().V1().CronJobs().Informer())
-	result.registerClusterInformer("rbac.authorization.k8s.io", "clusterroles", func() cache.SharedIndexInformer {
-		return kubeFactory.Rbac().V1().ClusterRoles().Informer()
-	})
-	result.registerClusterInformer("rbac.authorization.k8s.io", "clusterrolebindings", func() cache.SharedIndexInformer {
-		return kubeFactory.Rbac().V1().ClusterRoleBindings().Informer()
-	})
-	result.registerClusterInformer("rbac.authorization.k8s.io", "roles", func() cache.SharedIndexInformer {
-		return kubeFactory.Rbac().V1().Roles().Informer()
-	})
-	result.registerClusterInformer("rbac.authorization.k8s.io", "rolebindings", func() cache.SharedIndexInformer {
-		return kubeFactory.Rbac().V1().RoleBindings().Informer()
-	})
-	result.registerInformer("", "serviceaccounts", kubeFactory.Core().V1().ServiceAccounts().Informer())
-	result.registerClusterInformer("", "persistentvolumes", func() cache.SharedIndexInformer {
-		return kubeFactory.Core().V1().PersistentVolumes().Informer()
-	})
-	result.registerInformer("", "persistentvolumeclaims", kubeFactory.Core().V1().PersistentVolumeClaims().Informer())
-	result.registerInformer("", "resourcequotas", kubeFactory.Core().V1().ResourceQuotas().Informer())
-	result.registerInformer("", "limitranges", kubeFactory.Core().V1().LimitRanges().Informer())
-	result.registerClusterInformer("storage.k8s.io", "storageclasses", func() cache.SharedIndexInformer {
-		return kubeFactory.Storage().V1().StorageClasses().Informer()
-	})
-	result.registerClusterInformer("networking.k8s.io", "ingressclasses", func() cache.SharedIndexInformer {
-		return kubeFactory.Networking().V1().IngressClasses().Informer()
-	})
+	// roles, rolebindings, serviceaccounts, clusterroles, clusterrolebindings,
+	// persistentvolumes, persistentvolumeclaims, storageclasses, ingressclasses, and
+	// the admission webhook kinds are owned-reflector ingest kinds (IngestOwned),
+	// projected at intake by the IngestManager; the shared factory no longer caches
+	// them as typed objects. Their consumers (the rbac/storage/config maintained
+	// stores, catalog, object map, response-cache) read the ingest projections instead.
 	result.registerInformer("networking.k8s.io", "ingresses", kubeFactory.Networking().V1().Ingresses().Informer())
 	result.registerInformer("networking.k8s.io", "networkpolicies", kubeFactory.Networking().V1().NetworkPolicies().Informer())
 	result.registerInformer("autoscaling", "horizontalpodautoscalers", kubeFactory.Autoscaling().V1().HorizontalPodAutoscalers().Informer())
-	// Keep PDBs in sync for the namespace quotas refresh domain.
-	result.registerInformer("policy", "poddisruptionbudgets", kubeFactory.Policy().V1().PodDisruptionBudgets().Informer())
-	result.registerClusterInformer("admissionregistration.k8s.io", "validatingwebhookconfigurations", func() cache.SharedIndexInformer {
-		return kubeFactory.Admissionregistration().V1().ValidatingWebhookConfigurations().Informer()
-	})
-	result.registerClusterInformer("admissionregistration.k8s.io", "mutatingwebhookconfigurations", func() cache.SharedIndexInformer {
-		return kubeFactory.Admissionregistration().V1().MutatingWebhookConfigurations().Informer()
-	})
 	result.registerInformer("", "events", kubeFactory.Core().V1().Events().Informer())
 
 	if apiextClient != nil {

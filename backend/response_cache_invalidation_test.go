@@ -7,6 +7,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 )
 
 func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
@@ -178,5 +180,32 @@ func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T
 	}
 	if _, ok := app.responseCacheLookup(selectionKey, kindKey); ok {
 		t.Fatalf("expected built-in legacy kind cache entry to be evicted")
+	}
+}
+
+// TestIngestResponseCacheSinkEvictsOnUpsertAndDelete proves the owned-reflector
+// invalidation path: a cut kind's ingest Catalog-half sink evicts the cached detail
+// entry on both Upsert (the resource changed) and Delete (the resource was removed),
+// exactly as the shared-informer handler did — but fed the projected Summary, not the
+// typed object.
+func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
+	app := NewApp()
+	app.responseCache = newResponseCache(time.Minute, 10)
+	selectionKey := "cluster-a"
+
+	sink := app.ingestResponseCacheSink(selectionKey)
+
+	upsertKey := objectDetailCacheKey("ResourceQuota", "default", "rq-a")
+	app.responseCacheStore(selectionKey, upsertKey, "detail")
+	sink.Upsert(objectcatalog.Summary{Kind: "ResourceQuota", Namespace: "default", Name: "rq-a"})
+	if _, ok := app.responseCacheLookup(selectionKey, upsertKey); ok {
+		t.Fatalf("expected detail cache entry to be evicted on ingest Upsert")
+	}
+
+	deleteKey := objectDetailCacheKey("LimitRange", "default", "lr-b")
+	app.responseCacheStore(selectionKey, deleteKey, "detail")
+	sink.Delete(objectcatalog.Summary{Kind: "LimitRange", Namespace: "default", Name: "lr-b"})
+	if _, ok := app.responseCacheLookup(selectionKey, deleteKey); ok {
+		t.Fatalf("expected detail cache entry to be evicted on ingest Delete")
 	}
 }

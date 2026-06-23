@@ -23,6 +23,31 @@ import (
 // caller supplies the projection for the kind it ingests.
 type ProjectFunc func(obj interface{}) (interface{}, error)
 
+// Bundle is the per-object projection a kind ingested for multiple consumers
+// holds: the Table half is the directly-streamed/summary-table row (the kind's
+// StreamRow output), the Catalog half is the object-catalog Summary, and the
+// ObjectMap half is the object-map graph node (the kind's collector status +
+// action facts + pre-resolved edges). Any half may be nil when the kind has no
+// projector for that consumer. The store keeps the bundle, never the source
+// object, so every consumer reads its half from one ingestion.
+type Bundle struct {
+	Table     interface{}
+	Catalog   interface{}
+	ObjectMap interface{}
+}
+
+// Sink receives a kind's Table-half row incrementally as the reflector mutates
+// the store: Upsert on Add/Update/Replace, Delete on eviction. Both halves carry
+// the Table-half row (never the source object), so the sink derives its own key
+// from the row and need not share the store's cache keyspace. A maintained store
+// registers as a Sink so it stays current without polling. Sink calls happen
+// while the store holds its write lock, so a Sink implementation must not call
+// back into the store.
+type Sink interface {
+	Upsert(tableRow interface{})
+	Delete(tableRow interface{})
+}
+
 // ProjectingStore is a cache.Store that holds the PROJECTED row per object
 // instead of the full source object. On Add/Update/Replace it runs the injected
 // projection and stores only the result keyed by cache.MetaNamespaceKeyFunc; the
@@ -33,6 +58,19 @@ type ProjectingStore struct {
 
 	mu   sync.RWMutex
 	rows map[string]interface{}
+
+	// sinks receive each row's Table half incrementally as the store mutates
+	// (Upsert on store, Delete on eviction), so consumers — a maintained store, a
+	// response-cache invalidator — stay current without polling. They are read
+	// under the store's lock, so AddSink must be called before the reflector
+	// starts. Multiple sinks let several consumers observe one ingestion.
+	sinks []Sink
+
+	// catalogSinks receive each row's Catalog half incrementally, on the same
+	// Upsert/Delete events, so the object catalog stays current for an ingest-owned
+	// kind without reading the (now-absent) shared informer. They are registered and
+	// fanned exactly like sinks, but carry the Catalog half rather than the Table half.
+	catalogSinks []Sink
 
 	// rv is the latest resource version the store has observed, recorded by
 	// Replace (relist) and Bookmark (watch bookmark) and returned by
@@ -58,6 +96,112 @@ func NewProjectingStore(project ProjectFunc) *ProjectingStore {
 		project: project,
 		rows:    make(map[string]interface{}),
 	}
+}
+
+// AddSink registers a Sink fed each row's Table half incrementally. It must be
+// called before the reflector starts so no mutation is missed. Multiple sinks may
+// be registered; each receives every Upsert/Delete. A nil sink is ignored.
+func (s *ProjectingStore) AddSink(sink Sink) {
+	if sink == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sinks = append(s.sinks, sink)
+}
+
+// AddCatalogSink registers a Sink fed each row's Catalog half incrementally, on the
+// same Upsert/Delete events as AddSink, and immediately replays the Catalog half of
+// every row already in the store to the new sink as an Upsert. The replay mirrors a
+// SharedIndexInformer's AddEventHandler, which re-delivers the current store to a
+// handler added after the informer synced — so the catalog may register its sink
+// AFTER the reflector started (the production order, since the catalog Service is
+// built after the ingest manager) without missing the already-ingested set. A nil
+// sink is ignored.
+func (s *ProjectingStore) AddCatalogSink(sink Sink) {
+	if sink == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogSinks = append(s.catalogSinks, sink)
+	for _, row := range s.rows {
+		if cat := catalogHalf(row); cat != nil {
+			sink.Upsert(cat)
+		}
+	}
+}
+
+// hasSinks reports whether any Table-half or Catalog-half sink is registered, so the
+// mutation paths can skip half-extraction work when nothing observes them.
+func (s *ProjectingStore) hasSinks() bool {
+	return len(s.sinks) > 0 || len(s.catalogSinks) > 0
+}
+
+// emitUpsert / emitDelete fan a projected value's Table half out to every Table sink
+// and its Catalog half out to every Catalog sink, each only when that half is
+// non-nil. They assume the caller holds the write lock; a sink must not call back
+// into the store.
+func (s *ProjectingStore) emitUpsert(projected interface{}) {
+	if len(s.sinks) > 0 {
+		if table := tableHalf(projected); table != nil {
+			for _, sink := range s.sinks {
+				sink.Upsert(table)
+			}
+		}
+	}
+	if len(s.catalogSinks) > 0 {
+		if cat := catalogHalf(projected); cat != nil {
+			for _, sink := range s.catalogSinks {
+				sink.Upsert(cat)
+			}
+		}
+	}
+}
+
+func (s *ProjectingStore) emitDelete(projected interface{}) {
+	if len(s.sinks) > 0 {
+		if table := tableHalf(projected); table != nil {
+			for _, sink := range s.sinks {
+				sink.Delete(table)
+			}
+		}
+	}
+	if len(s.catalogSinks) > 0 {
+		if cat := catalogHalf(projected); cat != nil {
+			for _, sink := range s.catalogSinks {
+				sink.Delete(cat)
+			}
+		}
+	}
+}
+
+// tableHalf returns the Table half of a projected value: the Table field when the
+// value is a Bundle, otherwise the value itself (the table-only projection path,
+// where the stored value IS the table row). nil Table yields nil.
+func tableHalf(projected interface{}) interface{} {
+	if b, ok := projected.(Bundle); ok {
+		return b.Table
+	}
+	return projected
+}
+
+// catalogHalf returns the Catalog half of a projected value, or nil when the value
+// is not a Bundle or carries no catalog projection.
+func catalogHalf(projected interface{}) interface{} {
+	if b, ok := projected.(Bundle); ok {
+		return b.Catalog
+	}
+	return nil
+}
+
+// objectMapHalf returns the ObjectMap half of a projected value, or nil when the
+// value is not a Bundle or carries no object-map projection.
+func objectMapHalf(projected interface{}) interface{} {
+	if b, ok := projected.(Bundle); ok {
+		return b.ObjectMap
+	}
+	return nil
 }
 
 // keyOf resolves an object's store key, unwrapping a delete tombstone first so a
@@ -87,6 +231,9 @@ func (s *ProjectingStore) projectAndStore(obj interface{}) error {
 		return nil
 	}
 	s.rows[key] = projected
+	if s.hasSinks() {
+		s.emitUpsert(projected)
+	}
 	return nil
 }
 
@@ -115,7 +262,11 @@ func (s *ProjectingStore) Delete(obj interface{}) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	stored, existed := s.rows[key]
 	delete(s.rows, key)
+	if existed && s.hasSinks() {
+		s.emitDelete(stored)
+	}
 	return nil
 }
 
@@ -127,6 +278,52 @@ func (s *ProjectingStore) List() []interface{} {
 	out := make([]interface{}, 0, len(s.rows))
 	for _, row := range s.rows {
 		out = append(out, row)
+	}
+	return out
+}
+
+// TableRows returns a snapshot slice of the Table half of every stored projection
+// (the directly-streamed/summary-table row). Rows whose Table half is nil are
+// omitted. For a table-only projection (the stored value is not a Bundle) the
+// stored value itself is the table row.
+func (s *ProjectingStore) TableRows() []interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]interface{}, 0, len(s.rows))
+	for _, row := range s.rows {
+		if table := tableHalf(row); table != nil {
+			out = append(out, table)
+		}
+	}
+	return out
+}
+
+// CatalogRows returns a snapshot slice of the Catalog half of every stored
+// projection (the object-catalog Summary). Rows whose Catalog half is nil — kinds
+// with no catalog projector — are omitted.
+func (s *ProjectingStore) CatalogRows() []interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]interface{}, 0, len(s.rows))
+	for _, row := range s.rows {
+		if cat := catalogHalf(row); cat != nil {
+			out = append(out, cat)
+		}
+	}
+	return out
+}
+
+// ObjectMapRows returns a snapshot slice of the ObjectMap half of every stored
+// projection (the object-map graph node). Rows whose ObjectMap half is nil — kinds
+// with no object-map projector — are omitted.
+func (s *ProjectingStore) ObjectMapRows() []interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]interface{}, 0, len(s.rows))
+	for _, row := range s.rows {
+		if node := objectMapHalf(row); node != nil {
+			out = append(out, node)
+		}
 	}
 	return out
 }
@@ -185,10 +382,30 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 		}
 		next[key] = projected
 	}
+	prev := s.rows
 	s.rows = next
 	s.rv = resourceVersion
 	s.synced = true
+	if s.hasSinks() {
+		s.feedSinksReplace(prev, next)
+	}
 	return nil
+}
+
+// feedSinksReplace reconciles a relist against every sink: it deletes every key that
+// vanished from the new set, then upserts the whole new set — fanning each projected
+// value's Table and Catalog halves to their respective sinks. It assumes the caller
+// holds the write lock and at least one sink is registered.
+func (s *ProjectingStore) feedSinksReplace(prev, next map[string]interface{}) {
+	for key, stored := range prev {
+		if _, kept := next[key]; kept {
+			continue
+		}
+		s.emitDelete(stored)
+	}
+	for _, projected := range next {
+		s.emitUpsert(projected)
+	}
 }
 
 // HasSynced reports whether the reflector's initial relist has landed: it is

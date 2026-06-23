@@ -266,12 +266,13 @@ func newRole(ns, name string) *rbacv1.Role {
 }
 
 // storeNames returns the sorted "namespace/name" identity of every projected row
-// in a store, derived from the embedded ClusterMeta-bearing summary via JSON so
-// the helper stays kind-agnostic.
+// in a store, derived from the bundle's Table half (the stream Summary) via JSON
+// so the helper stays kind-agnostic.
 func storeNames(t *testing.T, store *ProjectingStore) []string {
 	t.Helper()
-	out := make([]string, 0, len(store.List()))
-	for _, row := range store.List() {
+	tables := store.TableRows()
+	out := make([]string, 0, len(tables))
+	for _, row := range tables {
 		ns, name := identityOf(t, row)
 		if ns == "" {
 			out = append(out, name)
@@ -359,7 +360,8 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 		t.Fatalf("configmap store names = %v", got)
 	}
 	// The stored values must be the projected ConfigSummary rows, not *corev1.ConfigMap.
-	for _, row := range cmStore.List() {
+	// The store holds bundles now; its Table half is the projected summary.
+	for _, row := range cmStore.TableRows() {
 		if _, isCM := row.(*corev1.ConfigMap); isCM {
 			t.Fatalf("configmap store retained a *corev1.ConfigMap; only the projected summary must be kept")
 		}
@@ -375,7 +377,7 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 	if got := waitForNames(t, saStore, []string{"default/seed-sa"}); !equalStrings(got, []string{"default/seed-sa"}) {
 		t.Fatalf("serviceaccount store names = %v", got)
 	}
-	for _, row := range saStore.List() {
+	for _, row := range saStore.TableRows() {
 		if _, isSA := row.(*corev1.ServiceAccount); isSA {
 			t.Fatalf("serviceaccount store retained a *corev1.ServiceAccount; only the projected summary must be kept")
 		}
@@ -391,7 +393,7 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 	if got := waitForNames(t, roleStore, []string{"default/seed-role"}); !equalStrings(got, []string{"default/seed-role"}) {
 		t.Fatalf("role store names = %v", got)
 	}
-	for _, row := range roleStore.List() {
+	for _, row := range roleStore.TableRows() {
 		if _, isRole := row.(*rbacv1.Role); isRole {
 			t.Fatalf("role store retained a *rbacv1.Role; only the projected summary must be kept")
 		}

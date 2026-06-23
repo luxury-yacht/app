@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
@@ -462,13 +463,23 @@ func descriptorInformer(d streamspec.Descriptor, factory informers.SharedInforme
 	return nil
 }
 
+// streamDescriptorIngestOwned reports whether a stream descriptor's kind is cut over
+// to the owned-reflector ingest path (the registry's IngestOwned facet). A cut kind's
+// maintained-store feed comes from the ingest Sink, not a shared-informer handler, so
+// the handler-registration loop skips it to avoid double-feeding the store.
+func streamDescriptorIngestOwned(d streamspec.Descriptor) bool {
+	_, owned := kindregistry.IngestOwnedGVRs()[d.GVR()]
+	return owned
+}
+
 // registerMaintainedHandlers wires the maintained store's ingest/evict into each of
 // the domain's registered kinds' informers — generic over the domain's kinds, with
 // no per-kind branch. It loops the stream descriptor registry, skipping any kind
-// whose indexer was not registered (collectIndexer returns nil) or whose informer is
-// unavailable (descriptorInformer returns nil). Handlers are registered BEFORE the
-// factory starts, so the snapshot sync gate guarantees the store is populated before
-// the first Build serves from it.
+// whose indexer was not registered (collectIndexer returns nil), whose informer is
+// unavailable (descriptorInformer returns nil), or that is ingest-owned (fed by the
+// ingest Sink instead — see feedMaintainedFromIngest). Handlers are registered BEFORE
+// the factory starts, so the snapshot sync gate guarantees the store is populated
+// before the first Build serves from it.
 func registerMaintainedHandlers[T any](
 	maintained *typedMaintainedStore[T],
 	domainName string,
@@ -477,6 +488,9 @@ func registerMaintainedHandlers[T any](
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 ) error {
 	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
+		if streamDescriptorIngestOwned(d) {
+			continue
+		}
 		if collectIndexer(d) == nil {
 			continue
 		}
@@ -494,6 +508,75 @@ func registerMaintainedHandlers[T any](
 		}
 	}
 	return nil
+}
+
+// feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
+// maintained store from the owned-reflector path: the kind's ingest store delivers
+// its already-projected Table-half row to the store's Sink, replacing the shared-
+// informer event handler entirely. It is the per-kind equivalent of the quotas
+// all-cut feed, so a domain with a mix of cut and uncut kinds feeds the cut ones here
+// and the uncut ones through registerMaintainedHandlers. ingestManager may be nil (no
+// cut kinds wired, e.g. a unit test), in which case it is a no-op.
+func feedMaintainedFromIngest[T any](
+	maintained *typedMaintainedStore[T],
+	domainName string,
+	ingestManager *ingest.IngestManager,
+) {
+	if ingestManager == nil {
+		return
+	}
+	sink := maintained.Sink()
+	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
+		if !streamDescriptorIngestOwned(d) {
+			continue
+		}
+		ingestManager.AddSink(d.GVR(), sink)
+	}
+}
+
+// Sink returns an ingest.Sink that feeds this maintained store from the owned
+// reflector path: each Upsert/Delete carries the already-projected row (the
+// bundle's Table half), which the adapter upserts/evicts by the adapter's own key.
+// Mutating through the sink advances the snapshot version monotonically so refetch
+// identity changes whenever the served set changes. This is the live cutover path;
+// the object-based ingest/evict methods remain for the equivalence gate tests.
+func (m *typedMaintainedStore[T]) Sink() ingest.Sink {
+	return maintainedStoreSink[T]{store: m}
+}
+
+// maintainedStoreSink adapts a typedMaintainedStore to ingest.Sink. The reflector
+// store delivers the Table-half row as interface{}; a row of the wrong type is
+// ignored (it cannot belong to this store), mirroring the type guard in ingest.
+type maintainedStoreSink[T any] struct {
+	store *typedMaintainedStore[T]
+}
+
+func (s maintainedStoreSink[T]) Upsert(tableRow interface{}) {
+	row, ok := tableRow.(T)
+	if !ok {
+		return
+	}
+	s.store.store.Upsert(row)
+	s.store.bumpSinkVersion()
+}
+
+func (s maintainedStoreSink[T]) Delete(tableRow interface{}) {
+	row, ok := tableRow.(T)
+	if !ok {
+		return
+	}
+	s.store.store.Delete(s.store.adapter.Key(row))
+	s.store.bumpSinkVersion()
+}
+
+// bumpSinkVersion advances the snapshot version by one on every sink mutation.
+// The reflector-fed rows carry no resourceVersion, so the maintained store cannot
+// reuse resourceVersionOrTimestamp; a per-change counter is an equally valid
+// monotonic refetch identity that changes exactly when the served set changes.
+func (m *typedMaintainedStore[T]) bumpSinkVersion() {
+	m.mu.Lock()
+	m.version++
+	m.mu.Unlock()
 }
 
 // upsertRow ingests an already-projected row directly, bumping the store version

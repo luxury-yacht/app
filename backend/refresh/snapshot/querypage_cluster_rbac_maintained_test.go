@@ -124,6 +124,51 @@ func TestClusterRBACMaintainedStoreMatchesListPath(t *testing.T) {
 		"maintained store rows must equal the list path for the cluster scope")
 }
 
+// TestClusterRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
+// ingest cutover: fed the projected StreamRow through the ingest Sink (the live
+// reflector path ClusterRole/ClusterRoleBinding now take via IngestOwned), the
+// maintained store's rows must equal exactly what the list path produces.
+func TestClusterRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	roleDesc := clusterRBACDescriptor(t, "clusterroles")
+	bindingDesc := clusterRBACDescriptor(t, "clusterrolebindings")
+
+	roles := []*rbacv1.ClusterRole{
+		clusterRoleObj("alpha", "1"),
+		clusterRoleObj("beta", "2"),
+	}
+	bindings := []*rbacv1.ClusterRoleBinding{
+		clusterRoleBindingObj("gamma", "3"),
+		clusterRoleBindingObj("delta", "4"),
+	}
+
+	roleIdx := newNamespaceIndexer()
+	bindingIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, clusterRBACQuerypageSchema(), clusterRBACTableQueryAdapter())
+	sink := store.Sink()
+	for _, r := range roles {
+		require.NoError(t, roleIdx.Add(r))
+		sink.Upsert(roleDesc.StreamRow(meta, r))
+	}
+	for _, b := range bindings {
+		require.NoError(t, bindingIdx.Add(b))
+		sink.Upsert(bindingDesc.StreamRow(meta, b))
+	}
+
+	collect := clusterRBACCollectIndexer(roleIdx, bindingIdx)
+	available := map[string]bool{"ClusterRole": true, "ClusterRoleBinding": true}
+	listed, _, _, err := collectDescriptorTableRows[ClusterRBACEntry](
+		context.Background(), clusterRBACDomainName, collect, meta, "",
+	)
+	require.NoError(t, err)
+	require.ElementsMatch(t, listed, store.rows("", available),
+		"sink-fed maintained store rows must equal the list path for the cluster scope")
+
+	sink.Delete(roleDesc.StreamRow(meta, roles[0]))
+	require.Nil(t, findClusterRBACRow(store.rows("", available), "ClusterRole", "alpha"))
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 // TestClusterRBACBuilderMaintainedMatchesListPath is the end-to-end cutover proof:
 // fed the same objects, a builder serving from the maintained store produces a
 // byte-identical snapshot payload to the list-path builder, across window, query,

@@ -115,6 +115,42 @@ func TestClusterStorageMaintainedStoreMatchesListPath(t *testing.T) {
 		"maintained store rows must equal the list path for the cluster scope")
 }
 
+// TestClusterStorageMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the
+// live ingest cutover: fed the projected StreamRow through the ingest Sink (the live
+// reflector path PersistentVolume now takes via IngestOwned), the maintained store's
+// rows must equal exactly what the list path produces.
+func TestClusterStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	pvDesc := clusterStorageDescriptor(t, "persistentvolumes")
+
+	pvs := []*corev1.PersistentVolume{
+		pvObj("alpha", "1", "1Gi", "standard"),
+		pvObj("beta", "2", "2Gi", "fast"),
+		pvObj("gamma", "3", "5Gi", "standard"),
+	}
+
+	pvIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, clusterStorageQuerypageSchema(), clusterStorageTableQueryAdapter())
+	sink := store.Sink()
+	for _, pv := range pvs {
+		require.NoError(t, pvIdx.Add(pv))
+		sink.Upsert(pvDesc.StreamRow(meta, pv))
+	}
+
+	collect := clusterStorageCollectIndexer(pvIdx)
+	available := map[string]bool{"PersistentVolume": true}
+	listed, _, _, err := collectDescriptorTableRows[ClusterStorageEntry](
+		context.Background(), clusterStorageDomainName, collect, meta, "",
+	)
+	require.NoError(t, err)
+	require.ElementsMatch(t, listed, store.rows("", available),
+		"sink-fed maintained store rows must equal the list path for the cluster scope")
+
+	sink.Delete(pvDesc.StreamRow(meta, pvs[0]))
+	require.Nil(t, findClusterStorageRow(store.rows("", available), "PersistentVolume", "alpha"))
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 // TestClusterStorageBuilderMaintainedMatchesListPath is the end-to-end cutover proof:
 // fed the same objects, a builder serving from the maintained store produces a
 // byte-identical snapshot payload to the list-path builder, across window, query,

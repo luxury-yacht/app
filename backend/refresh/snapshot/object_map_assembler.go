@@ -22,6 +22,7 @@ func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMa
 		client:      b.client,
 		shared:      b.shared,
 		permissions: b.permissions,
+		ingest:      b.ingest,
 	})
 	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
 	if err := index.listError(); err != nil {

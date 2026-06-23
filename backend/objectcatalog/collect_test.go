@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -97,6 +98,97 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 	}
 	if summary.LabelsDigest == "" {
 		t.Errorf("expected labels digest to be set")
+	}
+}
+
+// fakeCatalogIngestSource is a test IngestSource that serves pre-seeded Summaries for
+// a cut GVR, so the catalog ingest collect path can be exercised without a real
+// reflector.
+type fakeCatalogIngestSource struct {
+	rows map[schema.GroupVersionResource][]interface{}
+}
+
+func (f *fakeCatalogIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
+	return f.rows[gvr]
+}
+
+func (f *fakeCatalogIngestSource) AddCatalogSink(schema.GroupVersionResource, ingest.Sink) bool {
+	return true
+}
+
+// TestCollectViaIngestServesCutKindSummaries proves a cut kind's collect is served
+// from the ingest manager's CatalogRows (projected at intake), scoped to the
+// requested namespaces, and byte-identical to the catalog's own summaryFromObject —
+// the catalog-quotas-Summaries gate for the owned-reflector cutover.
+func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
+	// A real ingest-owned GVR from the registry's facet, so the cut-set membership
+	// check passes exactly as in production.
+	var cutGVR schema.GroupVersionResource
+	for gvr := range catalogIngestOwnedGVRs {
+		if gvr.Resource == "resourcequotas" {
+			cutGVR = gvr
+		}
+	}
+	if cutGVR.Empty() {
+		t.Fatal("expected resourcequotas in the ingest-owned cut set")
+	}
+
+	desc := builtinDescriptor(cutGVR.Group, cutGVR.Version, "ResourceQuota", cutGVR.Resource, true)
+	obj := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "compute", ResourceVersion: "7"},
+	}
+	want := summaryFromObject("c1", "cluster-one", desc, obj)
+	other := summaryFromObject("c1", "cluster-one", desc,
+		&metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "other", ResourceVersion: "8"}})
+
+	source := &fakeCatalogIngestSource{
+		rows: map[schema.GroupVersionResource][]interface{}{cutGVR: {want, other}},
+	}
+	svc := NewService(Dependencies{IngestSource: source, ClusterID: "c1", ClusterName: "cluster-one"}, nil)
+
+	// Namespace-scoped request to team-a returns only the team-a summary, byte-identical.
+	summaries, handled, err := svc.collectViaIngest(0, desc, []string{"team-a"}, nil)
+	if err != nil || !handled {
+		t.Fatalf("collectViaIngest handled=%v err=%v, want handled=true err=nil", handled, err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("got %d summaries, want 1 (scoped to team-a)", len(summaries))
+	}
+	if summaries[0] != want {
+		t.Fatalf("summary = %#v, want byte-identical %#v", summaries[0], want)
+	}
+
+	// An all-namespaces request returns both, proving no scoping when none requested.
+	all, handled, err := svc.collectViaIngest(0, desc, nil, nil)
+	if err != nil || !handled || len(all) != 2 {
+		t.Fatalf("all-namespaces collectViaIngest handled=%v err=%v len=%d, want true/nil/2", handled, err, len(all))
+	}
+}
+
+// TestCollectViaIngestAlwaysHandlesCutKind proves a cut kind's collect is ALWAYS
+// served by ingest — even with no rows yet — so the catalog never falls through to
+// the shared factory for a GVR the factory no longer registers (which would lazily
+// create an unstarted informer). An uncut GVR is not handled, so the factory/list
+// path still serves it.
+func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
+	var cutGVR schema.GroupVersionResource
+	for gvr := range catalogIngestOwnedGVRs {
+		if gvr.Resource == "resourcequotas" {
+			cutGVR = gvr
+		}
+	}
+	cutDesc := builtinDescriptor(cutGVR.Group, cutGVR.Version, "ResourceQuota", cutGVR.Resource, true)
+	source := &fakeCatalogIngestSource{
+		rows: map[schema.GroupVersionResource][]interface{}{cutGVR: {}},
+	}
+	svc := NewService(Dependencies{IngestSource: source}, nil)
+	if summaries, handled, err := svc.collectViaIngest(0, cutDesc, nil, nil); !handled || err != nil || len(summaries) != 0 {
+		t.Fatalf("cut kind collectViaIngest handled=%v err=%v len=%d, want true/nil/0", handled, err, len(summaries))
+	}
+
+	uncutDesc := builtinDescriptor("apps", "v1", "Deployment", "deployments", true)
+	if _, handled, _ := svc.collectViaIngest(0, uncutDesc, nil, nil); handled {
+		t.Fatal("uncut kind must not be handled by ingest")
 	}
 }
 

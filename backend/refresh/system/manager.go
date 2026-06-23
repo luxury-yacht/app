@@ -25,12 +25,14 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -75,6 +77,7 @@ type Subsystem struct {
 	Telemetry        *telemetry.Recorder     // Telemetry recorder for capturing metrics and events.
 	PermissionIssues []PermissionIssue       // List of permission issues encountered during refresh.
 	InformerFactory  *informer.Factory       // Factory for creating informers.
+	IngestManager    *ingest.IngestManager   // Owned-reflector ingestion manager for cut kinds.
 	RuntimePerms     *permissions.Checker    // Checker for runtime permissions.
 	Registry         *domain.Registry        // Registry for managing domain information.
 	SnapshotService  refresh.SnapshotService // Service for managing snapshots.
@@ -113,6 +116,20 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	informer.EnsureWatchListDecision(context.Background(), cfg.KubernetesClient)
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
 		WithGatewayFactory(cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
+
+	// Owned-reflector ingestion for cut kinds: build the manager, register each cut
+	// kind's table/catalog/object-map projectors, and let the composite hub start +
+	// sync-gate it alongside the factory. The factory no longer registers the cut
+	// kinds' informers (see informer.New), so the ingest manager is their sole source.
+	ingestManager := ingest.NewIngestManager(
+		streamrows.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
+		cfg.KubernetesClient,
+		cfg.APIExtensionsClient,
+		cfg.GatewayClient,
+	)
+	registerIngestProjectors(ingestManager, cfg.ClusterID, cfg.ClusterName)
+	informerHub := newIngestInformerHub(informerFactory, ingestManager)
+
 	var permissionIssues []PermissionIssue
 
 	// appendIssue adds a permission issue to the list if any errors are present.
@@ -198,6 +215,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
+		ingestManager:   ingestManager,
 		metricsProvider: metricsProvider,
 		cfg:             cfg,
 		gate:            gate,
@@ -226,11 +244,11 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		telemetryRecorder,
 		clusterMeta,
 		runtimePerms,
-	).WithInformerHub(informerFactory).
+	).WithInformerHub(informerHub).
 		WithDomainReadiness(domainReadinessResources(registrations))
 	queue := refresh.NewInMemoryQueue()
 
-	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)
+	manager := refresh.NewManager(registry, informerHub, snapshotService, metricsPoller, queue)
 
 	// Build the core refresh routes once so all server configurations stay consistent.
 	mux := BuildRefreshMux(MuxConfig{
@@ -238,7 +256,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ManualQueue:     queue,
 		Telemetry:       telemetryRecorder,
 		Metrics:         manager,
-		HealthHub:       informerFactory,
+		HealthHub:       informerHub,
 	})
 
 	eventManager, resourceManager, err := registerStreamHandlers(mux, streamDeps{
@@ -259,6 +277,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		Telemetry:        telemetryRecorder,
 		PermissionIssues: permissionIssues,
 		InformerFactory:  informerFactory,
+		IngestManager:    ingestManager,
 		RuntimePerms:     runtimePerms,
 		Registry:         registry,
 		SnapshotService:  snapshotService,

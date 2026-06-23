@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -18,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/informers"
@@ -77,7 +80,50 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 		client:      client,
 		shared:      shared,
 		permissions: allowAllPermissions{},
+		// Ingest-owned (cut) kinds are no longer read from the shared listers; project
+		// their object-map nodes through the same registry collector + edges the
+		// production ingest path uses, so the test stays byte-equivalent to a real
+		// reflector feeding the object map.
+		ingest: newFakeObjectMapIngestSource(t, shared),
 	}
+}
+
+// fakeObjectMapIngestSource projects the ingest-owned kinds' object-map nodes from
+// the started shared informer cache, exactly as a production ingest reflector would
+// (same collector Status/ActionFacts + same ObjectMapEdges). It lets the object-map
+// tests exercise the cut path without standing up a real reflector.
+type fakeObjectMapIngestSource struct {
+	rows map[schema.GroupVersionResource][]interface{}
+}
+
+func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerFactory) *fakeObjectMapIngestSource {
+	t.Helper()
+	src := &fakeObjectMapIngestSource{rows: map[schema.GroupVersionResource][]interface{}{}}
+	for _, collector := range objectMapCollectors {
+		gvr := collector.Identity.GVR()
+		if _, cut := objectMapIngestOwnedGVRs[gvr]; !cut {
+			continue
+		}
+		items, err := collector.List(shared)
+		if err != nil {
+			t.Fatalf("fake ingest source list %s: %v", gvr, err)
+		}
+		projector := objectmapnode.NewNodeProjector(
+			collector.Status,
+			collector.ActionFacts,
+			objectMapEdgeBuilders[collector.Identity.Kind],
+		)
+		nodes := make([]interface{}, 0, len(items))
+		for _, obj := range items {
+			nodes = append(nodes, projector("cluster-a", obj))
+		}
+		src.rows[gvr] = nodes
+	}
+	return src
+}
+
+func (s *fakeObjectMapIngestSource) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
+	return s.rows[gvr]
 }
 
 // denyPermissions denies CanListWatch for the named resources, for tests that

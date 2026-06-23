@@ -147,6 +147,63 @@ func TestRBACMaintainedStoreMatchesListPath(t *testing.T) {
 	}
 }
 
+// TestRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live ingest
+// cutover: fed the projected StreamRow through the ingest Sink (the live reflector
+// path Role/RoleBinding/ServiceAccount now take via IngestOwned), the maintained
+// store's rows must equal exactly what the list path produces, for every namespace.
+func TestRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	roleDesc := rbacDescriptor(t, "roles")
+	bindingDesc := rbacDescriptor(t, "rolebindings")
+	saDesc := rbacDescriptor(t, "serviceaccounts")
+
+	roles := []*rbacv1.Role{
+		roleObj("default", "alpha", "1"),
+		roleObj("app", "beta", "2"),
+	}
+	bindings := []*rbacv1.RoleBinding{
+		roleBindingObj("default", "gamma", "3"),
+		roleBindingObj("kube-system", "delta", "4"),
+	}
+	sas := []*corev1.ServiceAccount{
+		saObjRBAC("default", "epsilon", "5"),
+		saObjRBAC("kube-system", "zeta", "6"),
+	}
+
+	roleIdx := newNamespaceIndexer()
+	bindingIdx := newNamespaceIndexer()
+	saIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, rbacQuerypageSchema(), rbacTableQueryAdapter())
+	sink := store.Sink()
+	for _, r := range roles {
+		require.NoError(t, roleIdx.Add(r))
+		sink.Upsert(roleDesc.StreamRow(meta, r))
+	}
+	for _, b := range bindings {
+		require.NoError(t, bindingIdx.Add(b))
+		sink.Upsert(bindingDesc.StreamRow(meta, b))
+	}
+	for _, s := range sas {
+		require.NoError(t, saIdx.Add(s))
+		sink.Upsert(saDesc.StreamRow(meta, s))
+	}
+
+	collect := rbacCollectIndexer(roleIdx, bindingIdx, saIdx)
+	available := map[string]bool{"Role": true, "RoleBinding": true, "ServiceAccount": true}
+	for _, ns := range []string{"default", "kube-system", "app", ""} {
+		listed, _, _, err := collectDescriptorTableRows[RBACSummary](
+			context.Background(), namespaceRBACDomainName, collect, meta, ns,
+		)
+		require.NoError(t, err)
+		require.ElementsMatch(t, listed, store.rows(ns, available),
+			"sink-fed maintained store rows must equal the list path for namespace %q", ns)
+	}
+
+	sink.Delete(roleDesc.StreamRow(meta, roles[0]))
+	require.Nil(t, findRBACRow(store.rows("default", available), "Role", "default", "alpha"))
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 // TestNamespaceRBACBuilderMaintainedMatchesListPath is the end-to-end cutover proof:
 // fed the same objects, a builder serving from the maintained store produces a
 // byte-identical snapshot payload to the list-path builder, across window, query,

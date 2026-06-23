@@ -1,0 +1,270 @@
+package ingest
+
+import (
+	"context"
+	"fmt"
+	"net/http/httptest"
+	"sync"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// tableRow / catalogRow are the two halves a bundle projection produces. They are
+// distinct types so a test can prove TableRows/CatalogRows pull the right half.
+type tableRow struct {
+	NS   string
+	Name string
+}
+
+type catalogRow struct {
+	Key string
+}
+
+func bundleProject(tableErr, catalogErr bool) ProjectFunc {
+	return func(obj interface{}) (interface{}, error) {
+		cm, ok := obj.(*corev1.ConfigMap)
+		if !ok {
+			return nil, fmt.Errorf("bundleProject: unexpected type %T", obj)
+		}
+		b := Bundle{}
+		if !tableErr {
+			b.Table = tableRow{NS: cm.Namespace, Name: cm.Name}
+		}
+		if !catalogErr {
+			b.Catalog = catalogRow{Key: cm.Namespace + "/" + cm.Name}
+		}
+		return b, nil
+	}
+}
+
+// recordingSink captures the incremental upserts/deletes a store fires so a test
+// can prove the maintained store is fed live as the reflector mutates the store.
+type recordingSink struct {
+	mu      sync.Mutex
+	upserts []interface{}
+	deletes []interface{}
+}
+
+func (s *recordingSink) Upsert(row interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.upserts = append(s.upserts, row)
+}
+
+func (s *recordingSink) Delete(row interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deletes = append(s.deletes, row)
+}
+
+func (s *recordingSink) snapshot() ([]interface{}, []interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u := append([]interface{}(nil), s.upserts...)
+	d := append([]interface{}(nil), s.deletes...)
+	return u, d
+}
+
+func cm(ns, name string) *corev1.ConfigMap {
+	return configMap(ns, name)
+}
+
+// TestProjectingStoreBundleAccessorsSplitHalves proves TableRows and CatalogRows
+// each return only their half of every stored bundle.
+func TestProjectingStoreBundleAccessorsSplitHalves(t *testing.T) {
+	store := NewProjectingStore(bundleProject(false, false))
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := store.Add(cm("kube-system", "b")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	tables := store.TableRows()
+	if len(tables) != 2 {
+		t.Fatalf("TableRows len = %d, want 2", len(tables))
+	}
+	for _, r := range tables {
+		if _, ok := r.(tableRow); !ok {
+			t.Fatalf("TableRows returned %T, want tableRow", r)
+		}
+	}
+
+	catalogs := store.CatalogRows()
+	if len(catalogs) != 2 {
+		t.Fatalf("CatalogRows len = %d, want 2", len(catalogs))
+	}
+	for _, r := range catalogs {
+		if _, ok := r.(catalogRow); !ok {
+			t.Fatalf("CatalogRows returned %T, want catalogRow", r)
+		}
+	}
+}
+
+// TestProjectingStoreCatalogRowsOmitsNilHalf proves a kind with no catalog
+// projector (Catalog left nil) contributes no catalog rows but still contributes
+// table rows.
+func TestProjectingStoreCatalogRowsOmitsNilHalf(t *testing.T) {
+	// catalogErr=true leaves Bundle.Catalog nil for every object.
+	store := NewProjectingStore(bundleProject(false, true))
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if got := len(store.TableRows()); got != 1 {
+		t.Fatalf("TableRows len = %d, want 1", got)
+	}
+	if got := len(store.CatalogRows()); got != 0 {
+		t.Fatalf("CatalogRows len = %d, want 0 when catalog half is nil", got)
+	}
+}
+
+// TestProjectingStoreSinkReceivesIncrementalUpsertsAndDeletes proves a registered
+// sink is fed the Table half on Add/Update and the key on Delete, so a maintained
+// store stays in sync with the reflector incrementally — not by polling.
+func TestProjectingStoreSinkReceivesIncrementalUpsertsAndDeletes(t *testing.T) {
+	sink := &recordingSink{}
+	store := NewProjectingStore(bundleProject(false, false))
+	store.AddSink(sink)
+
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := store.Update(cm("default", "a")); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if err := store.Delete(cm("default", "a")); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	upserts, deletes := sink.snapshot()
+	if len(upserts) != 2 {
+		t.Fatalf("sink upserts = %d, want 2 (Add + Update)", len(upserts))
+	}
+	for _, u := range upserts {
+		if _, ok := u.(tableRow); !ok {
+			t.Fatalf("sink upsert is %T, want the Table half tableRow", u)
+		}
+	}
+	if len(deletes) != 1 {
+		t.Fatalf("sink deletes = %d, want 1", len(deletes))
+	}
+	if got, ok := deletes[0].(tableRow); !ok || got != (tableRow{NS: "default", Name: "a"}) {
+		t.Fatalf("sink delete row = %#v, want the Table half tableRow{default,a}", deletes[0])
+	}
+}
+
+// TestProjectingStoreSinkReceivesReplaceAsUpserts proves a relist (Replace) feeds
+// the sink the Table half of every object in the new set, so the maintained store
+// is repopulated on relist.
+func TestProjectingStoreSinkReceivesReplaceAsUpserts(t *testing.T) {
+	sink := &recordingSink{}
+	store := NewProjectingStore(bundleProject(false, false))
+	store.AddSink(sink)
+
+	if err := store.Replace([]interface{}{cm("default", "a"), cm("default", "b")}, "1"); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	upserts, _ := sink.snapshot()
+	if len(upserts) != 2 {
+		t.Fatalf("sink upserts after Replace = %d, want 2", len(upserts))
+	}
+}
+
+// TestIngestManagerBuildsBundleAndFeedsSink is the end-to-end proof of the bundle +
+// sink mechanism through the real manager: a registered catalog projector makes
+// CatalogRows populate alongside TableRows, and a registered sink is fed the Table
+// half live as the reflector syncs. This is exactly how the quotas cutover wires a
+// maintained store + the catalog onto one ingestion.
+func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
+	server := newTrackerAPIServer(t)
+	server.add(t, newCM("default", "seed-cm"), configMapGVK)
+	httpSrv := httptest.NewServer(server)
+	defer httpSrv.Close()
+	kube := newKubeClientFor(t, httpSrv)
+
+	mgr := NewIngestManager(testMeta, kube, nil, nil)
+
+	// Register a catalog projector and a sink BEFORE Start, the production order.
+	if ok := mgr.RegisterCatalogProjector(configMapGVR, func(o metav1.Object) interface{} {
+		return catalogRow{Key: o.GetNamespace() + "/" + o.GetName()}
+	}); !ok {
+		t.Fatal("RegisterCatalogProjector found no configmap entry")
+	}
+	sink := &recordingSink{}
+	if ok := mgr.AddSink(configMapGVR, sink); !ok {
+		t.Fatal("AddSink found no configmap entry")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	waitForManagerSynced(t, mgr)
+
+	cmStore := mgr.StoreFor(configMapGVR)
+	if got := waitForNames(t, cmStore, []string{"default/seed-cm"}); !equalStrings(got, []string{"default/seed-cm"}) {
+		t.Fatalf("configmap names = %v", got)
+	}
+
+	// Both halves are present: TableRows holds the ConfigSummary, CatalogRows holds
+	// the catalog projection from the SAME ingestion.
+	if got := len(mgr.TableRows(configMapGVR)); got != 1 {
+		t.Fatalf("TableRows = %d, want 1", got)
+	}
+	catalogs := mgr.CatalogRows(configMapGVR)
+	if len(catalogs) != 1 {
+		t.Fatalf("CatalogRows = %d, want 1", len(catalogs))
+	}
+	if got, ok := catalogs[0].(catalogRow); !ok || got.Key != "default/seed-cm" {
+		t.Fatalf("CatalogRows[0] = %#v, want catalogRow{default/seed-cm}", catalogs[0])
+	}
+
+	// The sink was fed the Table half at least once (the initial relist Upsert).
+	upserts, _ := sink.snapshot()
+	if len(upserts) == 0 {
+		t.Fatal("sink received no upserts; the maintained store would never populate")
+	}
+}
+
+// objectMapRow is the third bundle half a test projects: a distinct type so the test
+// proves ObjectMapRows pulls the ObjectMap half, not the Table or Catalog half.
+type objectMapRow struct {
+	Key string
+}
+
+// TestIngestManagerBuildsObjectMapHalf proves the third bundle half end-to-end: a
+// registered object-map projector makes ObjectMapRows populate alongside TableRows
+// from one reflector ingestion — exactly how the quotas cutover feeds the object map.
+func TestIngestManagerBuildsObjectMapHalf(t *testing.T) {
+	server := newTrackerAPIServer(t)
+	server.add(t, newCM("default", "seed-cm"), configMapGVK)
+	httpSrv := httptest.NewServer(server)
+	defer httpSrv.Close()
+	kube := newKubeClientFor(t, httpSrv)
+
+	mgr := NewIngestManager(testMeta, kube, nil, nil)
+	if ok := mgr.RegisterObjectMapProjector(configMapGVR, func(o metav1.Object) interface{} {
+		return objectMapRow{Key: o.GetNamespace() + "/" + o.GetName()}
+	}); !ok {
+		t.Fatal("RegisterObjectMapProjector found no configmap entry")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	waitForManagerSynced(t, mgr)
+
+	cmStore := mgr.StoreFor(configMapGVR)
+	if got := waitForNames(t, cmStore, []string{"default/seed-cm"}); !equalStrings(got, []string{"default/seed-cm"}) {
+		t.Fatalf("configmap names = %v", got)
+	}
+
+	nodes := mgr.ObjectMapRows(configMapGVR)
+	if len(nodes) != 1 {
+		t.Fatalf("ObjectMapRows = %d, want 1", len(nodes))
+	}
+	if got, ok := nodes[0].(objectMapRow); !ok || got.Key != "default/seed-cm" {
+		t.Fatalf("ObjectMapRows[0] = %#v, want objectMapRow{default/seed-cm}", nodes[0])
+	}
+}

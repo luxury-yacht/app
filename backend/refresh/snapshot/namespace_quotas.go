@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
 	"github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
@@ -70,19 +71,30 @@ type QuotaStatus = streamrows.QuotaStatus
 // RegisterNamespaceQuotasDomain registers quotas domain.
 // Only listers for permitted resources are wired; denied resources are left nil
 // so the builder skips them gracefully.
+//
+// When ingestManager is non-nil the quotas kinds are owned-reflector ingest kinds:
+// the maintained store is fed by the ingest reflectors' Table-half Sink (the
+// projected QuotaSummary) instead of typed-informer event handlers, so the shared
+// factory no longer caches them. When it is nil (e.g. uncut, or a unit test) the
+// store falls back to informer handlers.
 func RegisterNamespaceQuotasDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName)
 
-	// Maintain a per-cluster store fed by each available quota kind's informer.
+	// Maintain a per-cluster store fed by each available quota kind's source. Every
+	// quota kind is ingest-owned, so the ingest Sink feeds them all and
+	// registerMaintainedHandlers (which skips ingest-owned kinds) registers nothing —
+	// but it stays so a nil-ingest unit test still has a defined (empty) feed path.
 	maintained := newTypedMaintainedStore(clusterMeta, quotasQuerypageSchema(), quotaTableQueryAdapter())
+	feedMaintainedFromIngest(maintained, namespaceQuotasDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceQuotasDomainName, collectIndexer, factory, nil); err != nil {
 		return err
 	}

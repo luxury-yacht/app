@@ -14,6 +14,8 @@
 
 package resourcekind
 
+import "k8s.io/apimachinery/pkg/runtime/schema"
+
 // Identity is the group/version/kind + resource + scope identity of one built-in
 // Kubernetes resource. A kind package declares a value of this type once; every
 // subsystem reads the kind from that single declaration instead of restating it.
@@ -23,4 +25,15 @@ type Identity struct {
 	Kind       string
 	Resource   string
 	Namespaced bool
+}
+
+// GVR is the identity's GroupVersionResource, the key subsystems use to address the
+// kind's informer, lister, or ingest store.
+func (i Identity) GVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{Group: i.Group, Version: i.Version, Resource: i.Resource}
+}
+
+// GVK is the identity's GroupVersionKind.
+func (i Identity) GVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{Group: i.Group, Version: i.Version, Kind: i.Kind}
 }

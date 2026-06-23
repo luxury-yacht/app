@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -19,12 +20,13 @@ import (
 
 // registrationDeps bundles dependencies needed to register refresh domains.
 type registrationDeps struct {
-	registry        *domain.Registry  // Domain registry for managing domain lifecycles
-	informerFactory *informer.Factory // Factory for creating informers
-	metricsProvider metrics.Provider  // Provider for collecting metrics
-	cfg             Config            // Configuration settings
-	gate            *permissionGate   // Permission gate for access control
-	serverHost      string            // Hostname of the server
+	registry        *domain.Registry      // Domain registry for managing domain lifecycles
+	informerFactory *informer.Factory     // Factory for creating informers
+	ingestManager   *ingest.IngestManager // Owned-reflector ingestion for cut kinds
+	metricsProvider metrics.Provider      // Provider for collecting metrics
+	cfg             Config                // Configuration settings
+	gate            *permissionGate       // Permission gate for access control
+	serverHost      string                // Hostname of the server
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -324,6 +326,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.GatewayInformerFactory(),
 					allowed,
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -363,6 +366,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -380,6 +384,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 			deniedReason: "core/persistentvolumes",
@@ -465,6 +470,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -477,6 +483,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.SharedInformerFactory(),
 					allowed,
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -486,6 +493,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.registry,
 				deps.informerFactory.SharedInformerFactory(),
 				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+				deps.ingestManager,
 			)
 		}),
 
@@ -525,6 +533,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.cfg.GatewayClient,
 				deps.cfg.GatewayAPIPresence,
 				deps.cfg.ObjectCatalogService,
+				deps.ingestManager,
 			)
 		}),
 		directRegistration("object-maintenance", func() error {

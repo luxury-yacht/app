@@ -88,6 +88,47 @@ func TestStorageMaintainedStoreIngestion(t *testing.T) {
 	require.Len(t, store.rows("default", available), 1, "only pvc-a remains in default")
 }
 
+// TestStorageMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
+// ingest cutover: fed the projected StreamRow through the ingest Sink (the live
+// reflector path PersistentVolumeClaim now takes via IngestOwned), the maintained
+// store's rows must equal exactly what the list path produces, for every namespace
+// scope. The sink delivers the bundle's Table half directly.
+func TestStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	pvcDesc := storageDescriptor(t, "persistentvolumeclaims")
+
+	pvcs := []*corev1.PersistentVolumeClaim{
+		pvcObj("default", "alpha", "1", "1Gi", "standard"),
+		pvcObj("default", "beta", "2", "2Gi", "fast"),
+		pvcObj("kube-system", "gamma", "3", "5Gi", "standard"),
+		pvcObj("app", "delta", "4", "10Gi", "premium"),
+	}
+
+	pvcIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, storageQuerypageSchema(), storageTableQueryAdapter())
+	sink := store.Sink()
+	for _, pvc := range pvcs {
+		require.NoError(t, pvcIdx.Add(pvc))
+		sink.Upsert(pvcDesc.StreamRow(meta, pvc))
+	}
+
+	collect := storageCollectIndexer(pvcIdx)
+	available := map[string]bool{"PersistentVolumeClaim": true}
+	for _, ns := range []string{"default", "kube-system", "app", ""} {
+		listed, _, _, err := collectDescriptorTableRows[StorageSummary](
+			context.Background(), namespaceStorageDomainName, collect, meta, ns,
+		)
+		require.NoError(t, err)
+		require.ElementsMatch(t, listed, store.rows(ns, available),
+			"sink-fed maintained store rows must equal the list path for namespace %q", ns)
+	}
+
+	// A delete through the sink evicts the row, exactly like a watch delete.
+	sink.Delete(pvcDesc.StreamRow(meta, pvcs[0]))
+	require.Nil(t, findStorageRow(store.rows("default", available), "PersistentVolumeClaim", "default", "alpha"))
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 // TestStorageMaintainedStoreMatchesListPath is the SAFETY GATE for the live cutover:
 // fed the same objects, the maintained store's rows must equal exactly what the
 // current list path (collectDescriptorTableRows over a fake indexer) produces, for

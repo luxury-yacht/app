@@ -16,10 +16,12 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
@@ -114,6 +116,14 @@ type objectMapPermissionChecker interface {
 	CanListWatch(group, resource string) bool
 }
 
+// objectMapIngestSource supplies the projected object-map nodes for ingest-owned
+// (cut) kinds, whose objects are no longer cached by the shared informer factory.
+// *ingest.IngestManager satisfies it. The object map reads cut kinds' nodes from
+// here and uncut kinds from the shared informer listers.
+type objectMapIngestSource interface {
+	ObjectMapRows(gvr schema.GroupVersionResource) []interface{}
+}
+
 type objectMapBuilder struct {
 	client          kubernetes.Interface
 	gatewayClient   gatewayversioned.Interface
@@ -124,6 +134,9 @@ type objectMapBuilder struct {
 	// cluster-wide LIST calls per refresh.
 	shared      informers.SharedInformerFactory
 	permissions objectMapPermissionChecker
+	// ingest supplies projected object-map nodes for ingest-owned (cut) kinds. nil
+	// when no kind in the build is ingest-owned (e.g. a unit test with no cut kinds).
+	ingest objectMapIngestSource
 }
 
 // objectMapTypedSource carries everything collectTyped needs for one build: the
@@ -134,6 +147,8 @@ type objectMapTypedSource struct {
 	client      kubernetes.Interface
 	shared      informers.SharedInformerFactory
 	permissions objectMapPermissionChecker
+	// ingest supplies projected nodes for ingest-owned kinds; nil when none.
+	ingest objectMapIngestSource
 }
 
 func (s objectMapTypedSource) allowed(group, resource string) bool {
@@ -167,6 +182,16 @@ type objectMapRecord struct {
 	actionFacts       *ObjectMapActionFacts
 	owners            []metav1.OwnerReference
 	labels            map[string]string
+	// ingestEdges holds the kind's already-resolved relationship edges for an
+	// ingest-owned (cut) record, whose source object was dropped at intake. The edge
+	// builder uses these instead of re-deriving from obj (which is nil here). nil for
+	// uncut records, which derive edges from obj via objectMapEdgeBuilders.
+	ingestEdges []objectmapspec.Edge
+	// presented marks a record the object map presents as a node even though its
+	// source object is absent (an ingest-owned record). Uncut records carry obj and
+	// are presented via that; this flag is the equivalent presence signal for cut
+	// records in the namespace-map node filter.
+	presented bool
 }
 
 type objectMapIndex struct {
@@ -199,6 +224,8 @@ const (
 )
 
 // RegisterObjectMapDomain wires the backend relationship graph domain into the registry.
+// ingestSource supplies the projected object-map nodes for ingest-owned (cut) kinds;
+// it may be nil when no kind is cut over to the ingest path.
 func RegisterObjectMapDomain(
 	reg *domain.Registry,
 	client kubernetes.Interface,
@@ -207,6 +234,7 @@ func RegisterObjectMapDomain(
 	gatewayClient gatewayversioned.Interface,
 	gatewayPresence objectMapGatewayPresence,
 	catalogService func() *objectcatalog.Service,
+	ingestSource objectMapIngestSource,
 ) error {
 	if client == nil {
 		return fmt.Errorf("kubernetes client is required for object map domain")
@@ -221,6 +249,7 @@ func RegisterObjectMapDomain(
 		catalogService:  catalogService,
 		shared:          shared,
 		permissions:     permissions,
+		ingest:          ingestSource,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectMapDomain,
@@ -358,6 +387,12 @@ func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
 			idx.warnSkippedPermission(collector.Identity.Resource)
 			continue
 		}
+		// Ingest-owned (cut) kinds are no longer cached by the shared factory; their
+		// projected object-map nodes come from the ingest source instead of a lister.
+		if _, cut := objectMapIngestOwnedGVRs[collector.Identity.GVR()]; cut {
+			idx.collectIngestNodes(collector.Identity, src.ingest)
+			continue
+		}
 		items, err := collector.List(src.shared)
 		if idx.skipListError(collector.Identity.Resource, err) {
 			if idx.hasListError() {
@@ -387,6 +422,50 @@ func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
 	} else {
 		idx.warnSkippedPermission("horizontalpodautoscalers")
 	}
+}
+
+// collectIngestNodes adds an object-map record per projected node for an
+// ingest-owned kind, read from the ingest source instead of a shared-informer
+// lister. The projected node already carries the identity, status, action facts,
+// owners, labels, and pre-resolved edges the object-map needs — all computed from
+// the source object's own fields at intake — so the record is byte-equivalent to
+// the lister path's record except that obj is nil (the source object was dropped).
+func (idx *objectMapIndex) collectIngestNodes(identity resourcekind.Identity, source objectMapIngestSource) {
+	if source == nil {
+		return
+	}
+	for _, raw := range source.ObjectMapRows(identity.GVR()) {
+		node, ok := raw.(objectmapnode.Node)
+		if !ok {
+			continue
+		}
+		idx.addRecord(&objectMapRecord{
+			ref:               objectMapRefFromIngestNode(identity, node),
+			creationTimestamp: node.CreationTimestamp,
+			status:            node.Status,
+			actionFacts:       node.ActionFacts,
+			owners:            node.Owners,
+			labels:            cloneStringMap(node.Labels),
+			ingestEdges:       node.Edges,
+			presented:         true,
+		})
+	}
+}
+
+// objectMapRefFromIngestNode builds the graph reference for an ingest-projected
+// node, mirroring refFromObject but reading the identity from the node fields the
+// projection captured (no source object is retained).
+func objectMapRefFromIngestNode(identity resourcekind.Identity, node objectmapnode.Node) ObjectMapReference {
+	ref := ObjectMapReference{
+		Group:     identity.Group,
+		Version:   identity.Version,
+		Kind:      identity.Kind,
+		Resource:  identity.Resource,
+		Namespace: node.Namespace,
+		Name:      node.Name,
+		UID:       node.UID,
+	}
+	return ref
 }
 
 func (idx *objectMapIndex) warnSkippedPermission(resource string) {
@@ -931,10 +1010,10 @@ func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
 }
 
 // isNamespaceMapSupportedRecord reports whether a record is a node the object map
-// presents. Every object the collectors add carries its source object, and every
-// collected kind is a presented node, so a non-nil obj is the test.
+// presents. A collector-added record carries its source object; an ingest-owned
+// record carries no object but is flagged presented. Either signal qualifies it.
 func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
-	return record != nil && record.obj != nil
+	return record != nil && (record.obj != nil || record.presented)
 }
 
 func stopsNamespaceMapReverseExpansion(ref ObjectMapReference) bool {
@@ -989,20 +1068,21 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 	for _, record := range idx.records {
 		// Every kind declares its relationship edges in its own package; the
 		// registry dispatches by kind and resolveEdgeTargets resolves each target.
-		if build := objectMapEdgeBuilders[record.ref.Kind]; build != nil {
-			for _, e := range build(idx.meta.ClusterID, record.obj) {
-				relationship := objectMapRelationships[e.Type]
-				label := e.Label
-				if label == "" {
-					label = relationship.label
-				}
-				tracedBy := e.TracedBy
-				if tracedBy == "" {
-					tracedBy = relationship.defaultTracedBy
-				}
-				for _, target := range idx.resolveEdgeTargets(record, e) {
-					add(record, target, e.Type, label, tracedBy)
-				}
+		// An ingest-owned record carries no source object, so its edges were resolved
+		// at intake and are read from ingestEdges; an uncut record derives them now
+		// from its obj via the registry edge builder.
+		for _, e := range idx.recordEdges(record) {
+			relationship := objectMapRelationships[e.Type]
+			label := e.Label
+			if label == "" {
+				label = relationship.label
+			}
+			tracedBy := e.TracedBy
+			if tracedBy == "" {
+				tracedBy = relationship.defaultTracedBy
+			}
+			for _, target := range idx.resolveEdgeTargets(record, e) {
+				add(record, target, e.Type, label, tracedBy)
 			}
 		}
 	}
@@ -1012,6 +1092,19 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 		result = append(result, edge)
 	}
 	return result
+}
+
+// recordEdges returns a record's relationship edges: the pre-resolved ingestEdges
+// for an ingest-owned (cut) record whose source object was dropped at intake, or the
+// registry edge builder's output derived from the record's source object otherwise.
+func (idx *objectMapIndex) recordEdges(record *objectMapRecord) []objectmapspec.Edge {
+	if record.presented && record.obj == nil {
+		return record.ingestEdges
+	}
+	if build := objectMapEdgeBuilders[record.ref.Kind]; build != nil {
+		return build(idx.meta.ClusterID, record.obj)
+	}
+	return nil
 }
 
 func (idx *objectMapIndex) resolveOwner(child *objectMapRecord, owner metav1.OwnerReference) *objectMapRecord {

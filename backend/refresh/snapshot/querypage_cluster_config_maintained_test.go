@@ -197,6 +197,80 @@ func TestClusterConfigMaintainedStoreMatchesListPath(t *testing.T) {
 		"maintained store rows must equal the list path for the cluster scope")
 }
 
+// TestClusterConfigMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the
+// live ingest cutover of the MIXED cluster-config domain: StorageClass, IngressClass,
+// and the admission webhook kinds are IngestOwned and fed through the ingest Sink
+// (the bundle's Table half); GatewayClass is NOT cut and is fed through the informer
+// path (ingest()). The combined store's rows must still equal the list path exactly.
+func TestClusterConfigMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	scDesc := clusterConfigDescriptor(t, "storageclasses")
+	icDesc := clusterConfigDescriptor(t, "ingressclasses")
+	gcDesc := clusterConfigDescriptor(t, "gatewayclasses")
+	vwhDesc := clusterConfigDescriptor(t, "validatingwebhookconfigurations")
+	mwhDesc := clusterConfigDescriptor(t, "mutatingwebhookconfigurations")
+
+	scs := []*storagev1.StorageClass{
+		storageClassObj("standard", "1", "ebs.csi.aws.com"),
+		storageClassObj("fast", "2", "pd.csi.gke.io"),
+	}
+	ics := []*networkingv1.IngressClass{
+		ingressClassObj("public", "3", "nginx.org/ingress-controller"),
+	}
+	gcs := []*gatewayv1.GatewayClass{
+		gatewayClassObj("istio", "4", "istio.io/gateway-controller"),
+	}
+	vwhs := []*admissionv1.ValidatingWebhookConfiguration{
+		validatingWebhookObj("validate-widgets", "5", 1),
+	}
+	mwhs := []*admissionv1.MutatingWebhookConfiguration{
+		mutatingWebhookObj("mutate-widgets", "6", 2),
+	}
+
+	scIdx := newNamespaceIndexer()
+	icIdx := newNamespaceIndexer()
+	gcIdx := newNamespaceIndexer()
+	vwhIdx := newNamespaceIndexer()
+	mwhIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
+	sink := store.Sink()
+	// Cut kinds feed through the ingest Sink (the projected Table-half row).
+	for _, sc := range scs {
+		require.NoError(t, scIdx.Add(sc))
+		sink.Upsert(scDesc.StreamRow(meta, sc))
+	}
+	for _, ic := range ics {
+		require.NoError(t, icIdx.Add(ic))
+		sink.Upsert(icDesc.StreamRow(meta, ic))
+	}
+	for _, vwh := range vwhs {
+		require.NoError(t, vwhIdx.Add(vwh))
+		sink.Upsert(vwhDesc.StreamRow(meta, vwh))
+	}
+	for _, mwh := range mwhs {
+		require.NoError(t, mwhIdx.Add(mwh))
+		sink.Upsert(mwhDesc.StreamRow(meta, mwh))
+	}
+	// GatewayClass is NOT cut: it still arrives via the shared/Gateway informer handler.
+	for _, gc := range gcs {
+		require.NoError(t, gcIdx.Add(gc))
+		store.ingest(gcDesc, gc)
+	}
+
+	collect := clusterConfigCollectIndexer(scIdx, icIdx, gcIdx, vwhIdx, mwhIdx)
+	listed, _, _, err := collectDescriptorTableRows[ClusterConfigEntry](
+		context.Background(), clusterConfigDomainName, collect, meta, "",
+	)
+	require.NoError(t, err)
+	require.ElementsMatch(t, listed, store.rows("", clusterConfigAvailableAll()),
+		"sink-fed (cut) + informer-fed (GatewayClass) store rows must equal the list path")
+
+	// A delete through the sink evicts a cut kind's row, exactly like a watch delete.
+	sink.Delete(scDesc.StreamRow(meta, scs[0]))
+	require.Nil(t, findClusterConfigRow(store.rows("", clusterConfigAvailableAll()), "StorageClass", "standard"))
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 // TestClusterConfigBuilderMaintainedMatchesListPath is the end-to-end cutover proof:
 // fed the same objects (including a GatewayClass via the Gateway-API descriptor), a
 // builder serving from the maintained store produces a byte-identical snapshot

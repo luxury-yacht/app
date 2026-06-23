@@ -10,6 +10,7 @@ var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
 	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
+	IngestOwned:     true,
 	Stream:          &StreamDescriptor,
 	Binding:         &DetailBinding,
 }

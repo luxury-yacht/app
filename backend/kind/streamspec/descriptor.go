@@ -15,6 +15,7 @@ package streamspec
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -48,4 +49,11 @@ type Descriptor struct {
 
 	// GatewayInformer returns the kind's informer from the Gateway-API factory.
 	GatewayInformer func(factory gatewayinformers.SharedInformerFactory) cache.SharedIndexInformer
+}
+
+// GVR returns the descriptor's GroupVersionResource. It is the single source the
+// snapshot/ingest wiring uses to key a kind's informer, maintained-store sink, and
+// ingest-owned membership, so no caller re-assembles the GVR by hand.
+func (d Descriptor) GVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{Group: d.Group, Version: d.Version, Resource: d.Resource}
 }

@@ -5,6 +5,12 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 )
 
+// objectMapIngestOwnedGVRs is the set of GVRs cut over to the owned-reflector ingest
+// path, derived from the single kind registry's IngestOwned facet. collectTyped reads
+// these kinds' object-map nodes from the ingest source instead of the shared informer
+// lister; flipping the facet on the next domain's kinds adds them here automatically.
+var objectMapIngestOwnedGVRs = kindregistry.IngestOwnedGVRs()
+
 // objectMapCollectors is every kind read into the object map from the shared
 // informer cache, derived from the single kind registry. Each kind declares how it
 // is listed and projected in its own package; the collector loop never names a

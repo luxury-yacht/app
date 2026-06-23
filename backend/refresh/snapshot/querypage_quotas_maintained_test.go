@@ -17,6 +17,69 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
 
+// TestQuotasMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
+// ingest cutover: fed the same StreamRow rows through the ingest Sink (the live
+// reflector path), the maintained store's rows must equal exactly what the current
+// list path produces, for every namespace scope. The sink delivers the projected
+// QuotaSummary directly (the bundle's Table half), so this exercises the exact
+// adapter the IngestManager feeds in production.
+func TestQuotasMaintainedStoreSinkMatchesListPath(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	quotaDesc := quotasDescriptor(t, "resourcequotas")
+	limitDesc := quotasDescriptor(t, "limitranges")
+	pdbDesc := quotasDescriptor(t, "poddisruptionbudgets")
+
+	quotas := []*corev1.ResourceQuota{
+		quotaObj("default", "alpha", "1"),
+		quotaObj("app", "beta", "2"),
+	}
+	limits := []*corev1.LimitRange{
+		limitObj("default", "gamma", "3"),
+		limitObj("kube-system", "delta", "4"),
+	}
+	pdbs := []*policyv1.PodDisruptionBudget{
+		pdbObj("default", "epsilon", "5", 1),
+		pdbObj("kube-system", "zeta", "6", 2),
+	}
+
+	quotaIdx := newNamespaceIndexer()
+	limitIdx := newNamespaceIndexer()
+	pdbIdx := newNamespaceIndexer()
+	store := newTypedMaintainedStore(meta, quotasQuerypageSchema(), quotaTableQueryAdapter())
+	sink := store.Sink()
+	// Feed via the sink with the StreamRow output — exactly what the bundle's Table
+	// half delivers from the reflector. Each kind's descriptor projects its object.
+	for _, q := range quotas {
+		require.NoError(t, quotaIdx.Add(q))
+		sink.Upsert(quotaDesc.StreamRow(meta, q))
+	}
+	for _, l := range limits {
+		require.NoError(t, limitIdx.Add(l))
+		sink.Upsert(limitDesc.StreamRow(meta, l))
+	}
+	for _, p := range pdbs {
+		require.NoError(t, pdbIdx.Add(p))
+		sink.Upsert(pdbDesc.StreamRow(meta, p))
+	}
+
+	collect := quotasCollectIndexer(quotaIdx, limitIdx, pdbIdx)
+	available := map[string]bool{"ResourceQuota": true, "LimitRange": true, "PodDisruptionBudget": true}
+	for _, ns := range []string{"default", "kube-system", "app", ""} {
+		listed, _, _, err := collectDescriptorTableRows[QuotaSummary](
+			context.Background(), namespaceQuotasDomainName, collect, meta, ns,
+		)
+		require.NoError(t, err)
+		require.ElementsMatch(t, listed, store.rows(ns, available),
+			"sink-fed maintained store rows must equal the list path for namespace %q", ns)
+	}
+
+	// A delete through the sink evicts the row, exactly like a watch delete.
+	sink.Delete(limitDesc.StreamRow(meta, limits[0]))
+	require.Nil(t, findQuotaRow(store.rows("default", available), "LimitRange", "default", "gamma"))
+	// Version advances monotonically as the sink mutates the store.
+	require.Greater(t, store.snapshotVersion(), uint64(0), "sink mutations advance the snapshot version")
+}
+
 func quotaObj(ns, name, rv string) *corev1.ResourceQuota {
 	return &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv},

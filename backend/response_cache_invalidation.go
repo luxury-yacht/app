@@ -16,6 +16,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -69,21 +71,36 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	// creation for cluster-scoped resources the user cannot list/watch.
 	var perms permissions.ListWatchChecker = subsystem.InformerFactory
 
+	// Ingest-owned (cut) kinds are no longer cached by the shared factory; their
+	// invalidation flows from an ingest Catalog-half sink instead of a factory
+	// informer handler. Register it once for all cut kinds.
+	ingestOwned := kindregistry.IngestOwnedGVRs()
+	if subsystem.IngestManager != nil {
+		sink := a.ingestResponseCacheSink(selectionKey)
+		for gvr := range ingestOwned {
+			subsystem.IngestManager.AddCatalogSink(gvr, sink)
+		}
+	}
+
 	// Every detail-cacheable kind drives response-cache eviction. The kind registry
 	// is the single source; the informer is read generically from the factory its
 	// group implies (Gateway-API, apiextensions, or the core shared factory), so no
 	// per-kind informer accessor is wired here. Permissions are checked before
-	// ForResource to avoid creating informers the user cannot list/watch.
+	// ForResource to avoid creating informers the user cannot list/watch. Ingest-owned
+	// kinds are skipped — they are handled by the ingest sink above.
 	for _, d := range kindregistry.All {
 		if !d.DetailCacheable {
 			continue
 		}
 		group := d.Identity.Group
 		resource := d.Identity.Resource
+		gvr := schema.GroupVersionResource{Group: group, Version: d.Identity.Version, Resource: resource}
+		if _, cut := ingestOwned[gvr]; cut {
+			continue
+		}
 		if !perms.CanListWatch(group, resource) {
 			continue
 		}
-		gvr := schema.GroupVersionResource{Group: group, Version: d.Identity.Version, Resource: resource}
 		var informer cache.SharedIndexInformer
 		switch group {
 		case gatewayAPIGroup:
@@ -216,6 +233,34 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 	namespace := strings.TrimSpace(metaObj.GetNamespace())
 	a.invalidateResponseCache(selectionKey, kind, namespace, name)
 	a.invalidateHelmCacheIfNeeded(selectionKey, obj)
+}
+
+// ingestResponseCacheSink returns an ingest Catalog-half sink that evicts a cut
+// kind's cached detail entry on Upsert (resource changed) and Delete (resource
+// removed). The reflector delivers the projected catalog Summary, which carries the
+// kind/namespace/name the invalidation keys off — the same identity the
+// shared-informer handler derived from the typed object.
+func (a *App) ingestResponseCacheSink(selectionKey string) ingest.Sink {
+	return ingestResponseCacheSink{app: a, selectionKey: selectionKey}
+}
+
+// ingestResponseCacheSink adapts response-cache invalidation to an ingest.Sink. It
+// evicts on both Upsert and Delete: a cached detail is stale once the resource
+// changes or disappears.
+type ingestResponseCacheSink struct {
+	app          *App
+	selectionKey string
+}
+
+func (s ingestResponseCacheSink) Upsert(row interface{}) { s.invalidate(row) }
+func (s ingestResponseCacheSink) Delete(row interface{}) { s.invalidate(row) }
+
+func (s ingestResponseCacheSink) invalidate(row interface{}) {
+	summary, ok := row.(objectcatalog.Summary)
+	if !ok {
+		return
+	}
+	s.app.invalidateResponseCacheForResource(s.selectionKey, summary.Kind, summary.Namespace, summary.Name)
 }
 
 // invalidateResponseCacheForResource clears cached detail/YAML entries for a resource key.

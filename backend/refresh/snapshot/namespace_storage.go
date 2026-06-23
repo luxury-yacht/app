@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 )
@@ -64,18 +65,27 @@ func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
 type StorageSummary = streamrows.StorageSummary
 
 // RegisterNamespaceStorageDomain registers the storage domain.
+//
+// PersistentVolumeClaim is an owned-reflector ingest kind (IngestOwned): when
+// ingestManager is non-nil its maintained-store feed comes from the ingest reflector's
+// Table-half Sink, and registerMaintainedHandlers skips it (the shared factory no
+// longer caches it). When ingestManager is nil (a unit test) the store has no feed for
+// the cut kind, mirroring the quotas domain.
 func RegisterNamespaceStorageDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := unconditionalSharedIndexers(factory, namespaceStorageDomainName)
 
-	// Maintain a per-cluster store fed by each available storage kind's informer.
+	// Maintain a per-cluster store fed by each available storage kind's source: the
+	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, storageQuerypageSchema(), storageTableQueryAdapter())
+	feedMaintainedFromIngest(maintained, namespaceStorageDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceStorageDomainName, collectIndexer, factory, nil); err != nil {
 		return err
 	}

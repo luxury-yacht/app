@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
@@ -66,19 +67,28 @@ type ClusterRBACEntry = streamrows.ClusterRBACEntry
 // RegisterClusterRBACDomain wires the cluster RBAC domain into the registry.
 // Only listers for permitted resources are wired; denied resources are left nil
 // so the builder skips them gracefully.
+//
+// ClusterRole and ClusterRoleBinding are owned-reflector ingest kinds (IngestOwned):
+// when ingestManager is non-nil their maintained-store feed comes from the ingest
+// reflectors' Table-half Sink and registerMaintainedHandlers skips them (the shared
+// factory no longer caches them). When ingestManager is nil (a unit test) the store has
+// no feed for the cut kinds.
 func RegisterClusterRBACDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := sharedFactoryIndexers(factory, allowed, clusterRBACDomainName)
 
-	// Maintain a per-cluster store fed by each available RBAC kind's informer.
+	// Maintain a per-cluster store fed by each available RBAC kind's source: the
+	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, clusterRBACQuerypageSchema(), clusterRBACTableQueryAdapter())
+	feedMaintainedFromIngest(maintained, clusterRBACDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, clusterRBACDomainName, collectIndexer, factory, nil); err != nil {
 		return err
 	}
