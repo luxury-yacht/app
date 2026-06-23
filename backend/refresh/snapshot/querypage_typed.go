@@ -589,12 +589,6 @@ func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
 	m.bumpVersion(o)
 }
 
-// deleteKey removes a row by its adapter key. Self-projecting domains derive the
-// key from their projected row (adapter.Key) and call this directly.
-func (m *typedMaintainedStore[T]) deleteKey(key string) {
-	m.store.Delete(key)
-}
-
 // ingest projects an added/updated object via the descriptor's StreamRow closure
 // and upserts it — generic over the domain's kinds, no per-kind branch.
 func (m *typedMaintainedStore[T]) ingest(d streamspec.Descriptor, obj interface{}) {

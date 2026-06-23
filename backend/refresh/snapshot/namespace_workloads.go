@@ -27,7 +27,6 @@ import (
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -59,9 +58,15 @@ type NamespaceWorkloadsPermissions struct {
 	IncludeCronJobs     bool
 }
 
-// NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots.
+// NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots. Pods is cut
+// to the ingest path, so the pod aggregation (per-owner ready/resources) and the
+// standalone-pod row synthesis read the projected PodAggregate + PodSummary rows from
+// the ingest source instead of a typed pod lister; the workload kinds keep their typed
+// listers. includePods records whether the request is permitted to read pods (the gate
+// the typed pod lister's presence used to imply).
 type NamespaceWorkloadsBuilder struct {
-	podLister        corelisters.PodLister
+	podIngest        podWorkloadsIngestSource
+	includePods      bool
 	deploymentLister appslisters.DeploymentLister
 	statefulLister   appslisters.StatefulSetLister
 	daemonLister     appslisters.DaemonSetLister
@@ -70,6 +75,17 @@ type NamespaceWorkloadsBuilder struct {
 	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
 	metrics          metrics.Provider
 	logger           containerlogsstream.Logger
+}
+
+// podWorkloadsIngestSource supplies the cut pod kind's projected rows the workloads
+// domain reads. Rows returns the per-object bundles (Table + Aggregate halves) in ONE
+// consistent store read, so the standalone row's PodSummary and its PodAggregate always
+// belong to the same pod (a separate AggregateRows/TableRows pair could desync across a
+// concurrent reflector mutation). StoreResourceVersion gives the pod store's RV for the
+// version watermark. *ingest.IngestManager satisfies it.
+type podWorkloadsIngestSource interface {
+	Rows(gvr schema.GroupVersionResource) []interface{}
+	StoreResourceVersion(gvr schema.GroupVersionResource) string
 }
 
 // NamespaceWorkloadsSnapshot is returned to the frontend.
@@ -103,6 +119,7 @@ func RegisterNamespaceWorkloadsDomain(
 	provider metrics.Provider,
 	logger containerlogsstream.Logger,
 	perms NamespaceWorkloadsPermissions,
+	ingestManager podWorkloadsIngestSource,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
@@ -114,7 +131,10 @@ func RegisterNamespaceWorkloadsDomain(
 		logger:    logger,
 	}
 	if perms.IncludePods {
-		builder.podLister = factory.Core().V1().Pods().Lister()
+		// Pods is cut to the ingest path: the per-owner aggregation and standalone-pod
+		// rows read the pod kind's projected rows from the ingest manager.
+		builder.podIngest = ingestManager
+		builder.includePods = true
 	}
 	if perms.IncludeDeployments {
 		builder.deploymentLister = factory.Apps().V1().Deployments().Lister()
@@ -153,12 +173,12 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	namespace := parsedScope.Namespace
 	issues := b.queryIssues(ctx, query)
 
-	var pods []*corev1.Pod
-	if b.podLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
-		pods, err = b.listPods(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list pods: %w", err)
-		}
+	var (
+		podAggregates []streamrows.PodAggregate
+		podSummaries  map[string]streamrows.PodSummary
+	)
+	if b.includePods && b.podIngest != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
+		podAggregates, podSummaries = namespacePodRowsFromIngest(b.podIngest, namespace)
 	}
 	var deployments []*appsv1.Deployment
 	if b.deploymentLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
@@ -200,7 +220,7 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
+	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, podAggregates, podSummaries, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas, hpaErr == nil, issues)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +231,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
 	query typedTableQuery,
-	pods []*corev1.Pod,
+	podAggregates []streamrows.PodAggregate,
+	podSummaries map[string]streamrows.PodSummary,
 	deployments []*appsv1.Deployment,
 	statefulSets []*appsv1.StatefulSet,
 	daemonSets []*appsv1.DaemonSet,
@@ -229,15 +250,12 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	// Build a set of HPA-managed workloads keyed by full target GVK + namespace/name.
 	hpaTargets := buildHPATargetSet(hpas)
 
-	podsByOwner := make(map[string][]*corev1.Pod)
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		// namespace-workloads groups by OwnerKey (string-suffix collapse) and never
-		// reads WorkloadKind, so the RS lister is not needed for this projection.
-		if ownerKey := projectPodAggregate(pod, nil).OwnerKey; ownerKey != "" {
-			podsByOwner[ownerKey] = append(podsByOwner[ownerKey], pod)
+	// Group pods by their owner key (the string-suffix RS->Deployment collapse), read
+	// straight from the projected aggregate. namespace-workloads never reads WorkloadKind.
+	podsByOwner := make(map[string][]streamrows.PodAggregate)
+	for _, agg := range podAggregates {
+		if agg.OwnerKey != "" {
+			podsByOwner[agg.OwnerKey] = append(podsByOwner[agg.OwnerKey], agg)
 		}
 	}
 
@@ -310,11 +328,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, cron)
 	}
 
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		agg := projectPodAggregate(pod, nil)
+	standalonePodEmitted := false
+	for _, agg := range podAggregates {
 		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
@@ -323,8 +338,24 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				continue
 			}
 		}
-		summary := buildStandalonePodSummary(meta.ClusterID, pod, podUsage)
-		appendSummary(summary, pod)
+		// The standalone row reads the pod's projected PodSummary (status/age/ports/
+		// ready/restarts) plus this aggregate (resources), byte-identical to the prior
+		// typed buildStandalonePodSummary. A missing summary (race between the two
+		// halves) falls back to the aggregate-only fields, never panicking.
+		summary := buildStandalonePodSummaryFromRows(podSummaries[agg.Namespace+"/"+agg.Name], agg, podUsage)
+		appendSummary(summary, nil)
+		standalonePodEmitted = true
+	}
+
+	// Standalone-pod rows carry no per-object RV (the typed pod is gone), so when any is
+	// emitted the pod store's RV is folded into the version watermark to keep refetch
+	// identity advancing on standalone-pod changes — mirroring how the prior code folded
+	// each standalone pod's resourceVersion. Workload-owned pods never contributed to the
+	// version (they were not appended as rows), so the fold is gated on a standalone row.
+	if standalonePodEmitted {
+		if podVersion := namespacePodIngestVersion(b.podIngest); podVersion > version {
+			version = podVersion
+		}
 	}
 
 	sortWorkloadSummaries(items)
@@ -375,7 +406,7 @@ func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource
 			Kind:       podres.Identity.Kind,
 			Group:      "",
 			Resource:   "pods",
-			Available:  b.podLister != nil,
+			Available:  b.includePods,
 			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
 		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
@@ -503,10 +534,10 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	clusterID string,
 	deploy *appsv1.Deployment,
-	podsByOwner map[string][]*corev1.Pod,
+	podsByOwner map[string][]streamrows.PodAggregate,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
-	var pods []*corev1.Pod
+	var pods []streamrows.PodAggregate
 	if deploy != nil {
 		key := workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name)
 		pods = podsByOwner[key]
@@ -549,10 +580,10 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	clusterID string,
 	stateful *appsv1.StatefulSet,
-	podsByOwner map[string][]*corev1.Pod,
+	podsByOwner map[string][]streamrows.PodAggregate,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
-	var pods []*corev1.Pod
+	var pods []streamrows.PodAggregate
 	if stateful != nil {
 		key := workloadOwnerKey(statefulset.Identity.Kind, stateful.Namespace, stateful.Name)
 		pods = podsByOwner[key]
@@ -595,10 +626,10 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 	clusterID string,
 	daemon *appsv1.DaemonSet,
-	podsByOwner map[string][]*corev1.Pod,
+	podsByOwner map[string][]streamrows.PodAggregate,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
-	var pods []*corev1.Pod
+	var pods []streamrows.PodAggregate
 	if daemon != nil {
 		key := workloadOwnerKey(daemonset.Identity.Kind, daemon.Namespace, daemon.Name)
 		pods = podsByOwner[key]
@@ -638,10 +669,10 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	clusterID string,
 	job *batchv1.Job,
-	podsByOwner map[string][]*corev1.Pod,
+	podsByOwner map[string][]streamrows.PodAggregate,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
-	var pods []*corev1.Pod
+	var pods []streamrows.PodAggregate
 	if job != nil {
 		key := workloadOwnerKey(jobres.Identity.Kind, job.Namespace, job.Name)
 		pods = podsByOwner[key]
@@ -682,10 +713,10 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	clusterID string,
 	cron *batchv1.CronJob,
-	podsByOwner map[string][]*corev1.Pod,
+	podsByOwner map[string][]streamrows.PodAggregate,
 	usage map[string]metrics.PodUsage,
 ) WorkloadSummary {
-	var pods []*corev1.Pod
+	var pods []streamrows.PodAggregate
 	if cron != nil {
 		key := workloadOwnerKey(cronjob.Identity.Kind, cron.Namespace, cron.Name)
 		pods = podsByOwner[key]
@@ -720,7 +751,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 }
 
 func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
-	resources := aggregateWorkloadPodResources([]*corev1.Pod{pod}, usage)
+	resources := aggregateWorkloadPodResources([]streamrows.PodAggregate{projectPodAggregate(pod, nil)}, usage)
 	ready := podReadyStatus(pod)
 	model := podres.BuildResourceModel(clusterID, pod)
 
@@ -746,6 +777,45 @@ func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[stri
 	}
 }
 
+// buildStandalonePodSummaryFromRows builds the standalone-pod WorkloadSummary from the
+// pod's projected ingest rows instead of the typed pod, byte-identically to
+// buildStandalonePodSummary (proven in namespace_workloads_standalone_ingest_test.go):
+//
+//   - status (label/state/presentation/reason), name, namespace, ready, restarts, age,
+//     ageTimestamp, and port-forward availability are read from the PodSummary (the
+//     Table half), which carries exactly the same values BuildResourceModel/BuildFacts/
+//     common.HasForwardableContainerPorts produced from the typed pod;
+//   - the cpu/mem request/limit reservations are the PodAggregate's regular-container
+//     int64 sums, re-formatted with the WORKLOAD formatters (not the PodSummary's
+//     streamrows formatters), matching aggregateWorkloadPodResources;
+//   - cpu/mem usage are the fresh metrics sample, formatted the same way.
+//
+// The caller has already excluded Succeeded/Failed pods, so the single-pod aggregate's
+// restart total equals the PodSummary's RestartCount (BuildFacts) exactly.
+func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
+	sample := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
+	return WorkloadSummary{
+		Kind:                 podres.Identity.Kind,
+		Name:                 podSummary.Name,
+		Namespace:            podSummary.Namespace,
+		Ready:                podSummary.Ready,
+		Status:               podSummary.Status,
+		StatusState:          podSummary.StatusState,
+		StatusPresentation:   podSummary.StatusPresentation,
+		StatusReason:         podSummary.StatusReason,
+		Restarts:             podSummary.Restarts,
+		Age:                  podSummary.Age,
+		AgeTimestamp:         podSummary.AgeTimestamp,
+		CPUUsage:             formatWorkloadCPUMilli(sample.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(agg.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(agg.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(sample.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(agg.MemRequestBytes),
+		MemLimit:             formatWorkloadMemory(agg.MemLimitBytes),
+		PortForwardAvailable: podSummary.PortForwardAvailable,
+	}
+}
+
 type resourceTotals struct {
 	CPURequestMilli    int64
 	CPULimitMilli      int64
@@ -756,13 +826,9 @@ type resourceTotals struct {
 	Restarts           int32
 }
 
-func aggregateWorkloadPodResources(pods []*corev1.Pod, usage map[string]metrics.PodUsage) resourceTotals {
+func aggregateWorkloadPodResources(pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) resourceTotals {
 	var totals resourceTotals
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		agg := projectPodAggregate(pod, nil)
+	for _, agg := range pods {
 		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
@@ -828,14 +894,10 @@ func podReadyStatus(pod *corev1.Pod) string {
 	return fmt.Sprintf("%d/%d", agg.ReadyContainers, agg.TotalContainers)
 }
 
-func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int32) string {
+func workloadPodReadyStatus(pods []streamrows.PodAggregate, fallbackReady, fallbackTotal int32) string {
 	readyPods := int32(0)
 	totalPods := int32(0)
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		agg := projectPodAggregate(pod, nil)
+	for _, agg := range pods {
 		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
@@ -848,13 +910,6 @@ func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int
 		return fmt.Sprintf("%d/%d", fallbackReady, fallbackTotal)
 	}
 	return fmt.Sprintf("%d/%d", readyPods, totalPods)
-}
-
-func (b *NamespaceWorkloadsBuilder) listPods(namespace string) ([]*corev1.Pod, error) {
-	if namespace == "" {
-		return b.podLister.List(labels.Everything())
-	}
-	return b.podLister.Pods(namespace).List(labels.Everything())
 }
 
 func (b *NamespaceWorkloadsBuilder) listDeployments(namespace string) ([]*appsv1.Deployment, error) {

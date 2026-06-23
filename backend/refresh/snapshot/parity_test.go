@@ -371,7 +371,8 @@ func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
 				daemonLister:     testsupport.NewDaemonSetLister(t),
 				jobLister:        testsupport.NewJobLister(t),
 				cronJobLister:    testsupport.NewCronJobLister(t),
-				podLister:        testsupport.NewPodLister(t, pod),
+				podIngest:        newFakePodWorkloadsIngestSource(meta, nil, pod),
+				includePods:      true,
 				hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
@@ -947,9 +948,9 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 			provider := &staticPodMetrics{pods: usage}
 
 			builder := &NodeBuilder{
-				lister:    testsupport.NewNodeLister(t, node),
-				podLister: testsupport.NewPodLister(t, pod),
-				metrics:   provider,
+				lister:           testsupport.NewNodeLister(t, node),
+				ingestAggregates: newFakePodAggregateSource(nil, pod),
+				metrics:          provider,
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)

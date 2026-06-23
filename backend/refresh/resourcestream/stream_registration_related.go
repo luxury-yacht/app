@@ -1,20 +1,28 @@
 package resourcestream
 
-import "github.com/luxury-yacht/app/backend/refresh/informer"
+import (
+	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
+)
 
 // This file registers resources whose streamed output depends on related
 // objects or cached lookup state. These registrations intentionally keep the
 // required listers and indexers visible next to the informer event handlers.
 
-func (m *Manager) registerPodStreams(factory *informer.Factory) {
-	shared := factory.SharedInformerFactory()
-	if shared == nil {
+// registerPodStreams wires the pod live-stream change signal. Pods is an owned-reflector
+// ingest kind (IngestOwned): the typed pod informer is never instantiated, so the signal
+// comes from the pod reflector's whole-Bundle Sink instead of a shared-informer event
+// handler. The bundle carries the projected PodSummary (Table half — the Node/owner the
+// broadcast scopes need) and the catalog Summary (Catalog half — the UID/resourceVersion
+// the change Ref needs), so the emitted notify is identical to the typed-pod handler's.
+// When no ingest manager is wired (a unit test), the pod stream has no live signal; tests
+// drive handlePod/handlePodEvent directly.
+func (m *Manager) registerPodStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
+	if factory.SharedInformerFactory() == nil || ingestManager == nil {
 		return
 	}
 	if m.canListWatch("", "pods") {
-		podInformer := shared.Core().V1().Pods()
-		m.podLister = podInformer.Lister()
-		m.addRelatedResourceEventHandler(podInformer.Informer(), (*Manager).handlePodEvent)
+		ingestManager.AddBundleSink(podGVR, podNotifyBundleSink{manager: m})
 	}
 }
 

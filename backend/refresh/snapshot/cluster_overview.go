@@ -12,7 +12,6 @@ import (
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
-	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +30,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -44,13 +44,17 @@ const (
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
 type ClusterOverviewBuilder struct {
-	client            kubernetes.Interface
-	nodeLister        corelisters.NodeLister
-	podLister         corelisters.PodLister
-	namespaceLister   corelisters.NamespaceLister
-	eventLister       corelisters.EventLister
-	deploymentLister  appslisters.DeploymentLister
-	replicaSetLister  appslisters.ReplicaSetLister
+	client           kubernetes.Interface
+	nodeLister       corelisters.NodeLister
+	ingestAggregates podAggregateIngestSource
+	namespaceLister  corelisters.NamespaceLister
+	eventLister      corelisters.EventLister
+	deploymentLister appslisters.DeploymentLister
+	// replicaSetLister + replicaSetHasSynced previously fed buildWorkloadResourceUsage
+	// the RS list it needed to resolve a pod's metrics-bucketing workload kind. That
+	// resolution now happens at projection time (PodAggregate.WorkloadKind, via the RS
+	// lister the pod reflector holds), so the overview reads no RS list here. The RS
+	// informer stays registered for the pod projector.
 	statefulSetLister appslisters.StatefulSetLister
 	daemonSetLister   appslisters.DaemonSetLister
 	cronJobLister     batchlisters.CronJobLister
@@ -64,7 +68,6 @@ type ClusterOverviewBuilder struct {
 	hasSyncedFns         []cache.InformerSynced
 	eventHasSynced       cache.InformerSynced
 	deploymentHasSynced  cache.InformerSynced
-	replicaSetHasSynced  cache.InformerSynced
 	statefulSetHasSynced cache.InformerSynced
 	daemonSetHasSynced   cache.InformerSynced
 	cronJobHasSynced     cache.InformerSynced
@@ -173,12 +176,17 @@ type RecentEvent struct {
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
+// Pods is cut to the ingest path: the per-pod aggregation reads the projected
+// PodAggregate rows from the ingest manager instead of a typed pod lister, so the pod
+// informer is never instantiated. ingestManager may be nil in a unit test, in which
+// case no pods are aggregated.
 func RegisterClusterOverviewDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	client kubernetes.Interface,
 	provider metrics.Provider,
 	serverHost string,
+	ingestManager podAggregateIngestSource,
 ) error {
 	if reg == nil {
 		return fmt.Errorf("cluster overview: registry is nil")
@@ -191,11 +199,9 @@ func RegisterClusterOverviewDomain(
 	}
 
 	nodeInformer := factory.Core().V1().Nodes()
-	podInformer := factory.Core().V1().Pods()
 	namespaceInformer := factory.Core().V1().Namespaces()
 	eventInformer := factory.Core().V1().Events()
 	deploymentInformer := factory.Apps().V1().Deployments()
-	replicaSetInformer := factory.Apps().V1().ReplicaSets()
 	statefulSetInformer := factory.Apps().V1().StatefulSets()
 	daemonSetInformer := factory.Apps().V1().DaemonSets()
 	cronJobInformer := factory.Batch().V1().CronJobs()
@@ -203,24 +209,24 @@ func RegisterClusterOverviewDomain(
 	builder := &ClusterOverviewBuilder{
 		client:            client,
 		nodeLister:        nodeInformer.Lister(),
-		podLister:         podInformer.Lister(),
+		ingestAggregates:  ingestManager,
 		namespaceLister:   namespaceInformer.Lister(),
 		eventLister:       eventInformer.Lister(),
 		deploymentLister:  deploymentInformer.Lister(),
-		replicaSetLister:  replicaSetInformer.Lister(),
 		statefulSetLister: statefulSetInformer.Lister(),
 		daemonSetLister:   daemonSetInformer.Lister(),
 		cronJobLister:     cronJobInformer.Lister(),
 		metrics:           provider,
 		serverHost:        serverHost,
+		// Pod readiness is gated by the composite informer hub (the ingest store's
+		// HasSynced for core/pods), not an informer HasSynced here — the pod informer
+		// no longer exists. Node and namespace caches still gate this domain's build.
 		hasSyncedFns: []cache.InformerSynced{
 			nodeInformer.Informer().HasSynced,
-			podInformer.Informer().HasSynced,
 			namespaceInformer.Informer().HasSynced,
 		},
 		eventHasSynced:       eventInformer.Informer().HasSynced,
 		deploymentHasSynced:  deploymentInformer.Informer().HasSynced,
-		replicaSetHasSynced:  replicaSetInformer.Informer().HasSynced,
 		statefulSetHasSynced: statefulSetInformer.Informer().HasSynced,
 		daemonSetHasSynced:   daemonSetInformer.Informer().HasSynced,
 		cronJobHasSynced:     cronJobInformer.Informer().HasSynced,
@@ -433,7 +439,25 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		versionFn = func(context.Context) string { return defaultClusterVersion("") }
 	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodes, pods, namespaces, replicaSets, b.metrics, versionFn, b.serverHost)
+	// The list fallback projects its typed pods to the same PodAggregate rows the
+	// informer path reads from ingest. WorkloadKind (the metrics-bucketing kind) is
+	// resolved through an RS lister built from the RS list the fallback already
+	// fetched, so the bucketing matches the prior buildClusterOverviewReplicaSetDeploymentMap
+	// resolution. The per-pod RV is the version watermark contribution.
+	rsLister := replicaSetListerFromSlice(replicaSets)
+	podAggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	var podVersion uint64
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		podAggregates = append(podAggregates, projectPodAggregate(pod, rsLister))
+		if v := resourceVersionOrTimestamp(pod); v > podVersion {
+			podVersion = v
+		}
+	}
+
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodes, podAggregates, podVersion, namespaces, b.metrics, versionFn, b.serverHost)
 	if err != nil {
 		return nil, err
 	}
@@ -456,9 +480,9 @@ func buildClusterOverviewSnapshot(
 	ctx context.Context,
 	scope string,
 	nodes []*corev1.Node,
-	pods []*corev1.Pod,
+	podAggregates []streamrows.PodAggregate,
+	podVersion uint64,
 	namespaces []*corev1.Namespace,
-	replicaSets []*appsv1.ReplicaSet,
 	provider metrics.Provider,
 	versionFn func(context.Context) string,
 	serverHost string,
@@ -555,23 +579,17 @@ func buildClusterOverviewSnapshot(
 			FailureCount:        meta.FailureCount,
 		}
 	}
-	overview.WorkloadResourceUsage = buildWorkloadResourceUsage(pods, podUsage, replicaSets)
+	overview.WorkloadResourceUsage = buildWorkloadResourceUsage(podAggregates, podUsage)
 
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
+	// Pods are projected: the per-pod RV is gone with the typed object, so the pod
+	// contribution to the version watermark is the pod store's latest list/watch RV
+	// (the informer path) or the max typed-pod RV (the list fallback), folded once.
+	if podVersion > version {
+		version = podVersion
+	}
+
+	for _, agg := range podAggregates {
 		overview.TotalPods++
-		// resourceVersionOrTimestamp reads object metadata (ResourceVersion /
-		// CreationTimestamp) for the snapshot version watermark — it is not part
-		// of the per-pod aggregation, so it stays a direct read.
-		if v := resourceVersionOrTimestamp(pod); v > version {
-			version = v
-		}
-
-		// This loop reads phase/containers/status/restarts; WorkloadKind (the only
-		// RS-lister-resolved field) is consumed by buildWorkloadResourceUsage, not here.
-		agg := projectPodAggregate(pod, nil)
 
 		switch agg.Phase {
 		case string(corev1.PodRunning):
@@ -808,8 +826,14 @@ type workloadUsageTotals struct {
 	memBytes int64
 }
 
-func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.PodUsage, replicaSets []*appsv1.ReplicaSet) WorkloadResourceUsage {
-	replicaSetDeployments := buildClusterOverviewReplicaSetDeploymentMap(replicaSets)
+// buildWorkloadResourceUsage buckets pod metrics usage by the workload kind each pod
+// belongs to, reading the metrics-bucketing kind from the projected aggregate's
+// WorkloadKind (the controlling owner's kind with a ReplicaSet resolved to its
+// Deployment via the RS lister at projection time). This is the exact resolution the
+// old clusterOverviewWorkloadKind/buildClusterOverviewReplicaSetDeploymentMap applied
+// inline — proven byte-equivalent in pod_aggregate_test.go — so the buckets are
+// unchanged, but no typed pod or RS list is read here.
+func buildWorkloadResourceUsage(podAggregates []streamrows.PodAggregate, podUsage map[string]metrics.PodUsage) WorkloadResourceUsage {
 	totals := map[string]workloadUsageTotals{
 		deploymentpkg.Identity.Kind:  {},
 		daemonsetpkg.Identity.Kind:   {},
@@ -817,22 +841,18 @@ func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.
 		jobpkg.Identity.Kind:         {},
 	}
 
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		usage, ok := podUsage[podMetricKey(pod.Namespace, pod.Name)]
+	for _, agg := range podAggregates {
+		usage, ok := podUsage[podMetricKey(agg.Namespace, agg.Name)]
 		if !ok {
 			continue
 		}
-		kind := clusterOverviewWorkloadKind(pod, replicaSetDeployments)
-		current, ok := totals[kind]
+		current, ok := totals[agg.WorkloadKind]
 		if !ok {
 			continue
 		}
 		current.cpuMilli += usage.CPUUsageMilli
 		current.memBytes += usage.MemoryUsageBytes
-		totals[kind] = current
+		totals[agg.WorkloadKind] = current
 	}
 
 	return WorkloadResourceUsage{
@@ -843,21 +863,23 @@ func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.
 	}
 }
 
-func buildClusterOverviewReplicaSetDeploymentMap(replicaSets []*appsv1.ReplicaSet) map[string]string {
-	out := make(map[string]string, len(replicaSets))
-	for _, replicaSet := range replicaSets {
-		if replicaSet == nil {
+// replicaSetListerFromSlice builds a ReplicaSet lister backed by an in-memory indexer
+// over the supplied slice. The cluster-overview list fallback uses it to resolve a
+// pod's metrics-bucketing workload kind through projectPodAggregate (which needs a
+// lister, not a slice) — so the fallback's WorkloadKind resolution matches the informer
+// path's exactly, from the RS list the fallback already fetched.
+func replicaSetListerFromSlice(replicaSets []*appsv1.ReplicaSet) appslisters.ReplicaSetLister {
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	for _, rs := range replicaSets {
+		if rs == nil {
 			continue
 		}
-		for _, owner := range replicaSet.OwnerReferences {
-			if owner.Controller == nil || !*owner.Controller || owner.Kind != deploymentpkg.Identity.Kind || owner.Name == "" {
-				continue
-			}
-			out[namespaceNameKey(replicaSet.Namespace, replicaSet.Name)] = owner.Name
-			break
-		}
+		// Add cannot fail for a well-formed object with the standard key func; a
+		// malformed object would simply be omitted, leaving its pods' WorkloadKind
+		// unresolved — the same outcome the map path had for an absent RS.
+		_ = indexer.Add(rs)
 	}
-	return out
+	return appslisters.NewReplicaSetLister(indexer)
 }
 
 func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation string) {
@@ -876,27 +898,6 @@ func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation s
 	}
 }
 
-func clusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[string]string) string {
-	if pod == nil {
-		return ""
-	}
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller == nil || !*owner.Controller {
-			continue
-		}
-		switch owner.Kind {
-		case deploymentpkg.Identity.Kind, daemonsetpkg.Identity.Kind, statefulsetpkg.Identity.Kind, jobpkg.Identity.Kind:
-			return owner.Kind
-		case replicasetpkg.Identity.Kind:
-			if _, ok := replicaSetDeployments[namespaceNameKey(pod.Namespace, owner.Name)]; ok {
-				return deploymentpkg.Identity.Kind
-			}
-		}
-		return ""
-	}
-	return ""
-}
-
 func formatWorkloadTypeResourceUsage(totals workloadUsageTotals) WorkloadTypeResourceUsage {
 	return WorkloadTypeResourceUsage{
 		CPUUsage:    formatCPUValue(totals.cpuMilli),
@@ -905,10 +906,6 @@ func formatWorkloadTypeResourceUsage(totals workloadUsageTotals) WorkloadTypeRes
 }
 
 func podMetricKey(namespace, name string) string {
-	return namespace + "/" + name
-}
-
-func namespaceNameKey(namespace, name string) string {
 	return namespace + "/" + name
 }
 
@@ -951,10 +948,8 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	}
 
 	var (
-		nodeRes       listResult[corev1.Node]
-		podRes        listResult[corev1.Pod]
-		namespaceRes  listResult[corev1.Namespace]
-		replicaSetRes listResult[appsv1.ReplicaSet]
+		nodeRes      listResult[corev1.Node]
+		namespaceRes listResult[corev1.Namespace]
 	)
 	var deploymentCount, statefulSetCount, daemonSetCount, cronJobCount int
 	var recentEvents []RecentEvent
@@ -964,12 +959,6 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 			list, err := b.nodeLister.List(labels.Everything())
 			nodeRes.items = list
 			nodeRes.err = err
-			return err
-		},
-		func(context.Context) error {
-			list, err := b.podLister.List(labels.Everything())
-			podRes.items = list
-			podRes.err = err
 			return err
 		},
 		func(context.Context) error {
@@ -986,15 +975,6 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 			if err == nil {
 				deploymentCount = len(list)
 			}
-			return err
-		},
-		func(context.Context) error {
-			if b.replicaSetLister == nil || !informerSynced(b.replicaSetHasSynced) {
-				return nil
-			}
-			list, err := b.replicaSetLister.List(labels.Everything())
-			replicaSetRes.items = list
-			replicaSetRes.err = err
 			return err
 		},
 		func(context.Context) error {
@@ -1046,17 +1026,15 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	if nodeRes.err != nil {
 		return nil, nodeRes.err
 	}
-	if podRes.err != nil {
-		return nil, podRes.err
-	}
 	if namespaceRes.err != nil {
 		return nil, namespaceRes.err
 	}
-	if replicaSetRes.err != nil {
-		return nil, replicaSetRes.err
-	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeRes.items, podRes.items, namespaceRes.items, replicaSetRes.items, b.metrics, b.serverVersion, b.serverHost)
+	// Pods come from the ingest store (the typed pod informer is cut): the projected
+	// PodAggregate rows plus the store's latest RV as the pod version watermark.
+	podAggregates := podAggregatesFromIngest(b.ingestAggregates)
+	podVersion := podIngestVersion(b.ingestAggregates)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeRes.items, podAggregates, podVersion, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
 	if err != nil {
 		return nil, err
 	}

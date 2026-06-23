@@ -185,17 +185,31 @@ func TestResourcesSettledFalseAfterShutdown(t *testing.T) {
 	}
 }
 
-func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
+// TestNewFactoryDoesNotRegisterPodInformer is the factory-side memory proof for the pod
+// cut: pods is an owned-reflector ingest kind, so New must NOT register a typed pod
+// informer (which would otherwise be the dominant-memory typed cache). The shared
+// factory has no core/pods sync state — the pod store's readiness comes from the ingest
+// manager via the composite hub. The ReplicaSet informer stays registered (the pod
+// projector resolves owners through it), so this asserts the cut is precise.
+func TestNewFactoryDoesNotRegisterPodInformer(t *testing.T) {
 	client := fake.NewClientset()
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
 
-	podInformer := factory.SharedInformerFactory().Core().V1().Pods().Informer()
-	indexers := podInformer.GetIndexer().GetIndexers()
-	if _, ok := indexers[podNodeIndexName]; !ok {
-		t.Fatalf("expected pod informer to register %q index", podNodeIndexName)
+	factory.syncStatesMu.Lock()
+	keys := make(map[string]struct{}, len(factory.syncStates))
+	for _, state := range factory.syncStates {
+		keys[state.key] = struct{}{}
+	}
+	factory.syncStatesMu.Unlock()
+
+	if _, ok := keys["core/pods"]; ok {
+		t.Fatal("expected no core/pods informer registered: pods is cut to the ingest path")
+	}
+	if _, ok := keys["apps/replicasets"]; !ok {
+		t.Fatal("expected apps/replicasets informer to remain registered for pod owner resolution")
 	}
 }
 

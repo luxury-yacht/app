@@ -159,8 +159,8 @@ func TestNodeBuilderBuild(t *testing.T) {
 	}
 
 	builder := &NodeBuilder{
-		lister:    testsupport.NewNodeLister(t, node),
-		podLister: testsupport.NewPodLister(t, podA, podB, podOther),
+		lister:           testsupport.NewNodeLister(t, node),
+		ingestAggregates: newFakePodAggregateSource(nil, podA, podB, podOther),
 		metrics: fakeMetricsProvider{
 			usage: map[string]metrics.NodeUsage{
 				"node-1": {
@@ -266,9 +266,8 @@ func TestNodeBuilderBuild(t *testing.T) {
 // boundary contract hole.
 func TestNodeBuilderRejectsMalformedQueryScope(t *testing.T) {
 	builder := &NodeBuilder{
-		lister:    testsupport.NewNodeLister(t),
-		podLister: testsupport.NewPodLister(t),
-		metrics:   fakeMetricsProvider{},
+		lister:  testsupport.NewNodeLister(t),
+		metrics: fakeMetricsProvider{},
 	}
 
 	// `%zz` is an invalid percent-encoding, so the query string cannot parse.
@@ -300,9 +299,8 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &NodeBuilder{
-		lister:    testsupport.NewNodeLister(t, nodes...),
-		podLister: testsupport.NewPodLister(t),
-		metrics:   fakeMetricsProvider{},
+		lister:  testsupport.NewNodeLister(t, nodes...),
+		metrics: fakeMetricsProvider{},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")

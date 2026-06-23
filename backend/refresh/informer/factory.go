@@ -12,7 +12,6 @@ import (
 	httproutepkg "github.com/luxury-yacht/app/backend/resources/httproute"
 	tlsroutepkg "github.com/luxury-yacht/app/backend/resources/tlsroute"
 
-	corev1 "k8s.io/api/core/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -77,19 +76,6 @@ type informerSyncState struct {
 	degraded  atomic.Bool
 }
 
-const podNodeIndexName = "pods:node"
-
-func podNodeIndexFunc(obj interface{}) ([]string, error) {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok || pod == nil {
-		return nil, nil
-	}
-	if pod.Spec.NodeName == "" {
-		return nil, nil
-	}
-	return []string{pod.Spec.NodeName}, nil
-}
-
 // CanListResource reports whether the current identity can list the supplied resource.
 func (f *Factory) CanListResource(group, resource string) (bool, error) {
 	if f == nil {
@@ -145,11 +131,12 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	result.registerClusterInformer("", "nodes", func() cache.SharedIndexInformer {
 		return kubeFactory.Core().V1().Nodes().Informer()
 	})
-	podInformer := kubeFactory.Core().V1().Pods().Informer()
-	if err := podInformer.AddIndexers(cache.Indexers{podNodeIndexName: podNodeIndexFunc}); err != nil {
-		klog.V(2).Infof("pods informer: failed to add node index: %v", err)
-	}
-	result.registerInformer("", "pods", podInformer)
+	// pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
+	// never instantiated. Every pod consumer reads the ingest projections instead (the
+	// pods maintained store, the cluster-overview/nodes/namespace-workloads aggregation,
+	// the namespace workload tracker, the object catalog, the object map, the
+	// response-cache invalidator). The ReplicaSet informer below stays registered — the
+	// pod reflector resolves a pod's Deployment owner through it at projection time.
 	result.registerInformer("", "configmaps", kubeFactory.Core().V1().ConfigMaps().Informer())
 	result.registerInformer("", "secrets", kubeFactory.Core().V1().Secrets().Informer())
 	result.registerInformer("", "services", kubeFactory.Core().V1().Services().Informer())

@@ -19,6 +19,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -104,10 +105,10 @@ func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerF
 		if _, cut := objectMapIngestOwnedGVRs[gvr]; !cut {
 			continue
 		}
-		items, err := collector.List(shared)
-		if err != nil {
-			t.Fatalf("fake ingest source list %s: %v", gvr, err)
-		}
+		// Pod's collector.List intentionally returns nil (its production object-map nodes
+		// come from the ingest reflector, not the shared informer), so list pods from the
+		// shared factory directly here to stand in for what the reflector would project.
+		items := fakeIngestCollectorItems(t, collector, shared, gvr)
 		projector := objectmapnode.NewNodeProjector(
 			collector.Status,
 			collector.ActionFacts,
@@ -120,6 +121,26 @@ func newFakeObjectMapIngestSource(t *testing.T, shared informers.SharedInformerF
 		src.rows[gvr] = nodes
 	}
 	return src
+}
+
+// fakeIngestCollectorItems lists a cut kind's objects from the shared factory for the
+// fake ingest source. Pod's collector.List is a no-op (production reads pod nodes from
+// the reflector), so pods are listed straight from the pod lister; every other cut kind
+// uses its collector.List as before.
+func fakeIngestCollectorItems(t *testing.T, collector objectmapnode.Collector, shared informers.SharedInformerFactory, gvr schema.GroupVersionResource) []metav1.Object {
+	t.Helper()
+	if gvr == PodGVR {
+		pods, err := shared.Core().V1().Pods().Lister().List(labels.Everything())
+		if err != nil {
+			t.Fatalf("fake ingest source list pods: %v", err)
+		}
+		return objectmapnode.Objects(pods)
+	}
+	items, err := collector.List(shared)
+	if err != nil {
+		t.Fatalf("fake ingest source list %s: %v", gvr, err)
+	}
+	return items
 }
 
 func (s *fakeObjectMapIngestSource) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {

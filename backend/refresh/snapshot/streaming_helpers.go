@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
@@ -26,13 +27,17 @@ func BuildWorkloadSummary(
 	usage map[string]metrics.PodUsage,
 	hpas ...*autoscalingv1.HorizontalPodAutoscaler,
 ) (WorkloadSummary, error) {
-	podsByOwner := make(map[string][]*corev1.Pod)
+	// Project the supplied typed pods to the PodAggregate rows the workload-summary
+	// builders now consume (the same rows the ingest path supplies), grouping by the
+	// owner key. WorkloadKind is unused by these builders, so a nil RS lister is correct.
+	podsByOwner := make(map[string][]streamrows.PodAggregate)
 	for _, pod := range pods {
 		if pod == nil {
 			continue
 		}
-		if ownerKey := ownerKeyForPod(pod); ownerKey != "" {
-			podsByOwner[ownerKey] = append(podsByOwner[ownerKey], pod)
+		agg := projectPodAggregate(pod, nil)
+		if agg.OwnerKey != "" {
+			podsByOwner[agg.OwnerKey] = append(podsByOwner[agg.OwnerKey], agg)
 		}
 	}
 
@@ -92,8 +97,18 @@ func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, n
 		return NodeSummary{}, errors.New("node is nil")
 	}
 	ctx := WithClusterMeta(context.Background(), meta)
+	// Project the supplied typed pods to the PodAggregate rows buildNodeSnapshotFromUsage
+	// now consumes (the same rows the ingest path supplies). WorkloadKind is unused by
+	// the nodes domain, so a nil RS lister is correct here.
+	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+	}
 	// Scope "" carries no query string, so the parse cannot fail here.
-	snap, err := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, pods, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
+	snap, err := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, aggregates, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
 	if err != nil {
 		return NodeSummary{}, err
 	}

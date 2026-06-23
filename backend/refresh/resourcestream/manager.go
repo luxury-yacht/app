@@ -168,7 +168,11 @@ type Manager struct {
 
 	dynamicClient dynamic.Interface
 
+	// podLister is wired only by unit tests that drive the typed handlePod*/RS/HPA
+	// paths directly. Production reads pods from the ingest store (pods is cut), so the
+	// pod typed informer is never instantiated; podIngest is the production pod source.
 	podLister        corelisters.PodLister
+	podIngest        podBundleSource
 	nodeLister       corelisters.NodeLister
 	serviceLister    corelisters.ServiceLister
 	sliceLister      discoverylisters.EndpointSliceLister
@@ -227,6 +231,9 @@ func NewManager(
 		buffers:         make(map[string]*updateBuffer),
 		sequences:       make(map[string]uint64),
 	}
+	if ingestManager != nil {
+		mgr.podIngest = ingestManager
+	}
 
 	if factory == nil {
 		return mgr
@@ -237,7 +244,7 @@ func NewManager(
 		return mgr
 	}
 
-	mgr.registerPodStreams(factory)
+	mgr.registerPodStreams(factory, ingestManager)
 	mgr.registerConfigStreams(factory)
 	mgr.registerNetworkStreams(factory)
 	mgr.registerDescriptorStreams(factory)

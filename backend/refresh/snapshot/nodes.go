@@ -28,11 +28,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NodeBuilder constructs node snapshots from informer caches.
+// NodeBuilder constructs node snapshots from the node informer cache plus the pod
+// kind's projected aggregation rows read from ingest (pods is cut — no typed lister).
 type NodeBuilder struct {
-	lister    corelisters.NodeLister
-	podLister corelisters.PodLister
-	metrics   metrics.Provider
+	lister           corelisters.NodeLister
+	ingestAggregates podAggregateIngestSource
+	metrics          metrics.Provider
 }
 
 // NodeListBuilder assembles node payloads by issuing direct list calls.
@@ -86,12 +87,15 @@ type NodeTaint = streamrows.NodeTaint
 // NodePodMetric captures realtime usage for a pod scheduled on the node.
 type NodePodMetric = streamrows.NodePodMetric
 
-// RegisterNodeDomain registers the nodes snapshot domain.
-func RegisterNodeDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider) error {
+// RegisterNodeDomain registers the nodes snapshot domain. Pods is cut to the ingest
+// path, so the per-node pod aggregation reads the projected PodAggregate rows from the
+// ingest manager instead of a typed pod lister (the node informer stays). ingestManager
+// may be nil in a unit test, in which case no pods are aggregated.
+func RegisterNodeDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider, ingestManager podAggregateIngestSource) error {
 	builder := &NodeBuilder{
-		lister:    factory.Core().V1().Nodes().Lister(),
-		podLister: factory.Core().V1().Pods().Lister(),
-		metrics:   provider,
+		lister:           factory.Core().V1().Nodes().Lister(),
+		ingestAggregates: ingestManager,
+		metrics:          provider,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -114,21 +118,14 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 	})
 }
 
-// Build returns the node snapshot payload.
+// Build returns the node snapshot payload. The per-node pod aggregation reads the
+// projected PodAggregate rows from ingest (pods is cut — no typed lister).
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	list, err := b.lister.List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
-	pods := []*corev1.Pod{}
-	if b.podLister != nil {
-		podList, err := b.podLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-		pods = append(pods, podList...)
-	}
-	return buildNodeSnapshot(ctx, scope, list, pods, b.metrics)
+	return buildNodeSnapshot(ctx, scope, list, podAggregatesFromIngest(b.ingestAggregates), b.metrics)
 }
 
 // Build returns the node snapshot payload using direct list API calls.
@@ -178,11 +175,21 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	if podsForbidden {
 		pods = nil
 	}
-	return buildNodeSnapshot(ctx, scope, nodes, pods, b.metrics)
+	// The list fallback projects its typed pods to the same PodAggregate rows the
+	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
+	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
+	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+	}
+	return buildNodeSnapshot(ctx, scope, nodes, aggregates, b.metrics)
 }
 
 // buildNodeSnapshot assembles node summaries with cluster metadata.
-func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) (*refresh.Snapshot, error) {
+func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, podAggregates []streamrows.PodAggregate, provider metrics.Provider) (*refresh.Snapshot, error) {
 	var (
 		nodeMetrics map[string]metrics.NodeUsage
 		podMetrics  map[string]metrics.PodUsage
@@ -193,19 +200,21 @@ func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, 
 		podMetrics = provider.LatestPodUsage()
 		metaSrc = provider.Metadata()
 	}
-	return buildNodeSnapshotFromUsage(ctx, scope, nodes, pods, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, podAggregates, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
 // metrics maps. This is the metrics-as-parameter path required by the
 // resource-stream projection contract: stream handlers fetch the usage
 // snapshot once and pass it in, so per-event row projection is
-// deterministic and tests can use fixture metrics.
+// deterministic and tests can use fixture metrics. The pod aggregation reads the
+// projected PodAggregate rows (the same rows the typed-pod path produced), so pods is
+// never touched here.
 func buildNodeSnapshotFromUsage(
 	ctx context.Context,
 	scope string,
 	nodes []*corev1.Node,
-	pods []*corev1.Pod,
+	podAggregates []streamrows.PodAggregate,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
 	metricsMeta metrics.Metadata,
@@ -221,16 +230,10 @@ func buildNodeSnapshotFromUsage(
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 
-	podsByNode := make(map[string][]*corev1.Pod)
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		// Node assignment is read through the projector so the per-node grouping
-		// shares the single typed-pod read path with the resource aggregation. The
-		// nodes domain never reads WorkloadKind, so the RS lister is not needed here.
-		if nodeName := projectPodAggregate(pod, nil).NodeName; nodeName != "" {
-			podsByNode[nodeName] = append(podsByNode[nodeName], pod)
+	podsByNode := make(map[string][]streamrows.PodAggregate)
+	for _, agg := range podAggregates {
+		if agg.NodeName != "" {
+			podsByNode[agg.NodeName] = append(podsByNode[agg.NodeName], agg)
 		}
 	}
 
@@ -295,15 +298,12 @@ func buildNodeSnapshotFromUsage(
 
 		if len(pods) > 0 {
 			podSummaries := make([]NodePodMetric, 0, len(pods))
-			for _, pod := range pods {
-				if pod == nil {
-					continue
-				}
-				key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+			for _, agg := range pods {
+				key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
 				usage := podMetrics[key]
 				podSummaries = append(podSummaries, NodePodMetric{
-					Namespace:   pod.Namespace,
-					Name:        pod.Name,
+					Namespace:   agg.Namespace,
+					Name:        agg.Name,
 					CPUUsage:    formatCPUMilli(usage.CPUUsageMilli),
 					MemoryUsage: formatMemoryBytes(usage.MemoryUsageBytes),
 				})
@@ -482,12 +482,8 @@ func formatAge(t time.Time) string {
 var formatCPUMilli = streamrows.FormatCPUMilli
 var formatMemoryBytes = streamrows.FormatMemoryBytes
 
-func aggregatePodResources(pods []*corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64, restarts int32) {
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		agg := projectPodAggregate(pod, nil)
+func aggregatePodResources(pods []streamrows.PodAggregate) (cpuReq, cpuLim, memReq, memLim int64, restarts int32) {
+	for _, agg := range pods {
 		// Node capacity accounting sums regular AND init container reservations.
 		cpuReq += agg.CPURequestMilli + agg.InitCPURequestMilli
 		cpuLim += agg.CPULimitMilli + agg.InitCPULimitMilli

@@ -167,7 +167,7 @@ func TestProjectPodAggregateWorkloadKindMatchesOverviewResolution(t *testing.T) 
 	}
 	rsLister := testsupport.NewReplicaSetLister(t, rsWithDeploy, rsNoDeploy)
 	replicaSets := []*appsv1.ReplicaSet{rsWithDeploy, rsNoDeploy}
-	rsMap := buildClusterOverviewReplicaSetDeploymentMap(replicaSets)
+	rsMap := oracleClusterOverviewReplicaSetDeploymentMap(replicaSets)
 
 	pod := func(ns, name string, owner metav1.OwnerReference) *corev1.Pod {
 		return &corev1.Pod{
@@ -188,7 +188,7 @@ func TestProjectPodAggregateWorkloadKindMatchesOverviewResolution(t *testing.T) 
 		pod("team-a", "noncontroller", metav1.OwnerReference{Kind: "Deployment", Name: "web"}),
 	}
 	for _, p := range cases {
-		want := clusterOverviewWorkloadKind(p, rsMap)
+		want := oracleClusterOverviewWorkloadKind(p, rsMap)
 		got := projectPodAggregate(p, rsLister).WorkloadKind
 		if got != want {
 			t.Fatalf("pod %s/%s WorkloadKind = %q, want %q (overview resolution)", p.Namespace, p.Name, got, want)
@@ -257,9 +257,54 @@ func oraclePodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) 
 	return agg
 }
 
-// oracleWorkloadKind mirrors cluster-overview's clusterOverviewWorkloadKind, but
+// oracleClusterOverviewReplicaSetDeploymentMap is the prior cluster-overview RS->
+// Deployment map (the resolution clusterOverviewWorkloadKind keyed off, before
+// PodAggregate.WorkloadKind subsumed it). Kept here as the byte-equivalence oracle for
+// the projected WorkloadKind.
+func oracleClusterOverviewReplicaSetDeploymentMap(replicaSets []*appsv1.ReplicaSet) map[string]string {
+	out := make(map[string]string, len(replicaSets))
+	for _, replicaSet := range replicaSets {
+		if replicaSet == nil {
+			continue
+		}
+		for _, owner := range replicaSet.OwnerReferences {
+			if owner.Controller == nil || !*owner.Controller || owner.Kind != "Deployment" || owner.Name == "" {
+				continue
+			}
+			out[replicaSet.Namespace+"/"+replicaSet.Name] = owner.Name
+			break
+		}
+	}
+	return out
+}
+
+// oracleClusterOverviewWorkloadKind is the prior cluster-overview metrics-bucketing
+// kind resolution (clusterOverviewWorkloadKind), kept as the byte-equivalence oracle
+// for the projected WorkloadKind.
+func oracleClusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[string]string) string {
+	if pod == nil {
+		return ""
+	}
+	for _, owner := range pod.OwnerReferences {
+		if owner.Controller == nil || !*owner.Controller {
+			continue
+		}
+		switch owner.Kind {
+		case "Deployment", "DaemonSet", "StatefulSet", "Job":
+			return owner.Kind
+		case "ReplicaSet":
+			if _, ok := replicaSetDeployments[pod.Namespace+"/"+owner.Name]; ok {
+				return "Deployment"
+			}
+		}
+		return ""
+	}
+	return ""
+}
+
+// oracleWorkloadKind mirrors cluster-overview's prior clusterOverviewWorkloadKind, but
 // resolves the ReplicaSet->Deployment relationship through the RS lister (the actual
-// RS owner reference) the same way buildClusterOverviewReplicaSetDeploymentMap does.
+// RS owner reference) the same way the prior RS-map resolution did.
 func oracleWorkloadKind(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) string {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {

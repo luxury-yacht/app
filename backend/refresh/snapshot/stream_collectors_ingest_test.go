@@ -146,9 +146,35 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 				"domain %s cut kind %s must resolve from the ingest store with NO shared informer", tc.domain, d.Kind)
 		}
 	}
-	// All 14 IngestOwned kinds are covered by these 6 domains.
-	require.Equal(t, len(kindregistry.IngestOwnedGVRs()), totalCut,
-		"every IngestOwned kind must be covered by a typed-table domain's ingest-sourced availability gate")
+	// Every IngestOwned kind with a Stream descriptor is covered by these 6 typed-table
+	// domains. Pod is the ONE IngestOwned kind with no Stream descriptor (its table is the
+	// bespoke PodSummary served by the pods domain's own maintained store, not the generic
+	// collectDescriptorTableRows path), so it is covered by its own availability path, not
+	// these gates — see TestPodIngestOwnedHasNoStreamDescriptor.
+	streamedCut := 0
+	for _, d := range kindregistry.IngestOwnedDescriptors() {
+		if d.Stream != nil {
+			streamedCut++
+		}
+	}
+	require.Equal(t, streamedCut, totalCut,
+		"every Stream-backed IngestOwned kind must be covered by a typed-table domain's ingest-sourced availability gate")
+}
+
+// TestPodIngestOwnedHasNoStreamDescriptor pins the documented exception: pod is the only
+// IngestOwned kind without a Stream descriptor, so it is served by the bespoke pods
+// maintained store rather than the generic typed-table availability gate. This is the
+// reason TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer counts only
+// Stream-backed cut kinds.
+func TestPodIngestOwnedHasNoStreamDescriptor(t *testing.T) {
+	noStream := 0
+	for _, d := range kindregistry.IngestOwnedDescriptors() {
+		if d.Stream == nil {
+			noStream++
+			require.Equal(t, "Pod", d.Identity.Kind, "the only Stream-less IngestOwned kind must be Pod")
+		}
+	}
+	require.Equal(t, 1, noStream, "exactly one IngestOwned kind (Pod) has no Stream descriptor")
 }
 
 // TestIngestOwnedAvailabilityNilIngestManagerIsUnavailable proves the documented edge:

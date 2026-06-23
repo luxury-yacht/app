@@ -18,7 +18,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -27,6 +26,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -233,50 +233,31 @@ const (
 )
 
 // RegisterPodDomain registers the pods snapshot domain.
-func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFactory, provider metrics.Provider, clusterMeta ClusterMeta) error {
-	podInformer := factory.Core().V1().Pods().Informer()
-	builder := newPodBuilder(
-		factory.Core().V1().Pods().Lister(),
-		podInformer.GetIndexer(),
-		factory.Apps().V1().ReplicaSets().Lister(),
-		provider,
-	)
-
+//
+// Pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
+// never instantiated. The per-cluster maintained store of pod rows (metrics ZEROED)
+// is fed by the pod reflector's Table-half ingest Sink — the bespoke pod projector
+// (NewPodIngestProjector) builds the same zeroed-metrics PodSummary the old informer
+// handler did, so the store rows are byte-identical and the serve-time metrics overlay
+// in collectSummaries is unchanged. With no typed lister, the builder serves EVERY
+// scope (namespace/node/workload) from the store rows, which carry the resolved Node
+// and owner the scope filters need. ingestManager may be nil in a unit test, in which
+// case the store has no feed.
+func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
 	// Maintain a per-cluster store of pod rows with metrics ZEROED, fed by the pod
-	// informer. Fresh CPU/mem are overlaid at serve (see Build), so a metrics poll
-	// never touches the store. The handler is registered on the SAME pod informer
-	// BEFORE the factory starts, so the snapshot sync gate guarantees the store is
-	// populated before the first Build serves from it. A pod stream-broadcast handler
-	// is also registered on this informer elsewhere; this is an additional handler.
+	// reflector's Table-half Sink. The sink is registered BEFORE the ingest manager
+	// starts (this runs during registration), so the snapshot sync gate guarantees the
+	// store is populated before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, podQuerypageSchema(), podTableQueryAdapter())
-	adapter := podTableQueryAdapter()
-	rsLister := builder.rsLister
-	// projectPodRow unwraps a possible DeletedFinalStateUnknown tombstone, asserts a
-	// pod, and projects its row with metrics ZEROED — serve overlays the fresh sample.
-	projectPodRow := func(obj interface{}) (*corev1.Pod, PodSummary, bool) {
-		pod, ok := maintainedUnwrap(obj).(*corev1.Pod)
-		if !ok {
-			return nil, PodSummary{}, false
-		}
-		return pod, podres.BuildStreamSummary(clusterMeta, pod, 0, 0, rsLister), true
+	if ingestManager != nil {
+		ingestManager.AddSink(PodGVR, maintained.Sink())
 	}
-	upsert := func(obj interface{}) {
-		if pod, row, ok := projectPodRow(obj); ok {
-			maintained.upsertRow(row, pod)
-		}
+
+	builder := &PodBuilder{
+		metrics:    provider,
+		projCache:  newPodProjectionCache(),
+		maintained: maintained,
 	}
-	if _, err := podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    upsert,
-		UpdateFunc: func(_, newObj interface{}) { upsert(newObj) },
-		DeleteFunc: func(obj interface{}) {
-			if _, row, ok := projectPodRow(obj); ok {
-				maintained.deleteKey(adapter.Key(row))
-			}
-		},
-	}); err != nil {
-		return fmt.Errorf("%s: register pod maintained-store handler: %w", podDomainName, err)
-	}
-	builder.maintained = maintained
 
 	return reg.Register(refresh.DomainConfig{
 		Name:          podDomainName,
@@ -382,21 +363,20 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 }
 
 // collectSummaries returns the in-scope pod rows (metrics overlaid) and the
-// snapshot version. A namespace scope with a maintained store is served straight
-// from RAM: rows carry zeroed metrics, so the fresh sample is overlaid here. Node
-// and workload scopes — which need live owner-reference / NodeName matching the
-// store rows do not carry — and any builder without a store take the list +
-// re-project path, which projects metrics inline.
+// snapshot version. When the builder has no typed pod lister (the production,
+// ingest-fed path) every scope — namespace, node, and workload — is served straight
+// from the maintained store's zeroed-metrics rows, with the fresh metrics sample
+// overlaid here. The store rows carry the resolved Node and owner the node/workload
+// scopes filter by, so they need no typed pod. A builder WITH a typed lister (the
+// direct-builder unit tests) takes the list + re-project path, which projects metrics
+// inline.
 func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
+	if b.podLister == nil && b.maintained != nil {
+		return b.collectSummariesFromStore(baseScope, podUsage)
+	}
 	if namespace, ok := podStoreServableNamespace(baseScope); ok && b.maintained != nil {
 		rows := b.maintained.rows(namespace, map[string]bool{podres.Identity.Kind: true})
-		// Overlay the fresh metrics sample onto each stored (zeroed) row, using the
-		// SAME key and format funcs the list path's projectPod uses.
-		for i := range rows {
-			usage := podUsage[rows[i].Namespace+"/"+rows[i].Name]
-			rows[i].CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
-			rows[i].MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
-		}
+		overlayPodMetrics(rows, podUsage)
 		return rows, b.maintained.snapshotVersion(), nil
 	}
 
@@ -425,9 +405,102 @@ func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsa
 	return summaries, version, nil
 }
 
+// collectSummariesFromStore serves any pod scope from the maintained store's rows
+// (the ingest-fed, no-typed-lister production path). It filters the stored rows by
+// the scope (namespace / node / workload), overlays the fresh metrics sample, and
+// returns the store's monotonic snapshot version. The filters read only the resolved
+// fields the rows already carry — Node for the node scope, the RS->Deployment-resolved
+// owner for the workload scope — so the result matches the typed-lister list path.
+func (b *PodBuilder) collectSummariesFromStore(baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
+	all := b.maintained.rows("", map[string]bool{podres.Identity.Kind: true})
+	rows, err := filterPodRowsByScope(all, baseScope)
+	if err != nil {
+		return nil, 0, err
+	}
+	overlayPodMetrics(rows, podUsage)
+	return rows, b.maintained.snapshotVersion(), nil
+}
+
+// filterPodRowsByScope returns the subset of store rows in the requested scope. It
+// mirrors collectPods' scope parsing, but matches against the rows' already-resolved
+// fields instead of a typed pod: the node scope filters by Node, the workload scope by
+// the resolved owner GVK+name, and the namespace scope by Namespace (all/* = every
+// namespace).
+func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error) {
+	parts := strings.SplitN(scope, ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid pods scope: %s", scope)
+	}
+	scopeKey, value := parts[0], parts[1]
+	switch scopeKey {
+	case nodeScopeKey:
+		if value == "" {
+			return []PodSummary{}, nil
+		}
+		return filterPodRows(rows, func(row PodSummary) bool { return row.Node == value }), nil
+	case workloadScopeKey:
+		parsed, err := parseWorkloadScope(value)
+		if err != nil {
+			return nil, err
+		}
+		return filterPodRows(rows, func(row PodSummary) bool { return podRowMatchesWorkload(row, parsed) }), nil
+	case namespaceScopeKey:
+		namespace := strings.TrimSpace(value)
+		if namespace == "" {
+			return nil, fmt.Errorf("invalid namespace scope: %s", scope)
+		}
+		if namespace == "all" || namespace == "*" {
+			return append([]PodSummary(nil), rows...), nil
+		}
+		return filterPodRows(rows, func(row PodSummary) bool { return row.Namespace == namespace }), nil
+	default:
+		return nil, fmt.Errorf("unsupported pods scope: %s", scope)
+	}
+}
+
+func filterPodRows(rows []PodSummary, keep func(PodSummary) bool) []PodSummary {
+	out := make([]PodSummary, 0, len(rows))
+	for _, row := range rows {
+		if keep(row) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// podRowMatchesWorkload reports whether a stored pod row belongs to the workload
+// scope, reading the row's RESOLVED controlling owner (OwnerKind/OwnerName/
+// OwnerAPIVersion — already collapsed ReplicaSet->Deployment by BuildStreamSummary).
+// This matches matchesWorkload's result: matchesWorkload either matches the pod's
+// direct controlling owner against the scope or resolves an RS owner to its Deployment
+// and matches that — exactly the resolution resolvePodOwner baked into the row.
+func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
+	gv, err := schema.ParseGroupVersion(row.OwnerAPIVersion)
+	if err != nil {
+		return false
+	}
+	return gv.Group == scope.apiGroup &&
+		gv.Version == scope.apiVersion &&
+		row.OwnerKind == scope.kind &&
+		row.OwnerName == scope.name
+}
+
+// overlayPodMetrics overlays the fresh metrics sample onto each stored (zeroed) row,
+// using the SAME key and format funcs the list path's projectPod uses, so a metrics
+// poll refreshes CPU/mem without the store ever re-projecting.
+func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
+	for i := range rows {
+		usage := podUsage[rows[i].Namespace+"/"+rows[i].Name]
+		rows[i].CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
+		rows[i].MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+	}
+}
+
 // podStoreServableNamespace reports whether baseScope is a namespace scope the
 // maintained store can serve, returning the namespace to filter by ("" for all
-// namespaces). Node and workload scopes are not store-servable.
+// namespaces). Node and workload scopes are not store-servable. It remains for the
+// builder that has BOTH a typed lister and a store (no longer the production wiring,
+// but kept so a mixed builder still serves namespace scopes from RAM).
 func podStoreServableNamespace(baseScope string) (string, bool) {
 	value, ok := strings.CutPrefix(baseScope, namespaceScopeKey+":")
 	if !ok {

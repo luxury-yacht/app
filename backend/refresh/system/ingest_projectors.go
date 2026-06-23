@@ -18,7 +18,9 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
 // registerIngestProjectors wires the Catalog and ObjectMap projectors for every
@@ -27,6 +29,13 @@ import (
 // starts so every intake — including the initial relist — carries all three halves.
 func registerIngestProjectors(mgr *ingest.IngestManager, clusterID, clusterName string) {
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
+		// A bespoke-reflector kind (Stream == nil — only Pod) carries its OWN full
+		// ProjectFunc that builds all four bundle halves, so the generic Catalog/
+		// ObjectMap projectors here do not apply: the manager has no generic StreamRow
+		// entry to attach them to. The system wires the bespoke reflector separately.
+		if d.Stream == nil {
+			continue
+		}
 		gvr := d.Identity.GVR()
 		mgr.RegisterCatalogProjector(gvr, objectcatalog.SummaryProjector(clusterID, clusterName, d.Identity))
 		if projector := ingestObjectMapProjector(clusterID, d); projector != nil {
@@ -50,4 +59,24 @@ func ingestObjectMapProjector(clusterID string, d kindspec.Descriptor) ingest.Ob
 	return func(obj metav1.Object) interface{} {
 		return nodeProjector(clusterID, obj)
 	}
+}
+
+// registerPodReflector wires the bespoke pod reflector onto the manager. Pods has no
+// streamspec.Descriptor, so the manager's generic StreamDescriptors loop never builds
+// it; this registers a reflector + projecting store whose ProjectFunc is the four-half
+// pod bundle projector (Table = zeroed-metrics PodSummary, Aggregate = PodAggregate,
+// Catalog = catalog Summary, ObjectMap = pod graph node). The projector resolves the
+// pod's ReplicaSet->Deployment owner from the shared factory's RS lister (the RS
+// informer stays registered — only pods is cut). It must run before the hub starts so
+// the pod reflector launches with the rest and its initial relist is sync-gated.
+func registerPodReflector(mgr *ingest.IngestManager, factory *informer.Factory, meta snapshot.ClusterMeta) {
+	if mgr == nil || factory == nil {
+		return
+	}
+	shared := factory.SharedInformerFactory()
+	if shared == nil {
+		return
+	}
+	rsLister := shared.Apps().V1().ReplicaSets().Lister()
+	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, rsLister))
 }

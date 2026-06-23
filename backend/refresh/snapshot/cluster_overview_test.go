@@ -169,10 +169,10 @@ func TestClusterOverviewBuilder(t *testing.T) {
 		},
 	}
 	builder := &ClusterOverviewBuilder{
-		client:          nil,
-		nodeLister:      testsupport.NewNodeLister(t, nodeFargate, nodeEC2),
-		podLister:       testsupport.NewPodLister(t, podRunning, podPending, podCompleted),
-		namespaceLister: testsupport.NewNamespaceLister(t, nsA, nsB),
+		client:           nil,
+		nodeLister:       testsupport.NewNodeLister(t, nodeFargate, nodeEC2),
+		ingestAggregates: newFakePodAggregateSource(nil, podRunning, podPending, podCompleted),
+		namespaceLister:  testsupport.NewNamespaceLister(t, nsA, nsB),
 		metrics: fakeClusterMetrics{
 			pods: map[string]metrics.PodUsage{
 				"default/run-a": {
@@ -244,10 +244,10 @@ func TestClusterOverviewBuilderPreservesScopeAndClusterMeta(t *testing.T) {
 		ClusterName: "prod",
 	})
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
-		metrics:         fakeClusterMetrics{},
+		nodeLister:       testsupport.NewNodeLister(t),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
+		metrics:          fakeClusterMetrics{},
 	}
 
 	snapshot, err := builder.Build(ctx, "cluster-a|")
@@ -331,14 +331,10 @@ func TestClusterOverviewBuilderAggregatesWorkloadResourceUsage(t *testing.T) {
 
 	builder := &ClusterOverviewBuilder{
 		nodeLister:       testsupport.NewNodeLister(t),
-		podLister:        testsupport.NewPodLister(t, pods...),
+		ingestAggregates: newFakePodAggregateSource(testsupport.NewReplicaSetLister(t, replicaSet), pods...),
 		namespaceLister:  testsupport.NewNamespaceLister(t),
-		replicaSetLister: testsupport.NewReplicaSetLister(t, replicaSet),
 		cachedVersion:    "v1.30.0",
 		versionFetched:   now,
-		replicaSetHasSynced: func() bool {
-			return true
-		},
 		metrics: fakeClusterMetrics{
 			pods: map[string]metrics.PodUsage{
 				"default/api-7c8d9-a": {
@@ -432,9 +428,9 @@ func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
 	}
 
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t, nodes...),
-		podLister:       testsupport.NewPodLister(t, pods...),
-		namespaceLister: testsupport.NewNamespaceLister(t, namespaces...),
+		nodeLister:       testsupport.NewNodeLister(t, nodes...),
+		ingestAggregates: newFakePodAggregateSource(nil, pods...),
+		namespaceLister:  testsupport.NewNamespaceLister(t, namespaces...),
 		metrics: fakeClusterMetrics{
 			pods: map[string]metrics.PodUsage{
 				"default/pod-a": {
@@ -468,9 +464,9 @@ func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
 	now := time.Now()
 
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}}),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
+		nodeLister:       testsupport.NewNodeLister(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}}),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
 		eventLister: testsupport.NewEventLister(t, &corev1.Event{
 			ObjectMeta: metav1.ObjectMeta{Name: "warn-a", Namespace: "default", UID: "event-1"},
 			Type:       corev1.EventTypeWarning,
@@ -719,13 +715,13 @@ func TestClusterOverviewAKSVirtualNodes(t *testing.T) {
 	}
 
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t, nodeVM, nodeVirtual),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
-		metrics:         fakeClusterMetrics{},
-		cachedVersion:   "v1.29.0",
-		versionFetched:  now,
-		serverHost:      "https://mycluster.azmk8s.io",
+		nodeLister:       testsupport.NewNodeLister(t, nodeVM, nodeVirtual),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
+		metrics:          fakeClusterMetrics{},
+		cachedVersion:    "v1.29.0",
+		versionFetched:   now,
+		serverHost:       "https://mycluster.azmk8s.io",
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -765,12 +761,12 @@ func TestClusterOverviewGKEShowsOnlyTotal(t *testing.T) {
 	}
 
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t, node),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
-		metrics:         fakeClusterMetrics{},
-		cachedVersion:   "v1.29.0-gke.1234",
-		versionFetched:  now,
+		nodeLister:       testsupport.NewNodeLister(t, node),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
+		metrics:          fakeClusterMetrics{},
+		cachedVersion:    "v1.29.0-gke.1234",
+		versionFetched:   now,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -793,9 +789,9 @@ func TestClusterOverviewGKEShowsOnlyTotal(t *testing.T) {
 
 func TestClusterOverviewSuppressesInitialMetricsErrors(t *testing.T) {
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
+		nodeLister:       testsupport.NewNodeLister(t),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
 		metrics: fakeClusterMetrics{
 			meta: metrics.Metadata{
 				LastError:           "metrics API unavailable (pods.metrics.k8s.io)",
@@ -819,9 +815,9 @@ func TestClusterOverviewSuppressesInitialMetricsErrors(t *testing.T) {
 
 func TestClusterOverviewSurfacesRepeatedMetricsErrors(t *testing.T) {
 	builder := &ClusterOverviewBuilder{
-		nodeLister:      testsupport.NewNodeLister(t),
-		podLister:       testsupport.NewPodLister(t),
-		namespaceLister: testsupport.NewNamespaceLister(t),
+		nodeLister:       testsupport.NewNodeLister(t),
+		ingestAggregates: newFakePodAggregateSource(nil),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
 		metrics: fakeClusterMetrics{
 			meta: metrics.Metadata{
 				LastError:           "metrics API unavailable (pods.metrics.k8s.io)",

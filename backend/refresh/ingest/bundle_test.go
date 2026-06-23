@@ -310,3 +310,57 @@ func TestIngestManagerBuildsObjectMapHalf(t *testing.T) {
 		t.Fatalf("ObjectMapRows[0] = %#v, want objectMapRow{default/seed-cm}", nodes[0])
 	}
 }
+
+// recordingBundleSink records the bundles delivered to a BundleSink so a test can
+// assert both halves arrive together on each Upsert/Delete.
+type recordingBundleSink struct {
+	upserts []Bundle
+	deletes []Bundle
+}
+
+func (s *recordingBundleSink) UpsertBundle(b Bundle) { s.upserts = append(s.upserts, b) }
+func (s *recordingBundleSink) DeleteBundle(b Bundle) { s.deletes = append(s.deletes, b) }
+
+// TestProjectingStoreBundleSinkDeliversWholeBundle proves a registered BundleSink
+// receives the WHOLE projected bundle (both halves) on Upsert and Delete, in one
+// delivery — the pod notify path needs the Table half (scopes) and Catalog half
+// (UID/RV) of the same object together, which separate Table/Catalog sinks cannot
+// guarantee.
+func TestProjectingStoreBundleSinkDeliversWholeBundle(t *testing.T) {
+	project := func(obj interface{}) (interface{}, error) {
+		cmObj, ok := obj.(*corev1.ConfigMap)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type %T", obj)
+		}
+		return Bundle{
+			Table:   tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
+			Catalog: catalogRow{Key: cmObj.Namespace + "/" + cmObj.Name},
+		}, nil
+	}
+	store := NewProjectingStore(project)
+	sink := &recordingBundleSink{}
+	store.AddBundleSink(sink)
+
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if len(sink.upserts) != 1 {
+		t.Fatalf("UpsertBundle calls = %d, want 1", len(sink.upserts))
+	}
+	if got, ok := sink.upserts[0].Table.(tableRow); !ok || got.Name != "a" {
+		t.Fatalf("upsert Table half = %#v, want tableRow{a}", sink.upserts[0].Table)
+	}
+	if got, ok := sink.upserts[0].Catalog.(catalogRow); !ok || got.Key != "default/a" {
+		t.Fatalf("upsert Catalog half = %#v, want catalogRow{default/a}", sink.upserts[0].Catalog)
+	}
+
+	if err := store.Delete(cm("default", "a")); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if len(sink.deletes) != 1 {
+		t.Fatalf("DeleteBundle calls = %d, want 1", len(sink.deletes))
+	}
+	if got, ok := sink.deletes[0].Table.(tableRow); !ok || got.Name != "a" {
+		t.Fatalf("delete Table half = %#v, want tableRow{a}", sink.deletes[0].Table)
+	}
+}

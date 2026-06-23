@@ -5,7 +5,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 )
@@ -85,8 +88,21 @@ func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
 	}
 }
 
-// NewNamespaceWorkloadTracker wires informer event handlers that keep namespace workload counts updated.
-func NewNamespaceWorkloadTracker(factory informers.SharedInformerFactory) *NamespaceWorkloadTracker {
+// trackerPodIngestSource supplies the cut pod kind's presence to the workload tracker:
+// an incremental Table-half Sink (each Upsert/Delete carries the pod's PodSummary, from
+// which the tracker reads namespace/name) plus the pod store's HasSynced gate. The shared
+// informer no longer caches pods, so the tracker reads pod presence here instead of the
+// pod informer. *ingest.IngestManager satisfies it.
+type trackerPodIngestSource interface {
+	AddSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool
+	HasSyncedFor(gvr schema.GroupVersionResource) bool
+}
+
+// NewNamespaceWorkloadTracker wires informer event handlers that keep namespace workload
+// counts updated. Pods is cut to the ingest path, so pod presence comes from the pod
+// reflector's Table-half Sink (and its HasSynced gate) rather than the pod informer.
+// ingestManager may be nil (a unit test), in which case pods contribute no presence.
+func NewNamespaceWorkloadTracker(factory informers.SharedInformerFactory, ingestManager trackerPodIngestSource) *NamespaceWorkloadTracker {
 	tracker := newNamespaceWorkloadTracker()
 	if factory == nil {
 		tracker.synced.Store(true)
@@ -98,9 +114,42 @@ func NewNamespaceWorkloadTracker(factory informers.SharedInformerFactory) *Names
 	tracker.registerInformer(factory.Apps().V1().DaemonSets().Informer(), resourceDaemon)
 	tracker.registerInformer(factory.Batch().V1().Jobs().Informer(), resourceJob)
 	tracker.registerInformer(factory.Batch().V1().CronJobs().Informer(), resourceCronJob)
-	tracker.registerInformer(factory.Core().V1().Pods().Informer(), resourcePod)
+	tracker.registerPodIngest(ingestManager)
 
 	return tracker
+}
+
+// registerPodIngest wires the pod kind's presence from the ingest manager: a Table-half
+// Sink feeds add/delete keyed off the projected PodSummary (namespace/name), and the pod
+// store's HasSynced joins the tracker's sync gate, exactly as the pod informer's handler
+// + HasSynced did before the cut. A nil manager is a no-op.
+func (t *NamespaceWorkloadTracker) registerPodIngest(ingestManager trackerPodIngestSource) {
+	if ingestManager == nil {
+		return
+	}
+	if ingestManager.AddSink(PodGVR, trackerPodSink{tracker: t}) {
+		t.syncFns = append(t.syncFns, func() bool { return ingestManager.HasSyncedFor(PodGVR) })
+	}
+}
+
+// trackerPodSink adapts the tracker's per-namespace pod presence to an ingest Table-half
+// Sink: each Upsert/Delete carries the projected PodSummary, from which the pod's
+// namespace and "namespace/name" key are read — the same key the typed-pod event path
+// derived via meta.Accessor.
+type trackerPodSink struct {
+	tracker *NamespaceWorkloadTracker
+}
+
+func (s trackerPodSink) Upsert(row interface{}) {
+	if pod, ok := row.(streamrows.PodSummary); ok {
+		s.tracker.addNamespaceKey(resourcePod, pod.Namespace, pod.Namespace+"/"+pod.Name)
+	}
+}
+
+func (s trackerPodSink) Delete(row interface{}) {
+	if pod, ok := row.(streamrows.PodSummary); ok {
+		s.tracker.deleteNamespaceKey(resourcePod, pod.Namespace, pod.Namespace+"/"+pod.Name)
+	}
 }
 
 func (t *NamespaceWorkloadTracker) registerInformer(inf cache.SharedIndexInformer, resource workloadResource) {
@@ -179,6 +228,17 @@ func (t *NamespaceWorkloadTracker) handleAdd(obj interface{}, resource workloadR
 	if !ok || namespace == "" {
 		return
 	}
+	t.addNamespaceKey(resource, namespace, key)
+}
+
+// addNamespaceKey records one object's presence in a namespace by its already-resolved
+// namespace and key. It is the shared core of both the typed-informer event path
+// (handleAdd) and the pod ingest sink (which delivers a projected row, not a typed
+// object, so it resolves namespace/key from the row itself).
+func (t *NamespaceWorkloadTracker) addNamespaceKey(resource workloadResource, namespace, key string) {
+	if namespace == "" {
+		return
+	}
 	t.mu.Lock()
 	state := t.ensureNamespaceLocked(namespace)
 	if state.add(resource, key) {
@@ -192,7 +252,15 @@ func (t *NamespaceWorkloadTracker) handleDelete(obj interface{}, resource worklo
 	if !ok || namespace == "" {
 		return
 	}
+	t.deleteNamespaceKey(resource, namespace, key)
+}
 
+// deleteNamespaceKey removes one object's presence by its already-resolved namespace and
+// key — the shared core of the typed-informer delete path and the pod ingest sink.
+func (t *NamespaceWorkloadTracker) deleteNamespaceKey(resource workloadResource, namespace, key string) {
+	if namespace == "" {
+		return
+	}
 	t.mu.Lock()
 	state, exists := t.namespaces[namespace]
 	if !exists {

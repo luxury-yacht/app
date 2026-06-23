@@ -397,6 +397,22 @@ func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool
 	return true
 }
 
+// AddBundleSink registers a whole-Bundle sink for gvr's store so a consumer that needs
+// more than one bundle half of the same object (the pod live-stream notify) is fed both
+// halves together as the reflector mutates it. It is a no-op when the manager has no
+// entry for gvr. It must be called before Start so no mutation is missed. Reports whether
+// an entry was found.
+func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink BundleSink) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.store.AddBundleSink(sink)
+	return true
+}
+
 // AddCatalogSink registers a Catalog-half sink for gvr's store so the object catalog
 // is fed the kind's Summary incrementally as the reflector mutates it, without
 // reading the shared informer. It is a no-op when the manager has no entry for gvr.
@@ -455,6 +471,35 @@ func (m *IngestManager) AggregateRows(gvr schema.GroupVersionResource) []interfa
 		return nil
 	}
 	return store.AggregateRows()
+}
+
+// Rows returns the full projected value of every object in gvr's store — the per-object
+// Bundle (or table-only projection) — in ONE consistent locked read, or nil when the
+// manager has no entry for gvr. A consumer that needs more than one bundle half for the
+// SAME object (the workloads domain reading a pod's Table and Aggregate halves together)
+// reads here rather than pairing separate TableRows/AggregateRows calls, which could
+// desync across a concurrent reflector mutation.
+func (m *IngestManager) Rows(gvr schema.GroupVersionResource) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.List()
+}
+
+// StoreResourceVersion returns the latest list/watch resourceVersion gvr's store has
+// observed (from its relist or a watch bookmark), or "" when the manager has no entry
+// for gvr. It is the ingest equivalent of the highest object resourceVersion a typed
+// lister would expose: for a kind whose objects share one cluster-wide RV counter (the
+// core group), it advances on every add/update/delete the reflector sees, so a snapshot
+// domain can fold it into its monotonic version watermark in place of the per-object RV
+// it can no longer read from the dropped typed objects.
+func (m *IngestManager) StoreResourceVersion(gvr schema.GroupVersionResource) string {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return ""
+	}
+	return store.LastStoreSyncResourceVersion()
 }
 
 // HasSyncedFor reports whether gvr's store has completed its initial relist, or

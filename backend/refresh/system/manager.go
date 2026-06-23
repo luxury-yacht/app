@@ -128,6 +128,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		cfg.GatewayClient,
 	)
 	registerIngestProjectors(ingestManager, cfg.ClusterID, cfg.ClusterName)
+	// Pods has no Stream descriptor (its table is the bespoke PodSummary), so the
+	// generic ingest loop above does not build it. Wire the pod reflector explicitly
+	// with its four-half projector, resolving the ReplicaSet->Deployment owner from
+	// the shared factory's RS lister — the RS informer stays registered (only pods is
+	// cut). Registered BEFORE the hub starts so the pod reflector launches with the
+	// rest and the initial relist is sync-gated.
+	registerPodReflector(ingestManager, informerFactory, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
 	informerHub := newIngestInformerHub(informerFactory, ingestManager)
 
 	var permissionIssues []PermissionIssue

@@ -251,7 +251,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 
 	return []domainRegistration{
 		directRegistration("namespaces", func() error {
-			return snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
+			return snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
 		}),
 
 		listWatchRegistration(listWatchDomainConfig{
@@ -271,6 +271,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.KubernetesClient,
 					deps.metricsProvider,
 					deps.serverHost,
+					deps.ingestManager,
 				)
 			},
 			fallbackChecks: []listCheck{
@@ -305,7 +306,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				{group: "", resource: "pods"},
 			},
 			registerInformer: func() error {
-				return snapshot.RegisterNodeDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.metricsProvider)
+				return snapshot.RegisterNodeDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.metricsProvider, deps.ingestManager)
 			},
 			fallbackChecks: []listCheck{
 				{group: "", resource: "nodes"},
@@ -406,6 +407,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 						IncludeJobs:         allowed.Allows("batch", "jobs"),
 						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
 					},
+					deps.ingestManager,
 				)
 			},
 		}),
@@ -500,9 +502,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("pods", func() error {
 			return snapshot.RegisterPodDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
 				deps.metricsProvider,
 				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+				deps.ingestManager,
 			)
 		}),
 

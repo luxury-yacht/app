@@ -1388,7 +1388,8 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t, pod),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pod),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),
@@ -1436,7 +1437,8 @@ func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),
@@ -1607,7 +1609,8 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t, webPod, apiPod),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, webPod, apiPod),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, webDeployment, apiDeployment),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),
@@ -1712,7 +1715,8 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t, pods...),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),
@@ -1807,7 +1811,8 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 		metadata: metrics.Metadata{CollectedAt: now},
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t, pods...),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),
@@ -1862,7 +1867,8 @@ func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
 		},
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        testsupport.NewPodLister(t),
+		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+		includePods:      true,
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		statefulLister:   testsupport.NewStatefulSetLister(t),
 		daemonLister:     testsupport.NewDaemonSetLister(t),

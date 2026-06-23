@@ -13,10 +13,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -26,13 +28,22 @@ import (
 // NamespaceBuilder constructs namespace snapshots from informer caches.
 type NamespaceBuilder struct {
 	namespaces   corelisters.NamespaceLister
-	pods         corelisters.PodLister
+	podIngest    namespacePodIngestSource
 	deployments  appslisters.DeploymentLister
 	statefulsets appslisters.StatefulSetLister
 	daemonsets   appslisters.DaemonSetLister
 	jobs         batchlisters.JobLister
 	cronJobs     batchlisters.CronJobLister
 	tracker      *NamespaceWorkloadTracker
+}
+
+// namespacePodIngestSource supplies the cut pod kind's projected rows the namespace
+// domain reads: the tracker's incremental presence Sink + HasSynced gate, and the
+// projected rows for the legacy per-namespace workload-detection pod count. It composes
+// the tracker source so one value wires both. *ingest.IngestManager satisfies it.
+type namespacePodIngestSource interface {
+	trackerPodIngestSource
+	AggregateRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 // NamespaceSnapshot payload returned to clients.
@@ -57,12 +68,15 @@ type NamespaceSummary struct {
 	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
 }
 
-// RegisterNamespaceDomain registers the namespace domain with the registry.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory) error {
-	tracker := NewNamespaceWorkloadTracker(factory)
+// RegisterNamespaceDomain registers the namespace domain with the registry. Pods is cut
+// to the ingest path, so both the workload tracker's pod presence and the legacy
+// per-namespace workload-detection pod count read the pod kind's projected rows from the
+// ingest manager rather than a typed pod lister. ingestManager may be nil in a unit test.
+func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource) error {
+	tracker := NewNamespaceWorkloadTracker(factory, ingestManager)
 	builder := &NamespaceBuilder{
 		namespaces:   factory.Core().V1().Namespaces().Lister(),
-		pods:         factory.Core().V1().Pods().Lister(),
+		podIngest:    ingestManager,
 		deployments:  factory.Apps().V1().Deployments().Lister(),
 		statefulsets: factory.Apps().V1().StatefulSets().Lister(),
 		daemonsets:   factory.Apps().V1().DaemonSets().Lister(),
@@ -250,10 +264,19 @@ func (b *NamespaceBuilder) namespaceHasWorkloadsLegacy(namespace string) (bool, 
 		})
 	}
 
-	if b.pods != nil {
+	if b.podIngest != nil {
 		addTask(func() (int, error) {
-			list, err := b.pods.Pods(namespace).List(selector)
-			return len(list), err
+			// Pods is cut to ingest: count the namespace's projected PodAggregate rows
+			// instead of listing the typed pod lister. Only the count matters here (the
+			// legacy path's workload-presence signal), so reading the small aggregate
+			// rows is sufficient and never touches a typed pod.
+			count := 0
+			for _, row := range b.podIngest.AggregateRows(PodGVR) {
+				if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace == namespace {
+					count++
+				}
+			}
+			return count, nil
 		})
 	}
 

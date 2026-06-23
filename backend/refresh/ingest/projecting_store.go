@@ -53,6 +53,18 @@ type Sink interface {
 	Delete(tableRow interface{})
 }
 
+// BundleSink receives the WHOLE projected Bundle (every half together) as the store
+// mutates: UpsertBundle on Add/Update/Replace, DeleteBundle on eviction. It exists for a
+// consumer that needs more than one half of the SAME object in one delivery — the pod
+// live-stream notify needs the Table half (Node/owner for the broadcast scope) and the
+// Catalog half (UID/resourceVersion for the change Ref) of the same pod, which separate
+// Table/Catalog sinks cannot guarantee across a concurrent mutation. Like Sink, calls
+// happen under the store's write lock, so an implementation must not call back in.
+type BundleSink interface {
+	UpsertBundle(bundle Bundle)
+	DeleteBundle(bundle Bundle)
+}
+
 // ProjectingStore is a cache.Store that holds the PROJECTED row per object
 // instead of the full source object. On Add/Update/Replace it runs the injected
 // projection and stores only the result keyed by cache.MetaNamespaceKeyFunc; the
@@ -76,6 +88,12 @@ type ProjectingStore struct {
 	// kind without reading the (now-absent) shared informer. They are registered and
 	// fanned exactly like sinks, but carry the Catalog half rather than the Table half.
 	catalogSinks []Sink
+
+	// bundleSinks receive the WHOLE projected Bundle on the same Upsert/Delete events,
+	// so a consumer needing more than one half of the same object (the pod live-stream
+	// notify) gets both halves in one delivery. Non-Bundle projections are not fanned to
+	// them (the value is not a Bundle).
+	bundleSinks []BundleSink
 
 	// rv is the latest resource version the store has observed, recorded by
 	// Replace (relist) and Bookmark (watch bookmark) and returned by
@@ -137,10 +155,22 @@ func (s *ProjectingStore) AddCatalogSink(sink Sink) {
 	}
 }
 
-// hasSinks reports whether any Table-half or Catalog-half sink is registered, so the
-// mutation paths can skip half-extraction work when nothing observes them.
+// AddBundleSink registers a BundleSink fed the whole projected Bundle on each
+// Upsert/Delete. It must be called before the reflector starts so no mutation is missed.
+// A nil sink is ignored.
+func (s *ProjectingStore) AddBundleSink(sink BundleSink) {
+	if sink == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bundleSinks = append(s.bundleSinks, sink)
+}
+
+// hasSinks reports whether any Table-half, Catalog-half, or whole-bundle sink is
+// registered, so the mutation paths can skip extraction work when nothing observes them.
 func (s *ProjectingStore) hasSinks() bool {
-	return len(s.sinks) > 0 || len(s.catalogSinks) > 0
+	return len(s.sinks) > 0 || len(s.catalogSinks) > 0 || len(s.bundleSinks) > 0
 }
 
 // emitUpsert / emitDelete fan a projected value's Table half out to every Table sink
@@ -162,6 +192,13 @@ func (s *ProjectingStore) emitUpsert(projected interface{}) {
 			}
 		}
 	}
+	if len(s.bundleSinks) > 0 {
+		if bundle, ok := projected.(Bundle); ok {
+			for _, sink := range s.bundleSinks {
+				sink.UpsertBundle(bundle)
+			}
+		}
+	}
 }
 
 func (s *ProjectingStore) emitDelete(projected interface{}) {
@@ -176,6 +213,13 @@ func (s *ProjectingStore) emitDelete(projected interface{}) {
 		if cat := catalogHalf(projected); cat != nil {
 			for _, sink := range s.catalogSinks {
 				sink.Delete(cat)
+			}
+		}
+	}
+	if len(s.bundleSinks) > 0 {
+		if bundle, ok := projected.(Bundle); ok {
+			for _, sink := range s.bundleSinks {
+				sink.DeleteBundle(bundle)
 			}
 		}
 	}

@@ -53,9 +53,8 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 			},
 		}
 		builder := &NodeBuilder{
-			lister:    testsupport.NewNodeLister(t, node),
-			podLister: testsupport.NewPodLister(t),
-			metrics:   fakeMetricsProvider{},
+			lister:  testsupport.NewNodeLister(t, node),
+			metrics: fakeMetricsProvider{},
 		}
 		snap, err := builder.Build(ctx, "")
 		require.NoError(t, err)
@@ -81,7 +80,8 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 	t.Run("namespace-workloads", func(t *testing.T) {
 		deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
 		builder := &NamespaceWorkloadsBuilder{
-			podLister:        testsupport.NewPodLister(t),
+			podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+			includePods:      true,
 			deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 			statefulLister:   testsupport.NewStatefulSetLister(t),
 			daemonLister:     testsupport.NewDaemonSetLister(t),
