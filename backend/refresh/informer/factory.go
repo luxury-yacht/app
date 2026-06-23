@@ -159,6 +159,24 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// no longer caches them. namespace-network reads the Service OWN-rows + EndpointSlice
 	// rows (and the Service↔EndpointSlice endpoint-count join) from the ingest reflectors,
 	// and the catalog/object-map/notify consumers read the ingest projections instead.
+	//
+	// namespaces is a DOCUMENTED NO-CUT (kept on the typed informer), for three reasons:
+	//   1. No value. A cluster has a handful of small namespace objects, so the typed
+	//      cache is a few KB — cutting it reclaims near-nothing while adding a bespoke
+	//      reflector to maintain.
+	//   2. No Stream descriptor. resources/namespaces/descriptor.go sets no Stream facet
+	//      (the namespaces table is the bespoke NamespaceSummary, snapshot/namespaces.go),
+	//      so the generic IngestOwned flip cannot serve it: an ingest projection only
+	//      keeps the descriptor's StreamRow output, and there is none. Cutting would
+	//      require a hand-written bespoke reflector + full projector (like Pod/Node).
+	//   3. Full typed object needed. The namespace domain reads the whole *corev1.Namespace
+	//      (snapshot/namespaces.go:128-129 pass ns to BuildResourceModel/BuildFacts, and
+	//      :144 reads its ResourceVersion) — the cut path drops the typed object, so the
+	//      bespoke projector would have to reproduce the full model at intake. The object
+	//      catalog already derives its namespace listing from catalogued objects, not this
+	//      informer (objectcatalog/catalog_index.go), so the source-of-truth listing does
+	//      not depend on a cut here either way. Detail is a live client Get
+	//      (resources/namespaces/namespaces.go:41), independent of this informer.
 	result.registerClusterInformer("", "namespaces", func() cache.SharedIndexInformer {
 		return kubeFactory.Core().V1().Namespaces().Informer()
 	})
@@ -214,6 +232,30 @@ const gatewayGroup = "gateway.networking.k8s.io"
 
 // WithGatewayFactory registers Gateway API informers that are available on the cluster.
 // It must be called before Start so the Gateway caches participate in initial sync.
+//
+// The eight Gateway-API kinds (gatewayclasses, gateways, httproutes, grpcroutes,
+// tlsroutes, listenersets, referencegrants, backendtlspolicies) are a DOCUMENTED
+// NO-CUT — kept on this Gateway-API informer factory rather than cut to the
+// owned-reflector ingest path. A cut is mechanically feasible: each kind has a Stream
+// descriptor, ingest's restClientFor already maps the gateway group to the Gateway
+// client (refresh/ingest/manager.go) and exampleObjectFor falls back to the Gateway
+// scheme, so the generic IngestOwned flip would feed the table (querypage_typed
+// feedMaintainedFromIngest), the catalog (objectcatalog collectViaIngest runs before
+// the gateway-informer source), and the notify path. It is NOT worthwhile:
+//  1. No value. These objects are few and conditional — the whole factory only exists
+//     when Gateway-API is installed (the AnyPresent guard below). The typed cache is a
+//     handful of small objects, so a cut reclaims near-nothing.
+//  2. The typed objects are not actually eliminated by a cut. The object map collects
+//     every Gateway-API kind through its OWN independent live-LIST path
+//     (snapshot/object_map.go collectGatewayTyped over objectMapGatewayCollectors),
+//     which ignores the IngestOwned facet entirely — gateway kinds carry a
+//     GatewayCollector, not a Collector, so collectTyped's ingest-cut branch never
+//     touches them. Each object-map build therefore still materialises the full typed
+//     Gateway objects regardless of a cut, so the cut would not remove that footprint;
+//     it would only add a second copy of the list-decode path in an ingest reflector.
+//
+// Cutting would add a bespoke-projector reflector and a parallel data path for no
+// memory win, so these kinds stay on the typed informer.
 func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFactory, presence common.GatewayAPIPresence) *Factory {
 	if f == nil || factory == nil || presence == nil || !presence.AnyPresent() {
 		return f

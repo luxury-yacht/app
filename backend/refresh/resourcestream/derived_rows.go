@@ -147,16 +147,6 @@ func (m *Manager) refreshPodsForReplicaSetOnce(
 	}
 }
 
-func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
-	node := nodeFromObject(obj)
-	if node == nil {
-		return
-	}
-	// nodes is notify-only: emit the change signal and let the query-backed table
-	// refetch. The node row is rebuilt by the snapshot/query builder.
-	m.broadcastNodeNotification(node, updateType)
-}
-
 // broadcastNodeNotification emits a row-less node change notification on the
 // cluster scope. nodes is notify-only (see notify_only.go): the query-backed
 // table refetches on the bare signal and drift keys off Ref, so no NodeSummary

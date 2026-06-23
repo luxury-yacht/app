@@ -1151,11 +1151,6 @@ func podFromObject(obj interface{}) *corev1.Pod {
 	return typed
 }
 
-func nodeFromObject(obj interface{}) *corev1.Node {
-	typed, _ := objectAs[*corev1.Node](obj)
-	return typed
-}
-
 func configMapFromObject(obj interface{}) *corev1.ConfigMap {
 	typed, _ := objectAs[*corev1.ConfigMap](obj)
 	return typed

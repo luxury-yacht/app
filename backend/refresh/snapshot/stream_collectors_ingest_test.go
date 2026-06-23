@@ -172,16 +172,17 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 
 // TestStreamlessIngestOwnedKindsAreBespoke pins the documented exception: the IngestOwned
 // kinds WITHOUT a Stream descriptor are Pod, the five workload kinds
-// (Deployment/StatefulSet/DaemonSet/Job/CronJob), and the two network join kinds
-// (Service/EndpointSlice). Each carries a bespoke table — PodSummary / WorkloadSummary, or
-// the Service↔EndpointSlice-joined NetworkSummary — served by its own domain's serve-side
-// re-join rather than the generic typed-table availability gate. This is the reason
+// (Deployment/StatefulSet/DaemonSet/Job/CronJob), the two network join kinds
+// (Service/EndpointSlice), and Node. Each carries a bespoke table — PodSummary /
+// WorkloadSummary, the Service↔EndpointSlice-joined NetworkSummary, or the NodeSummary whose
+// row joins per-node pod aggregates + metrics — served by its own domain's serve-side re-join
+// rather than the generic typed-table availability gate. This is the reason
 // TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer counts only Stream-backed cut
 // kinds.
 func TestStreamlessIngestOwnedKindsAreBespoke(t *testing.T) {
 	expected := map[string]struct{}{
 		"Pod": {}, "Deployment": {}, "StatefulSet": {}, "DaemonSet": {}, "Job": {}, "CronJob": {},
-		"Service": {}, "EndpointSlice": {},
+		"Service": {}, "EndpointSlice": {}, "Node": {},
 	}
 	got := map[string]struct{}{}
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
@@ -190,7 +191,7 @@ func TestStreamlessIngestOwnedKindsAreBespoke(t *testing.T) {
 		}
 	}
 	require.Equal(t, expected, got,
-		"the Stream-less IngestOwned kinds must be exactly Pod and the five workload kinds")
+		"the Stream-less IngestOwned kinds must be exactly Pod, the five workload kinds, the two network join kinds, and Node")
 }
 
 // TestIngestOwnedAvailabilityNilIngestManagerIsUnavailable proves the documented edge:

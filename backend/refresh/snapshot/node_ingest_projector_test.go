@@ -10,8 +10,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func testNode() *corev1.Node {

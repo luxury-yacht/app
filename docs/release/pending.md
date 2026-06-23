@@ -6,6 +6,7 @@
 - Object-panel Overviews are now rendered from a single data-driven descriptor per resource kind instead of bespoke per-kind components.
 - ConfigMaps and Secrets now use less memory per connected cluster. Their objects are projected to the rows the app needs at ingest time instead of caching the full typed object, so a cluster with many (often large) ConfigMaps/Secrets holds far less in memory. Only Helm release records — a small, label-filtered subset — keep their full object, since the Helm view and Helm cache eviction still read it.
 - The network resources view (Services, EndpointSlices, Ingresses, NetworkPolicies) now uses less memory per connected cluster. These objects are projected to the rows the app needs at ingest time instead of caching the full typed object. A Service's endpoint count is still joined from its EndpointSlices, recomputed when the view is served, so the table is unchanged.
+- The Nodes view now uses less memory per connected cluster. Node objects carry a large list of every container image cached on the node, which the table never shows; nodes are now projected to the rows the app needs at ingest time instead of caching the full typed object, so that image list (and the rest of the unused node status) is no longer retained. Each node's pod totals and live CPU/memory usage are still joined when the view is served, so the table is unchanged.
 
 ### Fixed
 

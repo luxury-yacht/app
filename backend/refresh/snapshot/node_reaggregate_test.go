@@ -8,8 +8,8 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TestReaggregateNodeSummaryMatchesFullBuild proves the intake/serve split is byte-identical
@@ -45,14 +45,14 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 
 	aggregates := []streamrows.PodAggregate{
 		{
-			Namespace:           "team-a",
-			Name:                "web-1",
-			NodeName:            "node-1",
-			CPURequestMilli:     100,
-			CPULimitMilli:       200,
-			MemRequestBytes:     1 << 20,
-			MemLimitBytes:       2 << 20,
-			InitCPURequestMilli: 10,
+			Namespace:                  "team-a",
+			Name:                       "web-1",
+			NodeName:                   "node-1",
+			CPURequestMilli:            100,
+			CPULimitMilli:              200,
+			MemRequestBytes:            1 << 20,
+			MemLimitBytes:              2 << 20,
+			InitCPURequestMilli:        10,
 			RestartCountContainersInit: 3,
 		},
 		{
