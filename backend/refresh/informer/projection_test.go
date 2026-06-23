@@ -46,3 +46,21 @@ func TestStripManagedFieldsNonAccessorIsNoOp(t *testing.T) {
 		t.Fatalf("non-accessor input must be returned unchanged, got %v", out)
 	}
 }
+
+func TestStripManagedFieldsDropsLastAppliedConfigOnly(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "p1",
+		Annotations: map[string]string{
+			"kubectl.kubernetes.io/last-applied-configuration": `{"big":"json"}`,
+			"keep-me": "yes",
+		},
+	}}
+	out, _ := StripManagedFields(pod)
+	got := out.(*corev1.Pod).Annotations
+	if _, ok := got["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		t.Fatal("last-applied-configuration not stripped")
+	}
+	if got["keep-me"] != "yes" {
+		t.Fatalf("non-target annotation altered: %v", got)
+	}
+}

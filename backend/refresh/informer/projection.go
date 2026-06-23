@@ -29,5 +29,20 @@ func StripManagedFields(obj interface{}) (interface{}, error) {
 		return obj, nil
 	}
 	accessor.SetManagedFields(nil)
+	// Also drop the last-applied-configuration annotation: a full JSON copy of the
+	// object that `kubectl apply` writes (often KB-scale), in the same class as
+	// managedFields — unused by the table/catalog/maintained-store path, retained by
+	// detail views (which fetch fresh). Delete the single key in place rather than
+	// clearing all annotations, which the table/detail paths DO read.
+	if ann := accessor.GetAnnotations(); ann != nil {
+		if _, ok := ann[lastAppliedConfigAnnotation]; ok {
+			delete(ann, lastAppliedConfigAnnotation)
+			accessor.SetAnnotations(ann)
+		}
+	}
 	return obj, nil
 }
+
+// lastAppliedConfigAnnotation is the annotation `kubectl apply` writes with a full
+// JSON snapshot of the last-applied object.
+const lastAppliedConfigAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
