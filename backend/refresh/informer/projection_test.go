@@ -20,7 +20,7 @@ func TestStripManagedFieldsRemovesOnlyManagedFields(t *testing.T) {
 		},
 		Spec: corev1.PodSpec{NodeName: "node-1"},
 	}
-	out, err := stripManagedFields(pod)
+	out, err := StripManagedFields(pod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestStripManagedFieldsRemovesOnlyManagedFields(t *testing.T) {
 
 func TestStripManagedFieldsNonAccessorIsNoOp(t *testing.T) {
 	in := "not-a-k8s-object"
-	out, err := stripManagedFields(in)
+	out, err := StripManagedFields(in)
 	if err != nil {
 		t.Fatalf("non-accessor input must not error: %v", err)
 	}

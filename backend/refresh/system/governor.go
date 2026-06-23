@@ -61,3 +61,51 @@ func (p GovernorPolicy) Assign(mru []string, visible string, underPressure bool)
 	}
 	return out
 }
+
+// GovernorTransition is the action the wiring layer must take for one cluster to
+// move it from its last-applied tier to its desired tier. Keeping the decision a
+// PURE function of (lastApplied, desired) — separate from the subsystem build/
+// teardown calls it triggers — is what makes the reconcile decisions unit-testable
+// without standing up real refresh subsystems.
+type GovernorTransition struct {
+	ClusterID string
+	Tier      ResourceTier
+	// EnsureRunning is true when the cluster must be built+started if it is not
+	// already (Foreground and Background both require a live subsystem).
+	EnsureRunning bool
+	// MetricsActive is the demand-driven metrics poller state to apply once the
+	// subsystem is running: Foreground pins it active, Background lets it idle out.
+	// Only meaningful when EnsureRunning is true.
+	MetricsActive bool
+	// Teardown is true when the cluster must be torn down and its heap reclaimed
+	// (Cold). When Teardown is true, EnsureRunning is false.
+	Teardown bool
+}
+
+// PlanGovernorTransitions computes the per-cluster actions needed to move every
+// open cluster from its last-applied tier to its desired tier. It returns one
+// transition per cluster whose desired tier DIFFERS from last-applied (idempotent:
+// clusters already at their desired tier produce no action). Clusters present in
+// lastApplied but absent from desired are no longer open and are ignored — the
+// open/close lifecycle (syncClusterClientPool) owns their teardown, not the governor.
+func PlanGovernorTransitions(lastApplied, desired map[string]ResourceTier) []GovernorTransition {
+	var transitions []GovernorTransition
+	for id, tier := range desired {
+		if prev, ok := lastApplied[id]; ok && prev == tier {
+			continue
+		}
+		t := GovernorTransition{ClusterID: id, Tier: tier}
+		switch tier {
+		case TierForeground:
+			t.EnsureRunning = true
+			t.MetricsActive = true
+		case TierBackground:
+			t.EnsureRunning = true
+			t.MetricsActive = false
+		default: // TierCold
+			t.Teardown = true
+		}
+		transitions = append(transitions, t)
+	}
+	return transitions
+}

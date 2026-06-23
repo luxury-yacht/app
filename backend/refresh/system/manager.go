@@ -105,6 +105,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
+	// Decide once per process whether WatchList is usable, BEFORE the first
+	// informer factory issues a watch (client-go reads the WatchListClient gate
+	// lazily and caches it). If a bookmark-stripping proxy is in front of the
+	// apiserver this disables WatchList so informers fall back to LIST+WATCH
+	// instead of wedging. Idempotent — only the first cluster build runs the probe.
+	informer.EnsureWatchListDecision(context.Background(), cfg.KubernetesClient)
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
 		WithGatewayFactory(cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
 	var permissionIssues []PermissionIssue

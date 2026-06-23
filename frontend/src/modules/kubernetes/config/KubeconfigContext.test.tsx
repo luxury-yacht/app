@@ -33,6 +33,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
   GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
   SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
+  SetVisibleCluster: () => Promise.resolve(),
 }));
 
 vi.mock('@/core/refresh', () => ({

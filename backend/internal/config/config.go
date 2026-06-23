@@ -39,6 +39,15 @@ const (
 	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
 	RefreshInformerSyncTimeout = 30 * time.Second
 
+	// RefreshInformerSyncDeadline bounds how long a single informer may take to reach
+	// its initial sync after Start before it is marked DEGRADED and excluded from the
+	// "all settled" readiness gate. A WatchList stream behind a bookmark-stripping proxy
+	// never signals sync completion, so without this deadline one hung GVR would block
+	// the whole cluster's readiness forever. A degraded informer is logged once and keeps
+	// retrying in the background; it stops gating readiness so the rest of the cluster
+	// becomes usable.
+	RefreshInformerSyncDeadline = 15 * time.Second
+
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
 
@@ -198,6 +207,24 @@ const (
 
 	// ClusterOperationTimeout bounds coordinated per-cluster operations.
 	ClusterOperationTimeout = 90 * time.Second
+)
+
+// Resource governor settings. The governor bounds RAM when many clusters are
+// open by keeping only the visible cluster plus a small warm set running fully
+// and tearing the rest down.
+const (
+	// GovernorKeepWarm is the default number of non-visible clusters kept warm
+	// (Background) when not under memory pressure. Beyond it, clusters go Cold.
+	GovernorKeepWarm = 2
+
+	// GovernorHeapBudgetBytes is the default HeapInuse budget. When the process
+	// exceeds it, the warm set collapses to 0 so non-visible clusters are torn
+	// down to reclaim heap. A value of 0 disables pressure-driven demotion.
+	GovernorHeapBudgetBytes = 1 << 30 // 1 GiB
+
+	// GovernorPressureInterval is how often the governor samples heap usage to
+	// update its memory-pressure signal.
+	GovernorPressureInterval = 10 * time.Second
 )
 
 // Metrics collection settings.

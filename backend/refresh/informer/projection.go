@@ -4,9 +4,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 )
 
-// stripManagedFields is the projection-at-intake transform (Phase 4 of the v2
+// StripManagedFields is the projection-at-intake transform (Phase 4 of the v2
 // architecture, docs/plans/v2-ground-up-architecture.md §3.1): it discards
-// metadata.managedFields before any object lands in an informer cache.
+// metadata.managedFields before any object lands in an informer cache. Exported so
+// every ingestion path — the core/apiext factories here, plus the Gateway-API
+// factory and the catalog's dynamic-CRD informers — can install the same transform.
 //
 // managedFields is server-side-apply bookkeeping — 30-50% of a Pod's bytes — that
 // the table / catalog / maintained-store paths never read (verified: no
@@ -21,7 +23,7 @@ import (
 // cache.DeletedFinalStateUnknown tombstones before invoking the transform; the
 // meta.Accessor guard makes any non-accessor input a no-op rather than an error
 // (a transform that errors would drop the object from the cache).
-func stripManagedFields(obj interface{}) (interface{}, error) {
+func StripManagedFields(obj interface{}) (interface{}, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		return obj, nil

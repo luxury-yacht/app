@@ -64,6 +64,40 @@ func TestStartSettlesWhenInformerCanNeverSync(t *testing.T) {
 	}
 }
 
+func TestStartDegradesInformerThatNeverSyncsByDeadline(t *testing.T) {
+	factory := newStartedFactory(t)
+	// A short deadline so the test does not wait on the production default.
+	factory.syncDeadline = 100 * time.Millisecond
+
+	// A transient failure never goes terminal, so without the deadline it would
+	// block readiness forever (mirrors a WatchList stream whose terminal bookmark
+	// is stripped — the reflector never reports HasSynced).
+	hung := brokenInformer(errors.New("connection refused"))
+	factory.registerInformer("gateway.networking.k8s.io", "tlsroutes", hung)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go hung.Run(ctx.Done())
+
+	if err := factory.Start(ctx); err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("Start only returned because the test context expired — the hung informer was not degraded")
+	}
+	if !factory.HasSynced(context.Background()) {
+		t.Fatalf("expected the factory to reach readiness once the hung informer is degraded")
+	}
+	if !factory.ResourcesSettled([]string{"core/pods"}) {
+		t.Fatalf("expected unrelated resources to be settled")
+	}
+	// The hung resource itself is reported settled (degraded counts as settled so
+	// it stops gating readiness).
+	if !factory.ResourcesSettled([]string{"gateway.networking.k8s.io/tlsroutes"}) {
+		t.Fatalf("expected the degraded resource to be reported settled so it no longer blocks readiness")
+	}
+}
+
 func TestStartKeepsBlockingOnTransientFailures(t *testing.T) {
 	factory := newStartedFactory(t)
 

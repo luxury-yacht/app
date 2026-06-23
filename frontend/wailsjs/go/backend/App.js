@@ -582,6 +582,10 @@ export function SetUseShortResourceNames(arg1) {
   return window['go']['backend']['App']['SetUseShortResourceNames'](arg1);
 }
 
+export function SetVisibleCluster(arg1) {
+  return window['go']['backend']['App']['SetVisibleCluster'](arg1);
+}
+
 export function SetZoomLevel(arg1) {
   return window['go']['backend']['App']['SetZoomLevel'](arg1);
 }

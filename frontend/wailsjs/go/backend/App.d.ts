@@ -333,6 +333,8 @@ export function SetSidebarVisible(arg1:boolean):Promise<void>;
 
 export function SetUseShortResourceNames(arg1:boolean):Promise<void>;
 
+export function SetVisibleCluster(arg1:string):Promise<void>;
+
 export function SetZoomLevel(arg1:number):Promise<void>;
 
 export function ShowAbout():Promise<void>;

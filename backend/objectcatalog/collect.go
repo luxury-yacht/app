@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -314,6 +315,11 @@ func (s *Service) maybePromote(ctx context.Context, desc resourceDescriptor, ite
 		nil,
 	)
 	informer := genericInformer.Informer()
+	// Projection-at-intake for dynamically-promoted custom resources: strip
+	// managedFields before they enter this informer's cache, same as the static
+	// factory informers. SetTransform only errors on an already-started informer;
+	// this one is freshly created here, so the error is unreachable.
+	_ = informer.SetTransform(informerpkg.StripManagedFields)
 	stopCh := make(chan struct{})
 	promoted := &promotedDescriptor{informer: informer, stopCh: stopCh}
 

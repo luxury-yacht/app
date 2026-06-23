@@ -15,7 +15,7 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import { SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
+import { SetSelectedKubeconfigs, SetVisibleCluster } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
@@ -224,6 +224,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     (meta: { id: string; name: string }, clusterIds: string[]) => {
       // Foreground view-specific domains only refresh for the active cluster.
       const foregroundClusterIds = meta.id ? [meta.id] : [];
+      // Tell the backend resource governor which cluster is now visible so it can
+      // keep that cluster (plus a small warm set) running fully and cool the rest
+      // to bound RAM. Fire-and-forget: tiering is best-effort orchestration.
+      if (meta.id) {
+        void SetVisibleCluster(meta.id).catch(() => {
+          // Governor signalling is non-critical; ignore transient binding errors.
+        });
+      }
       refreshOrchestrator.updateContext({
         selectedClusterId: meta.id || undefined,
         selectedClusterName: meta.name || undefined,

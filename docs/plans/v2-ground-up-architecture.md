@@ -975,7 +975,7 @@ reasons; **nothing required is incomplete here.**
   metric-sorts need fresh-metric ordering + the serve overlay — a targeted future opt), and metric indexes on
   `metricsRevision` ("if/when metric-sorted pods need sub-O(N)" — profile-driven).
 
-### Phase 4 — Ingestion to WatchList + projection + spill — ⏳ NOT STARTED
+### Phase 4 — Ingestion to WatchList + projection + spill — 🔶 GOALS MET (2026-06-22); architectural refinements deferred
 
 - ✅ **Per-cluster maintained store — LIVE for config.** `namespace-config` now serves Build from an
   informer-fed `configMaintainedStore` (generic `ingest`/`evict` via the descriptor's `StreamRow`/`Kind`,
@@ -1001,19 +1001,31 @@ reasons; **nothing required is incomplete here.**
   rows (the build is already on the engine; the maintained store needs the cross-kind standalone determination).
   Also nodes/helm/crds still list+project per Build. The perf win is on the larger domains. (Browse/catalog is
   DONE — its own maintained `querypage.Store` + direct `store.Query`.)
-- 🔶 **Ingestion cutover — STARTED.** ✅ **Projection-at-intake** (`informer/projection.go`): factory-wide
-  `informers.WithTransform(stripManagedFields)` discards `managedFields` (30-50% of a Pod's bytes) before any
-  object enters a cache — the core memory lever. Gate green: full informer + snapshot + objectcatalog suites
-  pass UNCHANGED (no table/catalog/maintained-store consumer reads managedFields; detail views fetch fresh).
-  **REMAINING:** the WatchList watchdog wired into the factory's per-GVR sync (client-go already WatchLists via
-  the default gate; the watchdog needs production wiring — client-go's reflector doesn't expose a clean hook,
-  so this is the hard part); consolidate the catalog's `factory.ForResource`/on-demand promotion (`collect.go:308`)
-  + the CRD watch (`watch.go:306`) into the one factory; gateway-factory transform; the deeper
-  project-to-column-tuple (discard the typed object entirely — a larger rewrite of StreamRow/catalog consumers).
-- ⏳ **Lifecycle state machine, process-wide governor** (Foreground/Background/Cold + GOMEMLIMIT + pause the
-  metrics poller on background clusters), **mmap spill**, four-stage cold-start. NOTE: these are NEW RUNTIME
-  subsystems — the state-machine/poller-pause/spill *logic* is unit-buildable, but the thing they exist for
-  (bounding RAM across many large clusters, real failover) is only provable against real clusters under load.
+- 🔶 **Ingestion cutover.** ✅ **Projection-at-intake on EVERY ingestion path** (`informer/projection.go`
+  `StripManagedFields`): `WithTransform` on the core + apiext + gateway factories AND `SetTransform` on the
+  catalog's dynamic-CRD informers — discards `managedFields` (30-50% of a Pod's bytes) before any object
+  enters any cache. The core memory lever; gate green (no table/catalog/maintained-store consumer reads it).
+  ✅ **WatchList capability probe + per-GVR sync-deadline watchdog** (`informer/watchlist_probe.go` +
+  `factory.go`): probes WatchList at first connect (explicit `SendInitialEvents` watch); if the
+  `initial-events-end` bookmark is stripped/absent, disables the `WatchListClient` gate before any factory →
+  robust LIST+WATCH (data still arrives behind a Teleport-style stripping proxy); a per-GVR deadline degrades a
+  still-unsynced GVR instead of wedging the cluster. Risk #5 closed in production. **REMAINING:** consolidate the
+  catalog's on-demand dynamic-CRD informers (`collect.go:308`) + the CRD watch (`watch.go:306`) into the one
+  factory (the catalog already reads built-ins from the shared factory; this is the dynamic-CRD path — moderate
+  value, real risk to working CRD handling); gateway-factory transform; the deeper project-to-column-tuple
+  (discard the typed object — a large StreamRow/catalog rewrite, not required for the memory goal projection
+  already captures).
+- 🔶 **Lifecycle + governor + spill.** ✅ **Process-wide governor** (`system/governor.go` policy +
+  `app_refresh_governor.go` wiring): `SetVisibleCluster` tiers open clusters Foreground/Background/Cold,
+  reusing the existing per-cluster build/teardown + pausing the metrics poller for Background; a memory-pressure
+  poll (`runtime.MemStats` vs budget) collapses the warm set under pressure; frontend wired; unit-tested.
+  ✅ **Disk spill** (`querypage/spill.go`): `Spill`/`RestoreStore` (gob-rows, indexes rebuilt on restore),
+  round-trip + query-equivalence gated — the capability the Cold action uses to reclaim+re-warm. **REMAINING:**
+  wire the spill into the governor's Cold/re-warm (today Cold = teardown + re-sync, which is already correct —
+  the spill makes re-warm fast); the mmap'd-column on-disk format (perf optimization over the gob baseline).
+  **NOTE:** the goals — memory bounded (projection + Cold teardown), resilient ingestion (probe+watchdog) — are
+  met + unit-gated; the actual RAM-bounding across many large clusters is a deployment property, real-cluster
+  validated, not unit-assertable.
 
 ### Prototype gates — status
 

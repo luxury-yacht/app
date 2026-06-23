@@ -62,7 +62,18 @@ func (a *App) setupRefreshSubsystem() error {
 	}
 	a.refreshAggregates = aggregates
 
-	return a.startRefreshHTTPServer(mux, subsystems)
+	if err := a.startRefreshHTTPServer(mux, subsystems); err != nil {
+		return err
+	}
+
+	// The subsystems above are all started Foreground. Settle them to the
+	// governor's tiers (visible Foreground, warm set Background with metrics
+	// paused, the rest Cold) and start the memory-pressure loop, which stops
+	// when the refresh context is cancelled.
+	a.seedGovernorFromOpenClusters()
+	go a.startGovernorPressureLoop(ctx)
+
+	return nil
 }
 
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.

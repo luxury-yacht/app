@@ -41,6 +41,13 @@ type Factory struct {
 	synced   bool
 	syncedMu sync.RWMutex
 
+	// syncDeadline bounds how long a single informer may take to sync after Start
+	// before it is marked degraded and excluded from the readiness gate. startedAt
+	// records when Start began so the deadline is measured from a single moment.
+	syncDeadline time.Duration
+	startedAt    time.Time
+	startedAtMu  sync.RWMutex
+
 	syncStates   []*informerSyncState
 	shutdown     bool
 	syncStatesMu sync.Mutex
@@ -56,13 +63,18 @@ type Factory struct {
 
 // informerSyncState tracks one informer's progress toward its initial sync.
 // terminal flips when the watch fails with an error that can never succeed,
-// so the informer stops blocking the sync gates. key is the canonical
-// resource identity (permissions.ResourceKey format) used for per-resource
-// readiness checks.
+// so the informer stops blocking the sync gates. degraded flips when the
+// informer has neither synced nor gone terminal within the sync deadline —
+// for example a WatchList stream whose terminal bookmark was stripped, which
+// never reports HasSynced. A degraded informer is excluded from the readiness
+// gates and logged once, while it keeps retrying in the background. key is the
+// canonical resource identity (permissions.ResourceKey format) used for
+// per-resource readiness checks.
 type informerSyncState struct {
 	key       string
 	hasSynced cache.InformerSynced
 	terminal  atomic.Bool
+	degraded  atomic.Bool
 }
 
 const podNodeIndexName = "pods:node"
@@ -121,11 +133,12 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 		resync = config.RefreshResyncInterval
 	}
 	// Projection-at-intake: strip managedFields before any object enters the cache.
-	kubeFactory := informers.NewSharedInformerFactoryWithOptions(client, resync, informers.WithTransform(stripManagedFields))
+	kubeFactory := informers.NewSharedInformerFactoryWithOptions(client, resync, informers.WithTransform(StripManagedFields))
 	result := &Factory{
 		kubeClient:         client,
 		resync:             resync,
 		factory:            kubeFactory,
+		syncDeadline:       config.RefreshInformerSyncDeadline,
 		permissionAllowed:  make(map[string]struct{}),
 		runtimePermissions: checker,
 	}
@@ -189,7 +202,7 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	result.registerInformer("", "events", kubeFactory.Core().V1().Events().Informer())
 
 	if apiextClient != nil {
-		result.apiextFactory = apiextinformers.NewSharedInformerFactoryWithOptions(apiextClient, resync, apiextinformers.WithTransform(stripManagedFields))
+		result.apiextFactory = apiextinformers.NewSharedInformerFactoryWithOptions(apiextClient, resync, apiextinformers.WithTransform(StripManagedFields))
 		result.registerClusterInformer("apiextensions.k8s.io", "customresourcedefinitions", func() cache.SharedIndexInformer {
 			return result.apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
 		})
@@ -241,6 +254,9 @@ func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFact
 func (f *Factory) Start(ctx context.Context) error {
 	var startErr error
 	f.once.Do(func() {
+		f.startedAtMu.Lock()
+		f.startedAt = time.Now()
+		f.startedAtMu.Unlock()
 		go f.factory.Start(ctx.Done())
 		if f.apiextFactory != nil {
 			go f.apiextFactory.Start(ctx.Done())
@@ -285,14 +301,47 @@ func (f *Factory) cachesSettled() bool {
 	copy(states, f.syncStates)
 	f.syncStatesMu.Unlock()
 	for _, state := range states {
-		if state.terminal.Load() {
-			continue
-		}
-		if !state.hasSynced() {
+		if !f.stateSettled(state) {
 			return false
 		}
 	}
 	return true
+}
+
+// stateSettled reports whether one informer has stopped gating readiness: it has
+// synced, terminally failed, or been marked degraded. An informer that has done
+// none of these but has exceeded the sync deadline is flipped to degraded here
+// (logged once) so a single hung GVR — for example a WatchList stream whose
+// terminal bookmark was stripped — degrades rather than wedging the whole
+// cluster's readiness.
+func (f *Factory) stateSettled(state *informerSyncState) bool {
+	if state.terminal.Load() || state.degraded.Load() {
+		return true
+	}
+	if state.hasSynced() {
+		return true
+	}
+	if f.syncDeadlineExceeded() && state.degraded.CompareAndSwap(false, true) {
+		klog.Warningf("informer for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", state.key)
+		return true
+	}
+	return false
+}
+
+// syncDeadlineExceeded reports whether the per-informer sync deadline has passed
+// since Start began. It is false before Start (zero startedAt) or when no
+// deadline is configured, so the deadline never fires in those cases.
+func (f *Factory) syncDeadlineExceeded() bool {
+	if f.syncDeadline <= 0 {
+		return false
+	}
+	f.startedAtMu.RLock()
+	startedAt := f.startedAt
+	f.startedAtMu.RUnlock()
+	if startedAt.IsZero() {
+		return false
+	}
+	return time.Since(startedAt) > f.syncDeadline
 }
 
 // isTerminalWatchError reports whether a reflector failure can never succeed:
@@ -358,10 +407,7 @@ func (f *Factory) ResourcesSettled(keys []string) bool {
 		if _, ok := wanted[state.key]; !ok {
 			continue
 		}
-		if state.terminal.Load() {
-			continue
-		}
-		if !state.hasSynced() {
+		if !f.stateSettled(state) {
 			return false
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -354,7 +355,7 @@ func (a *App) buildClusterClientsWithManager(
 			return nil, fmt.Errorf("failed to create gateway api clientset: %w", err)
 		}
 		gatewayClient = gatewayClientset
-		gatewayInformerFactory = gatewayinformers.NewSharedInformerFactory(gatewayClientset, appconfig.RefreshResyncInterval)
+		gatewayInformerFactory = gatewayinformers.NewSharedInformerFactoryWithOptions(gatewayClientset, appconfig.RefreshResyncInterval, gatewayinformers.WithTransform(informerpkg.StripManagedFields))
 	}
 
 	// Configure the recovery test to rebuild credentials from kubeconfig.

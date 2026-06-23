@@ -50,6 +50,17 @@ type App struct {
 	refreshAggregates            *refreshAggregateHandlers
 	refreshPermissionCancels     map[string]context.CancelFunc
 
+	// governor holds the process-wide resource governor state: which open
+	// clusters run Foreground/Background/Cold so RAM stays bounded when many
+	// clusters are open. All fields are guarded by governorMu.
+	governorMu       sync.Mutex
+	governorPolicy   system.GovernorPolicy
+	governorMRU      []string                       // open cluster IDs, most-recently-visible first
+	governorVisible  string                         // the cluster the user is currently viewing
+	governorApplied  map[string]system.ResourceTier // last-applied tier per cluster
+	governorPressure bool                           // memory-pressure signal (HeapInuse over budget)
+	governorBudget   uint64                         // HeapInuse byte budget; 0 disables pressure demotion
+
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry
 
@@ -151,6 +162,7 @@ func NewApp() *App {
 	app.listenLoopback = defaultLoopbackListener
 	app.setupEnvironment()
 	app.initAuthManager()
+	app.initGovernor()
 	return app
 }
 
