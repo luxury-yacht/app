@@ -36,7 +36,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
-	podres "github.com/luxury-yacht/app/backend/resources/pods"
 )
 
 const (
@@ -563,61 +562,47 @@ func buildClusterOverviewSnapshot(
 			continue
 		}
 		overview.TotalPods++
+		// resourceVersionOrTimestamp reads object metadata (ResourceVersion /
+		// CreationTimestamp) for the snapshot version watermark — it is not part
+		// of the per-pod aggregation, so it stays a direct read.
 		if v := resourceVersionOrTimestamp(pod); v > version {
 			version = v
 		}
 
-		switch pod.Status.Phase {
-		case corev1.PodRunning:
+		// This loop reads phase/containers/status/restarts; WorkloadKind (the only
+		// RS-lister-resolved field) is consumed by buildWorkloadResourceUsage, not here.
+		agg := projectPodAggregate(pod, nil)
+
+		switch agg.Phase {
+		case string(corev1.PodRunning):
 			overview.RunningPods++
-		case corev1.PodSucceeded:
+		case string(corev1.PodSucceeded):
 			overview.SucceededPods++
-		case corev1.PodPending:
+		case string(corev1.PodPending):
 			overview.PendingPods++
-		case corev1.PodFailed:
+		case string(corev1.PodFailed):
 			overview.FailedPods++
 		}
 
-		overview.TotalContainers += len(pod.Spec.Containers)
-		overview.TotalInitContainers += len(pod.Spec.InitContainers)
+		overview.TotalContainers += agg.ContainerCount
+		overview.TotalInitContainers += agg.InitContainerCount
 
-		model := podres.BuildResourceModel("", pod)
-		countPodStatusPresentation(&overview, model.Status.Presentation)
-		if podCountsAsNotReadySignal(pod, podres.BuildFacts(pod)) {
+		countPodStatusPresentation(&overview, agg.StatusPresentation)
+		// Not-ready signal: an unfinished pod (not Succeeded) whose containers are
+		// not all ready. Mirrors the prior podCountsAsNotReadySignal check.
+		if agg.Phase != string(corev1.PodSucceeded) && agg.TotalContainers > 0 && agg.ReadyContainers < agg.TotalContainers {
 			overview.NotReadyPods++
 		}
-		hasRestarts := podHasRestarts(pod)
 
-		for _, container := range pod.Spec.Containers {
-			if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-				cpuRequestsMilli += cpu.MilliValue()
-			}
-			if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-				cpuLimitsMilli += cpu.MilliValue()
-			}
-			if mem := container.Resources.Requests.Memory(); mem != nil {
-				memRequestsBytes += mem.Value()
-			}
-			if mem := container.Resources.Limits.Memory(); mem != nil {
-				memLimitsBytes += mem.Value()
-			}
-		}
-		for _, container := range pod.Spec.InitContainers {
-			if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-				cpuRequestsMilli += cpu.MilliValue()
-			}
-			if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-				cpuLimitsMilli += cpu.MilliValue()
-			}
-			if mem := container.Resources.Requests.Memory(); mem != nil {
-				memRequestsBytes += mem.Value()
-			}
-			if mem := container.Resources.Limits.Memory(); mem != nil {
-				memLimitsBytes += mem.Value()
-			}
-		}
+		// Overview totals add regular + init container resources together.
+		cpuRequestsMilli += agg.CPURequestMilli + agg.InitCPURequestMilli
+		cpuLimitsMilli += agg.CPULimitMilli + agg.InitCPULimitMilli
+		memRequestsBytes += agg.MemRequestBytes + agg.InitMemRequestBytes
+		memLimitsBytes += agg.MemLimitBytes + agg.InitMemLimitBytes
 
-		if hasRestarts {
+		// hasRestarts previously checked container + init + EPHEMERAL restart
+		// statuses; RestartCountFacts sums exactly those three, so >0 is equivalent.
+		if agg.RestartCountFacts > 0 {
 			overview.RestartedPods++
 		}
 	}
@@ -889,32 +874,6 @@ func countPodStatusPresentation(overview *ClusterOverviewPayload, presentation s
 	case "terminating":
 		overview.TerminatingPods++
 	}
-}
-
-func podCountsAsNotReadySignal(pod *corev1.Pod, facts podres.Facts) bool {
-	if pod == nil || pod.Status.Phase == corev1.PodSucceeded {
-		return false
-	}
-	return facts.TotalContainers > 0 && facts.ReadyContainers < facts.TotalContainers
-}
-
-func podHasRestarts(pod *corev1.Pod) bool {
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.RestartCount > 0 {
-			return true
-		}
-	}
-	for _, status := range pod.Status.InitContainerStatuses {
-		if status.RestartCount > 0 {
-			return true
-		}
-	}
-	for _, status := range pod.Status.EphemeralContainerStatuses {
-		if status.RestartCount > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func clusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[string]string) string {

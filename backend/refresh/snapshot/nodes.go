@@ -226,8 +226,11 @@ func buildNodeSnapshotFromUsage(
 		if pod == nil {
 			continue
 		}
-		if pod.Spec.NodeName != "" {
-			podsByNode[pod.Spec.NodeName] = append(podsByNode[pod.Spec.NodeName], pod)
+		// Node assignment is read through the projector so the per-node grouping
+		// shares the single typed-pod read path with the resource aggregation. The
+		// nodes domain never reads WorkloadKind, so the RS lister is not needed here.
+		if nodeName := projectPodAggregate(pod, nil).NodeName; nodeName != "" {
+			podsByNode[nodeName] = append(podsByNode[nodeName], pod)
 		}
 	}
 
@@ -484,42 +487,15 @@ func aggregatePodResources(pods []*corev1.Pod) (cpuReq, cpuLim, memReq, memLim i
 		if pod == nil {
 			continue
 		}
-		// Account for standard containers
-		for _, container := range pod.Spec.Containers {
-			if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-				cpuReq += cpu.MilliValue()
-			}
-			if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-				cpuLim += cpu.MilliValue()
-			}
-			if mem := container.Resources.Requests.Memory(); mem != nil {
-				memReq += mem.Value()
-			}
-			if mem := container.Resources.Limits.Memory(); mem != nil {
-				memLim += mem.Value()
-			}
-		}
-		// Include init containers which may reserve resources
-		for _, container := range pod.Spec.InitContainers {
-			if cpu := container.Resources.Requests.Cpu(); cpu != nil {
-				cpuReq += cpu.MilliValue()
-			}
-			if cpu := container.Resources.Limits.Cpu(); cpu != nil {
-				cpuLim += cpu.MilliValue()
-			}
-			if mem := container.Resources.Requests.Memory(); mem != nil {
-				memReq += mem.Value()
-			}
-			if mem := container.Resources.Limits.Memory(); mem != nil {
-				memLim += mem.Value()
-			}
-		}
-		for _, status := range pod.Status.ContainerStatuses {
-			restarts += status.RestartCount
-		}
-		for _, status := range pod.Status.InitContainerStatuses {
-			restarts += status.RestartCount
-		}
+		agg := projectPodAggregate(pod, nil)
+		// Node capacity accounting sums regular AND init container reservations.
+		cpuReq += agg.CPURequestMilli + agg.InitCPURequestMilli
+		cpuLim += agg.CPULimitMilli + agg.InitCPULimitMilli
+		memReq += agg.MemRequestBytes + agg.InitMemRequestBytes
+		memLim += agg.MemLimitBytes + agg.InitMemLimitBytes
+		// Node restart total counts container + init statuses only (no ephemeral),
+		// which RestartCountContainersInit carries.
+		restarts += agg.RestartCountContainersInit
 	}
 	return
 }

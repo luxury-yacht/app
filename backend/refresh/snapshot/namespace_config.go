@@ -72,7 +72,10 @@ func RegisterNamespaceConfigDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName)
+	// namespace-config has no IngestOwned kinds (ConfigMap/Secret are CustomStreamHandler,
+	// not cut), so the ingest manager is nil here — the cut-kind availability branch is
+	// never taken.
+	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName, nil)
 
 	// Maintain a per-cluster store fed by each available config kind's informer.
 	maintained := newTypedMaintainedStore(clusterMeta, configQuerypageSchema(), configTableQueryAdapter())

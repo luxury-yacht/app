@@ -72,7 +72,10 @@ func RegisterNamespaceAutoscalingDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName)
+	// namespace-autoscaling has no IngestOwned kinds (HPA is CustomStreamHandler, not
+	// cut), so the ingest manager is nil here — the cut-kind availability branch is never
+	// taken.
+	collectIndexer := unconditionalSharedIndexers(factory, namespaceAutoscalingDomainName, nil)
 
 	// Maintain a per-cluster store fed by each available autoscaling kind's informer.
 	maintained := newTypedMaintainedStore(clusterMeta, autoscalingQuerypageSchema(), autoscalingTableQueryAdapter())

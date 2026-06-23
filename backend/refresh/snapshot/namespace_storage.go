@@ -80,7 +80,7 @@ func RegisterNamespaceStorageDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := unconditionalSharedIndexers(factory, namespaceStorageDomainName)
+	collectIndexer := unconditionalSharedIndexers(factory, namespaceStorageDomainName, ingestManager)
 
 	// Maintain a per-cluster store fed by each available storage kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.

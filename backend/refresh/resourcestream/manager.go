@@ -40,6 +40,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
@@ -198,7 +199,10 @@ type Manager struct {
 	sequences   map[string]uint64
 }
 
-// NewManager wires informer handlers into a resource stream manager.
+// NewManager wires informer handlers into a resource stream manager. ingestManager,
+// when non-nil, is the owned-reflector source for the IngestOwned (cut) kinds: their
+// notify-only change signal is driven from its Catalog-half Sink instead of a typed
+// shared informer (see registerIngestNotifyStreams), so the factory never caches them.
 func NewManager(
 	factory *informer.Factory,
 	provider metrics.Provider,
@@ -206,6 +210,7 @@ func NewManager(
 	recorder *telemetry.Recorder,
 	meta snapshot.ClusterMeta,
 	dynamicClient dynamic.Interface,
+	ingestManager *ingest.IngestManager,
 ) *Manager {
 	if logger == nil {
 		logger = applog.Noop
@@ -239,6 +244,10 @@ func NewManager(
 	mgr.registerAutoscalingStreams(factory)
 	mgr.registerNodeStreams(factory)
 	mgr.registerWorkloadStreams(factory)
+
+	// IngestOwned kinds have no typed informer in the factory; their notify-only
+	// change signal comes from the ingest reflector's Catalog-half Sink instead.
+	mgr.registerIngestNotifyStreams(ingestManager)
 
 	mgr.initCustomResourceInformers(factory)
 

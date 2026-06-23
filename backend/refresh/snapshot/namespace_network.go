@@ -101,7 +101,10 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceNetworkBuilder{
-		collectIndexer: factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName),
+		// namespace-network has no IngestOwned kinds (Service/Ingress/EndpointSlice/etc.
+		// are uncut), so the ingest manager is nil here — the cut-kind availability branch
+		// is never taken.
+		collectIndexer: factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, nil),
 	}
 	if allowed.Allows("", "services") {
 		builder.serviceLister = factory.Core().V1().Services().Lister()

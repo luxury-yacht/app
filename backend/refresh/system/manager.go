@@ -261,6 +261,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	eventManager, resourceManager, err := registerStreamHandlers(mux, streamDeps{
 		informerFactory: informerFactory,
+		ingestManager:   ingestManager,
 		snapshotService: snapshotService,
 		metricsProvider: metricsProvider,
 		cfg:             cfg,

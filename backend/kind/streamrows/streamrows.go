@@ -44,6 +44,69 @@ func (m ClusterMeta) Validate() error {
 	return nil
 }
 
+// PodAggregate is a projected per-pod aggregation row: the small set of scalar
+// aggregates the cluster-overview, namespace-workloads, and node domains compute
+// from a typed Pod, reduced once so those domains never touch raw Pod spec/status
+// arrays. It carries AGGREGATES (counts/sums/scalars), never raw container or
+// status arrays. The projector that fills it from a *corev1.Pod lives in the
+// snapshot package (snapshot.projectPodAggregate); keeping the type in this leaf
+// lets a later ingest step feed these rows without importing snapshot.
+//
+// Regular-container and init-container resource sums are kept SEPARATE because
+// the consumers differ: overview and nodes add regular+init together, while
+// namespace-workloads sums regular containers only. Likewise two restart totals
+// are carried: RestartCountFacts mirrors pods.BuildFacts (container + init +
+// ephemeral statuses) used by workloads/overview, and RestartCountContainersInit
+// mirrors the node/overview-hasRestarts sum (container + init statuses only).
+type PodAggregate struct {
+	Namespace string
+	Name      string
+	NodeName  string
+	Phase     string
+
+	ContainerCount     int
+	InitContainerCount int
+
+	// Regular-container resource sums (cpu in milli, memory in bytes).
+	CPURequestMilli int64
+	CPULimitMilli   int64
+	MemRequestBytes int64
+	MemLimitBytes   int64
+
+	// Init-container resource sums, kept separate from the regular sums above.
+	InitCPURequestMilli int64
+	InitCPULimitMilli   int64
+	InitMemRequestBytes int64
+	InitMemLimitBytes   int64
+
+	// Readiness facts (pods.BuildFacts): ready/total container counts.
+	ReadyContainers int32
+	TotalContainers int32
+
+	// RestartCountFacts mirrors pods.BuildFacts (container + init + ephemeral).
+	RestartCountFacts int32
+	// RestartCountContainersInit sums container + init restart statuses only.
+	RestartCountContainersInit int32
+
+	// StatusPresentation is the resource-model status presentation string
+	// (e.g. "ready"/"warning"/"error"/"terminating"), derived once from the Pod.
+	StatusPresentation string
+
+	// OwnerKey is the namespace-workloads owner grouping key with the
+	// ReplicaSet->Deployment string-suffix collapse applied; empty when the pod
+	// has no controlling owner.
+	OwnerKey string
+
+	// WorkloadKind is the cluster-overview metrics-bucketing workload kind for
+	// this pod: the controlling owner's kind (Deployment/DaemonSet/StatefulSet/
+	// Job), with a ReplicaSet owner resolved to Deployment via the ACTUAL
+	// ReplicaSet's owner reference (not the string-suffix collapse OwnerKey uses).
+	// Empty when the pod has no controlling owner, the owner is an unbucketed
+	// kind, or a ReplicaSet owner could not be resolved to a Deployment. This is
+	// the field cluster-overview's buildWorkloadResourceUsage buckets metrics by.
+	WorkloadKind string
+}
+
 // ConfigSummary describes a ConfigMap or Secret row (the namespace-config domain).
 type ConfigSummary struct {
 	ClusterMeta

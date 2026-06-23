@@ -87,7 +87,7 @@ func RegisterNamespaceQuotasDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName)
+	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName, ingestManager)
 
 	// Maintain a per-cluster store fed by each available quota kind's source. Every
 	// quota kind is ingest-owned, so the ingest Sink feeds them all and

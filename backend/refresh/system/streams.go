@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -17,6 +18,7 @@ import (
 // streamDeps bundles dependencies required to wire refresh stream handlers.
 type streamDeps struct {
 	informerFactory *informer.Factory
+	ingestManager   *ingest.IngestManager
 	snapshotService refresh.SnapshotService
 	metricsProvider metrics.Provider
 	cfg             Config
@@ -57,6 +59,7 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.telemetry,
 		deps.clusterMeta,
 		deps.cfg.DynamicClient,
+		deps.ingestManager,
 	)
 	resourceHandler, err := resourcestream.NewHandler(resourceManager, logger, deps.telemetry, deps.clusterMeta)
 	if err != nil {

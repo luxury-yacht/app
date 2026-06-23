@@ -34,6 +34,11 @@ type Bundle struct {
 	Table     interface{}
 	Catalog   interface{}
 	ObjectMap interface{}
+	// Aggregate is an optional fourth half: a small reduced row a kind's bespoke
+	// aggregation consumers read (the pod kind's PodAggregate, consumed by the
+	// cluster-overview/nodes/namespace-workloads domains). It is nil for every kind
+	// except pods, exactly as ObjectMap is nil for kinds with no graph node.
+	Aggregate interface{}
 }
 
 // Sink receives a kind's Table-half row incrementally as the reflector mutates
@@ -204,6 +209,15 @@ func objectMapHalf(projected interface{}) interface{} {
 	return nil
 }
 
+// aggregateHalf returns the Aggregate half of a projected value, or nil when the
+// value is not a Bundle or carries no aggregate projection.
+func aggregateHalf(projected interface{}) interface{} {
+	if b, ok := projected.(Bundle); ok {
+		return b.Aggregate
+	}
+	return nil
+}
+
 // keyOf resolves an object's store key, unwrapping a delete tombstone first so a
 // DeletedFinalStateUnknown keys to the same string its live object did.
 func keyOf(obj interface{}) (string, error) {
@@ -323,6 +337,21 @@ func (s *ProjectingStore) ObjectMapRows() []interface{} {
 	for _, row := range s.rows {
 		if node := objectMapHalf(row); node != nil {
 			out = append(out, node)
+		}
+	}
+	return out
+}
+
+// AggregateRows returns a snapshot slice of the Aggregate half of every stored
+// projection (a kind's bespoke aggregation row — the pod kind's PodAggregate). Rows
+// whose Aggregate half is nil — every kind but pods — are omitted.
+func (s *ProjectingStore) AggregateRows() []interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]interface{}, 0, len(s.rows))
+	for _, row := range s.rows {
+		if agg := aggregateHalf(row); agg != nil {
+			out = append(out, agg)
 		}
 	}
 	return out

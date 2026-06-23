@@ -98,7 +98,7 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName)
+	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName, ingestManager)
 
 	// Maintain a per-cluster store fed by each available config kind's source: the
 	// ingest Sink for the cut kinds (StorageClass/IngressClass/webhooks), the

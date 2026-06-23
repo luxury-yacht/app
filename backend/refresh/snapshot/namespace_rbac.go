@@ -84,7 +84,7 @@ func RegisterNamespaceRBACDomain(
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName)
+	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName, ingestManager)
 
 	// Maintain a per-cluster store fed by each available RBAC kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.

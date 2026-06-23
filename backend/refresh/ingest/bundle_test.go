@@ -227,6 +227,48 @@ func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
 	}
 }
 
+// aggregateRow is the fourth bundle half a test projects: a distinct type so the test
+// proves AggregateRows pulls the Aggregate half, not the Table/Catalog/ObjectMap half.
+type aggregateRow struct {
+	Key string
+}
+
+// TestProjectingStoreAggregateRowsSplitsHalf proves AggregateRows returns only the
+// Aggregate half of every stored bundle, and omits a nil Aggregate half. This is the
+// pod-aggregation consumer's read path: the pod bundle carries a PodAggregate the
+// overview/nodes/workloads domains read alongside the Table-half PodSummary.
+func TestProjectingStoreAggregateRowsSplitsHalf(t *testing.T) {
+	project := func(obj interface{}) (interface{}, error) {
+		cmObj, ok := obj.(*corev1.ConfigMap)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type %T", obj)
+		}
+		return Bundle{
+			Table:     tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
+			Aggregate: aggregateRow{Key: cmObj.Namespace + "/" + cmObj.Name},
+		}, nil
+	}
+	store := NewProjectingStore(project)
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	aggregates := store.AggregateRows()
+	if len(aggregates) != 1 {
+		t.Fatalf("AggregateRows len = %d, want 1", len(aggregates))
+	}
+	if got, ok := aggregates[0].(aggregateRow); !ok || got.Key != "default/a" {
+		t.Fatalf("AggregateRows[0] = %#v, want aggregateRow{default/a}", aggregates[0])
+	}
+	// A table-only projection (no Aggregate half) contributes no aggregate rows.
+	tableOnly := NewProjectingStore(bundleProject(false, true))
+	if err := tableOnly.Add(cm("default", "b")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if got := len(tableOnly.AggregateRows()); got != 0 {
+		t.Fatalf("AggregateRows len = %d, want 0 when aggregate half is nil", got)
+	}
+}
+
 // objectMapRow is the third bundle half a test projects: a distinct type so the test
 // proves ObjectMapRows pulls the ObjectMap half, not the Table or Catalog half.
 type objectMapRow struct {

@@ -234,7 +234,9 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if pod == nil {
 			continue
 		}
-		if ownerKey := ownerKeyForPod(pod); ownerKey != "" {
+		// namespace-workloads groups by OwnerKey (string-suffix collapse) and never
+		// reads WorkloadKind, so the RS lister is not needed for this projection.
+		if ownerKey := projectPodAggregate(pod, nil).OwnerKey; ownerKey != "" {
 			podsByOwner[ownerKey] = append(podsByOwner[ownerKey], pod)
 		}
 	}
@@ -312,11 +314,12 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		if pod == nil {
 			continue
 		}
-		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		agg := projectPodAggregate(pod, nil)
+		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
-		if ownerKey := ownerKeyForPod(pod); ownerKey != "" {
-			if _, ok := processedOwners[ownerKey]; ok {
+		if agg.OwnerKey != "" {
+			if _, ok := processedOwners[agg.OwnerKey]; ok {
 				continue
 			}
 		}
@@ -759,32 +762,21 @@ func aggregateWorkloadPodResources(pods []*corev1.Pod, usage map[string]metrics.
 		if pod == nil {
 			continue
 		}
-		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		agg := projectPodAggregate(pod, nil)
+		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
 
-		totals.Restarts += podres.BuildFacts(pod).RestartCount
+		totals.Restarts += agg.RestartCountFacts
 
-		for _, container := range pod.Spec.Containers {
-			if req := container.Resources.Requests; req != nil {
-				if cpu, ok := req[corev1.ResourceCPU]; ok {
-					totals.CPURequestMilli += cpu.MilliValue()
-				}
-				if mem, ok := req[corev1.ResourceMemory]; ok {
-					totals.MemoryRequestBytes += mem.Value()
-				}
-			}
-			if lim := container.Resources.Limits; lim != nil {
-				if cpu, ok := lim[corev1.ResourceCPU]; ok {
-					totals.CPULimitMilli += cpu.MilliValue()
-				}
-				if mem, ok := lim[corev1.ResourceMemory]; ok {
-					totals.MemoryLimitBytes += mem.Value()
-				}
-			}
-		}
+		// Workloads sum REGULAR containers only (init containers excluded), which
+		// the regular-container fields of the aggregate carry.
+		totals.CPURequestMilli += agg.CPURequestMilli
+		totals.MemoryRequestBytes += agg.MemRequestBytes
+		totals.CPULimitMilli += agg.CPULimitMilli
+		totals.MemoryLimitBytes += agg.MemLimitBytes
 
-		key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+		key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
 		if usageSample, ok := usage[key]; ok {
 			totals.CPUUsageMilli += usageSample.CPUUsageMilli
 			totals.MemoryUsageBytes += usageSample.MemoryUsageBytes
@@ -832,8 +824,8 @@ func podReadyStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "0/0"
 	}
-	facts := podres.BuildFacts(pod)
-	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
+	agg := projectPodAggregate(pod, nil)
+	return fmt.Sprintf("%d/%d", agg.ReadyContainers, agg.TotalContainers)
 }
 
 func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int32) string {
@@ -843,12 +835,12 @@ func workloadPodReadyStatus(pods []*corev1.Pod, fallbackReady, fallbackTotal int
 		if pod == nil {
 			continue
 		}
-		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		agg := projectPodAggregate(pod, nil)
+		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
 		totalPods++
-		facts := podres.BuildFacts(pod)
-		if facts.TotalContainers > 0 && facts.ReadyContainers >= facts.TotalContainers {
+		if agg.TotalContainers > 0 && agg.ReadyContainers >= agg.TotalContainers {
 			readyPods++
 		}
 	}

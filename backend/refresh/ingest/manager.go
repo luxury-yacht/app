@@ -133,6 +133,14 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 
 	e := &entry{desc: desc}
 	e.store = NewProjectingStore(projectionFor(m.meta, e))
+	m.installReflector(e, gvr, gvk, restClient, example)
+}
+
+// installReflector wires the ListWatch + reflector for an already-built entry whose
+// store is set, then registers the entry under gvr. It is the shared tail of both the
+// generic descriptor path (addDescriptor) and the bespoke-projector path
+// (RegisterReflector), so the ListWatch/WatchList wiring lives in exactly one place.
+func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, restClient rest.Interface, example apiruntime.Object) {
 	lw := cache.NewListWatchFromClient(restClient, gvr.Resource, metav1.NamespaceAll, fields.Everything())
 	// ToListWatcherWithWatchListSemantics lets the reflector use WatchList when the
 	// client advertises support and fall back to LIST+WATCH otherwise — exactly as
@@ -140,8 +148,38 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 	// its WatchList capability is detected.
 	wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
 	e.reflector = NewProjectingReflector(gvk.String(), wrapped, example, e.store, resyncDisabled)
-
 	m.entries[gvr] = e
+}
+
+// RegisterReflector builds a reflector + projecting store for a kind that is NOT a
+// directly-streamed descriptor (it has no streamspec.Descriptor in the registry), so
+// NewIngestManager's StreamDescriptors loop never adds it. The pod kind uses this: its
+// row projection needs a ReplicaSet lister and produces a four-half Bundle (PodSummary
+// Table + PodAggregate + catalog Summary + object-map node) the generic StreamRow
+// projection cannot express. project is the kind's full bundle projector. It must be
+// called before Start so the reflector is included when reflectors launch. It is a
+// no-op (returns false) when the kind's group has no client, the scheme cannot
+// instantiate its GVK, or an entry for gvr already exists (the generic loop already
+// added it — preventing a double reflector).
+func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ProjectFunc) bool {
+	restClient, ok := m.restClientFor(gvk.Group, gvk.Version)
+	if !ok {
+		klog.V(2).Infof("ingest: no client for %s/%s (kind %s); skipping reflector (logged once)", gvk.Group, gvk.Version, gvk.Kind)
+		return false
+	}
+	example, ok := exampleObjectFor(gvk)
+	if !ok {
+		klog.V(2).Infof("ingest: scheme does not know %s; skipping reflector (logged once)", gvk.String())
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.entries[gvr]; exists {
+		return false
+	}
+	e := &entry{store: NewProjectingStore(project)}
+	m.installReflector(e, gvr, gvk, restClient, example)
+	return true
 }
 
 // projectionFor returns the ProjectFunc for an entry: it asserts the
@@ -406,6 +444,17 @@ func (m *IngestManager) ObjectMapRows(gvr schema.GroupVersionResource) []interfa
 		return nil
 	}
 	return store.ObjectMapRows()
+}
+
+// AggregateRows returns the Aggregate half of every projected row for gvr (a kind's
+// bespoke aggregation rows — the pod kind's PodAggregate), or nil when the manager has
+// no entry for gvr or no aggregate half was projected.
+func (m *IngestManager) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.AggregateRows()
 }
 
 // HasSyncedFor reports whether gvr's store has completed its initial relist, or
