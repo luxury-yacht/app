@@ -135,6 +135,18 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// cut). Registered BEFORE the hub starts so the pod reflector launches with the
 	// rest and the initial relist is sync-gated.
 	registerPodReflector(ingestManager, informerFactory, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+	// The five workload kinds (Deployment/StatefulSet/DaemonSet/Job/CronJob) have no Stream
+	// descriptor either (their table is the bespoke cross-kind WorkloadSummary), so they too
+	// are wired with explicit bespoke projectors. ReplicaSet stays on its typed informer.
+	registerWorkloadReflectors(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+	// Service and EndpointSlice have no Stream descriptor either (a Service row is the bespoke
+	// Service↔EndpointSlice join), so they are wired with explicit bespoke projectors. Ingress
+	// and NetworkPolicy ARE Stream-backed and handled by the generic loop above.
+	registerNetworkReflectors(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+	// Node has no Stream descriptor either (its table is the bespoke NodeSummary whose row
+	// joins per-node pod aggregates + metrics), so it is wired with an explicit bespoke
+	// projector. The nodes domain re-joins pod aggregates + metrics at serve.
+	registerNodeReflector(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
 	informerHub := newIngestInformerHub(informerFactory, ingestManager)
 
 	var permissionIssues []PermissionIssue

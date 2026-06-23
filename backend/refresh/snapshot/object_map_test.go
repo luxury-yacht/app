@@ -136,6 +136,15 @@ func fakeIngestCollectorItems(t *testing.T, collector objectmapnode.Collector, s
 		}
 		return objectmapnode.Objects(pods)
 	}
+	if gvr == NodeGVR {
+		// Node's collector.List intentionally returns nil too (production reads node nodes
+		// from the ingest reflector), so list nodes from the shared factory directly here.
+		nodes, err := shared.Core().V1().Nodes().Lister().List(labels.Everything())
+		if err != nil {
+			t.Fatalf("fake ingest source list nodes: %v", err)
+		}
+		return objectmapnode.Objects(nodes)
+	}
 	items, err := collector.List(shared)
 	if err != nil {
 		t.Fatalf("fake ingest source list %s: %v", gvr, err)

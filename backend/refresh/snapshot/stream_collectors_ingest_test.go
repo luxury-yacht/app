@@ -135,8 +135,15 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 		{clusterRBACDomainName, sharedFactoryIndexers(nil, allowAll(clusterRBACDomainName), clusterRBACDomainName, ingestManager)},
 		{clusterStorageDomainName, unconditionalSharedIndexers(nil, clusterStorageDomainName, ingestManager)},
 		{clusterConfigDomainName, factoryIndexers(nil, nil, allowAll(clusterConfigDomainName), clusterConfigDomainName, ingestManager)},
+		// namespace-network's cut Stream-backed kinds are Ingress and NetworkPolicy (Service/
+		// EndpointSlice are Stream-less bespoke — see TestStreamlessIngestOwnedKindsAreBespoke).
+		{namespaceNetworkDomainName, factoryIndexers(nil, nil, allowAll(namespaceNetworkDomainName), namespaceNetworkDomainName, ingestManager)},
 	}
 
+	// ingestOwnedDescriptorsForDomain loops the domain's STREAM descriptors, so it returns
+	// only the Stream-backed cut kinds (namespace-network's Ingress/NetworkPolicy); the
+	// Stream-LESS bespoke cut kinds (Service/EndpointSlice) have no stream descriptor and are
+	// covered by TestStreamlessIngestOwnedKindsAreBespoke, not this generic gate.
 	totalCut := 0
 	for _, tc := range cases {
 		cut := ingestOwnedDescriptorsForDomain(tc.domain)
@@ -148,10 +155,11 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 		}
 	}
 	// Every IngestOwned kind with a Stream descriptor is covered by these 6 typed-table
-	// domains. Pod is the ONE IngestOwned kind with no Stream descriptor (its table is the
-	// bespoke PodSummary served by the pods domain's own maintained store, not the generic
-	// collectDescriptorTableRows path), so it is covered by its own availability path, not
-	// these gates — see TestPodIngestOwnedHasNoStreamDescriptor.
+	// domains. The Stream-LESS IngestOwned kinds (Pod plus the five workload kinds) carry a
+	// bespoke cross-kind table — PodSummary / WorkloadSummary — served by their own domain's
+	// maintained store, not the generic collectDescriptorTableRows path, so they are covered
+	// by their own availability path, not these gates — see
+	// TestStreamlessIngestOwnedKindsAreBespoke.
 	streamedCut := 0
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
 		if d.Stream != nil {
@@ -162,20 +170,27 @@ func TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer(t *testing.T) {
 		"every Stream-backed IngestOwned kind must be covered by a typed-table domain's ingest-sourced availability gate")
 }
 
-// TestPodIngestOwnedHasNoStreamDescriptor pins the documented exception: pod is the only
-// IngestOwned kind without a Stream descriptor, so it is served by the bespoke pods
-// maintained store rather than the generic typed-table availability gate. This is the
-// reason TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer counts only
-// Stream-backed cut kinds.
-func TestPodIngestOwnedHasNoStreamDescriptor(t *testing.T) {
-	noStream := 0
+// TestStreamlessIngestOwnedKindsAreBespoke pins the documented exception: the IngestOwned
+// kinds WITHOUT a Stream descriptor are Pod, the five workload kinds
+// (Deployment/StatefulSet/DaemonSet/Job/CronJob), and the two network join kinds
+// (Service/EndpointSlice). Each carries a bespoke table — PodSummary / WorkloadSummary, or
+// the Service↔EndpointSlice-joined NetworkSummary — served by its own domain's serve-side
+// re-join rather than the generic typed-table availability gate. This is the reason
+// TestEveryIngestOwnedDomainAvailabilityFromIngestNotInformer counts only Stream-backed cut
+// kinds.
+func TestStreamlessIngestOwnedKindsAreBespoke(t *testing.T) {
+	expected := map[string]struct{}{
+		"Pod": {}, "Deployment": {}, "StatefulSet": {}, "DaemonSet": {}, "Job": {}, "CronJob": {},
+		"Service": {}, "EndpointSlice": {},
+	}
+	got := map[string]struct{}{}
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
 		if d.Stream == nil {
-			noStream++
-			require.Equal(t, "Pod", d.Identity.Kind, "the only Stream-less IngestOwned kind must be Pod")
+			got[d.Identity.Kind] = struct{}{}
 		}
 	}
-	require.Equal(t, 1, noStream, "exactly one IngestOwned kind (Pod) has no Stream descriptor")
+	require.Equal(t, expected, got,
+		"the Stream-less IngestOwned kinds must be exactly Pod and the five workload kinds")
 }
 
 // TestIngestOwnedAvailabilityNilIngestManagerIsUnavailable proves the documented edge:

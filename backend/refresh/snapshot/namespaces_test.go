@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -104,7 +103,9 @@ func TestNamespaceBuilderUsesTrackerWhenKnown(t *testing.T) {
 	tracker := newNamespaceWorkloadTracker()
 	tracker.synced.Store(true)
 
-	tracker.handleAdd(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "alpha", Name: "web"}}, resourceDeployment)
+	// Record a Deployment's presence the way the cut workload kinds' ingest sink
+	// does — namespace + "namespace/name" key resolved from the projected row.
+	tracker.addNamespaceKey(resourceDeployment, "alpha", "alpha/web")
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
@@ -147,12 +148,14 @@ func TestNamespaceBuilderFallsBackWhenTrackerUnknown(t *testing.T) {
 	tracker.MarkUnknown("alpha")
 
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1", CreationTimestamp: metav1.NewTime(time.Unix(0, 0))}}
-	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "alpha", Name: "web"}}
 
 	builder := &NamespaceBuilder{
-		namespaces:  testsupport.NewNamespaceLister(t, ns),
-		deployments: testsupport.NewDeploymentLister(t, deployment),
-		tracker:     tracker,
+		namespaces: testsupport.NewNamespaceLister(t, ns),
+		// One projected Deployment catalog row in "alpha" drives the legacy
+		// workload-presence detection (the ingest replacement for the typed
+		// deployment lister the test used before the workload cut).
+		ingest:  fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "alpha", 1),
+		tracker: tracker,
 	}
 
 	snap, err := builder.Build(context.Background(), "")

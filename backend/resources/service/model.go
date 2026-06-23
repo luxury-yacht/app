@@ -97,6 +97,16 @@ func statusPresentation(svc *corev1.Service, facts Facts) resourcemodel.Resource
 	return resourcemodel.NetworkSourceStatus(state, state, "", "ready", signals, lifecycle)
 }
 
+// ReadyEndpointCount returns the number of ready endpoint addresses across the Service's
+// EndpointSlices, using the SAME aggregation as BuildFacts (endpointsFromSlices). It is the
+// one field of the Service stream row that depends on the EndpointSlice join, so the
+// namespace-network owned-reflector serve-side re-join derives it here rather than
+// reimplementing endpoint-readiness logic.
+func ReadyEndpointCount(slices []*discoveryv1.EndpointSlice) int {
+	_, ready, _ := endpointsFromSlices(slices)
+	return ready
+}
+
 // endpointsFromSlices aggregates ready/not-ready endpoint addresses from the
 // Service's EndpointSlices into "ip:port" strings + ready/not-ready counts.
 func endpointsFromSlices(slices []*discoveryv1.EndpointSlice) (endpoints []string, readyCount, notReadyCount int) {

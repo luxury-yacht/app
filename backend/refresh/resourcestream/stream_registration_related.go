@@ -26,19 +26,29 @@ func (m *Manager) registerPodStreams(factory *informer.Factory, ingestManager *i
 	}
 }
 
-func (m *Manager) registerNodeStreams(factory *informer.Factory) {
-	shared := factory.SharedInformerFactory()
-	if shared == nil {
+// registerNodeStreams wires the node live-stream change signal. Nodes is an owned-reflector
+// ingest kind (IngestOwned): the typed node informer is never instantiated, so the notify-only
+// signal comes from the ingest reflector's Catalog-half Sink (registerNodeIngestNotify) instead
+// of a shared-informer event handler — identical to the pod/workload/network path. When no
+// ingest manager is wired (a unit test), the node stream has no live signal; tests drive
+// handleNode directly with a wired typed lister.
+func (m *Manager) registerNodeStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
+	if factory.SharedInformerFactory() == nil {
 		return
 	}
-	if m.canListWatch("", "nodes") {
-		nodeInformer := shared.Core().V1().Nodes()
-		m.nodeLister = nodeInformer.Lister()
-		m.addResourceEventHandler(nodeInformer.Informer(), (*Manager).handleNode)
-	}
+	m.registerNodeIngestNotify(ingestManager)
 }
 
-func (m *Manager) registerWorkloadStreams(factory *informer.Factory) {
+// registerWorkloadStreams wires the workload kinds' change signal. The five workload kinds
+// (Deployment/StatefulSet/DaemonSet/Job/CronJob) are owned-reflector ingest kinds: the typed
+// informers are never instantiated, so their notify-only signal comes from the ingest
+// reflector's Catalog-half Sink (registerWorkloadIngestNotify) instead of a shared-informer
+// event handler — identical to the pod path. ReplicaSet is NOT cut: its typed informer stays
+// registered, and its event handler keeps re-broadcasting affected pods, because the pod
+// projector + cluster-overview resolve pod owners through the RS lister. When no ingest
+// manager is wired (a unit test), the workload streams have no live signal; tests drive
+// handleWorkload / the HPA paths directly with a wired typed lister.
+func (m *Manager) registerWorkloadStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
 	shared := factory.SharedInformerFactory()
 	if shared == nil {
 		return
@@ -48,29 +58,5 @@ func (m *Manager) registerWorkloadStreams(factory *informer.Factory) {
 		m.rsLister = rsInformer.Lister()
 		m.addRelatedResourceEventHandler(rsInformer.Informer(), (*Manager).handleReplicaSetEvent)
 	}
-	if m.canListWatch("apps", "deployments") {
-		deploymentInformer := shared.Apps().V1().Deployments()
-		m.deploymentLister = deploymentInformer.Lister()
-		m.addResourceEventHandler(deploymentInformer.Informer(), (*Manager).handleWorkload)
-	}
-	if m.canListWatch("apps", "statefulsets") {
-		statefulInformer := shared.Apps().V1().StatefulSets()
-		m.statefulLister = statefulInformer.Lister()
-		m.addResourceEventHandler(statefulInformer.Informer(), (*Manager).handleWorkload)
-	}
-	if m.canListWatch("apps", "daemonsets") {
-		daemonInformer := shared.Apps().V1().DaemonSets()
-		m.daemonLister = daemonInformer.Lister()
-		m.addResourceEventHandler(daemonInformer.Informer(), (*Manager).handleWorkload)
-	}
-	if m.canListWatch("batch", "jobs") {
-		jobInformer := shared.Batch().V1().Jobs()
-		m.jobLister = jobInformer.Lister()
-		m.addResourceEventHandler(jobInformer.Informer(), (*Manager).handleWorkload)
-	}
-	if m.canListWatch("batch", "cronjobs") {
-		cronInformer := shared.Batch().V1().CronJobs()
-		m.cronJobLister = cronInformer.Lister()
-		m.addResourceEventHandler(cronInformer.Informer(), (*Manager).handleWorkload)
-	}
+	m.registerWorkloadIngestNotify(ingestManager)
 }

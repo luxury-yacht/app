@@ -105,8 +105,11 @@ type networkIndexers struct {
 }
 
 // networkCollectIndexer resolves the namespace-network stream descriptors to the
-// supplied test indexers. Service and EndpointSlice are listed via the builder's
-// own listers, not here.
+// supplied test indexers. Service, EndpointSlice, Ingress, and NetworkPolicy are cut to
+// the ingest path: their availability resolves to the shared sentinel indexer (a non-nil
+// empty indexer) when the test supplies one, so the descriptor source gate marks them
+// Available without a typed informer — exactly as factoryIndexers does in production. Their
+// ROWS come from the builder's ingest source, not here.
 func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cache.Indexer {
 	return func(d streamspec.Descriptor) cache.Indexer {
 		switch d.Resource {
@@ -507,11 +510,15 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceNetworkBuilder{
-		serviceLister:       testsupport.NewServiceLister(t, svc),
-		endpointSliceLister: testsupport.NewEndpointSliceLister(t, slice),
+		networkIngest:          newFakeNetworkIngestSource(ClusterMeta{}, svc, slice, ing, policy),
+		includeServices:        true,
+		includeEndpointSlices:  true,
+		includeIngresses:       true,
+		includeNetworkPolicies: true,
+		// Cut kinds resolve availability via the sentinel indexer; rows come from ingest.
 		collectIndexer: networkCollectIndexer(networkIndexers{
-			ingress:       testsupport.NewNamespacedIndexer(t, ing),
-			networkpolicy: testsupport.NewNamespacedIndexer(t, policy),
+			ingress:       ingestAvailabilityIndexer,
+			networkpolicy: ingestAvailabilityIndexer,
 		}),
 	}
 
@@ -526,6 +533,12 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	endpointSliceSummary, ok := findNetworkSummary(payload.Rows, "EndpointSlice", "api-abcde")
 	require.True(t, ok)
 	require.Equal(t, "default", endpointSliceSummary.Namespace)
+	// The Service row's endpoint join is re-applied at serve from the EndpointSlice store:
+	// the single ready endpoint contributes "Addresses: 1" to the Service Details, exactly
+	// as the typed service.BuildStreamSummary(svc, slices) path produced.
+	serviceSummary, ok := findNetworkSummary(payload.Rows, "Service", "api")
+	require.True(t, ok)
+	require.Contains(t, serviceSummary.Details, "Addresses: 1")
 	for _, entry := range payload.Rows {
 		require.NotEmpty(t, entry.Age)
 	}
@@ -605,11 +618,14 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceNetworkBuilder{
-		serviceLister:       testsupport.NewServiceLister(t, svcDefault, svcOther),
-		endpointSliceLister: testsupport.NewEndpointSliceLister(t, sliceDefault, sliceOther),
+		networkIngest:          newFakeNetworkIngestSource(ClusterMeta{}, svcDefault, svcOther, sliceDefault, sliceOther, ingDefault, policyOther),
+		includeServices:        true,
+		includeEndpointSlices:  true,
+		includeIngresses:       true,
+		includeNetworkPolicies: true,
 		collectIndexer: networkCollectIndexer(networkIndexers{
-			ingress:       testsupport.NewNamespacedIndexer(t, ingDefault),
-			networkpolicy: testsupport.NewNamespacedIndexer(t, policyOther),
+			ingress:       ingestAvailabilityIndexer,
+			networkpolicy: ingestAvailabilityIndexer,
 		}),
 	}
 
@@ -1388,14 +1404,15 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pod),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
-		metrics:          provider,
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pod),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		metrics:             provider,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -1437,13 +1454,14 @@ func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, workloadObjects(deployments)...),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
@@ -1494,12 +1512,13 @@ func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
-		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA),
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -1609,14 +1628,15 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, webPod, apiPod),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, webDeployment, apiDeployment),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
-		metrics:          &workloadMetricsProvider{pods: map[string]metrics.PodUsage{}},
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, webPod, apiPod),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, webDeployment, apiDeployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		metrics:             &workloadMetricsProvider{pods: map[string]metrics.PodUsage{}},
 	}
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1715,13 +1735,14 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 	}
 
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, workloadObjects(deployments)...),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
 		metrics: &workloadMetricsProvider{pods: map[string]metrics.PodUsage{
 			"team-a/alpha-pod":   {MemoryUsageBytes: 64 * 1024 * 1024},
 			"team-b/bravo-pod":   {MemoryUsageBytes: 512 * 1024 * 1024},
@@ -1811,14 +1832,15 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 		metadata: metrics.Metadata{CollectedAt: now},
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployments...),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
-		metrics:          provider,
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pods...),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, workloadObjects(deployments)...),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		metrics:             provider,
 	}
 
 	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1")
@@ -1867,13 +1889,14 @@ func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
 		},
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		podIngest:        newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
-		includePods:      true,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t, job),
-		cronJobLister:    testsupport.NewCronJobLister(t),
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment, job),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
 	}
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceWorkloadsDomainName, domainpermissions.AllowedResources{
 		"core/pods":         true,
@@ -1894,6 +1917,17 @@ func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
 	require.Contains(t, payload.Issues[0].Message, "partial")
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "Deployment", payload.Rows[0].Kind)
+}
+
+// workloadObjects converts a typed workload slice to the []metav1.Object the
+// fake workload ingest source's variadic accepts (Go can't spread []*T directly
+// into a ...metav1.Object parameter even though *T implements metav1.Object).
+func workloadObjects[T metav1.Object](items []T) []metav1.Object {
+	out := make([]metav1.Object, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	return out
 }
 
 func mustQuantity(t testing.TB, value string) resource.Quantity {

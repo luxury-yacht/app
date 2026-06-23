@@ -13,7 +13,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
-	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 type fakeMetricsProvider struct {
@@ -159,8 +158,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	}
 
 	builder := &NodeBuilder{
-		lister:           testsupport.NewNodeLister(t, node),
-		ingestAggregates: newFakePodAggregateSource(nil, podA, podB, podOther),
+		ingest: newFakePodAggregateSource(nil, podA, podB, podOther).withNodes(ClusterMeta{}, "42", node),
 		metrics: fakeMetricsProvider{
 			usage: map[string]metrics.NodeUsage{
 				"node-1": {
@@ -266,7 +264,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 // boundary contract hole.
 func TestNodeBuilderRejectsMalformedQueryScope(t *testing.T) {
 	builder := &NodeBuilder{
-		lister:  testsupport.NewNodeLister(t),
+		ingest:  newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, ""),
 		metrics: fakeMetricsProvider{},
 	}
 
@@ -299,7 +297,7 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	}
 
 	builder := &NodeBuilder{
-		lister:  testsupport.NewNodeLister(t, nodes...),
+		ingest:  newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "", nodes...),
 		metrics: fakeMetricsProvider{},
 	}
 

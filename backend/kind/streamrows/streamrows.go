@@ -107,6 +107,20 @@ type PodAggregate struct {
 	WorkloadKind string
 }
 
+// EndpointSliceServiceFact is a projected per-EndpointSlice join fact: the small reduced
+// row the namespace-network domain reads (the bundle Aggregate half) to re-join endpoint
+// counts onto Service rows without the typed EndpointSlice. It carries the owning Service's
+// name (from the kubernetes.io/service-name label) and this slice's ready endpoint-address
+// count, computed by the SAME aggregation service.BuildFacts uses. Summing ReadyEndpointCount
+// across a Service's slices reproduces service.ReadyEndpointCount over all of them, because
+// the per-slice aggregation is independent and additive. ServiceName is empty for an
+// orphan slice (no service-name label), which contributes to no Service row.
+type EndpointSliceServiceFact struct {
+	Namespace          string
+	ServiceName        string
+	ReadyEndpointCount int
+}
+
 // ConfigSummary describes a ConfigMap or Secret row (the namespace-config domain).
 type ConfigSummary struct {
 	ClusterMeta

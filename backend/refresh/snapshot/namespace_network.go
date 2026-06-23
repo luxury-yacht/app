@@ -6,12 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	discoveryv1 "k8s.io/api/discovery/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
@@ -21,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
@@ -40,15 +36,23 @@ const (
 	errNamespaceNetworkScopeRequired = "namespace scope is required"
 )
 
-// NamespaceNetworkBuilder constructs summaries for namespace-scoped network
-// resources. Service and EndpointSlice stay custom because a Service row is
-// projected together with its correlated EndpointSlices (which the per-object
-// descriptor StreamRow cannot carry); every other network kind is descriptor-
-// driven via the stream registry (collectIndexer + collectDescriptorTableRows).
+// NamespaceNetworkBuilder constructs summaries for namespace-scoped network resources.
+// Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds: the
+// shared factory no longer caches the typed objects, so the builder reads each kind's
+// projected NetworkSummary (the Bundle Table half) from the ingest source instead of typed
+// listers. Service rows are OWN-fields (built with nil slices); the serve path re-joins the
+// endpoint count from the projected EndpointSlice store's join facts, byte-identical to the
+// typed path. The Gateway-API kinds are NOT cut and stay descriptor-driven via the stream
+// registry (collectIndexer + collectDescriptorTableRows). The include* flags record whether
+// the request is permitted to read each cut kind (the gate the typed listers' presence used
+// to imply).
 type NamespaceNetworkBuilder struct {
-	serviceLister       corelisters.ServiceLister
-	endpointSliceLister discoverylisters.EndpointSliceLister
-	collectIndexer      func(streamspec.Descriptor) cache.Indexer
+	networkIngest          networkIngestSource
+	includeServices        bool
+	includeEndpointSlices  bool
+	includeIngresses       bool
+	includeNetworkPolicies bool
+	collectIndexer         func(streamspec.Descriptor) cache.Indexer
 }
 
 // NamespaceNetworkSnapshot payload for the network tab.
@@ -78,39 +82,32 @@ func networkQuerypageSchema() querypage.Schema[NetworkSummary] {
 // this alias keeps the snapshot-side name and wire JSON unchanged.
 type NetworkSummary = streamrows.NetworkSummary
 
-// RegisterNamespaceNetworkDomain registers the network domain with the registry.
-func RegisterNamespaceNetworkDomain(
-	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
-	allowed domainpermissions.AllowedResources,
-) error {
-	return RegisterNamespaceNetworkDomainWithGatewayAPI(reg, factory, nil, allowed)
-}
-
 // RegisterNamespaceNetworkDomainWithGatewayAPI registers the network domain,
 // wiring Gateway-API kinds from the Gateway-API factory when it is available.
-// Only indexers/listers for permitted resources are wired; denied resources are
-// skipped so they appear in the source list but are not listed.
+//
+// Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds
+// (IngestOwned): the shared factory no longer caches them, so the builder reads their
+// projected rows from ingestManager. The per-kind include flags gate which cut kinds the
+// request is permitted to read (the gate the typed listers' presence used to imply). The
+// uncut Gateway-API kinds are still indexer-driven via collectIndexer. When ingestManager
+// is nil (a unit test) the cut kinds have no source.
 func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
+	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceNetworkBuilder{
-		// namespace-network has no IngestOwned kinds (Service/Ingress/EndpointSlice/etc.
-		// are uncut), so the ingest manager is nil here — the cut-kind availability branch
-		// is never taken.
-		collectIndexer: factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, nil),
-	}
-	if allowed.Allows("", "services") {
-		builder.serviceLister = factory.Core().V1().Services().Lister()
-	}
-	if allowed.Allows("discovery.k8s.io", "endpointslices") {
-		builder.endpointSliceLister = factory.Discovery().V1().EndpointSlices().Lister()
+		networkIngest:          ingestManager,
+		includeServices:        allowed.Allows("", "services"),
+		includeEndpointSlices:  allowed.Allows("discovery.k8s.io", "endpointslices"),
+		includeIngresses:       allowed.Allows("networking.k8s.io", "ingresses"),
+		includeNetworkPolicies: allowed.Allows("networking.k8s.io", "networkpolicies"),
+		collectIndexer:         factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceNetworkDomainName,
@@ -133,55 +130,65 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	}
 	namespace := parsedScope.Namespace
 
-	// Service and EndpointSlice are listed by hand because a Service row is built
-	// together with its correlated EndpointSlices.
-	servicesAvailable := b.serviceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services")
-	var services []*corev1.Service
-	if servicesAvailable {
-		services, err = b.listServices(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
-		}
-	}
-	endpointSlicesAvailable := b.endpointSliceLister != nil && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices")
-	var slices []*discoveryv1.EndpointSlice
-	if endpointSlicesAvailable {
-		slices, err = b.listEndpointSlices(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
-		}
-	}
-	slicesByService := groupEndpointSlicesByService(slices)
+	// Service, EndpointSlice, Ingress, and NetworkPolicy are cut to the ingest path: read
+	// each kind's projected NetworkSummary rows (the Bundle Table half) from the ingest
+	// source instead of a typed lister, gated by the per-request runtime permission AND the
+	// registration-time include flag (the gate the typed listers' presence used to imply).
+	servicesAvailable := b.includeServices && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services")
+	endpointSlicesAvailable := b.includeEndpointSlices && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices")
+	ingressesAvailable := b.includeIngresses && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "ingresses")
+	networkPoliciesAvailable := b.includeNetworkPolicies && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "networkpolicies")
 
-	// Every other network kind (Ingress, NetworkPolicy, Gateway API) is plain
-	// object→row and is driven from the stream descriptor registry.
+	var serviceOwnRows []NetworkSummary
+	if servicesAvailable {
+		serviceOwnRows = namespaceNetworkOwnRows(b.networkIngest, ServiceGVR, namespace)
+	}
+	// EndpointSlice rows AND the Service join facts both come from the EndpointSlice store.
+	// The Service join needs the slices' ready counts even when EndpointSlice itself is not
+	// a permitted source row, matching the typed path (which always listed slices to build
+	// the Service join, and only emitted EndpointSlice rows when permitted).
+	var endpointSliceRows []NetworkSummary
+	if endpointSlicesAvailable {
+		endpointSliceRows = namespaceNetworkOwnRows(b.networkIngest, EndpointSliceGVR, namespace)
+	}
+	readyCounts := namespaceEndpointSliceReadyCounts(b.networkIngest, namespace)
+	var ingressRows []NetworkSummary
+	if ingressesAvailable {
+		ingressRows = namespaceNetworkOwnRows(b.networkIngest, IngressGVR, namespace)
+	}
+	var networkPolicyRows []NetworkSummary
+	if networkPoliciesAvailable {
+		networkPolicyRows = namespaceNetworkOwnRows(b.networkIngest, NetworkPolicyGVR, namespace)
+	}
+
+	// The Gateway-API kinds are NOT cut: they remain indexer-driven through the stream
+	// descriptor registry. collectDescriptorTableRows also returns the source list for ALL
+	// the domain's stream descriptors (Ingress, NetworkPolicy, and the Gateway-API kinds),
+	// with cut kinds resolving to an empty sentinel indexer — so it contributes the cut
+	// kinds' SOURCE entries (availability) while their ROWS come from ingest above.
 	descriptorRows, descriptorSources, version, err := collectDescriptorTableRows[NetworkSummary](ctx, namespaceNetworkDomainName, b.collectIndexer, meta, namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	resources := make([]NetworkSummary, 0, len(services)+len(slices)+len(descriptorRows))
-	// Delegate to the shared row builders so the full-snapshot path and the
-	// streaming/incremental update path emit identical row shapes.
-	for _, svc := range services {
-		if svc == nil {
-			continue
-		}
-		resources = append(resources, service.BuildStreamSummary(meta, svc, slicesByService[serviceSliceKey(svc.Namespace, svc.Name)]))
-		if v := resourceVersionOrTimestamp(svc); v > version {
-			version = v
-		}
+	resources := make([]NetworkSummary, 0, len(serviceOwnRows)+len(endpointSliceRows)+len(ingressRows)+len(networkPolicyRows)+len(descriptorRows))
+	// Service rows re-join the endpoint count from the EndpointSlice store's join facts,
+	// reproducing the typed service.BuildStreamSummary(meta, svc, slices) row byte for byte.
+	for _, own := range serviceOwnRows {
+		resources = append(resources, reaggregateServiceSummary(own, readyCounts[serviceSliceKey(own.Namespace, own.Name)]))
 	}
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		resources = append(resources, endpointslice.BuildStreamSummary(meta, slice))
-		if v := resourceVersionOrTimestamp(slice); v > version {
-			version = v
-		}
-	}
+	resources = append(resources, endpointSliceRows...)
+	resources = append(resources, ingressRows...)
+	resources = append(resources, networkPolicyRows...)
 	resources = append(resources, descriptorRows...)
+
+	// The projected network rows carry no per-object RV (the typed objects are gone), so the
+	// cut stores' latest RV is folded into the version watermark (which starts from the
+	// Gateway-API descriptor rows' max RV) to keep refetch identity advancing on changes —
+	// mirroring how the prior code folded each typed object's resourceVersion.
+	if wlVersion := namespaceNetworkIngestVersion(b.networkIngest, ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR); wlVersion > version {
+		version = wlVersion
+	}
 
 	sortNetworkSummaries(resources)
 
@@ -218,20 +225,6 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	}, nil
 }
 
-func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
-	if namespace == "" {
-		return b.serviceLister.List(labels.Everything())
-	}
-	return b.serviceLister.Services(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceNetworkBuilder) listEndpointSlices(namespace string) ([]*discoveryv1.EndpointSlice, error) {
-	if namespace == "" {
-		return b.endpointSliceLister.List(labels.Everything())
-	}
-	return b.endpointSliceLister.EndpointSlices(namespace).List(labels.Everything())
-}
-
 func sortNetworkSummaries(resources []NetworkSummary) {
 	sort.SliceStable(resources, func(i, j int) bool {
 		if resources[i].Namespace != resources[j].Namespace {
@@ -242,21 +235,6 @@ func sortNetworkSummaries(resources []NetworkSummary) {
 		}
 		return resources[i].Kind < resources[j].Kind
 	})
-}
-
-func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
-	result := make(map[string][]*discoveryv1.EndpointSlice)
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		service := slice.Labels[discoveryv1.LabelServiceName]
-		if service == "" {
-			continue
-		}
-		result[serviceSliceKey(slice.Namespace, service)] = append(result[serviceSliceKey(slice.Namespace, service)], slice)
-	}
-	return result
 }
 
 func serviceSliceKey(namespace, name string) string {

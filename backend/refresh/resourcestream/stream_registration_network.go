@@ -1,28 +1,23 @@
 package resourcestream
 
-import "github.com/luxury-yacht/app/backend/refresh/informer"
+import (
+	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
+)
 
-// This file registers network resource streams. Network resources stay together
-// because several handlers need service, route, or policy listers, and Gateway
-// API resources come from a separate informer factory.
-
-// registerNetworkStreams wires the network kinds whose handlers need a
-// manager-level lister (service/endpointslice correlation). The plain
-// object→row network + Gateway-API kinds are registered from the descriptor
-// registry; see registerDescriptorStreams.
-func (m *Manager) registerNetworkStreams(factory *informer.Factory) {
-	shared := factory.SharedInformerFactory()
-	if shared == nil {
+// This file registers network resource streams. Service and EndpointSlice are owned-reflector
+// ingest kinds (IngestOwned): the typed informers are never instantiated, so their notify-only
+// change signal comes from the ingest reflector's Catalog-half Sink (registerNetworkIngestNotify)
+// instead of a shared-informer event handler — identical to the pod/workload path. The plain
+// object→row Ingress/NetworkPolicy (also cut) and the Gateway-API kinds are registered from the
+// descriptor registry (registerDescriptorStreams + the generic ingest notify); see those.
+//
+// The typed handleService / handleEndpointSlice* handlers + serviceLister/sliceLister remain
+// for the unit tests that drive them directly with wired typed listers; production wires no
+// network listers (the kinds are cut).
+func (m *Manager) registerNetworkStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
+	if factory.SharedInformerFactory() == nil {
 		return
 	}
-	if m.canListWatch("", "services") {
-		serviceInformer := shared.Core().V1().Services()
-		m.serviceLister = serviceInformer.Lister()
-		m.addResourceEventHandler(serviceInformer.Informer(), (*Manager).handleService)
-	}
-	if m.canListWatch("discovery.k8s.io", "endpointslices") {
-		sliceInformer := shared.Discovery().V1().EndpointSlices()
-		m.sliceLister = sliceInformer.Lister()
-		m.addRelatedResourceEventHandler(sliceInformer.Informer(), (*Manager).handleEndpointSliceEvent)
-	}
+	m.registerNetworkIngestNotify(ingestManager)
 }

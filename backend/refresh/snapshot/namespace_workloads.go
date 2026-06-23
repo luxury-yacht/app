@@ -24,9 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
-	appslisters "k8s.io/client-go/listers/apps/v1"
 	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
-	batchlisters "k8s.io/client-go/listers/batch/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -58,23 +56,27 @@ type NamespaceWorkloadsPermissions struct {
 	IncludeCronJobs     bool
 }
 
-// NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots. Pods is cut
-// to the ingest path, so the pod aggregation (per-owner ready/resources) and the
-// standalone-pod row synthesis read the projected PodAggregate + PodSummary rows from
-// the ingest source instead of a typed pod lister; the workload kinds keep their typed
-// listers. includePods records whether the request is permitted to read pods (the gate
-// the typed pod lister's presence used to imply).
+// NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots. Pods AND the
+// five workload kinds (Deployment/StatefulSet/DaemonSet/Job/CronJob) are cut to the ingest
+// path: the pod aggregation (per-owner ready/resources) and standalone-pod rows read the
+// projected PodAggregate + PodSummary rows, and the workload rows read each kind's projected
+// workload-OWN-fields WorkloadSummary (the Bundle Table half) — both from the ingest source
+// instead of typed listers. The serve path re-joins the owner's pods + metrics + HPA onto
+// each projected own-row (reaggregateWorkloadSummary), byte-identical to the typed path. The
+// include* flags record whether the request is permitted to read each kind (the gate the
+// typed listers' presence used to imply).
 type NamespaceWorkloadsBuilder struct {
-	podIngest        podWorkloadsIngestSource
-	includePods      bool
-	deploymentLister appslisters.DeploymentLister
-	statefulLister   appslisters.StatefulSetLister
-	daemonLister     appslisters.DaemonSetLister
-	jobLister        batchlisters.JobLister
-	cronJobLister    batchlisters.CronJobLister
-	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
-	metrics          metrics.Provider
-	logger           containerlogsstream.Logger
+	podIngest           podWorkloadsIngestSource
+	includePods         bool
+	workloadIngest      workloadIngestSource
+	includeDeployments  bool
+	includeStatefulSets bool
+	includeDaemonSets   bool
+	includeJobs         bool
+	includeCronJobs     bool
+	hpaLister           autoscalinglisters.HorizontalPodAutoscalerLister
+	metrics             metrics.Provider
+	logger              containerlogsstream.Logger
 }
 
 // podWorkloadsIngestSource supplies the cut pod kind's projected rows the workloads
@@ -127,8 +129,12 @@ func RegisterNamespaceWorkloadsDomain(
 	builder := &NamespaceWorkloadsBuilder{
 		// HPA lister is always wired — it's informational and doesn't block on missing perms.
 		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
-		metrics:   provider,
-		logger:    logger,
+		// The workload kinds are cut to the ingest path: their projected own-field rows
+		// come from the ingest manager. The per-kind include flags gate which kinds the
+		// request is permitted to read (the gate the typed listers' presence used to imply).
+		workloadIngest: ingestManager,
+		metrics:        provider,
+		logger:         logger,
 	}
 	if perms.IncludePods {
 		// Pods is cut to the ingest path: the per-owner aggregation and standalone-pod
@@ -136,21 +142,11 @@ func RegisterNamespaceWorkloadsDomain(
 		builder.podIngest = ingestManager
 		builder.includePods = true
 	}
-	if perms.IncludeDeployments {
-		builder.deploymentLister = factory.Apps().V1().Deployments().Lister()
-	}
-	if perms.IncludeStatefulSets {
-		builder.statefulLister = factory.Apps().V1().StatefulSets().Lister()
-	}
-	if perms.IncludeDaemonSets {
-		builder.daemonLister = factory.Apps().V1().DaemonSets().Lister()
-	}
-	if perms.IncludeJobs {
-		builder.jobLister = factory.Batch().V1().Jobs().Lister()
-	}
-	if perms.IncludeCronJobs {
-		builder.cronJobLister = factory.Batch().V1().CronJobs().Lister()
-	}
+	builder.includeDeployments = perms.IncludeDeployments
+	builder.includeStatefulSets = perms.IncludeStatefulSets
+	builder.includeDaemonSets = perms.IncludeDaemonSets
+	builder.includeJobs = perms.IncludeJobs
+	builder.includeCronJobs = perms.IncludeCronJobs
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceWorkloadsDomainName,
 		BuildSnapshot: builder.Build,
@@ -180,40 +176,29 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	if b.includePods && b.podIngest != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
 		podAggregates, podSummaries = namespacePodRowsFromIngest(b.podIngest, namespace)
 	}
-	var deployments []*appsv1.Deployment
-	if b.deploymentLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
-		deployments, err = b.listDeployments(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list deployments: %w", err)
-		}
+
+	// Each workload kind is cut to the ingest path: read its projected workload-OWN-fields
+	// WorkloadSummary rows (the Bundle Table half) from the ingest source instead of a typed
+	// lister. The serve path re-joins the owner's pods + metrics + HPA onto each own-row.
+	var deployments []WorkloadSummary
+	if b.includeDeployments && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
+		deployments = namespaceWorkloadOwnRows(b.workloadIngest, DeploymentGVR, namespace)
 	}
-	var statefulSets []*appsv1.StatefulSet
-	if b.statefulLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
-		statefulSets, err = b.listStatefulSets(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list statefulsets: %w", err)
-		}
+	var statefulSets []WorkloadSummary
+	if b.includeStatefulSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
+		statefulSets = namespaceWorkloadOwnRows(b.workloadIngest, StatefulSetGVR, namespace)
 	}
-	var daemonSets []*appsv1.DaemonSet
-	if b.daemonLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
-		daemonSets, err = b.listDaemonSets(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list daemonsets: %w", err)
-		}
+	var daemonSets []WorkloadSummary
+	if b.includeDaemonSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
+		daemonSets = namespaceWorkloadOwnRows(b.workloadIngest, DaemonSetGVR, namespace)
 	}
-	var jobs []*batchv1.Job
-	if b.jobLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
-		jobs, err = b.listJobs(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list jobs: %w", err)
-		}
+	var jobs []WorkloadSummary
+	if b.includeJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
+		jobs = namespaceWorkloadOwnRows(b.workloadIngest, JobGVR, namespace)
 	}
-	var cronJobs []*batchv1.CronJob
-	if b.cronJobLister != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
-		cronJobs, err = b.listCronJobs(namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)
-		}
+	var cronJobs []WorkloadSummary
+	if b.includeCronJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
+		cronJobs = namespaceWorkloadOwnRows(b.workloadIngest, CronJobGVR, namespace)
 	}
 
 	// List HPAs to mark workloads that are managed by an autoscaler. If this
@@ -233,11 +218,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	query typedTableQuery,
 	podAggregates []streamrows.PodAggregate,
 	podSummaries map[string]streamrows.PodSummary,
-	deployments []*appsv1.Deployment,
-	statefulSets []*appsv1.StatefulSet,
-	daemonSets []*appsv1.DaemonSet,
-	jobs []*batchv1.Job,
-	cronJobs []*batchv1.CronJob,
+	deployments []WorkloadSummary,
+	statefulSets []WorkloadSummary,
+	daemonSets []WorkloadSummary,
+	jobs []WorkloadSummary,
+	cronJobs []WorkloadSummary,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 	hpaKnown bool,
 	issues []ResourceQueryIssue,
@@ -288,44 +273,32 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		}
 	}
 
-	for _, deployment := range deployments {
-		if deployment == nil {
-			continue
+	// The workload kinds are cut: each `ownRow` is the projected workload-OWN-fields
+	// WorkloadSummary the reflector built at intake. The serve path re-joins the owner's
+	// pods + the fresh metrics sample onto it (reaggregateWorkloadSummary), reproducing the
+	// pre-cut row byte for byte. The projected row carries no per-object resourceVersion (the
+	// typed object is gone), so each is appended with a nil object — the workload store's RV
+	// is folded into the version watermark once below, mirroring the standalone-pod fold.
+	reaggregate := func(ownRow WorkloadSummary) WorkloadSummary {
+		key := workloadOwnerKey(ownRow.Kind, ownRow.Namespace, ownRow.Name)
+		return reaggregateWorkloadSummary(ownRow, podsByOwner[key], podUsage)
+	}
+	workloadEmitted := false
+	for _, ownRows := range [][]WorkloadSummary{deployments, statefulSets, daemonSets, jobs, cronJobs} {
+		for _, ownRow := range ownRows {
+			appendSummary(reaggregate(ownRow), nil)
+			workloadEmitted = true
 		}
-		summary := b.buildDeploymentSummary(meta.ClusterID, deployment, podsByOwner, podUsage)
-		appendSummary(summary, deployment)
 	}
 
-	for _, stateful := range statefulSets {
-		if stateful == nil {
-			continue
+	// The projected workload rows carry no per-object RV (the typed object is gone), so when
+	// any workload row is emitted the workload stores' latest RV is folded into the version
+	// watermark to keep refetch identity advancing on workload changes — mirroring the
+	// standalone-pod fold below and how the prior code folded each typed workload's RV.
+	if workloadEmitted {
+		if wlVersion := namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR); wlVersion > version {
+			version = wlVersion
 		}
-		summary := b.buildStatefulSetSummary(meta.ClusterID, stateful, podsByOwner, podUsage)
-		appendSummary(summary, stateful)
-	}
-
-	for _, daemon := range daemonSets {
-		if daemon == nil {
-			continue
-		}
-		summary := b.buildDaemonSetSummary(meta.ClusterID, daemon, podsByOwner, podUsage)
-		appendSummary(summary, daemon)
-	}
-
-	for _, job := range jobs {
-		if job == nil {
-			continue
-		}
-		summary := b.buildJobSummary(meta.ClusterID, job, podsByOwner, podUsage)
-		appendSummary(summary, job)
-	}
-
-	for _, cron := range cronJobs {
-		if cron == nil {
-			continue
-		}
-		summary := b.buildCronJobSummary(meta.ClusterID, cron, podsByOwner, podUsage)
-		appendSummary(summary, cron)
 	}
 
 	standalonePodEmitted := false
@@ -409,11 +382,11 @@ func (b *NamespaceWorkloadsBuilder) resourceSources() []typedTableResourceSource
 			Available:  b.includePods,
 			QueryKinds: []string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 		},
-		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.deploymentLister != nil},
-		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", Available: b.statefulLister != nil},
-		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", Available: b.daemonLister != nil},
-		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", Available: b.jobLister != nil},
-		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", Available: b.cronJobLister != nil},
+		{Kind: deployment.Identity.Kind, Group: "apps", Resource: "deployments", Available: b.includeDeployments},
+		{Kind: statefulset.Identity.Kind, Group: "apps", Resource: "statefulsets", Available: b.includeStatefulSets},
+		{Kind: daemonset.Identity.Kind, Group: "apps", Resource: "daemonsets", Available: b.includeDaemonSets},
+		{Kind: jobres.Identity.Kind, Group: "batch", Resource: "jobs", Available: b.includeJobs},
+		{Kind: cronjob.Identity.Kind, Group: "batch", Resource: "cronjobs", Available: b.includeCronJobs},
 	}
 }
 
@@ -910,41 +883,6 @@ func workloadPodReadyStatus(pods []streamrows.PodAggregate, fallbackReady, fallb
 		return fmt.Sprintf("%d/%d", fallbackReady, fallbackTotal)
 	}
 	return fmt.Sprintf("%d/%d", readyPods, totalPods)
-}
-
-func (b *NamespaceWorkloadsBuilder) listDeployments(namespace string) ([]*appsv1.Deployment, error) {
-	if namespace == "" {
-		return b.deploymentLister.List(labels.Everything())
-	}
-	return b.deploymentLister.Deployments(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceWorkloadsBuilder) listStatefulSets(namespace string) ([]*appsv1.StatefulSet, error) {
-	if namespace == "" {
-		return b.statefulLister.List(labels.Everything())
-	}
-	return b.statefulLister.StatefulSets(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceWorkloadsBuilder) listDaemonSets(namespace string) ([]*appsv1.DaemonSet, error) {
-	if namespace == "" {
-		return b.daemonLister.List(labels.Everything())
-	}
-	return b.daemonLister.DaemonSets(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceWorkloadsBuilder) listJobs(namespace string) ([]*batchv1.Job, error) {
-	if namespace == "" {
-		return b.jobLister.List(labels.Everything())
-	}
-	return b.jobLister.Jobs(namespace).List(labels.Everything())
-}
-
-func (b *NamespaceWorkloadsBuilder) listCronJobs(namespace string) ([]*batchv1.CronJob, error) {
-	if namespace == "" {
-		return b.cronJobLister.List(labels.Everything())
-	}
-	return b.cronJobLister.CronJobs(namespace).List(labels.Everything())
 }
 
 // listHPAs lists HorizontalPodAutoscalers in the given namespace (or all if empty).

@@ -173,12 +173,13 @@ func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
 		},
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-		statefulLister:   testsupport.NewStatefulSetLister(t),
-		daemonLister:     testsupport.NewDaemonSetLister(t),
-		jobLister:        testsupport.NewJobLister(t),
-		cronJobLister:    testsupport.NewCronJobLister(t),
-		hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
 	}
 
 	snap, err := builder.Build(context.Background(), "namespace:default")

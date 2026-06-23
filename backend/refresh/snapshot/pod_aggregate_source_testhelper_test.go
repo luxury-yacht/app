@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	corev1 "k8s.io/api/core/v1"
@@ -11,13 +12,23 @@ import (
 	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
-// fakePodAggregateSource is a test podAggregateIngestSource: it returns the supplied
-// PodAggregate rows for the pod GVR (and nothing for any other GVR), standing in for
-// the ingest manager's AggregateRows in domain unit tests after the pod cut. A non-empty
-// resourceVersion lets a test drive the pod-derived version watermark.
+// fakePodAggregateSource is a test podAggregateIngestSource / clusterOverviewIngestSource:
+// it returns the supplied PodAggregate rows for the pod GVR and the supplied workload
+// catalog rows (keyed by GVR) for the cut workload kinds, standing in for the ingest
+// manager in domain unit tests after the pod + workload cut. A non-empty resourceVersion
+// lets a test drive the pod-derived version watermark; workloadCatalog/workloadSynced let a
+// test drive the cluster-overview workload counts (len of catalog rows, gated on synced).
 type fakePodAggregateSource struct {
 	aggregates      []streamrows.PodAggregate
 	resourceVersion string
+	workloadCatalog map[schema.GroupVersionResource][]interface{}
+	workloadSynced  map[schema.GroupVersionResource]bool
+	// nodeBundles are the cut node kind's projected bundles (Table=NodeSummary own-row,
+	// Aggregate=nodeOverviewFact), returned for NodeGVR via Rows. nodeSynced gates the
+	// cluster-overview / nodes domain node read on store readiness (default false).
+	nodeBundles []ingest.Bundle
+	nodeSynced  bool
+	nodeRV      string
 }
 
 func (s fakePodAggregateSource) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
@@ -32,10 +43,101 @@ func (s fakePodAggregateSource) AggregateRows(gvr schema.GroupVersionResource) [
 }
 
 func (s fakePodAggregateSource) StoreResourceVersion(gvr schema.GroupVersionResource) string {
-	if gvr != PodGVR {
+	switch gvr {
+	case PodGVR:
+		return s.resourceVersion
+	case NodeGVR:
+		return s.nodeRV
+	default:
 		return ""
 	}
-	return s.resourceVersion
+}
+
+// Rows returns the cut node kind's projected bundles for NodeGVR (the nodes domain reads the
+// Table-half own-rows and the cluster-overview reads the Aggregate-half facts through it), or
+// nil otherwise.
+func (s fakePodAggregateSource) Rows(gvr schema.GroupVersionResource) []interface{} {
+	if gvr != NodeGVR {
+		return nil
+	}
+	out := make([]interface{}, 0, len(s.nodeBundles))
+	for _, b := range s.nodeBundles {
+		out = append(out, b)
+	}
+	return out
+}
+
+// CatalogRows returns the supplied workload catalog rows for a cut workload GVR (used by
+// the cluster-overview / namespaces workload counts), or nil otherwise.
+func (s fakePodAggregateSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
+	return s.workloadCatalog[gvr]
+}
+
+// HasSyncedFor reports the per-GVR synced flag for a cut workload GVR (default false), so a
+// test can gate the cluster-overview workload counts on store readiness; the pod GVR
+// reports true so pod-aggregate reads are never gated out in unit tests.
+func (s fakePodAggregateSource) HasSyncedFor(gvr schema.GroupVersionResource) bool {
+	switch gvr {
+	case PodGVR:
+		return true
+	case NodeGVR:
+		return s.nodeSynced
+	default:
+		return s.workloadSynced[gvr]
+	}
+}
+
+// AddSink lets this source stand in for the ingest manager wherever a
+// namespacePodIngestSource (which embeds the tracker's Sink-registration interface)
+// is required. The namespace builder's legacy workload-presence detection reads
+// CatalogRows/AggregateRows only; the Sink registration runs through the tracker,
+// which these tests build directly, so no sink is ever fed here.
+func (s fakePodAggregateSource) AddSink(_ schema.GroupVersionResource, _ ingest.Sink) bool {
+	return false
+}
+
+// withWorkloadCatalog returns a copy of the source carrying `count` projected catalog rows
+// for the workload GVR, marked synced, so a cluster-overview / namespaces test drives the
+// kind's count (the count is len(CatalogRows)). The rows are minimal objectcatalog.Summary
+// values in the given namespace — only namespace + presence matter to the counters.
+func (s fakePodAggregateSource) withWorkloadCatalog(gvr schema.GroupVersionResource, namespace string, count int) fakePodAggregateSource {
+	if s.workloadCatalog == nil {
+		s.workloadCatalog = map[schema.GroupVersionResource][]interface{}{}
+	}
+	if s.workloadSynced == nil {
+		s.workloadSynced = map[schema.GroupVersionResource]bool{}
+	}
+	rows := make([]interface{}, 0, count)
+	for i := 0; i < count; i++ {
+		rows = append(rows, objectcatalog.Summary{Namespace: namespace, Name: "wl-" + strconv.Itoa(i)})
+	}
+	s.workloadCatalog[gvr] = rows
+	s.workloadSynced[gvr] = true
+	return s
+}
+
+// withNodes returns a copy of the source carrying the supplied typed nodes projected to the
+// node ingest bundles (Table=NodeSummary own-row, Aggregate=nodeOverviewFact) exactly as the
+// node ingest projector does, marked synced, so a cluster-overview / nodes domain test feeds
+// the builder exactly the rows ingest would supply for those nodes. meta stamps the row
+// cluster identity. nodeRV drives the node-derived version watermark when non-empty.
+func (s fakePodAggregateSource) withNodes(meta ClusterMeta, nodeRV string, nodes ...*corev1.Node) fakePodAggregateSource {
+	project := NewNodeIngestProjector(meta)
+	bundles := make([]ingest.Bundle, 0, len(nodes))
+	for _, node := range nodes {
+		if node == nil {
+			continue
+		}
+		raw, err := project(node)
+		if err != nil {
+			continue
+		}
+		bundles = append(bundles, raw.(ingest.Bundle))
+	}
+	s.nodeBundles = bundles
+	s.nodeSynced = true
+	s.nodeRV = nodeRV
+	return s
 }
 
 // newFakePodAggregateSource projects the supplied typed pods to PodAggregate rows the

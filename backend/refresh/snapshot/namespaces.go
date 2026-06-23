@@ -6,9 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	batchlisters "k8s.io/client-go/listers/batch/v1"
-
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,33 +14,32 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
-	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
 )
 
-// NamespaceBuilder constructs namespace snapshots from informer caches.
+// NamespaceBuilder constructs namespace snapshots from informer caches. Pods AND the five
+// workload kinds are cut to the ingest path, so the legacy per-namespace workload-detection
+// count reads each kind's projected rows from the ingest manager rather than a typed lister.
 type NamespaceBuilder struct {
-	namespaces   corelisters.NamespaceLister
-	podIngest    namespacePodIngestSource
-	deployments  appslisters.DeploymentLister
-	statefulsets appslisters.StatefulSetLister
-	daemonsets   appslisters.DaemonSetLister
-	jobs         batchlisters.JobLister
-	cronJobs     batchlisters.CronJobLister
-	tracker      *NamespaceWorkloadTracker
+	namespaces corelisters.NamespaceLister
+	ingest     namespacePodIngestSource
+	tracker    *NamespaceWorkloadTracker
 }
 
-// namespacePodIngestSource supplies the cut pod kind's projected rows the namespace
-// domain reads: the tracker's incremental presence Sink + HasSynced gate, and the
-// projected rows for the legacy per-namespace workload-detection pod count. It composes
-// the tracker source so one value wires both. *ingest.IngestManager satisfies it.
+// namespacePodIngestSource supplies the cut pod + workload kinds' projected rows the
+// namespace domain reads: the tracker's incremental presence Sink + HasSynced gate, the
+// projected pod aggregate rows for the legacy workload-detection pod count, and the
+// projected workload catalog rows for the workload-detection counts. It composes the
+// tracker source so one value wires both. *ingest.IngestManager satisfies it.
 type namespacePodIngestSource interface {
 	trackerPodIngestSource
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
+	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 // NamespaceSnapshot payload returned to clients.
@@ -75,14 +71,9 @@ type NamespaceSummary struct {
 func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource) error {
 	tracker := NewNamespaceWorkloadTracker(factory, ingestManager)
 	builder := &NamespaceBuilder{
-		namespaces:   factory.Core().V1().Namespaces().Lister(),
-		podIngest:    ingestManager,
-		deployments:  factory.Apps().V1().Deployments().Lister(),
-		statefulsets: factory.Apps().V1().StatefulSets().Lister(),
-		daemonsets:   factory.Apps().V1().DaemonSets().Lister(),
-		jobs:         factory.Batch().V1().Jobs().Lister(),
-		cronJobs:     factory.Batch().V1().CronJobs().Lister(),
-		tracker:      tracker,
+		namespaces: factory.Core().V1().Namespaces().Lister(),
+		ingest:     ingestManager,
+		tracker:    tracker,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "namespaces",
@@ -199,110 +190,39 @@ func (b *NamespaceBuilder) namespaceHasWorkloadsLegacy(namespace string) (bool, 
 	if namespace == "" {
 		return false, nil
 	}
-
-	selector := labels.Everything()
-
-	type checkResult struct {
-		has bool
-		err error
-	}
-
-	var tasks []func(context.Context) error
-	var results []*checkResult
-
-	addTask := func(run func() (int, error)) {
-		res := &checkResult{}
-		results = append(results, res)
-		tasks = append(tasks, func(context.Context) error {
-			count, err := run()
-			if err != nil {
-				if apimachineryerrors.IsNotFound(err) {
-					return nil
-				}
-				res.err = err
-				return err
-			}
-			if count > 0 {
-				res.has = true
-			}
-			return nil
-		})
-	}
-
-	if b.deployments != nil {
-		addTask(func() (int, error) {
-			list, err := b.deployments.Deployments(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if b.statefulsets != nil {
-		addTask(func() (int, error) {
-			list, err := b.statefulsets.StatefulSets(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if b.daemonsets != nil {
-		addTask(func() (int, error) {
-			list, err := b.daemonsets.DaemonSets(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if b.jobs != nil {
-		addTask(func() (int, error) {
-			list, err := b.jobs.Jobs(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if b.cronJobs != nil {
-		addTask(func() (int, error) {
-			list, err := b.cronJobs.CronJobs(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if b.podIngest != nil {
-		addTask(func() (int, error) {
-			// Pods is cut to ingest: count the namespace's projected PodAggregate rows
-			// instead of listing the typed pod lister. Only the count matters here (the
-			// legacy path's workload-presence signal), so reading the small aggregate
-			// rows is sufficient and never touches a typed pod.
-			count := 0
-			for _, row := range b.podIngest.AggregateRows(PodGVR) {
-				if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace == namespace {
-					count++
-				}
-			}
-			return count, nil
-		})
-	}
-
-	if len(tasks) == 0 {
+	if b.ingest == nil {
 		return false, nil
 	}
 
-	if err := parallel.RunLimited(context.Background(), 3, tasks...); err != nil {
-		for _, res := range results {
-			if res.err != nil {
-				return false, res.err
-			}
-		}
-		return false, err
+	// Pods and the five workload kinds are cut to ingest: detect workload presence by
+	// counting the namespace's projected rows in each kind's ingest store rather than
+	// listing typed listers. Only presence (a non-empty count) matters for the legacy
+	// signal, so the small projected rows are sufficient and never touch a typed object.
+	if catalogRowsInNamespace(b.ingest, DeploymentGVR, namespace) > 0 ||
+		catalogRowsInNamespace(b.ingest, StatefulSetGVR, namespace) > 0 ||
+		catalogRowsInNamespace(b.ingest, DaemonSetGVR, namespace) > 0 ||
+		catalogRowsInNamespace(b.ingest, JobGVR, namespace) > 0 ||
+		catalogRowsInNamespace(b.ingest, CronJobGVR, namespace) > 0 {
+		return true, nil
 	}
-
-	for _, res := range results {
-		if res.err != nil {
-			return false, res.err
-		}
-		if res.has {
+	for _, row := range b.ingest.AggregateRows(PodGVR) {
+		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace == namespace {
 			return true, nil
 		}
 	}
-
 	return false, nil
+}
+
+// catalogRowsInNamespace counts the projected catalog rows for gvr whose Summary belongs to
+// the namespace — the ingest replacement for a typed lister's per-namespace List length.
+func catalogRowsInNamespace(source namespacePodIngestSource, gvr schema.GroupVersionResource, namespace string) int {
+	count := 0
+	for _, row := range source.CatalogRows(gvr) {
+		if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace == namespace {
+			count++
+		}
+	}
+	return count
 }
 
 func parseResourceVersion(obj *corev1.Namespace) uint64 {

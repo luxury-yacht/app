@@ -366,14 +366,15 @@ func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
 			}
 
 			builder := &NamespaceWorkloadsBuilder{
-				deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-				statefulLister:   testsupport.NewStatefulSetLister(t, statefulSet),
-				daemonLister:     testsupport.NewDaemonSetLister(t),
-				jobLister:        testsupport.NewJobLister(t),
-				cronJobLister:    testsupport.NewCronJobLister(t),
-				podIngest:        newFakePodWorkloadsIngestSource(meta, nil, pod),
-				includePods:      true,
-				hpaLister:        testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
+				workloadIngest:      newFakeWorkloadIngestSource(meta, deployment, statefulSet),
+				includeDeployments:  true,
+				includeStatefulSets: true,
+				includeDaemonSets:   true,
+				includeJobs:         true,
+				includeCronJobs:     true,
+				podIngest:           newFakePodWorkloadsIngestSource(meta, nil, pod),
+				includePods:         true,
+				hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -438,10 +439,19 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 				}}
 			}
 
+			// Service and EndpointSlice are cut to the ingest path: the builder reads the
+			// Service OWN-row + EndpointSlice rows + join facts from the ingest source. The
+			// serve-side re-join must reproduce servicepkg.BuildStreamSummary(meta, svc,
+			// slices) — the typed reference — byte for byte, INCLUDING the endpoint count.
+			ingestObjects := []metav1.Object{service}
+			for _, slice := range slices {
+				ingestObjects = append(ingestObjects, slice)
+			}
 			builder := &NamespaceNetworkBuilder{
-				serviceLister:       testsupport.NewServiceLister(t, service),
-				endpointSliceLister: testsupport.NewEndpointSliceLister(t, slices...),
-				collectIndexer:      networkCollectIndexer(networkIndexers{}),
+				networkIngest:         newFakeNetworkIngestSource(meta, ingestObjects...),
+				includeServices:       true,
+				includeEndpointSlices: true,
+				collectIndexer:        networkCollectIndexer(networkIndexers{}),
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
@@ -485,16 +495,18 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 				},
 			}
 
-			// Ingress, NetworkPolicy, and the Gateway-API kinds are all
-			// descriptor-driven plain object→row projections; the builder lists
-			// them from their informer indexers and calls the same shared
+			// Ingress and NetworkPolicy are cut to the ingest path (plain object→row, fed
+			// from the generic ingest reflector); the Gateway-API kinds are NOT cut and stay
+			// indexer-driven. The builder reads Ingress/NetworkPolicy rows from the ingest
+			// source and Gateway rows from its test indexer, all via the same shared
 			// Build*StreamSummary helpers as the streaming path.
 			builder := &NamespaceNetworkBuilder{
-				serviceLister:       testsupport.NewServiceLister(t),
-				endpointSliceLister: testsupport.NewEndpointSliceLister(t),
+				networkIngest:          newFakeNetworkIngestSource(meta, ingress, policy),
+				includeIngresses:       true,
+				includeNetworkPolicies: true,
 				collectIndexer: networkCollectIndexer(networkIndexers{
-					ingress:       testsupport.NewNamespacedIndexer(t, ingress),
-					networkpolicy: testsupport.NewNamespacedIndexer(t, policy),
+					ingress:       ingestAvailabilityIndexer,
+					networkpolicy: ingestAvailabilityIndexer,
 					gateway:       testsupport.NewNamespacedIndexer(t, gateway),
 				}),
 			}
@@ -948,9 +960,8 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 			provider := &staticPodMetrics{pods: usage}
 
 			builder := &NodeBuilder{
-				lister:           testsupport.NewNodeLister(t, node),
-				ingestAggregates: newFakePodAggregateSource(nil, pod),
-				metrics:          provider,
+				ingest:  newFakePodAggregateSource(nil, pod).withNodes(meta, node.ResourceVersion, node),
+				metrics: provider,
 			}
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)

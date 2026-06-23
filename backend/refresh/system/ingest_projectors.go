@@ -80,3 +80,56 @@ func registerPodReflector(mgr *ingest.IngestManager, factory *informer.Factory, 
 	rsLister := shared.Apps().V1().ReplicaSets().Lister()
 	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, rsLister))
 }
+
+// registerWorkloadReflectors wires the five bespoke workload reflectors onto the manager.
+// Deployment/StatefulSet/DaemonSet/Job/CronJob have no streamspec.Descriptor (the workloads
+// table is the bespoke cross-kind WorkloadSummary), so the manager's generic
+// StreamDescriptors loop never builds them; this registers a reflector + projecting store per
+// kind whose ProjectFunc is the kind's three-half bundle projector (Table = workload-own
+// WorkloadSummary, Catalog = catalog Summary, ObjectMap = graph node). Each projection reads
+// only the workload's own typed object — no lister needed (unlike pods, which resolve the RS
+// owner). It must run before the hub starts so the workload reflectors launch with the rest
+// and their initial relists are sync-gated.
+func registerWorkloadReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) {
+	if mgr == nil {
+		return
+	}
+	mgr.RegisterReflector(snapshot.DeploymentGVR, snapshot.DeploymentGVK, snapshot.NewDeploymentIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.StatefulSetGVR, snapshot.StatefulSetGVK, snapshot.NewStatefulSetIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.DaemonSetGVR, snapshot.DaemonSetGVK, snapshot.NewDaemonSetIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.CronJobGVR, snapshot.CronJobGVK, snapshot.NewCronJobIngestProjector(meta))
+}
+
+// registerNodeReflector wires the bespoke node reflector onto the manager. Node has no
+// streamspec.Descriptor (the nodes table is the bespoke NodeSummary whose row joins per-node
+// pod aggregates + metrics), so the manager's generic StreamDescriptors loop never builds it;
+// this registers a reflector + projecting store whose ProjectFunc is the node's four-half
+// bundle projector (Table = OWN-fields NodeSummary, Aggregate = node-overview fact, Catalog =
+// catalog Summary, ObjectMap = node graph node). The projection reads only the node's own typed
+// object — no lister needed (unlike pods, which resolve the RS owner). It must run before the
+// hub starts so the node reflector launches with the rest and its initial relist is sync-gated.
+func registerNodeReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) {
+	if mgr == nil {
+		return
+	}
+	mgr.RegisterReflector(snapshot.NodeGVR, snapshot.NodeGVK, snapshot.NewNodeIngestProjector(meta))
+}
+
+// registerNetworkReflectors wires the two bespoke network reflectors onto the manager.
+// Service and EndpointSlice have no streamspec.Descriptor (a Service's namespace-network row
+// is built JOINED with its EndpointSlices, and EndpointSlice is both its own table row and
+// that join input), so the manager's generic StreamDescriptors loop never builds them; this
+// registers a reflector + projecting store per kind whose ProjectFunc is the kind's bespoke
+// bundle projector (Service: OWN-fields NetworkSummary + catalog + object-map; EndpointSlice:
+// NetworkSummary + Service-join Aggregate + catalog + object-map). Ingress and NetworkPolicy
+// ARE Stream-backed, so the generic loop builds them — only Service/EndpointSlice are bespoke.
+// It must run before the hub starts so the network reflectors launch with the rest and their
+// initial relists are sync-gated.
+func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) {
+	if mgr == nil {
+		return
+	}
+	mgr.RegisterReflector(snapshot.ServiceGVR, snapshot.ServiceGVK, snapshot.NewServiceIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta))
+}

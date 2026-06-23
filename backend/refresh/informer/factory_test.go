@@ -213,6 +213,92 @@ func TestNewFactoryDoesNotRegisterPodInformer(t *testing.T) {
 	}
 }
 
+// TestNewFactoryDoesNotRegisterWorkloadInformers is the memory proof for the workload cut:
+// Deployment/StatefulSet/DaemonSet/Job/CronJob are owned-reflector ingest kinds, so the
+// shared factory must NOT instantiate a typed informer for any of them. ReplicaSet is NOT
+// cut and its informer must remain (the pod projector resolves the Deployment owner through
+// it and the pod stream re-broadcasts pods on RS changes).
+func TestNewFactoryDoesNotRegisterWorkloadInformers(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	factory.syncStatesMu.Lock()
+	keys := make(map[string]struct{}, len(factory.syncStates))
+	for _, state := range factory.syncStates {
+		keys[state.key] = struct{}{}
+	}
+	factory.syncStatesMu.Unlock()
+
+	for _, cut := range []string{
+		"apps/deployments", "apps/statefulsets", "apps/daemonsets",
+		"batch/jobs", "batch/cronjobs",
+	} {
+		if _, ok := keys[cut]; ok {
+			t.Fatalf("expected no %s informer registered: the workload kinds are cut to the ingest path", cut)
+		}
+	}
+	if _, ok := keys["apps/replicasets"]; !ok {
+		t.Fatal("expected apps/replicasets informer to remain registered (not cut)")
+	}
+}
+
+// TestNewFactoryDoesNotRegisterNetworkInformers is the memory proof for the network cut:
+// Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds, so
+// the shared factory must NOT instantiate a typed informer for any of them — their rows,
+// catalog, object-map, and notify all come from the ingest reflectors instead.
+func TestNewFactoryDoesNotRegisterNetworkInformers(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	factory.syncStatesMu.Lock()
+	keys := make(map[string]struct{}, len(factory.syncStates))
+	for _, state := range factory.syncStates {
+		keys[state.key] = struct{}{}
+	}
+	factory.syncStatesMu.Unlock()
+
+	for _, cut := range []string{
+		"core/services",
+		"discovery.k8s.io/endpointslices",
+		"networking.k8s.io/ingresses",
+		"networking.k8s.io/networkpolicies",
+	} {
+		if _, ok := keys[cut]; ok {
+			t.Fatalf("expected no %s informer registered: the network kinds are cut to the ingest path", cut)
+		}
+	}
+}
+
+// TestNewFactoryDoesNotRegisterNodeInformer is the memory proof for the node cut: Node is an
+// owned-reflector ingest kind, so the shared factory must NOT instantiate a typed node informer
+// — its OWN-rows, overview facts, catalog, object-map, and notify all come from the ingest
+// reflector instead. The win is the large .status.images list every node object carries, which
+// no consumer reads and the projection drops.
+func TestNewFactoryDoesNotRegisterNodeInformer(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	factory.syncStatesMu.Lock()
+	keys := make(map[string]struct{}, len(factory.syncStates))
+	for _, state := range factory.syncStates {
+		keys[state.key] = struct{}{}
+	}
+	factory.syncStatesMu.Unlock()
+
+	if _, ok := keys["core/nodes"]; ok {
+		t.Fatal("expected no core/nodes informer registered: nodes are cut to the ingest path")
+	}
+}
+
 func TestCanListResourceCachesResults(t *testing.T) {
 	var sarCalls atomic.Int32
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {

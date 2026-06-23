@@ -5,6 +5,7 @@
 - The object panel's actions menu (delete, restart, scale, rollback, trigger, suspend, port-forward) now runs through the same shared action controller as the cluster/namespace table views, so confirmation dialogs, the scale modal, and permission gating behave identically everywhere. Action failures now surface through the standard error notifications instead of an inline banner.
 - Object-panel Overviews are now rendered from a single data-driven descriptor per resource kind instead of bespoke per-kind components.
 - ConfigMaps and Secrets now use less memory per connected cluster. Their objects are projected to the rows the app needs at ingest time instead of caching the full typed object, so a cluster with many (often large) ConfigMaps/Secrets holds far less in memory. Only Helm release records — a small, label-filtered subset — keep their full object, since the Helm view and Helm cache eviction still read it.
+- The network resources view (Services, EndpointSlices, Ingresses, NetworkPolicies) now uses less memory per connected cluster. These objects are projected to the rows the app needs at ingest time instead of caching the full typed object. A Service's endpoint count is still joined from its EndpointSlices, recomputed when the view is served, so the table is unchanged.
 
 ### Fixed
 

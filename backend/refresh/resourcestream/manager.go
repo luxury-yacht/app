@@ -166,11 +166,16 @@ type Manager struct {
 
 	dynamicClient dynamic.Interface
 
-	// podLister is wired only by unit tests that drive the typed handlePod*/RS/HPA
-	// paths directly. Production reads pods from the ingest store (pods is cut), so the
-	// pod typed informer is never instantiated; podIngest is the production pod source.
+	// podLister, the workload listers (deployment/stateful/daemon/job/cronJob), and nodeLister
+	// are wired only by unit tests that drive the typed handlePod*/handleWorkload/handleNode/
+	// RS/HPA paths directly. Production reads pods, the workload kinds, AND nodes from the
+	// ingest store (all cut), so those typed informers are never instantiated; podIngest /
+	// workloadIngest / nodeIngest are the production sources (lookupWorkloadRef / lookupNodeRef
+	// prefer a wired lister for tests, else ingest).
 	podLister        corelisters.PodLister
 	podIngest        podBundleSource
+	workloadIngest   workloadBundleSource
+	nodeIngest       nodeBundleSource
 	nodeLister       corelisters.NodeLister
 	serviceLister    corelisters.ServiceLister
 	sliceLister      discoverylisters.EndpointSliceLister
@@ -231,6 +236,8 @@ func NewManager(
 	}
 	if ingestManager != nil {
 		mgr.podIngest = ingestManager
+		mgr.workloadIngest = ingestManager
+		mgr.nodeIngest = ingestManager
 	}
 
 	if factory == nil {
@@ -244,11 +251,11 @@ func NewManager(
 
 	mgr.registerPodStreams(factory, ingestManager)
 	mgr.registerHelmStorageStreams(factory)
-	mgr.registerNetworkStreams(factory)
+	mgr.registerNetworkStreams(factory, ingestManager)
 	mgr.registerDescriptorStreams(factory)
 	mgr.registerAutoscalingStreams(factory)
-	mgr.registerNodeStreams(factory)
-	mgr.registerWorkloadStreams(factory)
+	mgr.registerNodeStreams(factory, ingestManager)
+	mgr.registerWorkloadStreams(factory, ingestManager)
 
 	// IngestOwned kinds have no typed informer in the factory; their notify-only
 	// change signal comes from the ingest reflector's Catalog-half Sink instead.
@@ -1065,7 +1072,11 @@ func (m *Manager) listEndpointSlicesForService(namespace, service string) ([]*di
 	return m.sliceLister.EndpointSlices(namespace).List(selector)
 }
 
-func (m *Manager) lookupWorkload(kind, namespace, name string) (metav1.Object, error) {
+// lookupWorkloadObject resolves a workload object via a typed lister. Production wires no
+// workload listers (the kinds are cut to ingest), so this returns an error there and the
+// caller falls back to the ingest catalog half (see lookupWorkloadRef); only the unit tests
+// that drive the typed handlers wire these listers.
+func (m *Manager) lookupWorkloadObject(kind, namespace, name string) (metav1.Object, error) {
 	switch strings.ToLower(kind) {
 	case "deployment":
 		if m.deploymentLister == nil {

@@ -186,7 +186,10 @@ func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 		t.Fatalf("cut kind collectViaIngest handled=%v err=%v len=%d, want true/nil/0", handled, err, len(summaries))
 	}
 
-	uncutDesc := builtinDescriptor("apps", "v1", "Deployment", "deployments", true)
+	// HorizontalPodAutoscaler is NOT cut (it keeps its typed informer — no v2 shared informer
+	// for the ingest path), so its collect must NOT be handled by ingest — the factory/list
+	// path still serves it.
+	uncutDesc := builtinDescriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", false)
 	if _, handled, _ := svc.collectViaIngest(0, uncutDesc, nil, nil); handled {
 		t.Fatal("uncut kind must not be handled by ingest")
 	}

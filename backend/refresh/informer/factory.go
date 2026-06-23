@@ -135,9 +135,14 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 		permissionAllowed:  make(map[string]struct{}),
 		runtimePermissions: checker,
 	}
-	result.registerClusterInformer("", "nodes", func() cache.SharedIndexInformer {
-		return kubeFactory.Core().V1().Nodes().Informer()
-	})
+	// nodes is an owned-reflector ingest kind (IngestOwned): the typed node informer is never
+	// instantiated. Node has no Stream descriptor (its table is the bespoke NodeSummary whose
+	// row joins per-node pod aggregates + metrics), so the system wires a bespoke node reflector
+	// (snapshot.NewNodeIngestProjector) that projects the OWN-fields NodeSummary + an overview
+	// fact at intake. Every node consumer reads the ingest projections instead: the nodes domain
+	// (own-rows + serve-side pod-aggregate/metrics re-join), cluster-overview (overview facts),
+	// the object catalog, the object map, and the resource-stream notify (Catalog-half sink).
+	//
 	// pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
 	// never instantiated. Every pod consumer reads the ingest projections instead (the
 	// pods maintained store, the cluster-overview/nodes/namespace-workloads aggregation,
@@ -149,25 +154,30 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// longer caches them as typed objects. The helm consumers that still need the typed
 	// release object read the dedicated label-filtered helm-storage source (below)
 	// instead of a full configmaps/secrets informer.
-	result.registerInformer("", "services", kubeFactory.Core().V1().Services().Informer())
-	result.registerInformer("discovery.k8s.io", "endpointslices", kubeFactory.Discovery().V1().EndpointSlices().Informer())
+	//
+	// services and endpointslices are owned-reflector ingest kinds too: the shared factory
+	// no longer caches them. namespace-network reads the Service OWN-rows + EndpointSlice
+	// rows (and the Service↔EndpointSlice endpoint-count join) from the ingest reflectors,
+	// and the catalog/object-map/notify consumers read the ingest projections instead.
 	result.registerClusterInformer("", "namespaces", func() cache.SharedIndexInformer {
 		return kubeFactory.Core().V1().Namespaces().Informer()
 	})
+	// deployments, statefulsets, daemonsets, jobs, and cronjobs are owned-reflector ingest
+	// kinds (IngestOwned), projected at intake by the IngestManager's bespoke workload
+	// reflectors; the shared factory no longer caches them as typed objects. Their consumers
+	// (the workloads domain, cluster-overview counts, namespace workload tracker, object
+	// catalog, object map, response-cache, resource-stream notify) read the ingest
+	// projections instead. ReplicaSet stays registered — the pod projector resolves a pod's
+	// Deployment owner through it at projection time, and the pod stream re-broadcasts pods
+	// on RS changes.
 	result.registerInformer("apps", "replicasets", kubeFactory.Apps().V1().ReplicaSets().Informer())
-	result.registerInformer("apps", "deployments", kubeFactory.Apps().V1().Deployments().Informer())
-	result.registerInformer("apps", "statefulsets", kubeFactory.Apps().V1().StatefulSets().Informer())
-	result.registerInformer("apps", "daemonsets", kubeFactory.Apps().V1().DaemonSets().Informer())
-	result.registerInformer("batch", "jobs", kubeFactory.Batch().V1().Jobs().Informer())
-	result.registerInformer("batch", "cronjobs", kubeFactory.Batch().V1().CronJobs().Informer())
 	// roles, rolebindings, serviceaccounts, clusterroles, clusterrolebindings,
-	// persistentvolumes, persistentvolumeclaims, storageclasses, ingressclasses, and
-	// the admission webhook kinds are owned-reflector ingest kinds (IngestOwned),
-	// projected at intake by the IngestManager; the shared factory no longer caches
-	// them as typed objects. Their consumers (the rbac/storage/config maintained
-	// stores, catalog, object map, response-cache) read the ingest projections instead.
-	result.registerInformer("networking.k8s.io", "ingresses", kubeFactory.Networking().V1().Ingresses().Informer())
-	result.registerInformer("networking.k8s.io", "networkpolicies", kubeFactory.Networking().V1().NetworkPolicies().Informer())
+	// persistentvolumes, persistentvolumeclaims, storageclasses, ingressclasses, the
+	// admission webhook kinds, and ingresses + networkpolicies are owned-reflector ingest
+	// kinds (IngestOwned), projected at intake by the IngestManager; the shared factory no
+	// longer caches them as typed objects. Their consumers (the rbac/storage/config/network
+	// maintained stores, catalog, object map, response-cache) read the ingest projections
+	// instead.
 	result.registerInformer("autoscaling", "horizontalpodautoscalers", kubeFactory.Autoscaling().V1().HorizontalPodAutoscalers().Informer())
 	result.registerInformer("", "events", kubeFactory.Core().V1().Events().Informer())
 

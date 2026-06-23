@@ -306,7 +306,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				{group: "", resource: "pods"},
 			},
 			registerInformer: func() error {
-				return snapshot.RegisterNodeDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.metricsProvider, deps.ingestManager)
+				return snapshot.RegisterNodeDomain(deps.registry, deps.metricsProvider, deps.ingestManager)
 			},
 			fallbackChecks: []listCheck{
 				{group: "", resource: "nodes"},
@@ -462,6 +462,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.SharedInformerFactory(),
 					deps.informerFactory.GatewayInformerFactory(),
 					allowed,
+					deps.ingestManager,
 				)
 			},
 		}),
