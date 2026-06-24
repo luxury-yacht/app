@@ -128,7 +128,20 @@ sections it references._
 > "reconciling" marker deferred (rows paint then reconcile silently). Gated: `TestResetSpillRootForFormat`
 > (keep-compatible / clear-on-upgrade) + `mage qc:prerelease`. STILL TODO: stage 3 (WatchList resume
 > from persisted RV → delta reconcile — turns the cold-start full LIST into a delta), stage 4
-> (410-Gone reconcile-delete).
+> (410-Gone reconcile-delete). **ARCHITECTURE NOTE (2026-06-24):** stage 3 cannot reuse client-go's
+> `cache.Reflector` (the ingest path borrows it, manager.go:7) — that reflector ALWAYS transfers full
+> state on initial sync (`list()` reflector.go:676; WatchList streams from RV=""), with no resume-delta
+> option in `ReflectorOptions`. So the delta-resume is a custom watch path, built incrementally.
+> **stage 3a (resume-watch component) DONE:** `ingest/resume.go resumeFromResourceVersion` issues a delta
+> WATCH from the persisted RV (`AllowWatchBookmarks=true`), applies Added/Modified/Deleted to the
+> ProjectingStore on top of its restored baseline, advances RV on bookmarks, marks the store synced once
+> the watch establishes (per-GVR readiness), and returns `resumeNeedsFullSync` on 410-Gone/expired/Error
+> (caller full-syncs → stage 4 reconcile) or `resumeContextDone` on ctx end. + `ProjectingStore.MarkSynced`.
+> Standalone + unit-gated (deltas+synced / 410→needs-full-sync / error-event→needs-full-sync), NOT yet wired
+> (zero blast radius). REMAINING stage 3b: spill+restore the INGEST ProjectingStores with their RV (stage 2
+> spilled the downstream maintained query stores; delta-resume needs the source ingest stores full + RV-stamped),
+> route the reflector through resume with a full-sync fallback, per-GVR readiness; then stage 4 (the full-sync
+> fallback already reconciles deletes — formalize + test absent-UID deletion).
 > (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
 

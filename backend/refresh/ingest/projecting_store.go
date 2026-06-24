@@ -491,6 +491,16 @@ func (s *ProjectingStore) HasSynced() bool {
 	return s.synced
 }
 
+// MarkSynced flips the store's synced flag without a Replace, for the stage-3 resume path:
+// when the store's baseline came from a restored spill (not a relist) and a delta watch keeps
+// it current, the store is serveable and ready even though Replace never ran. It only ever
+// turns synced on (readiness latches), mirroring Replace's synced=true.
+func (s *ProjectingStore) MarkSynced() {
+	s.mu.Lock()
+	s.synced = true
+	s.mu.Unlock()
+}
+
 // Resync is a no-op: the projected rows are already current and there is no
 // secondary index to rebuild.
 func (s *ProjectingStore) Resync() error {
