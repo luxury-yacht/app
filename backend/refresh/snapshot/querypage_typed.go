@@ -510,6 +510,38 @@ func registerMaintainedHandlers[T any](
 	return nil
 }
 
+// registerMaintainedInformerHandler feeds a maintained store from an arbitrary informer
+// via a projection closure, for a kind whose informer registerMaintainedHandlers cannot
+// reach — its descriptorInformer only resolves shared- and Gateway-factory StreamDescriptor
+// informers, so a kind on the apiext factory (CRDs) or one projected outside the StreamRow
+// contract (events) needs this. project turns a watched object into its row + source object
+// (ok=false skips it). Handlers must be registered before the informer's factory starts so
+// the sync gate guarantees the store is populated before the first Build serves from it.
+func registerMaintainedInformerHandler[T any](
+	maintained *typedMaintainedStore[T],
+	informer cache.SharedIndexInformer,
+	project func(obj interface{}) (row T, source metav1.Object, ok bool),
+) error {
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if row, src, ok := project(obj); ok {
+				maintained.upsertRow(row, src)
+			}
+		},
+		UpdateFunc: func(_, newObj interface{}) {
+			if row, src, ok := project(newObj); ok {
+				maintained.upsertRow(row, src)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			if row, _, ok := project(maintainedUnwrap(obj)); ok {
+				maintained.deleteRow(row)
+			}
+		},
+	})
+	return err
+}
+
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
 // maintained store from the owned-reflector path: the kind's ingest store delivers
 // its already-projected Table-half row to the store's Sink, replacing the shared-
@@ -587,6 +619,15 @@ func (m *typedMaintainedStore[T]) bumpSinkVersion() {
 func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
 	m.store.Upsert(row)
 	m.bumpVersion(o)
+}
+
+// deleteRow removes an already-projected row by its adapter key — the bespoke-projection
+// counterpart of evict (which derives the row from a StreamRow descriptor). Like evict it
+// does NOT bump the version: an RV-based store's version is the max resourceVersion seen,
+// which a delete never raises, and the list path's version behaves the same — so the
+// maintained and list versions stay in agreement.
+func (m *typedMaintainedStore[T]) deleteRow(row T) {
+	m.store.Delete(m.adapter.Key(row))
 }
 
 // ingest projects an added/updated object via the descriptor's StreamRow closure

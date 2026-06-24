@@ -339,6 +339,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterClusterCRDDomain(
 					deps.registry,
 					deps.informerFactory.APIExtensionsInformerFactory(),
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 				)
 			},
 		}, crdMeta)),

@@ -39,11 +39,16 @@ sections it references._
 >
 > **Phase 4 status by item (audited):** DONE — project-to-column-tuple, LIST fallback,
 > gateway transform, governor + `SetMetricsActive`, metrics §3.6 for pods, ingest
-> deadline-degrade + permission-gating, 9 typed domains on the owned store. **REMAINING
-> (driving to completion, full Phase 4):** (1.2) bring the still-list+project domains onto
-> the owned store — `namespace/cluster-events`, `namespace-helm`, `cluster-crds`, plus the
-> hybrids' loose ends (`namespace-network` Gateway-API kinds, `namespace-workloads` re-joins,
-> `pods` node/workload scopes); (1.3) consolidate the catalog's on-demand dynamic-CRD
+> deadline-degrade + permission-gating, 10 typed domains on the owned store (the 9 + now
+> `cluster-crds`, fed by the apiext CRD informer via `registerMaintainedInformerHandler`,
+> byte-identity gated). **CORRECTION: `pods` already serves ALL scopes (namespace/node/
+> workload) from its maintained store** (`pods.go:373-376 collectSummariesFromStore`) — the
+> earlier audit's "node/workload scopes list" was wrong (that path is test-only).
+> **REMAINING (driving to completion, full Phase 4):** (1.2) the rest of the still-list+
+> project domains — `namespace/cluster-events` (NOTE: high-churn — a maintained store
+> projects on every event vs only when viewed; the one mild pessimization), `namespace-helm`
+> (synthesized from secrets), `namespace-network` Gateway-API kinds, `namespace-workloads`
+> standalone-pod assembly; (1.3) consolidate the catalog's on-demand dynamic-CRD
 > informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`
 > into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
 > (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,
