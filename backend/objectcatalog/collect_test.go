@@ -116,6 +116,16 @@ func (f *fakeCatalogIngestSource) AddCatalogSink(schema.GroupVersionResource, in
 	return true
 }
 
+// The dynamic-CRD path is not exercised by the static-cut-kind tests below, so these
+// satisfy the IngestSource interface as no-ops.
+func (f *fakeCatalogIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
+	return false
+}
+
+func (f *fakeCatalogIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
+
+func (f *fakeCatalogIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
+
 // TestCollectViaIngestServesCutKindSummaries proves a cut kind's collect is served
 // from the ingest manager's CatalogRows (projected at intake), scoped to the
 // requested namespaces, and byte-identical to the catalog's own summaryFromObject —

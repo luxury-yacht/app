@@ -16,20 +16,13 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
-	informerpkg "github.com/luxury-yacht/app/backend/refresh/informer"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	kruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
-	"k8s.io/client-go/tools/cache"
 )
-
-var errInformerNotSynced = errors.New("catalog informer cache not yet synced")
 
 func (s *Service) collectResource(ctx context.Context, index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
 	// Ingest-owned (cut) kinds are no longer cached by the shared informer factory;
@@ -41,23 +34,12 @@ func (s *Service) collectResource(ctx context.Context, index int, desc resourceD
 	if summaries, handled, err := s.collectViaSharedInformer(index, desc, namespaces, agg); handled {
 		return summaries, err
 	}
-	plan := planCollectionSource(desc)
-	if plan.promotable {
-		if promoted := s.getPromotedDescriptor(desc.GVR.String()); promoted != nil {
-			if summaries, err := s.collectFromInformer(index, desc, promoted, agg); err == nil {
-				return summaries, nil
-			} else if !errors.Is(err, errInformerNotSynced) {
-				s.logWarn(fmt.Sprintf("catalog informer for %s unavailable (%v); falling back to list", desc.GVR.String(), err))
-			}
-		}
-	}
-
 	summaries, err := s.listResource(ctx, index, desc, namespaces, agg)
 	if err != nil {
 		return nil, err
 	}
-	if plan.promotable {
-		s.maybePromote(ctx, desc, len(summaries))
+	if planCollectionSource(desc).promotable {
+		s.maybePromote(desc, len(summaries))
 	}
 	return summaries, nil
 }
@@ -297,114 +279,68 @@ func (s *Service) namespaceWorkerLimit(targetCount int) int {
 	return limit
 }
 
-func (s *Service) maybePromote(ctx context.Context, desc resourceDescriptor, itemCount int) {
-	if s.opts.InformerPromotionThreshold <= 0 {
+// maybePromote consolidates a dynamic (CRD-backed) kind onto the one ingest path once its
+// object count crosses the promotion threshold: it registers an on-demand dynamic reflector
+// with the ingest manager (which LIST+WATCHes the kind and projects each object to the same
+// Summary buildSummary produces) plus a Catalog-half sink for incremental updates, then
+// records the gvr so collectViaIngest serves it once the reflector has synced. Below the
+// threshold — or with no ingest source — the kind keeps being listed per collect, so a
+// reflector is only ever created on demand. The projection IS buildSummary, so the
+// ingest-served Summaries are byte-identical to the list path's.
+func (s *Service) maybePromote(desc resourceDescriptor, itemCount int) {
+	if s.opts.InformerPromotionThreshold <= 0 || itemCount < s.opts.InformerPromotionThreshold {
 		return
 	}
-	if itemCount < s.opts.InformerPromotionThreshold {
+	source := s.deps.IngestSource
+	if source == nil {
 		return
 	}
-	if s.deps.Common.DynamicClient == nil {
+	gvr := desc.GVR
+	if s.isDynamicallyIngested(gvr) {
 		return
 	}
-	key := desc.GVR.String()
-	if s.getPromotedDescriptor(key) != nil {
+	gvk := schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind}
+	project := func(obj metav1.Object) interface{} { return s.buildSummary(desc, obj) }
+	if !source.RegisterDynamicCatalogReflector(gvr, gvk, project) {
 		return
 	}
-
-	genericInformer := dynamicinformer.NewFilteredDynamicInformer(
-		s.deps.Common.DynamicClient,
-		desc.GVR,
-		metav1.NamespaceAll,
-		0,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		nil,
-	)
-	informer := genericInformer.Informer()
-	// Projection-at-intake for dynamically-promoted custom resources: strip
-	// managedFields before they enter this informer's cache, same as the static
-	// factory informers. SetTransform only errors on an already-started informer;
-	// this one is freshly created here, so the error is unreachable.
-	_ = informer.SetTransform(informerpkg.StripManagedFields)
-	stopCh := make(chan struct{})
-	promoted := &promotedDescriptor{informer: informer, stopCh: stopCh}
-
-	s.promotedMu.Lock()
-	if _, exists := s.promoted[key]; exists {
-		s.promotedMu.Unlock()
-		promoted.stop()
-		return
-	}
-	s.promoted[key] = promoted
-	s.promotedMu.Unlock()
-
-	go informer.Run(stopCh)
-	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
-		s.logWarn(fmt.Sprintf("catalog informer promotion failed to sync for %s", key))
-		promoted.stop()
-		s.promotedMu.Lock()
-		delete(s.promoted, key)
-		s.promotedMu.Unlock()
-		return
-	}
-	s.logInfo(fmt.Sprintf("catalog descriptor %s promoted to informer", key))
+	source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
+	s.markDynamicallyIngested(gvr)
+	s.logInfo(fmt.Sprintf("catalog descriptor %s promoted to the ingest path", gvr.String()))
 }
 
-func (s *Service) collectFromInformer(index int, desc resourceDescriptor, promoted *promotedDescriptor, agg *streamingAggregator) ([]Summary, error) {
-	if promoted == nil {
-		return nil, errors.New("no informer")
-	}
-	if !promoted.informer.HasSynced() {
-		return nil, errInformerNotSynced
-	}
-	objects := promoted.informer.GetStore().List()
-	results := make([]Summary, 0, len(objects))
-	for _, obj := range objects {
-		runtimeObj, ok := obj.(kruntime.Object)
-		if !ok {
-			continue
-		}
-		accessor, err := meta.Accessor(runtimeObj)
-		if err != nil {
-			continue
-		}
-		unstructuredObj := &unstructuredv1.Unstructured{}
-		if u, ok := runtimeObj.(*unstructuredv1.Unstructured); ok {
-			unstructuredObj = u
-		} else {
-			unstructuredObj.SetNamespace(accessor.GetNamespace())
-			unstructuredObj.SetName(accessor.GetName())
-			unstructuredObj.SetUID(accessor.GetUID())
-			unstructuredObj.SetResourceVersion(accessor.GetResourceVersion())
-			unstructuredObj.SetCreationTimestamp(accessor.GetCreationTimestamp())
-			unstructuredObj.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   desc.Group,
-				Version: desc.Version,
-				Kind:    desc.Kind,
-			})
-		}
-		results = append(results, s.buildSummary(desc, unstructuredObj))
-	}
-	if agg != nil && len(results) > 0 {
-		agg.emit(index, results)
-	}
-	return results, nil
+// isDynamicallyIngested reports whether the catalog has promoted gvr onto the ingest path.
+func (s *Service) isDynamicallyIngested(gvr schema.GroupVersionResource) bool {
+	s.dynamicMu.RLock()
+	defer s.dynamicMu.RUnlock()
+	_, ok := s.dynamicIngested[gvr]
+	return ok
 }
 
-func (s *Service) getPromotedDescriptor(key string) *promotedDescriptor {
-	s.promotedMu.RLock()
-	defer s.promotedMu.RUnlock()
-	return s.promoted[key]
+// markDynamicallyIngested records that gvr now serves from the ingest path.
+func (s *Service) markDynamicallyIngested(gvr schema.GroupVersionResource) {
+	s.dynamicMu.Lock()
+	defer s.dynamicMu.Unlock()
+	s.dynamicIngested[gvr] = struct{}{}
 }
 
-func (s *Service) stopPromotedInformers() {
-	s.promotedMu.Lock()
-	defer s.promotedMu.Unlock()
-	for key, promoted := range s.promoted {
-		if promoted != nil {
-			promoted.stop()
-		}
-		delete(s.promoted, key)
+// stopDynamicReflectors tears down every on-demand dynamic reflector the catalog promoted,
+// asking the ingest manager to stop each, so the reflectors do not outlive the catalog. It
+// is a no-op when no kind was promoted or no ingest source is configured.
+func (s *Service) stopDynamicReflectors() {
+	source := s.deps.IngestSource
+	s.dynamicMu.Lock()
+	gvrs := make([]schema.GroupVersionResource, 0, len(s.dynamicIngested))
+	for gvr := range s.dynamicIngested {
+		gvrs = append(gvrs, gvr)
+	}
+	s.dynamicIngested = make(map[schema.GroupVersionResource]struct{})
+	s.dynamicMu.Unlock()
+	if source == nil {
+		return
+	}
+	for _, gvr := range gvrs {
+		source.StopReflectorFor(gvr)
 	}
 }
 
@@ -445,19 +381,4 @@ func summaryFromObject(clusterID, clusterName string, desc resourceDescriptor, i
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
-}
-
-type promotedDescriptor struct {
-	informer cache.SharedIndexInformer
-	stopCh   chan struct{}
-	stopOnce sync.Once
-}
-
-func (p *promotedDescriptor) stop() {
-	if p == nil {
-		return
-	}
-	p.stopOnce.Do(func() {
-		close(p.stopCh)
-	})
 }

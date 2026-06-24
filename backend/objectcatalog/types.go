@@ -141,6 +141,18 @@ type Dependencies struct {
 type IngestSource interface {
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	AddCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool
+	// RegisterDynamicCatalogReflector starts an on-demand reflector for a dynamic
+	// (CRD-backed) kind, projecting each object to its catalog Summary via project. The
+	// catalog calls it when a CR kind crosses its promotion threshold (maybePromote),
+	// consolidating the former catalog-owned dynamic informer onto the ingest path.
+	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector) bool
+	// StopReflectorFor stops and evicts the on-demand reflector for gvr, the teardown half
+	// of the dynamic path (stopDynamicReflectors).
+	StopReflectorFor(gvr schema.GroupVersionResource)
+	// HasSyncedFor reports whether gvr's store has synced, so the catalog serves a promoted
+	// dynamic kind from CatalogRows only once its reflector's initial relist has landed
+	// (else it keeps listing — no empty flash).
+	HasSyncedFor(gvr schema.GroupVersionResource) bool
 }
 
 // Logger is the minimal logging contract required by the catalog, aliased to

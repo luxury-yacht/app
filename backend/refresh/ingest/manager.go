@@ -8,7 +8,10 @@
  * it loops kindregistry.StreamDescriptors(), and the only per-group code is the
  * finite group/version -> RESTClient mapping every typed informer needs anyway.
  *
- * This package is NOT wired into any live path; a later step cuts consumers over.
+ * Beyond the descriptor reflectors it also hosts the on-demand dynamic (CRD-backed)
+ * reflectors the catalog promotes at runtime (RegisterDynamicCatalogReflector), which use
+ * the dynamic client and are excluded from the readiness gate — so the one ingest path
+ * serves both built-in cut kinds and dynamically-discovered custom resources.
  */
 
 package ingest
@@ -26,9 +29,12 @@ import (
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -87,6 +93,20 @@ type entry struct {
 	// for the whole sync deadline — mirroring the factory's permission-skip
 	// (informer/factory.go CanListWatch gate).
 	skipped atomic.Bool
+
+	// onDemand marks a reflector added lazily AFTER Start for a dynamic (CRD-backed) kind
+	// the catalog promoted on demand (RegisterDynamicCatalogReflector). On-demand entries
+	// are EXCLUDED from the whole-manager HasSynced gate — they are added once the cluster
+	// already serves, so they must not perturb readiness or the metrics poller that gate
+	// blocks (the issue-#225 class) — while HasSyncedFor still reports their real per-gvr
+	// sync so the catalog can serve-when-synced-else-LIST.
+	onDemand atomic.Bool
+
+	// cancel stops just this entry's reflector. It is set only for on-demand reflectors,
+	// which launch on a context derived from the manager's run context so StopReflectorFor
+	// can tear one down without stopping the rest. Descriptor reflectors run directly on
+	// the run context and leave this nil.
+	cancel context.CancelFunc
 }
 
 // IngestManager owns one ProjectingStore + ProjectingReflector per built-in
@@ -97,11 +117,21 @@ type IngestManager struct {
 	kube    kubernetes.Interface
 	apiext  apiextensionsclientset.Interface
 	gateway gatewayversioned.Interface
+	// dynamic serves the on-demand dynamic (CRD-backed) reflectors the catalog promotes at
+	// runtime (RegisterDynamicCatalogReflector). It is optional (SetDynamicClient) because
+	// only that path needs it — the descriptor reflectors use the typed group clients
+	// (restClientFor). nil leaves the on-demand path disabled.
+	dynamic dynamic.Interface
 
 	entries map[schema.GroupVersionResource]*entry
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
+	// runCtx is the context Start derived for the running reflectors, retained so a
+	// reflector registered AFTER Start (an on-demand dynamic reflector) can launch on the
+	// same lifetime — Stop or cancelling Start's ctx winds it down with the rest. nil
+	// before Start and after Stop.
+	runCtx context.Context
 
 	// syncDeadline bounds how long a kind's store may take to complete its initial
 	// relist before it is degraded out of the readiness gate (so one never-syncing
@@ -217,6 +247,85 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 	return true
 }
 
+// RegisterDynamicCatalogReflector starts an on-demand reflector for a dynamic
+// (CRD-backed) kind: it LIST+WATCHes the kind's custom resources through the dynamic
+// client and projects each (decoded as *unstructured.Unstructured) to its object-catalog
+// row via project, wrapped as the Bundle's Catalog half so CatalogRows serves it. It is
+// the consolidation of the catalog's former on-demand promotion informer into the one
+// ingest path: the catalog calls it when a CR kind crosses its promotion threshold.
+// Unlike the descriptor reflectors it launches immediately on the manager's run context
+// (it is registered after Start) and is EXCLUDED from the whole-manager readiness gate
+// (see entry.onDemand). It returns false when no dynamic client is set, the manager is not
+// started, or an entry for gvr already exists.
+func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project CatalogProjector) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.dynamic == nil || m.runCtx == nil {
+		return false
+	}
+	if _, exists := m.entries[gvr]; exists {
+		return false
+	}
+	e := &entry{store: NewProjectingStore(catalogProjectionFor(project))}
+	e.onDemand.Store(true)
+	example := &unstructuredv1.Unstructured{}
+	example.SetGroupVersionKind(gvk)
+	e.reflector = NewProjectingReflector(gvk.String(), dynamicListWatch(m.dynamic, gvr), example, e.store, resyncDisabled)
+	m.entries[gvr] = e
+	ctx, cancel := context.WithCancel(m.runCtx)
+	e.cancel = cancel
+	go e.reflector.Run(ctx)
+	return true
+}
+
+// StopReflectorFor stops and evicts the reflector for gvr — the teardown half of the
+// on-demand dynamic path (the catalog drops a promoted CR kind on shutdown). It cancels
+// only that entry's reflector (on-demand entries carry their own cancel) and removes it,
+// so the manager no longer serves or reports the gvr. It is a no-op when no entry exists.
+func (m *IngestManager) StopReflectorFor(gvr schema.GroupVersionResource) {
+	m.mu.Lock()
+	e, ok := m.entries[gvr]
+	if ok {
+		delete(m.entries, gvr)
+	}
+	m.mu.Unlock()
+	if ok && e.cancel != nil {
+		e.cancel()
+	}
+}
+
+// dynamicListWatch builds a ListerWatcher over the dynamic client for gvr across all
+// namespaces — the on-demand dynamic-CRD equivalent of the typed ListWatch
+// NewListWatchFromClient builds in installReflector. The reflector decodes results as
+// *unstructured.Unstructured, which the catalog projection consumes as a metav1.Object.
+// context.Background mirrors NewListWatchFromClient: the reflector stops the returned
+// watch.Interface on ctx-cancel, so the watch is wound down without a per-call context.
+func dynamicListWatch(client dynamic.Interface, gvr schema.GroupVersionResource) cache.ListerWatcher {
+	resource := client.Resource(gvr).Namespace(metav1.NamespaceAll)
+	return &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (apiruntime.Object, error) {
+			return resource.List(context.Background(), options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			options.Watch = true
+			return resource.Watch(context.Background(), options)
+		},
+	}
+}
+
+// catalogProjectionFor adapts a CatalogProjector to a ProjectFunc yielding a Bundle that
+// carries only the Catalog half, so an on-demand reflector's store serves its rows through
+// CatalogRows exactly as the descriptor reflectors' catalog half does.
+func catalogProjectionFor(project CatalogProjector) ProjectFunc {
+	return func(obj interface{}) (interface{}, error) {
+		m, err := metaObjectOf(obj)
+		if err != nil {
+			return nil, err
+		}
+		return Bundle{Catalog: project(m)}, nil
+	}
+}
+
 // projectionFor returns the ProjectFunc for an entry: it asserts the
 // reflector-decoded object to metav1.Object, runs the kind's StreamRow for the
 // bundle's Table half, and runs the entry's catalog projector (when registered)
@@ -329,6 +438,16 @@ func (m *IngestManager) SetPermissionFilter(fn func(group, resource string) bool
 	m.mu.Unlock()
 }
 
+// SetDynamicClient installs the dynamic client used for on-demand dynamic (CRD-backed)
+// reflectors (RegisterDynamicCatalogReflector). It must be set before the first such
+// registration. A nil client (the default) leaves the on-demand path disabled, so
+// RegisterDynamicCatalogReflector returns false and the catalog keeps listing the kind.
+func (m *IngestManager) SetDynamicClient(dyn dynamic.Interface) {
+	m.mu.Lock()
+	m.dynamic = dyn
+	m.mu.Unlock()
+}
+
 // Start runs every permitted reflector on a goroutine bound to a context derived from
 // ctx. Both Stop and cancelling ctx wind the reflectors down. Start is idempotent per
 // manager: a second call is a no-op once reflectors are running. A kind the permission
@@ -346,6 +465,7 @@ func (m *IngestManager) Start(ctx context.Context) {
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
+	m.runCtx = runCtx
 	filter := m.permissionFilter
 	entries := make([]launchEntry, 0, len(m.entries))
 	for gvr, e := range m.entries {
@@ -380,6 +500,7 @@ func (m *IngestManager) Stop() {
 	m.mu.Lock()
 	cancel := m.cancel
 	m.cancel = nil
+	m.runCtx = nil
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -400,6 +521,12 @@ func (m *IngestManager) HasSynced() bool {
 	}
 	m.mu.Unlock()
 	for _, e := range entries {
+		if e.onDemand.Load() {
+			// On-demand dynamic reflectors are added after the cluster is already serving;
+			// they must not gate (or un-settle) the whole-manager readiness the metrics
+			// poller waits on. Their readiness is observed per-gvr via HasSyncedFor.
+			continue
+		}
 		if !m.entrySettled(e) {
 			return false
 		}
@@ -623,6 +750,12 @@ func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 	m.mu.Unlock()
 	if !ok {
 		return false
+	}
+	if e.onDemand.Load() {
+		// On-demand reflectors are excluded from the deadline-degrade (the catalog falls
+		// back to LIST until they sync, so there is nothing to degrade); report the raw
+		// store sync directly.
+		return e.store.HasSynced()
 	}
 	return m.entrySettled(e)
 }

@@ -67,8 +67,12 @@ type Service struct {
 	queryStore CatalogQueryStore
 	identity   *resourceIdentityResolver
 
-	promotedMu sync.RWMutex
-	promoted   map[string]*promotedDescriptor
+	// dynamicIngested is the set of dynamic (CRD-backed) kinds the catalog has promoted
+	// onto the ingest path on demand (see maybePromote). collectViaIngest serves these from
+	// the ingest manager's CatalogRows once their reflector has synced; stopDynamicReflectors
+	// tears them down with the catalog.
+	dynamicMu       sync.RWMutex
+	dynamicIngested map[schema.GroupVersionResource]struct{}
 
 	healthMu sync.RWMutex
 	health   healthStatus
@@ -161,7 +165,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		clusterName:       deps.ClusterName,
 		catalogIndex:      newCatalogIndex(),
 		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
-		promoted:          make(map[string]*promotedDescriptor),
+		dynamicIngested:   make(map[schema.GroupVersionResource]struct{}),
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
 		now:               nowFn,

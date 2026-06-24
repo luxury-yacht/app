@@ -173,7 +173,7 @@ func (s *Service) ensureDependencies() error {
 
 func (s *Service) runLoop(ctx context.Context) error {
 	defer close(s.doneCh)
-	defer s.stopPromotedInformers()
+	defer s.stopDynamicReflectors()
 
 	// Initial sync.
 	if err := s.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {

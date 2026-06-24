@@ -36,7 +36,7 @@ func newTestWatchService() *Service {
 		now:               time.Now,
 		catalogIndex:      newCatalogIndex(),
 		streamSubscribers: make(map[int]chan StreamingUpdate),
-		promoted:          make(map[string]*promotedDescriptor),
+		dynamicIngested:   make(map[schema.GroupVersionResource]struct{}),
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
 		clusterID:         "test-cluster",

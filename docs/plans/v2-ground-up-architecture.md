@@ -72,8 +72,24 @@ sections it references._
 > `…StandaloneTransitions` (workload delete → owned pod becomes standalone). Network's
 > Service↔EndpointSlice join stays the §3.6-mandated serve-time join. Reusable machinery:
 > `registerMaintainedInformerHandler`, `deleteRow`, `rowsInNamespace`, `collectDescriptorSources`.
-> REMAINING: (1.3) consolidate the catalog's on-demand dynamic-CRD
-> informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`
+> **TIER 1.3 COMPLETE (2026-06-24):** the catalog's on-demand dynamic-CRD informers are
+> consolidated onto the one ingest path. The catalog no longer owns a `dynamicinformer`:
+> `maybePromote` now registers an on-demand dynamic reflector with the ingest manager
+> (`RegisterDynamicCatalogReflector` — an unstructured LIST+WATCH via the dynamic client,
+> projecting each CR to the SAME `buildSummary` Summary), plus a Catalog-half sink for
+> incremental updates, and records the gvr so `collectViaIngest` serves it from `CatalogRows`
+> once `HasSyncedFor`. ON-DEMAND PRESERVED (only promotes at `itemCount ≥ threshold`; below
+> threshold the kind keeps being listed). READINESS ISOLATED: on-demand entries are EXCLUDED
+> from the whole-manager `HasSynced` gate (added after the cluster serves — they must not
+> perturb readiness/metrics, the issue-#225 class), while `HasSyncedFor` reports their real
+> per-gvr sync so the catalog serves-when-synced-else-LIST (no empty flash). DELETED:
+> `collectFromInformer`, `getPromotedDescriptor`, `promotedDescriptor`, `errInformerNotSynced`,
+> `s.promoted` (→ `dynamicIngested` gvr set). The CRD-DEFINITION watch (`watch.go`) already
+> rode the shared apiext factory — unchanged. Gates: `TestCatalogDynamicCRDViaIngestMatchesListPath`
+> (ingest-served Summaries == pure-LIST Summaries) + `…PromotesOnlyAboveThreshold` (on-demand)
+> + ingest pkg `TestRegisterDynamicCatalogReflectorServesCatalogRows` / `…GlobalHasSyncedIgnoresOnDemandEntries`
+> / `…StopReflectorForEvicts`; full backend `-race` + `mage qc:prerelease` green.
+> REMAINING: (2.4) wire `querypage/spill.go`
 > into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
 > (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,
 > 410-Gone reconcile-delete — none built); (2.6) mmap on-disk column format (gob baseline
@@ -1065,12 +1081,16 @@ reasons; **nothing required is incomplete here.**
   `factory.go`): probes WatchList at first connect (explicit `SendInitialEvents` watch); if the
   `initial-events-end` bookmark is stripped/absent, disables the `WatchListClient` gate before any factory →
   robust LIST+WATCH (data still arrives behind a Teleport-style stripping proxy); a per-GVR deadline degrades a
-  still-unsynced GVR instead of wedging the cluster. Risk #5 closed in production. **REMAINING:** consolidate the
-  catalog's on-demand dynamic-CRD informers (`collect.go:308`) + the CRD watch (`watch.go:306`) into the one
-  factory (the catalog already reads built-ins from the shared factory; this is the dynamic-CRD path — moderate
-  value, real risk to working CRD handling); gateway-factory transform; the deeper project-to-column-tuple
-  (discard the typed object — a large StreamRow/catalog rewrite, not required for the memory goal projection
-  already captures).
+  still-unsynced GVR instead of wedging the cluster. Risk #5 closed in production. ✅ **Dynamic-CRD informers
+  consolidated onto the ingest path (Tier 1.3, 2026-06-24):** the catalog's on-demand promotion no longer owns a
+  `dynamicinformer` — `maybePromote` registers an on-demand dynamic reflector with the ingest manager
+  (`RegisterDynamicCatalogReflector`, unstructured LIST+WATCH via the dynamic client, projecting to the same
+  `buildSummary` Summary) + a Catalog-half sink, serving from `CatalogRows` once synced. On-demand preserved;
+  on-demand entries excluded from the global readiness gate (per-gvr `HasSyncedFor` only); `collectFromInformer`/
+  `promotedDescriptor`/`s.promoted` deleted. The CRD-definition watch already rode the shared apiext factory
+  (`watch.go`) — unchanged. Byte-equivalence + readiness-isolation gated, full backend `-race` + prerelease green.
+  **REMAINING:** gateway-factory transform; the deeper project-to-column-tuple (discard the typed object — a large
+  StreamRow/catalog rewrite, not required for the memory goal projection already captures).
 - 🔶 **Lifecycle + governor + spill.** ✅ **Process-wide governor** (`system/governor.go` policy +
   `app_refresh_governor.go` wiring): `SetVisibleCluster` tiers open clusters Foreground/Background/Cold,
   reusing the existing per-cluster build/teardown + pausing the metrics poller for Background; a memory-pressure

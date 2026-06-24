@@ -77,7 +77,17 @@ func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespace
 		return nil, false, nil
 	}
 	gvr := desc.GVR
-	if _, cut := catalogIngestOwnedGVRs[gvr]; !cut {
+	_, staticCut := catalogIngestOwnedGVRs[gvr]
+	dynamicCut := s.isDynamicallyIngested(gvr)
+	if !staticCut && !dynamicCut {
+		return nil, false, nil
+	}
+	// A dynamic (on-demand promoted) kind serves from the ingest store only once its
+	// reflector's initial relist has landed; until then return handled=false so the caller
+	// falls through to LIST (no empty flash), exactly as the former promotion path served
+	// from the informer only after HasSynced. Static cut kinds always handle (their store is
+	// sync-gated by the composite hub before the catalog serves).
+	if dynamicCut && !staticCut && !source.HasSyncedFor(gvr) {
 		return nil, false, nil
 	}
 	rows := source.CatalogRows(gvr)
