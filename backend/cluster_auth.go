@@ -134,6 +134,11 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 	if subsystem.InformerFactory != nil {
 		_ = subsystem.InformerFactory.Shutdown()
 	}
+
+	// Spill this cluster's maintained stores to disk now that the subsystem is quiescent,
+	// so a re-warm re-paints them fast before its informers re-sync (the heap they hold is
+	// reclaimed by the governor's Cold action right after this returns).
+	a.spillClusterStores(clusterID, subsystem.Registry)
 }
 
 // rebuildClusterSubsystem rebuilds the cluster clients and refresh subsystem
@@ -208,11 +213,26 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		return
 	}
 
+	// Re-paint the fresh (empty) maintained stores from this cluster's last spill BEFORE the
+	// informers feed, so the view is instant on re-warm. The rows may be stale; they are
+	// reconciled after the manager syncs (below) and by the fresh reflectors' initial Replace.
+	a.restoreClusterStores(clusterID, subsystem.Registry)
+
 	// Start the subsystem
 	if a.refreshCtx != nil && subsystem.Manager != nil {
+		registry := subsystem.Registry
 		go func() {
 			if err := subsystem.Manager.Start(a.refreshCtx); err != nil {
 				a.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
+				return
+			}
+			// Manager.Start blocks until the informer hub has synced (factory + ingest), so
+			// the live caches are now populated: reconcile away any row warm-painted from a
+			// stale spill whose object was deleted while the cluster was Cold. Ingest-fed
+			// stores already reconciled via their reflector's initial Replace; this covers
+			// the shared-informer-fed kinds (HPA, Gateway-API, CRDs, events, …).
+			if registry != nil {
+				registry.ReconcileMaintainedStores()
 			}
 		}()
 	}

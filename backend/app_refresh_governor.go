@@ -18,6 +18,9 @@ func (a *App) initGovernor() {
 	if a == nil {
 		return
 	}
+	// Clear last session's transient store spill once at startup: a re-warm restores only
+	// what this session spilled (cross-restart resume is Tier 2.5).
+	a.resetSpillRoot()
 	a.governorMu.Lock()
 	defer a.governorMu.Unlock()
 	a.governorPolicy = system.GovernorPolicy{KeepWarm: config.GovernorKeepWarm}

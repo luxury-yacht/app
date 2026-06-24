@@ -211,3 +211,59 @@ func TestSpillToFileRoundTrip(t *testing.T) {
 
 	assertStoresEquivalent(t, orig, restored)
 }
+
+// TestRestoreFromIntoExistingStore proves RestoreFrom loads the spilled rows INTO an
+// already-constructed store (preserving its schema + any wiring that references it),
+// which is what a maintained store's warm-restore on re-warm needs — unlike RestoreStore,
+// which builds a fresh one. The target store keeps its own schema; after RestoreFrom it is
+// query-equivalent to the original.
+func TestRestoreFromIntoExistingStore(t *testing.T) {
+	orig := buildSpillStore(t)
+
+	var buf bytes.Buffer
+	if err := orig.Spill(&buf); err != nil {
+		t.Fatalf("Spill: %v", err)
+	}
+
+	target := NewStore(spillSchema())
+	if err := target.RestoreFrom(&buf); err != nil {
+		t.Fatalf("RestoreFrom: %v", err)
+	}
+
+	assertStoresEquivalent(t, orig, target)
+}
+
+// TestRestoreFromFileOverwritesByKey proves RestoreFrom upserts by UID into a non-empty
+// store: a pre-existing row with a UID also present in the spill is replaced by the
+// spilled version, and rows whose UID is absent from the spill are left untouched. (The
+// re-warm path restores into a fresh store, but this pins the merge semantics.)
+func TestRestoreFromFileOverwritesByKey(t *testing.T) {
+	orig := buildSpillStore(t)
+	path := filepath.Join(t.TempDir(), "store.spill")
+	if err := orig.SpillToFile(path); err != nil {
+		t.Fatalf("SpillToFile: %v", err)
+	}
+
+	target := NewStore(spillSchema())
+	// A row whose UID collides with a spilled row (u0000) but with stale content, and a
+	// row whose UID is unique to the target (keep-me).
+	target.Upsert(spillRow{UID: "u0000", Namespace: "stale", Name: "stale", Status: "Stale", CPU: 999})
+	target.Upsert(spillRow{UID: "keep-me", Namespace: "x", Name: "keep", Status: "Running", CPU: 1})
+
+	if err := target.RestoreFromFile(path); err != nil {
+		t.Fatalf("RestoreFromFile: %v", err)
+	}
+
+	byUID := make(map[string]spillRow)
+	for _, r := range target.Snapshot() {
+		byUID[r.UID] = r
+	}
+	// The colliding UID now holds the spilled content, not the stale one.
+	if got, ok := byUID["u0000"]; !ok || got.Namespace == "stale" {
+		t.Fatalf("u0000 should be overwritten by the spilled row, got ok=%v row=%+v", ok, got)
+	}
+	// The target-only row survives (restore upserts, it does not clear).
+	if _, ok := byUID["keep-me"]; !ok {
+		t.Fatalf("keep-me should survive RestoreFrom (upsert, not replace)")
+	}
+}

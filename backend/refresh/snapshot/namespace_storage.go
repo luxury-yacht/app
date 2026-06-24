@@ -85,6 +85,7 @@ func RegisterNamespaceStorageDomain(
 	// Maintain a per-cluster store fed by each available storage kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, storageQuerypageSchema(), storageTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceStorageDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	feedMaintainedFromIngest(maintained, namespaceStorageDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceStorageDomainName, collectIndexer, factory, nil); err != nil {
 		return err

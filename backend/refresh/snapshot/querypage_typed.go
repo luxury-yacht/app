@@ -439,6 +439,24 @@ type typedMaintainedStore[T any] struct {
 
 	mu      sync.Mutex
 	version uint64
+
+	// reconcileSources are the shared-informer-fed (and bespoke-informer-fed) feeds whose
+	// rows this store holds. Each lists its currently-live rows and reports which existing
+	// rows it owns, so Reconcile diff-syncs the store against them: a row restored from a
+	// stale spill (warm-paint on re-warm) for an object deleted while the cluster was Cold
+	// is dropped — a fresh informer delivers no Delete for it. Ingest-fed kinds are NOT
+	// listed here: their reflector's initial Replace already reconciles deletions, so adding
+	// them would let Reconcile delete live rows it has no live-set for.
+	reconcileSources []maintainedReconcileSource[T]
+}
+
+// maintainedReconcileSource is one feed's reconcile contract: listRows returns its
+// currently-live projected rows, and owns reports whether an existing store row belongs to
+// it — so Reconcile sweeps only the rows this feed is responsible for (a single feed in a
+// multi-kind store owns just its kind; a bespoke single-kind store's feed owns all rows).
+type maintainedReconcileSource[T any] struct {
+	listRows func() []T
+	owns     func(T) bool
 }
 
 func newTypedMaintainedStore[T any](meta ClusterMeta, schema querypage.Schema[T], adapter typedTableQueryAdapter[T]) *typedMaintainedStore[T] {
@@ -506,6 +524,11 @@ func registerMaintainedHandlers[T any](
 		}); err != nil {
 			return fmt.Errorf("%s: register %s handler: %w", domainName, d.Resource, err)
 		}
+		// This shared-informer kind gets no Delete on a fresh informer for an object removed
+		// while the cluster was Cold, so a row restored from a stale spill would ghost. Record
+		// the informer's live-list so reconcile() can diff-sync this kind on re-warm. inf is a
+		// per-iteration block-local, so the closure captures this descriptor's informer.
+		maintained.addReconcileSource(desc, func() []interface{} { return inf.GetIndexer().List() })
 	}
 	return nil
 }
@@ -539,7 +562,27 @@ func registerMaintainedInformerHandler[T any](
 			}
 		},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// This bespoke single-kind store gets no Delete on a fresh informer for an object removed
+	// while the cluster was Cold, so a row restored from a stale spill would ghost. Register a
+	// reconcile source that re-projects the informer's live set and owns the whole store (it
+	// holds exactly this one kind), so Reconcile drops ghosts on re-warm.
+	maintained.addReconcileSourceRows(
+		func() []T {
+			objs := informer.GetIndexer().List()
+			rows := make([]T, 0, len(objs))
+			for _, obj := range objs {
+				if row, _, ok := project(obj); ok {
+					rows = append(rows, row)
+				}
+			}
+			return rows
+		},
+		func(T) bool { return true },
+	)
+	return nil
 }
 
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
@@ -639,6 +682,93 @@ func (m *typedMaintainedStore[T]) Replace(rows []T) {
 			m.store.Delete(key)
 		}
 	}
+	m.bumpSinkVersion()
+}
+
+// spillTo flushes the store's rows to path so a Cold cluster's heap can be reclaimed and
+// the store re-painted fast on re-warm. Only the rows are written; the indexes/facets are
+// rebuilt from them on restore (see querypage.Store.SpillToFile).
+func (m *typedMaintainedStore[T]) SpillTo(path string) error {
+	return m.store.SpillToFile(path)
+}
+
+// restoreFrom loads spilled rows from path into this store (warm-paint), then bumps the
+// refetch identity so the first Build after re-warm serves the restored rows. The rows are
+// possibly STALE: reconcile() (for shared-informer kinds) and the fresh reflectors' initial
+// Replace (for ingest kinds) reconcile them against the live cluster once the subsystem
+// syncs. A missing spill file (never spilled) is not an error — the store stays empty and
+// the normal sync populates it, exactly as a cold start does.
+func (m *typedMaintainedStore[T]) RestoreFrom(path string) error {
+	if err := m.store.RestoreFromFile(path); err != nil {
+		return err
+	}
+	m.bumpSinkVersion()
+	return nil
+}
+
+// addReconcileSource registers a descriptor-fed kind (registerMaintainedHandlers) for
+// Reconcile to diff-sync: list yields the kind's currently-live objects (the informer's
+// indexer List), which it projects via the descriptor's StreamRow; the source owns only
+// rows whose adapter kind equals the descriptor's, so it never sweeps another kind's rows.
+func (m *typedMaintainedStore[T]) addReconcileSource(desc streamspec.Descriptor, list func() []interface{}) {
+	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{
+		listRows: func() []T {
+			objs := list()
+			rows := make([]T, 0, len(objs))
+			for _, obj := range objs {
+				item, ok := maintainedUnwrap(obj).(metav1.Object)
+				if !ok {
+					continue
+				}
+				if row, ok := desc.StreamRow(m.meta, item).(T); ok {
+					rows = append(rows, row)
+				}
+			}
+			return rows
+		},
+		owns: func(r T) bool { return m.adapter.Kind(r) == desc.Kind },
+	})
+}
+
+// addReconcileSourceRows registers a feed whose rows are produced by a bespoke projection
+// (registerMaintainedInformerHandler) rather than a descriptor's StreamRow — the CRD/event
+// stores. listRows yields its currently-live rows; owns reports which existing rows it is
+// responsible for (a single-kind bespoke store passes owns == always-true to sweep its
+// whole content).
+func (m *typedMaintainedStore[T]) addReconcileSourceRows(listRows func() []T, owns func(T) bool) {
+	m.reconcileSources = append(m.reconcileSources, maintainedReconcileSource[T]{listRows: listRows, owns: owns})
+}
+
+// Reconcile diff-syncs the store against the live row set of every reconcile source: it
+// re-upserts each live row (idempotent) and deletes any existing row the source OWNS whose
+// key is absent from that live set. It is the re-warm correctness step for warm-painted
+// rows — a fresh informer delivers no Delete for an object removed while the cluster was
+// Cold, so a stale restored row would otherwise persist as a ghost. The owns predicate
+// scopes each sweep so a source never touches rows of a kind it has no live-set for
+// (ingest-fed kinds, which self-reconcile). A no-op when no reconcile sources are
+// registered (a fully ingest-fed store, or a fresh start with nothing restored).
+func (m *typedMaintainedStore[T]) Reconcile() {
+	if len(m.reconcileSources) == 0 {
+		return
+	}
+	for _, src := range m.reconcileSources {
+		want := make(map[string]struct{})
+		for _, row := range src.listRows() {
+			want[m.adapter.Key(row)] = struct{}{}
+			m.store.Upsert(row)
+		}
+		for _, existing := range m.store.Snapshot() {
+			if !src.owns(existing) {
+				continue
+			}
+			key := m.adapter.Key(existing)
+			if _, keep := want[key]; !keep {
+				m.store.Delete(key)
+			}
+		}
+	}
+	// Reconcile runs only on re-warm (ReconcileMaintainedStores); a refetch is always
+	// wanted then, so advance the refetch identity once.
 	m.bumpSinkVersion()
 }
 

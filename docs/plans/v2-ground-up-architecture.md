@@ -89,8 +89,27 @@ sections it references._
 > (ingest-served Summaries == pure-LIST Summaries) + `…PromotesOnlyAboveThreshold` (on-demand)
 > + ingest pkg `TestRegisterDynamicCatalogReflectorServesCatalogRows` / `…GlobalHasSyncedIgnoresOnDemandEntries`
 > / `…StopReflectorForEvicts`; full backend `-race` + `mage qc:prerelease` green.
-> REMAINING: (2.4) wire `querypage/spill.go`
-> into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
+> **TIER 2.4 COMPLETE (2026-06-24):** the spill is wired into the governor's Cold/re-warm —
+> with a reconciling restore so it is correct for ALL domains (the user-chosen
+> difficult-but-correct path). A per-cluster `domain.Registry` now collects every domain's
+> maintained store (`RegisterMaintainedStore`, one line per domain, no signature changes);
+> `teardownClusterSubsystem` spills them to a session-scoped per-cluster cache dir once the
+> subsystem is quiescent (`spillClusterStores`), and `rebuildClusterSubsystem` re-paints the
+> fresh stores from disk BEFORE the informers feed (`restoreClusterStores`) then, in the
+> `Manager.Start` goroutine which blocks until the hub syncs, calls
+> `ReconcileMaintainedStores()`. CORRECTNESS: ingest/reflector-fed stores self-reconcile via
+> the reflector's initial `Replace`; shared-informer-fed stores (HPA, GatewayClass,
+> Gateway-API, CRDs, events, limitrange) drop ghosts via `typedMaintainedStore.Reconcile`
+> (per-kind diff-sync vs the live informer list — populated by `registerMaintainedHandlers`
+> and `registerMaintainedInformerHandler`); workloads self-reconciles via its Build recompute
+> `Replace`. helm is intentionally NOT spilled (bespoke synthesized rows; re-syncs from empty
+> = correct, no warm-paint). Session-scoped: `resetSpillRoot` clears last session's spill at
+> startup (cross-restart resume is 2.5). Gates: querypage `RestoreFrom` round-trip;
+> `typedMaintainedStore` spill/restore + reconcile-drops-ghosts + per-kind scoping; registry
+> SpillAll/RestoreAll(skip-missing)/ReconcileAll; app per-cluster spill-dir round-trip + reset;
+> full `mage qc:prerelease` EXIT 0. NOTE: a sub-second post-sync window can show a ghost before
+> `Reconcile`'s version-bump triggers the corrective refetch — acceptable for 2.4; 2.5 tightens it.
+> REMAINING: (2.5) the four-stage cold-start
 > (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,
 > 410-Gone reconcile-delete — none built); (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
@@ -1096,9 +1115,14 @@ reasons; **nothing required is incomplete here.**
   reusing the existing per-cluster build/teardown + pausing the metrics poller for Background; a memory-pressure
   poll (`runtime.MemStats` vs budget) collapses the warm set under pressure; frontend wired; unit-tested.
   ✅ **Disk spill** (`querypage/spill.go`): `Spill`/`RestoreStore` (gob-rows, indexes rebuilt on restore),
-  round-trip + query-equivalence gated — the capability the Cold action uses to reclaim+re-warm. **REMAINING:**
-  wire the spill into the governor's Cold/re-warm (today Cold = teardown + re-sync, which is already correct —
-  the spill makes re-warm fast); the mmap'd-column on-disk format (perf optimization over the gob baseline).
+  round-trip + query-equivalence gated — the capability the Cold action uses to reclaim+re-warm.
+  ✅ **Spill wired into Cold/re-warm (Tier 2.4, 2026-06-24):** `domain.Registry` collects every domain's maintained
+  store; `teardownClusterSubsystem` spills them (per-cluster session-scoped cache dir), `rebuildClusterSubsystem`
+  restores (warm-paint, before informers feed) then reconciles after the hub syncs. Correct for ALL domains:
+  ingest-fed self-reconcile via the reflector's `Replace`; shared-informer-fed drop ghosts via
+  `typedMaintainedStore.Reconcile` (added `Store.RestoreFrom`, exported SpillTo/RestoreFrom/Reconcile, per-kind
+  reconcile sources); helm intentionally not spilled. Gate-green (`mage qc:prerelease`). **REMAINING:**
+  the mmap'd-column on-disk format (perf optimization over the gob baseline, Tier 2.6).
   **NOTE:** the goals — memory bounded (projection + Cold teardown), resilient ingestion (probe+watchdog) — are
   met + unit-gated; the actual RAM-bounding across many large clusters is a deployment property, real-cluster
   validated, not unit-assertable.

@@ -88,6 +88,7 @@ func RegisterClusterRBACDomain(
 	// Maintain a per-cluster store fed by each available RBAC kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, clusterRBACQuerypageSchema(), clusterRBACTableQueryAdapter())
+	reg.RegisterMaintainedStore(clusterRBACDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	feedMaintainedFromIngest(maintained, clusterRBACDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, clusterRBACDomainName, collectIndexer, factory, nil); err != nil {
 		return err

@@ -146,6 +146,11 @@ func RegisterNamespaceHelmDomain(
 			return err
 		}
 	}
+	// NOTE: helm is intentionally NOT registered for spill/restore. Its rows are HelmReleases
+	// synthesized from revision secrets by the bespoke reaggregate handler; reconciling a
+	// release deleted while Cold would need a per-release sweep the handler does not express.
+	// Re-warm re-synthesizes the releases from the secret informer's initial relist (correct,
+	// just no warm-paint) — the value (few releases) does not justify a bespoke reconcile.
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceHelmDomainName,
 		BuildSnapshot: builder.Build,

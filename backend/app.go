@@ -60,6 +60,7 @@ type App struct {
 	governorApplied  map[string]system.ResourceTier // last-applied tier per cluster
 	governorPressure bool                           // memory-pressure signal (HeapInuse over budget)
 	governorBudget   uint64                         // HeapInuse byte budget; 0 disables pressure demotion
+	spillRoot        string                         // override for the maintained-store spill root; empty = user cache dir (tests set a temp dir)
 
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry

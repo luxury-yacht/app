@@ -79,6 +79,7 @@ func RegisterNamespaceAutoscalingDomain(
 
 	// Maintain a per-cluster store fed by each available autoscaling kind's informer.
 	maintained := newTypedMaintainedStore(clusterMeta, autoscalingQuerypageSchema(), autoscalingTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceAutoscalingDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if err := registerMaintainedHandlers(maintained, namespaceAutoscalingDomainName, collectIndexer, factory, nil); err != nil {
 		return err
 	}

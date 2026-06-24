@@ -168,6 +168,11 @@ func RegisterNamespaceWorkloadsDomain(
 	builder.includeDaemonSets = perms.IncludeDaemonSets
 	builder.includeJobs = perms.IncludeJobs
 	builder.includeCronJobs = perms.IncludeCronJobs
+	// Spill/restore the assembled store across Cold/re-warm. Its rows are a cross-kind
+	// assembly recomputed via Replace on the first Build after re-warm (ensureWorkloadsStoreFresh),
+	// so that Replace diff-syncs away any row warm-painted from a stale spill — Reconcile is a
+	// no-op here (no reconcile sources), the Build recompute is the reconciler.
+	reg.RegisterMaintainedStore(namespaceWorkloadsDomainName, builder.workloadsMaintained)
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceWorkloadsDomainName,
 		BuildSnapshot: builder.Build,

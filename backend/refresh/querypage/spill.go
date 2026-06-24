@@ -53,6 +53,38 @@ func RestoreStore[R any](r io.Reader, schema Schema[R]) (*Store[R], error) {
 	return s, nil
 }
 
+// RestoreFrom gob-decodes a []R written by Spill and Upserts every row INTO THIS store,
+// rebuilding each row's index/facet/match-cache entry incrementally — the same per-row
+// path Upsert always takes. Unlike RestoreStore it loads into an existing store,
+// preserving its schema and any wiring that already references it (a maintained store's
+// informer handlers / ingest sink), which is what the governor's warm-restore on re-warm
+// needs: the store is built+wired first, then pre-painted from disk before the fresh
+// informers feed. Rows already present are overwritten by UID; rows absent from the spill
+// are left untouched, so a later reconciling sync removes any that no longer exist
+// upstream.
+func (s *Store[R]) RestoreFrom(r io.Reader) error {
+	var rows []R
+	if err := gob.NewDecoder(r).Decode(&rows); err != nil {
+		return fmt.Errorf("querypage: restore decode: %w", err)
+	}
+	for _, row := range rows {
+		s.Upsert(row)
+	}
+	return nil
+}
+
+// RestoreFromFile opens path and loads its spilled rows into this store with a buffered
+// reader. It is the file counterpart of RestoreFrom — what the governor's re-warm path
+// calls to pre-paint a freshly-built maintained store from its on-disk spill.
+func (s *Store[R]) RestoreFromFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("querypage: restore open %q: %w", path, err)
+	}
+	defer f.Close()
+	return s.RestoreFrom(bufio.NewReader(f))
+}
+
 // SpillToFile creates/truncates path and writes the store's spilled rows to it with a
 // buffered writer. This is what the governor's Cold action calls.
 func (s *Store[R]) SpillToFile(path string) error {

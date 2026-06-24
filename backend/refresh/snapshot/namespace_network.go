@@ -116,6 +116,7 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	if err := registerMaintainedHandlers(gatewayMaintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
 		return err
 	}
+	reg.RegisterMaintainedStore(namespaceNetworkDomainName, gatewayMaintained) // spill/restore/reconcile across Cold/re-warm
 
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          ingestManager,

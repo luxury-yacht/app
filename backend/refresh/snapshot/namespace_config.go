@@ -85,6 +85,7 @@ func RegisterNamespaceConfigDomain(
 	// Maintain a per-cluster store fed by each available config kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, configQuerypageSchema(), configTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceConfigDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	feedMaintainedFromIngest(maintained, namespaceConfigDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceConfigDomainName, collectIndexer, factory, nil); err != nil {
 		return err

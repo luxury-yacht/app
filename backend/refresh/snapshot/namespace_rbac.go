@@ -89,6 +89,7 @@ func RegisterNamespaceRBACDomain(
 	// Maintain a per-cluster store fed by each available RBAC kind's source: the
 	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
 	maintained := newTypedMaintainedStore(clusterMeta, rbacQuerypageSchema(), rbacTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceRBACDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	feedMaintainedFromIngest(maintained, namespaceRBACDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceRBACDomainName, collectIndexer, factory, nil); err != nil {
 		return err

@@ -94,6 +94,7 @@ func RegisterNamespaceQuotasDomain(
 	// registerMaintainedHandlers (which skips ingest-owned kinds) registers nothing —
 	// but it stays so a nil-ingest unit test still has a defined (empty) feed path.
 	maintained := newTypedMaintainedStore(clusterMeta, quotasQuerypageSchema(), quotaTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceQuotasDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	feedMaintainedFromIngest(maintained, namespaceQuotasDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, namespaceQuotasDomainName, collectIndexer, factory, nil); err != nil {
 		return err

@@ -152,6 +152,7 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 	eventInformer := factory.Core().V1().Events()
 
 	maintained := newTypedMaintainedStore(clusterMeta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
+	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
 		func(obj interface{}) (ClusterEventEntry, metav1.Object, bool) {
 			evt, ok := obj.(*corev1.Event)

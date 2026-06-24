@@ -85,6 +85,7 @@ func RegisterClusterCRDDomain(
 	crdInformer := factory.Apiextensions().V1().CustomResourceDefinitions()
 
 	maintained := newTypedMaintainedStore(clusterMeta, crdsQuerypageSchema(), clusterCRDTableQueryAdapter())
+	reg.RegisterMaintainedStore(clusterCRDDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if err := registerMaintainedInformerHandler(maintained, crdInformer.Informer(),
 		func(obj interface{}) (ClusterCRDEntry, metav1.Object, bool) {
 			crd, ok := obj.(*apiextv1.CustomResourceDefinition)

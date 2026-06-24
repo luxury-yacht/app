@@ -133,6 +133,7 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 	eventInformer := factory.Core().V1().Events()
 
 	maintained := newTypedMaintainedStore(clusterMeta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
+	reg.RegisterMaintainedStore(namespaceEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
 		func(obj interface{}) (EventSummary, metav1.Object, bool) {
 			evt, ok := obj.(*corev1.Event)

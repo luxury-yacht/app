@@ -13,6 +13,10 @@ import (
 type Registry struct {
 	mu      sync.RWMutex
 	domains map[string]refresh.DomainConfig
+
+	// maintained collects the domains' spillable maintained stores so the governor can
+	// flush them to disk on Cold and re-paint + reconcile on re-warm (see maintained_stores.go).
+	maintained maintainedStoreSet
 }
 
 // New creates an empty Registry instance.

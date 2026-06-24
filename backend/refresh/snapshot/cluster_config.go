@@ -104,6 +104,9 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	// ingest Sink for the cut kinds (StorageClass/IngressClass/webhooks), the
 	// Gateway-API informer handler for the uncut GatewayClass.
 	maintained := newTypedMaintainedStore(clusterMeta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
+	// Register the store so the governor can spill it on Cold and re-paint + reconcile it on
+	// re-warm (domain.Registry.{Spill,Restore,Reconcile}MaintainedStores).
+	reg.RegisterMaintainedStore(clusterConfigDomainName, maintained)
 	feedMaintainedFromIngest(maintained, clusterConfigDomainName, ingestManager)
 	if err := registerMaintainedHandlers(maintained, clusterConfigDomainName, collectIndexer, factory, gatewayFactory); err != nil {
 		return err
