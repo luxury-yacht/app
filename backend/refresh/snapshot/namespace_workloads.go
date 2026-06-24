@@ -232,6 +232,58 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		podUsage = b.metrics.LatestPodUsage()
 	}
 
+	items, version := assembleWorkloadRows(
+		meta, podAggregates, podSummaries,
+		deployments, statefulSets, daemonSets, jobs, cronJobs,
+		hpas, hpaKnown, podUsage,
+		namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
+		namespacePodIngestVersion(b.podIngest),
+	)
+
+	resolved := resolveTypedSnapshotPageViaStore(
+		namespaceWorkloadsDomainName,
+		items,
+		query,
+		workloadTableQueryAdapter(),
+		workloadsQuerypageSchema(),
+		b.queryCapabilities(),
+		config.SnapshotNamespaceWorkloadsEntryLimit,
+		"workloads",
+		func(r WorkloadSummary) string { return r.Kind },
+		issues,
+	)
+	return &refresh.Snapshot{
+		Domain:  namespaceWorkloadsDomainName,
+		Scope:   scope,
+		Version: version,
+		Payload: NamespaceWorkloadsSnapshot{
+			ClusterMeta:           meta,
+			ResourceQueryEnvelope: resolved.Envelope,
+			Rows:                  resolved.Rows,
+		},
+		Stats: resolved.Stats,
+	}, nil
+}
+
+// assembleWorkloadRows builds the unified workload + standalone-pod rows for the domain
+// from the projected workload own-rows, pod aggregates/summaries, HPA targets, and the
+// fresh pod metrics sample. It is the ONE assembly shared by the list Build and (next) the
+// maintained store's recompute, so the two cannot diverge. Passing an empty podUsage yields
+// rows with ZEROED metrics — the maintained store's object-state form, overlaid with the
+// fresh sample at serve (§3.6). workloadIngestVersion/podIngestVersion are the cut stores'
+// watermarks, folded into the returned version only when a workload / standalone-pod row is
+// actually emitted (matching the prior per-object RV fold).
+func assembleWorkloadRows(
+	meta ClusterMeta,
+	podAggregates []streamrows.PodAggregate,
+	podSummaries map[string]streamrows.PodSummary,
+	deployments, statefulSets, daemonSets, jobs, cronJobs []WorkloadSummary,
+	hpas []*autoscalingv1.HorizontalPodAutoscaler,
+	hpaKnown bool,
+	podUsage map[string]metrics.PodUsage,
+	workloadIngestVersion uint64,
+	podIngestVersion uint64,
+) ([]WorkloadSummary, uint64) {
 	// Build a set of HPA-managed workloads keyed by full target GVK + namespace/name.
 	hpaTargets := buildHPATargetSet(hpas)
 
@@ -275,10 +327,9 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	// The workload kinds are cut: each `ownRow` is the projected workload-OWN-fields
 	// WorkloadSummary the reflector built at intake. The serve path re-joins the owner's
-	// pods + the fresh metrics sample onto it (reaggregateWorkloadSummary), reproducing the
-	// pre-cut row byte for byte. The projected row carries no per-object resourceVersion (the
-	// typed object is gone), so each is appended with a nil object — the workload store's RV
-	// is folded into the version watermark once below, mirroring the standalone-pod fold.
+	// pods + the metrics sample onto it (reaggregateWorkloadSummary). The projected row
+	// carries no per-object resourceVersion, so each is appended with a nil object — the
+	// workload store's RV is folded into the version watermark once below.
 	reaggregate := func(ownRow WorkloadSummary) WorkloadSummary {
 		key := workloadOwnerKey(ownRow.Kind, ownRow.Namespace, ownRow.Name)
 		return reaggregateWorkloadSummary(ownRow, podsByOwner[key], podUsage)
@@ -290,15 +341,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 			workloadEmitted = true
 		}
 	}
-
-	// The projected workload rows carry no per-object RV (the typed object is gone), so when
-	// any workload row is emitted the workload stores' latest RV is folded into the version
-	// watermark to keep refetch identity advancing on workload changes — mirroring the
-	// standalone-pod fold below and how the prior code folded each typed workload's RV.
-	if workloadEmitted {
-		if wlVersion := namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR); wlVersion > version {
-			version = wlVersion
-		}
+	if workloadEmitted && workloadIngestVersion > version {
+		version = workloadIngestVersion
 	}
 
 	standalonePodEmitted := false
@@ -319,43 +363,15 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		appendSummary(summary, nil)
 		standalonePodEmitted = true
 	}
-
-	// Standalone-pod rows carry no per-object RV (the typed pod is gone), so when any is
-	// emitted the pod store's RV is folded into the version watermark to keep refetch
-	// identity advancing on standalone-pod changes — mirroring how the prior code folded
-	// each standalone pod's resourceVersion. Workload-owned pods never contributed to the
-	// version (they were not appended as rows), so the fold is gated on a standalone row.
-	if standalonePodEmitted {
-		if podVersion := namespacePodIngestVersion(b.podIngest); podVersion > version {
-			version = podVersion
-		}
+	// Standalone-pod rows carry no per-object RV (the typed pod is gone); when any is
+	// emitted the pod store's RV is folded into the watermark. Workload-owned pods never
+	// contributed (they were not appended as rows), so the fold is gated on a standalone row.
+	if standalonePodEmitted && podIngestVersion > version {
+		version = podIngestVersion
 	}
 
 	sortWorkloadSummaries(items)
-
-	resolved := resolveTypedSnapshotPageViaStore(
-		namespaceWorkloadsDomainName,
-		items,
-		query,
-		workloadTableQueryAdapter(),
-		workloadsQuerypageSchema(),
-		b.queryCapabilities(),
-		config.SnapshotNamespaceWorkloadsEntryLimit,
-		"workloads",
-		func(r WorkloadSummary) string { return r.Kind },
-		issues,
-	)
-	return &refresh.Snapshot{
-		Domain:  namespaceWorkloadsDomainName,
-		Scope:   scope,
-		Version: version,
-		Payload: NamespaceWorkloadsSnapshot{
-			ClusterMeta:           meta,
-			ResourceQueryEnvelope: resolved.Envelope,
-			Rows:                  resolved.Rows,
-		},
-		Stats: resolved.Stats,
-	}, nil
+	return items, version
 }
 
 func sortWorkloadSummaries(items []WorkloadSummary) {
