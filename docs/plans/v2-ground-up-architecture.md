@@ -117,8 +117,18 @@ sections it references._
 > informer marks `discoveryStale` (`crdWatchHandler` wrapping `makeHandler`) so the next
 > `discoverResources` `Invalidate()`s the cache, so periodic discovers stay cached while a new/
 > removed CRD forces a fresh fetch (gated: invalidate-after-CRD-change + handler-marks-stale +
-> `mage qc:prerelease`). STILL TODO: stage 2 (warm-paint-from-disk across restarts), stage 3
-> (WatchList resume from persisted RV → delta reconcile), stage 4 (410-Gone reconcile-delete).
+> `mage qc:prerelease`). **stage 2 (warm-paint-from-disk across restarts) DONE (2026-06-24):** the
+> 2.4 spill is now cross-restart — `resetSpillRootForFormat` (initGovernor) keeps the previous
+> session's spill iff its `format-version` marker matches this build (else discards on first-run/
+> upgrade; any residual decode mismatch is skipped per-store), and restore is centralized in
+> `buildRefreshSubsystemForSelection` so EVERY build path (initial setup, selection update, auth/
+> governor re-warm) re-paints the maintained stores from disk before the manager starts;
+> reconcile-after-sync runs in both start goroutines (`startRefreshSubsystems` + cluster_auth
+> rebuild). Same mechanism as 2.4 reconciles stale rows on the cold-start full LIST; UI
+> "reconciling" marker deferred (rows paint then reconcile silently). Gated: `TestResetSpillRootForFormat`
+> (keep-compatible / clear-on-upgrade) + `mage qc:prerelease`. STILL TODO: stage 3 (WatchList resume
+> from persisted RV → delta reconcile — turns the cold-start full LIST into a delta), stage 4
+> (410-Gone reconcile-delete).
 > (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
 

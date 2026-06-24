@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -192,6 +193,13 @@ func (a *App) buildRefreshSubsystemForSelection(
 
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
 	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+
+	// Warm-paint the freshly-built maintained stores from this cluster's last spill BEFORE
+	// the manager starts feeding (cross-restart cold-start, Tier 2.5 stage 2). Shared by every
+	// build path — initial start, selection update, and auth/governor re-warm. Restored rows
+	// may be stale; they are reconciled once the subsystem syncs (the start paths call
+	// ReconcileMaintainedStores after Manager.Start returns).
+	a.restoreClusterStores(clusterMeta.ID, subsystem.Registry)
 	return subsystem, nil
 }
 
@@ -203,11 +211,20 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 			continue
 		}
 		clusterName := a.clusterNameForID(clusterID)
-		go func(mgr *refresh.Manager, clusterID, clusterName string) {
+		registry := subsystem.Registry
+		go func(mgr *refresh.Manager, registry *domain.Registry, clusterID, clusterName string) {
 			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
+				return
 			}
-		}(manager, clusterID, clusterName)
+			// Start blocks until the hub has synced, so the live caches are populated:
+			// reconcile away any row warm-painted from a stale spill whose object was deleted
+			// while the app was closed (ingest-fed stores already reconciled via their
+			// reflector's initial Replace; this covers the shared-informer-fed kinds).
+			if registry != nil {
+				registry.ReconcileMaintainedStores()
+			}
+		}(manager, registry, clusterID, clusterName)
 		// Keep permission grants fresh; revoke access stops refresh informers/streams.
 		permCtx, cancel := context.WithCancel(ctx)
 		a.storeRefreshPermissionCancel(clusterID, cancel)

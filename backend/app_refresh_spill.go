@@ -49,11 +49,13 @@ func hashClusterID(clusterID string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// resetSpillRoot clears the spill root once at session start, so a re-warm only ever
-// restores spill files THIS session wrote. Resuming a persisted store across app restarts
-// (cold-start-from-disk with resume-from-RV + 410-Gone reconcile) is Tier 2.5's job;
-// keeping 2.4's spill session-scoped avoids accidentally serving last session's data.
-// Best-effort: the spill is transient, so a clear failure is non-fatal.
+// spillFormatMarkerFile names the file at the spill root that records the spill format the
+// existing spill files were written with, so an app upgrade that changes a row struct does
+// not restore incompatible rows.
+const spillFormatMarkerFile = "format-version"
+
+// resetSpillRoot unconditionally clears the spill root. It is the discard primitive
+// resetSpillRootForFormat uses; best-effort, since the spill is transient cache.
 func (a *App) resetSpillRoot() {
 	if a == nil {
 		return
@@ -63,6 +65,43 @@ func (a *App) resetSpillRoot() {
 		return
 	}
 	_ = os.RemoveAll(root)
+}
+
+// spillFormatVersion is the version the current build's spill files are written with. A
+// change between sessions (an app upgrade that may have changed a row struct) invalidates
+// the on-disk spill. Tests override via App.spillFormat.
+func (a *App) spillFormatVersion() string {
+	if a.spillFormat != "" {
+		return a.spillFormat
+	}
+	return Version
+}
+
+// resetSpillRootForFormat is the session-start spill policy (Tier 2.5 stage 2): if the spill
+// root's recorded format matches this build's, the previous session's spill is KEPT so the
+// initial cluster build can re-paint from disk before any network call (cross-restart
+// warm-paint); otherwise — a missing marker (first run) or a format change (upgrade) — the
+// spill is discarded and the current format stamped, so incompatible rows are never restored.
+// Any residual decode mismatch within a version is still skipped per-store on restore, so
+// this guard is the proactive layer, not the only safety. Best-effort.
+func (a *App) resetSpillRootForFormat() {
+	if a == nil {
+		return
+	}
+	root, err := a.spillRootDir()
+	if err != nil || root == "" {
+		return
+	}
+	marker := filepath.Join(root, spillFormatMarkerFile)
+	current := a.spillFormatVersion()
+	if existing, rerr := os.ReadFile(marker); rerr == nil && string(existing) == current {
+		return // compatible spill from a previous session — keep it for cross-restart warm-paint
+	}
+	a.resetSpillRoot()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(marker, []byte(current), 0o644)
 }
 
 // spillClusterStores flushes a cluster's maintained stores to its spill directory before

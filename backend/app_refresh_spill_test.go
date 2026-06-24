@@ -75,9 +75,8 @@ func TestAppClusterSpillDirIsPerClusterAndStable(t *testing.T) {
 	require.NotEqual(t, d1a, d2, "per-cluster isolation")
 }
 
-// TestAppResetSpillRootClearsLastSession proves the spill is session-scoped: a startup
-// reset removes the previous session's spill files so a re-warm never restores stale
-// cross-session data (cold-start-from-disk across restarts is Tier 2.5).
+// TestAppResetSpillRootClearsLastSession proves the unconditional clear primitive removes
+// the spill files (used by the format-gated reset on an incompatible/missing marker).
 func TestAppResetSpillRootClearsLastSession(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.spillRoot = t.TempDir()
@@ -92,4 +91,36 @@ func TestAppResetSpillRootClearsLastSession(t *testing.T) {
 
 	app.resetSpillRoot()
 	require.NoFileExists(t, filepath.Join(dir, "namespace-config.spill"))
+}
+
+// TestResetSpillRootForFormat proves the cross-restart contract: a same-version restart
+// KEEPS the previous session's spill (so cold-start re-paints from disk), while a format
+// change (app upgrade) CLEARS the now-incompatible spill rather than restoring stale/wrong
+// rows.
+func TestResetSpillRootForFormat(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.spillRoot = t.TempDir()
+	app.spillFormat = "v1"
+
+	// First startup (no marker yet): the gated reset clears + stamps the current format.
+	app.resetSpillRootForFormat()
+
+	// This session spills a store.
+	reg := domain.New()
+	reg.RegisterMaintainedStore("namespace-config", &spillFake{rows: []string{"x"}})
+	app.spillClusterStores("cluster-1", reg)
+	dir, err := app.clusterSpillDir("cluster-1")
+	require.NoError(t, err)
+	require.FileExists(t, filepath.Join(dir, "namespace-config.spill"))
+
+	// Same-version restart: the spill is kept (cross-restart warm-paint).
+	app.resetSpillRootForFormat()
+	require.FileExists(t, filepath.Join(dir, "namespace-config.spill"),
+		"a same-version restart must keep the spill for cold-start warm-paint")
+
+	// Upgrade to a new format: the incompatible spill is discarded.
+	app.spillFormat = "v2"
+	app.resetSpillRootForFormat()
+	require.NoFileExists(t, filepath.Join(dir, "namespace-config.spill"),
+		"a format change must clear the incompatible spill")
 }

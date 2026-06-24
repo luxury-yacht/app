@@ -61,6 +61,7 @@ type App struct {
 	governorPressure bool                           // memory-pressure signal (HeapInuse over budget)
 	governorBudget   uint64                         // HeapInuse byte budget; 0 disables pressure demotion
 	spillRoot        string                         // override for the maintained-store spill root; empty = user cache dir (tests set a temp dir)
+	spillFormat      string                         // override for the spill format version; empty = app Version (tests set a fixed value)
 
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry

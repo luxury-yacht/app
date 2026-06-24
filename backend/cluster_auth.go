@@ -213,10 +213,8 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		return
 	}
 
-	// Re-paint the fresh (empty) maintained stores from this cluster's last spill BEFORE the
-	// informers feed, so the view is instant on re-warm. The rows may be stale; they are
-	// reconciled after the manager syncs (below) and by the fresh reflectors' initial Replace.
-	a.restoreClusterStores(clusterID, subsystem.Registry)
+	// (The maintained stores were already warm-painted from disk inside
+	// buildRefreshSubsystemForSelection, before the manager starts — shared by every build path.)
 
 	// Start the subsystem
 	if a.refreshCtx != nil && subsystem.Manager != nil {
