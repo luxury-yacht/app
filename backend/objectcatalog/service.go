@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 )
 
 const (
@@ -66,6 +67,17 @@ type Service struct {
 	catalogIndex
 	queryStore CatalogQueryStore
 	identity   *resourceIdentityResolver
+
+	// discoveryClient is the per-cluster discovery client the catalog re-discovers through.
+	// In production it is a disk-cached, ETag-revalidating, aggregated-discovery client
+	// (built once via ensureDiscovery → buildDiscoveryClient); tests pre-inject it.
+	// discoveryInvalidate is its cache-invalidation hook (nil for a plain, uncached client),
+	// and discoveryStale latches when a CRD change requires the cache to be invalidated on
+	// the next discover so a newly-created CRD is never hidden behind a stale document.
+	discoveryOnce       sync.Once
+	discoveryClient     discovery.DiscoveryInterface
+	discoveryInvalidate func()
+	discoveryStale      atomic.Bool
 
 	// dynamicIngested is the set of dynamic (CRD-backed) kinds the catalog has promoted
 	// onto the ingest path on demand (see maybePromote). collectViaIngest serves these from

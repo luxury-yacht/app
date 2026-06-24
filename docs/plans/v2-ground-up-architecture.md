@@ -109,9 +109,17 @@ sections it references._
 > SpillAll/RestoreAll(skip-missing)/ReconcileAll; app per-cluster spill-dir round-trip + reset;
 > full `mage qc:prerelease` EXIT 0. NOTE: a sub-second post-sync window can show a ghost before
 > `Reconcile`'s version-bump triggers the corrective refetch — acceptable for 2.4; 2.5 tightens it.
-> REMAINING: (2.5) the four-stage cold-start
-> (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,
-> 410-Gone reconcile-delete — none built); (2.6) mmap on-disk column format (gob baseline
+> REMAINING: (2.5) the four-stage cold-start — **stage 1 (discovery disk-cache+ETag) DONE
+> (2026-06-24):** the object catalog re-discovers through a per-cluster `disk.CachedDiscoveryClient`
+> (aggregated discovery + ETag/304 + on-disk group/HTTP cache under the user cache dir), built
+> once via `ensureDiscovery`→`buildDiscoveryClient` with a plain-client fallback when the
+> RestConfig/cache dir is unavailable; precise invalidation — a CRD add/delete on the apiext
+> informer marks `discoveryStale` (`crdWatchHandler` wrapping `makeHandler`) so the next
+> `discoverResources` `Invalidate()`s the cache, so periodic discovers stay cached while a new/
+> removed CRD forces a fresh fetch (gated: invalidate-after-CRD-change + handler-marks-stale +
+> `mage qc:prerelease`). STILL TODO: stage 2 (warm-paint-from-disk across restarts), stage 3
+> (WatchList resume from persisted RV → delta reconcile), stage 4 (410-Gone reconcile-delete).
+> (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):

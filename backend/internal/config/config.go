@@ -400,6 +400,13 @@ const (
 	// ObjectCatalogDiscoveryRequestTimeout bounds catalog discovery requests.
 	ObjectCatalogDiscoveryRequestTimeout = 15 * time.Second
 
+	// ObjectCatalogDiscoveryCacheTTL bounds how long the catalog's disk-cached discovery
+	// document is reused without revalidation. A CRD add/delete invalidates the cache
+	// immediately (see Service.markDiscoveryStale), so this only bounds the worst-case
+	// staleness for changes the catalog's CRD watch does not observe (e.g. a new API group
+	// from an aggregated-apiserver install), not for CRDs.
+	ObjectCatalogDiscoveryCacheTTL = 10 * time.Minute
+
 	// ObjectCatalogWatchPendingBufferSize caps pending informer watch events.
 	ObjectCatalogWatchPendingBufferSize = 8192
 

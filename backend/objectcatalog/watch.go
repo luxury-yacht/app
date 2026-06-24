@@ -315,7 +315,43 @@ func registerWatchHandlers(
 	if apiextFactory != nil {
 		crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
 		gr := schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}
-		crdInformer.AddEventHandler(makeHandler(gr, notifier, svc))
+		// Wrap the CRD handler so a CRD add/delete also marks discovery stale: the next
+		// discover invalidates the disk-cached discovery document, so a newly-created CRD's
+		// kind is discovered promptly rather than waiting out the cache TTL.
+		crdInformer.AddEventHandler(svc.crdWatchHandler(makeHandler(gr, notifier, svc)))
+	}
+}
+
+// markDiscoveryStale latches that the discovery document changed (a CRD was added or
+// removed), so the next discoverResources invalidates the disk-cached discovery before
+// re-discovering.
+func (s *Service) markDiscoveryStale() {
+	s.discoveryStale.Store(true)
+}
+
+// crdWatchHandler wraps the CRD informer's catalog handler so a CRD add/update/delete marks
+// discovery stale (forcing a cache invalidation on the next discover) before delegating to
+// the base handler — keeping newly-created CRDs from being hidden by a cached discovery doc.
+func (s *Service) crdWatchHandler(base cache.ResourceEventHandlerFuncs) cache.ResourceEventHandlerFuncs {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			s.markDiscoveryStale()
+			if base.AddFunc != nil {
+				base.AddFunc(obj)
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			s.markDiscoveryStale()
+			if base.UpdateFunc != nil {
+				base.UpdateFunc(oldObj, newObj)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			s.markDiscoveryStale()
+			if base.DeleteFunc != nil {
+				base.DeleteFunc(obj)
+			}
+		},
 	}
 }
 
