@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -22,12 +23,50 @@ import (
 
 const namespaceEventsDomainName = "namespace-events"
 
-// NamespaceEventsBuilder constructs summaries for namespace scoped events.
+// NamespaceEventsBuilder constructs summaries for namespace scoped events. In production it
+// serves from an informer-fed maintained store (projected at intake by the same
+// projectNamespaceEventSummary the list path uses); the eventLister path is the list
+// fallback (and the direct-builder unit tests).
 type NamespaceEventsBuilder struct {
 	eventLister corelisters.EventLister
+	maintained  *typedMaintainedStore[EventSummary]
 	// eventsSynced reports whether the events informer finished its initial
 	// sync; see ClusterEventsBuilder for why listing an unsynced cache is a lie.
 	eventsSynced cache.InformerSynced
+}
+
+// projectNamespaceEventSummary projects a Kubernetes Event into an EventSummary, or reports
+// ok=false to skip it. Namespace events involve namespaced objects, so an event whose
+// involved object has no namespace is skipped — the same gate the list path applies. Shared
+// by the list path and the maintained-store handler so both project byte-identically. The
+// row's Namespace is the involved-object namespace (what the table filters by); the
+// Kubernetes event recorder always creates an event in its involved object's namespace, so
+// involved-object namespace == event metadata namespace for real events.
+func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventSummary, bool) {
+	if event == nil || strings.TrimSpace(event.InvolvedObject.Namespace) == "" {
+		return EventSummary{}, false
+	}
+	facts := eventres.BuildFacts(meta.ClusterID, event)
+	timestamp := eventres.EventTimestamp(event).Time
+	return EventSummary{
+		ClusterMeta:      meta,
+		Kind:             event.InvolvedObject.Kind,
+		Name:             event.Name,
+		UID:              string(event.UID),
+		ResourceVersion:  event.ResourceVersion,
+		Namespace:        event.InvolvedObject.Namespace,
+		ObjectNamespace:  event.InvolvedObject.Namespace,
+		ObjectUID:        string(event.InvolvedObject.UID),
+		ObjectAPIVersion: event.InvolvedObject.APIVersion,
+		InvolvedObject:   facts.InvolvedObject,
+		Type:             facts.EventType,
+		Source:           facts.Source,
+		Reason:           facts.Reason,
+		Object:           eventres.EventObjectDisplay(event),
+		Message:          facts.Message,
+		Age:              formatAge(timestamp),
+		AgeTimestamp:     timestamp.UnixMilli(),
+	}, true
 }
 
 // NamespaceEventsSnapshot payload for events tab.
@@ -83,14 +122,34 @@ type EventSummary struct {
 	AgeTimestamp     int64                       `json:"ageTimestamp"`
 }
 
-// RegisterNamespaceEventsDomain registers the events domain.
-func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory) error {
+// RegisterNamespaceEventsDomain registers the events domain. It serves from a maintained
+// store fed by the shared Events informer (projected at intake by the same
+// projectNamespaceEventSummary the list path uses); the handler is registered before the
+// factory starts so the sync gate guarantees the store is populated before serve.
+func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
+	eventInformer := factory.Core().V1().Events()
+
+	maintained := newTypedMaintainedStore(clusterMeta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
+	if err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
+		func(obj interface{}) (EventSummary, metav1.Object, bool) {
+			evt, ok := obj.(*corev1.Event)
+			if !ok {
+				return EventSummary{}, nil, false
+			}
+			summary, keep := projectNamespaceEventSummary(clusterMeta, evt)
+			return summary, evt, keep
+		},
+	); err != nil {
+		return err
+	}
+
 	builder := &NamespaceEventsBuilder{
-		eventLister:  factory.Core().V1().Events().Lister(),
-		eventsSynced: factory.Core().V1().Events().Informer().HasSynced,
+		eventLister:  eventInformer.Lister(),
+		maintained:   maintained,
+		eventsSynced: eventInformer.Informer().HasSynced,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceEventsDomainName,
@@ -118,71 +177,43 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	if b.eventsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.eventsSynced) {
 		return nil, fmt.Errorf("namespace events cache has not finished syncing")
 	}
-	var (
-		events []*corev1.Event
-	)
-	if parsedScope.AllNamespaces {
-		events, err = b.eventLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		events, err = b.eventLister.Events(parsedScope.Namespace).List(labels.Everything())
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	filtered := make([]*corev1.Event, 0, len(events))
-	for _, event := range events {
-		if event == nil {
-			continue
-		}
-		eventNamespace := strings.TrimSpace(event.InvolvedObject.Namespace)
-		if eventNamespace == "" {
-			continue
-		}
-		if !parsedScope.AllNamespaces && eventNamespace != parsedScope.Namespace {
-			continue
-		}
-		filtered = append(filtered, event)
-	}
-	events = filtered
-
-	summaries := make([]EventSummary, 0, len(events))
+	var summaries []EventSummary
 	var version uint64
-
-	for _, event := range events {
-		if event == nil {
-			continue
+	if b.maintained != nil {
+		// Serve from the informer-fed store (rows projected + empty-involved-namespace
+		// filtered at intake) instead of listing + re-projecting. The store filters by the
+		// involved-object namespace, the same field the list path's namespace filter uses.
+		ns := ""
+		if !parsedScope.AllNamespaces {
+			ns = parsedScope.Namespace
 		}
-		if event.InvolvedObject.Namespace == "" {
-			continue
+		summaries = b.maintained.rowsInNamespace(ns)
+		version = b.maintained.snapshotVersion()
+	} else {
+		var events []*corev1.Event
+		if parsedScope.AllNamespaces {
+			events, err = b.eventLister.List(labels.Everything())
+		} else {
+			events, err = b.eventLister.Events(parsedScope.Namespace).List(labels.Everything())
 		}
-		facts := eventres.BuildFacts(meta.ClusterID, event)
-		timestamp := eventres.EventTimestamp(event).Time
-		summary := EventSummary{
-			ClusterMeta:      meta,
-			Kind:             event.InvolvedObject.Kind,
-			Name:             event.Name,
-			UID:              string(event.UID),
-			ResourceVersion:  event.ResourceVersion,
-			Namespace:        event.InvolvedObject.Namespace,
-			ObjectNamespace:  event.InvolvedObject.Namespace,
-			ObjectUID:        string(event.InvolvedObject.UID),
-			ObjectAPIVersion: event.InvolvedObject.APIVersion,
-			InvolvedObject:   facts.InvolvedObject,
-			Type:             facts.EventType,
-			Source:           facts.Source,
-			Reason:           facts.Reason,
-			Object:           eventres.EventObjectDisplay(event),
-			Message:          facts.Message,
-			Age:              formatAge(timestamp),
-			AgeTimestamp:     timestamp.UnixMilli(),
+		if err != nil {
+			return nil, err
 		}
-		summaries = append(summaries, summary)
-		if v := resourceVersionOrTimestamp(event); v > version {
-			version = v
+		summaries = make([]EventSummary, 0, len(events))
+		for _, event := range events {
+			summary, keep := projectNamespaceEventSummary(meta, event)
+			if !keep {
+				continue
+			}
+			// For a specific namespace the involved-object namespace must match the
+			// request (mirrors the prior filtered step); all-namespaces keeps every row.
+			if !parsedScope.AllNamespaces && summary.Namespace != parsedScope.Namespace {
+				continue
+			}
+			summaries = append(summaries, summary)
+			if v := resourceVersionOrTimestamp(event); v > version {
+				version = v
+			}
 		}
 	}
 

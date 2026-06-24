@@ -357,7 +357,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 
 		directRegistration("cluster-events", func() error {
-			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
+			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName})
 		}),
 
 		accessListRegistration(runtimeAccess, listDomainConfig{
@@ -447,12 +447,13 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		})),
 
 		directRegistration("namespace-events", func() error {
-			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
+			return snapshot.RegisterNamespaceEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName})
 		}),
 		directRegistration("namespace-helm", func() error {
 			return snapshot.RegisterNamespaceHelmDomain(
 				deps.registry,
 				deps.informerFactory.HelmStorage(),
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 			)
 		}),
 		accessListRegistration(runtimeAccess, listDomainConfig{

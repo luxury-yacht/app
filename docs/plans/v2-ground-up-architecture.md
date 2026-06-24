@@ -44,11 +44,21 @@ sections it references._
 > byte-identity gated). **CORRECTION: `pods` already serves ALL scopes (namespace/node/
 > workload) from its maintained store** (`pods.go:373-376 collectSummariesFromStore`) — the
 > earlier audit's "node/workload scopes list" was wrong (that path is test-only).
-> **REMAINING (driving to completion, full Phase 4):** (1.2) the rest of the still-list+
-> project domains — `namespace/cluster-events` (NOTE: high-churn — a maintained store
-> projects on every event vs only when viewed; the one mild pessimization), `namespace-helm`
-> (synthesized from secrets), `namespace-network` Gateway-API kinds, `namespace-workloads`
-> standalone-pod assembly; (1.3) consolidate the catalog's on-demand dynamic-CRD
+> 13 typed domains now on the owned store: the 9 + `cluster-crds` + `cluster-events` +
+> `namespace-events` + `namespace-helm` (helm = a bespoke handler on the helm-storage Secret
+> informer re-aggregates each release's latest non-superseded revision; events via
+> `registerMaintainedInformerHandler`; all byte-identity gated). **AUDIT CORRECTION (grounded):
+> `namespace-workloads` is NOT a list+project gap** — it reads the projected workload-OWN
+> rows + pod aggregates straight from the ingest stores (`namespace_workloads.go:276-281`) and
+> its per-Build work is `reaggregateWorkloadSummary` — a SERVE-TIME relationship join
+> (workload ↔ pods ↔ fresh metrics ↔ HPA), the SAME §3.6 pattern the architecture overlays at
+> serve on purpose (and metrics MUST stay at serve, so a maintained store can't subsume it).
+> Likewise `namespace-network`'s cut kinds read projected ingest rows + a serve-time
+> Service↔EndpointSlice join; its only raw list+project is the Gateway-API kinds via
+> `collectDescriptorTableRows` (small-N read from the gateway informer INDEXERS — RAM, not the
+> apiserver). **So every domain that list+projected RAW objects per Build is now on a
+> maintained store.** REMAINING (optional, low-value): network Gateway-API kinds onto a
+> maintained store (intricate hybrid merge for a small-N RAM read). (1.3) consolidate the catalog's on-demand dynamic-CRD
 > informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`
 > into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
 > (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,

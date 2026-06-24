@@ -696,3 +696,19 @@ func (m *typedMaintainedStore[T]) rows(namespace string, availableKinds map[stri
 	}
 	return out
 }
+
+// rowsInNamespace returns the maintained rows for a namespace ("" = all namespaces),
+// filtering by namespace ONLY. It serves open-kind-set domains (events) whose adapter.Kind
+// is the involved-object kind, not a fixed domain kind — so the rows() availableKinds gate
+// cannot enumerate the kinds and would wrongly drop every row.
+func (m *typedMaintainedStore[T]) rowsInNamespace(namespace string) []T {
+	all := m.store.Snapshot()
+	out := make([]T, 0, len(all))
+	for _, row := range all {
+		if namespace != "" && m.adapter.Namespace(row) != namespace {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
+}
