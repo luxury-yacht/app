@@ -56,9 +56,15 @@ sections it references._
 > Likewise `namespace-network`'s cut kinds read projected ingest rows + a serve-time
 > Service↔EndpointSlice join; its only raw list+project is the Gateway-API kinds via
 > `collectDescriptorTableRows` (small-N read from the gateway informer INDEXERS — RAM, not the
-> apiserver). **So every domain that list+projected RAW objects per Build is now on a
-> maintained store.** REMAINING (optional, low-value): network Gateway-API kinds onto a
-> maintained store (intricate hybrid merge for a small-N RAM read). (1.3) consolidate the catalog's on-demand dynamic-CRD
+> apiserver). **TIER 1.2 COMPLETE (2026-06-23):** every domain that list+projected RAW objects
+> per Build now serves from a maintained store — the 9 + `cluster-crds` + `cluster-events` +
+> `namespace-events` + `namespace-helm` + `namespace-network` Gateway-API kinds — each behind a
+> `…MaintainedMatchesListPath` byte-identity gate, full backend `-race` clean. `namespace-
+> workloads` and network's Service↔EndpointSlice join keep the §3.6-MANDATED serve-time join
+> (object + metrics are two column families "joined by UID in the store, never merged" — line
+> 272; metrics MUST overlay at serve), so they are plan-complete, not gaps. Reusable machinery:
+> `registerMaintainedInformerHandler`, `deleteRow`, `rowsInNamespace`, `collectDescriptorSources`.
+> REMAINING: (1.3) consolidate the catalog's on-demand dynamic-CRD
 > informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`
 > into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
 > (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,

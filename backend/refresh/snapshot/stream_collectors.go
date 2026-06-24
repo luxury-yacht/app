@@ -146,23 +146,22 @@ func unconditionalSharedIndexers(
 // permitted informer indexer (nil when the kind was not registered). Cluster-scoped
 // kinds (namespace "") list the whole indexer; namespaced scopes use the namespace
 // index.
-func collectDescriptorTableRows[Row any](
+// collectDescriptorSources reports per-descriptor availability for the domain — the
+// source list the table envelope publishes — WITHOUT listing any rows. A kind is
+// available only when we both hold permission AND have an indexer to list it from: a nil
+// indexer means the kind was not registered (denied at registration, or its factory is
+// absent — e.g. the Gateway API is not installed), so its data is genuinely unavailable
+// regardless of the runtime permission check. collectDescriptorTableRows builds its source
+// list from this, and a domain serving its descriptor rows from a maintained store uses it
+// directly, so the list path and the maintained path publish identical sources.
+func collectDescriptorSources(
 	ctx context.Context,
 	domainName string,
 	indexerFor func(streamspec.Descriptor) cache.Indexer,
-	meta ClusterMeta,
-	namespace string,
-) ([]Row, []typedTableResourceSource, uint64, error) {
-	rows := make([]Row, 0)
+) []typedTableResourceSource {
 	descriptors := kindregistry.StreamDescriptorsForDomain(domainName)
 	sources := make([]typedTableResourceSource, 0, len(descriptors))
-	var version uint64
 	for _, d := range descriptors {
-		// A kind is available only when we both hold permission AND have an
-		// indexer to list it from. A nil indexer means the kind was not
-		// registered (denied at registration, or its factory is absent — e.g.
-		// the Gateway API is not installed), so its data is genuinely
-		// unavailable regardless of the runtime permission check.
 		indexer := indexerFor(d)
 		available := indexer != nil && runtimeResourceAllowed(ctx, domainName, d.Group, d.Resource)
 		sources = append(sources, typedTableResourceSource{
@@ -171,9 +170,26 @@ func collectDescriptorTableRows[Row any](
 			Resource:  d.Resource,
 			Available: available,
 		})
-		if !available {
+	}
+	return sources
+}
+
+func collectDescriptorTableRows[Row any](
+	ctx context.Context,
+	domainName string,
+	indexerFor func(streamspec.Descriptor) cache.Indexer,
+	meta ClusterMeta,
+	namespace string,
+) ([]Row, []typedTableResourceSource, uint64, error) {
+	rows := make([]Row, 0)
+	sources := collectDescriptorSources(ctx, domainName, indexerFor)
+	descriptors := kindregistry.StreamDescriptorsForDomain(domainName)
+	var version uint64
+	for i, d := range descriptors {
+		if !sources[i].Available {
 			continue
 		}
+		indexer := indexerFor(d)
 		var objs []interface{}
 		if namespace == "" {
 			objs = indexer.List()

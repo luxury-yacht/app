@@ -53,6 +53,11 @@ type NamespaceNetworkBuilder struct {
 	includeIngresses       bool
 	includeNetworkPolicies bool
 	collectIndexer         func(streamspec.Descriptor) cache.Indexer
+	// gatewayMaintained holds the uncut Gateway-API kinds' projected NetworkSummary rows,
+	// fed from the Gateway-API informers (the cut kinds are ingest-owned and skipped). When
+	// set, Build reads the Gateway-API rows from it instead of listing the gateway indexers
+	// per request; otherwise it falls back to collectDescriptorTableRows (the unit tests).
+	gatewayMaintained *typedMaintainedStore[NetworkSummary]
 }
 
 // NamespaceNetworkSnapshot payload for the network tab.
@@ -96,18 +101,30 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	factory informers.SharedInformerFactory,
 	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
+	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
+	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager)
+
+	// Maintain a store of the uncut Gateway-API kinds' rows, fed from the Gateway-API
+	// informers. registerMaintainedHandlers skips the ingest-owned cut kinds (Service/
+	// EndpointSlice/Ingress/NetworkPolicy), so the store holds only the Gateway-API rows.
+	gatewayMaintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
+	if err := registerMaintainedHandlers(gatewayMaintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
+		return err
+	}
+
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          ingestManager,
 		includeServices:        allowed.Allows("", "services"),
 		includeEndpointSlices:  allowed.Allows("discovery.k8s.io", "endpointslices"),
 		includeIngresses:       allowed.Allows("networking.k8s.io", "ingresses"),
 		includeNetworkPolicies: allowed.Allows("networking.k8s.io", "networkpolicies"),
-		collectIndexer:         factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager),
+		collectIndexer:         collectIndexer,
+		gatewayMaintained:      gatewayMaintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceNetworkDomainName,
@@ -161,14 +178,26 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		networkPolicyRows = namespaceNetworkOwnRows(b.networkIngest, NetworkPolicyGVR, namespace)
 	}
 
-	// The Gateway-API kinds are NOT cut: they remain indexer-driven through the stream
-	// descriptor registry. collectDescriptorTableRows also returns the source list for ALL
-	// the domain's stream descriptors (Ingress, NetworkPolicy, and the Gateway-API kinds),
-	// with cut kinds resolving to an empty sentinel indexer — so it contributes the cut
-	// kinds' SOURCE entries (availability) while their ROWS come from ingest above.
-	descriptorRows, descriptorSources, version, err := collectDescriptorTableRows[NetworkSummary](ctx, namespaceNetworkDomainName, b.collectIndexer, meta, namespace)
-	if err != nil {
-		return nil, err
+	// The Gateway-API kinds are NOT cut. Their SOURCE entries (availability) — and the cut
+	// kinds' — come from collectDescriptorSources for ALL the domain's stream descriptors.
+	// Their ROWS come from the maintained store (fed by the Gateway-API informers via the
+	// same StreamRow projection) in production, or collectDescriptorTableRows in the unit
+	// tests; the cut kinds' rows always come from ingest above.
+	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.collectIndexer)
+	var descriptorRows []NetworkSummary
+	var version uint64
+	if b.gatewayMaintained != nil {
+		// The store holds ONLY the Gateway-API rows (registerMaintainedHandlers skips the
+		// ingest-owned cut kinds), so a namespace filter is all that is needed.
+		descriptorRows = b.gatewayMaintained.rowsInNamespace(namespace)
+		version = b.gatewayMaintained.snapshotVersion()
+	} else {
+		rows, _, listVersion, err := collectDescriptorTableRows[NetworkSummary](ctx, namespaceNetworkDomainName, b.collectIndexer, meta, namespace)
+		if err != nil {
+			return nil, err
+		}
+		descriptorRows = rows
+		version = listVersion
 	}
 
 	resources := make([]NetworkSummary, 0, len(serviceOwnRows)+len(endpointSliceRows)+len(ingressRows)+len(networkPolicyRows)+len(descriptorRows))
