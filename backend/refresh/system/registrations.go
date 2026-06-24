@@ -408,6 +408,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 						IncludeJobs:         allowed.Allows("batch", "jobs"),
 						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
 					},
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 					deps.ingestManager,
 				)
 			},

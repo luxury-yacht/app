@@ -59,10 +59,18 @@ sections it references._
 > apiserver). **TIER 1.2 COMPLETE (2026-06-23):** every domain that list+projected RAW objects
 > per Build now serves from a maintained store — the 9 + `cluster-crds` + `cluster-events` +
 > `namespace-events` + `namespace-helm` + `namespace-network` Gateway-API kinds — each behind a
-> `…MaintainedMatchesListPath` byte-identity gate, full backend `-race` clean. `namespace-
-> workloads` and network's Service↔EndpointSlice join keep the §3.6-MANDATED serve-time join
-> (object + metrics are two column families "joined by UID in the store, never merged" — line
-> 272; metrics MUST overlay at serve), so they are plan-complete, not gaps. Reusable machinery:
+> `…MaintainedMatchesListPath` byte-identity gate, full backend `-race` clean. **`namespace-
+> workloads` IS NOW on a maintained store too (2026-06-24):** the per-namespace view serves
+> assembled object-state rows (workload↔pod join + standalone determination) from the store,
+> re-assembled LAZILY + version-gated on Build (a cross-kind assembly can't be fed one row per
+> event — that would be O(N²) over a sync — so `ensureWorkloadsStoreFresh` re-runs the shared
+> `assembleWorkloadRows` only when the combined workload+pod+HPA ingest version advances), with
+> CPUUsage/MemUsage overlaid at serve per §3.6 (the only usage-dependent fields). The all-
+> namespaces overview stays on the list path (it reads no pods by design — `parsedScope.
+> Namespace==""`), so the store serves the heavy per-namespace case where it's byte-identical.
+> Gate: `TestNamespaceWorkloadsBuilderMaintainedMatchesListPath` (with metrics) +
+> `…StandaloneTransitions` (workload delete → owned pod becomes standalone). Network's
+> Service↔EndpointSlice join stays the §3.6-mandated serve-time join. Reusable machinery:
 > `registerMaintainedInformerHandler`, `deleteRow`, `rowsInNamespace`, `collectDescriptorSources`.
 > REMAINING: (1.3) consolidate the catalog's on-demand dynamic-CRD
 > informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`

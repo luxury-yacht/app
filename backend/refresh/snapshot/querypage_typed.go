@@ -621,6 +621,27 @@ func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
 	m.bumpVersion(o)
 }
 
+// Replace syncs the store to exactly rows: it upserts every row, then deletes any key the
+// store still holds that the new set does not. It is the maintained-store update for a domain
+// whose rows are a cross-kind ASSEMBLY (workloads: workload rows + standalone-pod rows) that
+// cannot be fed one object at a time — the domain recomputes the full assembled set on a
+// relevant event and Replace diffs it in. Snapshot returns a copy, so iterate-while-delete
+// is safe. bumpSinkVersion advances the refetch identity once per sync.
+func (m *typedMaintainedStore[T]) Replace(rows []T) {
+	want := make(map[string]struct{}, len(rows))
+	for _, r := range rows {
+		want[m.adapter.Key(r)] = struct{}{}
+		m.store.Upsert(r)
+	}
+	for _, existing := range m.store.Snapshot() {
+		key := m.adapter.Key(existing)
+		if _, keep := want[key]; !keep {
+			m.store.Delete(key)
+		}
+	}
+	m.bumpSinkVersion()
+}
+
 // deleteRow removes an already-projected row by its adapter key — the bespoke-projection
 // counterpart of evict (which derives the row from a StreamRow descriptor). Like evict it
 // does NOT bump the version: an RV-based store's version is the max resourceVersion seen,
