@@ -16,8 +16,10 @@ package ingest
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
@@ -70,6 +72,14 @@ type entry struct {
 	// It is registered before Start via RegisterObjectMapProjector and read by the
 	// store's projection; nil leaves the ObjectMap half nil.
 	objectMapProject ObjectMapProjector
+
+	// degraded latches true when this kind's store has not synced within the manager's
+	// sync deadline, so a single never-syncing reflector (RBAC denial, hung WatchList,
+	// projection error) is excluded from the readiness gate instead of blocking it
+	// forever — mirroring the informer factory's per-informer degrade (issue #225,
+	// informer/factory.go stateSettled). The reflector keeps retrying LIST+WATCH in the
+	// background, so the store still delivers data if it later syncs.
+	degraded atomic.Bool
 }
 
 // IngestManager owns one ProjectingStore + ProjectingReflector per built-in
@@ -85,6 +95,15 @@ type IngestManager struct {
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
+
+	// syncDeadline bounds how long a kind's store may take to complete its initial
+	// relist before it is degraded out of the readiness gate (so one never-syncing
+	// reflector cannot wedge the whole cluster's readiness). Measured from startedAt,
+	// which Start stamps once. now is the clock, injectable in tests.
+	syncDeadline time.Duration
+	now          func() time.Time
+	startedAtMu  sync.Mutex
+	startedAt    time.Time
 }
 
 // NewIngestManager builds an IngestManager for the cluster identified by meta,
@@ -100,11 +119,13 @@ func NewIngestManager(
 	gateway gatewayversioned.Interface,
 ) *IngestManager {
 	m := &IngestManager{
-		meta:    meta,
-		kube:    kube,
-		apiext:  apiext,
-		gateway: gateway,
-		entries: make(map[schema.GroupVersionResource]*entry),
+		meta:         meta,
+		kube:         kube,
+		apiext:       apiext,
+		gateway:      gateway,
+		entries:      make(map[schema.GroupVersionResource]*entry),
+		syncDeadline: config.RefreshInformerSyncDeadline,
+		now:          time.Now,
 	}
 	for _, desc := range kindregistry.StreamDescriptors() {
 		m.addDescriptor(desc)
@@ -302,6 +323,12 @@ func (m *IngestManager) Start(ctx context.Context) {
 	}
 	m.mu.Unlock()
 
+	// Stamp the readiness deadline from a single moment, so a kind whose initial
+	// relist never completes degrades out of the gate rather than blocking it.
+	m.startedAtMu.Lock()
+	m.startedAt = m.now()
+	m.startedAtMu.Unlock()
+
 	for _, e := range entries {
 		e := e
 		go e.reflector.Run(runCtx)
@@ -320,9 +347,12 @@ func (m *IngestManager) Stop() {
 	}
 }
 
-// HasSynced reports whether every kind's store has completed its initial relist.
-// It is true only once all reflectors have populated their stores, mirroring the
-// informer factory's HasSynced readiness gate.
+// HasSynced reports whether every kind's store has SETTLED — synced or degraded past
+// the sync deadline. It is the readiness gate the composite hub blocks on; gating it
+// on raw sync alone let a single never-syncing reflector (RBAC denial, hung WatchList,
+// projection error) wedge the whole subsystem's readiness — and, because Manager.Start
+// blocks on it before starting the metrics poller, wedge metrics too. The deadline
+// degrade mirrors the informer factory's stateSettled (issue #225).
 func (m *IngestManager) HasSynced() bool {
 	m.mu.Lock()
 	entries := make([]*entry, 0, len(m.entries))
@@ -331,11 +361,47 @@ func (m *IngestManager) HasSynced() bool {
 	}
 	m.mu.Unlock()
 	for _, e := range entries {
-		if !e.store.HasSynced() {
+		if !m.entrySettled(e) {
 			return false
 		}
 	}
 	return true
+}
+
+// entrySettled reports whether one kind's store has stopped gating readiness: it has
+// synced, or it has been marked degraded, or it has exceeded the sync deadline without
+// syncing (flipped to degraded here, logged once). A degraded store keeps retrying
+// LIST+WATCH in the background, so HasSynced still reflects a later real sync — the
+// degrade only stops it BLOCKING the initial gate.
+func (m *IngestManager) entrySettled(e *entry) bool {
+	if e.store.HasSynced() {
+		return true
+	}
+	if e.degraded.Load() {
+		return true
+	}
+	if m.syncDeadlineExceeded() && e.degraded.CompareAndSwap(false, true) {
+		klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.desc.GVR())
+		return true
+	}
+	return false
+}
+
+// syncDeadlineExceeded reports whether the per-cluster ingest sync deadline has passed
+// since Start stamped startedAt. A zero startedAt (Start not yet called) or a
+// non-positive deadline never fires, so the deadline can only degrade a store after the
+// reflectors have actually been given the chance to run.
+func (m *IngestManager) syncDeadlineExceeded() bool {
+	if m.syncDeadline <= 0 {
+		return false
+	}
+	m.startedAtMu.Lock()
+	startedAt := m.startedAt
+	m.startedAtMu.Unlock()
+	if startedAt.IsZero() {
+		return false
+	}
+	return m.now().Sub(startedAt) > m.syncDeadline
 }
 
 // StoreFor returns the ProjectingStore holding the projected rows for gvr, or nil
@@ -502,16 +568,19 @@ func (m *IngestManager) StoreResourceVersion(gvr schema.GroupVersionResource) st
 	return store.LastStoreSyncResourceVersion()
 }
 
-// HasSyncedFor reports whether gvr's store has completed its initial relist, or
-// false when the manager has no entry for gvr. Consumers that read only specific
-// GVRs (the catalog reading the quotas kinds) gate on these rather than the
-// whole-manager HasSynced.
+// HasSyncedFor reports whether gvr's store has SETTLED — synced or degraded past the
+// sync deadline (see entrySettled) — or false when the manager has no entry for gvr.
+// Consumers that read only specific GVRs (the catalog reading the quotas kinds, the
+// cut domains' per-GVR ResourcesSettled gate) use this rather than the whole-manager
+// HasSynced, so one stuck kind degrades only the domains that need it.
 func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
-	store := m.StoreFor(gvr)
-	if store == nil {
+	m.mu.Lock()
+	e, ok := m.entries[gvr]
+	m.mu.Unlock()
+	if !ok {
 		return false
 	}
-	return store.HasSynced()
+	return m.entrySettled(e)
 }
 
 // resyncDisabled documents that ingest reflectors run with no periodic resync:
