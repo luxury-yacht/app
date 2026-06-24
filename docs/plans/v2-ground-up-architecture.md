@@ -138,10 +138,19 @@ sections it references._
 > the watch establishes (per-GVR readiness), and returns `resumeNeedsFullSync` on 410-Gone/expired/Error
 > (caller full-syncs → stage 4 reconcile) or `resumeContextDone` on ctx end. + `ProjectingStore.MarkSynced`.
 > Standalone + unit-gated (deltas+synced / 410→needs-full-sync / error-event→needs-full-sync), NOT yet wired
-> (zero blast radius). REMAINING stage 3b: spill+restore the INGEST ProjectingStores with their RV (stage 2
-> spilled the downstream maintained query stores; delta-resume needs the source ingest stores full + RV-stamped),
-> route the reflector through resume with a full-sync fallback, per-GVR readiness; then stage 4 (the full-sync
-> fallback already reconciles deletes — formalize + test absent-UID deletion).
+> (zero blast radius). **stage 3b-i (resume wiring) DONE:** IngestManager.Start now launches each reflector
+> via `runWithResume(ctx, e.lw, e.store, e.resumeRV, fullSync)` — attempts the delta resume when `e.resumeRV` is
+> set, else (the default) runs the reflector's full sync UNCHANGED. `SetResumeResourceVersion(gvr, rv)` sets it;
+> entry retains its ListerWatcher. NOT activated in production (resumeRV unset until the ingest-store restore
+> lands), so zero behavior change — proven by the unchanged manager/readiness tests + `runWithResume` unit tests
+> (healthy→no full-sync / 410→full-sync / no-RV→full-sync). **REMAINING stage 3b-ii (the activation, BLOCKED on a
+> serialization issue):** to resume correctly the INGEST `ProjectingStore` must be restored FULL + RV-stamped, but
+> it holds type-erased `Bundle{interface{}}` rows whose concrete types live in consumer packages the ingest
+> package can't import (objectcatalog imports ingest — cycle) — so gob-spilling it needs a central `gob.Register`
+> of every projected type (done from the system package, which imports them all) + a restore-projected-rows-direct
+> path on ProjectingStore + spilling the ingest stores at teardown consistently with their RV + calling
+> SetResumeResourceVersion on restore. Then stage 4 (the full-sync fallback already reconciles deletes — formalize
+> + test absent-UID deletion).
 > (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
 

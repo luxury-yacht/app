@@ -82,6 +82,22 @@ func resumeFromResourceVersion(ctx context.Context, lw cache.ListerWatcher, stor
 	}
 }
 
+// runWithResume drives one kind's ingestion: when a persisted resourceVersion is set (and a
+// ListerWatcher is available), it first attempts a delta resume from that RV; the resume,
+// when healthy, runs as the steady-state watch until ctx ends (no full sync). If there is no
+// persisted RV, or the resume reports it needs a full sync (410-Gone / expired / dropped
+// watch), it falls back to fullSync — the reflector's full LIST+WATCH, which also reconciles
+// anything a stale baseline still held (stage 4). With resumeRV == "" this is exactly the
+// reflector's normal launch, so the default (no persisted RV yet) path is unchanged.
+func runWithResume(ctx context.Context, lw cache.ListerWatcher, store *ProjectingStore, resumeRV string, fullSync func()) {
+	if resumeRV != "" && lw != nil {
+		if resumeFromResourceVersion(ctx, lw, store, resumeRV) == resumeContextDone {
+			return
+		}
+	}
+	fullSync()
+}
+
 // resumeResourceVersionOf reads an object's resourceVersion (a bookmark carries only the RV),
 // returning "" when the object exposes no metadata accessor.
 func resumeResourceVersionOf(obj apiruntime.Object) string {

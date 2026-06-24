@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,4 +88,54 @@ func TestResumeReturnsNeedsFullSyncOnErrorEvent(t *testing.T) {
 
 	fw.Error(&metav1.Status{Reason: metav1.StatusReasonGone})
 	require.Equal(t, resumeNeedsFullSync, <-done)
+}
+
+// TestRunWithResumeHealthyDoesNotFullSync proves the launch wiring: when a persisted RV
+// resumes healthily (delta watch live until ctx end), the reflector's full LIST+WATCH is NOT
+// run — the resume IS the steady-state.
+func TestRunWithResumeHealthyDoesNotFullSync(t *testing.T) {
+	fw := watch.NewFake()
+	lw := &cache.ListWatch{
+		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) { return fw, nil },
+	}
+	store := nameProjectingStore()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var fullSyncCalled atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		runWithResume(ctx, lw, store, "100", func() { fullSyncCalled.Store(true) })
+		close(done)
+	}()
+
+	fw.Add(resumeCM("a", "101"))
+	require.Eventually(t, func() bool { return len(store.List()) == 1 }, time.Second, 5*time.Millisecond)
+
+	cancel()
+	<-done
+	require.False(t, fullSyncCalled.Load(), "a healthy resume must not fall back to a full sync")
+}
+
+// TestRunWithResume410FallsBackToFullSync proves a too-old RV falls through to the reflector's
+// full sync (which reconciles — stage 4).
+func TestRunWithResume410FallsBackToFullSync(t *testing.T) {
+	lw := &cache.ListWatch{
+		WatchFunc: func(metav1.ListOptions) (watch.Interface, error) {
+			return nil, apierrors.NewResourceExpired("resourceVersion too old")
+		},
+	}
+	store := nameProjectingStore()
+
+	called := false
+	runWithResume(context.Background(), lw, store, "5", func() { called = true })
+	require.True(t, called, "a 410 resume must fall back to the full sync")
+}
+
+// TestRunWithResumeNoRVFullSyncs proves the default path (no persisted RV — the current
+// production state) runs the full sync directly, so every existing reflector is unchanged.
+func TestRunWithResumeNoRVFullSyncs(t *testing.T) {
+	store := nameProjectingStore()
+	called := false
+	runWithResume(context.Background(), nil, store, "", func() { called = true })
+	require.True(t, called, "with no persisted RV the reflector full-syncs as today")
 }

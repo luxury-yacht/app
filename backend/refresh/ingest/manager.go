@@ -69,6 +69,16 @@ type entry struct {
 	store     *ProjectingStore
 	reflector *ProjectingReflector
 
+	// lw is the reflector's ListerWatcher, retained so the stage-3 resume path can issue a
+	// delta WATCH from a persisted resourceVersion through the same source the reflector uses.
+	lw cache.ListerWatcher
+
+	// resumeRV, when set (SetResumeResourceVersion, before Start), makes Start attempt a delta
+	// resume from this resourceVersion before the reflector's full sync — the cold-start
+	// "resume from persisted RV" path. Empty (the default) launches the reflector directly,
+	// unchanged. It is only set once the store was restored full from disk (a later slice).
+	resumeRV string
+
 	// catalogProject, when set, builds the bundle's Catalog half for this kind.
 	// It is registered before Start via RegisterCatalogProjector and read by the
 	// store's projection; nil leaves the Catalog half nil.
@@ -212,6 +222,7 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 	// the generated informers do. The client argument is the typed group client so
 	// its WatchList capability is detected.
 	wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
+	e.lw = wrapped
 	e.reflector = NewProjectingReflector(gvk.String(), wrapped, example, e.store, resyncDisabled)
 	m.entries[gvr] = e
 }
@@ -490,8 +501,30 @@ func (m *IngestManager) Start(ctx context.Context) {
 			klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", le.gvr)
 			continue
 		}
-		go le.e.reflector.Run(runCtx)
+		e := le.e
+		// Resume from a persisted resourceVersion when one was set (the store was restored
+		// full from disk); otherwise — the default — this is exactly e.reflector.Run.
+		go runWithResume(runCtx, e.lw, e.store, e.resumeRV, func() { e.reflector.Run(runCtx) })
 	}
+}
+
+// SetResumeResourceVersion records the resourceVersion gvr's reflector should resume its
+// WATCH from on Start, instead of a full re-sync — the cold-start delta-resume path. It must
+// be called before Start, and only when gvr's store has been restored full from disk (a
+// resume on an empty store would leave it holding only the deltas since rv). It is a no-op
+// (returns false) when the manager has no entry for gvr or rv is empty.
+func (m *IngestManager) SetResumeResourceVersion(gvr schema.GroupVersionResource, rv string) bool {
+	if rv == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[gvr]
+	if !ok {
+		return false
+	}
+	e.resumeRV = rv
+	return true
 }
 
 // Stop cancels every running reflector. It is safe to call when Start was never
