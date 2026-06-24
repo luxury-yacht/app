@@ -52,6 +52,46 @@ func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 	}
 }
 
+// TestIngestManagerSkipsDeniedKindsAtStart pins permission-gating: a cut kind the
+// permission filter denies must be skipped at Start — its reflector is never launched,
+// and it is excluded from the readiness gate IMMEDIATELY (settled-as-skipped), not after
+// the sync deadline. Without this, a denied kind's reflector 403-retries forever and the
+// whole subsystem waits out the deadline before it can come up. Mirrors the informer
+// factory's permission-skip (factory.go CanListWatch gate). The deadline here is set very
+// long so the only way the denied kind can be settled is via the skip, not a degrade.
+func TestIngestManagerSkipsDeniedKindsAtStart(t *testing.T) {
+	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	var deniedGVR, allowedGVR schema.GroupVersionResource
+	for g := range mgr.entries {
+		if deniedGVR.Resource == "" {
+			deniedGVR = g
+			continue
+		}
+		allowedGVR = g
+		break
+	}
+	if deniedGVR.Resource == "" || allowedGVR.Resource == "" {
+		t.Fatal("need at least two entries to exercise deny-one/allow-one")
+	}
+	// Deny exactly one kind; allow everything else.
+	mgr.SetPermissionFilter(func(group, resource string) bool {
+		return !(group == deniedGVR.Group && resource == deniedGVR.Resource)
+	})
+	mgr.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr.syncDeadline = time.Hour // so a settled denied kind can only be a SKIP, never a degrade
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+
+	if !mgr.HasSyncedFor(deniedGVR) {
+		t.Fatalf("denied kind %s must be settled (skipped) immediately at start", deniedGVR)
+	}
+	if mgr.HasSyncedFor(allowedGVR) {
+		t.Fatalf("allowed-but-unsynced kind %s must NOT be settled before sync or deadline", allowedGVR)
+	}
+}
+
 // TestIngestManagerHasSyncedForDegradesAfterDeadline pins the same contract on the
 // per-GVR readiness path (ingest_hub.go ingestKeySettled -> HasSyncedFor), which each
 // cut domain's ResourcesSettled gate uses to decide it can serve.

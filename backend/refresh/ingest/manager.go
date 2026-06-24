@@ -80,6 +80,13 @@ type entry struct {
 	// informer/factory.go stateSettled). The reflector keeps retrying LIST+WATCH in the
 	// background, so the store still delivers data if it later syncs.
 	degraded atomic.Bool
+
+	// skipped latches true when Start declines to launch this kind's reflector because
+	// the permission filter reports the identity cannot list/watch it. A skipped kind is
+	// settled immediately (excluded from readiness, empty store) rather than 403-retrying
+	// for the whole sync deadline — mirroring the factory's permission-skip
+	// (informer/factory.go CanListWatch gate).
+	skipped atomic.Bool
 }
 
 // IngestManager owns one ProjectingStore + ProjectingReflector per built-in
@@ -104,6 +111,13 @@ type IngestManager struct {
 	now          func() time.Time
 	startedAtMu  sync.Mutex
 	startedAt    time.Time
+
+	// permissionFilter, when set, reports whether the identity may list+watch a kind.
+	// Start skips (does not launch) the reflector for any kind it returns false for, so
+	// a denied cut kind is excluded from readiness immediately rather than 403-retrying
+	// for the whole sync deadline. nil leaves every reflector enabled (the default for
+	// tests and any caller that does not gate on permissions).
+	permissionFilter func(group, resource string) bool
 }
 
 // NewIngestManager builds an IngestManager for the cluster identified by meta,
@@ -306,10 +320,25 @@ func exampleObjectFor(gvk schema.GroupVersionKind) (apiruntime.Object, bool) {
 	return nil, false
 }
 
-// Start runs every reflector on a goroutine bound to a context derived from ctx.
-// Both Stop and cancelling ctx wind the reflectors down. Start is idempotent per
-// manager: a second call is a no-op once reflectors are running.
+// SetPermissionFilter installs the predicate Start uses to decide whether to launch
+// each kind's reflector. It must be called before Start. A nil filter (the default)
+// launches every reflector. See permissionFilter.
+func (m *IngestManager) SetPermissionFilter(fn func(group, resource string) bool) {
+	m.mu.Lock()
+	m.permissionFilter = fn
+	m.mu.Unlock()
+}
+
+// Start runs every permitted reflector on a goroutine bound to a context derived from
+// ctx. Both Stop and cancelling ctx wind the reflectors down. Start is idempotent per
+// manager: a second call is a no-op once reflectors are running. A kind the permission
+// filter denies is marked skipped (settled, empty store) and its reflector is not
+// launched.
 func (m *IngestManager) Start(ctx context.Context) {
+	type launchEntry struct {
+		gvr schema.GroupVersionResource
+		e   *entry
+	}
 	m.mu.Lock()
 	if m.cancel != nil {
 		m.mu.Unlock()
@@ -317,9 +346,10 @@ func (m *IngestManager) Start(ctx context.Context) {
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
-	entries := make([]*entry, 0, len(m.entries))
-	for _, e := range m.entries {
-		entries = append(entries, e)
+	filter := m.permissionFilter
+	entries := make([]launchEntry, 0, len(m.entries))
+	for gvr, e := range m.entries {
+		entries = append(entries, launchEntry{gvr: gvr, e: e})
 	}
 	m.mu.Unlock()
 
@@ -329,9 +359,18 @@ func (m *IngestManager) Start(ctx context.Context) {
 	m.startedAt = m.now()
 	m.startedAtMu.Unlock()
 
-	for _, e := range entries {
-		e := e
-		go e.reflector.Run(runCtx)
+	for _, le := range entries {
+		le := le
+		// Permission-skip: a kind the identity cannot list/watch never launches a
+		// reflector (which would only 403-retry); it is settled-as-skipped so it does
+		// not block readiness and its store stays empty (the domain serves degraded for
+		// that kind), mirroring the factory excluding a denied informer.
+		if filter != nil && !filter(le.gvr.Group, le.gvr.Resource) {
+			le.e.skipped.Store(true)
+			klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", le.gvr)
+			continue
+		}
+		go le.e.reflector.Run(runCtx)
 	}
 }
 
@@ -374,6 +413,11 @@ func (m *IngestManager) HasSynced() bool {
 // LIST+WATCH in the background, so HasSynced still reflects a later real sync — the
 // degrade only stops it BLOCKING the initial gate.
 func (m *IngestManager) entrySettled(e *entry) bool {
+	if e.skipped.Load() {
+		// Permission-skipped: reflector never launched, store stays empty; settled so it
+		// does not block readiness (the domain serves degraded for this kind).
+		return true
+	}
 	if e.store.HasSynced() {
 		return true
 	}

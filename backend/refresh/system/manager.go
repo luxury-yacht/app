@@ -147,6 +147,18 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// joins per-node pod aggregates + metrics), so it is wired with an explicit bespoke
 	// projector. The nodes domain re-joins pod aggregates + metrics at serve.
 	registerNodeReflector(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+
+	// Permission-gate the ingest reflectors the way the shared factory gates its
+	// informers: a cut kind the identity cannot list+watch is skipped at Start rather
+	// than launching a reflector that only 403-retries and waits out the sync deadline.
+	// CONSERVATIVE: skip ONLY on a confirmed denial (allowed==false, no error). On an
+	// SSAR error, run the reflector anyway — the per-kind sync-deadline degrade backstops
+	// a true failure, so a transient permission blip never wrongly excludes a kind with
+	// no retry. The factory's permission cache is primed by factory.Start, which the hub
+	// runs before ingest.Start, so these checks hit a warm cache.
+	ingestManager.SetPermissionFilter(ingestPermissionFilter(
+		informerFactory.CanListResource, informerFactory.CanWatchResource))
+
 	informerHub := newIngestInformerHub(informerFactory, ingestManager)
 
 	var permissionIssues []PermissionIssue
@@ -306,6 +318,25 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ResourceStream:   resourceManager,
 		ClusterMeta:      clusterMeta,
 	}, nil
+}
+
+// ingestPermissionFilter builds the predicate the ingest manager uses to decide whether
+// to launch each cut kind's reflector. It mirrors the shared factory's permission-skip
+// but conservatively: it skips a kind ONLY on a confirmed denial (allowed==false with no
+// error). On an SSAR error it returns true so the reflector still runs — the per-kind
+// sync-deadline degrade is the backstop, so a transient permission blip never wrongly
+// excludes a kind with no retry. canList/canWatch are the factory's CanListResource/
+// CanWatchResource.
+func ingestPermissionFilter(canList, canWatch func(group, resource string) (bool, error)) func(group, resource string) bool {
+	return func(group, resource string) bool {
+		if allowed, err := canList(group, resource); err == nil && !allowed {
+			return false
+		}
+		if allowed, err := canWatch(group, resource); err == nil && !allowed {
+			return false
+		}
+		return true
+	}
 }
 
 // HealthHandler returns an HTTP handler compatible with /healthz/refresh.

@@ -19,9 +19,36 @@ It reacts to, and would consolidate, the contracts in:
 
 ## Build status (live ledger)
 
-_Updated 2026-06-21. The running record of what is actually built vs. designed —
+_Updated 2026-06-23. The running record of what is actually built vs. designed —
 keep this current as work lands. Per-step detail (file:line, benchmarks) is in the
 sections it references._
+
+> **2026-06-23 re-baseline (audited against code; the pre-2026-06-23 ledger below
+> understated Phase 4).** The owned-reflector **ingest path is LIVE** for ~26 cut kinds
+> (`backend/refresh/ingest/`: `ProjectingReflector` + `ProjectingStore`, `IngestOwned`
+> descriptor facet). It **projects at intake and discards the typed object** (deeper than
+> the plan's "project-to-column-tuple" goal — `projecting_store.go`), uses
+> `ToListWatcherWithWatchListSemantics` so it **falls back to LIST+WATCH** when WatchList is
+> stripped, and the **gateway factory has `StripManagedFields`**. nodes/pods/workloads/network
+> are cut to ingest via bespoke projectors. Ingest readiness now has the factory's two
+> defenses: a **per-kind sync-deadline degrade** (a never-syncing kind degrades out of the
+> all-or-nothing gate instead of wedging `Manager.Start` + the metrics poller —
+> `ingest/manager.go entrySettled`) and **permission-skip** (a kind the identity cannot
+> list/watch is skipped at Start, conservatively — only on a confirmed denial —
+> `ingest/manager.go SetPermissionFilter` + `system/manager.go ingestPermissionFilter`).
+>
+> **Phase 4 status by item (audited):** DONE — project-to-column-tuple, LIST fallback,
+> gateway transform, governor + `SetMetricsActive`, metrics §3.6 for pods, ingest
+> deadline-degrade + permission-gating, 9 typed domains on the owned store. **REMAINING
+> (driving to completion, full Phase 4):** (1.2) bring the still-list+project domains onto
+> the owned store — `namespace/cluster-events`, `namespace-helm`, `cluster-crds`, plus the
+> hybrids' loose ends (`namespace-network` Gateway-API kinds, `namespace-workloads` re-joins,
+> `pods` node/workload scopes); (1.3) consolidate the catalog's on-demand dynamic-CRD
+> informers (`objectcatalog/collect.go`) into the one path; (2.4) wire `querypage/spill.go`
+> into the governor Cold/re-warm (built, never called); (2.5) the four-stage cold-start
+> (discovery disk-cache+ETag, warm-paint-from-disk, WatchList resume from persisted RV,
+> 410-Gone reconcile-delete — none built); (2.6) mmap on-disk column format (gob baseline
+> today); (2.7) nodes metrics in the query sort schema.
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
 
