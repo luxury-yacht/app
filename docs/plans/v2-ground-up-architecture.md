@@ -160,23 +160,34 @@ sections it references._
 > four stages (discovery disk-cache+ETag; cross-restart warm-paint; WatchList resume-from-persisted-RV via a custom
 > resume path since client-go's reflector can't; 410-Gone reconcile-delete), safe-degrade end-to-end (any failure →
 > full sync). Real-cluster delta-resume is a deployment property; the unit gates + safe-degrade are the contract.
-> **(2.6) mmap on-disk column format — READ MECHANISM DONE (2026-06-24):** the safe, cross-platform mmap column-file
-> mechanism is built (`querypage/columnfile.go` + build-tagged `mmap_unix.go` [syscall.Mmap PROT_READ/MAP_SHARED →
-> off-heap, OS-reclaimable page cache] + `mmap_other.go` [os.ReadFile fallback]). Writes int64/uint32/string column
-> sections (LE, header + string-offset table). BOTH read paths: per-value `binary.LittleEndian` accessors (portable,
-> any host) AND `Int64Column`/`Uint32Column` **zero-copy** accessors (`unsafe.Slice` aliasing the 8-aligned mapping —
-> the plan's literal "zero-copy page-cache reads"; native-order, valid on the all-little-endian targets, lifetime-bound
-> to Close). Round-trip + zero-copy + cross-platform (incl. windows build) gated. REMAINING (a large, intricate
-> rewrite of the query engine's HOT PATH `columnar.go`, warranting careful dedicated work — NOT a rushed slice): (i)
-> serialize the interned `columnStore` (per-field codecs + string dicts + promotion state + the live/freeRows arena)
-> to the column file; (ii) dual-mode serving so a Cold cluster's store queries DIRECTLY from the mapping (~0 heap) —
-> the actual memory win. NOTE: the plan's memory GOAL is already met (Cold teardown reclaims heap, 2.4) and fast
-> cold-start by gob warm-paint + delta-resume (2.5); 2.6 is the further "Cold = ~0 RAM while queryable" optimization
-> the plan itself defers ("ship gob first", spill.go:22-25), and its prototype-grade foundation is now in place.
+> **(2.6) mmap on-disk column format — DONE (2026-06-24), replacing the gob baseline.** The maintained-store spill
+> now writes/reads the columnar mmap format instead of gob: `querypage/columnfile.go` + build-tagged `mmap_unix.go`
+> (syscall.Mmap PROT_READ/MAP_SHARED → off-heap, OS-reclaimable page cache) + `mmap_other.go` (os.ReadFile fallback)
+> give the mmap mechanism with BOTH a portable per-value `binary.LittleEndian` path AND `Int64Column`/`Uint32Column`
+> **zero-copy** `unsafe.Slice` accessors (8-aligned, native-order — the plan's literal "zero-copy page-cache reads").
+> `querypage/columnstore_spill.go` serializes a whole `Store[R]` column-wise (all 7 codec field kinds: scalars flat,
+> strings len+bytes, ptr-to-scalar present+scalar, dynamic map/slice "fallback" fields via one gob stream) and
+> restores via `RestoreColumnsFromFileInto` (reconstruct + Upsert → rebuilds columns/dicts/indexes/match cache,
+> query-equivalent to gob). WIRED: `typedMaintainedStore.SpillTo`→`SpillColumns`, `RestoreFrom`→columnar with a gob
+> FALLBACK (handles a prior gob spill on a same-version transition + degrades safely). Gated: round-trip ==
+> gob-equivalence harness + all-scalar-kinds + zero-copy + cross-platform (windows build) + full `mage qc:prerelease`.
+> **FURTHER OPTIMIZATION (beyond 2.6's listed scope, explicitly deferred):** dual-mode SERVING — a Cold cluster's
+> store querying DIRECTLY from the mapping (~0 heap) — needs `unsafe` interned-column aliasing in the query hot path
+> AND the boxed map/slice fields can't go off-heap; it's a separate prototype-first effort. The memory GOAL is
+> already met (Cold teardown reclaims heap, 2.4); this would make Cold = ~0 RAM *while queryable*.
 > **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
 > cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
 > lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
-> regression test, now added (`TestNodesSortByMetricUsage`, values chosen so lexical≠numeric order). ONLY 2.6 remains.
+> regression test, now added (`TestNodesSortByMetricUsage`, values chosen so lexical≠numeric order).
+> **➤ TRACKED TIER WORK COMPLETE (2026-06-24); plan NOT entirely complete.** The re-baseline tier list — 1.1, 1.2,
+> 1.3, 2.4, 2.5 (all four cold-start stages), 2.6 (mmap on-disk column FORMAT, replacing gob), 2.7 — is done + gated
+> (`mage qc:prerelease` EXIT 0), and the plan's core goals are met. STILL OPEN (deferred/optional refinements, not
+> dropped): (a) 2.6's dual-mode mmap SERVING — Cold cluster queries directly from the mapping, ~0 RAM while
+> queryable (the format is in place; the serving needs `unsafe` hot-path aliasing + the boxed map/slice fields can't
+> go off-heap); (b) the "Smaller, optional" list below — a `nodes` maintained store (still list+projects per Build),
+> pods' direct query + metric indexes on `metricsRevision`, a stronger catalog correctness test, trigram search;
+> (c) ingestion refinements — gateway-factory transform, project-to-column-tuple. Phase 4 stays 🔶 (goals met,
+> refinements deferred). DROPPED-with-reason items (h2c, SSAR→SSRR, LSN clock, metrics-signal, MessagePack) are not pending.
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
 

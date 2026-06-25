@@ -685,22 +685,27 @@ func (m *typedMaintainedStore[T]) Replace(rows []T) {
 	m.bumpSinkVersion()
 }
 
-// spillTo flushes the store's rows to path so a Cold cluster's heap can be reclaimed and
-// the store re-painted fast on re-warm. Only the rows are written; the indexes/facets are
-// rebuilt from them on restore (see querypage.Store.SpillToFile).
+// spillTo flushes the store's rows to path in the Tier 2.6 columnar on-disk format (scalar
+// columns flat/mmap-friendly, dynamic fields gob'd) so a Cold cluster's heap can be reclaimed
+// and the store re-painted fast on re-warm. Only the rows are written; the indexes/facets are
+// rebuilt from them on restore.
 func (m *typedMaintainedStore[T]) SpillTo(path string) error {
-	return m.store.SpillToFile(path)
+	return m.store.SpillColumns(path)
 }
 
 // restoreFrom loads spilled rows from path into this store (warm-paint), then bumps the
-// refetch identity so the first Build after re-warm serves the restored rows. The rows are
-// possibly STALE: reconcile() (for shared-informer kinds) and the fresh reflectors' initial
-// Replace (for ingest kinds) reconcile them against the live cluster once the subsystem
-// syncs. A missing spill file (never spilled) is not an error — the store stays empty and
-// the normal sync populates it, exactly as a cold start does.
+// refetch identity so the first Build after re-warm serves the restored rows. It reads the
+// columnar format and falls back to the gob format if that fails — handling a spill file
+// written by a prior (gob) build during a same-version transition, and degrading safely on
+// any columnar parse error. The rows are possibly STALE: reconcile() (shared-informer kinds)
+// and the fresh reflectors' initial Replace (ingest kinds) reconcile them once the subsystem
+// syncs. A missing spill file (never spilled) is not an error — the store stays empty and the
+// normal sync populates it, exactly as a cold start does.
 func (m *typedMaintainedStore[T]) RestoreFrom(path string) error {
-	if err := m.store.RestoreFromFile(path); err != nil {
-		return err
+	if err := m.store.RestoreColumnsFromFileInto(path); err != nil {
+		if gobErr := m.store.RestoreFromFile(path); gobErr != nil {
+			return err // report the columnar error (the current format); the gob fallback also failed
+		}
 	}
 	m.bumpSinkVersion()
 	return nil

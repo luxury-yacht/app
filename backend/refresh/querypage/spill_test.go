@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // spillRow is a representative summary row with the shape a production row has and
@@ -194,6 +196,68 @@ func TestSpillRestoreRoundTrip(t *testing.T) {
 	}
 
 	assertStoresEquivalent(t, orig, restored)
+}
+
+// TestSpillColumnsRoundTrip is the Tier 2.6 gate: spilling the store in the columnar mmap
+// on-disk format and restoring it produces a query-equivalent store — proving the column
+// format is a faithful drop-in for the gob baseline. spillRow exercises string, int, a
+// slice-fallback (Labels), and a pointer-to-scalar (Owner) field, so all the codec paths the
+// columnar serializer must handle are covered.
+func TestSpillColumnsRoundTrip(t *testing.T) {
+	orig := buildSpillStore(t)
+
+	path := filepath.Join(t.TempDir(), "store.cols")
+	if err := orig.SpillColumns(path); err != nil {
+		t.Fatalf("SpillColumns: %v", err)
+	}
+
+	restored, err := RestoreColumnsFromFile(path, spillSchema())
+	if err != nil {
+		t.Fatalf("RestoreColumnsFromFile: %v", err)
+	}
+
+	assertStoresEquivalent(t, orig, restored)
+}
+
+// TestSpillColumnsAllScalarKinds covers the numeric/bool/float field kinds that spillRow does
+// not, so the columnar serializer is gated on every scalar kind.
+func TestSpillColumnsAllScalarKinds(t *testing.T) {
+	type allKinds struct {
+		UID  string
+		I    int64
+		U    uint32
+		F    float64
+		B    bool
+		Note *string
+	}
+	schema := Schema[allKinds]{
+		UID:        func(r allKinds) string { return r.UID },
+		SortKeys:   map[string]func(allKinds) string{"i": func(r allKinds) string { return fmt.Sprintf("%020d", r.I) }},
+		Facets:     map[string]func(allKinds) string{"b": func(r allKinds) string { return fmt.Sprintf("%v", r.B) }},
+		SearchText: func(r allKinds) string { return r.UID },
+	}
+	s := NewStore(schema)
+	note := "n"
+	s.Upsert(allKinds{UID: "a", I: -5, U: 4_000_000_000, F: 3.5, B: true, Note: &note})
+	s.Upsert(allKinds{UID: "b", I: 1 << 40, U: 0, F: -2.25, B: false, Note: nil})
+
+	path := filepath.Join(t.TempDir(), "allkinds.cols")
+	require.NoError(t, s.SpillColumns(path))
+	restored, err := RestoreColumnsFromFile(path, schema)
+	require.NoError(t, err)
+
+	require.Len(t, restored.Snapshot(), 2)
+	got := map[string]allKinds{}
+	for _, r := range restored.Snapshot() {
+		got[r.UID] = r
+	}
+	require.Equal(t, int64(-5), got["a"].I)
+	require.Equal(t, uint32(4_000_000_000), got["a"].U)
+	require.Equal(t, 3.5, got["a"].F)
+	require.True(t, got["a"].B)
+	require.NotNil(t, got["a"].Note)
+	require.Equal(t, "n", *got["a"].Note)
+	require.Nil(t, got["b"].Note, "nil pointer-to-scalar round-trips as nil")
 }
 
 func TestSpillToFileRoundTrip(t *testing.T) {
