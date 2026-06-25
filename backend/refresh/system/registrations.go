@@ -306,7 +306,12 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				{group: "", resource: "pods"},
 			},
 			registerInformer: func() error {
-				return snapshot.RegisterNodeDomain(deps.registry, deps.metricsProvider, deps.ingestManager)
+				return snapshot.RegisterNodeDomain(
+					deps.registry,
+					deps.metricsProvider,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
+				)
 			},
 			fallbackChecks: []listCheck{
 				{group: "", resource: "nodes"},

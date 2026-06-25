@@ -2,12 +2,14 @@
  * backend/refresh/snapshot/node_ingest_source.go
  *
  * The node read path after the node cut. Node is an owned-reflector ingest kind: the shared
- * factory no longer caches the typed *corev1.Node, so the nodes domain reads each node's
- * projected OWN-fields NodeSummary (the Bundle Table half) and the cluster-overview domain
- * reads each node's nodeOverviewFact (the Bundle Aggregate half), both keyed off NodeGVR,
- * instead of a typed lister. The nodes domain re-joins per-node pod aggregates + metrics onto
- * the own-rows at serve (reaggregateNodeSummary), reproducing the pre-cut node row byte for
- * byte; the overview sums the facts.
+ * factory no longer caches the typed *corev1.Node. The nodes domain now serves each node's
+ * projected OWN-fields NodeSummary (the Bundle Table half) from a per-cluster maintained store
+ * fed by the node reflector's Sink (see RegisterNodeDomain), NOT through this source; what the
+ * nodes domain still reads here is only the node store RV for its version watermark. The
+ * cluster-overview domain reads each node's nodeOverviewFact (the Bundle Aggregate half) keyed
+ * off NodeGVR via nodeOverviewFactsFromIngest. The nodes domain re-joins per-node pod aggregates
+ * + metrics onto the own-rows at serve (reaggregateNodeSummary), reproducing the pre-cut node
+ * row byte for byte; the overview sums the facts.
  *
  * Each kind's per-object Table half also carries the object's resourceVersion through the
  * ingest store's watermark, so a domain folds the store RV into its version watermark in place
@@ -19,13 +21,13 @@ package snapshot
 import (
 	"strconv"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// nodeIngestSource supplies the cut node kind's projected rows the nodes and cluster-overview
-// domains read. Rows returns each node's per-object bundle in one consistent store read;
+// nodeIngestSource supplies the cut node kind's projected rows the cluster-overview domain reads
+// (the Aggregate-half facts via Rows) and the node store RV the nodes domain folds into its
+// version watermark. Rows returns each node's per-object bundle in one consistent store read;
 // StoreResourceVersion gives the store's latest list/watch RV for the version watermark;
 // HasSyncedFor reports whether the node store has completed its initial relist (the overview's
 // node-sync gate). *ingest.IngestManager satisfies it.
@@ -33,30 +35,6 @@ type nodeIngestSource interface {
 	Rows(gvr schema.GroupVersionResource) []interface{}
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
-}
-
-// nodeOwnRowsFromIngest reads the cut node kind's projected Table-half OWN-fields NodeSummary
-// rows from the ingest source. A nil source yields no rows; a row of the wrong type is skipped,
-// mirroring the type guards the ingest sinks apply. These are the own-rows the serve path
-// re-joins pod aggregates + metrics onto.
-func nodeOwnRowsFromIngest(source nodeIngestSource) []streamrows.NodeSummary {
-	if source == nil {
-		return nil
-	}
-	rows := source.Rows(NodeGVR)
-	out := make([]streamrows.NodeSummary, 0, len(rows))
-	for _, raw := range rows {
-		bundle, ok := raw.(ingest.Bundle)
-		if !ok {
-			continue
-		}
-		summary, ok := bundle.Table.(streamrows.NodeSummary)
-		if !ok {
-			continue
-		}
-		out = append(out, summary)
-	}
-	return out
 }
 
 // nodeOverviewFactsFromIngest reads the cut node kind's projected Aggregate-half overview facts

@@ -141,7 +141,29 @@ func (c *columnFile) Uint32Column() []uint32 {
 	return unsafe.Slice((*uint32)(unsafe.Pointer(&c.mf.bytes()[c.uintOff])), c.uintCount)
 }
 
+// StringColumnAliased returns the string column with each element ALIASING the mapping via
+// unsafe.String — zero-copy, so the string BYTES stay in off-heap page cache (only the
+// []string and its string headers are heap). It is the string counterpart of
+// Int64Column/Uint32Column for the dual-mode serving path. Same lifetime contract: the
+// returned strings point into the mapping and are invalid after Close, so the caller must
+// hold the columnFile for as long as it uses them.
+func (c *columnFile) StringColumnAliased() []string {
+	out := make([]string, c.strCount)
+	b := c.mf.bytes()
+	for i := 0; i < c.strCount; i++ {
+		start := binary.LittleEndian.Uint64(b[c.strOffOff+i*8:])
+		end := binary.LittleEndian.Uint64(b[c.strOffOff+(i+1)*8:])
+		n := int(end - start)
+		if n == 0 {
+			out[i] = ""
+			continue
+		}
+		out[i] = unsafe.String(&b[c.strDataOff+int(start)], n)
+	}
+	return out
+}
+
 // Close unmaps the file. Values already read (ints, copied strings) remain valid; any
-// zero-copy column slice returned by Int64Column/Uint32Column does NOT — it aliases the now
-// unmapped region and must be dropped before Close.
+// zero-copy slice returned by Int64Column/Uint32Column/StringColumnAliased does NOT — it
+// aliases the now unmapped region and must be dropped before Close.
 func (c *columnFile) Close() error { return c.mf.close() }

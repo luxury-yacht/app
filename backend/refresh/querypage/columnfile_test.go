@@ -63,6 +63,24 @@ func TestColumnFileZeroCopyColumns(t *testing.T) {
 	}
 }
 
+// TestColumnFileStringColumnAliased proves the zero-copy string column reads (unsafe.String
+// over the mapping) equal the copying StringAt and the source — incl. empty and unicode.
+func TestColumnFileStringColumnAliased(t *testing.T) {
+	strs := []string{"a", "", "héllo", "z", "a longer value with spaces", ""}
+	path := filepath.Join(t.TempDir(), "strs.bin")
+	require.NoError(t, writeColumnFile(path, nil, nil, strs))
+
+	cf, err := openColumnFile(path)
+	require.NoError(t, err)
+	defer cf.Close()
+
+	aliased := cf.StringColumnAliased()
+	require.Equal(t, strs, aliased, "aliased string column equals the source")
+	for i := range strs {
+		require.Equal(t, cf.StringAt(i), aliased[i], "aliased == copying StringAt at %d", i)
+	}
+}
+
 // TestColumnFileEmpty proves empty columns round-trip cleanly (no panic, zero lengths).
 func TestColumnFileEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.bin")

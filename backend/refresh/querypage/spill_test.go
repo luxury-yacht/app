@@ -219,6 +219,54 @@ func TestSpillColumnsRoundTrip(t *testing.T) {
 	assertStoresEquivalent(t, orig, restored)
 }
 
+// TestInternedColumnStoreMmapRoundTrip is the Tier 2.6 dual-mode SERVING gate: spilling the
+// interned columns and reopening as a read-only, mmap-aliased store produces a query-equivalent
+// store — proving a Cold cluster can serve directly from off-heap page cache. spillRow exercises
+// string (interned), int, slice-fallback (Labels), and pointer-to-scalar (Owner).
+func TestInternedColumnStoreMmapRoundTrip(t *testing.T) {
+	orig := buildSpillStore(t)
+
+	path := filepath.Join(t.TempDir(), "store.qcm")
+	if err := orig.SpillInternedColumns(path); err != nil {
+		t.Fatalf("SpillInternedColumns: %v", err)
+	}
+
+	restored, closer, err := OpenInternedColumnStore(path, spillSchema())
+	if err != nil {
+		t.Fatalf("OpenInternedColumnStore: %v", err)
+	}
+	defer closer()
+
+	assertStoresEquivalent(t, orig, restored)
+
+	// The store is read-only: a write is ignored (mutating mmap-aliased columns is invalid).
+	before := restored.Len()
+	restored.Upsert(spillRow{UID: "new", Namespace: "x", Name: "y"})
+	require.Equal(t, before, restored.Len(), "read-only mmap store ignores Upsert")
+}
+
+// TestReopenInternedColumnsInPlace proves the Cold-serving transition at the store level: the
+// same *Store pointer, after ReopenInternedColumnsInPlace, serves queries identically (now from
+// the mmap-aliased columns) and rejects writes.
+func TestReopenInternedColumnsInPlace(t *testing.T) {
+	orig := buildSpillStore(t)
+	// A reference store to compare against (orig is mutated in place).
+	ref := buildSpillStore(t)
+
+	path := filepath.Join(t.TempDir(), "inplace.qcm")
+	closer, err := orig.ReopenInternedColumnsInPlace(path)
+	if err != nil {
+		t.Fatalf("ReopenInternedColumnsInPlace: %v", err)
+	}
+	defer closer()
+
+	assertStoresEquivalent(t, ref, orig)
+
+	before := orig.Len()
+	orig.Upsert(spillRow{UID: "new", Namespace: "x", Name: "y"})
+	require.Equal(t, before, orig.Len(), "in-place mmap store ignores Upsert")
+}
+
 // TestSpillColumnsAllScalarKinds covers the numeric/bool/float field kinds that spillRow does
 // not, so the columnar serializer is gated on every scalar kind.
 func TestSpillColumnsAllScalarKinds(t *testing.T) {

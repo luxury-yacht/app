@@ -112,6 +112,21 @@ type Store[R any] struct {
 	match  map[uint32]matchValues // by rowId: precomputed facet values + lowercased search text
 	idx    map[string]*sortIndex
 	facets map[string]map[string]int
+
+	// tri is a trigram inverted index over each row's lowercased SearchText, keyed by the
+	// same rowId as `match`, maintained in lockstep under s.mu on Upsert/Delete. A search
+	// of >= 3 chars uses it to narrow which rows get the strings.Contains verify (the
+	// trigram set is a SUPERSET, so the verify still decides membership — results, order,
+	// and cursors stay identical to a linear scan). It is nil for read-only (mmap-aliased,
+	// Cold) stores, whose whole point is off-heap column data; those fall back to a linear
+	// scan (Cold is not the hot search path).
+	tri *trigramIndex
+
+	// readOnly marks a store whose columns ALIAS a memory mapping (the Tier 2.6 dual-mode
+	// Cold-serving store): it answers Query but ignores Upsert/Delete, because mutating
+	// mmap-aliased columns is invalid and a Cold cluster is never fed (a re-warm builds a
+	// fresh mutable heap store instead). A normal store leaves this false.
+	readOnly bool
 }
 
 // NewStore builds an empty store for a schema, creating a per-direction index per
@@ -123,6 +138,7 @@ func NewStore[R any](schema Schema[R]) *Store[R] {
 		match:  make(map[uint32]matchValues),
 		idx:    make(map[string]*sortIndex, len(schema.SortKeys)),
 		facets: make(map[string]map[string]int, len(schema.Facets)),
+		tri:    newTrigramIndex(0),
 	}
 	for name := range schema.SortKeys {
 		s.idx[name] = &sortIndex{
@@ -136,27 +152,46 @@ func NewStore[R any](schema Schema[R]) *Store[R] {
 	return s
 }
 
-// Upsert inserts or replaces a row, maintaining every index + facet incrementally.
+// Upsert inserts or replaces a row, maintaining every index + facet incrementally. A
+// read-only (mmap-aliased) store ignores writes — see Store.readOnly.
 func (s *Store[R]) Upsert(row R) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.readOnly {
+		return
+	}
 	uid := s.schema.UID(row)
 	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
 	}
 	rowID := s.rows.put(uid, row)
-	s.match[rowID] = extractMatchValues(s.schema, row)
+	mv := extractMatchValues(s.schema, row)
+	s.match[rowID] = mv
+	// Maintain the trigram index in lockstep with `match`, keyed by the same rowID and the
+	// same lowercased search text. update = remove-then-add, so it re-keys an in-place
+	// replace and clears any prior occupant's trigrams on a recycled rowID.
+	if s.tri != nil {
+		s.tri.update(rowID, mv.searchText)
+	}
 	s.reindex(uid, row)
 }
 
-// Delete removes a row by UID, maintaining every index + facet incrementally.
+// Delete removes a row by UID, maintaining every index + facet incrementally. A read-only
+// (mmap-aliased) store ignores deletes — see Store.readOnly.
 func (s *Store[R]) Delete(uid string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.readOnly {
+		return
+	}
 	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
 		rowID, _ := s.rows.delete(uid)
 		delete(s.match, rowID)
+		// Drop the freed rowID's trigrams so a recycled rowID never carries them.
+		if s.tri != nil {
+			s.tri.remove(rowID)
+		}
 	}
 }
 
@@ -204,14 +239,31 @@ func (s *Store[R]) deindex(uid string, row R) {
 	}
 }
 
+// searchCandidates precomputes, ONCE per query, the trigram candidate set for a search
+// term: the superset of rowIDs that MIGHT contain the term, or nil to mean "no trigram
+// narrowing — run the linear strings.Contains on every row". It returns nil when the
+// term is empty/<3 chars (no trigrams) or when the store has no trigram index (read-only
+// Cold stores), so those callers keep the current linear-scan behavior. When non-nil, the
+// caller gates the Contains check on membership (a rowID absent from the set cannot match,
+// so its Contains call is skipped; a present rowID still gets verified).
+func (s *Store[R]) searchCandidates(searchLower string) (set map[uint32]struct{}, narrow bool) {
+	if s.tri == nil || len(searchLower) < 3 {
+		return nil, false
+	}
+	return s.tri.searchSet(searchLower), true
+}
+
 // matchValuesMatches tests a query's filters + search against a row's precomputed
 // match cache (facet values + lowercased search text), so no row is reconstructed to
 // answer a filter/search. `searchLower` is the query's search term, pre-lowered once
-// by the caller. It mirrors the previous rowMatches semantics exactly.
-func (s *Store[R]) matchValuesMatches(mv matchValues, q Query, searchLower string) bool {
+// by the caller. `rowID` identifies the row and `candidates`/`narrow` is the trigram
+// gate from searchCandidates (narrow=false ⇒ linear scan). It mirrors the previous
+// rowMatches semantics exactly: the trigram set only narrows which rows get the Contains
+// verify, the verify still decides membership.
+func (s *Store[R]) matchValuesMatches(rowID uint32, mv matchValues, q Query, searchLower string, candidates map[uint32]struct{}, narrow bool) bool {
 	// Query's filters + search are exactly a scope base + search, so the two share one
 	// matcher (scopeMatchesBase) and can never diverge.
-	return s.scopeMatchesBase(mv, q.Filters, searchLower)
+	return s.scopeMatchesBase(rowID, mv, q.Filters, searchLower, candidates, narrow)
 }
 
 // scopeMatchesBase tests a row's cached match values against a base filter set +
@@ -219,7 +271,9 @@ func (s *Store[R]) matchValuesMatches(mv matchValues, q Query, searchLower strin
 // pre-lowered search directly (rather than a full Query) so Scope and Query share one
 // matcher and can never diverge. Filters here carry the same semantics as Query.Filters
 // (OR within a facet, AND across facets); an empty allowed list for a facet is ignored.
-func (s *Store[R]) scopeMatchesBase(mv matchValues, base map[string][]string, searchLower string) bool {
+// `rowID` + `candidates`/`narrow` carry the trigram gate (see searchCandidates): when
+// narrow is true the rowID must be in candidates to even attempt the Contains verify.
+func (s *Store[R]) scopeMatchesBase(rowID uint32, mv matchValues, base map[string][]string, searchLower string, candidates map[uint32]struct{}, narrow bool) bool {
 	for fname, allowed := range base {
 		if len(allowed) == 0 {
 			continue
@@ -243,6 +297,14 @@ func (s *Store[R]) scopeMatchesBase(mv matchValues, base map[string][]string, se
 		if s.schema.SearchText == nil {
 			return false
 		}
+		// Trigram narrowing: a rowID absent from the candidate superset cannot contain the
+		// term, so skip its Contains call. When narrow is false (no index / <3-char term)
+		// every row falls through to the linear Contains verify, exactly as before.
+		if narrow {
+			if _, ok := candidates[rowID]; !ok {
+				return false
+			}
+		}
 		if !strings.Contains(mv.searchText, searchLower) {
 			return false
 		}
@@ -262,13 +324,14 @@ func (s *Store[R]) Scope(base map[string][]string, search string) (map[string]ma
 	defer s.mu.RUnlock()
 
 	searchLower := strings.ToLower(search)
+	candidates, narrow := s.searchCandidates(searchLower)
 	counts := make(map[string]map[string]int, len(s.schema.Facets))
 	for name := range s.schema.Facets {
 		counts[name] = make(map[string]int)
 	}
 	total := 0
-	for _, mv := range s.match {
-		if !s.scopeMatchesBase(mv, base, searchLower) {
+	for rowID, mv := range s.match {
+		if !s.scopeMatchesBase(rowID, mv, base, searchLower, candidates, narrow) {
 			continue
 		}
 		total++
@@ -315,6 +378,11 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	// pre-lowered cached SearchText, so neither side is re-lowered per row.
 	searchLower := strings.ToLower(q.Search)
 
+	// Precompute the trigram candidate superset ONCE per query (no limit, so the sort
+	// walk can reach any matching row in cursor order). narrow=false for <3-char terms
+	// or read-only stores ⇒ the per-row check falls back to the linear Contains verify.
+	candidates, narrow := s.searchCandidates(searchLower)
+
 	// matchesUID tests the query against a uid's cached match values (facets + search)
 	// without reconstructing the row. A uid present in the sort index always has a
 	// cached entry (maintained in lockstep by Upsert/Delete).
@@ -323,7 +391,7 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		if !ok {
 			return false
 		}
-		return s.matchValuesMatches(s.match[rowID], q, searchLower)
+		return s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow)
 	}
 
 	// Collect up to limit+1 matching entries from the pivot, in walk order, so the
@@ -406,8 +474,8 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	total := s.rows.len()
 	if len(q.Filters) > 0 || q.Search != "" {
 		total = 0
-		for _, mv := range s.match {
-			if s.matchValuesMatches(mv, q, searchLower) {
+		for rowID, mv := range s.match {
+			if s.matchValuesMatches(rowID, mv, q, searchLower, candidates, narrow) {
 				total++
 			}
 		}

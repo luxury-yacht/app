@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
@@ -25,19 +26,27 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// nodeDomainIngestSource is everything the informer-backed nodes domain reads from the
-// ingest manager: the cut node kind's projected OWN-fields rows + store RV + sync gate
-// (nodeIngestSource) and the cut pod kind's projected aggregation rows (podAggregateIngestSource).
-// *ingest.IngestManager satisfies both.
+// nodeDomainIngestSource is everything the informer-backed nodes domain still reads from the
+// ingest manager AFTER the node OWN-rows moved to the maintained store: the cut pod kind's
+// projected aggregation rows (podAggregateIngestSource) and the node store RV for the version
+// watermark (nodeIngestSource — only StoreResourceVersion is still read here; the node-sync
+// gate stays for the cluster-overview consumer). *ingest.IngestManager satisfies both.
 type nodeDomainIngestSource interface {
 	nodeIngestSource
 	podAggregateIngestSource
 }
 
 // NodeBuilder constructs node snapshots from the cut node kind's projected OWN-fields rows
-// read from the ingest manager (node is cut — no typed lister) plus the cut pod kind's
-// projected aggregation rows, re-joining pod aggregates + metrics onto each node row at serve.
+// served straight from a per-cluster maintained store (fed by the node reflector's Table-half
+// ingest Sink — same pattern as pods) plus the cut pod kind's projected aggregation rows read
+// from the ingest manager, re-joining pod aggregates + metrics onto each node row at serve.
 type NodeBuilder struct {
+	// maintained is the per-cluster store of node OWN-rows (NodeSummary), fed by the node
+	// reflector's Table-half Sink. Build serves own-rows straight from it. nil in a unit test
+	// with no store wired, in which case no nodes are served.
+	maintained *typedMaintainedStore[NodeSummary]
+	// ingest still supplies the per-node pod-aggregate join rows and the node store RV for the
+	// version watermark; the node OWN-rows no longer come from here.
 	ingest  nodeDomainIngestSource
 	metrics metrics.Provider
 }
@@ -94,13 +103,26 @@ type NodeTaint = streamrows.NodeTaint
 type NodePodMetric = streamrows.NodePodMetric
 
 // RegisterNodeDomain registers the nodes snapshot domain. Node and pods are both cut to the
-// ingest path: the node OWN-rows and the per-node pod aggregation both come from the ingest
-// manager (no typed listers). ingestManager may be nil in a unit test, in which case no nodes
-// or pods are read.
-func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, ingestManager nodeDomainIngestSource) error {
+// ingest path. The node OWN-rows are served from a per-cluster maintained store fed by the
+// node reflector's Table-half ingest Sink — the SAME mechanism pods uses (RegisterPodDomain):
+// the bespoke node projector (NewNodeIngestProjector) builds the same OWN-fields NodeSummary
+// the maintained store holds, so the served own-rows are byte-identical and the serve-time
+// pod-aggregate join + metrics overlay are unchanged. The Sink is registered BEFORE the ingest
+// manager starts (this runs during registration), so the snapshot sync gate guarantees the
+// store is populated before the first Build serves from it. The per-node pod aggregation still
+// comes from the ingest manager. ingestManager may be nil in a unit test, in which case the
+// store has no feed and no pods are read.
+func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
+	maintained := newTypedMaintainedStore(clusterMeta, nodesQuerypageSchema(), nodeTableQueryAdapter())
+	reg.RegisterMaintainedStore("nodes", maintained) // spill/restore/reconcile across Cold/re-warm
+	if ingestManager != nil {
+		ingestManager.AddSink(NodeGVR, maintained.Sink())
+	}
+
 	builder := &NodeBuilder{
-		ingest:  ingestManager,
-		metrics: provider,
+		maintained: maintained,
+		ingest:     ingestManager,
+		metrics:    provider,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -140,13 +162,24 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
-		nodeOwnRowsFromIngest(b.ingest),
+		b.ownRows(),
 		nodeIngestVersion(b.ingest),
 		podAggregatesFromIngest(b.ingest),
 		nodeUsageOrEmpty(nodeMetrics),
 		podUsageOrEmpty(podMetrics),
 		metaSrc,
 	)
+}
+
+// ownRows returns the node OWN-fields NodeSummary rows from the maintained store (the rows the
+// node reflector's Table-half Sink feeds). Nodes are cluster-scoped (no namespace) and the
+// store holds the single node kind, so it reads every node row. A nil store (a unit test with
+// no store wired) yields no rows.
+func (b *NodeBuilder) ownRows() []NodeSummary {
+	if b.maintained == nil {
+		return nil
+	}
+	return b.maintained.rows("", map[string]bool{nodepkg.Identity.Kind: true})
 }
 
 // Build returns the node snapshot payload using direct list API calls.

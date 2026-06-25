@@ -52,10 +52,13 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 				Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
 			},
 		}
-		builder := &NodeBuilder{
-			ingest:  newFakePodAggregateSource(nil).withNodes(ClusterMeta{ClusterID: "cluster-a"}, "", node),
-			metrics: fakeMetricsProvider{},
-		}
+		builder := newNodeBuilderForTest(
+			ClusterMeta{ClusterID: "cluster-a"},
+			"",
+			fakeMetricsProvider{},
+			newFakePodAggregateSource(nil).withNodes(ClusterMeta{ClusterID: "cluster-a"}, "", node),
+			node,
+		)
 		snap, err := builder.Build(ctx, "")
 		require.NoError(t, err)
 		payload, ok := snap.Payload.(NodeSnapshot)

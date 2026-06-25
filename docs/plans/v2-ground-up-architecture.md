@@ -171,10 +171,27 @@ sections it references._
 > query-equivalent to gob). WIRED: `typedMaintainedStore.SpillTo`→`SpillColumns`, `RestoreFrom`→columnar with a gob
 > FALLBACK (handles a prior gob spill on a same-version transition + degrades safely). Gated: round-trip ==
 > gob-equivalence harness + all-scalar-kinds + zero-copy + cross-platform (windows build) + full `mage qc:prerelease`.
-> **FURTHER OPTIMIZATION (beyond 2.6's listed scope, explicitly deferred):** dual-mode SERVING — a Cold cluster's
-> store querying DIRECTLY from the mapping (~0 heap) — needs `unsafe` interned-column aliasing in the query hot path
-> AND the boxed map/slice fields can't go off-heap; it's a separate prototype-first effort. The memory GOAL is
-> already met (Cold teardown reclaims heap, 2.4); this would make Cold = ~0 RAM *while queryable*.
+> **DUAL-MODE SERVING — CORE BUILT + GATED (2026-06-25); governor-tier wiring remains.** A Cold cluster can serve
+> queries directly from the mapping (column data off-heap). Built + tested: (a) Prototype #4
+> (`mmap_query_prototype_test.go`) proving a filter+sort+page query over mmap'd columns == in-memory baseline; (b)
+> zero-copy `StringColumnAliased` (`unsafe.String`) completing the int/uint/string off-heap read set; (c) `Store.readOnly`
+> mode (Upsert/Delete ignored — a mmap-aliased store is never mutated); (d) `querypage/columnstore_mmap.go` —
+> `Store.SpillInternedColumns` + `OpenInternedColumnStore` (aligned interned writer/reader; scalar columns aliased via
+> `unsafe.Slice`, dict strings via `unsafe.String`, fallback gob→heap; rebuilds uid→rowID + sort indexes + match cache
+> from the aliased columns; returns a closer that must outlive use). Gated: `TestInternedColumnStoreMmapRoundTrip`
+> (read-only mmap store == heap store across sorts/filters, incl. read-only enforcement) + `-race` + staticcheck +
+> windows build + full `mage qc:prerelease`. Plus `Store.ReopenInternedColumnsInPlace` (spill + swap a live store's
+> internals to the mmap view in place — same pointer keeps serving — returning the closer; `TestReopenInternedColumnsInPlace`
+> gated). So the entire STORE-LEVEL dual-mode machinery is complete + tested + gated.
+> **REMAINING is a cross-layer ARCHITECTURAL feature, not plumbing (grounded finding 2026-06-25):** serving is
+> PUSH-based — `refresh.Manager` drives `resourcestream.Manager` which emits snapshots to the frontend
+> (`cluster_auth.go:113-121`, `app_refresh_governor.go:207`); a Cold cluster with the Manager shut down cannot push.
+> So "serve Cold from the mmap store" requires a NEW PULL-based query path that bypasses the resource stream AND a
+> frontend that queries non-visible clusters. It also has no current consumer (queries route to the visible/Foreground
+> cluster; demoted clusters re-warm via warm-paint on switch-back, which already shows data fast) and trades MORE heap
+> than teardown (indexes/match stay resident to be queryable). Per the Cross-Layer Contract Rule + "explain the
+> tradeoff and ask when materially larger", this is a deliberate product decision (cross-cluster query?), not a
+> tail-end slice. The store-level machinery to enable it is built and waiting.
 > **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
 > cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
 > lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
@@ -184,9 +201,13 @@ sections it references._
 > (`mage qc:prerelease` EXIT 0), and the plan's core goals are met. STILL OPEN (deferred/optional refinements, not
 > dropped): (a) 2.6's dual-mode mmap SERVING — Cold cluster queries directly from the mapping, ~0 RAM while
 > queryable (the format is in place; the serving needs `unsafe` hot-path aliasing + the boxed map/slice fields can't
-> go off-heap); (b) the "Smaller, optional" list below — a `nodes` maintained store (still list+projects per Build),
+> go off-heap); (b) the "Smaller, optional" list below — ✅ the `nodes` maintained store is DONE (2026-06-25): the
+> nodes domain now serves node OWN-rows from a per-cluster `typedMaintainedStore[NodeSummary]` fed by the node
+> reflector's Table-half Sink, mirroring `RegisterPodDomain` (no more list+project per Build; pod-aggregate join +
+> metrics overlay + the node-store-RV version watermark are unchanged) — STILL OPEN:
 > pods' direct query + metric indexes on `metricsRevision`, a stronger catalog correctness test, trigram search;
-> (c) ingestion refinements — gateway-factory transform, project-to-column-tuple. Phase 4 stays 🔶 (goals met,
+> (c) ingestion refinement — project-to-column-tuple (gateway-factory transform was already done, cluster_clients.go:358).
+> Phase 4 stays 🔶 (goals met,
 > refinements deferred). DROPPED-with-reason items (h2c, SSAR→SSRR, LSN clock, metrics-signal, MessagePack) are not pending.
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
@@ -250,10 +271,13 @@ roadmap with per-item status in [§Migration phases](#migration-phases--value-ea
    path (capability-probe + watchdog). Prototype #3 (WatchList watchdog + LIST fallback) first.
 2. **Phase 4 — lifecycle + governor + mmap spill + four-stage cold-start.** The columnar SoA is already the
    on-disk format, so spill is `mmap`ing the column files per `(cluster,gvr)`.
-3. **Smaller, optional:** maintained stores for the cutover-only domains (network relationship, workloads
-   synthesized pods, nodes/helm/crds — they serve via the engine but still list+project per Build); pods'
-   direct query + metric indexes on `metricsRevision` (profile-driven); a stronger catalog correctness test;
-   trigram-accelerated search.
+3. **Smaller, optional (status 2026-06-25):** maintained stores for the cutover-only domains — `nodes` ✅ DONE
+   (typedMaintainedStore fed by the NodeGVR Sink); `network relationship` + `workloads synthesized pods` still
+   list+project per Build (these are the prerequisites for project-to-column-tuple); `helm/crds` still per Build.
+   pods' direct query ✅ (metric SORT done + gated; the persistent metric index stays profile-driven, part of the
+   deferred metrics-column-family). A stronger catalog correctness test ✅ DONE (`TestCatalogQueryMatchesBruteForceOracle`
+   — 10,800 query shapes vs a brute-force oracle). Trigram-accelerated search ✅ DONE (querypage `trigramIndex`,
+   verify-after-intersect so results stay identical, skipped on read-only Cold stores).
 
 ## Provenance & confidence
 
@@ -1165,8 +1189,15 @@ reasons; **nothing required is incomplete here.**
   a Service row depends on its EndpointSlices, `namespace_network.go:130,147,159`); needs the maintained
   store to also feed those relationship-dependent sources. `namespace-workloads` — synthesized standalone-pod
   rows (the build is already on the engine; the maintained store needs the cross-kind standalone determination).
-  Also nodes/helm/crds still list+project per Build. The perf win is on the larger domains. (Browse/catalog is
-  DONE — its own maintained `querypage.Store` + direct `store.Query`.)
+  `nodes` ✅ DONE (2026-06-25) — converted to a `typedMaintainedStore[NodeSummary]` fed by the NodeGVR Table-half
+  Sink (mirrors pods; `nodeOwnRowsFromIngest` removed); helm/crds still list+project per Build. The perf win is on
+  the larger domains. (Browse/catalog is DONE — its own maintained `querypage.Store` + direct `store.Query`.)
+  **project-to-column-tuple SCOPE (assessed 2026-06-25):** genuinely large + correctly deferred. `bundle.Table` is
+  still PULLED (not just Sink-pushed) by `network_ingest_source.go:54` (NetworkSummary, network-relationship) and
+  `workload_ingest_source.go:54` (WorkloadSummary, workloads-synthesized-pods); "discard the typed object" requires
+  converting those remaining pull-consumers to maintained stores FIRST, then dropping the Bundle's typed Table-half.
+  The plan marks it "not required for the memory goal" (StripManagedFields already captured the main win), so it stays
+  deferred behind the network-relationship + workloads-synthesized-pods conversions.
 - 🔶 **Ingestion cutover.** ✅ **Projection-at-intake on EVERY ingestion path** (`informer/projection.go`
   `StripManagedFields`): `WithTransform` on the core + apiext + gateway factories AND `SetTransform` on the
   catalog's dynamic-CRD informers — discards `managedFields` (30-50% of a Pod's bytes) before any object
@@ -1183,8 +1214,10 @@ reasons; **nothing required is incomplete here.**
   on-demand entries excluded from the global readiness gate (per-gvr `HasSyncedFor` only); `collectFromInformer`/
   `promotedDescriptor`/`s.promoted` deleted. The CRD-definition watch already rode the shared apiext factory
   (`watch.go`) — unchanged. Byte-equivalence + readiness-isolation gated, full backend `-race` + prerelease green.
-  **REMAINING:** gateway-factory transform; the deeper project-to-column-tuple (discard the typed object — a large
-  StreamRow/catalog rewrite, not required for the memory goal projection already captures).
+  ✅ **gateway-factory transform DONE** — the production Gateway-API factory is built with
+  `WithTransform(StripManagedFields)` (`cluster_clients.go:358`), so projection-at-intake covers EVERY ingestion path.
+  **REMAINING:** the deeper project-to-column-tuple (discard the typed object — a large StreamRow/catalog rewrite,
+  not required for the memory goal projection already captures).
 - 🔶 **Lifecycle + governor + spill.** ✅ **Process-wide governor** (`system/governor.go` policy +
   `app_refresh_governor.go` wiring): `SetVisibleCluster` tiers open clusters Foreground/Background/Cold,
   reusing the existing per-cluster build/teardown + pausing the metrics poller for Background; a memory-pressure

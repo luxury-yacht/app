@@ -959,10 +959,13 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 			}
 			provider := &staticPodMetrics{pods: usage}
 
-			builder := &NodeBuilder{
-				ingest:  newFakePodAggregateSource(nil, pod).withNodes(meta, node.ResourceVersion, node),
-				metrics: provider,
-			}
+			builder := newNodeBuilderForTest(
+				meta,
+				node.ResourceVersion,
+				provider,
+				newFakePodAggregateSource(nil, pod).withNodes(meta, node.ResourceVersion, node),
+				node,
+			)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
 			require.NoError(t, err)
 			payload := snap.Payload.(NodeSnapshot)
