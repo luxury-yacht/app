@@ -139,3 +139,24 @@ func TestRunWithResumeNoRVFullSyncs(t *testing.T) {
 	runWithResume(context.Background(), nil, store, "", func() { called = true })
 	require.True(t, called, "with no persisted RV the reflector full-syncs as today")
 }
+
+// TestFullSyncFallbackDeletesAbsentUIDs is the stage-4 (410-Gone reconcile-delete) contract:
+// when the persisted RV is too old, runWithResume falls back to the reflector's full sync,
+// whose LIST → ProjectingStore.Replace drops every warm-painted UID absent from the fresh
+// consistent snapshot AND notifies sinks — so a row for an object deleted while the app was
+// closed (a zombie row) is killed both in the ingest store and in its downstream maintained
+// store / catalog. This is the risk-#7 mitigation.
+func TestFullSyncFallbackDeletesAbsentUIDs(t *testing.T) {
+	store := nameProjectingStore()
+	// Warm-paint: the store holds a and b (the state at the now-too-old RV).
+	require.NoError(t, store.Replace([]interface{}{resumeCM("a", "10"), resumeCM("b", "10")}, "10"))
+	sink := &recordingSink{}
+	store.AddSink(sink) // a downstream maintained store / catalog half
+
+	// The 410 fallback re-LISTs the fresh consistent snapshot: b was deleted while the app
+	// was closed, so it is absent. Replace is what the reflector's full sync performs.
+	require.NoError(t, store.Replace([]interface{}{resumeCM("a", "20")}, "20"))
+
+	require.Equal(t, 1, len(store.List()), "the zombie row b is dropped from the store")
+	require.Len(t, sink.deletes, 1, "the absent UID's delete is propagated to sinks (downstream zombie killed)")
+}

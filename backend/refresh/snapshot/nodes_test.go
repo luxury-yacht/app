@@ -309,3 +309,35 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	require.Equal(t, config.SnapshotClusterNodesEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")
 }
+
+// TestNodesSortByMetricUsage pins that the nodes table sorts by LIVE metric usage numerically
+// (the metrics overlaid at serve), not lexically by the formatted string. The cpu values are
+// chosen so a lexical sort ("1000m" < "125m" < "650m") differs from the numeric one
+// (1000 > 650 > 125); likewise memory ("1 GB" sorts lexically below "128 MB"). This is the
+// stage-2.7 regression: nodes metrics are honored in the query sort schema.
+func TestNodesSortByMetricUsage(t *testing.T) {
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"})
+	items := []NodeSummary{
+		{Name: "alpha", CPUUsage: "1000m", MemoryUsage: "128 MB"},
+		{Name: "beta", CPUUsage: "650m", MemoryUsage: "1 GB"},
+		{Name: "gamma", CPUUsage: "125m", MemoryUsage: "512 MB"},
+	}
+
+	cpuSnap, err := finishNodeSnapshot(ctx, "c1|?sort=cpu&sortDirection=desc", items, 1, metrics.Metadata{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"alpha", "beta", "gamma"}, nodeRowNames(cpuSnap.Payload.(NodeSnapshot)),
+		"cpu sort must be numeric live usage (1000 > 650 > 125), not lexical")
+
+	memSnap, err := finishNodeSnapshot(ctx, "c1|?sort=memory&sortDirection=desc", items, 1, metrics.Metadata{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"beta", "gamma", "alpha"}, nodeRowNames(memSnap.Payload.(NodeSnapshot)),
+		"memory sort must be numeric live usage (1GB > 512MB > 128MB), not lexical")
+}
+
+func nodeRowNames(payload NodeSnapshot) []string {
+	names := make([]string, len(payload.Rows))
+	for i, r := range payload.Rows {
+		names[i] = r.Name
+	}
+	return names
+}

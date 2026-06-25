@@ -151,14 +151,20 @@ sections it references._
 > `IngestManager.SpillStores(dir)` / `RestoreStores(dir)` round-trip each entry's store (per-GVR `.bundles` file);
 > RestoreStores sets `e.resumeRV` from the persisted RV (lighting up runWithResume). `registerGobTypes` projects
 > each entry's retained example object and gob.Registers the Bundle halves (recover-guarded — unregisterable kind →
-> full sync). Safe-degrade gated (round-trip sets resumeRV+restores; no-file → resumeRV="" → full sync). UNWIRED in
-> production still. **REMAINING stage 3b-ii-b-2 (the final activation):** app teardownClusterSubsystem spills the
-> ingest stores (subsystem.IngestManager.SpillStores) at the quiescent post-Shutdown moment alongside the maintained
-> ones; buildRefreshSubsystemForSelection restores them (RestoreStores) before Start — under the same per-cluster,
-> format-version-guarded spill root as stage 2. Then stage 4 (the full-sync fallback already reconciles deletes —
-> formalize + test absent-UID deletion).
+> full sync). Safe-degrade gated. **stage 3b-ii-b-2 (activation) DONE:** teardownClusterSubsystem spills the ingest
+> stores (subsystem.IngestManager.SpillStores) after Shutdown (alongside the maintained ones);
+> buildRefreshSubsystemForSelection restores them (RestoreStores) before Start — per-cluster `ingest` subdir of the
+> format-version-guarded spill root. **stage 4 (410-Gone reconcile-delete) DONE:** the full-sync fallback's
+> `ProjectingStore.Replace` drops every UID absent from the fresh snapshot AND notifies sinks — the zombie-row
+> mitigation (risk #7), gated by `TestFullSyncFallbackDeletesAbsentUIDs`. **➤ TIER 2.5 COMPLETE (2026-06-24)** — all
+> four stages (discovery disk-cache+ETag; cross-restart warm-paint; WatchList resume-from-persisted-RV via a custom
+> resume path since client-go's reflector can't; 410-Gone reconcile-delete), safe-degrade end-to-end (any failure →
+> full sync). Real-cluster delta-resume is a deployment property; the unit gates + safe-degrade are the contract.
 > (2.6) mmap on-disk column format (gob baseline
-> today); (2.7) nodes metrics in the query sort schema.
+> today); **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
+> cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
+> lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
+> regression test, now added (`TestNodesSortByMetricUsage`, values chosen so lexical≠numeric order). ONLY 2.6 remains.
 
 **Shipped & green** (verified `go test ./backend/...` + `mage qc:prerelease`/vitest where noted):
 
