@@ -116,7 +116,7 @@ func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, cluster
 	maintained := newTypedMaintainedStore(clusterMeta, nodesQuerypageSchema(), nodeTableQueryAdapter())
 	reg.RegisterMaintainedStore("nodes", maintained) // spill/restore/reconcile across Cold/re-warm
 	if ingestManager != nil {
-		ingestManager.AddSink(NodeGVR, maintained.Sink())
+		ingestManager.AddBundleSink(NodeGVR, maintained.BundleSink())
 	}
 
 	builder := &NodeBuilder{

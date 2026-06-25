@@ -268,39 +268,17 @@ func newRole(ns, name string) *rbacv1.Role {
 // storeNames returns the sorted "namespace/name" identity of every projected row
 // in a store, derived from the bundle's Table half (the stream Summary) via JSON
 // so the helper stays kind-agnostic.
+// storeNames returns the identity (namespace/name, or name for cluster-scoped) of every
+// object in the store. It reads ListKeys — the cache key cache.MetaNamespaceKeyFunc set at
+// intake, which is exactly that identity — rather than the Table half, because the store now
+// drops the redundant Table half from its stored bundles (the maintained store holds it
+// columnar). A key is present only when projection succeeded, so it still proves the
+// projection ran for the kind.
 func storeNames(t *testing.T, store *ProjectingStore) []string {
 	t.Helper()
-	tables := store.TableRows()
-	out := make([]string, 0, len(tables))
-	for _, row := range tables {
-		ns, name := identityOf(t, row)
-		if ns == "" {
-			out = append(out, name)
-		} else {
-			out = append(out, ns+"/"+name)
-		}
-	}
+	out := append([]string(nil), store.ListKeys()...)
 	sort.Strings(out)
 	return out
-}
-
-// identityOf pulls namespace/name out of a projected summary row by round-tripping
-// through JSON; every stream summary serialises namespace and name, so the test
-// can assert identity without importing each kind's row type.
-func identityOf(t *testing.T, row interface{}) (string, string) {
-	t.Helper()
-	data, err := json.Marshal(row)
-	if err != nil {
-		t.Fatalf("marshal row %#v: %v", row, err)
-	}
-	var fields struct {
-		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		t.Fatalf("unmarshal row %s: %v", data, err)
-	}
-	return fields.Namespace, fields.Name
 }
 
 func waitForNames(t *testing.T, store *ProjectingStore, want []string) []string {
@@ -359,14 +337,16 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 	if got := waitForNames(t, cmStore, []string{"default/seed-cm", "other/second-cm"}); !equalStrings(got, []string{"default/seed-cm", "other/second-cm"}) {
 		t.Fatalf("configmap store names = %v", got)
 	}
-	// The stored values must be the projected ConfigSummary rows, not *corev1.ConfigMap.
-	// The store holds bundles now; its Table half is the projected summary.
-	for _, row := range cmStore.TableRows() {
+	// The stored values must be projected Bundles, never the typed *corev1.ConfigMap. The
+	// store drops the redundant Table half (the maintained store holds it columnar), so the
+	// stored bundle no longer carries the ConfigSummary — but the invariant that matters,
+	// "never the source object", still holds and is asserted here.
+	for _, row := range cmStore.List() {
 		if _, isCM := row.(*corev1.ConfigMap); isCM {
-			t.Fatalf("configmap store retained a *corev1.ConfigMap; only the projected summary must be kept")
+			t.Fatalf("configmap store retained a *corev1.ConfigMap; only the projected bundle must be kept")
 		}
-		if _, isSummary := row.(streamrows.ConfigSummary); !isSummary {
-			t.Fatalf("configmap store row is %T, want streamrows.ConfigSummary", row)
+		if _, isBundle := row.(Bundle); !isBundle {
+			t.Fatalf("configmap store row is %T, want ingest.Bundle", row)
 		}
 	}
 
@@ -377,12 +357,12 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 	if got := waitForNames(t, saStore, []string{"default/seed-sa"}); !equalStrings(got, []string{"default/seed-sa"}) {
 		t.Fatalf("serviceaccount store names = %v", got)
 	}
-	for _, row := range saStore.TableRows() {
+	for _, row := range saStore.List() {
 		if _, isSA := row.(*corev1.ServiceAccount); isSA {
-			t.Fatalf("serviceaccount store retained a *corev1.ServiceAccount; only the projected summary must be kept")
+			t.Fatalf("serviceaccount store retained a *corev1.ServiceAccount; only the projected bundle must be kept")
 		}
-		if _, isSummary := row.(streamrows.RBACSummary); !isSummary {
-			t.Fatalf("serviceaccount store row is %T, want streamrows.RBACSummary", row)
+		if _, isBundle := row.(Bundle); !isBundle {
+			t.Fatalf("serviceaccount store row is %T, want ingest.Bundle", row)
 		}
 	}
 
@@ -393,9 +373,9 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 	if got := waitForNames(t, roleStore, []string{"default/seed-role"}); !equalStrings(got, []string{"default/seed-role"}) {
 		t.Fatalf("role store names = %v", got)
 	}
-	for _, row := range roleStore.TableRows() {
+	for _, row := range roleStore.List() {
 		if _, isRole := row.(*rbacv1.Role); isRole {
-			t.Fatalf("role store retained a *rbacv1.Role; only the projected summary must be kept")
+			t.Fatalf("role store retained a *rbacv1.Role; only the projected bundle must be kept")
 		}
 	}
 }

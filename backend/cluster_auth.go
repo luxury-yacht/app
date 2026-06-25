@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
 // handleClusterAuthStateChange handles auth state changes for a specific cluster.
@@ -90,25 +91,25 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 	}
 }
 
-// teardownClusterSubsystem stops the refresh subsystem for a specific cluster
-// without affecting other clusters.
-func (a *App) teardownClusterSubsystem(clusterID string) {
-	if a == nil || clusterID == "" {
+// stopClusterFeeds stops everything that FEEDS a cluster's subsystem — permission
+// revalidation, the resource stream, the refresh manager (which also stops the metrics
+// poller and informer hub), and the informer factory — WITHOUT removing the subsystem from
+// the registry and WITHOUT spilling. It is the shared stop logic for two callers:
+//   - teardownClusterSubsystem, which then takes the subsystem + spills (full teardown), and
+//   - coolClusterToMmapServing, which then swaps the maintained stores to mmap and keeps the
+//     subsystem registered so it serves cooled queries.
+//
+// The subsystem must be the one currently registered for clusterID; the caller passes it so
+// cool can act on the same subsystem it will keep serving.
+func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
+	if a == nil || clusterID == "" || subsystem == nil {
 		return
 	}
 
-	// Stop permission revalidation for this cluster
+	// Stop permission revalidation for this cluster.
 	a.stopRefreshPermissionRevalidation(clusterID)
 
-	// Get and remove the subsystem for this cluster.
-	subsystem := a.takeRefreshSubsystem(clusterID)
-	if subsystem == nil {
-		return
-	}
-
-	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
-
-	// Stop the resource stream if present
+	// Stop the resource stream if present.
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
 	}
@@ -130,10 +131,38 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		}
 	}
 
-	// Shutdown the informer factory if present
+	// Shutdown the informer factory if present.
 	if subsystem.InformerFactory != nil {
 		_ = subsystem.InformerFactory.Shutdown()
 	}
+}
+
+// teardownClusterSubsystem stops the refresh subsystem for a specific cluster
+// without affecting other clusters.
+func (a *App) teardownClusterSubsystem(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+
+	// A cluster torn down while cooled (e.g. closed, or pressure-collapsed after cooling)
+	// must release its mmap mappings FIRST, before its stores are discarded — otherwise the
+	// closers would never run. takeCooledClosers returns each closer exactly once, so this
+	// never double-unmaps a subsequent re-warm.
+	a.closeCooledClosers(clusterID)
+
+	// Get and remove the subsystem for this cluster.
+	subsystem := a.takeRefreshSubsystem(clusterID)
+	if subsystem == nil {
+		// No live subsystem; still ensure permission revalidation is stopped (takeRefreshSubsystem
+		// short-circuits stopClusterFeeds below, which is where reval stop lives).
+		a.stopRefreshPermissionRevalidation(clusterID)
+		return
+	}
+
+	a.logger.Info(fmt.Sprintf("Tearing down subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
+
+	// Stop all feeds (permission reval, resource stream, manager, informer factory).
+	a.stopClusterFeeds(clusterID, subsystem)
 
 	// Spill this cluster's stores to disk now that the subsystem is quiescent, so a re-warm
 	// re-paints them fast before its informers re-sync (the heap they hold is reclaimed by the

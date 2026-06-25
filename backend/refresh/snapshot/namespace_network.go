@@ -123,17 +123,17 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager)
 
 	// One store holds ALL the domain's own-rows. Feed the four cut kinds' Table halves from
-	// each GVR's ingest Sink (Service/EndpointSlice are bespoke, so they need an explicit Sink
-	// each; Ingress/NetworkPolicy are stream-backed cut kinds, also wired explicitly here for a
-	// single, uniform feed point), then feed the uncut Gateway-API kinds from their informers
-	// (registerMaintainedHandlers skips the ingest-owned cut kinds). The Sinks/handlers are
-	// registered BEFORE the ingest manager / informer factory start (this runs during
+	// each GVR's whole-bundle ingest Sink (Service/EndpointSlice are bespoke, so they need an
+	// explicit Sink each; Ingress/NetworkPolicy are stream-backed cut kinds, also wired explicitly
+	// here for a single, uniform feed point), then feed the uncut Gateway-API kinds from their
+	// informers (registerMaintainedHandlers skips the ingest-owned cut kinds). The Sinks/handlers
+	// are registered BEFORE the ingest manager / informer factory start (this runs during
 	// registration), so the snapshot sync gate guarantees the store is populated before the
 	// first Build serves from it. nil ingestManager (a unit test) leaves the cut kinds unfed.
 	maintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
 	if ingestManager != nil {
 		for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
-			ingestManager.AddSink(gvr, maintained.Sink())
+			ingestManager.AddBundleSink(gvr, maintained.BundleSink())
 		}
 	}
 	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {

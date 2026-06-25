@@ -78,7 +78,11 @@ func registerPodReflector(mgr *ingest.IngestManager, factory *informer.Factory, 
 		return
 	}
 	rsLister := shared.Apps().V1().ReplicaSets().Lister()
-	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, rsLister))
+	// retainTable=true: the pod standalone-synthesis (pod_aggregate_source) and live-notify
+	// (ingest_notify_pods) paths read the STORED Table half (PodSummary), so it must not be
+	// dropped. Every other reflector below passes false — its Table half lives only in the
+	// columnar maintained store after being fanned to the BundleSink.
+	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, rsLister), true)
 }
 
 // registerWorkloadReflectors wires the five bespoke workload reflectors onto the manager.
@@ -94,11 +98,11 @@ func registerWorkloadReflectors(mgr *ingest.IngestManager, meta snapshot.Cluster
 	if mgr == nil {
 		return
 	}
-	mgr.RegisterReflector(snapshot.DeploymentGVR, snapshot.DeploymentGVK, snapshot.NewDeploymentIngestProjector(meta))
-	mgr.RegisterReflector(snapshot.StatefulSetGVR, snapshot.StatefulSetGVK, snapshot.NewStatefulSetIngestProjector(meta))
-	mgr.RegisterReflector(snapshot.DaemonSetGVR, snapshot.DaemonSetGVK, snapshot.NewDaemonSetIngestProjector(meta))
-	mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta))
-	mgr.RegisterReflector(snapshot.CronJobGVR, snapshot.CronJobGVK, snapshot.NewCronJobIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.DeploymentGVR, snapshot.DeploymentGVK, snapshot.NewDeploymentIngestProjector(meta), false)
+	mgr.RegisterReflector(snapshot.StatefulSetGVR, snapshot.StatefulSetGVK, snapshot.NewStatefulSetIngestProjector(meta), false)
+	mgr.RegisterReflector(snapshot.DaemonSetGVR, snapshot.DaemonSetGVK, snapshot.NewDaemonSetIngestProjector(meta), false)
+	mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta), false)
+	mgr.RegisterReflector(snapshot.CronJobGVR, snapshot.CronJobGVK, snapshot.NewCronJobIngestProjector(meta), false)
 }
 
 // registerNodeReflector wires the bespoke node reflector onto the manager. Node has no
@@ -113,7 +117,7 @@ func registerNodeReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta)
 	if mgr == nil {
 		return
 	}
-	mgr.RegisterReflector(snapshot.NodeGVR, snapshot.NodeGVK, snapshot.NewNodeIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.NodeGVR, snapshot.NodeGVK, snapshot.NewNodeIngestProjector(meta), false)
 }
 
 // registerNetworkReflectors wires the two bespoke network reflectors onto the manager.
@@ -130,6 +134,6 @@ func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterM
 	if mgr == nil {
 		return
 	}
-	mgr.RegisterReflector(snapshot.ServiceGVR, snapshot.ServiceGVK, snapshot.NewServiceIngestProjector(meta))
-	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta))
+	mgr.RegisterReflector(snapshot.ServiceGVR, snapshot.ServiceGVK, snapshot.NewServiceIngestProjector(meta), false)
+	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta), false)
 }

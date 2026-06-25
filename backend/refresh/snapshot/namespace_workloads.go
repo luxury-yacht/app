@@ -151,12 +151,13 @@ func RegisterNamespaceWorkloadsDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	maintained := newTypedMaintainedStore(clusterMeta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
-	// Feed the one store from every workload GVR's Table-half Sink. Each kind's projector emits a
-	// WorkloadSummary Table half, so they all land in this store; the Sink ignores a row of the
-	// wrong type. nil ingestManager (a unit test) leaves the store with no feed.
+	// Feed the one store from every workload GVR's whole-bundle Sink. Each kind's projector emits a
+	// WorkloadSummary Table half (upserted by key) and a Catalog half (the delete key), so they all
+	// land in this store; the BundleSink ignores a bundle whose Table half is the wrong type. nil
+	// ingestManager (a unit test) leaves the store with no feed.
 	if ingestManager != nil {
 		for _, gvr := range []schema.GroupVersionResource{DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR} {
-			ingestManager.AddSink(gvr, maintained.Sink())
+			ingestManager.AddBundleSink(gvr, maintained.BundleSink())
 		}
 	}
 	builder := &NamespaceWorkloadsBuilder{

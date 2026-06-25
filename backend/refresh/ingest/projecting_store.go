@@ -120,6 +120,15 @@ type ProjectingStore struct {
 	// projectErrLogged ensures a recurring projection failure is logged once,
 	// matching the repo rule that recurring identical errors log exactly once.
 	projectErrLogged bool
+
+	// retainTable keeps the Bundle's Table half in the STORED row when true; when false
+	// (the default) the Table half is dropped from the stored bundle after it has been
+	// fanned to the sinks, because the columnar maintained store already holds that row —
+	// keeping it here would be the double-storage this path removes. The sinks are still
+	// fed the FULL projected value (Table present); only the stored copy is nilled, and a
+	// maintained store's delete then keys off the retained Catalog half. Pods set it true
+	// because their standalone-synthesis and live-notify paths read the stored Table half.
+	retainTable bool
 }
 
 var _ cache.Store = (*ProjectingStore)(nil)
@@ -131,6 +140,31 @@ func NewProjectingStore(project ProjectFunc) *ProjectingStore {
 		project: project,
 		rows:    make(map[string]interface{}),
 	}
+}
+
+// SetRetainTable controls whether the Bundle's Table half is kept in the STORED row.
+// It must be called before the reflector starts (it is not synchronized against the
+// mutation paths). The default (false) drops the Table half from stored bundles after
+// fanning it to the sinks; a kind whose consumers read the stored Table half (pods) sets
+// it true.
+func (s *ProjectingStore) SetRetainTable(retain bool) {
+	s.retainTable = retain
+}
+
+// storedValue returns the value to write into s.rows for a freshly projected value: the
+// value itself when retainTable is true or the value is not a Bundle with a Table half,
+// otherwise a copy of the Bundle with the Table half dropped (the maintained store already
+// holds that row columnar). The Catalog/ObjectMap/Aggregate halves are preserved.
+func (s *ProjectingStore) storedValue(projected interface{}) interface{} {
+	if s.retainTable {
+		return projected
+	}
+	b, ok := projected.(Bundle)
+	if !ok || b.Table == nil {
+		return projected
+	}
+	b.Table = nil
+	return b
 }
 
 // AddSink registers a Sink fed each row's Table half incrementally. It must be
@@ -300,10 +334,13 @@ func (s *ProjectingStore) projectAndStore(obj interface{}) error {
 		}
 		return nil
 	}
-	s.rows[key] = projected
+	// Fan the FULL projected value (Table half present) to the sinks BEFORE dropping the
+	// Table half from the stored copy, so the maintained store is fed the row even though
+	// the store no longer keeps it.
 	if s.hasSinks() {
 		s.emitUpsert(projected)
 	}
+	s.rows[key] = s.storedValue(projected)
 	return nil
 }
 
@@ -468,12 +505,19 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 		next[key] = projected
 	}
 	prev := s.rows
-	s.rows = next
 	s.rv = resourceVersion
 	s.synced = true
+	// Fan the FULL projected values (Table half present) to the sinks first, then store the
+	// (possibly Table-dropped) copies — the same emit-then-drop ordering Add/Update use. A
+	// relist-delete fans each vanished key's PREVIOUS stored bundle, whose Catalog half is
+	// retained, so a catalog-keyed maintained store still evicts the ghost.
 	if s.hasSinks() {
 		s.feedSinksReplace(prev, next)
 	}
+	for key, projected := range next {
+		next[key] = s.storedValue(projected)
+	}
+	s.rows = next
 	return nil
 }
 

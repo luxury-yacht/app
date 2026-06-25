@@ -63,6 +63,15 @@ type App struct {
 	spillRoot        string                         // override for the maintained-store spill root; empty = user cache dir (tests set a temp dir)
 	spillFormat      string                         // override for the spill format version; empty = app Version (tests set a fixed value)
 
+	// cooledMmapClosers holds, per cooled cluster, the mmap closers returned by
+	// CoolMaintainedStoresToMmap. Each closer unmaps one domain's cooled column file and MUST
+	// outlive every Build that can read it; the re-warm/teardown paths take them (exactly once,
+	// under cooledMu) and call them only AFTER the cooled subsystem is unrouted, so no Build can
+	// still be reading the mapping. Guarded by cooledMu, independent of governorMu so closing
+	// never blocks the governor decision loop.
+	cooledMu          sync.Mutex
+	cooledMmapClosers map[string][]func() error
+
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry
 

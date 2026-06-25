@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -265,6 +267,94 @@ func TestReopenInternedColumnsInPlace(t *testing.T) {
 	before := orig.Len()
 	orig.Upsert(spillRow{UID: "new", Namespace: "x", Name: "y"})
 	require.Equal(t, before, orig.Len(), "in-place mmap store ignores Upsert")
+}
+
+// TestReopenInternedColumnsInPlaceCloserWaitsForInFlightQuery proves the mmap closer is
+// safe-by-construction: a Query in flight (holding the store's read lock while it
+// reconstructs rows whose strings ALIAS the mapping) blocks the unmap until it returns,
+// so the closer can never unmap memory a reader is still touching. The closer must acquire
+// the store's write lock before unmapping, so it serializes after every in-flight Query.
+func TestReopenInternedColumnsInPlaceCloserWaitsForInFlightQuery(t *testing.T) {
+	s := buildSpillStore(t)
+	path := filepath.Join(t.TempDir(), "inflight.qcm")
+	closer, err := s.ReopenInternedColumnsInPlace(path)
+	require.NoError(t, err)
+
+	// Hold the store's read lock to simulate a Query in flight reconstructing
+	// mmap-aliased rows. The closer must not unmap while this is held.
+	s.mu.RLock()
+
+	closed := make(chan struct{})
+	go func() {
+		_ = closer()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+		s.mu.RUnlock()
+		t.Fatal("closer unmapped while a reader held the store lock (use-after-free risk)")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: the closer is blocked waiting for the read lock to release.
+	}
+
+	s.mu.RUnlock()
+	select {
+	case <-closed:
+		// Expected: once the reader released, the closer acquired the lock and unmapped.
+	case <-time.After(time.Second):
+		t.Fatal("closer did not complete after the reader released the lock")
+	}
+}
+
+// TestReopenInternedColumnsInPlaceConcurrentQueryAndClose runs many Queries concurrently
+// with the close, mirroring the production re-warm ordering: a reader pool runs against the
+// cooled store, the store is then UNROUTED (no new Query may start — the test stops issuing
+// new Queries and waits for in-flight ones to return), and only then is the closer called.
+// The lock-safe closer serializes after any straggler in-flight Query, so the race detector
+// proves no Query reads the mapping after the unmap.
+func TestReopenInternedColumnsInPlaceConcurrentQueryAndClose(t *testing.T) {
+	s := buildSpillStore(t)
+	path := filepath.Join(t.TempDir(), "concurrent.qcm")
+	closer, err := s.ReopenInternedColumnsInPlace(path)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_, _ = s.Query(representativeQuery())
+				}
+			}
+		}()
+	}
+
+	// Let the readers run, then UNROUTE: stop issuing new Queries and drain the in-flight
+	// ones. In production the subsystem is removed from the serving map before close, so no
+	// new Query can resolve the cooled store; the test reproduces that by stopping + joining
+	// the readers first. The lock-safe closer then serializes after the last in-flight read.
+	time.Sleep(10 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+	require.NoError(t, closer())
+}
+
+// TestReopenInternedColumnsInPlaceCloserIdempotent proves the closer is safe to call more
+// than once: a re-warm/teardown race must never double-unmap.
+func TestReopenInternedColumnsInPlaceCloserIdempotent(t *testing.T) {
+	s := buildSpillStore(t)
+	path := filepath.Join(t.TempDir(), "idempotent.qcm")
+	closer, err := s.ReopenInternedColumnsInPlace(path)
+	require.NoError(t, err)
+	require.NoError(t, closer())
+	require.NoError(t, closer(), "second close must be a no-op, not a double-unmap")
 }
 
 // TestSpillColumnsAllScalarKinds covers the numeric/bool/float field kinds that spillRow does

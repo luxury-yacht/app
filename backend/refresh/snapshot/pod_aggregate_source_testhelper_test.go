@@ -96,6 +96,12 @@ func (s fakePodAggregateSource) AddSink(_ schema.GroupVersionResource, _ ingest.
 	return false
 }
 
+// AddBundleSink mirrors AddSink for the workload kinds, whose tracker feed is a whole-bundle
+// Sink (their stored bundle drops the Table half). No bundle is fed here for the same reason.
+func (s fakePodAggregateSource) AddBundleSink(_ schema.GroupVersionResource, _ ingest.BundleSink) bool {
+	return false
+}
+
 // withWorkloadCatalog returns a copy of the source carrying `count` projected catalog rows
 // for the workload GVR, marked synced, so a cluster-overview / namespaces test drives the
 // kind's count (the count is len(CatalogRows)). The rows are minimal objectcatalog.Summary

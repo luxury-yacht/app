@@ -9,6 +9,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
@@ -195,11 +196,17 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string, metricsActive bool
 	if a == nil {
 		return
 	}
-	if a.getRefreshSubsystem(clusterID) == nil {
+	subsystem := a.getRefreshSubsystem(clusterID)
+	switch {
+	case subsystem == nil:
 		// Re-warm a Cold (or never-started) cluster by reusing the same per-cluster
 		// build+start path used by auth recovery: it builds the subsystem, starts
 		// the manager, updates the aggregate handlers, and starts the object catalog.
 		a.rebuildClusterSubsystem(clusterID)
+	case subsystem.Cooled:
+		// A cooled subsystem is non-nil but NOT live: it serves cooled queries from its
+		// mmap-backed stores. Re-warm it to a fresh, live, mutable subsystem.
+		a.rewarmCooledClusterSubsystem(clusterID)
 	}
 	if subsystem := a.getRefreshSubsystem(clusterID); subsystem != nil && subsystem.Manager != nil {
 		// Foreground pins the demand poller active; Background lets it idle out so
@@ -208,7 +215,39 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string, metricsActive bool
 	}
 }
 
-// teardown tears down the cluster's subsystem and reclaims its heap.
+// rewarmCooledClusterSubsystem replaces a cooled (mmap-serving) subsystem with a fresh, live
+// one. ORDERING is the safety contract for the mmap closers, whose mappings the cooled stores'
+// rows alias (a read after unmap is a use-after-free):
+//  1. takeRefreshSubsystem removes the cooled subsystem from a.refreshSubsystems, so no NEW
+//     Build resolves it via the per-cluster getter.
+//  2. rebuildClusterSubsystem builds the fresh subsystem, sets it in the map, and calls
+//     refreshAggregates.Update — after which the aggregate snapshot router resolves the FRESH
+//     subsystem's stores, never the cooled mmap stores. The cooled subsystem (and its snapshot
+//     cache holding any mmap-aliased rows) is now fully unreachable for serving.
+//  3. closeCooledClosers takes the closers (exactly once) and runs them. Each store-level
+//     closer waits for the store's write lock, so it serializes after any straggler in-flight
+//     Build that was already reconstructing rows when the swap happened — only then unmapping.
+func (a *App) rewarmCooledClusterSubsystem(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	// (1) unroute the cooled subsystem so no new Build can reach its mmap stores.
+	a.takeRefreshSubsystem(clusterID)
+	if a.logger != nil {
+		a.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	}
+	// (2) build + start a fresh live subsystem and re-point the aggregate router at it.
+	a.rebuildClusterSubsystem(clusterID)
+	// (3) the cooled subsystem is now unrouted; release its mappings (waits for any straggler
+	// in-flight Build via each closer's store-lock, then unmaps once).
+	a.closeCooledClosers(clusterID)
+}
+
+// teardown moves the cluster to the governor's Cold tier. It first attempts to COOL the
+// cluster — stop its feeds and swap its maintained stores to off-heap mmap-backed columns,
+// keeping the subsystem registered so it still serves Build queries — and only falls back to a
+// full teardown (heap fully reclaimed, blank until re-warm) if cooling fails at any step. Either
+// way the cluster's informer/metrics heap is reclaimed.
 func (e *appGovernorExecutor) teardown(clusterID string) {
 	a := e.app
 	if a == nil {
@@ -217,16 +256,68 @@ func (e *appGovernorExecutor) teardown(clusterID string) {
 	if a.getRefreshSubsystem(clusterID) == nil {
 		return
 	}
-	// Reuse the per-cluster teardown used by auth recovery: it stops permission
-	// revalidation, shuts the manager + resource stream, and shuts the informer
-	// factory for just this cluster.
-	a.teardownClusterSubsystem(clusterID)
+	a.coolClusterToMmapServing(clusterID)
+}
+
+// coolClusterToMmapServing transitions a cluster to the Cold-tier SERVING state: it stops the
+// feeds, swaps the maintained stores to off-heap mmap-backed columns, installs a cooled
+// (always-settled) informer hub so the SnapshotService keeps serving, marks the subsystem
+// cooled, stops the object catalog, and reclaims the freed heap. On ANY cooling error it falls
+// back to the existing full teardown so a cluster is never left half-cooled.
+func (a *App) coolClusterToMmapServing(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	subsystem := a.getRefreshSubsystem(clusterID)
+	if subsystem == nil {
+		return
+	}
+
+	// Stop the feeds (permission reval, resource stream, manager, informer factory) WITHOUT
+	// removing the subsystem — it stays registered to serve cooled queries.
+	a.stopClusterFeeds(clusterID, subsystem)
+
+	// Swap the maintained stores to mmap. On error, safe-degrade to full teardown.
+	dir, err := a.clusterCooledMmapDir(clusterID)
+	if err == nil {
+		var closers []func() error
+		closers, err = subsystem.Registry.CoolMaintainedStoresToMmap(dir)
+		if err == nil {
+			// The feeds are stopped, so the manager + informer factory are shut down and the
+			// original hub's HasSynced now reports false — install a cooled hub so the
+			// SnapshotService serves the frozen, resident mmap stores without blocking on the
+			// (now-dead) sync gate.
+			if svc, ok := subsystem.SnapshotService.(*snapshot.Service); ok {
+				svc.SetInformerHub(system.NewCooledInformerHub())
+			}
+			a.setCooledClosers(clusterID, closers)
+			subsystem.Cooled = true
+		}
+	}
+	if err != nil {
+		// Cooling failed at some step (mkdir or a store swap). CoolMaintainedStoresToMmap already
+		// closed any mapping it opened, so nothing is left half-mapped. Fall back to a full
+		// teardown: the subsystem is discarded and its heap fully reclaimed.
+		if a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		}
+		a.teardownClusterSubsystem(clusterID)
+		a.stopObjectCatalogForCluster(clusterID)
+		runtime.GC()
+		debug.FreeOSMemory()
+		if a.logger != nil {
+			a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		}
+		return
+	}
+
+	// The cooled subsystem stays registered + serving; stop its object catalog like a teardown
+	// (the catalog is rebuilt on re-warm), then reclaim the heap the informers/metrics held.
 	a.stopObjectCatalogForCluster(clusterID)
-	// Reclaim the heap the torn-down informers held so the saving is realized.
 	runtime.GC()
 	debug.FreeOSMemory()
 	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 }
 

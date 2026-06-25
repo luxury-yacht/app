@@ -243,12 +243,14 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 // NewIngestManager's StreamDescriptors loop never adds it. The pod kind uses this: its
 // row projection needs a ReplicaSet lister and produces a four-half Bundle (PodSummary
 // Table + PodAggregate + catalog Summary + object-map node) the generic StreamRow
-// projection cannot express. project is the kind's full bundle projector. It must be
-// called before Start so the reflector is included when reflectors launch. It is a
-// no-op (returns false) when the kind's group has no client, the scheme cannot
-// instantiate its GVK, or an entry for gvr already exists (the generic loop already
-// added it — preventing a double reflector).
-func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ProjectFunc) bool {
+// projection cannot express. project is the kind's full bundle projector. retainTable keeps
+// the Bundle's Table half in the STORED row (pods read the stored Table half for standalone
+// synthesis + live notify); every other reflector passes false so the redundant Table half
+// is dropped once fanned to the maintained store. It must be called before Start so the
+// reflector is included when reflectors launch. It is a no-op (returns false) when the
+// kind's group has no client, the scheme cannot instantiate its GVK, or an entry for gvr
+// already exists (the generic loop already added it — preventing a double reflector).
+func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ProjectFunc, retainTable bool) bool {
 	restClient, ok := m.restClientFor(gvk.Group, gvk.Version)
 	if !ok {
 		klog.V(2).Infof("ingest: no client for %s/%s (kind %s); skipping reflector (logged once)", gvk.Group, gvk.Version, gvk.Kind)
@@ -264,7 +266,9 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 	if _, exists := m.entries[gvr]; exists {
 		return false
 	}
-	e := &entry{store: NewProjectingStore(project)}
+	store := NewProjectingStore(project)
+	store.SetRetainTable(retainTable)
+	e := &entry{store: store}
 	m.installReflector(e, gvr, gvk, restClient, example)
 	return true
 }

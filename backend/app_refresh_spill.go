@@ -180,3 +180,58 @@ func (a *App) restoreClusterIngestStores(clusterID string, im *ingest.IngestMana
 	}
 	im.RestoreStores(dir)
 }
+
+// clusterCooledMmapDir is the per-cluster directory the cooled maintained stores' mmap column
+// files live in. It is a subdir of clusterSpillDir, so the stage-2 format-version guard (which
+// clears the whole spill root on app upgrade) covers it too, and it never collides with the
+// gob warm-paint spill files in the parent directory.
+func (a *App) clusterCooledMmapDir(clusterID string) (string, error) {
+	dir, err := a.clusterSpillDir(clusterID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cooled"), nil
+}
+
+// setCooledClosers records the mmap closers for a cooled cluster so the re-warm/teardown path
+// can release the mappings exactly once. Guarded by cooledMu.
+func (a *App) setCooledClosers(clusterID string, closers []func() error) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	a.cooledMu.Lock()
+	defer a.cooledMu.Unlock()
+	if a.cooledMmapClosers == nil {
+		a.cooledMmapClosers = make(map[string][]func() error)
+	}
+	a.cooledMmapClosers[clusterID] = closers
+}
+
+// takeCooledClosers removes and returns a cooled cluster's mmap closers, returning nil after
+// the first call — so a re-warm followed by a teardown (or vice versa) closes each mapping
+// exactly once and never double-unmaps. Guarded by cooledMu.
+func (a *App) takeCooledClosers(clusterID string) []func() error {
+	if a == nil || clusterID == "" {
+		return nil
+	}
+	a.cooledMu.Lock()
+	defer a.cooledMu.Unlock()
+	closers := a.cooledMmapClosers[clusterID]
+	delete(a.cooledMmapClosers, clusterID)
+	return closers
+}
+
+// closeCooledClosers takes and runs a cooled cluster's mmap closers (a no-op if it was never
+// cooled or already re-warmed). Each store-level closer waits for any in-flight Query and
+// unmaps once, so this is safe to call only AFTER the cooled subsystem is unrouted (no new
+// Build can reach the mmap stores). Best-effort: a closer error is logged, not propagated.
+func (a *App) closeCooledClosers(clusterID string) {
+	for _, closer := range a.takeCooledClosers(clusterID) {
+		if closer == nil {
+			continue
+		}
+		if err := closer(); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("close cooled mmap for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		}
+	}
+}

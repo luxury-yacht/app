@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
@@ -87,13 +88,15 @@ func newNamespaceWorkloadTracker() *NamespaceWorkloadTracker {
 	}
 }
 
-// trackerPodIngestSource supplies the cut pod kind's presence to the workload tracker:
-// an incremental Table-half Sink (each Upsert/Delete carries the pod's PodSummary, from
-// which the tracker reads namespace/name) plus the pod store's HasSynced gate. The shared
-// informer no longer caches pods, so the tracker reads pod presence here instead of the
-// pod informer. *ingest.IngestManager satisfies it.
+// trackerPodIngestSource supplies the cut pod and workload kinds' presence to the workload
+// tracker: pods feed an incremental Table-half Sink (the pod store retains its Table half),
+// while workload kinds feed a whole-bundle Sink because their stores DROP the Table half —
+// the tracker reads namespace/name from the bundle's Catalog half on delete instead. Plus
+// each kind's store HasSynced gate. The shared informer no longer caches these kinds, so the
+// tracker reads their presence here. *ingest.IngestManager satisfies it.
 type trackerPodIngestSource interface {
 	AddSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool
+	AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
 }
 
@@ -124,15 +127,15 @@ func NewNamespaceWorkloadTracker(factory informers.SharedInformerFactory, ingest
 }
 
 // registerWorkloadIngest wires one cut workload kind's presence from the ingest manager: a
-// Table-half Sink feeds add/delete keyed off the projected WorkloadSummary (namespace/name),
-// and the kind's store HasSynced joins the tracker's sync gate — exactly as the typed
-// informer's handler + HasSynced did before the cut. A nil manager / unregistered kind is a
-// no-op.
+// whole-bundle Sink feeds add/delete (upsert from the WorkloadSummary Table half, delete from
+// the Catalog half's namespace/name — the workload store drops the Table half), and the kind's
+// store HasSynced joins the tracker's sync gate — exactly as the typed informer's handler +
+// HasSynced did before the cut. A nil manager / unregistered kind is a no-op.
 func (t *NamespaceWorkloadTracker) registerWorkloadIngest(ingestManager trackerPodIngestSource, gvr schema.GroupVersionResource, resource workloadResource) {
 	if ingestManager == nil {
 		return
 	}
-	if ingestManager.AddSink(gvr, trackerWorkloadSink{tracker: t, resource: resource}) {
+	if ingestManager.AddBundleSink(gvr, trackerWorkloadSink{tracker: t, resource: resource}) {
 		t.syncFns = append(t.syncFns, func() bool { return ingestManager.HasSyncedFor(gvr) })
 	}
 }
@@ -171,23 +174,24 @@ func (s trackerPodSink) Delete(row interface{}) {
 }
 
 // trackerWorkloadSink adapts the tracker's per-namespace workload presence to an ingest
-// Table-half Sink for one cut workload kind: each Upsert/Delete carries the projected
-// WorkloadSummary, from which the workload's namespace and "namespace/name" key are read —
-// the same key the typed-workload event path derived via meta.Accessor.
+// whole-bundle Sink for one cut workload kind: UpsertBundle reads the WorkloadSummary Table
+// half's namespace/name; DeleteBundle reads the Catalog half's namespace/name (the workload
+// store drops the Table half from its stored bundle, so the delete cannot read it there) —
+// the same "namespace/name" key the typed-workload event path derived via meta.Accessor.
 type trackerWorkloadSink struct {
 	tracker  *NamespaceWorkloadTracker
 	resource workloadResource
 }
 
-func (s trackerWorkloadSink) Upsert(row interface{}) {
-	if w, ok := row.(streamrows.WorkloadSummary); ok {
+func (s trackerWorkloadSink) UpsertBundle(b ingest.Bundle) {
+	if w, ok := b.Table.(streamrows.WorkloadSummary); ok {
 		s.tracker.addNamespaceKey(s.resource, w.Namespace, w.Namespace+"/"+w.Name)
 	}
 }
 
-func (s trackerWorkloadSink) Delete(row interface{}) {
-	if w, ok := row.(streamrows.WorkloadSummary); ok {
-		s.tracker.deleteNamespaceKey(s.resource, w.Namespace, w.Namespace+"/"+w.Name)
+func (s trackerWorkloadSink) DeleteBundle(b ingest.Bundle) {
+	if summary, ok := b.Catalog.(objectcatalog.Summary); ok {
+		s.tracker.deleteNamespaceKey(s.resource, summary.Namespace, summary.Namespace+"/"+summary.Name)
 	}
 }
 

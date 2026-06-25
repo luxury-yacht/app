@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"sync"
 	"unsafe"
 )
 
@@ -205,7 +206,26 @@ func (s *Store[R]) ReopenInternedColumnsInPlace(path string) (func() error, erro
 	// linear scan, matching a fresh OpenInternedColumnStore store.
 	s.tri = nil
 	s.readOnly = true
-	return closer, nil
+	return s.lockSafeCloser(closer), nil
+}
+
+// lockSafeCloser wraps the raw unmap closer so it is safe-by-construction against an
+// in-flight Query: Query reconstructs page rows whose strings ALIAS the mapping while
+// holding s.mu.RLock (store.go), so unmapping concurrently is a use-after-free. The
+// wrapper takes s.mu.Lock first, which serializes after every in-flight read lock, so the
+// unmap can never race a reader still touching the columns. It also unmaps at most once: a
+// second call (a re-warm/teardown double-close) is a no-op, never a double-unmap.
+func (s *Store[R]) lockSafeCloser(unmap func() error) func() error {
+	var once sync.Once
+	var err error
+	return func() error {
+		once.Do(func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			err = unmap()
+		})
+		return err
+	}
 }
 
 func readInternedField(r *internedReader, fc *fieldCodec, dicts *codecDicts, typ reflect.Type, n int) {

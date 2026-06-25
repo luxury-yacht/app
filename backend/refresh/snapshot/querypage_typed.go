@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -586,12 +587,12 @@ func registerMaintainedInformerHandler[T any](
 }
 
 // feedMaintainedFromIngest wires each ingest-owned kind in the domain to feed the
-// maintained store from the owned-reflector path: the kind's ingest store delivers
-// its already-projected Table-half row to the store's Sink, replacing the shared-
-// informer event handler entirely. It is the per-kind equivalent of the quotas
-// all-cut feed, so a domain with a mix of cut and uncut kinds feeds the cut ones here
-// and the uncut ones through registerMaintainedHandlers. ingestManager may be nil (no
-// cut kinds wired, e.g. a unit test), in which case it is a no-op.
+// maintained store from the owned-reflector path: the kind's ingest store delivers its
+// whole projected bundle to the store's BundleSink (Table half on upsert, Catalog-half key
+// on delete), replacing the shared-informer event handler entirely. It is the per-kind
+// equivalent of the quotas all-cut feed, so a domain with a mix of cut and uncut kinds feeds
+// the cut ones here and the uncut ones through registerMaintainedHandlers. ingestManager may
+// be nil (no cut kinds wired, e.g. a unit test), in which case it is a no-op.
 func feedMaintainedFromIngest[T any](
 	maintained *typedMaintainedStore[T],
 	domainName string,
@@ -600,28 +601,38 @@ func feedMaintainedFromIngest[T any](
 	if ingestManager == nil {
 		return
 	}
-	sink := maintained.Sink()
+	sink := maintained.BundleSink()
 	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
 		if !streamDescriptorIngestOwned(d) {
 			continue
 		}
-		ingestManager.AddSink(d.GVR(), sink)
+		ingestManager.AddBundleSink(d.GVR(), sink)
 	}
 }
 
-// Sink returns an ingest.Sink that feeds this maintained store from the owned
-// reflector path: each Upsert/Delete carries the already-projected row (the
-// bundle's Table half), which the adapter upserts/evicts by the adapter's own key.
-// Mutating through the sink advances the snapshot version monotonically so refetch
-// identity changes whenever the served set changes. This is the live cutover path;
-// the object-based ingest/evict methods remain for the equivalence gate tests.
+// BundleSink returns an ingest.BundleSink that feeds this maintained store from the owned
+// reflector path with the WHOLE projected bundle. UpsertBundle upserts the bundle's Table
+// half (present at upsert) by the adapter's own key; DeleteBundle evicts by the key derived
+// from the bundle's RETAINED Catalog half (keyFromCatalog) — the store no longer keeps the
+// Table half on its stored bundles, so the delete cannot read it from there. This is the
+// live cutover path used in production via AddBundleSink. Mutating advances the snapshot
+// version monotonically so refetch identity changes whenever the served set changes.
+func (m *typedMaintainedStore[T]) BundleSink() ingest.BundleSink {
+	return maintainedStoreSink[T]{store: m}
+}
+
+// Sink returns the Table-half ingest.Sink view of the same maintained-store feed. It is the
+// delivery path used by the equivalence/maintained-store gate tests, which feed projected
+// Table rows directly. Production registers BundleSink() instead, because a dropped-Table
+// store's incremental delete must key off the Catalog half, not the (absent) Table row.
 func (m *typedMaintainedStore[T]) Sink() ingest.Sink {
 	return maintainedStoreSink[T]{store: m}
 }
 
-// maintainedStoreSink adapts a typedMaintainedStore to ingest.Sink. The reflector
-// store delivers the Table-half row as interface{}; a row of the wrong type is
-// ignored (it cannot belong to this store), mirroring the type guard in ingest.
+// maintainedStoreSink adapts a typedMaintainedStore to BOTH ingest.Sink (Table-half view,
+// used by gate tests) and ingest.BundleSink (whole-bundle view, used in production). The
+// reflector store delivers a row/bundle as interface{}; a row of the wrong type is ignored
+// (it cannot belong to this store), mirroring the type guard in ingest.
 type maintainedStoreSink[T any] struct {
 	store *typedMaintainedStore[T]
 }
@@ -641,6 +652,32 @@ func (s maintainedStoreSink[T]) Delete(tableRow interface{}) {
 		return
 	}
 	s.store.store.Delete(s.store.adapter.Key(row))
+	s.store.bumpSinkVersion()
+}
+
+// UpsertBundle upserts the bundle's Table half by the adapter key. The Table half is present
+// at upsert (it is dropped from the STORED bundle only AFTER fanning to sinks), so a missing
+// or wrong-typed Table half means this bundle does not belong to this store and is ignored.
+func (s maintainedStoreSink[T]) UpsertBundle(bundle ingest.Bundle) {
+	row, ok := bundle.Table.(T)
+	if !ok {
+		return
+	}
+	s.store.store.Upsert(row)
+	s.store.bumpSinkVersion()
+}
+
+// DeleteBundle evicts by the key derived from the bundle's RETAINED Catalog half. A bundle
+// with no catalog Summary (a kind with no catalog projector) cannot be keyed this way and is
+// ignored — but every ingest-owned maintained-store kind registers a catalog projector, so in
+// production the Catalog half is always present (proven for all of them by
+// TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind).
+func (s maintainedStoreSink[T]) DeleteBundle(bundle ingest.Bundle) {
+	summary, ok := bundle.Catalog.(objectcatalog.Summary)
+	if !ok {
+		return
+	}
+	s.store.store.Delete(keyFromCatalog(summary))
 	s.store.bumpSinkVersion()
 }
 
@@ -670,6 +707,23 @@ func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
 // rebuilt from them on restore.
 func (m *typedMaintainedStore[T]) SpillTo(path string) error {
 	return m.store.SpillColumns(path)
+}
+
+// SwapToMmap spills this store's columns to path and swaps the SAME underlying querypage
+// store in place to a read-only, mmap-aliased view of that file — so Build keeps serving from
+// m.store (same pointer) but with the bulk column data off-heap (OS-reclaimable page cache),
+// the governor's Cold-tier serving transition. It bumps the refetch identity on success so the
+// first Build after cooling reflects the cooled (frozen) state. The returned closer unmaps the
+// file and MUST be held for the cooled store's lifetime, then called exactly once on
+// re-warm/teardown (it is itself idempotent and waits for any in-flight Query). On error the
+// store is left unchanged (safe-degrade — the caller falls back to full teardown).
+func (m *typedMaintainedStore[T]) SwapToMmap(path string) (func() error, error) {
+	closer, err := m.store.ReopenInternedColumnsInPlace(path)
+	if err != nil {
+		return nil, err
+	}
+	m.bumpSinkVersion()
+	return closer, nil
 }
 
 // restoreFrom loads spilled rows from path into this store (warm-paint), then bumps the

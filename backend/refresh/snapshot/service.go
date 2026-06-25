@@ -33,6 +33,7 @@ type Service struct {
 	group               singleflight.Group
 	sequence            uint64
 	cluster             ClusterMeta
+	informerHubMu       sync.RWMutex
 	informerHub         refresh.InformerHub
 	domainReadiness     map[string][]string
 	informerSyncTimeout time.Duration
@@ -105,8 +106,31 @@ func (s *Service) WithInformerHub(hub refresh.InformerHub) *Service {
 	if s == nil {
 		return s
 	}
-	s.informerHub = hub
+	s.SetInformerHub(hub)
 	return s
+}
+
+// SetInformerHub swaps the sync-gate hub at runtime. The governor's Cold-tier serving
+// transition uses it: after a cooled cluster's manager + informer factory are shut down, the
+// original hub's HasSynced reports false (factory.Shutdown clears its synced flag), which would
+// block every cooled Build until timeout. A cooled cluster's data is frozen and resident in
+// its mmap-backed stores, so its readiness gate must report settled immediately — the cool path
+// installs an always-synced hub here. Guarded so it never races an in-flight Build's hub read.
+func (s *Service) SetInformerHub(hub refresh.InformerHub) {
+	if s == nil {
+		return
+	}
+	s.informerHubMu.Lock()
+	s.informerHub = hub
+	s.informerHubMu.Unlock()
+}
+
+// currentInformerHub reads the live hub under the lock, so a runtime swap (SetInformerHub)
+// is visible to an in-flight Build's poll loop without racing.
+func (s *Service) currentInformerHub() refresh.InformerHub {
+	s.informerHubMu.RLock()
+	defer s.informerHubMu.RUnlock()
+	return s.informerHub
 }
 
 // WithDomainReadiness narrows the informer sync gate per domain: a declared
@@ -230,17 +254,26 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 }
 
 func (s *Service) waitForInformerSync(ctx context.Context, domainName string) error {
-	if s == nil || s.informerHub == nil {
+	if s == nil {
+		return nil
+	}
+	if s.currentInformerHub() == nil {
 		return nil
 	}
 	// A domain with declared readiness resources waits only on those informers;
-	// undeclared domains keep the conservative factory-wide gate.
+	// undeclared domains keep the conservative factory-wide gate. The hub is re-read
+	// on every poll, not captured once, so a runtime swap (the Cold-tier cooled-hub
+	// install) is observed by an already-blocked Build.
 	keys, scoped := s.domainReadiness[domainName]
 	settled := func() bool {
-		if scoped {
-			return s.informerHub.ResourcesSettled(keys)
+		hub := s.currentInformerHub()
+		if hub == nil {
+			return true
 		}
-		return s.informerHub.HasSynced(ctx)
+		if scoped {
+			return hub.ResourcesSettled(keys)
+		}
+		return hub.HasSynced(ctx)
 	}
 	if settled() {
 		return nil

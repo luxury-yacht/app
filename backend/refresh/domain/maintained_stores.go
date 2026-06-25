@@ -20,10 +20,17 @@ import (
 //   - Reconcile diff-syncs the store against its live sources after re-warm sync, dropping
 //     rows whose objects were deleted while the cluster was Cold (a no-op for stores whose
 //     feed already reconciles on relist).
+//   - SwapToMmap spills the store's columns to path and swaps the SAME store in place to a
+//     read-only, mmap-aliased view of that file, so its bulk column data goes off-heap while
+//     the store keeps serving queries. It returns a closer that unmaps the file; the closer
+//     MUST outlive all use of the store (its rows alias the mapping) and is idempotent. It is
+//     the Cold-tier serving transition: a cooled cluster serves from the mmap stores instead
+//     of being fully torn down.
 type SpillableStore interface {
 	SpillTo(path string) error
 	RestoreFrom(path string) error
 	Reconcile()
+	SwapToMmap(path string) (func() error, error)
 }
 
 // maintainedStoreSet collects a registry's spillable stores keyed by a stable,
@@ -72,6 +79,42 @@ type namedSpillable struct {
 // spillFileName derives a store's spill-file path under dir from its name.
 func spillFileName(dir, name string) string {
 	return filepath.Join(dir, name+".spill")
+}
+
+// mmapFileName derives a store's cooled mmap-file path under dir from its name. It is the
+// columnar mmap format (.qcm), distinct from the gob spill (.spill) the cross-restart
+// warm-paint uses, so the two never collide in the same directory.
+func mmapFileName(dir, name string) string {
+	return filepath.Join(dir, name+".qcm")
+}
+
+// CoolMaintainedStoresToMmap swaps every registered store in place to a read-only,
+// mmap-aliased view of a per-domain file under dir (one <domain>.qcm each), creating dir if
+// needed. It is the governor's Cold-tier serving transition: the stores' bulk column data
+// goes off-heap (OS-reclaimable page cache) while the subsystem keeps serving Build queries.
+//
+// It returns one closer per store, which the caller must hold for the cooled subsystem's
+// lifetime and call exactly once on re-warm/teardown (each closer is itself idempotent). On
+// ANY error — mkdir or any store's swap — it closes every mapping it already opened (reverse
+// order) and returns the error with NO closers, so the caller can safely fall back to a full
+// teardown with nothing left half-mapped.
+func (r *Registry) CoolMaintainedStoresToMmap(dir string) ([]func() error, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("domain: cool mkdir %q: %w", dir, err)
+	}
+	var closers []func() error
+	for _, ns := range r.maintainedSnapshot() {
+		closer, err := ns.store.SwapToMmap(mmapFileName(dir, ns.name))
+		if err != nil {
+			// Safe-degrade: unmap everything opened so far before reporting the failure.
+			for i := len(closers) - 1; i >= 0; i-- {
+				_ = closers[i]()
+			}
+			return nil, fmt.Errorf("cool %q: %w", ns.name, err)
+		}
+		closers = append(closers, closer)
+	}
+	return closers, nil
 }
 
 // SpillMaintainedStores flushes every registered store to dir (one file per store named

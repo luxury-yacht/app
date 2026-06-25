@@ -145,3 +145,21 @@ func (h *ingestInformerHub) Shutdown() error {
 	}
 	return h.factory.Shutdown()
 }
+
+// cooledInformerHub is the readiness gate a cooled (Cold-tier serving) subsystem installs on
+// its SnapshotService. Cooling shuts the manager + informer factory, after which the live hub
+// reports NOT synced (factory.Shutdown clears its synced flag), which would block every cooled
+// Build until the sync-deadline. A cooled cluster's data is frozen and resident in its
+// mmap-backed maintained stores, so its sync gate must report settled immediately. Its
+// lifecycle methods are no-ops: there is nothing to start or shut down.
+type cooledInformerHub struct{}
+
+// NewCooledInformerHub returns the always-settled readiness gate for a cooled subsystem.
+func NewCooledInformerHub() refresh.InformerHub { return cooledInformerHub{} }
+
+var _ refresh.InformerHub = cooledInformerHub{}
+
+func (cooledInformerHub) Start(context.Context) error    { return nil }
+func (cooledInformerHub) HasSynced(context.Context) bool { return true }
+func (cooledInformerHub) ResourcesSettled([]string) bool { return true }
+func (cooledInformerHub) Shutdown() error                { return nil }

@@ -85,6 +85,14 @@ type Subsystem struct {
 	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
+
+	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
+	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
+	// maintained stores have been swapped to off-heap mmap-backed columns, but it stays
+	// registered and serves Build queries from those stores (its SnapshotService runs a
+	// cooled, always-settled informer hub). A cooled subsystem is non-nil but NOT live:
+	// the governor re-warm path detects this and rebuilds a fresh, live subsystem.
+	Cooled bool
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.

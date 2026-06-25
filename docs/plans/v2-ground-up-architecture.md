@@ -171,7 +171,28 @@ sections it references._
 > query-equivalent to gob). WIRED: `typedMaintainedStore.SpillTo`→`SpillColumns`, `RestoreFrom`→columnar with a gob
 > FALLBACK (handles a prior gob spill on a same-version transition + degrades safely). Gated: round-trip ==
 > gob-equivalence harness + all-scalar-kinds + zero-copy + cross-platform (windows build) + full `mage qc:prerelease`.
-> **DUAL-MODE SERVING — CORE BUILT + GATED (2026-06-25); governor-tier wiring remains.** A Cold cluster can serve
+> **DUAL-MODE SERVING — CORE BUILT + GATED; GOVERNOR-TIER WIRING DONE (2026-06-25).** A Cold cluster now serves
+> queries from its mmap-backed columnar stores instead of being fully torn down. WIRED: `typedMaintainedStore.SwapToMmap`
+> (calls `Store.ReopenInternedColumnsInPlace`, bumps the sink version) + the `domain.SpillableStore` interface +
+> `domain.Registry.CoolMaintainedStoresToMmap(dir)` (one `<domain>.qcm` per domain; on any error closes what it opened
+> and returns the error so the caller falls back to full teardown). The governor's Cold action
+> (`appGovernorExecutor.teardown` → `App.coolClusterToMmapServing`) stops the cluster's FEEDS (a factored
+> `stopClusterFeeds`: permission-reval + ResourceStream + Manager.Shutdown + InformerFactory.Shutdown — NO
+> `takeRefreshSubsystem`, NO spill), swaps the maintained stores to mmap, installs a `system.cooledInformerHub`
+> (always-settled, since `factory.Shutdown` cleared the real hub's synced flag) on the still-registered
+> `snapshot.Service`, marks `Subsystem.Cooled`, stores the closers per-cluster, and `FreeOSMemory`s; any cooling error
+> safe-degrades to the existing full `teardownClusterSubsystem`. Re-warm (`ensureRunning` detecting `Subsystem.Cooled`)
+> UNROUTES the cooled subsystem (`takeRefreshSubsystem`), rebuilds a fresh live one (re-pointing the aggregate router),
+> THEN closes the mmap mappings — so a closer (each lock-safe: it takes the store's write lock to serialize after any
+> in-flight Query, and is idempotent) only unmaps after no Build can still read the mapping. Gated: store-level
+> `TestReopenInternedColumnsInPlaceCloserWaitsForInFlightQuery`/`...ConcurrentQueryAndClose`/`...CloserIdempotent`
+> (`-race`); maintained-store `TestTypedMaintainedStoreSwapToMmapServesIdentically`; registry
+> `TestRegistryCoolMaintainedStoresToMmap`/`...ErrorClosesOpened`; service `TestServiceSetInformerHubSwapsSyncGate`;
+> system `TestCooledInformerHubAlwaysSettled`; end-to-end `TestCoolServeRewarmRoundTrip` (cool→serve-identical→re-warm,
+> `-race`) + `TestCoolReadOnlyRejectsUpsert`; app `TestAppCloseCooledClosersRunsEachExactlyOnce`. A cooled cluster is
+> LOW-RAM (columns off-heap, indexes resident), not ~0-RAM — see the contradiction note below.
+>
+> _(historical, pre-wiring:)_ A Cold cluster can serve
 > queries directly from the mapping (column data off-heap). Built + tested: (a) Prototype #4
 > (`mmap_query_prototype_test.go`) proving a filter+sort+page query over mmap'd columns == in-memory baseline; (b)
 > zero-copy `StringColumnAliased` (`unsafe.String`) completing the int/uint/string off-heap read set; (c) `Store.readOnly`
@@ -183,15 +204,18 @@ sections it references._
 > windows build + full `mage qc:prerelease`. Plus `Store.ReopenInternedColumnsInPlace` (spill + swap a live store's
 > internals to the mmap view in place — same pointer keeps serving — returning the closer; `TestReopenInternedColumnsInPlace`
 > gated). So the entire STORE-LEVEL dual-mode machinery is complete + tested + gated.
-> **REMAINING is a cross-layer ARCHITECTURAL feature, not plumbing (grounded finding 2026-06-25):** serving is
-> PUSH-based — `refresh.Manager` drives `resourcestream.Manager` which emits snapshots to the frontend
-> (`cluster_auth.go:113-121`, `app_refresh_governor.go:207`); a Cold cluster with the Manager shut down cannot push.
-> So "serve Cold from the mmap store" requires a NEW PULL-based query path that bypasses the resource stream AND a
-> frontend that queries non-visible clusters. It also has no current consumer (queries route to the visible/Foreground
-> cluster; demoted clusters re-warm via warm-paint on switch-back, which already shows data fast) and trades MORE heap
-> than teardown (indexes/match stay resident to be queryable). Per the Cross-Layer Contract Rule + "explain the
-> tradeoff and ask when materially larger", this is a deliberate product decision (cross-cluster query?), not a
-> tail-end slice. The store-level machinery to enable it is built and waiting.
+> **REMAINING: only the governor-tier WIRING, and "~0 RAM WHILE queryable" is inherently contradictory (corrected
+> 2026-06-25 — my earlier "product-gated / needs a cross-cluster-query frontend" claim was WRONG).** A query already
+> reaches a switched-to cluster through the existing visible-cluster path (no frontend change needed): the governor's
+> `ensureRunning` re-warms it and warm-paint (now the columnar mmap restore) shows data fast. So the dual-mode store's
+> only real use is letting the governor's Cold action SERVE from the mmap store instead of re-warm-rebuilding on
+> switch-back — a `governor.go` lifecycle/tier change, NOT a frontend/product feature. BUT "Cold = ~0 RAM while
+> queryable" is contradictory: answering a query needs the sort b-trees + match cache RESIDENT (heap); mmap puts the
+> column DATA off-heap but the query INDEXES can't be (without mmap-backed b-trees, a far larger change). So a serving
+> Cold cluster is LOW-RAM, not ~0-RAM — strictly more heap than the current Cold=teardown, which is exactly why the
+> plan's design chose teardown to hit the ~0-RAM goal. The store-level machinery (off-heap columns) is built; a
+> distinct "low-RAM queryable" governor tier (off-heap columns + resident indexes, between Background and Cold) is a
+> design addition beyond the plan's Foreground/Background/Cold, not a listed deliverable.
 > **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
 > cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
 > lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
@@ -1191,9 +1215,10 @@ reasons; **nothing required is incomplete here.**
   `Informer` and Gateway-API `GatewayInformer` — which de-duped the 8 loops AND let cluster-config
   (GatewayClass) join. Fixed a generic `evict` bug (delete key via `adapter.Key`, so namespaced+cluster
   -scoped both delete right). Gate green (`mage qc:prerelease` EXIT 0: race tests, vitest 3234, knip, trivy).
-  **REMAINING:** `namespace-network` — hybrid (descriptor rows + bespoke `listServices`/EndpointSlices, where
-  a Service row depends on its EndpointSlices, `namespace_network.go:130,147,159`); needs the maintained
-  store to also feed those relationship-dependent sources. `namespace-workloads` ✅ DONE (2026-06-25) — converted
+  **ALL maintained-store conversions DONE (2026-06-25).** `namespace-network` ✅ DONE — Service/Ingress/EndpointSlice/
+  NetworkPolicy Sinks → one `typedMaintainedStore[NetworkSummary]`; the EndpointSlice relationship (a Service row's
+  endpoint counts) stays a SERVE-time cross-kind join (`namespaceEndpointSliceReadyCounts` + `reaggregateServiceSummary`),
+  proven by `TestNamespaceNetworkMaintainedEndpointJoinFromStore`; the cut-kind PULL fallback was removed. `namespace-workloads` ✅ DONE (2026-06-25) — converted
   to one `typedMaintainedStore[WorkloadSummary]` fed by all five workload GVRs' Table-half Sinks (Deployment/
   StatefulSet/DaemonSet/Job/CronJob; the Sink type-guards on WorkloadSummary so one store holds all five). The
   synthesized standalone-pod rows + the pod-aggregate/metrics/HPA overlay stay SERVE-time cross-kind joins
@@ -1202,21 +1227,27 @@ reasons; **nothing required is incomplete here.**
   `namespaceWorkloadOwnRows` were removed, and the now-orphaned `typedMaintainedStore.Replace` with them. ONE serve
   path for all scopes; all-namespaces reads no pods (namespacePodRowsFromIngest("") empty), preserving the overview
   behavior. `nodes` ✅ DONE (2026-06-25) — converted to a `typedMaintainedStore[NodeSummary]` fed by the NodeGVR
-  Table-half Sink (mirrors pods; `nodeOwnRowsFromIngest` removed); helm/crds still list+project per Build. The perf
-  win is on the larger domains. (Browse/catalog is DONE — its own maintained `querypage.Store` + direct `store.Query`.)
-  **project-to-column-tuple — prerequisites DONE, but BLOCKED on a deeper contract (grounded 2026-06-25).** The
-  pull-consumers are all converted now: nodes ✅, workloads ✅, network ✅ are Sink-fed maintained stores, so the only
-  DIRECT `bundle.Table` pull left is the pod path (`pod_aggregate_source.go:61`, which reads PodAggregate+PodSummary
-  from the SAME bundle atomically for standalone-pod synthesis — must stay). A proof-of-concept to drop the stored
-  Table-half (retaining pods) was built + RED-tested + REVERTED: it breaks the INDIRECT dependency — the
-  maintained-store Sink's DELETE keys off the Table row's Kind (`querypage_typed.go:638-644` → `static_table_query.go:65`)
-  and `emitDelete` (`projecting_store.go:237-244`) reads the STORED Table-half, so dropping it skips Sink deletes →
-  ghost rows for EVERY ingest-fed kind (gated by `querypage_cluster_config_maintained_test.go:268`, etc.). So the real
-  prerequisite is converting the maintained-store Sink to KEY-BASED deletion (derive the eviction key from the retained
-  Catalog half, not the Table row) — a Delete-contract change across ALL maintained-store adapters + their tests. The
-  plan marks project-to-column-tuple "not required for the memory goal" (StripManagedFields already captured the main
-  win), so it stays DEFERRED behind that key-based-deletion contract change rather than forcing a risky ingest-delete
-  rewrite for a not-required optimization.
+  Table-half Sink (mirrors pods; `nodeOwnRowsFromIngest` removed). `cluster-crds` ✅ and `namespace-helm` ✅ are ALSO
+  already maintained stores (`cluster_crds.go:87` apiext-CRD-informer-fed; `namespace_helm.go:129` helm-storage-Secret-
+  handler-fed — helm intentionally not spilled). So EVERY built-in domain now serves from a maintained store; none
+  list+project per Build. (Browse/catalog is DONE — its own maintained `querypage.Store` + direct `store.Query`.)
+  ✅ **project-to-column-tuple DONE (2026-06-25).** The earlier "BLOCKED, needs a large per-adapter rewrite" verdict
+  was WRONG. The maintained-store delete does NOT need the Table row — it needs `adapter.Key`, which is reconstructable
+  from the RETAINED Catalog half. A single generic `keyFromCatalog(summary)` (`static_table_query.go`:
+  cluster-scoped → `clusterTableKey(Kind, Name)`, else `namespacedTableKey(Kind, Namespace, Name)`) equals
+  `adapter.Key(tableRow)` for ALL 27 ingest-fed maintained-store kinds — PROVEN by
+  `TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind` (no mismatch; helm/events are not ingest-owned, so not in
+  scope). So: (1) the maintained-store feed is now a whole-`ingest.BundleSink` (`maintainedStoreSink` UpsertBundle by
+  Table half, DeleteBundle by `keyFromCatalog(Catalog half)`), wired via `AddBundleSink` in the 9 descriptor domains +
+  nodes/workloads/network; (2) `ProjectingStore` gained `retainTable bool` (default FALSE) — on Add/Update/Replace it
+  fans the FULL projected value to sinks FIRST, then stores a Table-nilled copy (Catalog/ObjectMap/Aggregate retained);
+  (3) pods set `retainTable=TRUE` (the only `RegisterReflector(..., true)` call) because `pod_aggregate_source.go:61`
+  and `ingest_notify_pods.go:51,83` read the STORED Table half. `trackerWorkloadSink` (a second Table-half-Sink
+  delete consumer) was converted to a BundleSink keyed off the Catalog half too. Verified: incremental Delete AND
+  relist Replace-delete evict with no ghost (`TestMaintainedStoreNoGhostOnDeleteWithTableHalfDropped`); spill/re-warm
+  with nil Table halves round-trips (the Catalog half survives; gob type registration reads the fresh example, not
+  stored rows); `IngestManager.TableRows` has no non-test consumer so no serve path breaks. Full
+  `go test ./backend/refresh/ingest ./backend/refresh/snapshot -race` green; staticcheck + gofmt clean.
 - 🔶 **Ingestion cutover.** ✅ **Projection-at-intake on EVERY ingestion path** (`informer/projection.go`
   `StripManagedFields`): `WithTransform` on the core + apiext + gateway factories AND `SetTransform` on the
   catalog's dynamic-CRD informers — discards `managedFields` (30-50% of a Pod's bytes) before any object
@@ -1235,8 +1266,10 @@ reasons; **nothing required is incomplete here.**
   (`watch.go`) — unchanged. Byte-equivalence + readiness-isolation gated, full backend `-race` + prerelease green.
   ✅ **gateway-factory transform DONE** — the production Gateway-API factory is built with
   `WithTransform(StripManagedFields)` (`cluster_clients.go:358`), so projection-at-intake covers EVERY ingestion path.
-  **REMAINING:** the deeper project-to-column-tuple (discard the typed object — a large StreamRow/catalog rewrite,
-  not required for the memory goal projection already captures).
+  ✅ **project-to-column-tuple DONE (2026-06-25)** — the ingest stores no longer retain the redundant typed Table half
+  (the columnar maintained store holds it); the maintained-store delete keys off the retained Catalog half via the
+  generic `keyFromCatalog`. Pods opt out (retain) because their synthesis/notify paths read the stored Table half.
+  See the matching ✅ entry under "Build-on-snapshot serving" above.
 - 🔶 **Lifecycle + governor + spill.** ✅ **Process-wide governor** (`system/governor.go` policy +
   `app_refresh_governor.go` wiring): `SetVisibleCluster` tiers open clusters Foreground/Background/Cold,
   reusing the existing per-cluster build/teardown + pausing the metrics poller for Background; a memory-pressure
@@ -1248,8 +1281,12 @@ reasons; **nothing required is incomplete here.**
   restores (warm-paint, before informers feed) then reconciles after the hub syncs. Correct for ALL domains:
   ingest-fed self-reconcile via the reflector's `Replace`; shared-informer-fed drop ghosts via
   `typedMaintainedStore.Reconcile` (added `Store.RestoreFrom`, exported SpillTo/RestoreFrom/Reconcile, per-kind
-  reconcile sources); helm intentionally not spilled. Gate-green (`mage qc:prerelease`). **REMAINING:**
-  the mmap'd-column on-disk format (perf optimization over the gob baseline, Tier 2.6).
+  reconcile sources); helm intentionally not spilled. Gate-green (`mage qc:prerelease`). ✅ **mmap'd-column on-disk
+  format DONE (2.6, 2026-06-25):** `typedMaintainedStore.SpillTo`→`SpillColumns` / `RestoreFrom`→columnar-with-gob-
+  fallback, replacing the gob baseline; gate-green. The governor/lifecycle is COMPLETE per its Foreground/Background/
+  Cold design. (The only unbuilt item is the optional dual-mode mmap-SERVING tier — see the Tier-2.6 ledger note above:
+  store-machinery built, but "~0 RAM while queryable" is inherently contradictory, so it's a design addition beyond
+  the Foreground/Background/Cold tiers, not a listed deliverable.)
   **NOTE:** the goals — memory bounded (projection + Cold teardown), resilient ingestion (probe+watchdog) — are
   met + unit-gated; the actual RAM-bounding across many large clusters is a deployment property, real-cluster
   validated, not unit-assertable.

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
@@ -621,4 +622,18 @@ func namespacedTableKey(kind, namespace, name string) string {
 
 func clusterTableKey(kind, name string) string {
 	return fmt.Sprintf("%s/%s", strings.ToLower(kind), strings.ToLower(name))
+}
+
+// keyFromCatalog derives a maintained-store row's adapter key from the object-catalog
+// Summary half of its ingest bundle, so a maintained store can evict a row from the
+// RETAINED Catalog half after the redundant stored Table half is dropped. The Summary
+// carries the same Kind/Namespace/Name every adapter's Key folds into the table key, so
+// this matches adapter.Key(tableRow) for every ingest-fed kind — proven for all of them by
+// TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind. A cluster-scoped object (no
+// namespace) keys without a namespace segment, exactly as clusterTableKey does.
+func keyFromCatalog(summary objectcatalog.Summary) string {
+	if summary.Namespace == "" {
+		return clusterTableKey(summary.Kind, summary.Name)
+	}
+	return namespacedTableKey(summary.Kind, summary.Namespace, summary.Name)
 }

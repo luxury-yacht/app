@@ -17,6 +17,12 @@ type spillFake struct {
 	rows       []string
 	restored   []string
 	reconciled bool
+
+	// swapped records the file SwapToMmap wrote; swapErr forces a cool failure; closed counts
+	// closer invocations (to prove the app calls each closer exactly once).
+	swapped string
+	swapErr error
+	closed  *int
 }
 
 func (s *spillFake) SpillTo(path string) error {
@@ -38,6 +44,38 @@ func (s *spillFake) RestoreFrom(path string) error {
 }
 
 func (s *spillFake) Reconcile() { s.reconciled = true }
+
+func (s *spillFake) SwapToMmap(path string) (func() error, error) {
+	if s.swapErr != nil {
+		return nil, s.swapErr
+	}
+	s.swapped = path
+	count := 0
+	s.closed = &count
+	return func() error { count++; return nil }, nil
+}
+
+// TestAppCloseCooledClosersRunsEachExactlyOnce proves the app's cooled-closer bookkeeping:
+// closers stored on cool are taken+run exactly once, and a second close (a re-warm followed by
+// a teardown, or a double re-warm) is a no-op — never a double-unmap.
+func TestAppCloseCooledClosersRunsEachExactlyOnce(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	var aCount, bCount int
+	app.setCooledClosers("cluster-1", []func() error{
+		func() error { aCount++; return nil },
+		func() error { bCount++; return nil },
+	})
+
+	app.closeCooledClosers("cluster-1")
+	require.Equal(t, 1, aCount)
+	require.Equal(t, 1, bCount)
+
+	// Second call: the closers were already taken, so this is a no-op (no double-unmap).
+	app.closeCooledClosers("cluster-1")
+	require.Equal(t, 1, aCount, "closer must not run twice")
+	require.Equal(t, 1, bCount, "closer must not run twice")
+}
 
 // TestAppClusterStoresSpillRestoreRoundTrip proves the governor's Cold/re-warm wiring: a
 // cluster's maintained stores spilled on Cold are restored into the freshly-built stores on

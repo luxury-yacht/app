@@ -72,9 +72,12 @@ func cm(ns, name string) *corev1.ConfigMap {
 }
 
 // TestProjectingStoreBundleAccessorsSplitHalves proves TableRows and CatalogRows
-// each return only their half of every stored bundle.
+// each return only their half of every stored bundle. It uses a retain-table store (the
+// pod store) so the Table half is present to assert TableRows returns it; the default
+// drop-table behavior is covered by TestProjectingStoreDropsStoredTableHalfByDefault.
 func TestProjectingStoreBundleAccessorsSplitHalves(t *testing.T) {
 	store := NewProjectingStore(bundleProject(false, false))
+	store.SetRetainTable(true)
 	if err := store.Add(cm("default", "a")); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -105,10 +108,11 @@ func TestProjectingStoreBundleAccessorsSplitHalves(t *testing.T) {
 
 // TestProjectingStoreCatalogRowsOmitsNilHalf proves a kind with no catalog
 // projector (Catalog left nil) contributes no catalog rows but still contributes
-// table rows.
+// table rows. It uses a retain-table store so the Table half is present to assert on.
 func TestProjectingStoreCatalogRowsOmitsNilHalf(t *testing.T) {
 	// catalogErr=true leaves Bundle.Catalog nil for every object.
 	store := NewProjectingStore(bundleProject(false, true))
+	store.SetRetainTable(true)
 	if err := store.Add(cm("default", "a")); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -126,6 +130,10 @@ func TestProjectingStoreCatalogRowsOmitsNilHalf(t *testing.T) {
 func TestProjectingStoreSinkReceivesIncrementalUpsertsAndDeletes(t *testing.T) {
 	sink := &recordingSink{}
 	store := NewProjectingStore(bundleProject(false, false))
+	// The Table-half Sink delete reads the STORED Table half, so this delivery contract
+	// holds only for a retain-table store (the production maintained store uses the
+	// catalog-keyed BundleSink delete instead — see TestProjectingStoreDropsStoredTableHalfByDefault).
+	store.SetRetainTable(true)
 	store.AddSink(sink)
 
 	if err := store.Add(cm("default", "a")); err != nil {
@@ -207,10 +215,12 @@ func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
 		t.Fatalf("configmap names = %v", got)
 	}
 
-	// Both halves are present: TableRows holds the ConfigSummary, CatalogRows holds
-	// the catalog projection from the SAME ingestion.
-	if got := len(mgr.TableRows(configMapGVR)); got != 1 {
-		t.Fatalf("TableRows = %d, want 1", got)
+	// The descriptor store drops the redundant Table half from its stored bundle (the
+	// maintained store holds it columnar), so TableRows is empty — but the Catalog half is
+	// retained for the catalog-keyed delete and CatalogRows holds the projection from the
+	// SAME ingestion.
+	if got := len(mgr.TableRows(configMapGVR)); got != 0 {
+		t.Fatalf("TableRows = %d, want 0 (the redundant Table half is dropped from the store)", got)
 	}
 	catalogs := mgr.CatalogRows(configMapGVR)
 	if len(catalogs) != 1 {
@@ -220,10 +230,17 @@ func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
 		t.Fatalf("CatalogRows[0] = %#v, want catalogRow{default/seed-cm}", catalogs[0])
 	}
 
-	// The sink was fed the Table half at least once (the initial relist Upsert).
+	// The sink was fed the Table half at least once (the initial relist Upsert) BEFORE it was
+	// dropped from the stored bundle — that is how the maintained store populates. The fanned
+	// value is the descriptor's StreamRow projection (a streamrows.ConfigSummary), never nil.
 	upserts, _ := sink.snapshot()
 	if len(upserts) == 0 {
 		t.Fatal("sink received no upserts; the maintained store would never populate")
+	}
+	for _, u := range upserts {
+		if u == nil {
+			t.Fatal("sink upsert is nil; the Table half must be fanned before the drop")
+		}
 	}
 }
 
@@ -325,7 +342,8 @@ func (s *recordingBundleSink) DeleteBundle(b Bundle) { s.deletes = append(s.dele
 // receives the WHOLE projected bundle (both halves) on Upsert and Delete, in one
 // delivery — the pod notify path needs the Table half (scopes) and Catalog half
 // (UID/RV) of the same object together, which separate Table/Catalog sinks cannot
-// guarantee.
+// guarantee. The pod store retains its Table half (SetRetainTable(true)), so the Table
+// half is present on the DeleteBundle too, exactly as the pod notify path requires.
 func TestProjectingStoreBundleSinkDeliversWholeBundle(t *testing.T) {
 	project := func(obj interface{}) (interface{}, error) {
 		cmObj, ok := obj.(*corev1.ConfigMap)
@@ -338,6 +356,7 @@ func TestProjectingStoreBundleSinkDeliversWholeBundle(t *testing.T) {
 		}, nil
 	}
 	store := NewProjectingStore(project)
+	store.SetRetainTable(true)
 	sink := &recordingBundleSink{}
 	store.AddBundleSink(sink)
 
@@ -362,5 +381,148 @@ func TestProjectingStoreBundleSinkDeliversWholeBundle(t *testing.T) {
 	}
 	if got, ok := sink.deletes[0].Table.(tableRow); !ok || got.Name != "a" {
 		t.Fatalf("delete Table half = %#v, want tableRow{a}", sink.deletes[0].Table)
+	}
+}
+
+// tableCatalogProject projects a ConfigMap to a Bundle with both a Table and a Catalog
+// half, used by the Table-drop tests below.
+func tableCatalogProject(obj interface{}) (interface{}, error) {
+	cmObj, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T", obj)
+	}
+	return Bundle{
+		Table:   tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
+		Catalog: catalogRow{Key: cmObj.Namespace + "/" + cmObj.Name},
+	}, nil
+}
+
+// TestProjectingStoreDropsStoredTableHalfByDefault proves the redundant Table half is
+// dropped from the STORED bundle (the maintained store already holds it columnar) while
+// the Table half STILL reaches the sinks on upsert and the Catalog half stays retained for
+// the catalog-keyed delete. This is the project-to-column-tuple change: stored bundles keep
+// the Catalog/ObjectMap/Aggregate halves, not the Table half.
+func TestProjectingStoreDropsStoredTableHalfByDefault(t *testing.T) {
+	store := NewProjectingStore(tableCatalogProject)
+	sink := &recordingBundleSink{}
+	store.AddBundleSink(sink)
+
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	// The sink received the FULL bundle (Table present) at upsert — the maintained store
+	// is fed the Table half before it is dropped from the stored copy.
+	if len(sink.upserts) != 1 {
+		t.Fatalf("UpsertBundle calls = %d, want 1", len(sink.upserts))
+	}
+	if _, ok := sink.upserts[0].Table.(tableRow); !ok {
+		t.Fatalf("upsert Table half = %#v, want tableRow (Table must reach the sink)", sink.upserts[0].Table)
+	}
+
+	// The STORED bundle dropped the Table half but kept the Catalog half.
+	stored, exists, err := store.GetByKey("default/a")
+	if err != nil || !exists {
+		t.Fatalf("GetByKey: exists=%v err=%v", exists, err)
+	}
+	b, ok := stored.(Bundle)
+	if !ok {
+		t.Fatalf("stored value is %T, want Bundle", stored)
+	}
+	if b.Table != nil {
+		t.Fatalf("stored Table half = %#v, want nil (dropped)", b.Table)
+	}
+	if _, ok := b.Catalog.(catalogRow); !ok {
+		t.Fatalf("stored Catalog half = %#v, want catalogRow (retained)", b.Catalog)
+	}
+	if got := len(store.TableRows()); got != 0 {
+		t.Fatalf("TableRows = %d, want 0 once the stored Table half is dropped", got)
+	}
+	if got := len(store.CatalogRows()); got != 1 {
+		t.Fatalf("CatalogRows = %d, want 1 (Catalog half retained)", got)
+	}
+
+	// On delete the sink's DeleteBundle gets the STORED bundle (Table nil) but the Catalog
+	// half is present, so a catalog-keyed maintained-store delete still evicts the row.
+	if err := store.Delete(cm("default", "a")); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if len(sink.deletes) != 1 {
+		t.Fatalf("DeleteBundle calls = %d, want 1", len(sink.deletes))
+	}
+	if sink.deletes[0].Table != nil {
+		t.Fatalf("delete Table half = %#v, want nil (dropped from stored bundle)", sink.deletes[0].Table)
+	}
+	if _, ok := sink.deletes[0].Catalog.(catalogRow); !ok {
+		t.Fatalf("delete Catalog half = %#v, want catalogRow (the catalog-keyed delete needs it)", sink.deletes[0].Catalog)
+	}
+}
+
+// TestProjectingStoreRetainTableKeepsStoredTableHalf proves a store created with
+// retainTable=TRUE (the pod store, whose standalone-synthesis + notify paths read the
+// STORED Table half) keeps the Table half in its stored bundle.
+func TestProjectingStoreRetainTableKeepsStoredTableHalf(t *testing.T) {
+	store := NewProjectingStore(tableCatalogProject)
+	store.SetRetainTable(true)
+
+	if err := store.Add(cm("default", "a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	stored, exists, err := store.GetByKey("default/a")
+	if err != nil || !exists {
+		t.Fatalf("GetByKey: exists=%v err=%v", exists, err)
+	}
+	b, ok := stored.(Bundle)
+	if !ok {
+		t.Fatalf("stored value is %T, want Bundle", stored)
+	}
+	if _, ok := b.Table.(tableRow); !ok {
+		t.Fatalf("stored Table half = %#v, want tableRow (retained when retainTable=true)", b.Table)
+	}
+	if got := len(store.TableRows()); got != 1 {
+		t.Fatalf("TableRows = %d, want 1 when the Table half is retained", got)
+	}
+}
+
+// TestProjectingStoreReplaceDropsStoredTableHalf proves the relist (Replace) path also
+// drops the stored Table half but feeds the sinks the full bundle, and a relist-delete
+// (a key vanishing from the new set) fans the stored (Table-nil, Catalog-present) bundle to
+// DeleteBundle so the catalog-keyed maintained-store delete still evicts the ghost.
+func TestProjectingStoreReplaceDropsStoredTableHalf(t *testing.T) {
+	store := NewProjectingStore(tableCatalogProject)
+	sink := &recordingBundleSink{}
+	store.AddBundleSink(sink)
+
+	if err := store.Replace([]interface{}{cm("default", "a"), cm("default", "b")}, "1"); err != nil {
+		t.Fatalf("Replace 1: %v", err)
+	}
+	// Both upserts carried the Table half to the sink.
+	if len(sink.upserts) != 2 {
+		t.Fatalf("UpsertBundle calls = %d, want 2", len(sink.upserts))
+	}
+	for _, u := range sink.upserts {
+		if _, ok := u.Table.(tableRow); !ok {
+			t.Fatalf("replace upsert Table half = %#v, want tableRow", u.Table)
+		}
+	}
+	// But the stored bundles dropped the Table half.
+	for _, row := range store.List() {
+		b := row.(Bundle)
+		if b.Table != nil {
+			t.Fatalf("stored Table half after Replace = %#v, want nil", b.Table)
+		}
+	}
+
+	// Relist that drops "a": the vanished key must reach DeleteBundle with a usable Catalog
+	// half so a catalog-keyed maintained store evicts it (no ghost on relist).
+	if err := store.Replace([]interface{}{cm("default", "b")}, "2"); err != nil {
+		t.Fatalf("Replace 2: %v", err)
+	}
+	if len(sink.deletes) != 1 {
+		t.Fatalf("DeleteBundle calls after relist-delete = %d, want 1", len(sink.deletes))
+	}
+	got, ok := sink.deletes[0].Catalog.(catalogRow)
+	if !ok || got.Key != "default/a" {
+		t.Fatalf("relist-delete Catalog half = %#v, want catalogRow{default/a}", sink.deletes[0].Catalog)
 	}
 }
