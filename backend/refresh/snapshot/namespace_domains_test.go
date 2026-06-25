@@ -521,6 +521,7 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 			networkpolicy: ingestAvailabilityIndexer,
 		}),
 	}
+	seedNetworkMaintained(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -628,6 +629,7 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 			networkpolicy: ingestAvailabilityIndexer,
 		}),
 	}
+	seedNetworkMaintained(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1414,6 +1416,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 		includeCronJobs:     true,
 		metrics:             provider,
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -1463,6 +1466,7 @@ func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T
 		includeJobs:         true,
 		includeCronJobs:     true,
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
@@ -1520,6 +1524,7 @@ func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
 		includeCronJobs:     true,
 		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA),
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -1638,6 +1643,7 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 		includeCronJobs:     true,
 		metrics:             &workloadMetricsProvider{pods: map[string]metrics.PodUsage{}},
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
 	require.Equal(t, namespaceWorkloadsDomainName, snapshot.Domain)
@@ -1749,6 +1755,7 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 			"team-b/charlie-pod": {MemoryUsageBytes: 128 * 1024 * 1024},
 		}},
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1")
 	require.NoError(t, err)
@@ -1842,6 +1849,7 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 		includeCronJobs:     true,
 		metrics:             provider,
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=memory&sortDirection=desc&limit=1")
 	require.NoError(t, err)
@@ -1898,6 +1906,7 @@ func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
 		includeJobs:         true,
 		includeCronJobs:     true,
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceWorkloadsDomainName, domainpermissions.AllowedResources{
 		"core/pods":         true,
 		"apps/deployments":  true,

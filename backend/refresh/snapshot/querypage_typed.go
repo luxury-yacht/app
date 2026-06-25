@@ -664,27 +664,6 @@ func (m *typedMaintainedStore[T]) upsertRow(row T, o metav1.Object) {
 	m.bumpVersion(o)
 }
 
-// Replace syncs the store to exactly rows: it upserts every row, then deletes any key the
-// store still holds that the new set does not. It is the maintained-store update for a domain
-// whose rows are a cross-kind ASSEMBLY (workloads: workload rows + standalone-pod rows) that
-// cannot be fed one object at a time — the domain recomputes the full assembled set on a
-// relevant event and Replace diffs it in. Snapshot returns a copy, so iterate-while-delete
-// is safe. bumpSinkVersion advances the refetch identity once per sync.
-func (m *typedMaintainedStore[T]) Replace(rows []T) {
-	want := make(map[string]struct{}, len(rows))
-	for _, r := range rows {
-		want[m.adapter.Key(r)] = struct{}{}
-		m.store.Upsert(r)
-	}
-	for _, existing := range m.store.Snapshot() {
-		key := m.adapter.Key(existing)
-		if _, keep := want[key]; !keep {
-			m.store.Delete(key)
-		}
-	}
-	m.bumpSinkVersion()
-}
-
 // spillTo flushes the store's rows to path in the Tier 2.6 columnar on-disk format (scalar
 // columns flat/mmap-friendly, dynamic fields gob'd) so a Cold cluster's heap can be reclaimed
 // and the store re-painted fast on re-warm. Only the rows are written; the indexes/facets are

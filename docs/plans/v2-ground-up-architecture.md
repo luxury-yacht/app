@@ -272,8 +272,14 @@ roadmap with per-item status in [§Migration phases](#migration-phases--value-ea
 2. **Phase 4 — lifecycle + governor + mmap spill + four-stage cold-start.** The columnar SoA is already the
    on-disk format, so spill is `mmap`ing the column files per `(cluster,gvr)`.
 3. **Smaller, optional (status 2026-06-25):** maintained stores for the cutover-only domains — `nodes` ✅ DONE
-   (typedMaintainedStore fed by the NodeGVR Sink); `network relationship` + `workloads synthesized pods` still
-   list+project per Build (these are the prerequisites for project-to-column-tuple); `helm/crds` still per Build.
+   (typedMaintainedStore fed by the NodeGVR Sink); `workloads synthesized pods` ✅ DONE (one
+   typedMaintainedStore[WorkloadSummary] fed by all five workload GVRs' Table-half Sinks; the standalone-pod
+   synthesis + pod/metrics/HPA overlay stay serve-time cross-kind joins; `namespaceWorkloadOwnRows` removed);
+   `network relationship` ✅ DONE 2026-06-25 (one typedMaintainedStore[NetworkSummary] fed by the four cut
+   network GVRs' Table-half Sinks — Service/EndpointSlice/Ingress/NetworkPolicy — UNIFIED with the uncut
+   Gateway-API kinds' informer-fed rows in the SAME store; the EndpointSlice service-join stays a serve-time
+   cross-kind join read from the ingest source's Aggregate half and re-applied by reaggregateServiceSummary;
+   `namespaceNetworkOwnRows` + the cut-kind PULL fallback removed, no dual path); `helm/crds` still per Build.
    pods' direct query ✅ (metric SORT done + gated; the persistent metric index stays profile-driven, part of the
    deferred metrics-column-family). A stronger catalog correctness test ✅ DONE (`TestCatalogQueryMatchesBruteForceOracle`
    — 10,800 query shapes vs a brute-force oracle). Trigram-accelerated search ✅ DONE (querypage `trigramIndex`,
@@ -1187,17 +1193,30 @@ reasons; **nothing required is incomplete here.**
   -scoped both delete right). Gate green (`mage qc:prerelease` EXIT 0: race tests, vitest 3234, knip, trivy).
   **REMAINING:** `namespace-network` — hybrid (descriptor rows + bespoke `listServices`/EndpointSlices, where
   a Service row depends on its EndpointSlices, `namespace_network.go:130,147,159`); needs the maintained
-  store to also feed those relationship-dependent sources. `namespace-workloads` — synthesized standalone-pod
-  rows (the build is already on the engine; the maintained store needs the cross-kind standalone determination).
-  `nodes` ✅ DONE (2026-06-25) — converted to a `typedMaintainedStore[NodeSummary]` fed by the NodeGVR Table-half
-  Sink (mirrors pods; `nodeOwnRowsFromIngest` removed); helm/crds still list+project per Build. The perf win is on
-  the larger domains. (Browse/catalog is DONE — its own maintained `querypage.Store` + direct `store.Query`.)
-  **project-to-column-tuple SCOPE (assessed 2026-06-25):** genuinely large + correctly deferred. `bundle.Table` is
-  still PULLED (not just Sink-pushed) by `network_ingest_source.go:54` (NetworkSummary, network-relationship) and
-  `workload_ingest_source.go:54` (WorkloadSummary, workloads-synthesized-pods); "discard the typed object" requires
-  converting those remaining pull-consumers to maintained stores FIRST, then dropping the Bundle's typed Table-half.
-  The plan marks it "not required for the memory goal" (StripManagedFields already captured the main win), so it stays
-  deferred behind the network-relationship + workloads-synthesized-pods conversions.
+  store to also feed those relationship-dependent sources. `namespace-workloads` ✅ DONE (2026-06-25) — converted
+  to one `typedMaintainedStore[WorkloadSummary]` fed by all five workload GVRs' Table-half Sinks (Deployment/
+  StatefulSet/DaemonSet/Job/CronJob; the Sink type-guards on WorkloadSummary so one store holds all five). The
+  synthesized standalone-pod rows + the pod-aggregate/metrics/HPA overlay stay SERVE-time cross-kind joins
+  (reaggregateWorkloadSummary + the standalone synthesis in assembleWorkloadRows, read from the pod ingest source
+  + HPA lister + metrics provider); the lazy recompute (`recomputeWorkloadsStore`/`ensureWorkloadsStoreFresh`) and
+  `namespaceWorkloadOwnRows` were removed, and the now-orphaned `typedMaintainedStore.Replace` with them. ONE serve
+  path for all scopes; all-namespaces reads no pods (namespacePodRowsFromIngest("") empty), preserving the overview
+  behavior. `nodes` ✅ DONE (2026-06-25) — converted to a `typedMaintainedStore[NodeSummary]` fed by the NodeGVR
+  Table-half Sink (mirrors pods; `nodeOwnRowsFromIngest` removed); helm/crds still list+project per Build. The perf
+  win is on the larger domains. (Browse/catalog is DONE — its own maintained `querypage.Store` + direct `store.Query`.)
+  **project-to-column-tuple — prerequisites DONE, but BLOCKED on a deeper contract (grounded 2026-06-25).** The
+  pull-consumers are all converted now: nodes ✅, workloads ✅, network ✅ are Sink-fed maintained stores, so the only
+  DIRECT `bundle.Table` pull left is the pod path (`pod_aggregate_source.go:61`, which reads PodAggregate+PodSummary
+  from the SAME bundle atomically for standalone-pod synthesis — must stay). A proof-of-concept to drop the stored
+  Table-half (retaining pods) was built + RED-tested + REVERTED: it breaks the INDIRECT dependency — the
+  maintained-store Sink's DELETE keys off the Table row's Kind (`querypage_typed.go:638-644` → `static_table_query.go:65`)
+  and `emitDelete` (`projecting_store.go:237-244`) reads the STORED Table-half, so dropping it skips Sink deletes →
+  ghost rows for EVERY ingest-fed kind (gated by `querypage_cluster_config_maintained_test.go:268`, etc.). So the real
+  prerequisite is converting the maintained-store Sink to KEY-BASED deletion (derive the eviction key from the retained
+  Catalog half, not the Table row) — a Delete-contract change across ALL maintained-store adapters + their tests. The
+  plan marks project-to-column-tuple "not required for the memory goal" (StripManagedFields already captured the main
+  win), so it stays DEFERRED behind that key-based-deletion contract change rather than forcing a risky ingest-delete
+  rewrite for a not-required optimization.
 - 🔶 **Ingestion cutover.** ✅ **Projection-at-intake on EVERY ingestion path** (`informer/projection.go`
   `StripManagedFields`): `WithTransform` on the core + apiext + gateway factories AND `SetTransform` on the
   catalog's dynamic-CRD informers — discards `managedFields` (30-50% of a Pod's bytes) before any object

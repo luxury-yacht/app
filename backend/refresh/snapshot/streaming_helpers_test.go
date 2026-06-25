@@ -181,6 +181,7 @@ func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
 		includeCronJobs:     true,
 		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
 	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 
 	snap, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)

@@ -65,35 +65,6 @@ func namespacePodRowsFromIngest(source podWorkloadsIngestSource, namespace strin
 	return aggregates, summaries
 }
 
-// allPodRowsFromIngest is namespacePodRowsFromIngest across ALL namespaces — the read the
-// workloads maintained store's recompute uses to assemble the cluster-wide row set (the
-// per-request namespace filter is applied later when Build reads from the store).
-// namespacePodRowsFromIngest with "" returns nothing by design, so the all-namespaces read
-// is its own helper. A nil source yields empty results.
-func allPodRowsFromIngest(source podWorkloadsIngestSource) ([]streamrows.PodAggregate, map[string]streamrows.PodSummary) {
-	if source == nil {
-		return nil, nil
-	}
-	bundles := source.Rows(PodGVR)
-	aggregates := make([]streamrows.PodAggregate, 0, len(bundles))
-	summaries := make(map[string]streamrows.PodSummary, len(bundles))
-	for _, raw := range bundles {
-		bundle, ok := raw.(ingest.Bundle)
-		if !ok {
-			continue
-		}
-		agg, ok := bundle.Aggregate.(streamrows.PodAggregate)
-		if !ok {
-			continue
-		}
-		aggregates = append(aggregates, agg)
-		if summary, ok := bundle.Table.(streamrows.PodSummary); ok {
-			summaries[summary.Namespace+"/"+summary.Name] = summary
-		}
-	}
-	return aggregates, summaries
-}
-
 // namespacePodIngestVersion returns the pod store's latest list/watch RV as the version
 // watermark for a domain that reads pods through the workloads ingest source.
 func namespacePodIngestVersion(source podWorkloadsIngestSource) uint64 {

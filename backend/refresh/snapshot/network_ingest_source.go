@@ -1,18 +1,15 @@
 /*
  * backend/refresh/snapshot/network_ingest_source.go
  *
- * The network read path for the namespace-network domain after the network cut.
- * Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds: the
- * shared factory no longer caches the typed objects, so the network domain reads each
- * kind's projected NetworkSummary (the Bundle Table half) the reflector built at intake,
- * keyed off each kind's GVR, instead of a typed lister. Service rows are OWN-fields only
- * (built with nil slices); the serve path re-joins the endpoint count from the projected
- * EndpointSlice store's join facts (the Bundle Aggregate half), reproducing the pre-cut
- * Service row byte for byte.
- *
- * Each kind's per-object Table half also carries the object's resourceVersion through the
- * ingest store's watermark, so the domain folds the store RV into its version watermark in
- * place of the per-object RV it can no longer read from the dropped typed objects.
+ * The two SERVE-TIME reads the namespace-network domain still makes from the ingest source
+ * after the cut network kinds' OWN-rows (Service/EndpointSlice/Ingress/NetworkPolicy Table
+ * halves) moved to the Sink-fed maintained store: (1) the EndpointSlice service-join — each
+ * Service row's ready endpoint count, summed from the projected EndpointSlice store's join
+ * facts (the Bundle Aggregate half, NOT delivered to the maintained store's Table-only Sink),
+ * a cross-kind join re-applied at serve so the Service row stays byte-identical to the typed
+ * service.BuildStreamSummary(meta, svc, slices); and (2) the version watermark — the highest
+ * store RV across the cut kinds, folded into the snapshot version in place of the per-object
+ * RV the dropped typed objects no longer carry.
  */
 
 package snapshot
@@ -25,42 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// networkIngestSource supplies the cut network kinds' projected rows the namespace-network
-// domain reads. Rows returns each kind's per-object bundles in one consistent store read;
-// StoreResourceVersion gives the store's latest list/watch RV for the version watermark.
-// *ingest.IngestManager satisfies it.
+// networkIngestSource supplies the two serve-time ingest reads the namespace-network domain
+// still makes (the EndpointSlice join facts and the cut kinds' store RVs). Rows returns each
+// kind's per-object bundles in one consistent store read; StoreResourceVersion gives the
+// store's latest list/watch RV for the version watermark. *ingest.IngestManager satisfies it.
 type networkIngestSource interface {
 	Rows(gvr schema.GroupVersionResource) []interface{}
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
-}
-
-// namespaceNetworkOwnRows reads a cut network kind's projected Table-half NetworkSummary
-// rows from the ingest source for the given GVR, filtered to the namespace ("" = all
-// namespaces). A nil source yields no rows; a row of the wrong type is skipped, mirroring
-// the type guards the ingest sinks apply. For Service these are the OWN-fields rows the
-// serve path re-joins endpoint counts onto; for EndpointSlice/Ingress/NetworkPolicy they
-// are the full rows.
-func namespaceNetworkOwnRows(source networkIngestSource, gvr schema.GroupVersionResource, namespace string) []streamrows.NetworkSummary {
-	if source == nil {
-		return nil
-	}
-	rows := source.Rows(gvr)
-	out := make([]streamrows.NetworkSummary, 0, len(rows))
-	for _, raw := range rows {
-		bundle, ok := raw.(ingest.Bundle)
-		if !ok {
-			continue
-		}
-		summary, ok := bundle.Table.(streamrows.NetworkSummary)
-		if !ok {
-			continue
-		}
-		if namespace != "" && summary.Namespace != namespace {
-			continue
-		}
-		out = append(out, summary)
-	}
-	return out
 }
 
 // namespaceEndpointSliceReadyCounts reads the EndpointSlice store's projected Service-join

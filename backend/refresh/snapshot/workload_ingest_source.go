@@ -1,17 +1,16 @@
 /*
  * backend/refresh/snapshot/workload_ingest_source.go
  *
- * The workload read path for the namespace-workloads domain after the workload cut.
- * Deployment/StatefulSet/DaemonSet/Job/CronJob are owned-reflector ingest kinds: the
- * shared factory no longer caches the typed object, so the workloads domain reads the
- * projected workload-OWN-fields WorkloadSummary (the Bundle's Table half) the workload
- * reflector built at intake, keyed off each kind's GVR, instead of a typed lister. The
- * serve path then re-joins the owner's pods + metrics + HPA onto each own-row
- * (reaggregateWorkloadSummary), reproducing the pre-cut row byte for byte.
+ * The workload version-watermark read path for the namespace-workloads domain after the
+ * workload cut. Deployment/StatefulSet/DaemonSet/Job/CronJob are owned-reflector ingest kinds:
+ * the shared factory no longer caches the typed object. Each kind's projected workload-OWN-fields
+ * WorkloadSummary (the Bundle's Table half) is fed straight into the domain's maintained store by
+ * the kind's Table-half ingest Sink (RegisterNamespaceWorkloadsDomain), so the domain reads
+ * own-rows from RAM rather than pulling them here.
  *
- * Each kind's per-object Table half also carries the object's resourceVersion through the
- * ingest store's watermark, so the domain folds the store RV into its version watermark in
- * place of the per-object RV it can no longer read from the dropped typed objects.
+ * What remains here is the version watermark: each kind's store carries the latest list/watch RV,
+ * so the domain folds the highest store RV into its version watermark in place of the per-object RV
+ * it can no longer read from the dropped typed objects.
  */
 
 package snapshot
@@ -19,48 +18,15 @@ package snapshot
 import (
 	"strconv"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// workloadIngestSource supplies the cut workload kinds' projected own-field rows the
-// namespace-workloads domain reads. Rows returns each kind's projected Table-half
-// WorkloadSummary in one consistent store read; StoreResourceVersion gives the store's
-// latest list/watch RV for the version watermark. *ingest.IngestManager satisfies it.
+// workloadIngestSource supplies the cut workload kinds' store RVs for the namespace-workloads
+// version watermark. The own-rows themselves no longer come from here — they are Sink-fed into the
+// domain's maintained store — so only StoreResourceVersion is needed. *ingest.IngestManager
+// satisfies it.
 type workloadIngestSource interface {
-	Rows(gvr schema.GroupVersionResource) []interface{}
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
-}
-
-// namespaceWorkloadOwnRows reads the cut workload kind's projected own-field rows from the
-// ingest source for the given GVR, filtered to the namespace ("" = all namespaces). A nil
-// source yields no rows; a row of the wrong type is skipped, mirroring the type guards the
-// ingest sinks apply. The returned rows are the workload-OWN-fields WorkloadSummary the
-// serve path re-joins pods/metrics/HPA onto.
-func namespaceWorkloadOwnRows(source workloadIngestSource, gvr schema.GroupVersionResource, namespace string) []streamrows.WorkloadSummary {
-	if source == nil {
-		return nil
-	}
-	rows := source.Rows(gvr)
-	out := make([]streamrows.WorkloadSummary, 0, len(rows))
-	for _, raw := range rows {
-		// The store holds the projected Bundle per object; the workload own-fields row is
-		// its Table half (mirroring the pod path's bundle unwrap in namespacePodRowsFromIngest).
-		bundle, ok := raw.(ingest.Bundle)
-		if !ok {
-			continue
-		}
-		summary, ok := bundle.Table.(streamrows.WorkloadSummary)
-		if !ok {
-			continue
-		}
-		if namespace != "" && summary.Namespace != namespace {
-			continue
-		}
-		out = append(out, summary)
-	}
-	return out
 }
 
 // namespaceWorkloadIngestVersion returns the highest store RV across the cut workload

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -38,14 +39,17 @@ const (
 
 // NamespaceNetworkBuilder constructs summaries for namespace-scoped network resources.
 // Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds: the
-// shared factory no longer caches the typed objects, so the builder reads each kind's
-// projected NetworkSummary (the Bundle Table half) from the ingest source instead of typed
-// listers. Service rows are OWN-fields (built with nil slices); the serve path re-joins the
-// endpoint count from the projected EndpointSlice store's join facts, byte-identical to the
-// typed path. The Gateway-API kinds are NOT cut and stay descriptor-driven via the stream
-// registry (collectIndexer + collectDescriptorTableRows). The include* flags record whether
-// the request is permitted to read each cut kind (the gate the typed listers' presence used
-// to imply).
+// shared factory no longer caches the typed objects, so each kind's projected NetworkSummary
+// (the Bundle Table half) is fed into the maintained store from that GVR's ingest Sink — the
+// SAME mechanism nodes/workloads use — and Build serves the OWN-rows straight from the store
+// (scope + allowed-kind filtered) instead of pulling + re-projecting per request. Service rows
+// are OWN-fields (built with nil slices); the serve path re-joins the endpoint count from the
+// projected EndpointSlice store's join facts (a SERVE-time cross-kind join read from the ingest
+// source, like the workloads pod-aggregate overlay), byte-identical to the typed path. The
+// Gateway-API kinds are NOT cut and stay descriptor-driven via the stream registry
+// (registerMaintainedHandlers feeds their rows into the SAME store). The include* flags record
+// whether the request is permitted to read each cut kind (the gate the typed listers' presence
+// used to imply).
 type NamespaceNetworkBuilder struct {
 	networkIngest          networkIngestSource
 	includeServices        bool
@@ -53,11 +57,14 @@ type NamespaceNetworkBuilder struct {
 	includeIngresses       bool
 	includeNetworkPolicies bool
 	collectIndexer         func(streamspec.Descriptor) cache.Indexer
-	// gatewayMaintained holds the uncut Gateway-API kinds' projected NetworkSummary rows,
-	// fed from the Gateway-API informers (the cut kinds are ingest-owned and skipped). When
-	// set, Build reads the Gateway-API rows from it instead of listing the gateway indexers
-	// per request; otherwise it falls back to collectDescriptorTableRows (the unit tests).
-	gatewayMaintained *typedMaintainedStore[NetworkSummary]
+	// maintained holds ALL the domain's OWN-rows (NetworkSummary): the four cut kinds'
+	// (Service/EndpointSlice/Ingress/NetworkPolicy) Table halves fed by each GVR's ingest
+	// Sink, AND the uncut Gateway-API kinds' rows fed from the Gateway-API informers
+	// (registerMaintainedHandlers). Build reads every own-row from it (scope + allowed-kind
+	// filtered) and re-joins the EndpointSlice endpoint count onto Service rows at serve. nil in
+	// a unit test with no store wired, in which case no own-rows are served (the SAME no-fallback
+	// contract nodes/workloads use; tests seed the store via the Sink).
+	maintained *typedMaintainedStore[NetworkSummary]
 }
 
 // NamespaceNetworkSnapshot payload for the network tab.
@@ -91,11 +98,17 @@ type NetworkSummary = streamrows.NetworkSummary
 // wiring Gateway-API kinds from the Gateway-API factory when it is available.
 //
 // Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds
-// (IngestOwned): the shared factory no longer caches them, so the builder reads their
-// projected rows from ingestManager. The per-kind include flags gate which cut kinds the
-// request is permitted to read (the gate the typed listers' presence used to imply). The
-// uncut Gateway-API kinds are still indexer-driven via collectIndexer. When ingestManager
-// is nil (a unit test) the cut kinds have no source.
+// (IngestOwned): the shared factory no longer caches them, so their projected OWN-rows (each
+// kind's Table-half NetworkSummary) are fed into the maintained store from each GVR's ingest
+// Sink — the SAME mechanism nodes/workloads use. Service and EndpointSlice are bespoke (no
+// streamspec.Descriptor), so feedMaintainedFromIngest (which loops StreamDescriptors) cannot
+// reach them; the four cut GVRs are wired explicitly here. The uncut Gateway-API kinds are fed
+// into the SAME store from the Gateway-API informers (registerMaintainedHandlers skips the
+// ingest-owned cut kinds, so it adds only the Gateway-API handlers). Build serves every own-row
+// from the one store and re-joins the EndpointSlice endpoint count onto Service rows at serve
+// (read from the ingest source, unchanged). The per-kind include flags gate which cut kinds the
+// request is permitted to read (the gate the typed listers' presence used to imply). When
+// ingestManager is nil (a unit test) the cut kinds have no Sink feed.
 func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
@@ -109,14 +122,24 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	}
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager)
 
-	// Maintain a store of the uncut Gateway-API kinds' rows, fed from the Gateway-API
-	// informers. registerMaintainedHandlers skips the ingest-owned cut kinds (Service/
-	// EndpointSlice/Ingress/NetworkPolicy), so the store holds only the Gateway-API rows.
-	gatewayMaintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
-	if err := registerMaintainedHandlers(gatewayMaintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
+	// One store holds ALL the domain's own-rows. Feed the four cut kinds' Table halves from
+	// each GVR's ingest Sink (Service/EndpointSlice are bespoke, so they need an explicit Sink
+	// each; Ingress/NetworkPolicy are stream-backed cut kinds, also wired explicitly here for a
+	// single, uniform feed point), then feed the uncut Gateway-API kinds from their informers
+	// (registerMaintainedHandlers skips the ingest-owned cut kinds). The Sinks/handlers are
+	// registered BEFORE the ingest manager / informer factory start (this runs during
+	// registration), so the snapshot sync gate guarantees the store is populated before the
+	// first Build serves from it. nil ingestManager (a unit test) leaves the cut kinds unfed.
+	maintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
+	if ingestManager != nil {
+		for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
+			ingestManager.AddSink(gvr, maintained.Sink())
+		}
+	}
+	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
 		return err
 	}
-	reg.RegisterMaintainedStore(namespaceNetworkDomainName, gatewayMaintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
 
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          ingestManager,
@@ -125,7 +148,7 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 		includeIngresses:       allowed.Allows("networking.k8s.io", "ingresses"),
 		includeNetworkPolicies: allowed.Allows("networking.k8s.io", "networkpolicies"),
 		collectIndexer:         collectIndexer,
-		gatewayMaintained:      gatewayMaintained,
+		maintained:             maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceNetworkDomainName,
@@ -148,74 +171,56 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	}
 	namespace := parsedScope.Namespace
 
-	// Service, EndpointSlice, Ingress, and NetworkPolicy are cut to the ingest path: read
-	// each kind's projected NetworkSummary rows (the Bundle Table half) from the ingest
-	// source instead of a typed lister, gated by the per-request runtime permission AND the
-	// registration-time include flag (the gate the typed listers' presence used to imply).
+	// Service, EndpointSlice, Ingress, and NetworkPolicy are cut to the ingest path; their
+	// per-request availability is the registration-time include flag AND the runtime
+	// permission (the gate the typed listers' presence used to imply). Availability gates
+	// which cut kinds' own-rows the maintained store serves for this request.
 	servicesAvailable := b.includeServices && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "", "services")
 	endpointSlicesAvailable := b.includeEndpointSlices && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "discovery.k8s.io", "endpointslices")
 	ingressesAvailable := b.includeIngresses && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "ingresses")
 	networkPoliciesAvailable := b.includeNetworkPolicies && runtimeResourceAllowed(ctx, namespaceNetworkDomainName, "networking.k8s.io", "networkpolicies")
 
-	var serviceOwnRows []NetworkSummary
-	if servicesAvailable {
-		serviceOwnRows = namespaceNetworkOwnRows(b.networkIngest, ServiceGVR, namespace)
-	}
-	// EndpointSlice rows AND the Service join facts both come from the EndpointSlice store.
-	// The Service join needs the slices' ready counts even when EndpointSlice itself is not
-	// a permitted source row, matching the typed path (which always listed slices to build
-	// the Service join, and only emitted EndpointSlice rows when permitted).
-	var endpointSliceRows []NetworkSummary
-	if endpointSlicesAvailable {
-		endpointSliceRows = namespaceNetworkOwnRows(b.networkIngest, EndpointSliceGVR, namespace)
-	}
+	// The Service endpoint-count join is a SERVE-time cross-kind join: it sums each Service's
+	// correlated EndpointSlices' ready endpoint addresses from the ingest source's Aggregate
+	// half (NOT delivered to the maintained store's Sink, which carries only the Table half).
+	// It is read from ingest exactly as before, so the re-joined Service row stays byte-
+	// identical. The join needs the slices' ready counts even when EndpointSlice itself is not
+	// a permitted source row, matching the typed path.
 	readyCounts := namespaceEndpointSliceReadyCounts(b.networkIngest, namespace)
-	var ingressRows []NetworkSummary
-	if ingressesAvailable {
-		ingressRows = namespaceNetworkOwnRows(b.networkIngest, IngressGVR, namespace)
-	}
-	var networkPolicyRows []NetworkSummary
-	if networkPoliciesAvailable {
-		networkPolicyRows = namespaceNetworkOwnRows(b.networkIngest, NetworkPolicyGVR, namespace)
-	}
 
-	// The Gateway-API kinds are NOT cut. Their SOURCE entries (availability) — and the cut
-	// kinds' — come from collectDescriptorSources for ALL the domain's stream descriptors.
-	// Their ROWS come from the maintained store (fed by the Gateway-API informers via the
-	// same StreamRow projection) in production, or collectDescriptorTableRows in the unit
-	// tests; the cut kinds' rows always come from ingest above.
 	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.collectIndexer)
-	var descriptorRows []NetworkSummary
+
+	// All own-rows come from the one Sink/informer-fed store: the four cut kinds' Table halves
+	// (gated by their per-request availability) plus the uncut Gateway-API rows (ungated at the
+	// row level — registerMaintainedHandlers only feeds kinds whose indexer was registered, so
+	// the store already holds only the permitted Gateway-API kinds). A nil store (a unit test
+	// with no store wired) yields no own-rows — the SAME no-fallback contract nodes/workloads use;
+	// the network tests seed the store via the Sink (seedNetworkMaintained).
+	var ownRows []NetworkSummary
 	var version uint64
-	if b.gatewayMaintained != nil {
-		// The store holds ONLY the Gateway-API rows (registerMaintainedHandlers skips the
-		// ingest-owned cut kinds), so a namespace filter is all that is needed.
-		descriptorRows = b.gatewayMaintained.rowsInNamespace(namespace)
-		version = b.gatewayMaintained.snapshotVersion()
-	} else {
-		rows, _, listVersion, err := collectDescriptorTableRows[NetworkSummary](ctx, namespaceNetworkDomainName, b.collectIndexer, meta, namespace)
-		if err != nil {
-			return nil, err
-		}
-		descriptorRows = rows
-		version = listVersion
+	if b.maintained != nil {
+		ownRows = b.maintained.rows(namespace, b.servedKinds(
+			servicesAvailable, endpointSlicesAvailable, ingressesAvailable, networkPoliciesAvailable, descriptorSources,
+		))
+		version = b.maintained.snapshotVersion()
 	}
 
-	resources := make([]NetworkSummary, 0, len(serviceOwnRows)+len(endpointSliceRows)+len(ingressRows)+len(networkPolicyRows)+len(descriptorRows))
+	resources := make([]NetworkSummary, 0, len(ownRows))
 	// Service rows re-join the endpoint count from the EndpointSlice store's join facts,
 	// reproducing the typed service.BuildStreamSummary(meta, svc, slices) row byte for byte.
-	for _, own := range serviceOwnRows {
-		resources = append(resources, reaggregateServiceSummary(own, readyCounts[serviceSliceKey(own.Namespace, own.Name)]))
+	// Every other kind's own-row is served as-is.
+	for _, own := range ownRows {
+		if own.Kind == service.Identity.Kind {
+			resources = append(resources, reaggregateServiceSummary(own, readyCounts[serviceSliceKey(own.Namespace, own.Name)]))
+			continue
+		}
+		resources = append(resources, own)
 	}
-	resources = append(resources, endpointSliceRows...)
-	resources = append(resources, ingressRows...)
-	resources = append(resources, networkPolicyRows...)
-	resources = append(resources, descriptorRows...)
 
 	// The projected network rows carry no per-object RV (the typed objects are gone), so the
 	// cut stores' latest RV is folded into the version watermark (which starts from the
-	// Gateway-API descriptor rows' max RV) to keep refetch identity advancing on changes —
-	// mirroring how the prior code folded each typed object's resourceVersion.
+	// maintained store / descriptor rows' max RV) to keep refetch identity advancing on
+	// changes — mirroring how the prior code folded each typed object's resourceVersion.
 	if wlVersion := namespaceNetworkIngestVersion(b.networkIngest, ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR); wlVersion > version {
 		version = wlVersion
 	}
@@ -253,6 +258,37 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		},
 		Stats: resolved.Stats,
 	}, nil
+}
+
+// servedKinds is the set of kinds whose own-rows this request serves from the maintained
+// store: each cut kind gated by its per-request availability, plus EVERY Gateway-API
+// descriptor kind (ungated at the row level — the store holds only the Gateway-API kinds
+// whose informer handler was registered, matching the prior gateway-store rowsInNamespace
+// read, while collectDescriptorSources still governs the published source availability).
+func (b *NamespaceNetworkBuilder) servedKinds(
+	servicesAvailable, endpointSlicesAvailable, ingressesAvailable, networkPoliciesAvailable bool,
+	descriptorSources []typedTableResourceSource,
+) map[string]bool {
+	allowed := map[string]bool{
+		service.Identity.Kind:       servicesAvailable,
+		endpointslice.Identity.Kind: endpointSlicesAvailable,
+		ingress.Identity.Kind:       ingressesAvailable,
+		networkpolicy.Identity.Kind: networkPoliciesAvailable,
+	}
+	// The descriptor sources include the cut kinds (Ingress/NetworkPolicy) too; the cut-kind
+	// entries above already set their availability, so only the Gateway-API kinds are added
+	// here (their cut-kind names are overwritten with the same gated value they already hold
+	// only if a future descriptor reorder collides, which it does not — the cut kinds are
+	// keyed by their own gated flags above and not re-set to true).
+	for _, src := range descriptorSources {
+		switch src.Kind {
+		case service.Identity.Kind, endpointslice.Identity.Kind, ingress.Identity.Kind, networkpolicy.Identity.Kind:
+			// Cut kinds keep their per-request availability set above.
+		default:
+			allowed[src.Kind] = true
+		}
+	}
+	return allowed
 }
 
 func sortNetworkSummaries(resources []NetworkSummary) {

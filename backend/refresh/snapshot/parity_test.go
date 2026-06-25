@@ -376,6 +376,7 @@ func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
 				includePods:         true,
 				hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
 			}
+			seedWorkloadsFromBuilderSource(builder, meta)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceWorkloadsSnapshot)
@@ -453,6 +454,7 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 				includeEndpointSlices: true,
 				collectIndexer:        networkCollectIndexer(networkIndexers{}),
 			}
+			seedNetworkMaintained(builder, meta)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceNetworkSnapshot)
@@ -510,6 +512,7 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 					gateway:       testsupport.NewNamespacedIndexer(t, gateway),
 				}),
 			}
+			seedNetworkMaintained(builder, meta)
 			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
 			require.NoError(t, err)
 			payload := snap.Payload.(NamespaceNetworkSnapshot)

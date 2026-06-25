@@ -93,6 +93,7 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 			includeCronJobs:     true,
 			metrics:             fakeMetricsProvider{},
 		}
+		seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 		snap, err := builder.Build(ctx, "namespace:default")
 		require.NoError(t, err)
 		payload, ok := snap.Payload.(NamespaceWorkloadsSnapshot)
