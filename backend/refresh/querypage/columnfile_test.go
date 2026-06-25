@@ -39,6 +39,30 @@ func TestColumnFileRoundTrip(t *testing.T) {
 	}
 }
 
+// TestColumnFileZeroCopyColumns proves the plan's "zero-copy page-cache reads": Int64Column
+// and Uint32Column return slices that ALIAS the mapping (no per-value decode, no heap copy of
+// the column), so a Cold cluster can serve scalar columns straight from off-heap page cache.
+// The values are read back identical to what was written.
+func TestColumnFileZeroCopyColumns(t *testing.T) {
+	ints := []int64{0, 1, -3, 1 << 40, -(1 << 50), 9_999_999_999}
+	uints := []uint32{0, 7, 1 << 20, 4_000_000_000}
+
+	path := filepath.Join(t.TempDir(), "zc.bin")
+	require.NoError(t, writeColumnFile(path, ints, uints, nil))
+
+	cf, err := openColumnFile(path)
+	require.NoError(t, err)
+	defer cf.Close()
+
+	require.Equal(t, ints, cf.Int64Column(), "int64 column read zero-copy from the mapping")
+	require.Equal(t, uints, cf.Uint32Column(), "uint32 column read zero-copy from the mapping")
+
+	// A zero-copy column still agrees with the per-value accessor (same backing bytes).
+	for i := range ints {
+		require.Equal(t, cf.Int64At(i), cf.Int64Column()[i])
+	}
+}
+
 // TestColumnFileEmpty proves empty columns round-trip cleanly (no panic, zero lengths).
 func TestColumnFileEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.bin")

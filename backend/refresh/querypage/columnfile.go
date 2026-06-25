@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"unsafe"
 )
 
 // columnfile.go is the Tier 2.6 mmap'd on-disk column format. It writes a kind's interned
@@ -113,5 +114,34 @@ func (c *columnFile) StringAt(i int) string {
 	return string(b[c.strDataOff+int(start) : c.strDataOff+int(end)])
 }
 
-// Close unmaps the file. Values already read (ints, copied strings) remain valid.
+// Int64Column returns the int64 column as a slice ALIASING the mapping — zero-copy, with no
+// heap copy of the column (the plan's "zero-copy page-cache reads"). The int64 section starts
+// at offset 16 and the mmap base is page-aligned, so the cast is 8-byte aligned. The values
+// are interpreted in NATIVE byte order, which matches the little-endian on-disk encoding on
+// every supported host (amd64/arm64 darwin/linux/windows are all little-endian); the portable
+// per-value accessors (Int64At) use explicit little-endian and work on any host.
+//
+// LIFETIME: the returned slice points into the mapping and is valid only until Close — the
+// caller (a Cold-cluster columnStore) must hold the columnFile for as long as it uses the
+// slice and must not retain it past Close.
+func (c *columnFile) Int64Column() []int64 {
+	if c.intCount == 0 {
+		return nil
+	}
+	return unsafe.Slice((*int64)(unsafe.Pointer(&c.mf.bytes()[c.intOff])), c.intCount)
+}
+
+// Uint32Column returns the uint32 column zero-copy, aliasing the mapping. The uint32 section
+// follows the 8-aligned int64 section, so it is at least 4-byte aligned. Same native-order and
+// lifetime contract as Int64Column.
+func (c *columnFile) Uint32Column() []uint32 {
+	if c.uintCount == 0 {
+		return nil
+	}
+	return unsafe.Slice((*uint32)(unsafe.Pointer(&c.mf.bytes()[c.uintOff])), c.uintCount)
+}
+
+// Close unmaps the file. Values already read (ints, copied strings) remain valid; any
+// zero-copy column slice returned by Int64Column/Uint32Column does NOT — it aliases the now
+// unmapped region and must be dropped before Close.
 func (c *columnFile) Close() error { return c.mf.close() }

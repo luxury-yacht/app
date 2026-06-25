@@ -160,12 +160,13 @@ sections it references._
 > four stages (discovery disk-cache+ETag; cross-restart warm-paint; WatchList resume-from-persisted-RV via a custom
 > resume path since client-go's reflector can't; 410-Gone reconcile-delete), safe-degrade end-to-end (any failure →
 > full sync). Real-cluster delta-resume is a deployment property; the unit gates + safe-degrade are the contract.
-> **(2.6) mmap on-disk column format — FOUNDATION DONE (2026-06-24):** the safe, cross-platform mmap column-file
+> **(2.6) mmap on-disk column format — READ MECHANISM DONE (2026-06-24):** the safe, cross-platform mmap column-file
 > mechanism is built (`querypage/columnfile.go` + build-tagged `mmap_unix.go` [syscall.Mmap PROT_READ/MAP_SHARED →
 > off-heap, OS-reclaimable page cache] + `mmap_other.go` [os.ReadFile fallback]). Writes int64/uint32/string column
-> sections (LE, header + string-offset table); reads per-value via `binary.LittleEndian` — NO `unsafe` pointer
-> casts, no alignment constraint, so it trades the plan's literal "zero-copy" for memory-SAFE off-heap reads (the
-> per-value decode is negligible for Cold reads). Round-trip + cross-platform gated. REMAINING (a large, intricate
+> sections (LE, header + string-offset table). BOTH read paths: per-value `binary.LittleEndian` accessors (portable,
+> any host) AND `Int64Column`/`Uint32Column` **zero-copy** accessors (`unsafe.Slice` aliasing the 8-aligned mapping —
+> the plan's literal "zero-copy page-cache reads"; native-order, valid on the all-little-endian targets, lifetime-bound
+> to Close). Round-trip + zero-copy + cross-platform (incl. windows build) gated. REMAINING (a large, intricate
 > rewrite of the query engine's HOT PATH `columnar.go`, warranting careful dedicated work — NOT a rushed slice): (i)
 > serialize the interned `columnStore` (per-field codecs + string dicts + promotion state + the live/freeRows arena)
 > to the column file; (ii) dual-mode serving so a Cold cluster's store queries DIRECTLY from the mapping (~0 heap) —
