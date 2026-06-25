@@ -160,8 +160,19 @@ sections it references._
 > four stages (discovery disk-cache+ETag; cross-restart warm-paint; WatchList resume-from-persisted-RV via a custom
 > resume path since client-go's reflector can't; 410-Gone reconcile-delete), safe-degrade end-to-end (any failure →
 > full sync). Real-cluster delta-resume is a deployment property; the unit gates + safe-degrade are the contract.
-> (2.6) mmap on-disk column format (gob baseline
-> today); **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
+> **(2.6) mmap on-disk column format — FOUNDATION DONE (2026-06-24):** the safe, cross-platform mmap column-file
+> mechanism is built (`querypage/columnfile.go` + build-tagged `mmap_unix.go` [syscall.Mmap PROT_READ/MAP_SHARED →
+> off-heap, OS-reclaimable page cache] + `mmap_other.go` [os.ReadFile fallback]). Writes int64/uint32/string column
+> sections (LE, header + string-offset table); reads per-value via `binary.LittleEndian` — NO `unsafe` pointer
+> casts, no alignment constraint, so it trades the plan's literal "zero-copy" for memory-SAFE off-heap reads (the
+> per-value decode is negligible for Cold reads). Round-trip + cross-platform gated. REMAINING (a large, intricate
+> rewrite of the query engine's HOT PATH `columnar.go`, warranting careful dedicated work — NOT a rushed slice): (i)
+> serialize the interned `columnStore` (per-field codecs + string dicts + promotion state + the live/freeRows arena)
+> to the column file; (ii) dual-mode serving so a Cold cluster's store queries DIRECTLY from the mapping (~0 heap) —
+> the actual memory win. NOTE: the plan's memory GOAL is already met (Cold teardown reclaims heap, 2.4) and fast
+> cold-start by gob warm-paint + delta-resume (2.5); 2.6 is the further "Cold = ~0 RAM while queryable" optimization
+> the plan itself defers ("ship gob first", spill.go:22-25), and its prototype-grade foundation is now in place.
+> **(2.7) nodes metrics in the query sort schema DONE (2026-06-24)** — the nodes adapter already sorts
 > cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
 > lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
 > regression test, now added (`TestNodesSortByMetricUsage`, values chosen so lexical≠numeric order). ONLY 2.6 remains.
