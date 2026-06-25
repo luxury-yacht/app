@@ -18,6 +18,11 @@ package ingest
 
 import (
 	"context"
+	"encoding/gob"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -73,11 +78,16 @@ type entry struct {
 	// delta WATCH from a persisted resourceVersion through the same source the reflector uses.
 	lw cache.ListerWatcher
 
-	// resumeRV, when set (SetResumeResourceVersion, before Start), makes Start attempt a delta
-	// resume from this resourceVersion before the reflector's full sync — the cold-start
-	// "resume from persisted RV" path. Empty (the default) launches the reflector directly,
-	// unchanged. It is only set once the store was restored full from disk (a later slice).
+	// resumeRV, when set (SetResumeResourceVersion / RestoreStores, before Start), makes Start
+	// attempt a delta resume from this resourceVersion before the reflector's full sync — the
+	// cold-start "resume from persisted RV" path. Empty (the default) launches the reflector
+	// directly, unchanged. It is only set once the store was restored full from disk.
 	resumeRV string
+
+	// example is the empty typed object for this kind, retained so registerGobTypes can
+	// project it through the store's projection to discover (and gob.Register) the concrete
+	// Bundle-half types the spill encodes — types the ingest package cannot import directly.
+	example apiruntime.Object
 
 	// catalogProject, when set, builds the bundle's Catalog half for this kind.
 	// It is registered before Start via RegisterCatalogProjector and read by the
@@ -223,6 +233,7 @@ func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResour
 	// its WatchList capability is detected.
 	wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
 	e.lw = wrapped
+	e.example = example
 	e.reflector = NewProjectingReflector(gvk.String(), wrapped, example, e.store, resyncDisabled)
 	m.entries[gvr] = e
 }
@@ -525,6 +536,114 @@ func (m *IngestManager) SetResumeResourceVersion(gvr schema.GroupVersionResource
 	}
 	e.resumeRV = rv
 	return true
+}
+
+// registerGobTypes gob-registers the concrete Bundle-half types every entry projects, by
+// projecting each entry's example object through its store projection and registering each
+// non-nil half. The ingest package cannot import those types (they live in consumer packages
+// that import ingest), so it registers them from the runtime projection value instead. It is
+// idempotent (re-registering a type is a no-op) and fully recover()-guarded: a kind whose
+// zero-object projection panics or whose type conflicts is simply left unregistered, so its
+// SpillBundles fails and it falls back to a full sync — never a crash.
+func (m *IngestManager) registerGobTypes() {
+	m.mu.Lock()
+	entries := make([]*entry, 0, len(m.entries))
+	for _, e := range m.entries {
+		entries = append(entries, e)
+	}
+	m.mu.Unlock()
+	for _, e := range entries {
+		registerEntryGobTypes(e)
+	}
+}
+
+func registerEntryGobTypes(e *entry) {
+	defer func() { _ = recover() }()
+	if e.example == nil || e.store == nil {
+		return
+	}
+	projected, err := e.store.project(e.example)
+	if err != nil {
+		return
+	}
+	b, ok := projected.(Bundle)
+	if !ok {
+		return
+	}
+	gobRegisterIfNonNil(b.Table)
+	gobRegisterIfNonNil(b.Catalog)
+	gobRegisterIfNonNil(b.ObjectMap)
+	gobRegisterIfNonNil(b.Aggregate)
+}
+
+func gobRegisterIfNonNil(v interface{}) {
+	if v == nil {
+		return
+	}
+	defer func() { _ = recover() }() // gob.Register panics on a name conflict; ignore it
+	gob.Register(v)
+}
+
+// SpillStores writes every (non-on-demand) entry's store to a per-GVR file under dir, so a
+// restart can restore the full projected state and resume each watch from the persisted RV.
+// It registers the projected types first. Best-effort: a per-store failure (an unregistered
+// type) is collected and the rest still spill, so one bad kind only forgoes its own delta
+// resume. On-demand dynamic reflectors are skipped (they are not resumed).
+func (m *IngestManager) SpillStores(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("ingest: spill mkdir %q: %w", dir, err)
+	}
+	m.registerGobTypes()
+	m.mu.Lock()
+	type gvrEntry struct {
+		gvr schema.GroupVersionResource
+		e   *entry
+	}
+	entries := make([]gvrEntry, 0, len(m.entries))
+	for gvr, e := range m.entries {
+		entries = append(entries, gvrEntry{gvr: gvr, e: e})
+	}
+	m.mu.Unlock()
+	var errs []error
+	for _, ge := range entries {
+		if ge.e.onDemand.Load() {
+			continue
+		}
+		if err := ge.e.store.SpillBundles(filepath.Join(dir, ingestSpillFileName(ge.gvr))); err != nil {
+			errs = append(errs, fmt.Errorf("spill %s: %w", ge.gvr, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// RestoreStores restores each (non-on-demand) entry's store from its per-GVR file under dir
+// and, on success, sets the entry's resumeRV so Start resumes that kind's watch from the
+// persisted RV instead of a full re-LIST. It registers the projected types first. Best-effort
+// and safe-by-default: a missing/corrupt file or an unregistered type leaves resumeRV empty,
+// so that kind full-syncs. Must be called before Start.
+func (m *IngestManager) RestoreStores(dir string) {
+	m.registerGobTypes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for gvr, e := range m.entries {
+		if e.onDemand.Load() {
+			continue
+		}
+		rv, err := e.store.RestoreBundles(filepath.Join(dir, ingestSpillFileName(gvr)))
+		if err == nil && rv != "" {
+			e.resumeRV = rv
+		}
+	}
+}
+
+// ingestSpillFileName renders a filesystem-safe per-GVR spill file name. The core group's
+// empty string becomes "core"; group/version/resource are otherwise dot-safe.
+func ingestSpillFileName(gvr schema.GroupVersionResource) string {
+	group := gvr.Group
+	if group == "" {
+		group = "core"
+	}
+	return group + "." + gvr.Version + "." + gvr.Resource + ".bundles"
 }
 
 // Stop cancels every running reflector. It is safe to call when Start was never

@@ -143,14 +143,20 @@ sections it references._
 > set, else (the default) runs the reflector's full sync UNCHANGED. `SetResumeResourceVersion(gvr, rv)` sets it;
 > entry retains its ListerWatcher. NOT activated in production (resumeRV unset until the ingest-store restore
 > lands), so zero behavior change — proven by the unchanged manager/readiness tests + `runWithResume` unit tests
-> (healthy→no full-sync / 410→full-sync / no-RV→full-sync). **REMAINING stage 3b-ii (the activation, BLOCKED on a
-> serialization issue):** to resume correctly the INGEST `ProjectingStore` must be restored FULL + RV-stamped, but
-> it holds type-erased `Bundle{interface{}}` rows whose concrete types live in consumer packages the ingest
-> package can't import (objectcatalog imports ingest — cycle) — so gob-spilling it needs a central `gob.Register`
-> of every projected type (done from the system package, which imports them all) + a restore-projected-rows-direct
-> path on ProjectingStore + spilling the ingest stores at teardown consistently with their RV + calling
-> SetResumeResourceVersion on restore. Then stage 4 (the full-sync fallback already reconciles deletes — formalize
-> + test absent-UID deletion).
+> (healthy→no full-sync / 410→full-sync / no-RV→full-sync). **stage 3b-ii-a (serialization primitive) DONE:**
+> `ProjectingStore.SpillBundles(path)` / `RestoreBundles(path) (rv, err)` gob-encode `{Rows map[string]Bundle, RV}`
+> and restore the Bundles DIRECT (no re-projection — source object gone) + rv + synced, returning rv for the
+> resume. SAFE-DEGRADE design: missing file / unregistered type / decode error → error → caller skips → full sync
+> (no regression). Round-trip + missing-file gated. **stage 3b-ii-b-1 (manager spill/restore + gob registration) DONE:**
+> `IngestManager.SpillStores(dir)` / `RestoreStores(dir)` round-trip each entry's store (per-GVR `.bundles` file);
+> RestoreStores sets `e.resumeRV` from the persisted RV (lighting up runWithResume). `registerGobTypes` projects
+> each entry's retained example object and gob.Registers the Bundle halves (recover-guarded — unregisterable kind →
+> full sync). Safe-degrade gated (round-trip sets resumeRV+restores; no-file → resumeRV="" → full sync). UNWIRED in
+> production still. **REMAINING stage 3b-ii-b-2 (the final activation):** app teardownClusterSubsystem spills the
+> ingest stores (subsystem.IngestManager.SpillStores) at the quiescent post-Shutdown moment alongside the maintained
+> ones; buildRefreshSubsystemForSelection restores them (RestoreStores) before Start — under the same per-cluster,
+> format-version-guarded spill root as stage 2. Then stage 4 (the full-sync fallback already reconciles deletes —
+> formalize + test absent-UID deletion).
 > (2.6) mmap on-disk column format (gob baseline
 > today); (2.7) nodes metrics in the query sort schema.
 

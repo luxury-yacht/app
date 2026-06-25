@@ -12,11 +12,23 @@
 package ingest
 
 import (
+	"bufio"
+	"encoding/gob"
+	"fmt"
+	"os"
 	"sync"
 
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
+
+// spilledBundles is the on-disk form of a ProjectingStore: the projected Bundle per object
+// key plus the resourceVersion the store had observed, so a restart can restore the full
+// projected state and resume the watch from RV instead of a full re-LIST (Tier 2.5 stage 3).
+type spilledBundles struct {
+	Rows map[string]Bundle
+	RV   string
+}
 
 // ProjectFunc maps a Kubernetes object to its projected row (any type). It is
 // injected so the store stays generic — there is no per-kind logic here; the
@@ -489,6 +501,65 @@ func (s *ProjectingStore) HasSynced() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.synced
+}
+
+// SpillBundles writes the store's projected Bundles (keyed by object) plus its observed
+// resourceVersion to path, so a restart can restore the full projected state and resume the
+// watch from that RV (stage 3). Only Bundle-valued rows are written (every ingest projection
+// is a Bundle). It gob-encodes through the Bundle's interface halves, so every concrete
+// projected type must be gob-registered; an encode error (an unregistered type) is returned
+// so the caller skips this kind and lets its reflector full-sync instead — never a regression.
+func (s *ProjectingStore) SpillBundles(path string) error {
+	s.mu.RLock()
+	snap := spilledBundles{Rows: make(map[string]Bundle, len(s.rows)), RV: s.rv}
+	for key, row := range s.rows {
+		if b, ok := row.(Bundle); ok {
+			snap.Rows[key] = b
+		}
+	}
+	s.mu.RUnlock()
+
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("ingest: spill create %q: %w", path, err)
+	}
+	defer f.Close()
+	bw := bufio.NewWriter(f)
+	if err := gob.NewEncoder(bw).Encode(snap); err != nil {
+		return fmt.Errorf("ingest: spill encode %q: %w", path, err)
+	}
+	if err := bw.Flush(); err != nil {
+		return fmt.Errorf("ingest: spill flush %q: %w", path, err)
+	}
+	return f.Close()
+}
+
+// RestoreBundles loads spilled Bundles from path DIRECTLY into the store (they are already
+// projected — the source object is gone, so they are not re-projected), sets the observed
+// resourceVersion, and marks the store synced (the restored state is the baseline a delta
+// resume builds on). It returns the RV so the caller can resume the watch from it
+// (SetResumeResourceVersion). A missing/corrupt file or a decode error (an unregistered type)
+// returns an error so the caller skips → full sync; the store is left untouched on failure.
+func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("ingest: restore open %q: %w", path, err)
+	}
+	defer f.Close()
+	var snap spilledBundles
+	if err := gob.NewDecoder(bufio.NewReader(f)).Decode(&snap); err != nil {
+		return "", fmt.Errorf("ingest: restore decode %q: %w", path, err)
+	}
+
+	s.mu.Lock()
+	s.rows = make(map[string]interface{}, len(snap.Rows))
+	for key, b := range snap.Rows {
+		s.rows[key] = b
+	}
+	s.rv = snap.RV
+	s.synced = true
+	s.mu.Unlock()
+	return snap.RV, nil
 }
 
 // MarkSynced flips the store's synced flag without a Replace, for the stage-3 resume path:
