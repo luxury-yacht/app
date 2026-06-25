@@ -190,6 +190,53 @@ func TestPollerRefreshRequiresConfig(t *testing.T) {
 	require.Contains(t, summary.Metrics.LastError, "rest config not provided")
 }
 
+// TestPollerRefreshCapturesSampleTimestamps proves each parsed pod/node usage
+// carries metrics-server's per-sample Timestamp (the right edge of the scrape
+// interval), so the overlay can drop a sample that predates a recreated object.
+func TestPollerRefreshCapturesSampleTimestamps(t *testing.T) {
+	ctx := context.Background()
+
+	nodeStamp := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
+	podStamp := time.Date(2026, 6, 25, 10, 0, 5, 0, time.UTC)
+
+	nodeList := &metricsv1beta1.NodeMetricsList{
+		Items: []metricsv1beta1.NodeMetrics{{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
+			Timestamp:  metav1.NewTime(nodeStamp),
+			Usage: corev1.ResourceList{
+				corev1.ResourceCPU: *resource.NewMilliQuantity(250, resource.DecimalSI),
+			},
+		}},
+	}
+	podList := &metricsv1beta1.PodMetricsList{
+		Items: []metricsv1beta1.PodMetrics{{
+			ObjectMeta: metav1.ObjectMeta{Name: "api-0", Namespace: "default"},
+			Timestamp:  metav1.NewTime(podStamp),
+			Containers: []metricsv1beta1.ContainerMetrics{{
+				Name:  "api",
+				Usage: corev1.ResourceList{corev1.ResourceCPU: *resource.NewMilliQuantity(125, resource.DecimalSI)},
+			}},
+		}},
+	}
+
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.maxRetry = 1
+	poller.jitterFactor = 0
+	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+		return nodeList, nil
+	}
+	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+		return podList, nil
+	}
+
+	require.NoError(t, poller.refresh(ctx))
+
+	require.Equal(t, nodeStamp, poller.LatestNodeUsage()["node-a"].Timestamp)
+	require.Equal(t, podStamp, poller.LatestPodUsage()["default/api-0"].Timestamp)
+}
+
 func TestJitterDurationHandlesNonPositiveFactor(t *testing.T) {
 	base := time.Second
 	if got := jitterDuration(base, 0); got != base {

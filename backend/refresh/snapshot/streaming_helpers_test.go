@@ -782,5 +782,12 @@ func buildPodSummaryForTest(meta ClusterMeta, pod *corev1.Pod, usage map[string]
 	if pod != nil {
 		u = usage[pod.Namespace+"/"+pod.Name]
 	}
-	return podres.BuildStreamSummary(meta, pod, u.CPUUsageMilli, u.MemoryUsageBytes, rsLister)
+	row := podres.BuildStreamSummary(meta, pod, u.CPUUsageMilli, u.MemoryUsageBytes, rsLister)
+	// Mirror the production serve-time overlay so the parity harness and the real
+	// Build path render CPU/mem identically — including the no-data marker for a
+	// pod with no valid sample (Risk #9 / §3.6). overlayPodMetrics re-derives the
+	// usage cells from the same map keyed by namespace/name.
+	rows := []PodSummary{row}
+	overlayPodMetrics(rows, usage)
+	return rows[0]
 }

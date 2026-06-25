@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -38,6 +39,80 @@ func (f fakePodMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
 
 func (f fakePodMetricsProvider) Metadata() metrics.Metadata {
 	return f.metadata
+}
+
+// TestOverlayPodMetricsMissingSampleRendersNoData proves a row whose pod has NO
+// metrics sample renders the no-data marker, never "0m"/"0Mi" — so "metrics
+// unknown" is distinguishable from a real zero (Risk #9 / §3.6).
+func TestOverlayPodMetricsMissingSampleRendersNoData(t *testing.T) {
+	created := time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC)
+	rows := []PodSummary{{
+		Name:         "lonely",
+		Namespace:    "default",
+		AgeTimestamp: created.UnixMilli(),
+	}}
+	overlayPodMetrics(rows, map[string]metrics.PodUsage{}) // no sample for this pod
+
+	require.Equal(t, streamrows.MetricsNoData, rows[0].CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, rows[0].MemUsage)
+}
+
+// TestOverlayPodMetricsPresentSampleRendersNumbers proves a fresh sample (taken
+// after the object's creation) overlays the formatted numbers.
+func TestOverlayPodMetricsPresentSampleRendersNumbers(t *testing.T) {
+	created := time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC)
+	rows := []PodSummary{{
+		Name:         "api",
+		Namespace:    "default",
+		AgeTimestamp: created.UnixMilli(),
+	}}
+	overlayPodMetrics(rows, map[string]metrics.PodUsage{
+		"default/api": {CPUUsageMilli: 125, MemoryUsageBytes: 256 * 1024 * 1024, Timestamp: created.Add(30 * time.Second)},
+	})
+
+	require.Equal(t, "125m", rows[0].CPUUsage)
+	require.Equal(t, "256 MB", rows[0].MemUsage)
+}
+
+// TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation is the Risk #9 / §3.6
+// property test: a pod deleted and recreated under the SAME name (a new object with
+// a LATER creationTimestamp) must NOT inherit the prior incarnation's numbers. A
+// sample whose Timestamp predates the object's creation is dropped (renders no-data)
+// until a fresh sample arrives. This expresses the "a metric cell's UID matches its
+// object row's UID" invariant through the timestamp/recreate path (metrics-server
+// exposes no UID; the sample-vs-creation timestamp comparison is the sound proxy).
+func TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation(t *testing.T) {
+	oldCreated := time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC)
+	// The stale sample belongs to the FIRST incarnation, scraped before deletion.
+	staleSample := metrics.PodUsage{
+		CPUUsageMilli:    900,
+		MemoryUsageBytes: 4 * 1024 * 1024 * 1024,
+		Timestamp:        oldCreated.Add(time.Minute),
+	}
+	// The pod is recreated under the same name with a LATER creationTimestamp.
+	newCreated := oldCreated.Add(time.Hour)
+	rows := []PodSummary{{
+		Name:         "churned",
+		Namespace:    "default",
+		AgeTimestamp: newCreated.UnixMilli(),
+	}}
+
+	overlayPodMetrics(rows, map[string]metrics.PodUsage{"default/churned": staleSample})
+
+	// The recreated pod must NOT show the deleted pod's 900m / 4Gi numbers.
+	require.NotEqual(t, "900m", rows[0].CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, rows[0].CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, rows[0].MemUsage)
+
+	// Once a fresh sample (after the new creation) arrives, the numbers appear.
+	freshSample := metrics.PodUsage{
+		CPUUsageMilli:    50,
+		MemoryUsageBytes: 128 * 1024 * 1024,
+		Timestamp:        newCreated.Add(30 * time.Second),
+	}
+	overlayPodMetrics(rows, map[string]metrics.PodUsage{"default/churned": freshSample})
+	require.Equal(t, "50m", rows[0].CPUUsage)
+	require.Equal(t, "128 MB", rows[0].MemUsage)
 }
 
 func TestPodBuilderNodeScope(t *testing.T) {

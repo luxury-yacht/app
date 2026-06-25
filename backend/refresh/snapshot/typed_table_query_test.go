@@ -2,10 +2,41 @@ package snapshot
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 )
+
+// TestParseFormattedMetricHandlesNoDataMarker proves the always-numeric CPU/memory
+// sort parsers treat the no-data marker (streamrows.MetricsNoData, "-") as a
+// deterministic -Inf sentinel rather than 0, so a cell with no metrics sample sorts
+// at the no-data end (first ascending / last descending) and never collides with a
+// real-zero cell. This is the sort contract the Risk #9 / §3.6 no-data overlay relies
+// on (overlay now emits the marker instead of "0m"/"0Mi").
+func TestParseFormattedMetricHandlesNoDataMarker(t *testing.T) {
+	cpu, ok := parseFormattedCPUToMilli(streamrows.MetricsNoData)
+	if !ok || !math.IsInf(cpu, -1) {
+		t.Fatalf("CPU no-data marker: got (%v, %v), want (-Inf, true)", cpu, ok)
+	}
+	mem, ok := parseFormattedMemoryToBytes(streamrows.MetricsNoData)
+	if !ok || !math.IsInf(mem, -1) {
+		t.Fatalf("memory no-data marker: got (%v, %v), want (-Inf, true)", mem, ok)
+	}
+
+	// A real-zero cell ("0m"/"0Mi") parses to a finite 0 — strictly greater than the
+	// no-data sentinel — so no-data and real-zero rows are ordered distinctly.
+	zeroCPU, _ := parseFormattedCPUToMilli("0m")
+	if zeroCPU <= cpu {
+		t.Fatalf("real-zero CPU %v must sort above no-data %v", zeroCPU, cpu)
+	}
+	zeroMem, _ := parseFormattedMemoryToBytes("0Mi")
+	if zeroMem <= mem {
+		t.Fatalf("real-zero memory %v must sort above no-data %v", zeroMem, mem)
+	}
+}
 
 type typedQueryTestRow struct {
 	key       string

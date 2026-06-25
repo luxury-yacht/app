@@ -477,6 +477,15 @@ type NodePodMetric struct {
 	MemoryUsage string `json:"memoryUsage"`
 }
 
+// MetricsNoData is the marker rendered for a CPU/memory usage cell that has no
+// valid sample (no metrics-server sample for the object, or a sample that belongs
+// to a prior incarnation of a same-named object). It is the ASCII hyphen because
+// that is the no-data sentinel the frontend resource-bar parsers already
+// recognise (parseCpuToMillicores/parseMemToMB, ResourceBar.parseResource,
+// formatResourceForExport). Rendering this — never "0m"/"0Mi" — distinguishes
+// "metrics unknown" from a real zero (v2 architecture Risk #9 / §3.6).
+const MetricsNoData = "-"
+
 // FormatCPUMilli renders CPU millicores as the streaming rows display them.
 func FormatCPUMilli(value int64) string {
 	return fmt.Sprintf("%dm", value)

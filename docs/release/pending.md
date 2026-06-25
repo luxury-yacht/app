@@ -11,5 +11,6 @@
 
 ### Fixed
 
+- Pod and node CPU/memory usage cells now show a no-data dash instead of "0m"/"0Mi" when no live sample is available, so "metrics unknown" is no longer indistinguishable from genuinely-zero usage. A pod deleted and recreated under the same name no longer briefly inherits the previous pod's usage numbers — its usage stays no-data until a fresh sample (taken after the new pod was created) arrives.
 - Views no longer get stuck on a loading spinner the first time you open a view that has none of that resource.
 - Object details now show an Age for every resource type, including custom resources, and the value always matches the Age shown in the cluster/namespace browse tables. Age is now derived once from the object's creation timestamp instead of per resource type.

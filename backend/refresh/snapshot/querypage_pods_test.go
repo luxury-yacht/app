@@ -251,8 +251,8 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	require.Equal(t, "alpha", payload.Rows[0].Name)
 	require.Equal(t, "245m", payload.Rows[0].CPUUsage, "fresh metrics overlaid at serve")
 	require.Equal(t, "256 MB", payload.Rows[0].MemUsage)
-	require.Equal(t, "0m", payload.Rows[1].CPUUsage, "no metrics sample -> zeroed overlay")
-	require.Equal(t, "0Mi", payload.Rows[1].MemUsage)
+	require.Equal(t, streamrows.MetricsNoData, payload.Rows[1].CPUUsage, "no metrics sample -> no-data marker, never 0 (Risk #9 / §3.6)")
+	require.Equal(t, streamrows.MetricsNoData, payload.Rows[1].MemUsage)
 	require.Equal(t, 2, payload.TotalCount)
 
 	// Change ONLY the metrics sample (no re-ingest) and re-serve. The new value must

@@ -4,6 +4,9 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -97,4 +100,43 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("reaggregated node row mismatch:\n got=%#v\nwant=%#v", got, want)
 	}
+}
+
+// TestReaggregateNodeSummaryMissingNodeMetricRendersNoData proves a node with no
+// metrics sample renders the no-data marker for CPU/mem usage, never "0m"/"0Mi"
+// (Risk #9 / §3.6).
+func TestReaggregateNodeSummaryMissingNodeMetricRendersNoData(t *testing.T) {
+	own := streamrows.NodeSummary{Name: "node-x", AgeTimestamp: time.Now().Add(-time.Hour).UnixMilli()}
+	got := reaggregateNodeSummary(own, nil, map[string]metrics.PodUsage{}, map[string]metrics.NodeUsage{})
+
+	require.Equal(t, streamrows.MetricsNoData, got.CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, got.MemoryUsage)
+}
+
+// TestReaggregateNodeSummaryDropsStaleNodeMetric proves a node sample scraped before
+// the node's creation (a recreated same-name node) is dropped, rendering no-data
+// rather than the prior incarnation's numbers.
+func TestReaggregateNodeSummaryDropsStaleNodeMetric(t *testing.T) {
+	created := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	own := streamrows.NodeSummary{Name: "node-x", AgeTimestamp: created.UnixMilli()}
+	staleNodeMetrics := map[string]metrics.NodeUsage{
+		"node-x": {CPUUsageMilli: 700, MemoryUsageBytes: 8 << 30, Timestamp: created.Add(-time.Minute)},
+	}
+	got := reaggregateNodeSummary(own, nil, map[string]metrics.PodUsage{}, staleNodeMetrics)
+
+	require.NotEqual(t, "700m", got.CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, got.CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, got.MemoryUsage)
+}
+
+// TestReaggregateNodeSummaryMissingPerPodMetricRendersNoData proves a per-pod entry
+// with no metrics sample renders the no-data marker rather than "0m"/"0Mi".
+func TestReaggregateNodeSummaryMissingPerPodMetricRendersNoData(t *testing.T) {
+	own := streamrows.NodeSummary{Name: "node-x", PodsCapacity: "110"}
+	pods := []streamrows.PodAggregate{{Namespace: "ns", Name: "p1", NodeName: "node-x"}}
+	got := reaggregateNodeSummary(own, pods, map[string]metrics.PodUsage{}, map[string]metrics.NodeUsage{})
+
+	require.Len(t, got.PodMetrics, 1)
+	require.Equal(t, streamrows.MetricsNoData, got.PodMetrics[0].CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, got.PodMetrics[0].MemoryUsage)
 }

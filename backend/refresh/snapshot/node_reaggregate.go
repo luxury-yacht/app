@@ -109,12 +109,21 @@ func reaggregateNodeSummary(
 		podSummaries := make([]NodePodMetric, 0, len(pods))
 		for _, agg := range pods {
 			key := fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)
-			usage := podMetrics[key]
+			usage, ok := podMetrics[key]
+			// PodAggregate carries no per-pod creationTimestamp, so a per-pod entry can
+			// only drop on a MISSING sample (stale-on-recreate is enforced at the node
+			// level and in the pods table where the row carries AgeTimestamp). A missing
+			// sample renders the no-data marker rather than "0m"/"0Mi".
+			cpu, mem := streamrows.MetricsNoData, streamrows.MetricsNoData
+			if ok {
+				cpu = formatCPUMilli(usage.CPUUsageMilli)
+				mem = formatMemoryBytes(usage.MemoryUsageBytes)
+			}
 			podSummaries = append(podSummaries, NodePodMetric{
 				Namespace:   agg.Namespace,
 				Name:        agg.Name,
-				CPUUsage:    formatCPUMilli(usage.CPUUsageMilli),
-				MemoryUsage: formatMemoryBytes(usage.MemoryUsageBytes),
+				CPUUsage:    cpu,
+				MemoryUsage: mem,
 			})
 		}
 		if len(podSummaries) > 0 {
@@ -127,15 +136,31 @@ func reaggregateNodeSummary(
 		summary.Pods = fmt.Sprintf("%d", len(pods))
 	}
 
-	if usage, ok := nodeMetrics[own.Name]; ok {
-		summary.CPUUsage = formatCPUMilli(usage.CPUUsageMilli)
-		summary.MemoryUsage = formatMemoryBytes(usage.MemoryUsageBytes)
-	} else {
-		summary.CPUUsage = formatCPUMilli(0)
-		summary.MemoryUsage = formatMemoryBytes(0)
-	}
+	// A node with no sample, or a sample that predates the node's creation (a recreated
+	// same-name node), renders the no-data marker rather than stale or zero numbers.
+	usage, ok := nodeMetrics[own.Name]
+	summary.CPUUsage = formatNodeMetricCPU(usage, ok, own.AgeTimestamp)
+	summary.MemoryUsage = formatNodeMetricMemory(usage, ok, own.AgeTimestamp)
 
 	return summary
+}
+
+// formatNodeMetricCPU and formatNodeMetricMemory render a node (or per-pod) usage
+// cell: the formatted number for a valid sample (present, and not predating the
+// object's creation — see metricSampleValid), otherwise the no-data marker (never
+// "0m"/"0Mi", so "metrics unknown" is distinguishable from a real zero).
+func formatNodeMetricCPU(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
+	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
+		return streamrows.MetricsNoData
+	}
+	return formatCPUMilli(usage.CPUUsageMilli)
+}
+
+func formatNodeMetricMemory(usage metrics.NodeUsage, ok bool, creationMillis int64) string {
+	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
+		return streamrows.MetricsNoData
+	}
+	return formatMemoryBytes(usage.MemoryUsageBytes)
 }
 
 // nodePodsCapacityValue parses the own row's pods-capacity string (a canonical

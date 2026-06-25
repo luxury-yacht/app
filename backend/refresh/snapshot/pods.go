@@ -70,7 +70,7 @@ func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rs
 // re-projects the row. Metrics advance on their own cadence, so they are not part
 // of the projection-cache key.
 func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string) PodSummary {
-	usage := podUsage[pod.Namespace+"/"+pod.Name]
+	usage, ok := podUsage[pod.Namespace+"/"+pod.Name]
 	build := func() PodSummary {
 		project := b.buildSummary
 		if project == nil {
@@ -85,9 +85,12 @@ func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[
 		summary = b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, build)
 	}
 	// Overlay the current metrics sample onto the (possibly cached) object row, so
-	// a metrics poll refreshes CPU/mem without rebuilding the rest of the row.
-	summary.CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
-	summary.MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+	// a metrics poll refreshes CPU/mem without rebuilding the rest of the row. A
+	// missing sample, or one that predates this pod's creation (a recreated
+	// same-name pod), renders no-data rather than stale or zero numbers.
+	creationMillis := streamrows.CreationMillis(pod)
+	summary.CPUUsage = formatPodMetricCPU(usage, ok, creationMillis)
+	summary.MemUsage = formatPodMetricMemory(usage, ok, creationMillis)
 	return summary
 }
 
@@ -486,14 +489,54 @@ func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
 		row.OwnerName == scope.name
 }
 
+// metricSampleValid reports whether a metrics sample may be overlaid onto an object
+// row whose creation time is creationMillis (UnixMilli, 0 if unknown). A sample is
+// rejected when (a) it is absent (ok=false) or (b) it was scraped before the object
+// was created — i.e. it belongs to a prior incarnation of a same-named object (a pod
+// deleted and recreated under the same name with a new UID). metrics-server exposes
+// no UID, so the sample-Timestamp-vs-creationTimestamp comparison is the sound proxy
+// for the plan's name->UID join (v2 architecture Risk #9 / §3.6). A zero sample
+// Timestamp (e.g. a test or a metrics source that omits it) is treated as valid so
+// real-zero usage still renders its numbers. Freshness is capped at the scrape
+// interval, which the plan accepts.
+func metricSampleValid(ok bool, sampleTime time.Time, creationMillis int64) bool {
+	if !ok {
+		return false
+	}
+	if creationMillis > 0 && !sampleTime.IsZero() && sampleTime.UnixMilli() < creationMillis {
+		return false
+	}
+	return true
+}
+
+// formatPodMetricCPU and formatPodMetricMemory render a pod's usage cell: the
+// formatted number for a valid sample, otherwise the no-data marker (never "0m"/
+// "0Mi", so "metrics unknown" is distinguishable from a real zero).
+func formatPodMetricCPU(usage metrics.PodUsage, ok bool, creationMillis int64) string {
+	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
+		return streamrows.MetricsNoData
+	}
+	return streamrows.FormatCPUMilli(usage.CPUUsageMilli)
+}
+
+func formatPodMetricMemory(usage metrics.PodUsage, ok bool, creationMillis int64) string {
+	if !metricSampleValid(ok, usage.Timestamp, creationMillis) {
+		return streamrows.MetricsNoData
+	}
+	return streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+}
+
 // overlayPodMetrics overlays the fresh metrics sample onto each stored (zeroed) row,
 // using the SAME key and format funcs the list path's projectPod uses, so a metrics
-// poll refreshes CPU/mem without the store ever re-projecting.
+// poll refreshes CPU/mem without the store ever re-projecting. A pod with no sample,
+// or a sample that predates the row's creation (a recreated same-name pod inheriting
+// a prior incarnation's numbers), renders the no-data marker rather than stale or
+// zero numbers.
 func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
 	for i := range rows {
-		usage := podUsage[rows[i].Namespace+"/"+rows[i].Name]
-		rows[i].CPUUsage = streamrows.FormatCPUMilli(usage.CPUUsageMilli)
-		rows[i].MemUsage = streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
+		usage, ok := podUsage[rows[i].Namespace+"/"+rows[i].Name]
+		rows[i].CPUUsage = formatPodMetricCPU(usage, ok, rows[i].AgeTimestamp)
+		rows[i].MemUsage = formatPodMetricMemory(usage, ok, rows[i].AgeTimestamp)
 	}
 }
 
