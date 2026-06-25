@@ -135,10 +135,13 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		_ = subsystem.InformerFactory.Shutdown()
 	}
 
-	// Spill this cluster's maintained stores to disk now that the subsystem is quiescent,
-	// so a re-warm re-paints them fast before its informers re-sync (the heap they hold is
-	// reclaimed by the governor's Cold action right after this returns).
+	// Spill this cluster's stores to disk now that the subsystem is quiescent, so a re-warm
+	// re-paints them fast before its informers re-sync (the heap they hold is reclaimed by the
+	// governor's Cold action right after this returns). The maintained query stores give the
+	// instant warm-paint; the ingest stores (+ their RV) let each reflector resume from a
+	// delta instead of a full re-LIST.
 	a.spillClusterStores(clusterID, subsystem.Registry)
+	a.spillClusterIngestStores(clusterID, subsystem.IngestManager)
 }
 
 // rebuildClusterSubsystem rebuilds the cluster clients and refresh subsystem

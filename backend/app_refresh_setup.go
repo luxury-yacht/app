@@ -200,6 +200,9 @@ func (a *App) buildRefreshSubsystemForSelection(
 	// may be stale; they are reconciled once the subsystem syncs (the start paths call
 	// ReconcileMaintainedStores after Manager.Start returns).
 	a.restoreClusterStores(clusterMeta.ID, subsystem.Registry)
+	// Restore the ingest stores full + RV-stamped too, so each reflector resumes its watch
+	// from the persisted resourceVersion (a delta) instead of a full re-LIST when it starts.
+	a.restoreClusterIngestStores(clusterMeta.ID, subsystem.IngestManager)
 	return subsystem, nil
 }
 

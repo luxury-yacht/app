@@ -75,6 +75,27 @@ func TestAppClusterSpillDirIsPerClusterAndStable(t *testing.T) {
 	require.NotEqual(t, d1a, d2, "per-cluster isolation")
 }
 
+// TestClusterIngestSpillDir proves the ingest spill lives in a per-cluster subdir of the
+// maintained-store spill dir, so the format-version guard (which clears the spill root)
+// covers both, and one cluster's ingest spill never collides with another's.
+func TestClusterIngestSpillDir(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.spillRoot = t.TempDir()
+
+	base1, err := app.clusterSpillDir("cluster-1")
+	require.NoError(t, err)
+	ing1, err := app.clusterIngestSpillDir("cluster-1")
+	require.NoError(t, err)
+	ing1b, err := app.clusterIngestSpillDir("cluster-1")
+	require.NoError(t, err)
+	ing2, err := app.clusterIngestSpillDir("cluster-2")
+	require.NoError(t, err)
+
+	require.Equal(t, filepath.Join(base1, "ingest"), ing1, "ingest spill is a subdir of the cluster spill dir")
+	require.Equal(t, ing1, ing1b, "stable across calls")
+	require.NotEqual(t, ing1, ing2, "per-cluster isolation")
+}
+
 // TestAppResetSpillRootClearsLastSession proves the unconditional clear primitive removes
 // the spill files (used by the format-gated reset on an incompatible/missing marker).
 func TestAppResetSpillRootClearsLastSession(t *testing.T) {

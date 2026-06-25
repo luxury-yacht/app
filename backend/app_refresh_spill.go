@@ -9,6 +9,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 )
 
 // app_refresh_spill.go wires the querypage maintained-store spill into the governor's
@@ -41,6 +42,17 @@ func (a *App) clusterSpillDir(clusterID string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, hashClusterID(clusterID)), nil
+}
+
+// clusterIngestSpillDir is the per-cluster directory for the ingest stores' Bundle spill — a
+// subdir of clusterSpillDir, so the stage-2 format-version guard (which clears the whole spill
+// root on an app upgrade) covers it too, keeping the maintained and ingest spills in lockstep.
+func (a *App) clusterIngestSpillDir(clusterID string) (string, error) {
+	dir, err := a.clusterSpillDir(clusterID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "ingest"), nil
 }
 
 // hashClusterID renders a stable, filesystem-safe directory name for a clusterID.
@@ -136,4 +148,35 @@ func (a *App) restoreClusterStores(clusterID string, reg *domain.Registry) {
 	if err := reg.RestoreMaintainedStores(dir); err != nil && a.logger != nil {
 		a.logger.Warn(fmt.Sprintf("restore maintained stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
+}
+
+// spillClusterIngestStores flushes a cluster's ingest stores (the projected Bundles + their
+// per-GVR resourceVersion) on Cold, so a re-warm can resume each watch from the persisted RV
+// (delta) instead of a full re-LIST. Best-effort: a failure just means that kind full-syncs.
+func (a *App) spillClusterIngestStores(clusterID string, im *ingest.IngestManager) {
+	if a == nil || im == nil {
+		return
+	}
+	dir, err := a.clusterIngestSpillDir(clusterID)
+	if err != nil {
+		return
+	}
+	if err := im.SpillStores(dir); err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("spill ingest stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	}
+}
+
+// restoreClusterIngestStores restores a cluster's ingest stores from disk before its reflectors
+// start, setting each kind's resume RV so Start resumes the watch from it. Best-effort: a
+// missing/corrupt spill leaves that kind to full-sync (no regression). Must be called before
+// the manager starts.
+func (a *App) restoreClusterIngestStores(clusterID string, im *ingest.IngestManager) {
+	if a == nil || im == nil {
+		return
+	}
+	dir, err := a.clusterIngestSpillDir(clusterID)
+	if err != nil {
+		return
+	}
+	im.RestoreStores(dir)
 }
