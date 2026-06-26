@@ -12,23 +12,35 @@ package system
 
 import (
 	"context"
-	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+type ingestHubFactory interface {
+	Start(context.Context) error
+	HasSynced(context.Context) bool
+	ResourcesSettled([]string) bool
+	Shutdown() error
+}
+
+type ingestHubManager interface {
+	Start(context.Context)
+	Stop()
+	StoreFor(schema.GroupVersionResource) *ingest.ProjectingStore
+	HasSyncedFor(schema.GroupVersionResource) bool
+}
 
 // ingestInformerHub adapts a *informer.Factory plus a *ingest.IngestManager to the
 // refresh.InformerHub interface. The factory remains the readiness source for every
 // uncut kind; the ingest manager is the readiness source for the cut kinds (whose
 // informers the factory no longer registers).
 type ingestInformerHub struct {
-	factory *informer.Factory
-	ingest  *ingest.IngestManager
+	factory ingestHubFactory
+	ingest  ingestHubManager
 
 	// ingestKeys is the set of canonical resource keys (permissions.ResourceKey
 	// format) the ingest manager owns, so ResourcesSettled routes each requested key
@@ -38,7 +50,7 @@ type ingestInformerHub struct {
 
 // newIngestInformerHub builds the composite hub. ingestManager may be nil, in which
 // case the hub is a thin pass-through to the factory (no cut kinds wired).
-func newIngestInformerHub(factory *informer.Factory, ingestManager *ingest.IngestManager) *ingestInformerHub {
+func newIngestInformerHub(factory ingestHubFactory, ingestManager ingestHubManager) *ingestInformerHub {
 	keys := make(map[string]struct{})
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
 		keys[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = struct{}{}
@@ -48,51 +60,30 @@ func newIngestInformerHub(factory *informer.Factory, ingestManager *ingest.Inges
 
 var _ refresh.InformerHub = (*ingestInformerHub)(nil)
 
-// Start starts the factory (blocking on its sync gate) and then the ingest manager,
-// blocking until every ingest store has completed its initial relist — so the
-// composite reports synced only when both sources are ready, the precondition for the
-// cut domains serving from populated stores.
+// Start launches ingest-owned reflectors before waiting on the factory sync gate,
+// so cut-kind relists warm in parallel with the remaining shared informers. It
+// does not wait for every ingest-owned kind: domains that read cut resources
+// declare those keys and wait through ResourcesSettled, while global manager
+// startup and metrics polling match the factory-scoped startup gate.
 func (h *ingestInformerHub) Start(ctx context.Context) error {
+	if h.ingest != nil {
+		h.ingest.Start(ctx)
+	}
 	if err := h.factory.Start(ctx); err != nil {
+		if h.ingest != nil {
+			h.ingest.Stop()
+		}
 		return err
 	}
-	if h.ingest == nil {
-		return nil
-	}
-	h.ingest.Start(ctx)
-	return waitForIngestSynced(ctx, h.ingest)
+	return nil
 }
 
-// waitForIngestSynced blocks until the ingest manager reports HasSynced or ctx ends.
-// It polls on the same cadence the factory's settle loop uses; the ingest reflectors
-// converge in the same order of magnitude as the typed informers they replace.
-func waitForIngestSynced(ctx context.Context, mgr *ingest.IngestManager) error {
-	if mgr.HasSynced() {
-		return nil
-	}
-	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if mgr.HasSynced() {
-				return nil
-			}
-		}
-	}
-}
-
-// HasSynced reports synced only when both the factory and the ingest manager are.
+// HasSynced reports the global manager readiness gate. Ingest-owned resources are
+// intentionally excluded here; callers that need them must use ResourcesSettled
+// with concrete resource keys so one slow unrelated cut kind does not hold global
+// refresh health or metrics polling.
 func (h *ingestInformerHub) HasSynced(ctx context.Context) bool {
-	if !h.factory.HasSynced(ctx) {
-		return false
-	}
-	if h.ingest == nil {
-		return true
-	}
-	return h.ingest.HasSynced()
+	return h.factory.HasSynced(ctx)
 }
 
 // ResourcesSettled routes each requested key to its readiness source: ingest-owned

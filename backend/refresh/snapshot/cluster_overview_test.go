@@ -501,6 +501,42 @@ func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
 	require.Empty(t, payload.Overview.RecentEvents)
 }
 
+func TestClusterOverviewBuilderWaitsForRequiredIngestStores(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", ResourceVersion: "20"}}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a", ResourceVersion: "10"}}
+	source := newFakePodAggregateSource(nil, pod).withNodes(ClusterMeta{}, "", node).withPodSynced(false)
+
+	builder := &ClusterOverviewBuilder{
+		ingest:             source,
+		namespaceLister:    testsupport.NewNamespaceLister(t),
+		requiredIngestGVRs: []schema.GroupVersionResource{PodGVR, NodeGVR},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := builder.Build(ctx, "")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestClusterOverviewBuilderProceedsWhenRequiredIngestStoresSynced(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", ResourceVersion: "20"}}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a", ResourceVersion: "10"}}
+
+	builder := &ClusterOverviewBuilder{
+		ingest:             newFakePodAggregateSource(nil, pod).withNodes(ClusterMeta{}, "", node),
+		namespaceLister:    testsupport.NewNamespaceLister(t),
+		requiredIngestGVRs: []schema.GroupVersionResource{PodGVR, NodeGVR},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, 1, payload.Overview.TotalNodes)
+	require.Equal(t, 1, payload.Overview.TotalPods)
+}
+
 func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *testing.T) {
 	now := time.Now()
 

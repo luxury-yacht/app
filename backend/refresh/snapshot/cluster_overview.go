@@ -56,11 +56,11 @@ type clusterOverviewIngestSource interface {
 }
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
-// Pods and the four counted workload kinds (Deployment/StatefulSet/DaemonSet/CronJob) are
-// cut to the ingest path: the per-pod aggregation reads the projected PodAggregate rows and
-// the workload counts read the projected catalog rows, both from the ingest source, so none
-// of those informers is instantiated. Node, namespace, and event caches still gate this
-// domain's build.
+// Pods, nodes, and the four counted workload kinds (Deployment/StatefulSet/DaemonSet/CronJob)
+// are cut to the ingest path: the per-pod aggregation reads the projected PodAggregate rows,
+// the node summary reads projected node facts, and the workload counts read projected catalog
+// rows from the ingest source, so none of those informers is instantiated. Required ingest
+// stores and the namespace informer gate this domain's build.
 type ClusterOverviewBuilder struct {
 	client          kubernetes.Interface
 	ingest          clusterOverviewIngestSource
@@ -76,6 +76,8 @@ type ClusterOverviewBuilder struct {
 	hasSyncedFns   []cache.InformerSynced
 	eventHasSynced cache.InformerSynced
 	synced         atomic.Uint32
+
+	requiredIngestGVRs []schema.GroupVersionResource
 }
 
 // workloadIngestCount returns the number of projected catalog rows in the cut workload
@@ -229,7 +231,8 @@ func RegisterClusterOverviewDomain(
 		hasSyncedFns: []cache.InformerSynced{
 			namespaceInformer.Informer().HasSynced,
 		},
-		eventHasSynced: eventInformer.Informer().HasSynced,
+		eventHasSynced:     eventInformer.Informer().HasSynced,
+		requiredIngestGVRs: []schema.GroupVersionResource{PodGVR, NodeGVR},
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -678,7 +681,7 @@ func buildClusterOverviewSnapshot(
 }
 
 func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error {
-	if len(b.hasSyncedFns) == 0 {
+	if len(b.hasSyncedFns) == 0 && len(b.requiredIngestGVRs) == 0 {
 		return nil
 	}
 	if b.synced.Load() == 1 {
@@ -688,17 +691,7 @@ func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error 
 	defer ticker.Stop()
 
 	for {
-		allSynced := true
-		for _, fn := range b.hasSyncedFns {
-			if fn == nil {
-				continue
-			}
-			if !fn() {
-				allSynced = false
-				break
-			}
-		}
-		if allSynced {
+		if b.requiredSourcesSynced() {
 			b.synced.Store(1)
 			return nil
 		}
@@ -708,6 +701,23 @@ func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error 
 		case <-ticker.C:
 		}
 	}
+}
+
+func (b *ClusterOverviewBuilder) requiredSourcesSynced() bool {
+	for _, fn := range b.hasSyncedFns {
+		if fn == nil {
+			continue
+		}
+		if !fn() {
+			return false
+		}
+	}
+	for _, gvr := range b.requiredIngestGVRs {
+		if b.ingest == nil || !b.ingest.HasSyncedFor(gvr) {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *ClusterOverviewBuilder) serverVersion(_ context.Context) string {

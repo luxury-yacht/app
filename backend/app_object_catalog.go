@@ -11,6 +11,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
@@ -265,10 +266,7 @@ func (a *App) stopObjectCatalog() {
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.done == nil {
-			continue
-		}
-		<-entry.done
+		a.waitForObjectCatalogDone(entry)
 	}
 
 	if a.telemetryRecorder != nil {
@@ -331,8 +329,26 @@ func (a *App) stopObjectCatalogForCluster(clusterID string) {
 	if entry.cancel != nil {
 		entry.cancel()
 	}
-	if entry.done != nil {
+	a.waitForObjectCatalogDone(entry)
+}
+
+func (a *App) waitForObjectCatalogDone(entry *objectCatalogEntry) {
+	if entry == nil || entry.done == nil {
+		return
+	}
+	timeout := config.RefreshShutdownTimeout
+	if timeout <= 0 {
 		<-entry.done
+		return
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-entry.done:
+	case <-timer.C:
+		if a != nil && a.logger != nil {
+			a.logger.Warn("Timed out waiting for object catalog shutdown", logsources.ObjectCatalog, entry.meta.ID, entry.meta.Name)
+		}
 	}
 }
 

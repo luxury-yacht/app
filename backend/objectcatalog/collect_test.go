@@ -105,7 +105,8 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 // a cut GVR, so the catalog ingest collect path can be exercised without a real
 // reflector.
 type fakeCatalogIngestSource struct {
-	rows map[schema.GroupVersionResource][]interface{}
+	rows   map[schema.GroupVersionResource][]interface{}
+	synced map[schema.GroupVersionResource]bool
 }
 
 func (f *fakeCatalogIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
@@ -124,7 +125,58 @@ func (f *fakeCatalogIngestSource) RegisterDynamicCatalogReflector(schema.GroupVe
 
 func (f *fakeCatalogIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
 
-func (f *fakeCatalogIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
+func (f *fakeCatalogIngestSource) HasSyncedFor(gvr schema.GroupVersionResource) bool {
+	if f.synced == nil {
+		return true
+	}
+	return f.synced[gvr]
+}
+
+func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
+	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	svc := NewService(Dependencies{Now: func() time.Time { return now }}, nil)
+	cmGVR := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	secGVR := schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+	cmDesc := resourceDescriptor{GVR: cmGVR, Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true, Scope: ScopeNamespace}
+	secDesc := resourceDescriptor{GVR: secGVR, Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true, Scope: ScopeNamespace}
+	svc.resources = map[string]resourceDescriptor{
+		cmGVR.String():  cmDesc,
+		secGVR.String(): secDesc,
+	}
+	sec := Summary{Kind: "Secret", Version: "v1", Resource: "secrets", Namespace: "default", Name: "sec-a", Scope: ScopeNamespace}
+	oldCM := Summary{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "cm-old", Scope: ScopeNamespace}
+	svc.items = map[string]Summary{
+		catalogKey(secDesc, sec.Namespace, sec.Name):    sec,
+		catalogKey(cmDesc, oldCM.Namespace, oldCM.Name): oldCM,
+	}
+	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
+
+	sink := ingestCatalogSink{service: svc, gvr: cmGVR}
+	bulk, ok := interface{}(sink).(ingest.ReplaceSink)
+	if !ok {
+		t.Fatal("ingest catalog sink must support bulk replace")
+	}
+	newCM := Summary{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "cm-new", Scope: ScopeNamespace}
+	bulk.Replace([]interface{}{newCM})
+
+	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-old")]; ok {
+		t.Fatal("old ConfigMap summary survived bulk replace")
+	}
+	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; !ok {
+		t.Fatal("new ConfigMap summary missing after bulk replace")
+	}
+	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
+		t.Fatal("Secret summary was removed by ConfigMap bulk replace")
+	}
+
+	bulk.Replace(nil)
+	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; ok {
+		t.Fatal("ConfigMap summary survived empty bulk replace")
+	}
+	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
+		t.Fatal("Secret summary was removed by empty ConfigMap bulk replace")
+	}
+}
 
 // TestCollectViaIngestServesCutKindSummaries proves a cut kind's collect is served
 // from the ingest manager's CatalogRows (projected at intake), scoped to the
@@ -202,6 +254,32 @@ func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 	uncutDesc := builtinDescriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", false)
 	if _, handled, _ := svc.collectViaIngest(0, uncutDesc, nil, nil); handled {
 		t.Fatal("uncut kind must not be handled by ingest")
+	}
+}
+
+func TestCollectViaIngestReportsUnsyncedStaticCutKind(t *testing.T) {
+	var cutGVR schema.GroupVersionResource
+	for gvr := range catalogIngestOwnedGVRs {
+		if gvr.Resource == "resourcequotas" {
+			cutGVR = gvr
+		}
+	}
+	cutDesc := builtinDescriptor(cutGVR.Group, cutGVR.Version, "ResourceQuota", cutGVR.Resource, true)
+	source := &fakeCatalogIngestSource{
+		rows:   map[schema.GroupVersionResource][]interface{}{cutGVR: {}},
+		synced: map[schema.GroupVersionResource]bool{cutGVR: false},
+	}
+	svc := NewService(Dependencies{IngestSource: source}, nil)
+
+	summaries, handled, err := svc.collectViaIngest(0, cutDesc, nil, nil)
+	if !handled {
+		t.Fatal("unsynced static cut kind must still be handled by ingest")
+	}
+	if err == nil {
+		t.Fatal("unsynced static cut kind must report an incomplete collect")
+	}
+	if len(summaries) != 0 {
+		t.Fatalf("unsynced static cut kind returned %d summaries, want 0", len(summaries))
 	}
 }
 

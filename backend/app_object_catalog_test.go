@@ -8,6 +8,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -53,6 +54,36 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	summary := app.telemetryRecorder.SnapshotSummary()
 	if summary.Catalog != nil && summary.Catalog.Enabled {
 		t.Fatalf("expected catalog telemetry to be disabled")
+	}
+}
+
+func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+
+	cancelCalled := make(chan struct{})
+	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+		cancel:  func() { close(cancelCalled) },
+		done:    make(chan struct{}),
+	})
+
+	returned := make(chan struct{})
+	go func() {
+		app.stopObjectCatalog()
+		close(returned)
+	}()
+
+	select {
+	case <-cancelCalled:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected catalog stop to cancel the running catalog")
+	}
+
+	select {
+	case <-returned:
+	case <-time.After(config.RefreshShutdownTimeout + 500*time.Millisecond):
+		t.Fatal("stopObjectCatalog blocked waiting for catalog done")
 	}
 }
 

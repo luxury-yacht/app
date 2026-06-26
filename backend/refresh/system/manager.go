@@ -168,8 +168,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// CONSERVATIVE: skip ONLY on a confirmed denial (allowed==false, no error). On an
 	// SSAR error, run the reflector anyway — the per-kind sync-deadline degrade backstops
 	// a true failure, so a transient permission blip never wrongly excludes a kind with
-	// no retry. The factory's permission cache is primed by factory.Start, which the hub
-	// runs before ingest.Start, so these checks hit a warm cache.
+	// no retry. Permission preflight below primes the same checker before Start, and
+	// cache misses still run the normal SubjectAccessReview path.
 	ingestManager.SetPermissionFilter(ingestPermissionFilter(
 		informerFactory.CanListResource, informerFactory.CanWatchResource))
 

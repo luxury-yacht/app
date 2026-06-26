@@ -17,6 +17,9 @@
 package objectcatalog
 
 import (
+	"fmt"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -64,13 +67,12 @@ func isIngestOwned(gr schema.GroupResource) bool {
 // CatalogRows (Summaries projected at intake) instead of a shared/dynamic lister.
 // It returns handled=false (so the caller falls through to the next source) only
 // when the kind is not ingest-owned or no ingest source is configured. For a cut
-// kind it ALWAYS handles the collect — even before the ingest store has synced (it
-// returns whatever rows have landed so far) — so the catalog never falls through to
-// the shared factory for a cut kind, which would lazily create an unstarted informer
-// for a GVR the factory no longer registers. The catalog's periodic resync plus the
-// incremental Catalog-half sink converge it once the reflector finishes its relist.
-// Summaries for a namespaced kind are filtered to the requested namespaces, matching
-// the lister path's per-namespace scope.
+// kind it ALWAYS handles the collect, so the catalog never falls through to the
+// shared factory for a GVR the factory no longer registers. Static cut kinds
+// report an incomplete collect until their own ingest store has synced/settled;
+// dynamic cuts still fall through to LIST until their on-demand reflector syncs.
+// Summaries for a namespaced kind are filtered to the requested namespaces,
+// matching the lister path's per-namespace scope.
 func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
 	source := s.deps.IngestSource
 	if source == nil {
@@ -85,10 +87,13 @@ func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespace
 	// A dynamic (on-demand promoted) kind serves from the ingest store only once its
 	// reflector's initial relist has landed; until then return handled=false so the caller
 	// falls through to LIST (no empty flash), exactly as the former promotion path served
-	// from the informer only after HasSynced. Static cut kinds always handle (their store is
-	// sync-gated by the composite hub before the catalog serves).
+	// from the informer only after HasSynced. Static cut kinds have no fallback informer,
+	// so they remain handled but make the sync incomplete until their own store settles.
 	if dynamicCut && !staticCut && !source.HasSyncedFor(gvr) {
 		return nil, false, nil
+	}
+	if staticCut && !source.HasSyncedFor(gvr) {
+		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
 	rows := source.CatalogRows(gvr)
 	allowed := requestedNamespaceSet(desc, namespaces)
@@ -165,6 +170,64 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 	s.broadcastStreaming(true)
 }
 
+func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
+	if !s.syncMu.TryLock() {
+		return
+	}
+	defer s.syncMu.Unlock()
+	if s.syncInProgress.Load() {
+		return
+	}
+
+	desc, ok := s.resolveIngestDescriptor(gvr)
+	if !ok {
+		return
+	}
+	now := s.now()
+
+	s.mu.Lock()
+	if s.catalogIndex.items == nil {
+		s.catalogIndex.items = make(map[string]Summary)
+	}
+	if s.catalogIndex.lastSeen == nil {
+		s.catalogIndex.lastSeen = make(map[string]time.Time)
+	}
+	changed := false
+	for key, existing := range s.catalogIndex.items {
+		if !summaryMatchesDescriptor(existing, desc) {
+			continue
+		}
+		delete(s.catalogIndex.items, key)
+		delete(s.catalogIndex.lastSeen, key)
+		changed = true
+	}
+	for _, summary := range rows {
+		key := catalogKey(desc, summary.Namespace, summary.Name)
+		s.catalogIndex.items[key] = summary
+		s.catalogIndex.lastSeen[key] = now
+		changed = true
+	}
+	if changed {
+		s.catalogIndex.rebuildLookupIndexes()
+	}
+	itemsCopy := cloneSummaryMap(s.items)
+	s.mu.Unlock()
+
+	if !changed {
+		return
+	}
+	descriptors := s.Descriptors()
+	s.rebuildCacheFromItems(itemsCopy, descriptors)
+	s.broadcastStreaming(true)
+}
+
+func summaryMatchesDescriptor(summary Summary, desc resourceDescriptor) bool {
+	return summary.Group == desc.Group &&
+		summary.Version == desc.Version &&
+		summary.Resource == desc.Resource &&
+		summary.Kind == desc.Kind
+}
+
 // resolveIngestDescriptor resolves a cut kind's GVR to its catalog descriptor from
 // the index, so an incremental sink update keys its summary the same way the collect
 // path does.
@@ -201,4 +264,16 @@ func (s ingestCatalogSink) Delete(row interface{}) {
 		return
 	}
 	s.service.applyIngestCatalogSummary(s.gvr, summary, true)
+}
+
+func (s ingestCatalogSink) Replace(rows []interface{}) {
+	summaries := make([]Summary, 0, len(rows))
+	for _, row := range rows {
+		summary, ok := row.(Summary)
+		if !ok {
+			continue
+		}
+		summaries = append(summaries, summary)
+	}
+	s.service.replaceIngestCatalogSummaries(s.gvr, summaries)
 }

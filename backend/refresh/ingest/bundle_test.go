@@ -180,6 +180,51 @@ func TestProjectingStoreSinkReceivesReplaceAsUpserts(t *testing.T) {
 	}
 }
 
+type recordingReplaceSink struct {
+	recordingSink
+	mu       sync.Mutex
+	replaces [][]interface{}
+}
+
+func (s *recordingReplaceSink) Replace(rows []interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := append([]interface{}(nil), rows...)
+	s.replaces = append(s.replaces, copied)
+}
+
+func (s *recordingReplaceSink) replaceSnapshot() [][]interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([][]interface{}, len(s.replaces))
+	for i, rows := range s.replaces {
+		out[i] = append([]interface{}(nil), rows...)
+	}
+	return out
+}
+
+func TestProjectingStoreReplaceUsesBulkSinkWhenAvailable(t *testing.T) {
+	sink := &recordingReplaceSink{}
+	store := NewProjectingStore(bundleProject(false, false))
+	store.AddSink(sink)
+
+	if err := store.Replace([]interface{}{cm("default", "a"), cm("default", "b")}, "1"); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+
+	replaces := sink.replaceSnapshot()
+	if len(replaces) != 1 {
+		t.Fatalf("bulk replaces after Replace = %d, want 1", len(replaces))
+	}
+	if len(replaces[0]) != 2 {
+		t.Fatalf("bulk replace rows = %d, want 2", len(replaces[0]))
+	}
+	upserts, _ := sink.snapshot()
+	if len(upserts) != 0 {
+		t.Fatalf("incremental upserts after bulk Replace = %d, want 0", len(upserts))
+	}
+}
+
 // TestIngestManagerBuildsBundleAndFeedsSink is the end-to-end proof of the bundle +
 // sink mechanism through the real manager: a registered catalog projector makes
 // CatalogRows populate alongside TableRows, and a registered sink is fed the Table

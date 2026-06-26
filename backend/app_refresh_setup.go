@@ -220,10 +220,10 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
 				return
 			}
-			// Start blocks until the hub has synced, so the live caches are populated:
-			// reconcile away any row warm-painted from a stale spill whose object was deleted
-			// while the app was closed (ingest-fed stores already reconciled via their
-			// reflector's initial Replace; this covers the shared-informer-fed kinds).
+			// Start blocks until the factory-backed informer caches have synced. Reconcile
+			// away any row warm-painted from a stale spill whose object was deleted while the
+			// app was closed; ingest-fed stores either have no reconcile source or reconcile
+			// through their reflector's initial Replace.
 			if registry != nil {
 				registry.ReconcileMaintainedStores()
 			}

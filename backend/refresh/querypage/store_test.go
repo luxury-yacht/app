@@ -30,6 +30,34 @@ func podSchema() Schema[podRow] {
 	}
 }
 
+func TestReplaceWhereReplacesOnlyOwnedRows(t *testing.T) {
+	s := NewStore(podSchema())
+	s.Upsert(podRow{uid: "deploy-old", namespace: "default", name: "deploy-old", status: "Deployment", cpu: 1})
+	s.Upsert(podRow{uid: "service-keep", namespace: "default", name: "service-keep", status: "Service", cpu: 2})
+
+	s.ReplaceWhere([]podRow{
+		{uid: "deploy-new", namespace: "default", name: "deploy-new", status: "Deployment", cpu: 3},
+	}, func(row podRow) bool {
+		return row.status == "Deployment"
+	})
+
+	rows := s.Snapshot()
+	sort.Slice(rows, func(i, j int) bool { return rows[i].uid < rows[j].uid })
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, row.uid)
+	}
+	want := []string{"deploy-new", "service-keep"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("rows after ReplaceWhere = %v, want %v", got, want)
+	}
+
+	_, total := s.Scope(map[string][]string{"status": {"Deployment"}}, "")
+	if total != 1 {
+		t.Fatalf("deployment facet total after ReplaceWhere = %d, want 1", total)
+	}
+}
+
 // paginate drives a query through every page via the returned cursors and returns
 // the rows in encounter order. It guards against an infinite loop.
 func paginate(t *testing.T, s *Store[podRow], q Query) []podRow {

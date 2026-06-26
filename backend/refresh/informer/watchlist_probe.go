@@ -27,9 +27,11 @@ import (
 // bookmark, and if not, disables the process-global gate so informers fall back
 // to the safe LIST+WATCH path before the first informer factory reads the gate.
 
-// watchListProbeTimeout bounds how long the capability probe waits for the
-// terminal initial-events-end bookmark before deciding WatchList is unavailable.
-const watchListProbeTimeout = 5 * time.Second
+// watchListProbeTimeout bounds how long startup waits for the terminal
+// initial-events-end bookmark before deciding WatchList is unavailable. A false
+// negative only falls back to LIST+WATCH, so keep this below the user-visible
+// first-load budget.
+const watchListProbeTimeout = time.Second
 
 // watchListEnvVar is the client-go feature-gate environment variable that
 // controls the WatchListClient gate. client-go reads it lazily (cached on first

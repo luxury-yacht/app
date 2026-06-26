@@ -110,3 +110,9 @@ func TestProbeWatchListSupportNilClient(t *testing.T) {
 		t.Fatalf("expected ok=false for a nil client")
 	}
 }
+
+func TestWatchListProbeTimeoutStaysBelowStartupBudget(t *testing.T) {
+	if watchListProbeTimeout > time.Second {
+		t.Fatalf("watchListProbeTimeout = %s, want <= 1s so startup does not block on capability probing", watchListProbeTimeout)
+	}
+}

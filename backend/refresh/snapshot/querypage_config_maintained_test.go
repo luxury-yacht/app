@@ -11,6 +11,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 )
 
@@ -138,6 +140,36 @@ func TestConfigMaintainedStoreMatchesListPath(t *testing.T) {
 		require.ElementsMatch(t, listed, store.rows(ns, available),
 			"maintained store rows must equal the list path for namespace %q", ns)
 	}
+}
+
+func TestConfigMaintainedStoreBulkReplaceScopesSourceKind(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
+	cmDesc := configDescriptor(t, "configmaps")
+	secDesc := configDescriptor(t, "secrets")
+	store := newTypedMaintainedStore(meta, configQuerypageSchema(), configTableQueryAdapter())
+	available := map[string]bool{"ConfigMap": true, "Secret": true}
+
+	sec := secObj("default", "sec-a", "5", map[string][]byte{"t": []byte("x")})
+	secRow, ok := secDesc.StreamRow(meta, sec).(ConfigSummary)
+	require.True(t, ok)
+	store.Sink().Upsert(secRow)
+
+	cmSink, ok := store.bundleSinkFor(cmDesc).(ingest.BundleReplaceSink)
+	require.True(t, ok, "source-scoped maintained sink must support bulk bundle replace")
+	projectCatalog := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, configmap.Identity)
+	cmSink.ReplaceBundles([]ingest.Bundle{{
+		Table:   cmDesc.StreamRow(meta, cmObj("default", "cm-a", "10", map[string]string{"k": "v"})),
+		Catalog: projectCatalog(cmObj("default", "cm-a", "10", map[string]string{"k": "v"})),
+	}})
+
+	rows := store.rows("default", available)
+	require.NotNil(t, findConfigRow(rows, "ConfigMap", "default", "cm-a"))
+	require.NotNil(t, findConfigRow(rows, "Secret", "default", "sec-a"))
+
+	cmSink.ReplaceBundles(nil)
+	rows = store.rows("default", available)
+	require.Nil(t, findConfigRow(rows, "ConfigMap", "default", "cm-a"))
+	require.NotNil(t, findConfigRow(rows, "Secret", "default", "sec-a"))
 }
 
 // TestNamespaceConfigBuilderMaintainedMatchesListPath is the end-to-end cutover

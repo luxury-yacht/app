@@ -66,6 +66,14 @@ type Sink interface {
 	Delete(tableRow interface{})
 }
 
+// ReplaceSink is an optional Sink extension for relist/Replace delivery. A sink that
+// maintains an indexed downstream view can replace the whole source set in one batch
+// instead of receiving N incremental Upserts while the reflector's initial relist is
+// still holding the source store lock.
+type ReplaceSink interface {
+	Replace(rows []interface{})
+}
+
 // BundleSink receives the WHOLE projected Bundle (every half together) as the store
 // mutates: UpsertBundle on Add/Update/Replace, DeleteBundle on eviction. It exists for a
 // consumer that needs more than one half of the SAME object in one delivery — the pod
@@ -76,6 +84,12 @@ type Sink interface {
 type BundleSink interface {
 	UpsertBundle(bundle Bundle)
 	DeleteBundle(bundle Bundle)
+}
+
+// BundleReplaceSink is an optional BundleSink extension for relist/Replace delivery.
+// The rows argument is the complete Bundle set for this store's source after the relist.
+type BundleReplaceSink interface {
+	ReplaceBundles(rows []Bundle)
 }
 
 // ProjectingStore is a cache.Store that holds the PROJECTED row per object
@@ -195,6 +209,16 @@ func (s *ProjectingStore) AddCatalogSink(sink Sink) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.catalogSinks = append(s.catalogSinks, sink)
+	if bulk, ok := sink.(ReplaceSink); ok {
+		rows := make([]interface{}, 0, len(s.rows))
+		for _, row := range s.rows {
+			if cat := catalogHalf(row); cat != nil {
+				rows = append(rows, cat)
+			}
+		}
+		bulk.Replace(rows)
+		return
+	}
 	for _, row := range s.rows {
 		if cat := catalogHalf(row); cat != nil {
 			sink.Upsert(cat)
@@ -531,10 +555,107 @@ func (s *ProjectingStore) feedSinksReplace(prev, next map[string]interface{}) {
 		if _, kept := next[key]; kept {
 			continue
 		}
-		s.emitDelete(stored)
+		s.emitDeleteToIncrementalSinks(stored)
 	}
+	tableRows, catalogRows, bundles := replaceRows(next)
+	s.emitReplaceTableRows(tableRows)
+	s.emitReplaceCatalogRows(catalogRows)
+	s.emitReplaceBundles(bundles)
+}
+
+func (s *ProjectingStore) emitDeleteToIncrementalSinks(projected interface{}) {
+	if len(s.sinks) > 0 {
+		if table := tableHalf(projected); table != nil {
+			for _, sink := range s.sinks {
+				if _, bulk := sink.(ReplaceSink); bulk {
+					continue
+				}
+				sink.Delete(table)
+			}
+		}
+	}
+	if len(s.catalogSinks) > 0 {
+		if cat := catalogHalf(projected); cat != nil {
+			for _, sink := range s.catalogSinks {
+				if _, bulk := sink.(ReplaceSink); bulk {
+					continue
+				}
+				sink.Delete(cat)
+			}
+		}
+	}
+	if len(s.bundleSinks) > 0 {
+		if bundle, ok := projected.(Bundle); ok {
+			for _, sink := range s.bundleSinks {
+				if _, bulk := sink.(BundleReplaceSink); bulk {
+					continue
+				}
+				sink.DeleteBundle(bundle)
+			}
+		}
+	}
+}
+
+func replaceRows(next map[string]interface{}) ([]interface{}, []interface{}, []Bundle) {
+	tableRows := make([]interface{}, 0, len(next))
+	catalogRows := make([]interface{}, 0, len(next))
+	bundles := make([]Bundle, 0, len(next))
 	for _, projected := range next {
-		s.emitUpsert(projected)
+		if table := tableHalf(projected); table != nil {
+			tableRows = append(tableRows, table)
+		}
+		if cat := catalogHalf(projected); cat != nil {
+			catalogRows = append(catalogRows, cat)
+		}
+		if bundle, ok := projected.(Bundle); ok {
+			bundles = append(bundles, bundle)
+		}
+	}
+	return tableRows, catalogRows, bundles
+}
+
+func (s *ProjectingStore) emitReplaceTableRows(rows []interface{}) {
+	if len(s.sinks) == 0 {
+		return
+	}
+	for _, sink := range s.sinks {
+		if bulk, ok := sink.(ReplaceSink); ok {
+			bulk.Replace(rows)
+			continue
+		}
+		for _, row := range rows {
+			sink.Upsert(row)
+		}
+	}
+}
+
+func (s *ProjectingStore) emitReplaceCatalogRows(rows []interface{}) {
+	if len(s.catalogSinks) == 0 {
+		return
+	}
+	for _, sink := range s.catalogSinks {
+		if bulk, ok := sink.(ReplaceSink); ok {
+			bulk.Replace(rows)
+			continue
+		}
+		for _, row := range rows {
+			sink.Upsert(row)
+		}
+	}
+}
+
+func (s *ProjectingStore) emitReplaceBundles(rows []Bundle) {
+	if len(s.bundleSinks) == 0 {
+		return
+	}
+	for _, sink := range s.bundleSinks {
+		if bulk, ok := sink.(BundleReplaceSink); ok {
+			bulk.ReplaceBundles(rows)
+			continue
+		}
+		for _, row := range rows {
+			sink.UpsertBundle(row)
+		}
 	}
 }
 

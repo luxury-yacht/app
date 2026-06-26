@@ -21,6 +21,7 @@ import (
 type fakePodAggregateSource struct {
 	aggregates      []streamrows.PodAggregate
 	resourceVersion string
+	podSynced       *bool
 	workloadCatalog map[schema.GroupVersionResource][]interface{}
 	workloadSynced  map[schema.GroupVersionResource]bool
 	// nodeBundles are the cut node kind's projected bundles (Table=NodeSummary own-row,
@@ -79,12 +80,20 @@ func (s fakePodAggregateSource) CatalogRows(gvr schema.GroupVersionResource) []i
 func (s fakePodAggregateSource) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 	switch gvr {
 	case PodGVR:
+		if s.podSynced != nil {
+			return *s.podSynced
+		}
 		return true
 	case NodeGVR:
 		return s.nodeSynced
 	default:
 		return s.workloadSynced[gvr]
 	}
+}
+
+func (s fakePodAggregateSource) withPodSynced(synced bool) fakePodAggregateSource {
+	s.podSynced = &synced
+	return s
 }
 
 // AddSink lets this source stand in for the ingest manager wherever a

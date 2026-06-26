@@ -601,12 +601,11 @@ func feedMaintainedFromIngest[T any](
 	if ingestManager == nil {
 		return
 	}
-	sink := maintained.BundleSink()
 	for _, d := range kindregistry.StreamDescriptorsForDomain(domainName) {
 		if !streamDescriptorIngestOwned(d) {
 			continue
 		}
-		ingestManager.AddBundleSink(d.GVR(), sink)
+		ingestManager.AddBundleSink(d.GVR(), maintained.bundleSinkFor(d))
 	}
 }
 
@@ -619,6 +618,17 @@ func feedMaintainedFromIngest[T any](
 // version monotonically so refetch identity changes whenever the served set changes.
 func (m *typedMaintainedStore[T]) BundleSink() ingest.BundleSink {
 	return maintainedStoreSink[T]{store: m}
+}
+
+// bundleSinkFor returns the production ingest sink for one descriptor source. Its
+// bulk ReplaceBundles path sweeps only rows whose adapter kind belongs to that
+// descriptor, so one GVR relist cannot remove another kind's rows in a multi-kind
+// maintained store.
+func (m *typedMaintainedStore[T]) bundleSinkFor(desc streamspec.Descriptor) ingest.BundleSink {
+	return maintainedStoreSink[T]{
+		store: m,
+		owns:  func(row T) bool { return m.adapter.Kind(row) == desc.Kind },
+	}
 }
 
 // Sink returns the Table-half ingest.Sink view of the same maintained-store feed. It is the
@@ -635,6 +645,7 @@ func (m *typedMaintainedStore[T]) Sink() ingest.Sink {
 // (it cannot belong to this store), mirroring the type guard in ingest.
 type maintainedStoreSink[T any] struct {
 	store *typedMaintainedStore[T]
+	owns  func(T) bool
 }
 
 func (s maintainedStoreSink[T]) Upsert(tableRow interface{}) {
@@ -655,6 +666,18 @@ func (s maintainedStoreSink[T]) Delete(tableRow interface{}) {
 	s.store.bumpSinkVersion()
 }
 
+func (s maintainedStoreSink[T]) Replace(tableRows []interface{}) {
+	rows := make([]T, 0, len(tableRows))
+	for _, tableRow := range tableRows {
+		row, ok := tableRow.(T)
+		if !ok {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	s.replaceRows(rows)
+}
+
 // UpsertBundle upserts the bundle's Table half by the adapter key. The Table half is present
 // at upsert (it is dropped from the STORED bundle only AFTER fanning to sinks), so a missing
 // or wrong-typed Table half means this bundle does not belong to this store and is ignored.
@@ -665,6 +688,18 @@ func (s maintainedStoreSink[T]) UpsertBundle(bundle ingest.Bundle) {
 	}
 	s.store.store.Upsert(row)
 	s.store.bumpSinkVersion()
+}
+
+func (s maintainedStoreSink[T]) ReplaceBundles(bundles []ingest.Bundle) {
+	rows := make([]T, 0, len(bundles))
+	for _, bundle := range bundles {
+		row, ok := bundle.Table.(T)
+		if !ok {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	s.replaceRows(rows)
 }
 
 // DeleteBundle evicts by the key derived from the bundle's RETAINED Catalog half. A bundle
@@ -678,6 +713,15 @@ func (s maintainedStoreSink[T]) DeleteBundle(bundle ingest.Bundle) {
 		return
 	}
 	s.store.store.Delete(keyFromCatalog(summary))
+	s.store.bumpSinkVersion()
+}
+
+func (s maintainedStoreSink[T]) replaceRows(rows []T) {
+	owns := s.owns
+	if owns == nil {
+		owns = func(T) bool { return true }
+	}
+	s.store.store.ReplaceWhere(rows, owns)
 	s.store.bumpSinkVersion()
 }
 

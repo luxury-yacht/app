@@ -160,6 +160,10 @@ func (s *Store[R]) Upsert(row R) {
 	if s.readOnly {
 		return
 	}
+	s.upsertLocked(row)
+}
+
+func (s *Store[R]) upsertLocked(row R) {
 	uid := s.schema.UID(row)
 	if old, ok := s.rows.get(uid); ok {
 		s.deindex(uid, old)
@@ -174,6 +178,52 @@ func (s *Store[R]) Upsert(row R) {
 		s.tri.update(rowID, mv.searchText)
 	}
 	s.reindex(uid, row)
+}
+
+// ReplaceWhere replaces the rows owned by one source with rows from that source,
+// preserving rows owned by other sources. Passing owns=nil replaces the whole
+// store. It is the batch counterpart to Upsert/Delete for reflector relists:
+// rebuild derived indexes/facets once from the post-relist row set instead of
+// issuing N incremental updates through downstream sinks.
+func (s *Store[R]) ReplaceWhere(rows []R, owns func(R) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.readOnly {
+		return
+	}
+	next := make([]R, 0, len(rows)+s.rows.len())
+	if owns != nil {
+		s.rows.forEach(func(_ string, row R) bool {
+			if !owns(row) {
+				next = append(next, row)
+			}
+			return true
+		})
+	}
+	next = append(next, rows...)
+	s.replaceAllLocked(next)
+}
+
+func (s *Store[R]) replaceAllLocked(rows []R) {
+	s.rows = newColumnStore[R](newRowCodec[R]())
+	s.match = make(map[uint32]matchValues, len(rows))
+	s.idx = make(map[string]*sortIndex, len(s.schema.SortKeys))
+	for name := range s.schema.SortKeys {
+		s.idx[name] = &sortIndex{
+			asc:  btree.NewG[indexEntry](32, ascLess),
+			desc: btree.NewG[indexEntry](32, descLess),
+		}
+	}
+	s.facets = make(map[string]map[string]int, len(s.schema.Facets))
+	for name := range s.schema.Facets {
+		s.facets[name] = make(map[string]int)
+	}
+	if s.tri != nil {
+		s.tri = newTrigramIndex(len(rows))
+	}
+	for _, row := range rows {
+		s.upsertLocked(row)
+	}
 }
 
 // Delete removes a row by UID, maintaining every index + facet incrementally. A read-only
