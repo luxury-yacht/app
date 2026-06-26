@@ -18,6 +18,15 @@ const (
 	MessageTypeDeleted   = streammux.MessageTypeDeleted
 )
 
+// Source is the doorbell clock taxonomy, aliased from the envelope layer so a
+// domain's authored SourceClocks reference one vocabulary across both packages.
+type Source = streammux.Source
+
+const (
+	SourceObject = streammux.SourceObject
+	SourceMetric = streammux.SourceMetric
+)
+
 // DropReason captures why a subscription was terminated.
 type DropReason = streammux.DropReason
 

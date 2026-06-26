@@ -20,21 +20,6 @@ import (
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
-// Source names a clock that can advance a domain's published rows, and is the
-// canonical taxonomy for the A1 refetch-signal `source` field. A domain's
-// SourceClocks is the single authoring point for which clocks affect it; the
-// per-domain metric/event/catalog booleans elsewhere derive from this list.
-type Source string
-
-const (
-	// SourceObject advances when object-backed row membership, fields, sort
-	// keys, filters, or facts can change. Every resource-stream domain has it.
-	SourceObject Source = "object"
-	// SourceMetric advances when metric-backed values or metric sort keys can
-	// change (the cpu/memory overlay domains).
-	SourceMetric Source = "metric"
-)
-
 // ProjectionDescriptor documents the row projection contract for a resource
 // stream domain. The descriptor is intentionally metadata-only; stream
 // registration stays behavior-specific so Kubernetes edge cases remain visible.

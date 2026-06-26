@@ -477,6 +477,10 @@ func (s *session) writeLoop(ctx context.Context) {
 }
 
 func (s *session) writeMessage(msg ServerMessage) error {
+	// Populate the public {source, signal} doorbell pair from the internal
+	// MessageType at the one send chokepoint, so live and resume-replayed frames
+	// carry it identically.
+	msg = withSignalEnvelope(msg)
 	if err := s.conn.SetWriteDeadline(time.Now().Add(config.StreamMuxWriteTimeout)); err != nil {
 		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), logsources.StreamMux)
 	}

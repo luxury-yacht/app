@@ -29,6 +29,30 @@ const (
 	DropReasonClosed       DropReason = "closed"
 )
 
+// Source names the clock whose advance produced a doorbell signal, and is the
+// canonical taxonomy referenced by a refresh domain's authored sourceClocks
+// (see resourcestream.ProjectionDescriptor.SourceClocks, which aliases this
+// type). object/metric are used today; event/catalog join as the events and
+// catalog streams fold onto this WS.
+type Source string
+
+const (
+	SourceObject Source = "object"
+	SourceMetric Source = "metric"
+)
+
+// Signal is the public outcome a doorbell frame carries, formalizing the
+// internal MessageType: "changed" means refetch if this source affects the
+// query, "reset" means the resume position was lost so re-snapshot, and "error"
+// feeds the terminal-error/diagnostics path.
+type Signal string
+
+const (
+	SignalChanged Signal = "changed"
+	SignalReset   Signal = "reset"
+	SignalError   Signal = "error"
+)
+
 // ClientMessage is the request envelope sent from websocket clients.
 type ClientMessage struct {
 	Type            MessageType `json:"type"`
@@ -55,6 +79,8 @@ type ServerMessage struct {
 	ClusterName     string                          `json:"clusterName,omitempty"`
 	Domain          string                          `json:"domain,omitempty"`
 	Scope           string                          `json:"scope,omitempty"`
+	Source          Source                          `json:"source,omitempty"`
+	Signal          Signal                          `json:"signal,omitempty"`
 	ResourceVersion string                          `json:"resourceVersion,omitempty"`
 	Sequence        string                          `json:"sequence,omitempty"`
 	Ref             *resourcemodel.ResourceRef      `json:"ref,omitempty"`
