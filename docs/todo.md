@@ -1,3 +1,5 @@
+- objects maps are broken
+
 - Build a plugin architecture
   - AI
     - Conversational support to perform functions of the app
