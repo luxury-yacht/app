@@ -1,7 +1,7 @@
 package storebench
 
-// Prototype #3 from docs/plans/v2-ground-up-architecture.md — the WatchList
-// watchdog + LIST fallback that gates the Phase 4 ingestion rewrite (risk #5).
+// Prototype #3 (see docs/architecture/data-layer.md, "Provenance") — the WatchList
+// watchdog + LIST fallback that gated the ingestion rewrite.
 //
 // WatchList (KEP-3157) streams a GVR's initial state as ADDED events terminated by
 // a `k8s.io/initial-events-end: "true"` bookmark; client-go's reflector treats that

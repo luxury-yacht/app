@@ -230,18 +230,19 @@ Pods: `backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod
 tables. It carries pod identity, status, restart, readiness, node, owner, and
 metrics projection state. All-namespaces Pods are `Query Backed Dynamic`:
 search, namespace filters, health predicates, pagination, and CPU/memory sort
-are backend-owned for the current metrics snapshot. The current implementation
-still scans the informer-backed object set for each query page, but it no
-longer retains the full projected pod row universe before sorting and slicing;
-matching rows feed a bounded keyset candidate buffer plus exact facet/total
-accounting.
+are backend-owned for the current metrics snapshot. Pod rows are served from a
+maintained `querypage` store fed by the owned-reflector ingest path (a keyset
+range scan with exact facet/total counters; metrics are overlaid at serve, never
+stored) — see [data-layer.md](./data-layer.md).
 
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
 workload tables. Both single-namespace and all-namespaces workload tables are
 `Query Backed Dynamic` (single-namespace runs a namespace-scoped query page):
 kind and namespace filters, search, pagination, and CPU/memory aggregate sorts
-are backend-owned for the current metrics snapshot. Like Pods, this is a bounded
-projected-row query path, not a persistent secondary index for workload summaries.
+are backend-owned for the current metrics snapshot. Like Pods, workload rows
+serve from a maintained `querypage` store fed by the workload GVRs' ingest
+reflectors, with the pod-aggregate / HPA / metrics join applied at serve — see
+[data-layer.md](./data-layer.md).
 
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,

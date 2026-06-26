@@ -4,8 +4,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 )
 
-// StripManagedFields is the projection-at-intake transform (Phase 4 of the v2
-// architecture, docs/plans/v2-ground-up-architecture.md §3.1): it discards
+// StripManagedFields is the projection-at-intake transform (see
+// docs/architecture/data-layer.md, "Ingestion"): it discards
 // metadata.managedFields before any object lands in an informer cache. Exported so
 // every ingestion path — the core/apiext factories here, plus the Gateway-API
 // factory and the catalog's dynamic-CRD informers — can install the same transform.

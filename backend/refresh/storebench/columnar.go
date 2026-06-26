@@ -1,5 +1,5 @@
-// Package storebench is Prototype #1 from docs/plans/v2-ground-up-architecture.md:
-// the write-path benchmark that gates the v2 store decision. It implements a
+// Package storebench is Prototype #1 (see docs/architecture/data-layer.md,
+// "Provenance"): the write-path benchmark that gated the v2 store decision. It implements a
 // minimal-but-faithful version of the proposed OWNED columnar write path —
 // dictionary-interned structure-of-arrays columns in a recycled rowId arena,
 // sorted indexes over (sortKey, uid), and exact facet counters — so we can

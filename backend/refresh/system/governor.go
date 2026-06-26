@@ -1,8 +1,8 @@
 package system
 
 // ResourceTier is a cluster's runtime resource tier, assigned by the process-wide
-// governor to bound RAM when many clusters are open (Phase 4 of the v2 architecture,
-// docs/plans/v2-ground-up-architecture.md §"Multi-cluster, cold start & persistence").
+// governor to bound RAM when many clusters are open (see
+// docs/architecture/data-layer.md, "Lifecycle & governor").
 //
 //   - Foreground: the cluster the user is viewing — full ingestion + metrics poller.
 //   - Background: recently-viewed, kept warm (informers live, metrics poller paused),
