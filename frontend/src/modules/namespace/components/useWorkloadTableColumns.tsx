@@ -11,6 +11,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { parseCpuToMillicores, parseMemToMB } from '@/utils/resourceCalculations';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
 
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
@@ -147,9 +148,9 @@ const useWorkloadTableColumns = ({
         key: 'cpu',
         header: 'CPU',
         type: 'cpu',
-        getUsage: (row) => row.cpuUsage,
-        getRequest: (row) => row.cpuRequest,
-        getLimit: (row) => row.cpuLimit,
+        getUsage: (row) => workloadRowCpuValue(row, 'usage'),
+        getRequest: (row) => workloadRowCpuValue(row, 'request'),
+        getLimit: (row) => workloadRowCpuValue(row, 'limit'),
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
@@ -167,9 +168,9 @@ const useWorkloadTableColumns = ({
         key: 'memory',
         header: 'Memory',
         type: 'memory',
-        getUsage: (row) => row.memUsage,
-        getRequest: (row) => row.memRequest,
-        getLimit: (row) => row.memLimit,
+        getUsage: (row) => workloadRowMemoryValue(row, 'usage'),
+        getRequest: (row) => workloadRowMemoryValue(row, 'request'),
+        getLimit: (row) => workloadRowMemoryValue(row, 'limit'),
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,

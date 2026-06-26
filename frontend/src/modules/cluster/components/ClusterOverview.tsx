@@ -53,6 +53,12 @@ import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
 } from '@shared/utils/eventObjectIdentity';
+import {
+  clusterOverviewCpuValue,
+  clusterOverviewMemoryValue,
+  clusterOverviewResourceMetrics,
+  clusterWorkloadUsageValue,
+} from '@/core/resource-metrics';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -526,29 +532,30 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       key: 'deployment',
       label: 'deployments',
       variant: 'deployment',
-      cpuUsage: workloadResourceUsage.deployments?.cpuUsage ?? '0',
-      memoryUsage: workloadResourceUsage.deployments?.memoryUsage ?? '0',
+      cpuUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'deployments', 'cpu') ?? '0',
+      memoryUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'deployments', 'memory') ?? '0',
     },
     {
       key: 'statefulset',
       label: 'statefulsets',
       variant: 'statefulset',
-      cpuUsage: workloadResourceUsage.statefulSets?.cpuUsage ?? '0',
-      memoryUsage: workloadResourceUsage.statefulSets?.memoryUsage ?? '0',
+      cpuUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'statefulSets', 'cpu') ?? '0',
+      memoryUsage:
+        clusterWorkloadUsageValue(workloadResourceUsage, 'statefulSets', 'memory') ?? '0',
     },
     {
       key: 'daemonset',
       label: 'daemonsets',
       variant: 'daemonset',
-      cpuUsage: workloadResourceUsage.daemonSets?.cpuUsage ?? '0',
-      memoryUsage: workloadResourceUsage.daemonSets?.memoryUsage ?? '0',
+      cpuUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'daemonSets', 'cpu') ?? '0',
+      memoryUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'daemonSets', 'memory') ?? '0',
     },
     {
       key: 'job',
       label: 'jobs',
       variant: 'job',
-      cpuUsage: workloadResourceUsage.jobs?.cpuUsage ?? '0',
-      memoryUsage: workloadResourceUsage.jobs?.memoryUsage ?? '0',
+      cpuUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'jobs', 'cpu') ?? '0',
+      memoryUsage: clusterWorkloadUsageValue(workloadResourceUsage, 'jobs', 'memory') ?? '0',
     },
   ];
   const cpuWorkloadUsageItems = workloadUsageSources.map((item) => ({
@@ -566,24 +573,12 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     (sum, item) => sum + item.value,
     0
   );
+  const overviewResourceMetrics = clusterOverviewResourceMetrics(displayOverview, metricsInfo);
   const memoryResourceMetrics = calculateResourceMetrics(
-    {
-      usage: displayOverview.memoryUsage,
-      request: displayOverview.memoryRequests,
-      limit: displayOverview.memoryLimits,
-      allocatable: displayOverview.memoryAllocatable,
-    },
+    overviewResourceMetrics.memory ?? {},
     'memory'
   );
-  const cpuResourceMetrics = calculateResourceMetrics(
-    {
-      usage: displayOverview.cpuUsage,
-      request: displayOverview.cpuRequests,
-      limit: displayOverview.cpuLimits,
-      allocatable: displayOverview.cpuAllocatable,
-    },
-    'cpu'
-  );
+  const cpuResourceMetrics = calculateResourceMetrics(overviewResourceMetrics.cpu ?? {}, 'cpu');
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
   const percentClassName = (baseClass: string, value: number) =>
     value > 100 ? `${baseClass} ${baseClass}--warning` : baseClass;
@@ -885,10 +880,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             >
               <div className="resource-bar-placeholder">
                 <ResourceBar
-                  usage={displayOverview.cpuUsage}
-                  request={displayOverview.cpuRequests}
-                  limit={displayOverview.cpuLimits}
-                  allocatable={displayOverview.cpuAllocatable}
+                  usage={clusterOverviewCpuValue(displayOverview, 'usage')}
+                  request={clusterOverviewCpuValue(displayOverview, 'request')}
+                  limit={clusterOverviewCpuValue(displayOverview, 'limit')}
+                  allocatable={clusterOverviewCpuValue(displayOverview, 'allocatable')}
                   type="cpu"
                   variant="default"
                 />
@@ -926,10 +921,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             >
               <div className="resource-bar-placeholder">
                 <ResourceBar
-                  usage={displayOverview.memoryUsage}
-                  request={displayOverview.memoryRequests}
-                  limit={displayOverview.memoryLimits}
-                  allocatable={displayOverview.memoryAllocatable}
+                  usage={clusterOverviewMemoryValue(displayOverview, 'usage')}
+                  request={clusterOverviewMemoryValue(displayOverview, 'request')}
+                  limit={clusterOverviewMemoryValue(displayOverview, 'limit')}
+                  allocatable={clusterOverviewMemoryValue(displayOverview, 'allocatable')}
                   type="memory"
                   variant="default"
                 />

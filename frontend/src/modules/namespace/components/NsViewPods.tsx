@@ -44,6 +44,7 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
 import type { PodSnapshotPayload } from '@/core/refresh/types';
 
 interface PodsViewProps {
@@ -382,9 +383,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           header: 'CPU',
           key: 'cpu',
           type: 'cpu',
-          getUsage: (pod) => pod.cpuUsage,
-          getRequest: (pod) => pod.cpuRequest,
-          getLimit: (pod) => pod.cpuLimit,
+          getUsage: (pod) => podRowCpuValue(pod, 'usage'),
+          getRequest: (pod) => podRowCpuValue(pod, 'request'),
+          getLimit: (pod) => podRowCpuValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
@@ -396,9 +397,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           header: 'Memory',
           key: 'memory',
           type: 'memory',
-          getUsage: (pod) => pod.memUsage,
-          getRequest: (pod) => pod.memRequest,
-          getLimit: (pod) => pod.memLimit,
+          getUsage: (pod) => podRowMemoryValue(pod, 'usage'),
+          getRequest: (pod) => podRowMemoryValue(pod, 'request'),
+          getLimit: (pod) => podRowMemoryValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,

@@ -36,6 +36,7 @@ import {
 } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
+import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
 import type { ClusterNodeSnapshotPayload } from '@/core/refresh/types';
 
 // Define props for NodesViewGrid component. The table is query-backed (sourced from
@@ -258,10 +259,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         key: 'cpu',
         header: 'CPU',
         type: 'cpu',
-        getUsage: (row) => row.cpuUsage,
-        getRequest: (row) => row.cpuRequests,
-        getLimit: (row) => row.cpuLimits,
-        getAllocatable: (row) => row.cpuAllocatable,
+        getUsage: (row) => nodeRowCpuValue(row, 'usage'),
+        getRequest: (row) => nodeRowCpuValue(row, 'request'),
+        getLimit: (row) => nodeRowCpuValue(row, 'limit'),
+        getAllocatable: (row) => nodeRowCpuValue(row, 'allocatable'),
         getOvercommitPercent: (row) => {
           const value = calculateCpuOvercommitted(row.cpuLimits, row.cpuAllocatable);
           return value > 0 ? value : undefined;
@@ -278,10 +279,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         key: 'memory',
         header: 'Memory',
         type: 'memory',
-        getUsage: (row) => row.memoryUsage,
-        getRequest: (row) => row.memRequests,
-        getLimit: (row) => row.memLimits,
-        getAllocatable: (row) => row.memoryAllocatable,
+        getUsage: (row) => nodeRowMemoryValue(row, 'usage'),
+        getRequest: (row) => nodeRowMemoryValue(row, 'request'),
+        getLimit: (row) => nodeRowMemoryValue(row, 'limit'),
+        getAllocatable: (row) => nodeRowMemoryValue(row, 'allocatable'),
         getOvercommitPercent: (row) => {
           const value = calculateMemoryOvercommitted(row.memLimits, row.memoryAllocatable);
           return value > 0 ? value : undefined;

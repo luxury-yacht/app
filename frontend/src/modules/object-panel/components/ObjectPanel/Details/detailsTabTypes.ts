@@ -24,23 +24,23 @@ export interface DetailsTabProps {
 
 export interface UtilizationData {
   cpu?: {
-    usage: string;
+    usage?: string;
     request?: string;
     limit?: string;
     capacity?: string;
     allocatable?: string;
   };
   memory?: {
-    usage: string;
+    usage?: string;
     request?: string;
     limit?: string;
     capacity?: string;
     allocatable?: string;
   };
   pods?: {
-    count: string;
-    capacity: string;
-    allocatable: string;
+    count?: string;
+    capacity?: string;
+    allocatable?: string;
   };
   mode?: 'nodeMetrics';
   podCount?: number;
