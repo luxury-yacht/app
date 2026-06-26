@@ -152,7 +152,7 @@ const CACHE_POLICIES = new Set([
   'stream-only',
 ]);
 const STREAM_SEMANTICS = new Set([
-  'row-update',
+  'change-signal',
   'complete-resync',
   'append-merge',
   'snapshot-replace',
@@ -161,7 +161,7 @@ const STREAM_SEMANTICS = new Set([
 ]);
 const COVERAGE_CONTRACTS = new Set([
   'snapshot-table-payload',
-  'resource-stream-row-parity',
+  'query-refetch-on-signal',
   'complete-resync-only',
   'catalog-consistency',
   'catalog-snapshot-query',
@@ -184,7 +184,7 @@ const COVERAGE_PROOF_FAMILIES: Array<{
     behaviorClasses: new Set(['aggregate-snapshot']),
   },
   {
-    coverageContract: 'resource-stream-row-parity',
+    coverageContract: 'query-refetch-on-signal',
     behaviorClasses: new Set(['resource-stream-table']),
   },
   {
@@ -250,8 +250,8 @@ describe('refresh domain contract', () => {
 
     expect(refreshDomainContract.version).toBe(2);
     expect(refreshDomainContract.resourceStream.updateIdentity).toEqual({
-      rowUpdates: 'ref',
-      rowDeletes: 'ref',
+      changeSignals: 'ref',
+      deleteSignals: 'ref',
       legacyFieldsDuringMigration: [],
       completeSemantics: 'scope-level-resync',
       completeIdentity: 'diagnostic-only',
@@ -392,11 +392,12 @@ describe('refresh domain contract', () => {
         const streamContract = refreshDomainContract.resourceStream.domains[entry.domain];
         if (inventory.behaviorClass === 'complete-resync-stream') {
           expect(streamContract.rowProjection).toBe('scope-level-complete-only');
-          expect(inventory.streamSemantics).not.toContain('row-update');
+          expect(inventory.streamSemantics).not.toContain('change-signal');
           expect(inventory.coverageContract).toBe('complete-resync-only');
         } else {
           expect(streamContract.rowProjection).toBeUndefined();
-          expect(inventory.streamSemantics).toContain('row-update');
+          expect(inventory.streamSemantics).toContain('change-signal');
+          expect(inventory.coverageContract).toBe('query-refetch-on-signal');
         }
       } else {
         expect(resourceStreamDomains.has(entry.domain)).toBe(false);

@@ -533,7 +533,7 @@ func TestPodBuilderReportsScopeCounts(t *testing.T) {
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
 
-	// Scope-level counts travel on the payload so a query-backed (notify-only)
+	// Scope-level counts travel on the payload so a query-backed (signal-only)
 	// view can show unhealthy/total badges without retaining the live row set.
 	require.Equal(t, 3, payload.TotalCount)
 	require.Equal(t, 1, payload.HealthCounts["unhealthy"])

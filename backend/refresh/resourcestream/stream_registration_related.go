@@ -27,7 +27,7 @@ func (m *Manager) registerPodStreams(factory *informer.Factory, ingestManager *i
 }
 
 // registerNodeStreams wires the node live-stream change signal. Nodes is an owned-reflector
-// ingest kind (IngestOwned): the typed node informer is never instantiated, so the notify-only
+// ingest kind (IngestOwned): the typed node informer is never instantiated, so the signal-only
 // signal comes from the ingest reflector's Catalog-half Sink (registerNodeIngestNotify) instead
 // of a shared-informer event handler — identical to the pod/workload/network path. When no
 // ingest manager is wired (a unit test), the node stream has no live signal; tests drive
@@ -41,7 +41,7 @@ func (m *Manager) registerNodeStreams(factory *informer.Factory, ingestManager *
 
 // registerWorkloadStreams wires the workload kinds' change signal. The five workload kinds
 // (Deployment/StatefulSet/DaemonSet/Job/CronJob) are owned-reflector ingest kinds: the typed
-// informers are never instantiated, so their notify-only signal comes from the ingest
+// informers are never instantiated, so their signal-only signal comes from the ingest
 // reflector's Catalog-half Sink (registerWorkloadIngestNotify) instead of a shared-informer
 // event handler — identical to the pod path. ReplicaSet is NOT cut: its typed informer stays
 // registered, and its event handler keeps re-broadcasting affected pods, because the pod

@@ -36,7 +36,7 @@ func podBundleFor(namespace, name, node, uid, rv string, owner [3]string) ingest
 
 // TestPodNotifyBundleSinkBroadcastsPodRowSignal proves the ingest-fed pod notify sink
 // emits the pod-row change signal (Ref with the catalog UID/RV, no row) on the pod's
-// namespace scope — the same notify-only signal the typed pod handler emitted, with no
+// namespace scope — the same signal-only signal the typed pod handler emitted, with no
 // typed pod informer.
 func TestPodNotifyBundleSinkBroadcastsPodRowSignal(t *testing.T) {
 	manager := &Manager{

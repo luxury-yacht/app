@@ -13,7 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
 
-// TestIngestNotifySinkBroadcastsNamespacedSignal proves the notify-only change signal
+// TestIngestNotifySinkBroadcastsNamespacedSignal proves the signal-only change signal
 // for an IngestOwned namespaced kind (ResourceQuota → namespace-quotas) fires from the
 // ingest Catalog-half Sink: an Upsert of the kind's catalog Summary broadcasts a
 // MODIFIED change signal on the descriptor's domain + the object's namespace scope,

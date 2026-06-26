@@ -474,7 +474,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     // Scope counts come from the query payload (backend, scope-level), mirrored
     // into state below once the query page lands, so they stay correct for a
-    // query-backed/notify-only view without retaining the live row set.
+    // query-backed signal-only view without retaining the live row set.
     const unhealthyCount = scopeCounts.unhealthy;
     const scopeTotalCount = scopeCounts.total;
 
@@ -550,8 +550,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, [payloadTotalCount, payloadUnhealthyCount]);
 
     // The pending-filter guard (single namespace) reads the per-mode scope counts
-    // from the latest query payload, not the live row set (pods is notify-only, so
-    // live rows are static at baseline). A ref keeps the guard effect from
+    // from the latest query payload, not the live row set. A ref keeps the guard effect from
     // re-running on every count change.
     const healthCountsRef = useRef<Record<string, number>>({});
     healthCountsRef.current = queryPayload?.healthCounts ?? {};

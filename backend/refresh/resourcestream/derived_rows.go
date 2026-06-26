@@ -148,9 +148,8 @@ func (m *Manager) refreshPodsForReplicaSetOnce(
 }
 
 // broadcastNodeNotification emits a row-less node change notification on the
-// cluster scope. nodes is notify-only (see notify_only.go): the query-backed
-// table refetches on the bare signal and drift keys off Ref, so no NodeSummary
-// is projected.
+// cluster scope. The query-backed table refetches on the bare signal and drift
+// keys off Ref, so no NodeSummary is projected.
 func (m *Manager) broadcastNodeNotification(node metav1.Object, updateType MessageType) {
 	ref := m.resourceRefForObject(node, nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource)
 	update := m.newObjectRowUpdate(updateType, domainNodes, node, ref, nil)
@@ -182,7 +181,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 		return
 	}
 
-	// namespace-workloads is notify-only: emit the change signal (Ref/RV) and let
+	// namespace-workloads emits the change signal (Ref/RV) and lets
 	// the query-backed table refetch. The row is rebuilt by the snapshot/query
 	// builder, so no per-event WorkloadSummary is projected here.
 	m.broadcastWorkloadNotification(workload, m.workloadRef(workload, kind), workload.GetNamespace(), "", updateType)
@@ -270,10 +269,10 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 }
 
 // broadcastWorkloadNotification emits a row-less workload change notification on
-// the namespace scope. namespace-workloads is notify-only (see notify_only.go):
-// the query-backed table refetches on the bare signal and drift keys off Ref, so
-// no WorkloadSummary is projected. resourceVersion overrides the object's own RV
-// when the trigger differs from the workload (a pod or HPA event).
+// the namespace scope. The query-backed table refetches on the bare signal and
+// drift keys off Ref, so no WorkloadSummary is projected. resourceVersion
+// overrides the object's own RV when the trigger differs from the workload (a
+// pod or HPA event).
 func (m *Manager) broadcastWorkloadNotification(obj metav1.Object, ref resourcemodel.ResourceRef, namespace, resourceVersion string, updateType MessageType) {
 	update := m.newObjectRowUpdate(updateType, domainWorkloads, obj, ref, nil)
 	if resourceVersion != "" {

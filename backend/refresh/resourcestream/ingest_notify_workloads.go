@@ -5,7 +5,7 @@
  * manager. Deployment/StatefulSet/DaemonSet/Job/CronJob have no streamspec.Descriptor (the
  * workloads table is the bespoke cross-kind WorkloadSummary), so the generic
  * registerIngestNotifyStreams does not cover them — exactly like pods. namespace-workloads
- * is notify-only: handleWorkload emits only the change signal (Ref + ResourceVersion) and
+ * is signal-only: handleWorkload emits only the change signal (Ref + ResourceVersion) and
  * the query-backed table refetches, so the projected catalog Summary (which carries the
  * kind/identity/namespace/name/uid/resourceVersion) is all the signal needs.
  *
@@ -126,7 +126,7 @@ func (m *Manager) registerWorkloadIngestNotify(ingestManager *ingest.IngestManag
 	}
 }
 
-// workloadNotifyCatalogSink adapts the workloads notify-only broadcast to an ingest
+// workloadNotifyCatalogSink adapts the workloads signal-only broadcast to an ingest
 // Catalog-half Sink. The reflector delivers the projected catalog Summary (never the source
 // object), which carries every identity field the workloads change signal needs. Upsert
 // fires a MODIFIED signal and Delete a DELETED signal — the same Add/Update/Delete ->

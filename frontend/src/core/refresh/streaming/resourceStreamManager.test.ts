@@ -217,7 +217,7 @@ describe('resourceStreamManager helpers', () => {
 });
 
 describe('ResourceStreamManager', () => {
-  test('pod delta is notify-only: bumps streamRevision and leaves rows untouched', () => {
+  test('pod delta is signal-only: bumps streamRevision and leaves rows untouched', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -265,7 +265,7 @@ describe('ResourceStreamManager', () => {
         name: 'pod-a',
         namespace: 'default',
         ref: resourceRef({ kind: 'Pod', namespace: 'default', name: 'pod-a' }),
-        // The backend ships no row for notify-only pods; even if one slipped through
+        // The backend ships no row for signal-only pods; even if one slipped through
         // the frontend must not apply it. The query-backed table refetches instead.
         row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
       })
@@ -280,7 +280,7 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
   });
 
-  test('notify-only domain delta bumps streamRevision and never retains rows', () => {
+  test('signal-only domain delta bumps streamRevision and never retains rows', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -290,7 +290,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-workloads', storeScope);
 
-    // namespace-workloads is notify-only: the backend ships the change signal
+    // namespace-workloads is signal-only: the backend ships the change signal
     // (Ref/ResourceVersion) without a row. The frontend must bump streamRevision
     // — so the query-backed table refetches — and leave the row list untouched.
     manager.handleMessage(
@@ -318,7 +318,7 @@ describe('ResourceStreamManager', () => {
   // (version/checksum/streamRevision) changes. Streamed row updates do not carry
   // a new backend snapshot version, so they must bump streamRevision or the
   // query-backed views never see streamed changes.
-  test('streamed updates bump streamRevision (notify-only: no content suppression)', () => {
+  test('streamed updates bump streamRevision (signal-only: no content suppression)', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -429,7 +429,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     // The update routes to the matching subscription (unique scope despite the
-    // cluster-id mismatch) and, being notify-only, bumps the refetch signal.
+    // cluster-id mismatch) and, being signal-only, bumps the refetch signal.
     const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.streamRevision).toBe(1);
   });
@@ -479,7 +479,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    // A cluster-prefixed scope still routes to the subscription; notify-only bumps
+    // A cluster-prefixed scope still routes to the subscription; signal-only bumps
     // the refetch signal.
     const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.streamRevision).toBe(1);
@@ -621,7 +621,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    // pods is notify-only: both deltas are accepted (sequence advances despite the
+    // pods is signal-only: both deltas are accepted (sequence advances despite the
     // resourceVersion regressing), so each flush bumps streamRevision — and the
     // regression does not trigger a resync.
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
@@ -640,7 +640,7 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('cluster-rbac', storeScope);
 
     // A resourceVersion past the safe-integer limit is parsed via BigInt, so the
-    // notify-only delta is still accepted and bumps the refetch signal.
+    // signal-only delta is still accepted and bumps the refetch signal.
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
@@ -815,7 +815,7 @@ describe('ResourceStreamManager', () => {
     const secondSocket = createdSockets[1];
     expect(secondSocket).toBeDefined();
     secondSocket.onopen?.(new Event('open'));
-    // Reconnect re-subscribes the stream; notify-only needs no snapshot fetch.
+    // Reconnect re-subscribes the stream; signal-only needs no snapshot fetch.
     expect(secondSocket.send).toHaveBeenCalled();
   });
 
@@ -854,7 +854,7 @@ describe('ResourceStreamManager', () => {
     (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
     await flushPromises();
 
-    // Resume re-opens + re-subscribes the stream; notify-only needs no snapshot fetch.
+    // Resume re-opens + re-subscribes the stream; signal-only needs no snapshot fetch.
     expect(createdSockets[1]).toBeDefined();
   });
 
@@ -949,7 +949,7 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // COMPLETE triggers a notify-only resync: re-arm + bump streamRevision (no fetch).
+    // COMPLETE triggers a signal-only resync: re-arm + bump streamRevision (no fetch).
     expect(
       getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
     ).toBeGreaterThan(0);
@@ -1033,7 +1033,7 @@ describe('ResourceStreamManager', () => {
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScope('cluster-a', 'namespace:default');
 
-    // pods is notify-only: starting the subscription must NOT fetch a full-row
+    // pods is signal-only: starting the subscription must NOT fetch a full-row
     // baseline (the query-backed table no longer waits on one — that's the
     // load-time win), yet deltas must still be processed.
     await manager.start('pods', storeScope);
@@ -1075,7 +1075,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     // The stale-then-newer deltas (sequence advancing) are accepted and bump
-    // streamRevision; a notify-only start/resync never fetches a snapshot.
+    // streamRevision; a signal-only start/resync never fetches a snapshot.
     const state = getScopedDomainState('pods', storeScope);
     expect(state.streamRevision ?? 0).toBeGreaterThanOrEqual(1);
     expect(fetchSnapshotMock).not.toHaveBeenCalled();

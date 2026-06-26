@@ -10,15 +10,15 @@ then stored by the frontend under cluster-aware scopes.
 - Cross-cluster displays read multiple per-cluster entries and derive summaries
   above refresh state.
 - `backend/refresh/snapshot` owns list/table snapshot payloads.
-- `backend/refresh/resourcestream` owns live row updates for streamed table
-  domains and must emit the same row shape as snapshots.
+- `backend/refresh/resourcestream` owns change signals for streamed table
+  domains; rows are served by the snapshot/query path.
 - `backend/resources` owns rich detail payloads and imperative helpers, not
   list/table refresh paths.
 - Refresh domain names, behavior classes, timing, and registration metadata must
   stay aligned across the shared domain contract, backend registrations, and
   frontend registrations.
-- Streams and snapshots for the same domain must share identity, row keys,
-  merge semantics, and permission behavior.
+- Streams and snapshots for the same domain must share identity, scope, liveness,
+  and permission behavior.
 - Snapshot caching is allowed only when the data can tolerate it. Live
   app-managed state such as node maintenance must bypass stale cache and
   singleflight paths.
@@ -60,7 +60,7 @@ and store writes must still normalize through the refresh scope helpers.
 - Backend subsystem setup and aggregate routing: `backend/app_refresh_*.go`
 - Domain registry and permission gates: `backend/refresh/system`
 - Snapshot builders: `backend/refresh/snapshot`
-- Resource stream rows: `backend/refresh/resourcestream`
+- Resource stream signals: `backend/refresh/resourcestream`
 - Refresh HTTP API: `backend/refresh/api/server.go`
 - Frontend scheduler: `frontend/src/core/refresh/RefreshManager.ts`
 - Frontend executor and runtimes: `frontend/src/core/refresh/orchestrator.ts`
@@ -72,11 +72,11 @@ and store writes must still normalize through the refresh scope helpers.
 Use behavior classes to preserve correctness, not to force inheritance:
 
 - snapshot domains replace a full payload for one scope
-- resource-stream table domains apply snapshot baselines plus row updates
+- resource-stream table domains render snapshot/query pages and refetch them from
+  WebSocket change signals
 - complete-resync streams use stream messages as resync signals
-- notify-only streams ship the change signal without rows, for query-backed
-  domains that never render live rows (see
-  [notify-only-streams.md](notify-only-streams.md))
+- resource-stream signal delivery is documented in
+  [resource-stream-signals.md](resource-stream-signals.md)
 - catalog, event, and log streams have source-specific reducers
 - detail, graph, Helm, YAML, and operation-state domains keep their own payload
   semantics

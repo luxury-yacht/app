@@ -1,7 +1,7 @@
 /*
  * backend/refresh/resourcestream/ingest_notify.go
  *
- * The notify-only change signal for ingest-owned (cut) kinds, sourced from the
+ * The signal-only change signal for ingest-owned (cut) kinds, sourced from the
  * owned-reflector ingest manager instead of a typed shared informer.
  *
  * Every streamed table is query-backed: the live subscription exists only to learn
@@ -25,7 +25,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
-// registerIngestNotifyStreams wires the notify-only change signal for every
+// registerIngestNotifyStreams wires the signal-only change signal for every
 // IngestOwned descriptor to the ingest manager's Catalog-half Sink, so no typed
 // informer is created for those kinds. It is the ingest twin of
 // registerDescriptorStreams (which skips IngestOwned kinds): a streamed descriptor is
@@ -50,7 +50,7 @@ func (m *Manager) registerIngestNotifyStreams(ingestManager *ingest.IngestManage
 }
 
 // ingestNotifySink returns an ingest Catalog-half Sink that broadcasts the
-// notify-only change signal for one IngestOwned descriptor. Upsert fires a MODIFIED
+// signal-only change signal for one IngestOwned descriptor. Upsert fires a MODIFIED
 // signal (the row may have changed) and Delete a DELETED signal — the same Add/
 // Update/Delete → broadcast mapping the shared-informer handler applied, collapsed to
 // the two events a Sink exposes. The frontend bumps streamRevision on any signal and
@@ -63,7 +63,7 @@ func (m *Manager) ingestNotifySink(d streamspec.Descriptor) ingest.Sink {
 	return ingestNotifySink{manager: m, desc: d}
 }
 
-// ingestNotifySink adapts the notify-only broadcast to an ingest.Sink. The reflector
+// ingestNotifySink adapts the signal-only broadcast to an ingest.Sink. The reflector
 // delivers the projected catalog Summary (never the source object), which carries
 // every identity field the broadcast needs.
 type ingestNotifySink struct {
@@ -79,7 +79,7 @@ func (s ingestNotifySink) Delete(row interface{}) {
 	s.broadcastSignal(row, MessageTypeDeleted)
 }
 
-// broadcastSignal emits the notify-only Update for one catalog Summary on the
+// broadcastSignal emits the signal-only Update for one catalog Summary on the
 // descriptor's domain and scope, identically to streamObjectRowFromDescriptor's
 // broadcast: a Ref + ResourceVersion change signal with no Row, scoped to the object's
 // namespace (namespaced kinds) or the cluster (cluster-scoped kinds).

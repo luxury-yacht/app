@@ -77,8 +77,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NodeBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-config": {
@@ -93,8 +93,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterConfigBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-crds": {
@@ -109,8 +109,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterCRDBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-custom": {
@@ -125,8 +125,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterCustomBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-events": {
@@ -157,8 +157,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterRBACBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-storage": {
@@ -173,8 +173,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ClusterStorageBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-workloads": {
@@ -189,8 +189,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceWorkloadsBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-autoscaling": {
@@ -205,8 +205,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceAutoscalingBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-config": {
@@ -221,8 +221,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceConfigBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-custom": {
@@ -237,8 +237,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceCustomBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-events": {
@@ -285,8 +285,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceNetworkBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-quotas": {
@@ -301,8 +301,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceQuotasBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-rbac": {
@@ -317,8 +317,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceRBACBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-storage": {
@@ -333,8 +333,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceStorageBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "pods": {
@@ -349,8 +349,8 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.PodBuilder",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "row-update", "complete-resync"],
-      "coverageContract": "resource-stream-row-parity",
+      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "object-details": {
@@ -484,8 +484,8 @@
   },
   "resourceStream": {
     "updateIdentity": {
-      "rowUpdates": "ref",
-      "rowDeletes": "ref",
+      "changeSignals": "ref",
+      "deleteSignals": "ref",
       "legacyFieldsDuringMigration": [],
       "completeSemantics": "scope-level-resync",
       "completeIdentity": "diagnostic-only"

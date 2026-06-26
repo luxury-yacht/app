@@ -100,7 +100,7 @@ the completed `v2` rewrite plan; the forward work is in
   its page. **No live row ever crosses the wire** — the envelope (`streammux.ServerMessage`)
   has no row field, and the live-row-merge path (`applyResourceRowUpdates`, `mergeSnapshotRows`,
   `sortRows`, per-domain collections) is deleted. See
-  [`notify-only-streams.md`](./notify-only-streams.md) for the frontend contract.
+  [`resource-stream-signals.md`](./resource-stream-signals.md) for the frontend contract.
 - **Metrics** reach a view by serve-time overlay (above), not the store or the wire.
 
 ## Boundaries (deliberately NOT this path)

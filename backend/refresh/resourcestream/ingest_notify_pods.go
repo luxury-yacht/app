@@ -4,7 +4,7 @@
  * The pod live-stream change signal, sourced from the owned-reflector ingest manager.
  *
  * Pods has no streamspec.Descriptor, so the generic registerIngestNotifyStreams does not
- * cover it; and unlike the notify-only query-backed kinds, the pod stream's broadcast
+ * cover it; and unlike the signal-only query-backed kinds, the pod stream's broadcast
  * SCOPE depends on the pod's Node and owner (scopesForPod), and a pod change also signals
  * the pod's owner workload and node rows to refetch. The catalog Summary alone (the only
  * half the generic notify reads) lacks Node/owner, so the pod notify reads the WHOLE

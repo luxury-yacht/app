@@ -712,7 +712,7 @@ export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFi
   // pending health filter has matches — without retaining the live row set.
   // healthCounts keys match the "health" filter modes ('unhealthy', 'restarts',
   // 'not-ready'). Mirrors snapshot.PodSnapshot. See
-  // docs/architecture/notify-only-streams.md.
+  // docs/architecture/resource-stream-signals.md.
   totalCount?: number;
   healthCounts?: Record<string, number>;
 }

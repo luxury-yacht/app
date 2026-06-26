@@ -34,8 +34,8 @@ type refreshDomainContract struct {
 	DomainInventory map[string]domainInventoryEntry `json:"domainInventory"`
 	ResourceStream  struct {
 		UpdateIdentity struct {
-			RowUpdates                  string   `json:"rowUpdates"`
-			RowDeletes                  string   `json:"rowDeletes"`
+			ChangeSignals               string   `json:"changeSignals"`
+			DeleteSignals               string   `json:"deleteSignals"`
 			LegacyFieldsDuringMigration []string `json:"legacyFieldsDuringMigration"`
 			CompleteSemantics           string   `json:"completeSemantics"`
 			CompleteIdentity            string   `json:"completeIdentity"`
@@ -176,10 +176,10 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"external-catalog-cache-with-merge",
 		"stream-only",
 	)
-	streamSemantics := setOf("row-update", "complete-resync", "append-merge", "snapshot-replace", "line-stream", "none")
+	streamSemantics := setOf("change-signal", "complete-resync", "append-merge", "snapshot-replace", "line-stream", "none")
 	coverageContracts := setOf(
 		"snapshot-table-payload",
-		"resource-stream-row-parity",
+		"query-refetch-on-signal",
 		"complete-resync-only",
 		"catalog-consistency",
 		"catalog-snapshot-query",
@@ -193,6 +193,12 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"aggregate-snapshot-permission-fallback",
 	)
 	enforcedProofs := enforcedCoverageProofs(t)
+
+	require.Equal(t, "ref", contract.ResourceStream.UpdateIdentity.ChangeSignals)
+	require.Equal(t, "ref", contract.ResourceStream.UpdateIdentity.DeleteSignals)
+	require.Empty(t, contract.ResourceStream.UpdateIdentity.LegacyFieldsDuringMigration)
+	require.Equal(t, "scope-level-resync", contract.ResourceStream.UpdateIdentity.CompleteSemantics)
+	require.Equal(t, "diagnostic-only", contract.ResourceStream.UpdateIdentity.CompleteIdentity)
 
 	for domainID, inventory := range contract.DomainInventory {
 		require.Containsf(t, domainIDs, domainID, "inventory domain %q is not present in domains[]", domainID)
@@ -428,8 +434,8 @@ func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {
 func TestResourceStreamIdentityContractIsAuthored(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
 	identity := contract.ResourceStream.UpdateIdentity
-	require.Equal(t, "ref", identity.RowUpdates)
-	require.Equal(t, "ref", identity.RowDeletes)
+	require.Equal(t, "ref", identity.ChangeSignals)
+	require.Equal(t, "ref", identity.DeleteSignals)
 	require.Empty(t, identity.LegacyFieldsDuringMigration, "legacy field migration window must be closed once all domains use Ref")
 	require.Equal(t, "scope-level-resync", identity.CompleteSemantics)
 	require.Equal(t, "diagnostic-only", identity.CompleteIdentity)
@@ -647,7 +653,7 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 	}{
 		{"snapshot-table-payload", setOf("snapshot-table")},
 		{"aggregate-snapshot-permission-fallback", setOf("aggregate-snapshot")},
-		{"resource-stream-row-parity", setOf("resource-stream-table")},
+		{"query-refetch-on-signal", setOf("resource-stream-table")},
 		{"complete-resync-only", setOf("complete-resync-stream")},
 		{"catalog-consistency", setOf("catalog-stream")},
 		{"catalog-snapshot-query", setOf("catalog-snapshot")},

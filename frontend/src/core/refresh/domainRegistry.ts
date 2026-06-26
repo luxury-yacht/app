@@ -66,7 +66,7 @@ export type RefreshCachePolicy =
   | 'stream-only';
 
 export type RefreshStreamSemantic =
-  | 'row-update'
+  | 'change-signal'
   | 'complete-resync'
   | 'append-merge'
   | 'snapshot-replace'
@@ -75,7 +75,7 @@ export type RefreshStreamSemantic =
 
 export type RefreshCoverageContract =
   | 'snapshot-table-payload'
-  | 'resource-stream-row-parity'
+  | 'query-refetch-on-signal'
   | 'complete-resync-only'
   | 'catalog-consistency'
   | 'catalog-snapshot-query'
@@ -164,8 +164,8 @@ export interface RefreshDomainContract {
   domainInventory: Record<RefreshDomain, DomainInventoryEntry>;
   resourceStream: {
     updateIdentity: {
-      rowUpdates: 'ref';
-      rowDeletes: 'ref';
+      changeSignals: 'ref';
+      deleteSignals: 'ref';
       legacyFieldsDuringMigration: string[];
       completeSemantics: 'scope-level-resync';
       completeIdentity: 'diagnostic-only';

@@ -4,7 +4,7 @@
  * The node live-stream change signal, sourced from the owned-reflector ingest manager. Nodes
  * has no streamspec.Descriptor (the nodes table is the bespoke NodeSummary whose row joins
  * per-node pod aggregates + metrics), so the generic registerIngestNotifyStreams does not
- * cover it — exactly like pods and the workload/network kinds. The nodes domain is notify-only:
+ * cover it — exactly like pods and the workload/network kinds. The nodes domain is signal-only:
  * handleNode emits only the change signal (Ref + ResourceVersion) on the cluster scope and the
  * query-backed table refetches, so the projected catalog Summary — which carries the
  * kind/identity/name/uid/resourceVersion — is all the signal needs.
@@ -79,7 +79,7 @@ func (m *Manager) registerNodeIngestNotify(ingestManager *ingest.IngestManager) 
 	ingestManager.AddCatalogSink(nodeGVR, nodeNotifyCatalogSink{manager: m})
 }
 
-// nodeNotifyCatalogSink adapts the nodes notify-only broadcast to an ingest Catalog-half Sink.
+// nodeNotifyCatalogSink adapts the nodes signal-only broadcast to an ingest Catalog-half Sink.
 // The reflector delivers the projected catalog Summary (never the source object), which carries
 // every identity field the node change signal needs. Upsert fires a MODIFIED signal and Delete
 // a DELETED signal — the same Add/Update/Delete -> broadcast mapping the typed handleNode

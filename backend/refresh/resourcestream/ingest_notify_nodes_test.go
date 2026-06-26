@@ -36,7 +36,7 @@ func nodeBundle(name, uid, resourceVersion string) ingest.Bundle {
 }
 
 // TestNodeNotifyCatalogSinkBroadcastsChangeSignal proves the ingest Catalog-half sink emits
-// the byte-equivalent notify-only node change signal the typed handleNode did: a Ref carrying
+// the byte-equivalent signal-only node change signal the typed handleNode did: a Ref carrying
 // the node's identity + UID, the catalog RV, and the cluster scope, with no projected row.
 func TestNodeNotifyCatalogSinkBroadcastsChangeSignal(t *testing.T) {
 	manager := &Manager{

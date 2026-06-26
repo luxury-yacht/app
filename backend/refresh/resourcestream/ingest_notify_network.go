@@ -5,7 +5,7 @@
  * ingest manager. Service and EndpointSlice have no streamspec.Descriptor (a Service's
  * namespace-network row is the bespoke Service↔EndpointSlice join, and EndpointSlice is both
  * its own row and that join input), so the generic registerIngestNotifyStreams does not cover
- * them — exactly like pods and the workload kinds. namespace-network is notify-only: the
+ * them — exactly like pods and the workload kinds. namespace-network is signal-only: the
  * broadcast ships only the change signal (Ref + ResourceVersion), never the projected row
  * (newObjectRowUpdate drops it), so the projected catalog Summary — which carries the
  * kind/identity/namespace/name/uid/resourceVersion — is all the signal needs.
@@ -48,7 +48,7 @@ func (m *Manager) registerNetworkIngestNotify(ingestManager *ingest.IngestManage
 	}
 }
 
-// networkNotifyCatalogSink adapts the namespace-network notify-only broadcast to an ingest
+// networkNotifyCatalogSink adapts the namespace-network signal-only broadcast to an ingest
 // Catalog-half Sink. The reflector delivers the projected catalog Summary (never the source
 // object), which carries every identity field the change signal needs. Upsert fires a
 // MODIFIED signal and Delete a DELETED signal — the same Add/Update/Delete -> broadcast

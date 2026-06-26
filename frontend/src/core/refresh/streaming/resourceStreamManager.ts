@@ -656,8 +656,8 @@ export class ResourceStreamManager {
     this.bumpStreamRevisionOnly(subscription, Date.now());
   }
 
-  // bumpStreamRevisionOnly advances the live-data identity for a notify-only
-  // domain without touching its rows. The third component of liveDomainVersion
+  // bumpStreamRevisionOnly advances the live-data identity for a signal-only
+  // resource stream without touching rows. The third component of liveDomainVersion
   // (streamRevision) changes, so the query-backed view refetches its page; the
   // streamed deltas carried no rows to apply. Coalescing (UPDATE_COALESCE_MS)
   // collapses a burst — e.g. an informer resync — into a single bump/refetch.
@@ -752,7 +752,7 @@ export class ResourceStreamManager {
     // pulled over the bridge, and status→'ready' clears the query gate so the table
     // stops waiting on a baseline before showing page 1. (helm's backend stays
     // complete-resync; its complete-resync signal lands here and triggers a refetch
-    // exactly like the 15 row-update domains.)
+    // exactly like the change-signal domains.)
     this.bumpStreamRevisionOnly(subscription, now);
     this.markResyncComplete(subscription);
     subscription.pendingReset = false;

@@ -12,7 +12,7 @@ import (
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 )
 
-// TestNetworkNotifyCatalogSinkBroadcastsServiceSignal proves the bespoke Service notify-only
+// TestNetworkNotifyCatalogSinkBroadcastsServiceSignal proves the bespoke Service signal-only
 // change signal fires from the ingest Catalog-half Sink: an Upsert of the Service catalog
 // Summary broadcasts a MODIFIED change signal on namespace-network + the Service's namespace
 // scope, carrying Ref + ResourceVersion and NO Row — byte-equivalent to the typed
@@ -54,7 +54,7 @@ func TestNetworkNotifyCatalogSinkBroadcastsServiceSignal(t *testing.T) {
 }
 
 // TestNetworkNotifyCatalogSinkBroadcastsEndpointSliceSignal proves the bespoke EndpointSlice
-// notify-only change signal fires from the Catalog-half Sink on namespace-network + the
+// signal-only change signal fires from the Catalog-half Sink on namespace-network + the
 // slice's namespace scope. The slice's namespace-scoped signal already refetches every
 // Service row in the namespace (Service and EndpointSlice share the namespace-network domain
 // AND scope), so no separate derived per-Service signal is needed — the namespace refetch

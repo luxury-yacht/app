@@ -32,7 +32,7 @@ func (m *Manager) registerDescriptorStreams(factory *informer.Factory) {
 			continue
 		}
 		// IngestOwned (cut) kinds have no typed informer in the factory; their
-		// notify-only change signal is driven from the ingest Catalog-half Sink
+		// signal-only change signal is driven from the ingest Catalog-half Sink
 		// (registerIngestNotifyStreams) so calling d.Informer(shared) here would
 		// re-create the very informer the cutover eliminated.
 		if _, owned := ingestOwned[d.GVR()]; owned {

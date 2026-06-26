@@ -208,7 +208,7 @@ type Manager struct {
 
 // NewManager wires informer handlers into a resource stream manager. ingestManager,
 // when non-nil, is the owned-reflector source for the IngestOwned (cut) kinds: their
-// notify-only change signal is driven from its Catalog-half Sink instead of a typed
+// signal-only change signal is driven from its Catalog-half Sink instead of a typed
 // shared informer (see registerIngestNotifyStreams), so the factory never caches them.
 func NewManager(
 	factory *informer.Factory,
@@ -257,7 +257,7 @@ func NewManager(
 	mgr.registerNodeStreams(factory, ingestManager)
 	mgr.registerWorkloadStreams(factory, ingestManager)
 
-	// IngestOwned kinds have no typed informer in the factory; their notify-only
+	// IngestOwned kinds have no typed informer in the factory; their signal-only
 	// change signal comes from the ingest reflector's Catalog-half Sink instead.
 	mgr.registerIngestNotifyStreams(ingestManager)
 
@@ -867,7 +867,7 @@ func (m *Manager) handleWorkloadFromHPA(hpa *autoscalingv1.HorizontalPodAutoscal
 	if !ok {
 		return
 	}
-	// notify-only: signal the targeted workload so its query-backed row refetches
+	// signal-only: signal the targeted workload so its query-backed row refetches
 	// (and picks up the new/removed HPA context from the snapshot builder).
 	if kind == podspkg.Identity.Kind {
 		m.broadcastStandalonePodWorkloadRow(namespace, name, hpa.ResourceVersion)
