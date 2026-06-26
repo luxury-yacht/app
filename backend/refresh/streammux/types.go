@@ -41,12 +41,14 @@ type ClientMessage struct {
 
 // ServerMessage is the envelope sent back to websocket clients.
 //
-// Row identity flows through Ref. The previous top-level identity
-// fields (UID/Name/Namespace/Kind/APIGroup/APIVersion) have been
-// removed as part of the resource-stream projection contract plan;
-// consumers must read identity from Ref. ClusterID and ClusterName
-// stay on the envelope as routing metadata that applies to every
-// message type (including control messages without a row Ref).
+// The envelope carries only a change SIGNAL, never a projected row: every
+// streamed table is query-backed, so the visible page is fetched over HTTP and
+// the subscription exists only to learn WHEN to refetch. A changed object's
+// identity travels through Ref (the previous top-level identity fields —
+// UID/Name/Namespace/Kind/APIGroup/APIVersion — were removed; consumers must
+// read identity from Ref). ClusterID and ClusterName stay on the envelope as
+// routing metadata that applies to every message type (including control
+// messages without a Ref).
 type ServerMessage struct {
 	Type            MessageType                     `json:"type"`
 	ClusterID       string                          `json:"clusterId,omitempty"`
@@ -56,7 +58,6 @@ type ServerMessage struct {
 	ResourceVersion string                          `json:"resourceVersion,omitempty"`
 	Sequence        string                          `json:"sequence,omitempty"`
 	Ref             *resourcemodel.ResourceRef      `json:"ref,omitempty"`
-	Row             interface{}                     `json:"row,omitempty"`
 	Error           string                          `json:"error,omitempty"`
 	ErrorDetails    *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }

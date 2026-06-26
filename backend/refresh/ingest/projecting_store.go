@@ -7,8 +7,9 @@
 // …) while the maintained stores additionally hold projected rows — double
 // storage. ProjectingStore collapses that: the source object is projected the
 // moment it lands and is then droppable, so the store holds the projected row
-// alone. This package is self-contained and is NOT wired into any live path; it
-// is the foundation later steps cut consumers over to.
+// alone. It is wired into the live refresh subsystem via IngestManager
+// (system.NewSubsystemWithServices -> ingest.NewIngestManager), which feeds the
+// maintained stores the cut kinds serve from.
 package ingest
 
 import (

@@ -184,7 +184,7 @@ func (a *App) restoreClusterIngestStores(clusterID string, im *ingest.IngestMana
 // clusterCooledMmapDir is the per-cluster directory the cooled maintained stores' mmap column
 // files live in. It is a subdir of clusterSpillDir, so the stage-2 format-version guard (which
 // clears the whole spill root on app upgrade) covers it too, and it never collides with the
-// gob warm-paint spill files in the parent directory.
+// columnar warm-paint spill files in the parent directory.
 func (a *App) clusterCooledMmapDir(clusterID string) (string, error) {
 	dir, err := a.clusterSpillDir(clusterID)
 	if err != nil {

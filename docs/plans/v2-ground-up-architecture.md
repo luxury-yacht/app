@@ -1,12 +1,64 @@
 # Luxury Yacht v2 — Ground-Up Architecture (Design + Migration)
 
-Status: **In progress — see the Build Status ledger below.** This is a clean-sheet
-architecture for handling very large clusters (100k–1M+ objects, many GVRs,
-multiple clusters open), loading data as fast as possible, and keeping updates
-near real-time. It is written as a phased *evolution* of the current app, not a
-big-bang rewrite — every phase ships value behind existing seams. Nothing here is
-committed until **Prototype #1 (the write-path benchmark gate, §Risks)** picks the
-store engine.
+Status: **Substantially built — but the headline real-time-delivery and
+single-clock goals were _replaced_, not delivered. Read the Post-implementation
+audit immediately below before trusting the "PLAN COMPLETE" line in the ledger.**
+This is a clean-sheet architecture for handling very large clusters (100k–1M+
+objects, many GVRs, multiple clusters open), loading data as fast as possible, and
+keeping updates near real-time. It is written as a phased *evolution* of the
+current app, not a big-bang rewrite — every phase ships value behind existing
+seams. Nothing here is committed until **Prototype #1 (the write-path benchmark
+gate, §Risks)** picks the store engine.
+
+> **Post-implementation audit — 2026-06-25 (code on branch `arch-rewrite`, each
+> claim verified `file:line`).** The "one of each" goals split into _delivered_ vs.
+> _replaced/dropped_. The ledger's "PLAN COMPLETE" line means **all _retained_
+> tiers**, not the §3.4/§3.6 design as written.
+>
+> **Delivered (built + wired):**
+> - One owned columnar store, no cgo / no linked SQLite (`querypage/store.go`,
+>   `columnar.go`; `CGO_ENABLED=0` builds; `go-sqlite3` is only a transitive
+>   go.sum entry via Helm, never imported/compiled).
+> - One `Query → Page` engine for typed tables **and** Browse; both old
+>   engines/codecs (`typedTableQueryCollector`, the catalog chunk-scan + cursor
+>   codec) deleted (`querypage_typed.go`, `objectcatalog/query_engine.go`).
+> - Webview holds only the visible window + cursor; backend owns
+>   sort/filter/facets.
+> - WatchList ingestion with projection-at-intake (managedFields stripped, typed
+>   object discarded) + capability-probe + LIST fallback (`ingest/`,
+>   `informer/watchlist_probe.go`).
+> - Foreground/Background/Cold governor + columnar spill + dual-mode mmap
+>   Cold-serving (`system/governor.go`, `domain/maintained_stores.go`).
+> - The three table-row delivery models collapsed to one; the live-row-merge path
+>   is deleted.
+>
+> **Replaced or NOT built (the headline §3.4/§3.6 design):**
+> - **Single per-cluster object `LSN` clock — NOT built.** Phase 2 was dropped; the
+>   four ordering signals (per-(domain,scope) sequence, per-object
+>   `resourceVersion`, frontend `liveDomainVersion`, snapshot `Sequence`) all
+>   remain. The only `LSN` artifact is an unwired additive cursor field
+>   (`querypage/cursor.go:56`). So the "one clock per data source" invariant under
+>   §Principles is **aspirational, not met**.
+> - **The "page + window delta" WS protocol (§3.4) — NOT built.** No positional
+>   INSERT/MOVE/REMOVE/DOORBELL frames, no CBOR, no h2c, no MessagePack/Worker, no
+>   object/metric sub-channels. The shipped delivery model is
+>   **"page + refetch-on-signal"**: a `streamRevision` bump triggers a full HTTP
+>   page refetch over the existing gorilla WebSocket (JSON). Simpler than §3.4 —
+>   arguably truer to the "simplify to one of each" thesis, but not what §3.4
+>   specifies.
+> - **Metrics fully split (§3.6) — PARTIAL.** Store-zeroing + serve-time
+>   `LatestPodUsage()` overlay + a metricsRev-free projection cache are built; but
+>   `snapshotVersionWithDynamicRevision` (`pods.go`, `table_window.go:19`) still
+>   folds the metrics revision into the published snapshot version (load-bearing —
+>   it is how a metrics poll triggers the refetch in the model above), and there is
+>   no `metricsRevision` metric index — metric sorts parse the overlaid row strings.
+> - **The order-statistics (Rank/At) index (§3.2 "owned #2") — NOT built.** The
+>   store uses plain keyset b-trees per sort direction; there is no
+>   subtree-size-augmented tree. It was only needed by the unbuilt delta layer, so
+>   its absence is consistent.
+> - **Governor memory trigger** is a `runtime.ReadMemStats` HeapInuse-vs-budget poll
+>   (`app_refresh_governor.go`), **not** `GOMEMLIMIT`/`debug.SetMemoryLimit` as
+>   §Multi-cluster states. Behavior matches; mechanism differs.
 
 It reacts to, and would consolidate, the contracts in:
 
@@ -223,7 +275,7 @@ sections it references._
 > cpu/memory by numeric LIVE usage (`NumericSort` → `parseFormattedCPUToMilli`/`parseFormattedMemoryToBytes`, schema
 > lists cpu/memory, `finishNodeSnapshot` serves the metrics-overlaid rows through the engine); the gap was a missing
 > regression test, now added (`TestNodesSortByMetricUsage`, values chosen so lexical≠numeric order).
-> **➤ PLAN COMPLETE (2026-06-25) — all tiers + all refinements landed, gate-green.** The re-baseline tier list —
+> **➤ RETAINED TIERS COMPLETE (2026-06-25) — all _kept_ tiers + refinements landed, gate-green. NOT the full §3.4/§3.6 design: the LSN clock and the window-delta WS protocol were dropped/replaced — see the Post-implementation audit at the top.** The re-baseline tier list —
 > 1.1, 1.2, 1.3, 2.4, 2.5 (all four cold-start stages), 2.6 (mmap on-disk column format + dual-mode Cold-serving
 > tier), 2.7 — is done + gated (`mage qc:prerelease` EXIT 0). The previously-"STILL OPEN" items are now ALL done:
 > (a) 2.6 dual-mode mmap SERVING — the governor Cold action cools a cluster to a read-only mmap-aliased store (bulk

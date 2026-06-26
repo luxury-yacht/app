@@ -40,7 +40,6 @@ func TestManagerNewObjectUpdateCopiesClusterAndObjectMetadata(t *testing.T) {
 	require.Equal(t, "", update.Ref.Group)
 	require.Equal(t, "v1", update.Ref.Version)
 	require.Equal(t, ref, *update.Ref)
-	require.Nil(t, update.Row)
 }
 
 func TestManagerResourceRefForObjectBuildsValidatedIdentity(t *testing.T) {
@@ -70,59 +69,6 @@ func TestManagerResourceRefForObjectValidationRejectsIncompleteIdentity(t *testi
 
 	require.Error(t, resourcemodel.ValidateResourceRef(manager.resourceRefForObject(configMap, "", "", "ConfigMap", "configmaps")))
 	require.Error(t, resourcemodel.ValidateResourceRef(manager.resourceRefForObject(configMap, "", "v1", "Deployment", "deployments")))
-}
-
-func TestManagerNewObjectRowUpdateAlwaysOmitsRows(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
-	}
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "secret",
-			Namespace:       "default",
-			UID:             "secret-uid",
-			ResourceVersion: "9",
-		},
-	}
-	row := map[string]string{"name": "secret"}
-
-	ref := manager.resourceRefForObject(secret, "", "v1", "Secret", "secrets")
-	// Every streamed table is query-backed now, so adds omit Row too — not just deletes.
-	added := manager.newObjectRowUpdate(MessageTypeAdded, domainNamespaceHelm, secret, ref, row)
-	require.Nil(t, added.Row)
-
-	deleted := manager.newObjectRowUpdate(MessageTypeDeleted, domainNamespaceHelm, secret, ref, row)
-	require.Nil(t, deleted.Row)
-	require.Equal(t, "secret", deleted.Ref.Name)
-	require.Equal(t, "default", deleted.Ref.Namespace)
-	require.Equal(t, ref, *deleted.Ref)
-}
-
-func TestManagerNewObjectRowUpdateOmitsRowsForEveryDomain(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-id", ClusterName: "cluster-name"},
-	}
-	object := &metav1.ObjectMeta{
-		Name:            "web",
-		Namespace:       "default",
-		UID:             "web-uid",
-		ResourceVersion: "77",
-	}
-	row := map[string]string{"name": "web"}
-	ref := manager.resourceRefForObject(object, "apps", "v1", "Deployment", "deployments")
-
-	// Every streamed table is query-backed, so the stream ships change notifications
-	// without the projected row: even ADDED/MODIFIED omit Row, while identity (Ref)
-	// and ResourceVersion still travel so drift detection and the query-backed refetch
-	// trigger keep working. This holds for the previously row-bearing helm domain too.
-	for _, domain := range []string{domainWorkloads, domainNamespaceHelm} {
-		for _, updateType := range []MessageType{MessageTypeAdded, MessageTypeModified} {
-			update := manager.newObjectRowUpdate(updateType, domain, object, ref, row)
-			require.Nilf(t, update.Row, "%s must omit Row for %s", domain, updateType)
-			require.Equal(t, "77", update.ResourceVersion)
-			require.Equal(t, ref, *update.Ref)
-		}
-	}
 }
 
 func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
@@ -175,9 +121,6 @@ func TestManagerNewObjectRowUpdateCarriesMetadataFromResourceRef(t *testing.T) {
 			require.Equal(t, tt.version, update.Ref.Version)
 			require.Equal(t, tt.resource, update.Ref.Resource)
 			require.Equal(t, ref, *update.Ref)
-			// Every domain ships the change signal and metadata without the
-			// projected Row; the query-backed table refetches the visible page.
-			require.Nil(t, update.Row)
 		})
 	}
 }

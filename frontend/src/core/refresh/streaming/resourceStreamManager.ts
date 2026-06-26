@@ -85,7 +85,6 @@ type ServerMessage = {
     name?: string;
     uid?: string;
   };
-  row?: unknown;
   error?: string;
   errorDetails?: PermissionDeniedStatus;
 };
@@ -130,13 +129,7 @@ const normalizeUpdateClusterId = (update: UpdateMessage, clusterId: string): Upd
   if (messageClusterId && messageClusterId === clusterId) {
     return update;
   }
-  const next: UpdateMessage = { ...update, clusterId };
-  if (update.row && typeof update.row === 'object' && !Array.isArray(update.row)) {
-    if ('clusterId' in update.row) {
-      next.row = { ...(update.row as Record<string, unknown>), clusterId };
-    }
-  }
-  return next;
+  return { ...update, clusterId };
 };
 
 const parseResourceVersion = (value?: string | number): bigint | null => {

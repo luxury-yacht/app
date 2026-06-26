@@ -57,7 +57,6 @@ func TestNodeNotifyCatalogSinkBroadcastsChangeSignal(t *testing.T) {
 	require.Equal(t, "Node", update.Ref.Kind)
 	require.Equal(t, "node-uid", update.Ref.UID)
 	require.Equal(t, "9", update.ResourceVersion)
-	require.Nil(t, update.Row)
 
 	sink.Delete(objectcatalog.Summary{Name: "node-a", UID: "node-uid", ResourceVersion: "10"})
 	del := requireNextUpdate(t, sub)
@@ -87,7 +86,6 @@ func TestBroadcastNodeFromPodNodeResolvesViaIngest(t *testing.T) {
 	require.Equal(t, "Node", update.Ref.Kind)
 	require.Equal(t, "node-uid", update.Ref.UID)
 	require.Equal(t, "7", update.ResourceVersion)
-	require.Nil(t, update.Row)
 }
 
 // TestBroadcastNodeFromPodNodeSkipsUnknownNode proves a node not in the ingest store is

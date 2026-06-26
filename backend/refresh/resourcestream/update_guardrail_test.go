@@ -12,22 +12,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStreamHandlersDoNotConstructRowsDirectly(t *testing.T) {
+// TestStreamHandlersPassProjectorDerivedRowArg enforces that every call to the
+// newObjectRowUpdate helper passes a projector-derived row argument (nil, a local
+// identifier, or a snapshot.Build*Summary call) — never a hand-assembled row
+// literal.
+//
+// The Update/ServerMessage envelope no longer has a Row field, so shipping a
+// projected row over the wire is impossible by construction; what remains worth
+// guarding is that the projection some callers still build (e.g. pods, for
+// load-bearing broadcast scope) comes from the canonical projector rather than a
+// divergent hand-built value.
+func TestStreamHandlersPassProjectorDerivedRowArg(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	dir := filepath.Dir(filename)
 
-	allowedFiles := map[string]struct{}{
-		"update_helpers.go": {},
-	}
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	require.NoError(t, err)
 	for _, path := range files {
-		base := filepath.Base(path)
-		if strings.HasSuffix(base, "_test.go") {
-			continue
-		}
-		if _, ok := allowedFiles[base]; ok {
+		if strings.HasSuffix(filepath.Base(path), "_test.go") {
 			continue
 		}
 
@@ -35,43 +38,22 @@ func TestStreamHandlersDoNotConstructRowsDirectly(t *testing.T) {
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		require.NoError(t, err)
 		ast.Inspect(file, func(node ast.Node) bool {
-			switch n := node.(type) {
-			case *ast.CompositeLit:
-				if ident, ok := n.Type.(*ast.Ident); ok && ident.Name == "Update" {
-					for _, elt := range n.Elts {
-						kv, ok := elt.(*ast.KeyValueExpr)
-						if !ok {
-							continue
-						}
-						if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Row" {
-							require.Failf(t, "direct row construction", "%s uses Update{Row: ...}; use projection/update helpers", fset.Position(kv.Pos()))
-						}
-					}
-				}
-			case *ast.AssignStmt:
-				for _, lhs := range n.Lhs {
-					selector, ok := lhs.(*ast.SelectorExpr)
-					if ok && selector.Sel.Name == "Row" {
-						require.Failf(t, "direct row assignment", "%s assigns update.Row; use projection/update helpers", fset.Position(selector.Pos()))
-					}
-				}
-			case *ast.CallExpr:
-				if !callIsObjectRowUpdate(n) {
-					return true
-				}
-				if len(n.Args) == 0 {
-					return true
-				}
-				row := n.Args[len(n.Args)-1]
-				if !rowArgIsApproved(row) {
-					require.Failf(
-						t,
-						"row arg must come from snapshot.Build* projector",
-						"%s passes a non-projector value as the row argument to newObjectRowUpdate; "+
-							"row construction must go through snapshot.Build*Summary or a nil/identifier value derived from one",
-						fset.Position(row.Pos()),
-					)
-				}
+			call, ok := node.(*ast.CallExpr)
+			if !ok || !callIsObjectRowUpdate(call) {
+				return true
+			}
+			if len(call.Args) == 0 {
+				return true
+			}
+			row := call.Args[len(call.Args)-1]
+			if !rowArgIsApproved(row) {
+				require.Failf(
+					t,
+					"row arg must come from snapshot.Build* projector",
+					"%s passes a non-projector value as the row argument to newObjectRowUpdate; "+
+						"row construction must go through snapshot.Build*Summary or a nil/identifier value derived from one",
+					fset.Position(row.Pos()),
+				)
 			}
 			return true
 		})

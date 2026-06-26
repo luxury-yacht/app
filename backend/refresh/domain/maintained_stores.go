@@ -82,8 +82,8 @@ func spillFileName(dir, name string) string {
 }
 
 // mmapFileName derives a store's cooled mmap-file path under dir from its name. It is the
-// columnar mmap format (.qcm), distinct from the gob spill (.spill) the cross-restart
-// warm-paint uses, so the two never collide in the same directory.
+// read-only cooled mmap format (.qcm), distinct from the columnar warm-paint spill (.spill)
+// the cross-restart restore uses, so the two never collide in the same directory.
 func mmapFileName(dir, name string) string {
 	return filepath.Join(dir, name+".qcm")
 }

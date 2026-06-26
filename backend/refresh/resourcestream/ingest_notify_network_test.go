@@ -46,7 +46,6 @@ func TestNetworkNotifyCatalogSinkBroadcastsServiceSignal(t *testing.T) {
 	require.Equal(t, domainNamespaceNetwork, add.Domain)
 	require.Equal(t, "namespace:default", add.Scope)
 	requireUpdateObjectMetadata(t, add, "3", "svc-uid", "svc-1", "default", "Service")
-	require.Nil(t, add.Row)
 
 	sink.Delete(summary)
 	del := requireNextUpdate(t, sub)
@@ -87,5 +86,4 @@ func TestNetworkNotifyCatalogSinkBroadcastsEndpointSliceSignal(t *testing.T) {
 	require.Equal(t, domainNamespaceNetwork, update.Domain)
 	require.Equal(t, "namespace:default", update.Scope)
 	requireUpdateObjectMetadata(t, update, "5", "slice-uid", "slice-1", "default", "EndpointSlice")
-	require.Nil(t, update.Row)
 }

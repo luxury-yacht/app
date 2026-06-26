@@ -59,7 +59,6 @@ func TestPodNotifyBundleSinkBroadcastsPodRowSignal(t *testing.T) {
 		require.Equal(t, "default", update.Ref.Namespace)
 		require.Equal(t, "pod-uid", update.Ref.UID)
 		require.Equal(t, "12", update.ResourceVersion)
-		require.Nil(t, update.Row, "pods is query-backed: the live stream carries the signal, not the row")
 	default:
 		t.Fatal("expected a pod-row signal to be delivered")
 	}

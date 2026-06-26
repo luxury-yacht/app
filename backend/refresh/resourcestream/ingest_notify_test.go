@@ -46,7 +46,6 @@ func TestIngestNotifySinkBroadcastsNamespacedSignal(t *testing.T) {
 	require.Equal(t, domainNamespaceQuotas, update.Domain)
 	require.Equal(t, "namespace:default", update.Scope)
 	requireUpdateObjectMetadata(t, update, "7", "quota-uid", "quota-1", "default", "ResourceQuota")
-	require.Nil(t, update.Row) // query-backed: change signal ships without the Row
 }
 
 // TestIngestNotifySinkBroadcastsClusterSignalAndDelete proves the cluster-scoped
@@ -79,7 +78,6 @@ func TestIngestNotifySinkBroadcastsClusterSignalAndDelete(t *testing.T) {
 	require.Equal(t, domainClusterRBAC, add.Domain)
 	require.Equal(t, "", add.Scope)
 	requireUpdateObjectMetadata(t, add, "10", "cr-uid", "cluster-role-1", "", "ClusterRole")
-	require.Nil(t, add.Row)
 
 	sink.Delete(summary)
 	del := requireNextUpdate(t, sub)
