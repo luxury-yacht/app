@@ -61,8 +61,8 @@ func (m *Manager) lookupPodBundle(namespace, name string) (snapshot.PodSummary, 
 // podNotifyBundleSink adapts the pod live-stream notify to an ingest whole-Bundle sink.
 // Each UpsertBundle fires a MODIFIED signal (the pod's row may have changed) and each
 // DeleteBundle a DELETED signal — the same Add/Update/Delete -> broadcast mapping the
-// typed pod handler applied, collapsed to the two events a Sink exposes (byte-equivalent
-// to the consumer, which bumps streamRevision on any signal and never reads Update.Type
+// typed pod handler applied, collapsed to the two events a Sink exposes (equivalent to
+// the consumer, which advances sourceVersion on any signal and never reads Update.Type
 // for these query-backed domains).
 type podNotifyBundleSink struct {
 	manager *Manager

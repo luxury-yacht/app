@@ -96,10 +96,10 @@ the completed `v2` rewrite plan; the forward work is in
 
 - **Pull:** `GET /api/v2/snapshots/{domain}` (`refresh/api/server.go:59`) → `Build`.
 - **Push:** the resources **WebSocket** `/api/v2/stream/resources` carries only a change
-  **signal**; a delta/resync bumps `streamRevision` and the query-backed view refetches
-  its page. **No live row ever crosses the wire** — the envelope (`streammux.ServerMessage`)
-  has no row field, and the live-row-merge path (`applyResourceRowUpdates`, `mergeSnapshotRows`,
-  `sortRows`, per-domain collections) is deleted. See
+  **signal**; a delta/resync advances the scoped `sourceVersion` and the
+  query-backed view refetches its page. **No live row ever crosses the wire** — the
+  envelope (`streammux.ServerMessage`) has no row field, and the live-row-merge path
+  (`applyResourceRowUpdates`, `mergeSnapshotRows`, `sortRows`, per-domain collections) is deleted. See
   [`resource-stream-signals.md`](./resource-stream-signals.md) for the frontend contract.
 - **Metrics** reach a view by serve-time overlay (above), not the store or the wire.
 
@@ -133,8 +133,9 @@ Validated/decided during the rewrite; reasons in git history + the memory record
 - **Order-statistics Rank/At index** and a **`metricsRevision` metric index** — only the
   unbuilt delta layer / profiled metric-sorted views would need them.
 
-The genuinely-remaining simplification (unify the four ordering clocks + the three push
-channels) is scoped in [`../plans/v2-remaining-work.md`](../plans/v2-remaining-work.md).
+The ordering/liveness simplification is tracked in
+[`../plans/v2-remaining-work.md`](../plans/v2-remaining-work.md); remaining items there
+are cleanup/profile decisions, not a second delivery model.
 
 ## Provenance
 

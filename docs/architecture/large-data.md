@@ -197,13 +197,13 @@ object-panel table becomes namespace or cluster scale.
 A query-backed table renders one-shot query pages, so its liveness comes from
 refetching — never from mutating displayed rows in place. The contract:
 
-- The typed query refetches exactly when the scoped live domain's **data
-  identity** changes: `liveDomainVersion = version:checksum:streamRevision`
-  (`useQueryBackedResourceGridTable.ts`). `version`/`checksum` come from window
-  snapshots (polls, resyncs); `streamRevision` is bumped by the resource-stream
-  and events-stream managers when a streamed delivery actually changes rows.
-  Refresh timestamps are deliberately excluded — identical data must never
-  trigger a refetch (the anti-churn invariant).
+- The typed query refetches exactly when the scoped live domain's **source
+  identity** changes: `liveDomainVersion = sourceVersion`
+  (`useQueryBackedResourceGridTable.ts`). `sourceVersion` comes from snapshot
+  responses and resource WebSocket doorbells; the HTTP snapshot endpoint uses the
+  same token for `ETag` / `304`. Refresh timestamps are deliberately excluded —
+  identical source identity must never trigger a refetch (the anti-churn
+  invariant).
 - **Update latency**: for streamed domains, a cluster change is visible within
   one stream coalescing window (200ms flush in the stream managers) plus one
   query round-trip (an in-memory backend page build — tens of milliseconds at

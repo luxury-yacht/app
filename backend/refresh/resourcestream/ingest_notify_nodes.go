@@ -83,8 +83,8 @@ func (m *Manager) registerNodeIngestNotify(ingestManager *ingest.IngestManager) 
 // The reflector delivers the projected catalog Summary (never the source object), which carries
 // every identity field the node change signal needs. Upsert fires a MODIFIED signal and Delete
 // a DELETED signal — the same Add/Update/Delete -> broadcast mapping the typed handleNode
-// applied, collapsed to the two events a Sink exposes (byte-equivalent to the consumer, which
-// bumps streamRevision on any signal and never reads Update.Type for this query-backed domain).
+// applied, collapsed to the two events a Sink exposes (equivalent to the consumer, which
+// advances sourceVersion on any signal and never reads Update.Type for this query-backed domain).
 type nodeNotifyCatalogSink struct {
 	manager *Manager
 }

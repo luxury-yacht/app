@@ -53,9 +53,9 @@ func (m *Manager) registerIngestNotifyStreams(ingestManager *ingest.IngestManage
 // signal-only change signal for one IngestOwned descriptor. Upsert fires a MODIFIED
 // signal (the row may have changed) and Delete a DELETED signal — the same Add/
 // Update/Delete → broadcast mapping the shared-informer handler applied, collapsed to
-// the two events a Sink exposes. The frontend bumps streamRevision on any signal and
-// never reads Update.Type for these query-backed domains, so collapsing Add+Update to
-// MODIFIED is byte-equivalent to the consumer. The catalog half's incremental replay on
+	// the two events a Sink exposes. The frontend advances sourceVersion on any signal and
+	// never reads Update.Type for these query-backed domains, so collapsing Add+Update to
+	// MODIFIED is equivalent to the consumer. The catalog half's incremental replay on
 // registration (AddCatalogSink re-Upserts the already-ingested set) means a sink
 // registered after the reflector started still signals the current set, matching an
 // informer's re-delivery of its store to a late handler.

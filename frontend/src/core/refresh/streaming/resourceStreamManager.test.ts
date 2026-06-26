@@ -295,8 +295,8 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('namespace-workloads', storeScope);
 
     // namespace-workloads is signal-only: the backend ships the change signal
-    // (Ref/ResourceVersion) without a row. The frontend must bump streamRevision
-    // — so the query-backed table refetches — and leave the row list untouched.
+    // (Ref/ResourceVersion) without a row. The frontend advances sourceVersion
+    // so the query-backed table refetches and leaves the row list untouched.
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
@@ -416,11 +416,9 @@ describe('ResourceStreamManager', () => {
     expect(getScopedDomainState('pods', storeScope).sourceVersion).toBeUndefined();
   });
 
-  // The typed query refetches only when the live-data identity
-  // (version/checksum/streamRevision) changes. Streamed row updates do not carry
-  // a new backend snapshot version, so they must bump streamRevision or the
-  // query-backed views never see streamed changes.
-  test('streamed updates bump streamRevision (signal-only: no content suppression)', () => {
+  // The typed query refetches from sourceVersion. streamRevision is retained as
+  // diagnostic/backward-compatible state for legacy signal-only messages.
+  test('legacy streamed updates bump diagnostic streamRevision', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -724,8 +722,8 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     // pods is signal-only: both deltas are accepted (sequence advances despite the
-    // resourceVersion regressing), so each flush bumps streamRevision — and the
-    // regression does not trigger a resync.
+    // resourceVersion regressing), so each flush advances the sourceVersion refetch
+    // signal while streamRevision remains diagnostic/backward-compatible state.
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     const state = getScopedDomainState('pods', storeScope);
     expect(state.streamRevision).toBe(2);
@@ -794,7 +792,7 @@ describe('ResourceStreamManager', () => {
 
     await flushPromises();
 
-    // Notify-only resync re-arms the stream and bumps streamRevision (no snapshot fetch).
+    // Notify-only resync re-arms the stream and bumps diagnostic streamRevision.
     expect(
       getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
     ).toBeGreaterThan(0);
@@ -825,7 +823,7 @@ describe('ResourceStreamManager', () => {
 
     await flushPromises();
 
-    // Notify-only recovers by re-arming the stream + bumping streamRevision (no fetch).
+    // Notify-only recovers by re-arming the stream and bumping diagnostic streamRevision.
     const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.streamRevision ?? 0).toBeGreaterThan(0);
   });
@@ -1009,7 +1007,7 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // A later reset is a real resync: it re-arms the stream and bumps streamRevision.
+    // A later reset is a real resync: it re-arms the stream and bumps diagnostic streamRevision.
     expect(
       getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
     ).toBeGreaterThan(0);
@@ -1051,7 +1049,7 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // COMPLETE triggers a signal-only resync: re-arm + bump streamRevision (no fetch).
+    // COMPLETE triggers a signal-only resync: re-arm + diagnostic streamRevision bump.
     expect(
       getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
     ).toBeGreaterThan(0);
@@ -1177,7 +1175,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     // The stale-then-newer deltas (sequence advancing) are accepted and bump
-    // streamRevision; a signal-only start/resync never fetches a snapshot.
+    // diagnostic streamRevision; a signal-only start/resync never fetches a snapshot.
     const state = getScopedDomainState('pods', storeScope);
     expect(state.streamRevision ?? 0).toBeGreaterThanOrEqual(1);
     expect(fetchSnapshotMock).not.toHaveBeenCalled();

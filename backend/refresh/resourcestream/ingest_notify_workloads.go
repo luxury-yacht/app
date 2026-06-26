@@ -131,7 +131,7 @@ func (m *Manager) registerWorkloadIngestNotify(ingestManager *ingest.IngestManag
 // object), which carries every identity field the workloads change signal needs. Upsert
 // fires a MODIFIED signal and Delete a DELETED signal — the same Add/Update/Delete ->
 // broadcast mapping the typed handleWorkload applied, collapsed to the two events a Sink
-// exposes (byte-equivalent to the consumer, which bumps streamRevision on any signal).
+// exposes to advance the consumer's sourceVersion refetch signal.
 type workloadNotifyCatalogSink struct {
 	manager  *Manager
 	identity resourcekind.Identity

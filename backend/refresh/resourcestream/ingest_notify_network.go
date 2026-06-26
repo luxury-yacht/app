@@ -53,7 +53,7 @@ func (m *Manager) registerNetworkIngestNotify(ingestManager *ingest.IngestManage
 // object), which carries every identity field the change signal needs. Upsert fires a
 // MODIFIED signal and Delete a DELETED signal — the same Add/Update/Delete -> broadcast
 // mapping the typed handlers applied, collapsed to the two events a Sink exposes
-// (byte-equivalent to the consumer, which bumps streamRevision on any signal and never reads
+// (equivalent to the consumer, which advances sourceVersion on any signal and never reads
 // Update.Type for this query-backed domain).
 type networkNotifyCatalogSink struct {
 	manager  *Manager

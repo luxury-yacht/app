@@ -183,7 +183,7 @@ all key off one source-version contract.
 clock — the object/metric split (see `../architecture/data-layer.md`, Invariant 4),
 completed.
 
-- **C0 [design, after A].** Metric freshness for visible query-backed pages uses
+- ✅ **C0 [design, after A].** Metric freshness for visible query-backed pages uses
   **throttled same-page refetch**. Pages subscribe to `source=metric` through an explicit
   throttle interval `N` (initially the existing `metricsRefreshIntervalMs` preference);
   when the visible page is stale past `N`, the app refetches that same typed-query page
@@ -194,7 +194,7 @@ completed.
   `TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges`. This reuses the
   existing page (HTTP) + doorbell model; no metric-only fetch shape or client-side
   query-row overlay is part of the C baseline.
-- **C1 [after C0, can precede B].** Classify query dependency on metrics in one place:
+- ✅ **C1 [after C0, can precede B].** Classify query dependency on metrics in one place:
   metric-sorted queries treat `source=metric` as throttled same-page refetch because
   metrics can affect order; object-sorted queries follow the C0 stable-row policy.
   Metric-filtered queries should enter the same metric-dependent branch only if a future
@@ -236,14 +236,16 @@ completed.
 
 ## Phase D — Smaller cleanups & consistency (low priority, profile-driven)
 
-- **D1.** Governor memory trigger: either adopt `GOMEMLIMIT`/`debug.SetMemoryLimit` as the
-  architecture named, or **document the `runtime.ReadMemStats` HeapInuse-vs-budget poll as
-  the accepted mechanism** (recommended — it works; the named one is not load-bearing).
-- **D2.** Order-statistics (`Rank`/`At`) index — **leave dropped** unless a profiled view
-  needs O(log N) rank answers; keyset pagination suffices today.
-- **D3.** Metric index on `metricsRevision` — **leave dropped** unless metric-sorted large
-  views profile slow (then it's a targeted add behind C2).
-- **D4.** Doc/comment drift sweep as surfaces change.
+- ✅ **D1.** Governor memory trigger: keep the documented `runtime.ReadMemStats`
+  HeapInuse-vs-budget poll as the accepted mechanism. Do not switch to
+  `GOMEMLIMIT` / `debug.SetMemoryLimit`; the architecture doc now names the poll
+  explicitly.
+- ✅ **D2.** Order-statistics (`Rank`/`At`) index stays dropped unless a future profiled
+  view needs O(log N) rank answers; keyset pagination is the baseline.
+- ✅ **D3.** Metric index on `metricsRevision` stays dropped unless metric-sorted large
+  views profile slow; the targeted add belongs behind the existing C2/C3 contract.
+- ✅ **D4.** Doc/comment drift sweep completed for the source-version/refetch identity,
+  governor memory trigger, and dropped-index decisions.
 
 ---
 
@@ -277,8 +279,8 @@ completed.
 | A — one doorbell | ✅ 2 SSE transports + aggregate routers + their clients | High (3 push paths → 1) | Landed |
 | B — one object scope clock | ✅ frontend tuple + checksum ETag + public sequence ordering | High (the core unmet goal) | Landed |
 | C — metrics split | ✅ object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Landed |
-| D — cleanups | naming/mechanism drift | Low | Low |
+| D — cleanups | ✅ naming/mechanism drift | Low | Landed |
 
-**Remaining recommended order: D only.** A removed duplicate push channels; B made
+**Remaining recommended order: none.** A removed duplicate push channels; B made
 `sourceVersion` the refetch/cache token; C folded metrics into that same source-version
-contract. D is opportunistic cleanup and profiling-driven follow-up.
+contract; D recorded the cleanup/profile decisions.

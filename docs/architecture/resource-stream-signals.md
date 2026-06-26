@@ -12,10 +12,13 @@ query-backed view when to refetch.
   cluster routing metadata, and errors.
 - `Manager.newObjectRowUpdate` may accept a row argument for projector guardrails
   and scope resolution, but it must emit only the signal fields.
-- `ResourceStreamManager.flushUpdates` must coalesce update messages and bump
-  `streamRevision`; it must not retain, merge, or sort streamed rows.
-- Query-backed table hooks must include `streamRevision` in `liveDomainVersion`
-  so a signal changes the query identity and refetches the visible page.
+- `ResourceStreamManager.flushUpdates` must coalesce update messages and advance
+  the scoped domain's `sourceVersion` / `sourceVersions`; it must not retain,
+  merge, or sort streamed rows.
+- Query-backed table hooks must use the scoped domain `sourceVersion` as the
+  live-data identity so a signal changes the query identity and refetches the
+  visible page. `streamRevision` is retained only as diagnostic/backward-
+  compatible state and must not drive query identity.
 
 ## Contract Vocabulary
 
