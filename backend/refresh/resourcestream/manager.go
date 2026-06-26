@@ -73,12 +73,15 @@ const (
 	domainNamespaceQuotas      = "namespace-quotas"
 	domainNamespaceStorage     = "namespace-storage"
 	// Cluster-scoped domains stream resources without namespace scopes.
-	domainClusterRBAC    = "cluster-rbac"
-	domainClusterStorage = "cluster-storage"
-	domainClusterConfig  = "cluster-config"
-	domainClusterCRDs    = "cluster-crds"
-	domainClusterCustom  = "cluster-custom"
-	domainNodes          = "nodes"
+	domainClusterRBAC     = "cluster-rbac"
+	domainClusterStorage  = "cluster-storage"
+	domainClusterConfig   = "cluster-config"
+	domainClusterCRDs     = "cluster-crds"
+	domainClusterCustom   = "cluster-custom"
+	domainNodes           = "nodes"
+	domainCatalog         = "catalog"
+	domainClusterEvents   = "cluster-events"
+	domainNamespaceEvents = "namespace-events"
 )
 
 const (
@@ -936,6 +939,44 @@ func (m *Manager) BroadcastMetricRefresh(version string) {
 			m.broadcast(domain, scopes, domainUpdate)
 		}
 	}
+}
+
+func (m *Manager) BroadcastCatalogRefresh(version string) {
+	if m == nil {
+		return
+	}
+	m.broadcastDoorbellRefresh(domainCatalog, m.subscribedScopes(domainCatalog), SourceCatalog, version)
+}
+
+func (m *Manager) BroadcastEventRefresh(domain, scope, version string) {
+	if m == nil {
+		return
+	}
+	selector, err := ParseStreamSelector(m.clusterMeta.ClusterID, domain, scope)
+	if err != nil {
+		return
+	}
+	m.broadcastDoorbellRefresh(domain, []string{selector.CanonicalScope()}, SourceEvent, version)
+}
+
+func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {
+	if m == nil {
+		return
+	}
+	version = strings.TrimSpace(version)
+	if version == "" || len(scopes) == 0 {
+		return
+	}
+	update := Update{
+		Type:        MessageTypeModified,
+		ClusterID:   m.clusterMeta.ClusterID,
+		ClusterName: m.clusterMeta.ClusterName,
+		Domain:      domain,
+		Source:      source,
+		Signal:      SignalChanged,
+		Version:     version,
+	}
+	m.broadcast(domain, scopes, update)
 }
 
 func (m *Manager) subscribedScopes(domain string) []string {

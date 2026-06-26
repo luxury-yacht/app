@@ -45,7 +45,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/objectcatalog.Service",
       "cachePolicy": "external-catalog-cache",
-      "streamSemantics": ["snapshot-replace", "append-merge"],
+      "streamSemantics": ["snapshot-replace", "change-signal"],
       "coverageContract": "catalog-consistency",
       "coverageStatus": "enforced"
     },
@@ -134,15 +134,15 @@
       "scopeContract": {
         "kind": "event-stream-scope",
         "clusterPrefix": "required",
-        "parser": "backend/refresh/eventstream/handler.go:parseScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["cluster"]
+        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
+        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
+        "acceptedEncodings": ["", "cluster"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/eventstream",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["append-merge"],
-      "coverageContract": "event-resume-merge",
+      "streamSemantics": ["snapshot-replace", "change-signal"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "cluster-rbac": {
@@ -246,15 +246,15 @@
       "scopeContract": {
         "kind": "event-stream-scope",
         "clusterPrefix": "required",
-        "parser": "backend/refresh/eventstream/handler.go:parseScope",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
+        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
+        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
         "acceptedEncodings": ["namespace:<namespace>"]
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/eventstream",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["append-merge"],
-      "coverageContract": "event-resume-merge",
+      "streamSemantics": ["snapshot-replace", "change-signal"],
+      "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
     "namespace-helm": {
@@ -529,14 +529,12 @@
     "domains": {
       "pods": {
         "scopeKind": "pod",
-        "sourceClocks": ["object", "metric"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}],
         "relatedResources": [{"group": "apps", "version": "v1", "kind": "ReplicaSet", "resource": "replicasets"}]
       },
       "namespace-workloads": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object", "metric"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "apps", "version": "v1", "kind": "Deployment", "resource": "deployments"},
@@ -554,7 +552,6 @@
       },
       "namespace-config": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"},
@@ -564,7 +561,6 @@
       },
       "namespace-network": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "Service", "resource": "services"},
@@ -583,7 +579,6 @@
       },
       "namespace-rbac": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "Role", "resource": "roles"},
@@ -594,14 +589,12 @@
       },
       "namespace-custom": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [],
         "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
       },
       "namespace-helm": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "rowProjection": "scope-level-complete-only",
         "primaryResources": [
@@ -616,14 +609,12 @@
       },
       "namespace-autoscaling": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}],
         "relatedResources": []
       },
       "namespace-quotas": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "", "version": "v1", "kind": "ResourceQuota", "resource": "resourcequotas"},
@@ -634,14 +625,12 @@
       },
       "namespace-storage": {
         "scopeKind": "namespace",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolumeClaim", "resource": "persistentvolumeclaims"}],
         "relatedResources": []
       },
       "cluster-rbac": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "rbac.authorization.k8s.io", "version": "v1", "kind": "ClusterRole", "resource": "clusterroles"},
@@ -651,14 +640,12 @@
       },
       "cluster-storage": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "PersistentVolume", "resource": "persistentvolumes"}],
         "relatedResources": []
       },
       "cluster-config": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [
           {"group": "storage.k8s.io", "version": "v1", "kind": "StorageClass", "resource": "storageclasses"},
@@ -671,21 +658,18 @@
       },
       "cluster-crds": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}],
         "relatedResources": []
       },
       "cluster-custom": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object"],
         "completeIsScopeLevel": true,
         "primaryResources": [],
         "relatedResources": [{"group": "apiextensions.k8s.io", "version": "v1", "kind": "CustomResourceDefinition", "resource": "customresourcedefinitions"}]
       },
       "nodes": {
         "scopeKind": "cluster",
-        "sourceClocks": ["object", "metric"],
         "completeIsScopeLevel": true,
         "primaryResources": [{"group": "", "version": "v1", "kind": "Node", "resource": "nodes"}],
         "relatedResources": [{"group": "", "version": "v1", "kind": "Pod", "resource": "pods"}]
@@ -720,6 +704,7 @@
     {
       "domain": "catalog",
       "category": "cluster",
+      "sourceClocks": ["catalog"],
       "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
       "frontend": {
         "refresherName": "catalog",
@@ -743,6 +728,7 @@
     {
       "domain": "nodes",
       "category": "cluster",
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-nodes",
@@ -755,6 +741,7 @@
     {
       "domain": "cluster-config",
       "category": "cluster",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-config",
@@ -766,6 +753,7 @@
     {
       "domain": "cluster-crds",
       "category": "cluster",
+      "sourceClocks": ["object"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-crds",
@@ -777,6 +765,7 @@
     {
       "domain": "cluster-custom",
       "category": "cluster",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-custom",
@@ -788,6 +777,7 @@
     {
       "domain": "cluster-events",
       "category": "cluster",
+      "sourceClocks": ["event"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "cluster-events",
@@ -799,6 +789,7 @@
     {
       "domain": "cluster-rbac",
       "category": "cluster",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-rbac",
@@ -810,6 +801,7 @@
     {
       "domain": "cluster-storage",
       "category": "cluster",
+      "sourceClocks": ["object"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-storage",
@@ -821,6 +813,7 @@
     {
       "domain": "namespace-workloads",
       "category": "namespace",
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "workloads",
@@ -833,6 +826,7 @@
     {
       "domain": "namespace-autoscaling",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "autoscaling",
@@ -844,6 +838,7 @@
     {
       "domain": "namespace-config",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "config",
@@ -855,6 +850,7 @@
     {
       "domain": "namespace-custom",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "custom",
@@ -866,6 +862,7 @@
     {
       "domain": "namespace-events",
       "category": "namespace",
+      "sourceClocks": ["event"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "events",
@@ -877,6 +874,7 @@
     {
       "domain": "namespace-helm",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "helm",
@@ -888,6 +886,7 @@
     {
       "domain": "namespace-network",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "network",
@@ -899,6 +898,7 @@
     {
       "domain": "namespace-quotas",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "quotas",
@@ -910,6 +910,7 @@
     {
       "domain": "namespace-rbac",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "rbac",
@@ -921,6 +922,7 @@
     {
       "domain": "namespace-storage",
       "category": "namespace",
+      "sourceClocks": ["object"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "storage",
@@ -932,6 +934,7 @@
     {
       "domain": "pods",
       "category": "system",
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "unified-pods",

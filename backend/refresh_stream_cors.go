@@ -4,13 +4,11 @@ import "net/http"
 
 // withStreamCORS applies CORS headers to every response from a stream
 // endpoint — including error responses written before a handler reaches its
-// own header setup (e.g. the aggregate routers' 400s during cluster
-// initialization). Without this, the browser blocks the failed response and
+// own header setup. Without this, the browser blocks the failed response and
 // reports an opaque CORS error instead of the real status and body.
 //
-// Mirrors the per-handler logic in refresh/snapshot/catalog_stream.go (echoed
-// Origin with a `*` fallback, credentials only for concrete origins) so the
-// success path is unchanged.
+// Echo concrete origins for the Wails webview, fall back to `*`, and only send
+// credentials for concrete origins.
 func withStreamCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

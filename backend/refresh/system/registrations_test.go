@@ -66,7 +66,6 @@ type scopeContract struct {
 
 type streamDomainContract struct {
 	ScopeKind            string                 `json:"scopeKind"`
-	SourceClocks         []string               `json:"sourceClocks"`
 	CompleteIsScopeLevel bool                   `json:"completeIsScopeLevel"`
 	RowProjection        string                 `json:"rowProjection,omitempty"`
 	PrimaryResources     []streamResourceRecord `json:"primaryResources"`
@@ -82,8 +81,9 @@ type streamResourceRecord struct {
 }
 
 type refreshDomainRecord struct {
-	Domain  string `json:"domain"`
-	Backend struct {
+	Domain       string   `json:"domain"`
+	SourceClocks []string `json:"sourceClocks,omitempty"`
+	Backend      struct {
 		Registration   string `json:"registration"`
 		Permission     string `json:"permission"`
 		ResourceStream bool   `json:"resourceStream"`
@@ -260,7 +260,7 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, "catalog-query", catalog.ScopeContract.Kind)
 	require.Equal(t, "backend/objectcatalog.Service", catalog.PayloadOwner)
 	require.Equal(t, "external-catalog-cache", catalog.CachePolicy)
-	require.ElementsMatch(t, []string{"snapshot-replace", "append-merge"}, catalog.StreamSemantics)
+	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, catalog.StreamSemantics)
 	require.Equal(t, "catalog-consistency", catalog.CoverageContract)
 
 	catalogDiff := contract.DomainInventory["catalog-diff"]
@@ -277,8 +277,8 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		require.Equal(t, "event-stream-scope", events.ScopeContract.Kind)
 		require.Equal(t, "backend/refresh/eventstream", events.PayloadOwner)
 		require.Equal(t, "snapshot-cache", events.CachePolicy)
-		require.Equal(t, []string{"append-merge"}, events.StreamSemantics)
-		require.Equal(t, "event-resume-merge", events.CoverageContract)
+		require.Equal(t, []string{"snapshot-replace", "change-signal"}, events.StreamSemantics)
+		require.Equal(t, "query-refetch-on-signal", events.CoverageContract)
 	}
 
 	objectEvents := contract.DomainInventory["object-events"]
@@ -456,38 +456,56 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 		entry, ok := contract.ResourceStream.Domains[domain]
 		require.Truef(t, ok, "resourceStream.domains.%s missing from refresh-domain-contract.json", domain)
 		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
-		require.ElementsMatchf(t, entry.SourceClocks, sourceClocksToStrings(descriptor.SourceClocks), "domain %s sourceClocks drift", domain)
 		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
 		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
 		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
 	}
 }
 
-// TestResourceStreamSourceClocksAuthored locks sourceClocks as the single
-// authored per-domain source-clock list: every resource-stream domain declares
-// object, the three metric-bearing domains additionally declare metric, and no
-// other source is used yet. Backend MetricsDependency derives from this list.
-func TestResourceStreamSourceClocksAuthored(t *testing.T) {
+// TestRefreshDomainSourceClocksAuthored locks sourceClocks as the single
+// authored per-domain source-clock list for doorbell-capable domains.
+func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
 	descriptors := resourcestream.ProjectionDescriptors()
 	metricDomains := map[string]bool{"pods": true, "namespace-workloads": true, "nodes": true}
-	validSources := map[string]bool{"object": true, "metric": true}
+	validSources := map[string]bool{"object": true, "metric": true, "event": true, "catalog": true}
 
-	for domain, entry := range contract.ResourceStream.Domains {
-		require.NotEmptyf(t, entry.SourceClocks, "domain %s must declare sourceClocks", domain)
-		require.Containsf(t, entry.SourceClocks, "object", "domain %s must declare the object source clock", domain)
-		hasMetric := false
-		for _, s := range entry.SourceClocks {
-			require.Truef(t, validSources[s], "domain %s declares unsupported source clock %q", domain, s)
-			if s == "metric" {
-				hasMetric = true
-			}
+	for _, entry := range contract.Domains {
+		inventory := contract.DomainInventory[entry.Domain]
+		requiresDoorbellClock := entry.Backend.ResourceStream ||
+			inventory.BehaviorClass == "event-stream" ||
+			inventory.BehaviorClass == "catalog-stream"
+		if !requiresDoorbellClock {
+			continue
 		}
-		require.Equalf(t, metricDomains[domain], hasMetric, "domain %s metric source clock must match the known metric-bearing domains", domain)
 
-		// MetricsDependency is derived, not authored: it must reflect the metric
-		// source clock so the metric flag keeps a single authority.
-		require.Equalf(t, hasMetric, descriptors[domain].MetricsDependency(), "domain %s MetricsDependency must derive from its metric source clock", domain)
+		require.NotEmptyf(t, entry.SourceClocks, "domain %s must declare sourceClocks", entry.Domain)
+		for _, s := range entry.SourceClocks {
+			require.Truef(t, validSources[s], "domain %s declares unsupported source clock %q", entry.Domain, s)
+		}
+
+		switch inventory.BehaviorClass {
+		case "event-stream":
+			require.ElementsMatchf(t, []string{"event"}, entry.SourceClocks, "domain %s event source clock", entry.Domain)
+		case "catalog-stream":
+			require.ElementsMatchf(t, []string{"catalog"}, entry.SourceClocks, "domain %s catalog source clock", entry.Domain)
+		default:
+			_, ok := contract.ResourceStream.Domains[entry.Domain]
+			require.Truef(t, ok, "resource-stream domain %s must have stream metadata", entry.Domain)
+			require.ElementsMatchf(t, sourceClocksToStrings(descriptors[entry.Domain].SourceClocks), entry.SourceClocks, "domain %s sourceClocks must mirror projection metadata", entry.Domain)
+			require.Containsf(t, entry.SourceClocks, "object", "domain %s must declare the object source clock", entry.Domain)
+			hasMetric := false
+			for _, s := range entry.SourceClocks {
+				if s == "metric" {
+					hasMetric = true
+				}
+			}
+			require.Equalf(t, metricDomains[entry.Domain], hasMetric, "domain %s metric source clock must match the known metric-bearing domains", entry.Domain)
+
+			// MetricsDependency is derived, not authored: it must reflect the
+			// metric source clock so the metric flag keeps a single authority.
+			require.Equalf(t, hasMetric, descriptors[entry.Domain].MetricsDependency(), "domain %s MetricsDependency must derive from its metric source clock", entry.Domain)
+		}
 	}
 }
 
@@ -689,11 +707,10 @@ func enforcedCoverageProofs(t *testing.T) map[string]map[string]struct{} {
 	}{
 		{"snapshot-table-payload", setOf("snapshot-table")},
 		{"aggregate-snapshot-permission-fallback", setOf("aggregate-snapshot")},
-		{"query-refetch-on-signal", setOf("resource-stream-table")},
+		{"query-refetch-on-signal", setOf("resource-stream-table", "event-stream")},
 		{"complete-resync-only", setOf("complete-resync-stream")},
 		{"catalog-consistency", setOf("catalog-stream")},
 		{"catalog-snapshot-query", setOf("catalog-snapshot")},
-		{"event-resume-merge", setOf("event-stream")},
 		{"event-snapshot-payload", setOf("event-snapshot")},
 		{"log-stream-lifecycle", setOf("log-stream")},
 		{"detail-payload-shape", setOf("detail-payload")},

@@ -29,11 +29,12 @@ machinery the team rightly skipped.**
    per-(domain,scope) sequence numbers (`resourcestream/manager.go:937`), per-object
    `resourceVersion`, frontend `liveDomainVersion`=`version:checksum:streamRevision`
    (`resourceStreamManager.ts`), and snapshot `Sequence` (`refresh/snapshot/service.go`).
-2. **Three liveness transports tell views "refetch"** where the goal was one channel:
-   the resources WebSocket `/api/v2/stream/resources` (`resourcestream`), the events
-   SSE `/api/v2/stream/events` (`eventstream`), and the catalog SSE
-   `/api/v2/stream/catalog` (`catalog_stream`) — registered at
-   `refresh/system/streams.go`.
+2. ✅ **One liveness channel now tells views "refetch."** Events and catalog changes emit
+   `source=event` / `source=catalog` doorbells on `/api/v2/stream/resources`; the old
+   `/api/v2/stream/events` and `/api/v2/stream/catalog` SSE routes, aggregate routers,
+   and frontend `EventSource` clients have been deleted. The remaining liveness work is
+   B3's removal of the internal per-(domain,scope) sequence numbers after the B0/B1
+   source-version contract lands.
 3. ✅ **C2/C4 have landed for the metric-bearing query-backed domains.** The store remains
    metrics-free and overlays at serve, the published snapshot object version for `pods`,
    `nodes`, and `namespace-workloads` no longer includes the metrics revision, the metrics
@@ -58,7 +59,7 @@ should **not** be forced onto `querypage`.
 
 ---
 
-## Phase A — One refetch signal (collapse the three liveness transports)
+## Phase A — One refetch signal (collapse the three liveness transports) ✅
 
 **Goal.** Replace the WS + 2×SSE "something changed, refetch" fan-out with a single
 push channel. The pull stays the one `GET /api/v2/snapshots/{domain}` endpoint; the
@@ -66,7 +67,7 @@ push becomes one uniform **scope-changed doorbell** on the existing resources
 WebSocket. Net delivery model: **page (HTTP) + doorbell (one WS)** — the realistic,
 already-proven "one delivery model," minus the positional deltas that were dropped.
 
-- **A1 [design].** Define one signal envelope on the resources WS:
+- ✅ **A1 [design].** Define one signal envelope on the resources WS:
   `{clusterId, domain, scope, source, version, signal}`.
   - `clusterId` is required; resource-stream scopes remain single-cluster.
   - `domain` is the refresh domain; `scope` is the canonical **clusterless source
@@ -80,9 +81,9 @@ already-proven "one delivery model," minus the positional deltas that were dropp
   - `signal` is `changed`, `reset`, or `error`. `changed` means "refetch if this
     source affects the current query"; `reset` means "resume was lost, re-snapshot";
     `error` feeds the same terminal-error/diagnostics path as current streams.
-  - the A1 work adds `sourceClocks` to `refresh-domain-contract.json` as the
-    authoring point, with backend/frontend contract tests proving each emitted
-    signal source is declared by that domain.
+  - `sourceClocks` is authored once per domain in `refresh-domain-contract.json`, with
+    backend/frontend contract tests proving each emitted signal source is declared by
+    that domain.
 
   The frame carries no rows, no positions, and no partial table payload. It is the
   formal version of what `streamRevision` already does internally: bump a live-data
@@ -93,24 +94,21 @@ already-proven "one delivery model," minus the positional deltas that were dropp
   The target public wire path exposes only this signal envelope; current resource-stream
   `ADDED`/`MODIFIED`/`DELETED`/`COMPLETE` messages become migration-internal producer
   causes and are removed from the frontend-visible refresh-signal path.
-- **A2.** Fold the **events** tail onto it: the events table is already `querypage`-backed;
-  convert `eventstream`'s live tail into the A1 doorbell and **delete the
-  `/api/v2/stream/events` SSE transport + its frontend client**. (The per-object events
-  panel keeps its own `object-events` snapshot domain.) Reconnect behavior must map
-  missed/overflowed event resume to a `reset` signal, not to silent freshness loss.
-  Deletion includes the per-cluster mux registration, the aggregate mux registration,
-  the aggregate event-stream handler/buffer, and the frontend `EventSource` client.
-- **A3.** Fold the **catalog** stream onto it: convert `catalog_stream`'s push into the
-  A1 doorbell for the `catalog` scope and **delete `/api/v2/stream/catalog` SSE + its
-  client**. Browse keeps pulling pages from the query endpoint. Catalog signals use
-  `source=catalog` and must preserve the current single-cluster catalog scope boundary.
-  Deletion includes the per-cluster mux registration, the aggregate mux registration,
-  the aggregate catalog router, and the frontend `EventSource` client.
-- **A4.** Frontend: one subscription manager consumes the unified doorbell for tables,
-  events, and Browse; delete the two `EventSource` clients. The manager owns reconnect,
-  visibility pause/resume, terminal-error notification, and diagnostics status for all
-  doorbell sources; per-domain code decides whether `source=metric` affects the active
-  query.
+- ✅ **A2.** Fold the **events** tail onto it: the events table is already
+  `querypage`-backed; `eventstream` now observes live-tail sequence changes and emits an
+  A1 doorbell with `source=event`. The `/api/v2/stream/events` SSE transport, aggregate
+  event-stream router, and frontend `EventSource` client have been deleted. (The
+  per-object events panel keeps its own `object-events` snapshot domain.) Reconnect
+  behavior maps missed/overflowed event resume to a `reset` signal, not to silent
+  freshness loss.
+- ✅ **A3.** Fold the **catalog** stream onto it: catalog streaming updates now emit an
+  A1 doorbell with `source=catalog` for the catalog scope. Browse keeps pulling pages
+  from the query endpoint. The `/api/v2/stream/catalog` SSE transport, aggregate catalog
+  router, and frontend `EventSource` client have been deleted.
+- ✅ **A4.** Frontend: `resourceStreamManager` is the unified doorbell manager for
+  resource tables, events, and Browse. It owns reconnect, visibility pause/resume,
+  terminal-error notification, and diagnostics status for all doorbell sources;
+  per-domain code decides whether `source=metric` affects the active query.
 
 **Gate.** Per migration:
 
@@ -123,7 +121,9 @@ already-proven "one delivery model," minus the positional deltas that were dropp
 - frontend stream-health tests cover reconnect, visibility pause/resume, terminal error,
   and kubeconfig-change suppression through the unified manager.
 
-The deleted SSE transports are the simplification payoff. **Prerequisite for B3 and C2.**
+The deleted SSE transports are the simplification payoff. Phase A is complete; B3 is the
+remaining internal cleanup that can remove per-(domain,scope) resource-stream sequence
+numbers after B0/B1 define the source-version authority.
 
 ## Phase B — One object scope clock (quarantine non-object clocks)
 
@@ -255,8 +255,8 @@ completed.
 
 ## Principles & sequencing
 
-- **A first** (the unified doorbell is the carrier for the unified version and the metric
-  signal).
+- ✅ **A first** (landed: the unified doorbell is now the carrier for event, catalog,
+  object, and metric source signals).
 - **C1/C2 may land before B** because they remove the poll-driven object refetch coupling
   using the A1 signal shape.
 - **B before C3** because the final metric clock should use the same source-version contract
@@ -270,12 +270,11 @@ completed.
 
 | Phase | Removes | Simplification | Effort |
 |---|---|---|---|
-| A — one doorbell | 2 SSE transports + aggregate routers + their clients | High (3 push paths → 1) | Medium–High |
+| A — one doorbell | ✅ 2 SSE transports + aggregate routers + their clients | High (3 push paths → 1) | Landed |
 | B — one object scope clock | 3 of 4 object ordering authorities | High (the core unmet goal) | Medium–High |
 | C — metrics split | object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Medium |
 | D — cleanups | naming/mechanism drift | Low | Low |
 
-**Recommended order: A → C1/C2 → B → C3 → D.** A+C1/C2 together remove the most
-day-to-day coupling (poll-driven refetch, duplicate push channels) for moderate effort;
-B is the deeper object-clock unification; C3 folds metrics into that same contract; D is
-opportunistic.
+**Remaining recommended order: B → C3 → D.** A and C1/C2 removed the most day-to-day
+coupling (poll-driven object invalidation and duplicate push channels); B is the deeper
+object-clock unification; C3 folds metrics into that same contract; D is opportunistic.

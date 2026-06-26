@@ -85,10 +85,6 @@ const eventStreamMocks = vi.hoisted(() => ({
   refreshCluster: vi.fn(),
 }));
 
-vi.mock('./streaming/eventStreamManager', () => ({
-  eventStreamManager: eventStreamMocks,
-}));
-
 const resourceStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
@@ -105,10 +101,6 @@ const catalogStreamMocks = vi.hoisted(() => ({
   stop: vi.fn(),
   refreshOnce: vi.fn(),
   isHealthy: vi.fn(() => false),
-}));
-
-vi.mock('./streaming/catalogStreamManager', () => ({
-  catalogStreamManager: catalogStreamMocks,
 }));
 
 const errorHandlerMock = vi.hoisted(() => ({
@@ -1368,9 +1360,8 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockClear();
 
     // Trigger a manual refresh via fetchScopedDomain.
-    // SSE domains (catalog) should fall through to a snapshot fetch instead of
-    // redirecting to refreshStreamingDomainOnce, because the SSE stream delivers
-    // full snapshots on its own schedule and restarting it is wasteful.
+    // Doorbell domains should fall through to a snapshot fetch instead of
+    // redirecting to refreshStreamingDomainOnce for manual refresh.
     await refreshOrchestrator.fetchScopedDomain('catalog', 'scope=all', { isManual: true });
 
     expect(catalogStreamMocks.refreshOnce).not.toHaveBeenCalled();
@@ -1382,7 +1373,9 @@ describe('refreshOrchestrator', () => {
     const pageScope = buildClusterScope('cluster-a', 'limit=50&namespace=cluster');
     const metadataScope = buildClusterScope('cluster-a', 'limit=1&namespace=cluster');
     setRuntimeScopeEnabled('catalog', pageScope, true);
-    catalogStreamMocks.isHealthy.mockImplementation((scope?: string) => scope === metadataScope);
+    resourceStreamMocks.isHealthy.mockImplementation(
+      (_domain?: string, scope?: string) => scope === metadataScope
+    );
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
         domain: 'catalog',
@@ -1409,7 +1402,7 @@ describe('refreshOrchestrator', () => {
 
     await refreshOrchestrator.fetchScopedDomain('catalog', pageScope, { isManual: false });
 
-    expect(catalogStreamMocks.isHealthy).toHaveBeenCalledWith(pageScope);
+    expect(resourceStreamMocks.isHealthy).toHaveBeenCalledWith('catalog', pageScope);
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
       'catalog',
       expect.objectContaining({ scope: pageScope })

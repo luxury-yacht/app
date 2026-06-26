@@ -26,12 +26,13 @@ type Manager struct {
 	clusterID string
 	logger    Logger
 
-	mu          sync.RWMutex
-	subscribers map[string]map[uint64]*subscription
-	buffers     map[string]*eventBuffer
-	sequences   map[string]uint64
-	nextID      uint64
-	telemetry   *telemetry.Recorder
+	mu             sync.RWMutex
+	subscribers    map[string]map[uint64]*subscription
+	buffers        map[string]*eventBuffer
+	sequences      map[string]uint64
+	nextID         uint64
+	telemetry      *telemetry.Recorder
+	signalObserver func(scope string, sequence uint64)
 }
 
 type bufferedEvent struct {
@@ -73,6 +74,15 @@ func NewManager(
 	})
 
 	return m
+}
+
+func (m *Manager) SetSignalObserver(observer func(scope string, sequence uint64)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.signalObserver = observer
 }
 
 // Subscribe returns a channel that receives events for the provided scope.
@@ -252,11 +262,14 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 	m.mu.Lock()
 	subscribers := m.subscribers[scope]
 	buffer := m.buffers[scope]
+	observer := m.signalObserver
 	// Only keep resume buffers when active or recent subscribers exist.
 	shouldBuffer := len(subscribers) > 0 || buffer != nil
 	var sequence uint64
-	if shouldBuffer {
+	if shouldBuffer || observer != nil {
 		sequence = m.nextSequenceLocked(scope)
+	}
+	if shouldBuffer {
 		if buffer == nil {
 			buffer = newEventBuffer(config.EventStreamResumeBufferSize)
 			m.buffers[scope] = buffer
@@ -274,6 +287,9 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 		}{id: id, sub: sub})
 	}
 	m.mu.Unlock()
+	if observer != nil && sequence > 0 {
+		observer(scope, sequence)
+	}
 	if len(items) == 0 {
 		return
 	}

@@ -25,7 +25,6 @@ import {
 } from './store';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
-import { catalogStreamManager } from './streaming/catalogStreamManager';
 import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
@@ -626,9 +625,8 @@ class RefreshOrchestrator {
     if (isResourceStreamDomain(domain)) {
       return resourceStreamManager.isHealthy(domain, scope);
     }
-    // SSE-based streaming domains: check the stream manager directly.
-    if (domain === 'catalog') {
-      return catalogStreamManager.isHealthy(scope);
+    if (domain === 'catalog' || domain === 'cluster-events' || domain === 'namespace-events') {
+      return resourceStreamManager.isHealthy(domain, scope);
     }
     return false;
   }

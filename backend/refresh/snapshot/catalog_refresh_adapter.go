@@ -14,11 +14,10 @@ type catalogRefreshAdapter struct {
 }
 
 type catalogRefreshAssembly struct {
-	result       objectcatalog.QueryResult
-	payload      CatalogSnapshot
-	stats        refresh.SnapshotStats
-	truncated    bool
-	snapshotMode catalogStreamSnapshotMode
+	result    objectcatalog.QueryResult
+	payload   CatalogSnapshot
+	stats     refresh.SnapshotStats
+	truncated bool
 }
 
 func newCatalogRefreshAdapter(
@@ -69,26 +68,6 @@ func (a catalogRefreshAdapter) BuildSnapshot(
 	}
 }
 
-func (a catalogRefreshAdapter) BuildStreamEvent(
-	opts browseQueryOptions,
-	ready bool,
-	reset bool,
-	sequence uint64,
-) catalogStreamEvent {
-	assembly := a.assemble(opts, ready)
-	return catalogStreamEvent{
-		Reset:        reset,
-		Ready:        ready && assembly.payload.IsFinal,
-		CacheReady:   a.service.CachesReady(),
-		Truncated:    assembly.truncated,
-		SnapshotMode: assembly.snapshotMode,
-		Snapshot:     assembly.payload,
-		Stats:        assembly.stats,
-		GeneratedAt:  time.Now().UnixMilli(),
-		Sequence:     sequence,
-	}
-}
-
 func (a catalogRefreshAdapter) assemble(
 	opts browseQueryOptions,
 	forceFinal bool,
@@ -110,17 +89,12 @@ func (a catalogRefreshAdapter) assemble(
 	}
 
 	stats := buildCatalogSnapshotStats(payload, result.TotalItems, truncated)
-	snapshotMode := catalogStreamSnapshotFull
-	if !payload.IsFinal || truncated {
-		snapshotMode = catalogStreamSnapshotPartial
-	}
 
 	return catalogRefreshAssembly{
-		result:       result,
-		payload:      payload,
-		stats:        stats,
-		truncated:    truncated,
-		snapshotMode: snapshotMode,
+		result:    result,
+		payload:   payload,
+		stats:     stats,
+		truncated: truncated,
 	}
 }
 

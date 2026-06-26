@@ -1,15 +1,15 @@
 # Resource stream signals
 
-Resource-stream table domains are query-backed. The HTTP snapshot/query path owns
-the page rows, filtering, sorting, facets, totals, and payload metadata. The
-resource WebSocket is only the liveness channel that tells a query-backed view
-when to refetch.
+Resource-stream table, event, and catalog domains are query-backed. The HTTP
+snapshot/query path owns rows, filtering, sorting, facets, totals, and payload
+metadata. The resource WebSocket is only the liveness channel that tells a
+query-backed view when to refetch.
 
 ## Invariants
 
 - `streammux.ServerMessage` must not grow a projected row field. The message may
-  carry `Ref`, `Sequence`, `ResourceVersion`, cluster routing metadata, and
-  errors.
+  carry `Ref`, `Source`, `Version`, `Signal`, `Sequence`, `ResourceVersion`,
+  cluster routing metadata, and errors.
 - `Manager.newObjectRowUpdate` may accept a row argument for projector guardrails
   and scope resolution, but it must emit only the signal fields.
 - `ResourceStreamManager.flushUpdates` must coalesce update messages and bump
@@ -27,6 +27,9 @@ truth.
 - Their `coverageContract` is `query-refetch-on-signal`.
 - `resourceStream.updateIdentity.changeSignals` and `.deleteSignals` are both
   `ref`; the object identity lives in `resourcemodel.ResourceRef`.
+- Event and catalog domains use `sourceClocks` plus `change-signal` semantics
+  on the same resource WebSocket, but their rows are still fetched from their
+  snapshot/query domains.
 - `complete-resync-stream` domains, such as Helm, keep
   `coverageContract: "complete-resync-only"` because the stream sends
   scope-level resync signals rather than object-change signals.

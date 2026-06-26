@@ -23,7 +23,7 @@ import {
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
   isSupportedDomain,
-  type ResourceDomain,
+  type DoorbellDomain,
   type ResourceStreamSourceClock,
 } from './resourceStreamDomains';
 import { ResourceStreamConnection } from './resourceStreamConnection';
@@ -111,7 +111,7 @@ type ServerMessage = {
 };
 
 type UpdateMessage = ServerMessage & {
-  domain: ResourceDomain;
+  domain: DoorbellDomain;
   scope: string;
   signalEnvelope?: SignalEnvelope;
 };
@@ -122,7 +122,7 @@ const hasMessageType = (value: unknown): value is StreamMessageType =>
 const hasSignalType = (value: unknown): value is StreamSignalType =>
   typeof value === 'string' && Object.values(SIGNAL_TYPES).includes(value as StreamSignalType);
 
-const normalizeStreamScope = (domain: ResourceDomain, scope: unknown): string | null => {
+const normalizeStreamScope = (domain: DoorbellDomain, scope: unknown): string | null => {
   if (typeof scope === 'string') {
     const trimmed = scope.trim();
     const normalized = stripClusterScope(trimmed);
@@ -299,7 +299,7 @@ export class ResourceStreamManager {
   }
 
   // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
-  getHealthStatus(domain: ResourceDomain, scope: string): ResourceStreamHealthStatus {
+  getHealthStatus(domain: DoorbellDomain, scope: string): ResourceStreamHealthStatus {
     return this.streamHealth.status(domain, scope);
   }
 
@@ -307,11 +307,11 @@ export class ResourceStreamManager {
     return this.streamHealth.snapshot(domain, scope);
   }
 
-  isHealthy(domain: ResourceDomain, scope: string): boolean {
+  isHealthy(domain: DoorbellDomain, scope: string): boolean {
     return this.getHealthStatus(domain, scope) === 'healthy';
   }
 
-  async start(domain: ResourceDomain, scope: string): Promise<void> {
+  async start(domain: DoorbellDomain, scope: string): Promise<void> {
     if (typeof window === 'undefined') {
       return;
     }
@@ -321,7 +321,7 @@ export class ResourceStreamManager {
     );
   }
 
-  stop(domain: ResourceDomain, scope: string, reset = false): void {
+  stop(domain: DoorbellDomain, scope: string, reset = false): void {
     const subscriptions = this.getSubscriptions(domain, scope);
     if (subscriptions.length === 0) {
       return;
@@ -329,7 +329,7 @@ export class ResourceStreamManager {
     subscriptions.forEach((subscription) => this.scheduleUnsubscribe(subscription, reset));
   }
 
-  async refreshOnce(domain: ResourceDomain, scope: string): Promise<void> {
+  async refreshOnce(domain: DoorbellDomain, scope: string): Promise<void> {
     if (typeof window === 'undefined') {
       return;
     }
@@ -440,7 +440,7 @@ export class ResourceStreamManager {
   }
 
   private findSubscriptionByScope(
-    domain: ResourceDomain,
+    domain: DoorbellDomain,
     scope: string
   ): StreamSubscription | undefined {
     return this.subscriptions.findByScope(domain, scope);
@@ -494,7 +494,7 @@ export class ResourceStreamManager {
     this.visibility.resume();
   }
 
-  private ensureSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
+  private ensureSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const subscriptions = this.subscriptions.ensure(domain, scope);
     subscriptions.forEach((subscription) =>
       this.updateHealthForScope(subscription.domain, subscription.reportScope)
@@ -502,7 +502,7 @@ export class ResourceStreamManager {
     return subscriptions;
   }
 
-  private getSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
+  private getSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     return this.subscriptions.getForScope(domain, scope);
   }
 
@@ -591,7 +591,7 @@ export class ResourceStreamManager {
   }
 
   private aggregateHealth(
-    domain: ResourceDomain,
+    domain: DoorbellDomain,
     reportScope: string
   ): ResourceStreamHealthPayload {
     const subscriptions = Array.from(this.subscriptions.values()).filter(
@@ -638,13 +638,13 @@ export class ResourceStreamManager {
     return payload;
   }
 
-  private updateHealthForScope(domain: ResourceDomain, reportScope: string): void {
+  private updateHealthForScope(domain: DoorbellDomain, reportScope: string): void {
     const next = this.aggregateHealth(domain, reportScope);
     this.streamHealth.set(next);
   }
 
   private updateAllHealth(): void {
-    const targets = new Map<string, { domain: ResourceDomain; scope: string }>();
+    const targets = new Map<string, { domain: DoorbellDomain; scope: string }>();
     this.subscriptions.forEach((subscription) => {
       const key = `${subscription.domain}::${subscription.reportScope}`;
       if (!targets.has(key)) {

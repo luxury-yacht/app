@@ -69,6 +69,24 @@ func TestParseStreamSelectorRoundTrips(t *testing.T) {
 			scope:  "cluster",
 			want:   StreamSelector{ClusterID: "c1", Domain: domainClusterConfig, ScopeKind: StreamScopeCluster},
 		},
+		{
+			name:   "cluster events doorbell scope",
+			domain: "cluster-events",
+			scope:  "cluster",
+			want:   StreamSelector{ClusterID: "c1", Domain: "cluster-events", ScopeKind: StreamScopeCluster},
+		},
+		{
+			name:   "namespace events doorbell scope",
+			domain: "namespace-events",
+			scope:  "namespace:prod",
+			want:   StreamSelector{ClusterID: "c1", Domain: "namespace-events", ScopeKind: StreamScopeNamespace, Namespace: "prod"},
+		},
+		{
+			name:   "catalog doorbell scope",
+			domain: "catalog",
+			scope:  "",
+			want:   StreamSelector{ClusterID: "c1", Domain: "catalog", ScopeKind: StreamScopeCluster},
+		},
 	}
 
 	for _, tc := range cases {
@@ -95,6 +113,7 @@ func TestParseStreamSelectorRejectsInvalid(t *testing.T) {
 		{domainPods, "node:", "node scope is required"},
 		{domainPods, "workload:prod:apps", "namespace:group:version:kind:name"},
 		{domainNodes, "namespace:prod", "does not accept scope"},
+		{"catalog", "limit=50", "does not accept scope"},
 		{"unknown-domain", "anything", "unsupported resource stream domain"},
 	}
 	for _, tc := range cases {
@@ -120,6 +139,9 @@ func TestStreamSelectorCanonicalScope(t *testing.T) {
 		{domainWorkloads, "namespace:all", "namespace:all"},
 		{domainClusterRBAC, "", ""},
 		{domainNodes, "", ""},
+		{"cluster-events", "cluster", ""},
+		{"namespace-events", "prod", "namespace:prod"},
+		{"catalog", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.domain+"/"+tc.scope, func(t *testing.T) {

@@ -40,9 +40,10 @@ Typed refresh rows are enrichments. They are not competing identity systems.
   `backend/objectcatalog/identity.go`
 - Shared backend resolver contract:
   `backend/resources/common/resource_identity.go`
-- Catalog snapshots and stream payloads:
+- Catalog snapshots and liveness doorbells:
   `backend/refresh/snapshot/catalog.go`,
-  `backend/refresh/snapshot/catalog_stream.go`
+  `backend/app_object_catalog.go`,
+  `backend/refresh/resourcestream`
 - Browse catalog consumer:
   `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`
 

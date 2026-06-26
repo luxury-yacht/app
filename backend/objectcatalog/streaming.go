@@ -138,13 +138,11 @@ func (s *Service) SubscribeStreaming() (<-chan StreamingUpdate, func()) {
 		s.streamSubMu.Unlock()
 	}
 
-	go func() {
-		ready := s.CachesReady()
-		select {
-		case ch <- StreamingUpdate{Ready: ready}:
-		default:
-		}
-	}()
+	ready := s.CachesReady()
+	select {
+	case ch <- StreamingUpdate{Ready: ready}:
+	default:
+	}
 
 	return ch, unsubscribe
 }

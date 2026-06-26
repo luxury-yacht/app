@@ -302,16 +302,7 @@ func (a *App) buildRefreshMux(
 		}
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
-	aggregateEvents := newAggregateEventStreamHandler(
-		aggregateService,
-		collectEventManagers(subsystems),
-		collectClusterMeta(subsystems),
-		clusterOrder,
-		sharedTelemetry,
-		a.logger,
-	)
 	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
-	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
 		return nil, nil, err
@@ -331,9 +322,7 @@ func (a *App) buildRefreshMux(
 	})
 	// withStreamCORS guarantees CORS headers on every stream response,
 	// including error responses written before the handlers' own header setup.
-	mux.Handle("/api/v2/stream/events", withStreamCORS(aggregateEvents))
 	mux.Handle("/api/v2/stream/container-logs", withStreamCORS(aggregateContainerLogs))
-	mux.Handle("/api/v2/stream/catalog", withStreamCORS(aggregateCatalog))
 	mux.Handle("/api/v2/stream/resources", withStreamCORS(aggregateResources))
 	// NOTE: Do NOT mount "/" to any single subsystem's handler.
 	// Requests to "/" should return 404, not route to one cluster.
@@ -341,9 +330,7 @@ func (a *App) buildRefreshMux(
 	aggregates := &refreshAggregateHandlers{
 		snapshot:      aggregateService,
 		manual:        aggregateQueue,
-		events:        aggregateEvents,
 		containerLogs: aggregateContainerLogs,
-		catalog:       aggregateCatalog,
 		resources:     aggregateResources,
 		telemetry:     aggregateTelemetryHandler,
 	}
@@ -354,9 +341,7 @@ func (a *App) buildRefreshMux(
 type refreshAggregateHandlers struct {
 	snapshot      *aggregateSnapshotService
 	manual        *aggregateManualQueue
-	events        *aggregateEventStreamHandler
 	containerLogs *aggregateContainerLogsStreamHandler
-	catalog       *aggregateCatalogStreamHandler
 	resources     *aggregateResourceStreamHandler
 	telemetry     *aggregateTelemetry
 }
@@ -382,19 +367,8 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 	if h.manual != nil {
 		h.manual.UpdateConfig(clusterOrder, subsystems)
 	}
-	if h.events != nil {
-		h.events.UpdateConfig(
-			h.snapshot,
-			collectEventManagers(subsystems),
-			collectClusterMeta(subsystems),
-			clusterOrder,
-		)
-	}
 	if h.containerLogs != nil {
 		h.containerLogs.Update(subsystems)
-	}
-	if h.catalog != nil {
-		h.catalog.Update(subsystems)
 	}
 	return nil
 }

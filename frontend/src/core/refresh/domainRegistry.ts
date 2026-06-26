@@ -110,6 +110,7 @@ export interface DomainInventoryEntry {
 export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDomain> {
   domain: D;
   category: DomainCategory;
+  sourceClocks?: RefreshSourceClock[];
   backend: {
     registration: 'direct' | 'list' | 'listWatch' | 'streamOnly';
     permission: 'runtime' | 'exempt' | 'stream-specific';
@@ -131,15 +132,13 @@ export interface StreamResourceContractRecord {
   resource: string;
 }
 
-// RefreshSourceClock mirrors the backend resourcestream.Source taxonomy: the
-// clocks that can advance a domain's rows. It is the single authored source of
-// metric-dependency on both sides; object/metric are the clocks used so far
-// (event/catalog join as the events/catalog domains fold onto the doorbell).
-export type RefreshSourceClock = 'object' | 'metric';
+// RefreshSourceClock mirrors the backend streammux.Source taxonomy: the clocks
+// that can advance a domain's rows. This is the authored source of metric
+// dependency and doorbell source validation.
+export type RefreshSourceClock = 'object' | 'metric' | 'event' | 'catalog';
 
 export interface StreamDomainContractEntry {
   scopeKind: 'pod' | 'namespace' | 'cluster';
-  sourceClocks: RefreshSourceClock[];
   completeIsScopeLevel: boolean;
   rowProjection?: 'scope-level-complete-only';
   primaryResources: StreamResourceContractRecord[];
@@ -193,8 +192,7 @@ export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
     };
     // metricsInterval derives from the domain's source clocks: a domain runs the
     // metric refresh interval exactly when it declares the metric source clock.
-    const sourceClocks =
-      refreshDomainContract.resourceStream.domains[entry.domain]?.sourceClocks ?? [];
+    const sourceClocks = entry.sourceClocks ?? [];
     if (sourceClocks.includes('metric')) {
       descriptor.metricsInterval = true;
     }

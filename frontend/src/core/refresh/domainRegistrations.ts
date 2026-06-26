@@ -1,7 +1,5 @@
 import { getRefreshDomainDescriptor } from './domainRegistry';
-import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { containerLogsStreamManager } from './streaming/containerLogsStreamManager';
-import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import type { RefreshDomainRegistrar, StreamingRegistration } from './refreshRegistration';
 import type { RefreshDomain } from './types';
@@ -34,27 +32,11 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     });
   };
 
-  const registerEventStreamDomain = (
-    domain: 'cluster-events' | 'namespace-events',
-    start: (scope: string) => Promise<(() => void) | void> | (() => void),
-    stop: (scope: string, options?: { reset?: boolean }) => void,
-    refreshOnce: (scope: string) => Promise<void>
-  ) => {
+  const doorbellStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
     registerRefreshDomain(domain, {
-      start,
-      stop,
-      refreshOnce,
-      pauseRefresherWhenStreaming: true,
-    });
-  };
-
-  const registerCatalogDomain = () => {
-    registerRefreshDomain('catalog', {
-      start: (scope) => catalogStreamManager.start(scope),
-      // Pass the scope through: the manager must only reset the scope it is
-      // asked to stop, never whichever scope its singleton stream holds.
-      stop: (scope, options) => catalogStreamManager.stop(options?.reset ?? false, scope),
-      refreshOnce: (scope) => catalogStreamManager.refreshOnce(scope),
+      start: (scope) => resourceStreamManager.start(domain, scope),
+      stop: (scope, options) => resourceStreamManager.stop(domain, scope, options?.reset ?? false),
+      refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
       pauseRefresherWhenStreaming: true,
     });
   };
@@ -90,14 +72,9 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   registerContainerLogsDomain();
   resourceStreamDomain('pods', { metricsOnly: true });
 
-  registerCatalogDomain();
+  doorbellStreamDomain('catalog');
   registerSnapshotDomains('catalog-diff');
-  registerEventStreamDomain(
-    'cluster-events',
-    (scope) => eventStreamManager.startCluster(scope),
-    (scope, options) => eventStreamManager.stopCluster(scope, options?.reset ?? false),
-    (scope) => eventStreamManager.refreshCluster(scope)
-  );
+  doorbellStreamDomain('cluster-events');
   resourceStreamDomain('nodes', { metricsOnly: true });
   resourceStreamDomain('cluster-rbac');
   resourceStreamDomain('cluster-storage');
@@ -105,12 +82,7 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   resourceStreamDomain('cluster-crds');
   resourceStreamDomain('cluster-custom');
 
-  registerEventStreamDomain(
-    'namespace-events',
-    (scope) => eventStreamManager.startNamespace(scope),
-    (scope, options) => eventStreamManager.stopNamespace(scope, options?.reset ?? false),
-    (scope) => eventStreamManager.refreshNamespace(scope)
-  );
+  doorbellStreamDomain('namespace-events');
   resourceStreamDomain('namespace-workloads', { metricsOnly: true });
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');

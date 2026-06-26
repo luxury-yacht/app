@@ -23,8 +23,10 @@ const (
 type Source = streammux.Source
 
 const (
-	SourceObject = streammux.SourceObject
-	SourceMetric = streammux.SourceMetric
+	SourceObject  = streammux.SourceObject
+	SourceMetric  = streammux.SourceMetric
+	SourceEvent   = streammux.SourceEvent
+	SourceCatalog = streammux.SourceCatalog
 )
 
 type Signal = streammux.Signal

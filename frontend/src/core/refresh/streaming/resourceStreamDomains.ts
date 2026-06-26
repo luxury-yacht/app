@@ -8,11 +8,12 @@ import type { AppEvents } from '@/core/events';
 import { refreshDomainContract, type RefreshSourceClock } from '../domainRegistry';
 
 export type ResourceDomain = AppEvents['refresh:resource-stream-drift']['domain'];
+export type DoorbellDomain = AppEvents['refresh:resource-stream-health']['domain'];
 
 export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster';
 
 export type ResourceStreamDomainDescriptor = {
-  domain: ResourceDomain;
+  domain: DoorbellDomain;
   scopeKind: ResourceStreamScopeKind;
   isClusterScoped: boolean;
   preserveMetrics: boolean;
@@ -192,34 +193,60 @@ export const resourceStreamDomainDescriptors = [
 
 export const RESOURCE_STREAM_DOMAINS = resourceStreamDomainDescriptors.map(
   (descriptor) => descriptor.domain
+) as ResourceDomain[];
+
+const doorbellDomainDescriptors = [
+  ...resourceStreamDomainDescriptors,
+  {
+    domain: 'catalog',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+    preserveMetrics: false,
+  },
+  {
+    domain: 'cluster-events',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+    preserveMetrics: false,
+  },
+  {
+    domain: 'namespace-events',
+    scopeKind: 'namespace',
+    isClusterScoped: false,
+    preserveMetrics: false,
+  },
+] satisfies ResourceStreamDomainDescriptor[];
+
+export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(
+  (descriptor) => descriptor.domain
 );
 
-const resourceStreamDescriptorByDomain = new Map<ResourceDomain, ResourceStreamDomainDescriptor>(
-  resourceStreamDomainDescriptors.map((descriptor) => [descriptor.domain, descriptor])
+const doorbellDescriptorByDomain = new Map<DoorbellDomain, ResourceStreamDomainDescriptor>(
+  doorbellDomainDescriptors.map((descriptor) => [descriptor.domain, descriptor])
 );
 
-const sourceClocksByDomain = new Map<ResourceDomain, readonly ResourceStreamSourceClock[]>(
-  Object.entries(refreshDomainContract.resourceStream.domains)
-    .filter(([domain]) => resourceStreamDescriptorByDomain.has(domain as ResourceDomain))
-    .map(([domain, entry]) => [domain as ResourceDomain, entry.sourceClocks])
+const sourceClocksByDomain = new Map<DoorbellDomain, readonly ResourceStreamSourceClock[]>(
+  refreshDomainContract.domains
+    .filter((entry) => doorbellDescriptorByDomain.has(entry.domain as DoorbellDomain))
+    .map((entry) => [entry.domain as DoorbellDomain, entry.sourceClocks ?? []])
 );
 
-export const isSupportedDomain = (value: string | undefined): value is ResourceDomain =>
-  Boolean(value && resourceStreamDescriptorByDomain.has(value as ResourceDomain));
+export const isSupportedDomain = (value: string | undefined): value is DoorbellDomain =>
+  Boolean(value && doorbellDescriptorByDomain.has(value as DoorbellDomain));
 
 export const isResourceStreamSourceClock = (value: unknown): value is ResourceStreamSourceClock =>
-  value === 'object' || value === 'metric';
+  value === 'object' || value === 'metric' || value === 'event' || value === 'catalog';
 
 export const domainSupportsSourceClock = (
-  domain: ResourceDomain,
+  domain: DoorbellDomain,
   source: ResourceStreamSourceClock
 ): boolean => sourceClocksByDomain.get(domain)?.includes(source) ?? false;
 
 export const getResourceStreamDomainDescriptor = (
-  domain: ResourceDomain
-): ResourceStreamDomainDescriptor => resourceStreamDescriptorByDomain.get(domain)!;
+  domain: DoorbellDomain
+): ResourceStreamDomainDescriptor => doorbellDescriptorByDomain.get(domain)!;
 
-export const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
+export const isClusterScopedDomain = (domain: DoorbellDomain): boolean =>
   getResourceStreamDomainDescriptor(domain).isClusterScoped;
 
 export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
@@ -231,10 +258,10 @@ export const COMPLETE_RESYNC_STREAM_DOMAINS = new Set<ResourceDomain>(
     .map(([domain]) => domain as ResourceDomain)
 );
 
-export const isCompleteResyncStreamDomain = (domain: ResourceDomain): boolean =>
-  COMPLETE_RESYNC_STREAM_DOMAINS.has(domain);
+export const isCompleteResyncStreamDomain = (domain: DoorbellDomain): boolean =>
+  COMPLETE_RESYNC_STREAM_DOMAINS.has(domain as ResourceDomain);
 
-export const normalizeResourceScope = (domain: ResourceDomain, scope: string): string => {
+export const normalizeResourceScope = (domain: DoorbellDomain, scope: string): string => {
   const descriptor = getResourceStreamDomainDescriptor(domain);
   switch (descriptor.scopeKind) {
     case 'pod':

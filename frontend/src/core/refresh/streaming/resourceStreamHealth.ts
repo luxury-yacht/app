@@ -7,7 +7,7 @@
  */
 
 import { eventBus, type AppEvents } from '@/core/events';
-import { isSupportedDomain, type ResourceDomain } from './resourceStreamDomains';
+import { isSupportedDomain, type DoorbellDomain } from './resourceStreamDomains';
 
 export type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
 export type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];
@@ -22,11 +22,11 @@ export const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, numb
 export class ResourceStreamHealthStore {
   private snapshots = new Map<string, ResourceStreamHealthPayload>();
 
-  private key(domain: ResourceDomain, scope: string): string {
+  private key(domain: DoorbellDomain, scope: string): string {
     return `${domain}::${scope}`;
   }
 
-  status(domain: ResourceDomain, scope: string): ResourceStreamHealthStatus {
+  status(domain: DoorbellDomain, scope: string): ResourceStreamHealthStatus {
     return this.snapshots.get(this.key(domain, scope))?.status ?? 'unhealthy';
   }
 

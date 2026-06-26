@@ -1,5 +1,5 @@
 import { ensureRefreshBaseURL, invalidateRefreshBaseURL } from '../client';
-import type { ResourceDomain } from './resourceStreamDomains';
+import type { DoorbellDomain } from './resourceStreamDomains';
 import { streamReconnectDelay } from './streamTiming';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
@@ -8,7 +8,7 @@ const RECONNECT_JITTER_FACTOR = 0.2;
 export type ResourceStreamClientMessage = {
   type: string;
   clusterId?: string;
-  domain: ResourceDomain;
+  domain: DoorbellDomain;
   scope: string;
   resourceVersion?: string;
   resumeToken?: string;

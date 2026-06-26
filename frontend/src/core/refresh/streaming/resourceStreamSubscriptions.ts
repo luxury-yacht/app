@@ -2,14 +2,14 @@ import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
 import {
   getResourceStreamDomainDescriptor,
   normalizeResourceScope,
-  type ResourceDomain,
+  type DoorbellDomain,
 } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
 export type ResourceStreamUpdateMessage = {
   type?: string;
   clusterId?: string;
   clusterName?: string;
-  domain: ResourceDomain;
+  domain: DoorbellDomain;
   scope: string;
   source?: string;
   signal?: string;
@@ -27,7 +27,7 @@ export type ResourceStreamUpdateMessage = {
 
 export type StreamSubscription = {
   key: string;
-  domain: ResourceDomain;
+  domain: DoorbellDomain;
   storeScope: string;
   reportScope: string;
   normalizedScope: string;
@@ -56,12 +56,12 @@ type PendingUnsubscribe = {
 
 export const resourceStreamSubscriptionKey = (
   clusterId: string,
-  domain: ResourceDomain,
+  domain: DoorbellDomain,
   scope: string
 ): string => `${clusterId}::${domain}::${scope}`;
 
 export const resolveResourceStreamSubscriptionScope = (
-  domain: ResourceDomain,
+  domain: DoorbellDomain,
   scope: string
 ): { clusterIds: string[]; normalizedScope: string; reportScope: string } => {
   const parsed = parseClusterScopeList(scope);
@@ -101,7 +101,7 @@ export class ResourceStreamSubscriptionStore {
     return this.subscriptions.get(key);
   }
 
-  ensure(domain: ResourceDomain, scope: string): StreamSubscription[] {
+  ensure(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const { clusterIds, normalizedScope, reportScope } = resolveResourceStreamSubscriptionScope(
       domain,
       scope
@@ -111,7 +111,7 @@ export class ResourceStreamSubscriptionStore {
     );
   }
 
-  getForScope(domain: ResourceDomain, scope: string): StreamSubscription[] {
+  getForScope(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const parsed = parseClusterScopeList(scope);
     if (parsed.clusterIds.length === 0 || parsed.isMultiCluster) {
       return [];
@@ -130,7 +130,7 @@ export class ResourceStreamSubscriptionStore {
       .filter((subscription): subscription is StreamSubscription => Boolean(subscription));
   }
 
-  findByScope(domain: ResourceDomain, scope: string): StreamSubscription | undefined {
+  findByScope(domain: DoorbellDomain, scope: string): StreamSubscription | undefined {
     let match: StreamSubscription | undefined;
     for (const subscription of this.subscriptions.values()) {
       if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
@@ -223,7 +223,7 @@ export class ResourceStreamSubscriptionStore {
   }
 
   private ensureForCluster(
-    domain: ResourceDomain,
+    domain: DoorbellDomain,
     clusterId: string,
     normalizedScope: string,
     reportScope: string

@@ -29,6 +29,13 @@ type ResourceStreamDomain =
   | 'cluster-crds'
   | 'cluster-custom'
   | 'nodes';
+
+type DoorbellStreamDomain =
+  | ResourceStreamDomain
+  | 'catalog'
+  | 'cluster-events'
+  | 'namespace-events';
+
 type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 type ResourceStreamConnectionStatus = 'connected' | 'disconnected';
 
@@ -71,7 +78,7 @@ export interface AppEvents {
     extraKeys: number;
   };
   'refresh:resource-stream-health': {
-    domain: ResourceStreamDomain;
+    domain: DoorbellStreamDomain;
     scope: string;
     status: ResourceStreamHealthStatus;
     reason: string;

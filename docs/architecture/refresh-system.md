@@ -74,10 +74,12 @@ Use behavior classes to preserve correctness, not to force inheritance:
 - snapshot domains replace a full payload for one scope
 - resource-stream table domains render snapshot/query pages and refetch them from
   WebSocket change signals
+- event and catalog domains also use resource WebSocket doorbells for liveness
+  and refetch rows through their snapshot/query domains
 - complete-resync streams use stream messages as resync signals
 - resource-stream signal delivery is documented in
   [resource-stream-signals.md](resource-stream-signals.md)
-- catalog, event, and log streams have source-specific reducers
+- log streams have source-specific reducers
 - detail, graph, Helm, YAML, and operation-state domains keep their own payload
   semantics
 

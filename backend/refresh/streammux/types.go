@@ -37,8 +37,10 @@ const (
 type Source string
 
 const (
-	SourceObject Source = "object"
-	SourceMetric Source = "metric"
+	SourceObject  Source = "object"
+	SourceMetric  Source = "metric"
+	SourceEvent   Source = "event"
+	SourceCatalog Source = "catalog"
 )
 
 // Signal is the public outcome a doorbell frame carries, formalizing the

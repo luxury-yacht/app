@@ -12,9 +12,11 @@ import (
 // and the console shows an opaque CORS failure instead of the real status —
 // e.g. the 400 "cluster not active" during cluster initialization.
 func TestStreamCORSCarriesHeadersOnErrorResponses(t *testing.T) {
-	handler := withStreamCORS(newAggregateCatalogStreamHandler(nil))
+	handler := withStreamCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "cluster not active", http.StatusBadRequest)
+	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog?missing:missing|limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/resources", nil)
 	req.Header.Set("Origin", "wails://wails.localhost:34115")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -26,9 +28,11 @@ func TestStreamCORSCarriesHeadersOnErrorResponses(t *testing.T) {
 }
 
 func TestStreamCORSFallsBackToWildcardWithoutOrigin(t *testing.T) {
-	handler := withStreamCORS(newAggregateCatalogStreamHandler(nil))
+	handler := withStreamCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "cluster not active", http.StatusBadRequest)
+	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog?missing:missing|limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/resources", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -38,9 +42,11 @@ func TestStreamCORSFallsBackToWildcardWithoutOrigin(t *testing.T) {
 }
 
 func TestStreamCORSAnswersPreflight(t *testing.T) {
-	handler := withStreamCORS(newAggregateCatalogStreamHandler(nil))
+	handler := withStreamCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "cluster not active", http.StatusBadRequest)
+	}))
 
-	req := httptest.NewRequest(http.MethodOptions, "/api/v2/stream/catalog", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/v2/stream/resources", nil)
 	req.Header.Set("Origin", "wails://wails.localhost:34115")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

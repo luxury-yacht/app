@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -323,6 +325,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			resourceManager.BroadcastMetricRefresh(revision)
 		})
 	}
+	if eventManager != nil && resourceManager != nil {
+		eventManager.SetSignalObserver(eventSignalObserver(resourceManager))
+	}
 
 	return &Subsystem{
 		Manager:          manager,
@@ -339,6 +344,24 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ResourceStream:   resourceManager,
 		ClusterMeta:      clusterMeta,
 	}, nil
+}
+
+func eventSignalObserver(resourceManager *resourcestream.Manager) func(scope string, sequence uint64) {
+	return func(scope string, sequence uint64) {
+		if resourceManager == nil || sequence == 0 {
+			return
+		}
+		domain := "cluster-events"
+		targetScope := ""
+		trimmed := strings.TrimSpace(scope)
+		if strings.HasPrefix(trimmed, "namespace:") {
+			domain = "namespace-events"
+			targetScope = trimmed
+		} else if trimmed != "" && trimmed != "cluster" {
+			return
+		}
+		resourceManager.BroadcastEventRefresh(domain, targetScope, strconv.FormatUint(sequence, 10))
+	}
 }
 
 // ingestPermissionFilter builds the predicate the ingest manager uses to decide whether

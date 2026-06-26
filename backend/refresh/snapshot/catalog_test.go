@@ -1,9 +1,7 @@
 package snapshot
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"reflect"
 	"sort"
 	"strconv"
@@ -442,39 +440,9 @@ func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 		t.Fatalf("snapshot lost catalog identity fields: %+v", item)
 	}
 
-	opts, err := parseBrowseScope(scope)
-	if err != nil {
-		t.Fatalf("parseBrowseScope returned error: %v", err)
-	}
-	handler := &catalogStreamHandler{clusterMeta: meta}
-	recorder := newCatalogFlushRecorder()
-	if err := handler.writeSnapshot(recorder, recorder, svc, opts, false, true, 7); err != nil {
-		t.Fatalf("writeSnapshot returned error: %v", err)
-	}
-	event := decodeFirstCatalogStreamEvent(t, recorder.BodyString())
-	if event.Sequence != 7 || !event.Reset {
-		t.Fatalf("unexpected stream event envelope: sequence=%d reset=%v", event.Sequence, event.Reset)
-	}
-	if event.SnapshotMode != catalogStreamSnapshotPartial {
-		t.Fatalf("expected partial stream mode for paginated payload, got %q", event.SnapshotMode)
-	}
-	if event.Snapshot.ClusterID != payload.ClusterID || event.Snapshot.ClusterName != payload.ClusterName {
-		t.Fatalf("stream lost cluster metadata: %+v", event.Snapshot.ClusterMeta)
-	}
-	if !reflect.DeepEqual(event.Snapshot.Items, payload.Items) {
-		t.Fatalf("stream items diverged from snapshot items: stream=%+v snapshot=%+v", event.Snapshot.Items, payload.Items)
-	}
-	if event.Snapshot.Continue != payload.Continue ||
-		event.Snapshot.Total != payload.Total ||
-		event.Snapshot.BatchSize != payload.BatchSize ||
-		event.Snapshot.TotalBatches != payload.TotalBatches ||
-		!reflect.DeepEqual(event.Snapshot.Kinds, payload.Kinds) ||
-		!reflect.DeepEqual(event.Snapshot.Namespaces, payload.Namespaces) {
-		t.Fatalf("stream query metadata diverged from snapshot: stream=%+v snapshot=%+v", event.Snapshot, payload)
-	}
 }
 
-func TestCatalogRefreshAdapterBuildsSnapshotAndStreamFromSharedAssembly(t *testing.T) {
+func TestCatalogRefreshAdapterBuildsSnapshotFromSharedAssembly(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{
 			Kind:            "Deployment",
@@ -520,30 +488,13 @@ func TestCatalogRefreshAdapterBuildsSnapshotAndStreamFromSharedAssembly(t *testi
 	if !ok {
 		t.Fatalf("unexpected payload type: %T", snap.Payload)
 	}
-	event := adapter.BuildStreamEvent(opts, false, true, 11)
-
-	if !reflect.DeepEqual(event.Snapshot.Items, payload.Items) {
-		t.Fatalf("stream items diverged from snapshot items: stream=%+v snapshot=%+v", event.Snapshot.Items, payload.Items)
-	}
-	if event.Snapshot.Total != payload.Total ||
-		event.Snapshot.Continue != payload.Continue ||
-		event.Snapshot.ResourceCount != payload.ResourceCount ||
-		!reflect.DeepEqual(event.Snapshot.Kinds, payload.Kinds) ||
-		!reflect.DeepEqual(event.Snapshot.Namespaces, payload.Namespaces) {
-		t.Fatalf("stream query metadata diverged from snapshot: stream=%+v snapshot=%+v", event.Snapshot, payload)
-	}
 	if snap.Stats.ItemCount != len(payload.Items) ||
 		snap.Stats.TotalItems != payload.Total ||
 		snap.Stats.Truncated != (payload.Continue != "") {
 		t.Fatalf("snapshot stats diverged from payload: stats=%+v payload=%+v", snap.Stats, payload)
 	}
-	if event.Stats.ItemCount != len(event.Snapshot.Items) ||
-		event.Stats.TotalItems != event.Snapshot.Total ||
-		event.Stats.Truncated != (event.Snapshot.Continue != "") {
-		t.Fatalf("stream stats diverged from payload: stats=%+v payload=%+v", event.Stats, event.Snapshot)
-	}
-	if len(payload.NamespaceGroups) != 1 || len(event.Snapshot.NamespaceGroups) != 1 {
-		t.Fatalf("expected namespace groups on both payloads: snapshot=%+v stream=%+v", payload.NamespaceGroups, event.Snapshot.NamespaceGroups)
+	if len(payload.NamespaceGroups) != 1 {
+		t.Fatalf("expected namespace groups on payload: snapshot=%+v", payload.NamespaceGroups)
 	}
 }
 
@@ -765,26 +716,4 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 		t.Fatal("catalog service cachesReady field not found")
 	}
 	setUnexportedField(cachesReadyField, true)
-}
-
-func decodeFirstCatalogStreamEvent(t *testing.T, body string) catalogStreamEvent {
-	t.Helper()
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		var event catalogStreamEvent
-		if err := json.Unmarshal([]byte(payload), &event); err != nil {
-			t.Fatalf("unmarshal catalog stream event: %v", err)
-		}
-		return event
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan catalog stream body: %v", err)
-	}
-	t.Fatalf("expected catalog stream event in body %q", body)
-	return catalogStreamEvent{}
 }

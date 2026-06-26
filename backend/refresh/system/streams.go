@@ -46,11 +46,6 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.telemetry,
 		deps.clusterMeta.ClusterID,
 	)
-	eventHandler, err := eventstream.NewHandler(deps.snapshotService, eventManager, logger)
-	if err != nil {
-		return nil, nil, err
-	}
-	mux.Handle("/api/v2/stream/events", eventHandler)
 
 	resourceManager := resourcestream.NewManager(
 		deps.informerFactory,
@@ -66,11 +61,6 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		return nil, nil, err
 	}
 	mux.Handle("/api/v2/stream/resources", resourceHandler)
-
-	if deps.cfg.ObjectCatalogService != nil {
-		catalogHandler := snapshot.NewCatalogStreamHandler(deps.cfg.ObjectCatalogService, logger, deps.telemetry, deps.clusterMeta)
-		mux.Handle("/api/v2/stream/catalog", catalogHandler)
-	}
 
 	return eventManager, resourceManager, nil
 }

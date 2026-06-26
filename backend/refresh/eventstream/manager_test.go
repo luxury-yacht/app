@@ -159,6 +159,58 @@ func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing
 	}
 }
 
+func TestManagerNotifiesSignalObserverWithoutSSESubscribers(t *testing.T) {
+	client := fake.NewClientset()
+	factory := informers.NewSharedInformerFactory(client, 0)
+	informer := factory.Core().V1().Events()
+	manager := NewManager(informer, applog.Noop, telemetry.NewRecorder(), "cluster-a")
+
+	type observedSignal struct {
+		scope    string
+		sequence uint64
+	}
+	var observed []observedSignal
+	manager.SetSignalObserver(func(scope string, sequence uint64) {
+		observed = append(observed, observedSignal{scope: scope, sequence: sequence})
+	})
+
+	manager.handleEvent(&corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ns-event",
+			Namespace: "default",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "web-123",
+			Namespace: "default",
+		},
+		Message: "Pod restarted",
+		Type:    "Warning",
+	})
+	manager.handleEvent(&corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-event",
+			Namespace: "kube-system",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "Node",
+			Name: "node-a",
+		},
+		Message: "Node updated",
+		Type:    "Normal",
+	})
+
+	if len(observed) != 2 {
+		t.Fatalf("expected two observed signals, got %+v", observed)
+	}
+	if observed[0].scope != "namespace:default" || observed[0].sequence == 0 {
+		t.Fatalf("unexpected namespace signal: %+v", observed[0])
+	}
+	if observed[1].scope != "cluster" || observed[1].sequence == 0 {
+		t.Fatalf("unexpected cluster signal: %+v", observed[1])
+	}
+}
+
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	manager := &Manager{
 		logger:      applog.Noop,

@@ -168,6 +168,52 @@ func TestManagerMetricRefreshBroadcastsMetricSourceForSubscribedMetricDomains(t 
 	}
 }
 
+func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	catalogSub, err := subscribeForTest(t, manager, domainCatalog, "")
+	require.NoError(t, err)
+	clusterEventsSub, err := subscribeForTest(t, manager, domainClusterEvents, "cluster")
+	require.NoError(t, err)
+	namespaceEventsSub, err := subscribeForTest(t, manager, domainNamespaceEvents, "namespace:prod")
+	require.NoError(t, err)
+
+	manager.BroadcastCatalogRefresh("catalog-42")
+	manager.BroadcastEventRefresh(domainClusterEvents, "", "event-7")
+	manager.BroadcastEventRefresh(domainNamespaceEvents, "namespace:prod", "event-8")
+
+	for _, tc := range []struct {
+		name    string
+		sub     *Subscription
+		domain  string
+		scope   string
+		source  Source
+		version string
+	}{
+		{name: "catalog", sub: catalogSub, domain: domainCatalog, scope: "", source: SourceCatalog, version: "catalog-42"},
+		{name: "cluster events", sub: clusterEventsSub, domain: domainClusterEvents, scope: "", source: SourceEvent, version: "event-7"},
+		{name: "namespace events", sub: namespaceEventsSub, domain: domainNamespaceEvents, scope: "namespace:prod", source: SourceEvent, version: "event-8"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			update := requireNextUpdate(t, tc.sub)
+			require.Equal(t, MessageTypeModified, update.Type)
+			require.Equal(t, tc.domain, update.Domain)
+			require.Equal(t, tc.scope, update.Scope)
+			require.Equal(t, tc.source, update.Source)
+			require.Equal(t, SignalChanged, update.Signal)
+			require.Equal(t, tc.version, update.Version)
+			require.Equal(t, "c1", update.ClusterID)
+			require.Equal(t, "cluster", update.ClusterName)
+			require.Nil(t, update.Ref)
+		})
+	}
+}
+
 // The namespace-config live notify is now driven by the generic ingest notify sink
 // (ConfigMap/Secret are owned-reflector ingest kinds), proven in ingest_notify_test.go.
 // The resource-stream handleConfigMap/handleSecret handlers carry only the Helm-release

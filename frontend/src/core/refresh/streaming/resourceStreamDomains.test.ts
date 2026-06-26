@@ -8,13 +8,16 @@ import { describe, expect, it } from 'vitest';
 
 import { refreshDomainContract } from '../domainRegistry';
 import {
+  DOORBELL_STREAM_DOMAINS,
   COMPLETE_RESYNC_STREAM_DOMAINS,
   RESOURCE_STREAM_DOMAINS,
+  domainSupportsSourceClock,
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
   isSupportedDomain,
   normalizeResourceScope,
   resourceStreamDomainDescriptors,
+  type DoorbellDomain,
   type ResourceDomain,
 } from './resourceStreamDomains';
 
@@ -51,6 +54,13 @@ const REPRESENTATIVE_DOMAIN_BY_SCOPE_KIND = {
   namespace: 'namespace-workloads',
   cluster: 'nodes',
 } satisfies Record<'pod' | 'namespace' | 'cluster', ResourceDomain>;
+
+const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
+  ...EXPECTED_DOMAINS,
+  'catalog',
+  'cluster-events',
+  'namespace-events',
+];
 
 describe('resource stream domain descriptors', () => {
   it('covers every streamed resource domain exactly once', () => {
@@ -106,6 +116,24 @@ describe('resource stream domain descriptors', () => {
     expect(isSupportedDomain('not-a-domain')).toBe(false);
   });
 
+  it('keeps doorbell domains distinct from resource table domains', () => {
+    expect(DOORBELL_STREAM_DOMAINS).toEqual(EXPECTED_DOORBELL_DOMAINS);
+    expect(RESOURCE_STREAM_DOMAINS).toEqual(EXPECTED_DOMAINS);
+    expect(isSupportedDomain('catalog')).toBe(true);
+    expect(isSupportedDomain('cluster-events')).toBe(true);
+    expect(isSupportedDomain('namespace-events')).toBe(true);
+
+    expect(normalizeResourceScope('catalog', '')).toBe('');
+    expect(normalizeResourceScope('cluster-events', 'cluster')).toBe('');
+    expect(normalizeResourceScope('namespace-events', 'prod')).toBe('namespace:prod');
+    expect(() => normalizeResourceScope('catalog', 'limit=50')).toThrow('does not accept scope');
+
+    expect(domainSupportsSourceClock('catalog', 'catalog')).toBe(true);
+    expect(domainSupportsSourceClock('cluster-events', 'event')).toBe(true);
+    expect(domainSupportsSourceClock('namespace-events', 'event')).toBe(true);
+    expect(domainSupportsSourceClock('catalog', 'object')).toBe(false);
+  });
+
   // Locks the frontend descriptor table to the backend-authored projection
   // contract. The same JSON file (refresh-domain-contract.json) is the
   // source of truth for both: this test ensures scopeKind and
@@ -116,6 +144,9 @@ describe('resource stream domain descriptors', () => {
   it('matches the backend-authored projection contract', async () => {
     const { refreshDomainContract } = await import('@/core/refresh/domainRegistry');
     const contractDomains = refreshDomainContract.resourceStream.domains;
+    const sourceClocksByDomain = new Map(
+      refreshDomainContract.domains.map((entry) => [entry.domain, entry.sourceClocks ?? []])
+    );
     expect(Object.keys(contractDomains).sort()).toEqual([...EXPECTED_DOMAINS].sort());
 
     for (const descriptor of resourceStreamDomainDescriptors) {
@@ -123,7 +154,7 @@ describe('resource stream domain descriptors', () => {
       expect(entry, `contract missing entry for ${descriptor.domain}`).toBeDefined();
       expect(entry.scopeKind, `${descriptor.domain} scopeKind`).toBe(descriptor.scopeKind);
       expect(
-        entry.sourceClocks.includes('metric'),
+        sourceClocksByDomain.get(descriptor.domain)?.includes('metric'),
         `${descriptor.domain} metric source clock`
       ).toBe(descriptor.preserveMetrics);
       expect(entry.completeIsScopeLevel, `${descriptor.domain} completeIsScopeLevel`).toBe(true);
