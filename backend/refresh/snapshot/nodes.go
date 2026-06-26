@@ -396,9 +396,10 @@ func finishNodeSnapshot(
 		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
 	return &refresh.Snapshot{
-		Domain:  "nodes",
-		Scope:   snapshotScope,
-		Version: version,
+		Domain:         "nodes",
+		Scope:          snapshotScope,
+		Version:        version,
+		SourceVersions: metricSourceVersions(dynamicRevision),
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,

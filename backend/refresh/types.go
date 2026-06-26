@@ -103,14 +103,16 @@ const (
 
 // Snapshot represents the payload returned to clients.
 type Snapshot struct {
-	Domain      string        `json:"domain"`
-	Scope       string        `json:"scope,omitempty"`
-	Version     uint64        `json:"version"`
-	Checksum    string        `json:"checksum"`
-	GeneratedAt int64         `json:"generatedAt"` // unix millis
-	Sequence    uint64        `json:"sequence"`
-	Payload     interface{}   `json:"payload"`
-	Stats       SnapshotStats `json:"stats"`
+	Domain         string            `json:"domain"`
+	Scope          string            `json:"scope,omitempty"`
+	Version        uint64            `json:"version"`
+	SourceVersion  string            `json:"sourceVersion,omitempty"`
+	SourceVersions map[string]string `json:"sourceVersions,omitempty"`
+	Checksum       string            `json:"checksum"`
+	GeneratedAt    int64             `json:"generatedAt"` // unix millis
+	Sequence       uint64            `json:"sequence"`
+	Payload        interface{}       `json:"payload"`
+	Stats          SnapshotStats     `json:"stats"`
 }
 
 // SnapshotStats captures simple metrics for a snapshot build.

@@ -217,7 +217,7 @@ describe('resourceStreamManager helpers', () => {
 });
 
 describe('ResourceStreamManager', () => {
-  test('pod delta is signal-only: bumps streamRevision and leaves rows untouched', () => {
+  test('pod delta is signal-only: updates sourceVersion and leaves rows untouched', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -258,9 +258,13 @@ describe('ResourceStreamManager', () => {
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'pods',
         scope: 'namespace:default',
+        source: 'object',
+        version: 'object:2',
+        signal: 'changed',
         resourceVersion: '2',
         name: 'pod-a',
         namespace: 'default',
@@ -274,13 +278,13 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('pods', storeScope);
-    // streamRevision bumps (refetch trigger); the seeded row is left untouched.
-    expect(state.streamRevision).toBe(1);
+    expect(state.sourceVersion).toBe('object:2');
+    expect(state.sourceVersions?.object).toBe('object:2');
     expect(state.data?.rows?.[0]?.status).toBe('Running');
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
   });
 
-  test('signal-only domain delta bumps streamRevision and never retains rows', () => {
+  test('signal-only domain delta updates sourceVersion and never retains rows', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -296,9 +300,13 @@ describe('ResourceStreamManager', () => {
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
+        clusterId: 'cluster-a',
         type: 'MODIFIED',
         domain: 'namespace-workloads',
         scope: 'namespace:default',
+        source: 'object',
+        version: 'object:7',
+        signal: 'changed',
         resourceVersion: '7',
         name: 'web',
         namespace: 'default',
@@ -310,11 +318,12 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('namespace-workloads', storeScope);
-    expect(state.streamRevision).toBe(1);
+    expect(state.sourceVersion).toBe('object:7');
+    expect(state.sourceVersions?.object).toBe('object:7');
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
-  test('A1 changed signal envelope bumps streamRevision without legacy message type', () => {
+  test('A1 changed signal envelope updates sourceVersion without legacy message type', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -347,7 +356,8 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    expect(getScopedDomainState('pods', storeScope).streamRevision).toBe(1);
+    expect(getScopedDomainState('pods', storeScope).sourceVersion).toBe('metrics:2');
+    expect(getScopedDomainState('pods', storeScope).sourceVersions?.metric).toBe('metrics:2');
   });
 
   test('A1 reset signal envelope forces a resync without legacy message type', async () => {
@@ -373,7 +383,10 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    expect(getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0).toBe(1);
+    expect(getScopedDomainState('namespace-config', storeScope).sourceVersion).toBe('object:11');
+    expect(getScopedDomainState('namespace-config', storeScope).sourceVersions?.object).toBe(
+      'object:11'
+    );
   });
 
   test('A1 signal envelope does not fall back across cluster ids', () => {
@@ -400,7 +413,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    expect(getScopedDomainState('pods', storeScope).streamRevision ?? 0).toBe(0);
+    expect(getScopedDomainState('pods', storeScope).sourceVersion).toBeUndefined();
   });
 
   // The typed query refetches only when the live-data identity

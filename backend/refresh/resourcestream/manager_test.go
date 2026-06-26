@@ -84,6 +84,8 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      applog.Noop,
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
 	}
 
 	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
@@ -111,6 +113,9 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, MessageTypeAdded, update.Type)
 		require.Equal(t, domainPods, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, SourceObject, update.Source)
+		require.Equal(t, SignalChanged, update.Signal)
+		require.Equal(t, "1", update.Version)
 		require.Equal(t, "pod-1", update.Ref.Name)
 		require.Equal(t, "default", update.Ref.Namespace)
 		// pods is query-backed: the live stream carries the change signal, not the row.

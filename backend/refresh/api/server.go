@@ -102,8 +102,12 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	validator := snapshot.SourceVersion
+	if validator == "" {
+		validator = snapshot.Checksum
+	}
 	ifNoneMatch := r.Header.Get("If-None-Match")
-	if ifNoneMatch != "" && snapshot.Checksum != "" && ifNoneMatch == snapshot.Checksum {
+	if ifNoneMatch != "" && validator != "" && ifNoneMatch == validator {
 		setCorrelationID(w, correlationID)
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -111,8 +115,8 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	setCorrelationID(w, correlationID)
 	w.Header().Set("Content-Type", "application/json")
-	if snapshot.Checksum != "" {
-		w.Header().Set("ETag", snapshot.Checksum)
+	if validator != "" {
+		w.Header().Set("ETag", validator)
 	}
 	if err := json.NewEncoder(w).Encode(snapshot); err != nil {
 		writeError(w, http.StatusInternalServerError, err, correlationID)

@@ -25,22 +25,25 @@ machinery the team rightly skipped.**
 
 ### The remaining multiplicity (each verified this session)
 
-1. **Four ordering authorities still coexist** where the goal was one:
-   per-(domain,scope) sequence numbers (`resourcestream/manager.go:937`), per-object
-   `resourceVersion`, frontend `liveDomainVersion`=`version:checksum:streamRevision`
-   (`resourceStreamManager.ts`), and snapshot `Sequence` (`refresh/snapshot/service.go`).
+1. ✅ **The frontend refetch identity now uses one source token.** Snapshot responses
+   expose `sourceVersion`, `GET /api/v2/snapshots/{domain}` uses that token for
+   `ETag`/`304`, and query-backed grids read `sourceVersion` instead of the old
+   `version:checksum:streamRevision` tuple. Resource-stream `Sequence` remains a
+   transport resume/high-water token only; per-object `resourceVersion` remains object
+   identity/reflector metadata only; snapshot `Sequence` remains internal build/debug
+   metadata only.
 2. ✅ **One liveness channel now tells views "refetch."** Events and catalog changes emit
    `source=event` / `source=catalog` doorbells on `/api/v2/stream/resources`; the old
    `/api/v2/stream/events` and `/api/v2/stream/catalog` SSE routes, aggregate routers,
    and frontend `EventSource` clients have been deleted. The remaining liveness work is
-   B3's removal of the internal per-(domain,scope) sequence numbers after the B0/B1
-   source-version contract lands.
+   B3's quarantine of internal per-(domain,scope) sequence numbers as transport resume
+   metadata after the B0/B1 source-version contract lands.
 3. ✅ **C2/C4 have landed for the metric-bearing query-backed domains.** The store remains
    metrics-free and overlays at serve, the published snapshot object version for `pods`,
    `nodes`, and `namespace-workloads` no longer includes the metrics revision, the metrics
    poller emits a `source=metric` doorbell through the resource stream manager, and the
-   legacy `applyMetricsSnapshot` client row-overlay path has been deleted. The remaining
-   metric work is C3's final fold into the B0/B1 source-version contract.
+   legacy `applyMetricsSnapshot` client row-overlay path has been deleted. C3 has folded
+   `metricsRevision` into the B0/B1 source-version contract as the metric source clock.
 
 ### Out of scope on purpose (NOT "unfinished" — intentional design)
 
@@ -86,7 +89,7 @@ already-proven "one delivery model," minus the positional deltas that were dropp
     that domain.
 
   The frame carries no rows, no positions, and no partial table payload. It is the
-  formal version of what `streamRevision` already does internally: bump a live-data
+  formal replacement for what `streamRevision` did internally: bump a live-data
   identity so a query-backed view refetches. The added fields formalize existing
   contracts instead of adding a second delivery model: `clusterId` is the routing
   identity, `source` names the producer clock that already changed, and `signal`
@@ -122,8 +125,8 @@ already-proven "one delivery model," minus the positional deltas that were dropp
   and kubeconfig-change suppression through the unified manager.
 
 The deleted SSE transports are the simplification payoff. Phase A is complete; B3 is the
-remaining internal cleanup that can remove per-(domain,scope) resource-stream sequence
-numbers after B0/B1 define the source-version authority.
+remaining internal cleanup that quarantines per-(domain,scope) resource-stream sequence
+numbers as transport resume metadata after B0/B1 define the source-version authority.
 
 ## Phase B — One object scope clock (quarantine non-object clocks)
 
@@ -133,7 +136,7 @@ need a full LSN delta-log (a from-scratch LSN rewrite was deliberately dropped).
 endpoint stamps and the A1 doorbell references, so cursor, ETag/304, resume, and refetch
 all key off one source-version contract.
 
-- **B0 [design].** Define the source-version contract before code moves:
+- ✅ **B0 [design].** Define the source-version contract before code moves:
   - versions are opaque string equality tokens at API boundaries; backend-internal
     counters, store revisions, and epochs may contribute to the token, but consumers
     never parse or order it;
@@ -150,16 +153,17 @@ all key off one source-version contract.
     public scope version;
   - snapshot `Sequence` remains an internal build/debug sequence until retired; it is
     not the cache/refetch token.
-- **B1.** Implement the single authority from B0 — a domain/scope version source used by
+- ✅ **B1.** Implement the single authority from B0 — a domain/scope version source used by
   snapshot builders and the A1 doorbell. Ingest-fed domains can derive object changes
   from `StoreResourceVersion`; derived domains must bump their own domain/scope version
   when any object input can affect the projected rows.
-- **B2.** Collapse `liveDomainVersion`'s three components on the frontend to the opaque
-  source token + a real `304` path; delete the `checksum`/`streamRevision` triple.
-- **B3.** Retire the per-(domain,scope) sequence numbers in `resourcestream` after A1
-  supplies `changed`/`reset` semantics; the A1 doorbell carries the source version
-  instead.
-- **B4.** Keep per-object `resourceVersion` **only** as the apiserver's reflector resume
+- ✅ **B2.** Collapse `liveDomainVersion`'s three components on the frontend to the opaque
+  source token + a real `304` path; remove the `version`/`checksum`/`streamRevision`
+  tuple from query identity.
+- ✅ **B3.** Quarantine per-(domain,scope) sequence numbers in `resourcestream` as
+  transport resume/high-water metadata only. A1 doorbells carry `source/version` for
+  refetch identity; frontend query invalidation no longer reads `Sequence`.
+- ✅ **B4.** Keep per-object `resourceVersion` **only** as the apiserver's reflector resume
   token (inside `ingest`), never as an app-level ordering authority — document the boundary
   so it can't leak back out.
 
@@ -203,7 +207,7 @@ completed.
   visible views use C0's throttled keyset-cursor refetch; object-sorted visible views use
   C0's throttled stable-row refetch; neither path advances the object source token for a
   metric-only poll.
-- **C3 [after B0/B1].** `metricsRevision` becomes the metric source clock under the same
+- ✅ **C3 [after B0/B1].** `metricsRevision` becomes the metric source clock under the same
   source-version contract — "one clock **per source**" (object version + metric version),
   the one deliberate two-of-something.
 - ✅ **C4 [after C0/C2].** Retire the legacy `applyMetricsSnapshot` metrics-only scoped-store
@@ -257,9 +261,9 @@ completed.
 
 - ✅ **A first** (landed: the unified doorbell is now the carrier for event, catalog,
   object, and metric source signals).
-- **C1/C2 may land before B** because they remove the poll-driven object refetch coupling
+- ✅ **C1/C2 may land before B** because they remove the poll-driven object refetch coupling
   using the A1 signal shape.
-- **B before C3** because the final metric clock should use the same source-version contract
+- ✅ **B before C3** because the final metric clock should use the same source-version contract
   as object state.
 - Every step lands behind a **new==old equivalence gate** and leaves the app correct +
   simpler; gated by `mage qc:prerelease`.
@@ -271,10 +275,10 @@ completed.
 | Phase | Removes | Simplification | Effort |
 |---|---|---|---|
 | A — one doorbell | ✅ 2 SSE transports + aggregate routers + their clients | High (3 push paths → 1) | Landed |
-| B — one object scope clock | 3 of 4 object ordering authorities | High (the core unmet goal) | Medium–High |
-| C — metrics split | object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Medium |
+| B — one object scope clock | ✅ frontend tuple + checksum ETag + public sequence ordering | High (the core unmet goal) | Landed |
+| C — metrics split | ✅ object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Landed |
 | D — cleanups | naming/mechanism drift | Low | Low |
 
-**Remaining recommended order: B → C3 → D.** A and C1/C2 removed the most day-to-day
-coupling (poll-driven object invalidation and duplicate push channels); B is the deeper
-object-clock unification; C3 folds metrics into that same contract; D is opportunistic.
+**Remaining recommended order: D only.** A removed duplicate push channels; B made
+`sourceVersion` the refetch/cache token; C folded metrics into that same source-version
+contract. D is opportunistic cleanup and profiling-driven follow-up.

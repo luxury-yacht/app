@@ -48,24 +48,18 @@ export const typedQueryPageLimitOrDefault = (
 ): TablePageSize => (isTablePageSize(value) ? value : fallback);
 
 // The live-data identity the typed query watches to decide when to refetch. It
-// uses ONLY the data identity (version + checksum/etag) — deliberately NOT a
-// refresh timestamp. Including a timestamp made it change on every poll tick even
-// when the data was identical, so the query refetched continuously (~5×/sec while
-// idle on the view) and intermittently raced into a transient "returned no data"
-// that blanked the table. Keyed on data identity, it refetches only on real change.
+// uses the opaque source token emitted by snapshots and doorbell signals, not
+// refresh timestamps or the legacy version/checksum tuple.
 export const liveDomainVersion = (state: {
+  sourceVersion?: string;
   version?: number | string;
   checksum?: string;
   etag?: string;
-  // Bumped by the stream manager when streamed row updates change the data
-  // without a new backend snapshot version — a real data change, not a tick.
   streamRevision?: number;
-  // Accepted from the scoped domain state but deliberately IGNORED below — see comment.
   lastUpdated?: number;
   lastAutoRefresh?: number;
   lastManualRefresh?: number;
-}): string =>
-  [state.version ?? '', state.checksum ?? state.etag ?? '', state.streamRevision ?? ''].join(':');
+}): string => state.sourceVersion ?? state.etag ?? '';
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
 // resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the

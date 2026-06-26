@@ -9,6 +9,7 @@ import { useSyncExternalStore } from 'react';
 
 import type { DomainPayloadMap, RefreshDomain } from './types';
 import type { SnapshotStats } from './client';
+import type { RefreshSourceClock } from './domainRegistry';
 
 export type DomainStatus = 'idle' | 'loading' | 'initialising' | 'updating' | 'ready' | 'error';
 
@@ -17,14 +18,12 @@ export interface DomainSnapshotState<TPayload> {
   data: TPayload | null;
   stats: SnapshotStats | null;
   version?: number;
+  sourceVersion?: string;
+  sourceVersions?: Partial<Record<RefreshSourceClock, string>>;
   checksum?: string;
   etag?: string;
-  /**
-   * Monotonic counter bumped by the resource stream manager whenever streamed
-   * row updates change the data WITHOUT a new backend snapshot version. Part of
-   * the live-data identity (see liveDomainVersion) so typed queries refetch on
-   * streamed changes.
-   */
+  // Retained for stream diagnostics/backward-compatible tests only. Query-backed
+  // table identity no longer reads it; sourceVersion is the live-data token.
   streamRevision?: number;
   lastUpdated?: number;
   lastManualRefresh?: number;

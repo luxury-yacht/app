@@ -1496,6 +1496,7 @@ func TestNamespaceWorkloadsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *t
 	first, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, uint64(10), first.Version)
+	require.Equal(t, fmt.Sprintf("%d", now.UnixNano()), first.SourceVersions["metric"])
 	require.Equal(t, "80m", first.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsage)
 
 	provider.pods = map[string]metrics.PodUsage{
@@ -1506,6 +1507,7 @@ func TestNamespaceWorkloadsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *t
 	second, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
+	require.Equal(t, fmt.Sprintf("%d", now.Add(5*time.Second).UnixNano()), second.SourceVersions["metric"])
 	require.Equal(t, "120m", second.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsage)
 }
 

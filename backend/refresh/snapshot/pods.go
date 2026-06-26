@@ -349,9 +349,10 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	metricsInfo.FailureCount = metadata.FailureCount
 
 	snapshot := &refresh.Snapshot{
-		Domain:  podDomainName,
-		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
-		Version: version,
+		Domain:         podDomainName,
+		Scope:          refresh.JoinClusterScope(clusterID, trimmed),
+		Version:        version,
+		SourceVersions: metricSourceVersions(dynamicRevision),
 		Payload: PodSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,

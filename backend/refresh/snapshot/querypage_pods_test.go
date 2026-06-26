@@ -246,6 +246,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 
 	snap, err := builder.Build(ctx, "namespace:team-a")
 	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("%d", now.UnixNano()), snap.SourceVersions["metric"])
 	payload := snap.Payload.(PodSnapshot)
 	require.Len(t, payload.Rows, 2)
 	require.Equal(t, "alpha", payload.Rows[0].Name)
@@ -265,5 +266,6 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	}
 	snap2, err := builder.Build(ctx, "namespace:team-a")
 	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("%d", now.Add(time.Second).UnixNano()), snap2.SourceVersions["metric"])
 	require.Equal(t, "999m", snap2.Payload.(PodSnapshot).Rows[0].CPUUsage, "metrics refreshed without re-ingest")
 }

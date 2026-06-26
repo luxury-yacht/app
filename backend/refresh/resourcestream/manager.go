@@ -1016,7 +1016,17 @@ func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update,
 	if len(scopeSubs) > 0 || bufferExists {
 		// Buffer updates only when there are active or recent subscribers for this scope.
 		sequence := m.nextSequenceLocked(domain, scope)
-		scopedUpdate.Sequence = strconv.FormatUint(sequence, 10)
+		sequenceToken := strconv.FormatUint(sequence, 10)
+		scopedUpdate.Sequence = sequenceToken
+		if scopedUpdate.Source == "" {
+			scopedUpdate.Source = SourceObject
+		}
+		if scopedUpdate.Signal == "" {
+			scopedUpdate.Signal = SignalChanged
+		}
+		if strings.TrimSpace(scopedUpdate.Version) == "" {
+			scopedUpdate.Version = sequenceToken
+		}
 		buffer := m.bufferLocked(domain, scope)
 		buffer.Add(bufferedUpdate{sequence: sequence, update: scopedUpdate})
 	}

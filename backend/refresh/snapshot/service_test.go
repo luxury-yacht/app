@@ -154,6 +154,10 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	if snap.Checksum == "" {
 		t.Fatalf("expected checksum to be set")
 	}
+	if snap.SourceVersion == "" {
+		t.Fatalf("expected sourceVersion to be set")
+	}
+	require.Equal(t, "0", snap.SourceVersions["object"])
 
 	summary := rec.SnapshotSummary()
 	if len(summary.Snapshots) != 1 {
@@ -162,6 +166,66 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	if summary.Snapshots[0].LastStatus != "success" || summary.Snapshots[0].LastError != "" {
 		t.Fatalf("expected successful snapshot telemetry, got %+v", summary.Snapshots[0])
 	}
+}
+
+func TestServiceSourceVersionIncludesEpoch(t *testing.T) {
+	reg := domain.New()
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "demo",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{
+				Domain:  "demo",
+				Scope:   scope,
+				Version: 3,
+				Payload: map[string]string{
+					"hello": "world",
+				},
+			}, nil
+		},
+	}))
+
+	serviceA := NewService(reg, nil, testClusterMeta())
+	serviceB := NewService(reg, nil, testClusterMeta())
+	serviceA.epoch = "epoch-a"
+	serviceB.epoch = "epoch-b"
+
+	first, err := serviceA.Build(context.Background(), "demo", "scope-a")
+	require.NoError(t, err)
+	second, err := serviceB.Build(context.Background(), "demo", "scope-a")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, first.SourceVersion)
+	require.NotEmpty(t, second.SourceVersion)
+	require.NotEqual(t, first.SourceVersion, second.SourceVersion)
+	require.Equal(t, first.SourceVersions, second.SourceVersions)
+}
+
+func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "pods",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain: "pods",
+				Scope:  scope,
+				SourceVersions: map[string]string{
+					"metric": time.Unix(0, int64(builds)).Format(time.RFC3339Nano),
+				},
+				Payload: map[string]int{"builds": builds},
+			}, nil
+		},
+	}))
+
+	service := NewService(reg, nil, testClusterMeta())
+	first, err := service.Build(context.Background(), "pods", "namespace:default")
+	require.NoError(t, err)
+	second, err := service.Build(context.Background(), "pods", "namespace:default")
+	require.NoError(t, err)
+
+	require.Equal(t, 2, builds)
+	require.NotEqual(t, first.SourceVersions["metric"], second.SourceVersions["metric"])
 }
 
 func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {

@@ -3,8 +3,8 @@
  *
  * Coordinates resource WebSocket subscriptions and resyncs for refresh domains
  * that receive live change signals. Every streamed table is query-backed, so a
- * delta (or a resync) bumps streamRevision to trigger a refetch rather than
- * delivering rows over the bridge.
+ * delta (or a resync) advances the domain source token to trigger a refetch
+ * rather than delivering rows over the bridge.
  */
 
 import { setScopedDomainState } from '../store';
@@ -394,6 +394,12 @@ export class ResourceStreamManager {
             this.updateHealthForScope(subscription.domain, subscription.reportScope);
             return;
           }
+          this.bumpSourceVersionOnly(
+            subscription,
+            Date.now(),
+            { [resolvedUpdate.signalEnvelope.source]: resolvedUpdate.signalEnvelope.version },
+            resolvedUpdate.signalEnvelope.version
+          );
           void this.resyncSubscription(subscription, 'reset');
           this.updateHealthForScope(subscription.domain, subscription.reportScope);
           return;
@@ -721,22 +727,52 @@ export class ResourceStreamManager {
     if (subscription.updateQueue.length === 0) {
       return;
     }
+    const sourceUpdate = this.sourceVersionsFromUpdates(subscription.updateQueue);
     subscription.updateQueue = [];
-    // Every streamed domain is query-backed: the table refetches on the bare
-    // signal. Bump streamRevision (the refetch trigger); streamed deltas carry no
-    // rows to apply, so there is no retain/merge/sort path.
-    this.bumpStreamRevisionOnly(subscription, Date.now());
+    this.bumpSourceVersionOnly(
+      subscription,
+      Date.now(),
+      sourceUpdate.sourceVersions,
+      sourceUpdate.latest
+    );
   }
 
-  // bumpStreamRevisionOnly advances the live-data identity for a signal-only
-  // resource stream without touching rows. The third component of liveDomainVersion
-  // (streamRevision) changes, so the query-backed view refetches its page; the
-  // streamed deltas carried no rows to apply. Coalescing (UPDATE_COALESCE_MS)
-  // collapses a burst — e.g. an informer resync — into a single bump/refetch.
-  private bumpStreamRevisionOnly(subscription: StreamSubscription, now: number): void {
+  private sourceVersionsFromUpdates(
+    updates: Array<{
+      source?: string;
+      signal?: string;
+      version?: string;
+      signalEnvelope?: SignalEnvelope;
+    }>
+  ): { sourceVersions: Partial<Record<ResourceStreamSourceClock, string>>; latest?: string } {
+    const sourceVersions: Partial<Record<ResourceStreamSourceClock, string>> = {};
+    let latest: string | undefined;
+    for (const update of updates) {
+      const source = update.signalEnvelope?.source ?? update.source;
+      const version = update.signalEnvelope?.version ?? update.version?.trim();
+      if (!isResourceStreamSourceClock(source) || !version) {
+        continue;
+      }
+      sourceVersions[source] = version;
+      latest = version;
+    }
+    return { sourceVersions, latest };
+  }
+
+  private bumpSourceVersionOnly(
+    subscription: StreamSubscription,
+    now: number,
+    sourceVersions: Partial<Record<ResourceStreamSourceClock, string>>,
+    latest?: string
+  ): void {
     setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
       ...previous,
       status: 'ready',
+      sourceVersion: latest ?? previous.sourceVersion,
+      sourceVersions: {
+        ...(previous.sourceVersions ?? {}),
+        ...sourceVersions,
+      },
       streamRevision: (previous.streamRevision ?? 0) + 1,
       lastUpdated: now,
       lastAutoRefresh: now,
@@ -818,14 +854,8 @@ export class ResourceStreamManager {
     subscription.updateQueue = [];
     subscription.lastSequence = undefined;
 
-    // Every streamed table is query-backed. A resync (initial start, reset,
-    // backpressure, complete/error, manual refresh) re-arms the delta stream and
-    // bumps streamRevision so the view refetches its page — no full-row snapshot is
-    // pulled over the bridge, and status→'ready' clears the query gate so the table
-    // stops waiting on a baseline before showing page 1. (helm's backend stays
-    // complete-resync; its complete-resync signal lands here and triggers a refetch
-    // exactly like the change-signal domains.)
-    this.bumpStreamRevisionOnly(subscription, now);
+    const sourceUpdate = this.sourceVersionsFromUpdates(subscription.updateQueue);
+    this.bumpSourceVersionOnly(subscription, now, sourceUpdate.sourceVersions, sourceUpdate.latest);
     this.markResyncComplete(subscription);
     subscription.pendingReset = false;
     subscription.resyncInFlight = false;

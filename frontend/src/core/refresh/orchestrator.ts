@@ -1129,7 +1129,7 @@ class RefreshOrchestrator {
       const { snapshot, etag, notModified } = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
         scope: normalizedScope,
         signal: controller.signal,
-        ifNoneMatch: previousState.etag,
+        ifNoneMatch: previousState.sourceVersion ?? previousState.etag,
       });
 
       if (controller.signal.aborted) {
@@ -1237,8 +1237,10 @@ class RefreshOrchestrator {
         data: payload,
         stats: snapshot.stats ?? null,
         version: snapshot.version,
+        sourceVersion: snapshot.sourceVersion ?? etag ?? prev.sourceVersion,
+        sourceVersions: snapshot.sourceVersions ?? prev.sourceVersions,
         checksum: snapshot.checksum,
-        etag: etag ?? snapshot.checksum ?? prev.etag,
+        etag: etag ?? snapshot.sourceVersion ?? snapshot.checksum ?? prev.etag,
         lastUpdated: Date.now(),
         lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,

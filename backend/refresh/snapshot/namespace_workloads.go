@@ -235,6 +235,11 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
+	if snapshot.SourceVersions == nil {
+		snapshot.SourceVersions = metricSourceVersions(dynamicRevision)
+	} else if strings.TrimSpace(dynamicRevision) != "" {
+		snapshot.SourceVersions["metric"] = dynamicRevision
+	}
 	return snapshot, nil
 }
 

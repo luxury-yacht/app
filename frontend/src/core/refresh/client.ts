@@ -33,6 +33,8 @@ export interface Snapshot<TPayload> {
   domain: string;
   scope?: string;
   version: number;
+  sourceVersion?: string;
+  sourceVersions?: Record<string, string>;
   checksum?: string;
   generatedAt: number;
   sequence: number;

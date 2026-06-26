@@ -9,9 +9,14 @@ package snapshot
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +45,7 @@ type Service struct {
 	cacheMu             sync.RWMutex
 	cache               map[string]cacheEntry
 	cacheTTL            time.Duration
+	epoch               string
 	permissionChecker   *permissions.Checker
 	runtimeAccess       domainpermissions.RuntimeAccess
 	requestSerial       uint64
@@ -54,6 +60,8 @@ type cacheEntry struct {
 	snapshot  *refresh.Snapshot
 	expiresAt time.Time
 }
+
+var sourceVersionEpochSerial uint64
 
 type BuildRequest struct {
 	Context context.Context
@@ -93,6 +101,7 @@ func newService(
 		cluster:             meta,
 		cache:               make(map[string]cacheEntry),
 		cacheTTL:            config.SnapshotCacheTTL,
+		epoch:               newSourceVersionEpoch(meta),
 		informerSyncTimeout: config.RefreshInformerSyncTimeout,
 		permissionChecker:   checker,
 		runtimeAccess:       access,
@@ -187,13 +196,14 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	if s.shouldBypassSingleflight(domainName) {
 		groupKey = fmt.Sprintf("%s:live:%d", cacheKey, atomic.AddUint64(&s.requestSerial, 1))
 	}
-	if !refresh.HasCacheBypass(ctx) {
+	bypassSnapshotCache := s.shouldBypassSnapshotCache(domainName)
+	if !refresh.HasCacheBypass(ctx) && !bypassSnapshotCache {
 		if cached := s.loadCache(cacheKey); cached != nil {
 			return cached, nil
 		}
 	}
 	value, err, _ := s.group.Do(groupKey, func() (interface{}, error) {
-		if !refresh.HasCacheBypass(ctx) {
+		if !refresh.HasCacheBypass(ctx) && !bypassSnapshotCache {
 			if cached := s.loadCache(cacheKey); cached != nil {
 				return cached, nil
 			}
@@ -230,6 +240,7 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 				snap.Checksum = checksumBytes(data)
 			}
 		}
+		s.finalizeSourceVersion(snap)
 		s.recordTelemetry(
 			domainName,
 			scope,
@@ -453,6 +464,69 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 
 func (s *Service) shouldBypassSingleflight(domainName string) bool {
 	return domainName == "object-maintenance"
+}
+
+func (s *Service) shouldBypassSnapshotCache(domainName string) bool {
+	switch domainName {
+	case "pods", "namespace-workloads", "nodes":
+		return true
+	default:
+		return false
+	}
+}
+
+func newSourceVersionEpoch(meta ClusterMeta) string {
+	serial := atomic.AddUint64(&sourceVersionEpochSerial, 1)
+	return fmt.Sprintf("%s:%d:%d", meta.ClusterID, time.Now().UnixNano(), serial)
+}
+
+func (s *Service) finalizeSourceVersion(snap *refresh.Snapshot) {
+	if snap == nil {
+		return
+	}
+	if snap.SourceVersions == nil {
+		snap.SourceVersions = make(map[string]string)
+	}
+	if strings.TrimSpace(snap.SourceVersions["object"]) == "" {
+		snap.SourceVersions["object"] = strconv.FormatUint(snap.Version, 10)
+	}
+	snap.SourceVersion = s.sourceVersionToken(snap.Domain, snap.Scope, snap.SourceVersions)
+}
+
+func (s *Service) sourceVersionToken(domainName, scope string, sourceVersions map[string]string) string {
+	type sourceClock struct {
+		Source  string `json:"source"`
+		Version string `json:"version"`
+	}
+	payload := struct {
+		Epoch   string        `json:"epoch"`
+		Cluster string        `json:"cluster"`
+		Domain  string        `json:"domain"`
+		Scope   string        `json:"scope"`
+		Sources []sourceClock `json:"sources"`
+	}{
+		Epoch:   s.epoch,
+		Cluster: s.cluster.ClusterID,
+		Domain:  domainName,
+		Scope:   scope,
+	}
+	keys := make([]string, 0, len(sourceVersions))
+	for key, version := range sourceVersions {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(version) == "" {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		payload.Sources = append(payload.Sources, sourceClock{Source: key, Version: sourceVersions[key]})
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return "sv:" + hex.EncodeToString(sum[:])
 }
 
 func checksumBytes(data []byte) string {

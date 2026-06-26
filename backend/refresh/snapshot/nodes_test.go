@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -304,6 +305,7 @@ func TestNodeBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 	first, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	require.Equal(t, uint64(42), first.Version)
+	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
 	require.Equal(t, "650m", first.Payload.(NodeSnapshot).Rows[0].CPUUsage)
 
 	builder.metrics = fakeMetricsProvider{
@@ -314,6 +316,7 @@ func TestNodeBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 	second, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
+	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
 	require.Equal(t, "700m", second.Payload.(NodeSnapshot).Rows[0].CPUUsage)
 }
 
