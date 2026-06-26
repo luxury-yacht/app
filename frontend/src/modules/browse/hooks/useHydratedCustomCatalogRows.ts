@@ -70,6 +70,7 @@ const mergeHydratedRows = (
       apiVersion: row.version,
       age: hydrated?.age || row.age,
       ageTimestamp: hydrated?.ageTimestamp ?? row.ageTimestamp,
+      creationTimestamp: hydrated?.creationTimestamp ?? row.creationTimestamp,
     };
   });
 };

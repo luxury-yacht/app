@@ -60,7 +60,7 @@ const resourceValues = (
   };
 };
 
-export const metricFreshnessFromInfo = (
+const metricFreshnessFromInfo = (
   metrics: ResourceMetricsFreshnessInput
 ): ResourceMetricsFreshness | undefined => {
   if (!metrics) {
@@ -76,7 +76,7 @@ export const metricFreshnessFromInfo = (
   };
 };
 
-export const parseReadyPodCounts = (
+const parseReadyPodCounts = (
   ready: string | null | undefined
 ): { readyPodCount: number; podCount: number } | undefined => {
   const match = (ready ?? '').trim().match(/^(\d+)\s*\/\s*(\d+)$/);

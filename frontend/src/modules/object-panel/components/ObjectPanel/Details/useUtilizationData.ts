@@ -58,7 +58,7 @@ interface UseUtilizationDataParams {
   detail: unknown;
 }
 
-export function deriveDetailUtilizationData(
+function deriveDetailUtilizationData(
   objectData: KubernetesObjectReference | null | undefined,
   detail: unknown
 ): UtilizationData | null {

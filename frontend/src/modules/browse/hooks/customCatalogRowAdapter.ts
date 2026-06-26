@@ -31,6 +31,7 @@ export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
   }>;
   age?: string;
   ageTimestamp?: number;
+  creationTimestamp?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -76,6 +77,8 @@ export const customCatalogObjectReference = (
     { fallbackClusterId },
     {
       age: row.age,
+      ageTimestamp: row.ageTimestamp,
+      creationTimestamp: row.creationTimestamp,
       labels: row.labels,
       annotations: row.annotations,
       requiresExplicitVersion: options?.requiresExplicitVersion,
@@ -132,6 +135,7 @@ export const catalogItemToFallbackCustomRow = (
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
     ageTimestamp,
+    creationTimestamp: item.creationTimestamp,
   };
 };
 
@@ -159,6 +163,7 @@ export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourc
     conditions: row.conditions,
     age: row.age,
     ageTimestamp: row.ageTimestamp,
+    creationTimestamp: row.creationTimestamp,
     labels: row.labels,
     annotations: row.annotations,
   };

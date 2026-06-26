@@ -378,17 +378,17 @@ describe('ClusterViewCustom', () => {
         apiGroup: 'example.com',
         apiVersion: 'v1',
         crdName: 'widgets.example.com',
-        age: '1d',
+        ageTimestamp: expect.any(Number),
       }),
     ]);
-    expect(props.data[0].age).not.toContain('T');
+    expect(props.data[0].age).toBeUndefined();
 
     props.getCustomContextMenuItems(props.data[0], 'kind')[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'Widget',
         name: 'gizmo',
-        age: '1d',
+        ageTimestamp: props.data[0].ageTimestamp,
         clusterId: 'alpha:ctx',
         group: 'example.com',
         version: 'v1',

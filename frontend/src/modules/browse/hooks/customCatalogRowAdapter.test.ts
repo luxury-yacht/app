@@ -37,6 +37,7 @@ describe('customCatalogRowAdapter', () => {
   });
 
   it('preserves fallback catalog creation time for live Age rendering', () => {
+    const creationTimestamp = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     const fallback = catalogItemToFallbackCustomRow({
       clusterId: 'cluster-a',
       kind: 'DBInstance',
@@ -46,11 +47,16 @@ describe('customCatalogRowAdapter', () => {
       name: 'primary',
       uid: 'primary-uid',
       resourceVersion: '1',
-      creationTimestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      creationTimestamp,
       scope: 'Cluster',
     });
 
     expect(fallback.age).toBeUndefined();
     expect(fallback.ageTimestamp).toEqual(expect.any(Number));
+    expect(fallback.creationTimestamp).toBe(creationTimestamp);
+    expect(customCatalogObjectReference(fallback)).toMatchObject({
+      ageTimestamp: fallback.ageTimestamp,
+      creationTimestamp,
+    });
   });
 });
