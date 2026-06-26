@@ -69,14 +69,20 @@ already-proven "one delivery model," minus the positional deltas that were dropp
 - **A1 [design].** Define one signal envelope on the resources WS:
   `{clusterId, domain, scope, source, version, signal}`.
   - `clusterId` is required; resource-stream scopes remain single-cluster.
-  - `domain` is the refresh domain; `scope` is the canonical transport scope for that
-    domain.
+  - `domain` is the refresh domain; `scope` is the canonical **clusterless source
+    scope** for that domain. It is not a store/report key and never includes query
+    params, page limits, sort/filter state, or `continue` tokens. Consumers join
+    `clusterId + scope` locally when they need a scoped store key.
   - `source` is `object`, `metric`, `catalog`, or `event`; it names the clock that
     advanced.
-  - `version` is the source version after the change.
+  - `version` is the opaque source-token string after the change; consumers compare it
+    for equality only.
   - `signal` is `changed`, `reset`, or `error`. `changed` means "refetch if this
     source affects the current query"; `reset` means "resume was lost, re-snapshot";
     `error` feeds the same terminal-error/diagnostics path as current streams.
+  - the A1 work adds `sourceClocks` to `refresh-domain-contract.json` as the
+    authoring point, with backend/frontend contract tests proving each emitted
+    signal source is declared by that domain.
 
   The frame carries no rows, no positions, and no partial table payload. It is the
   formal version of what `streamRevision` already does internally: bump a live-data
@@ -84,6 +90,9 @@ already-proven "one delivery model," minus the positional deltas that were dropp
   contracts instead of adding a second delivery model: `clusterId` is the routing
   identity, `source` names the producer clock that already changed, and `signal`
   preserves the existing changed/resync/error outcomes.
+  The target public wire path exposes only this signal envelope; current resource-stream
+  `ADDED`/`MODIFIED`/`DELETED`/`COMPLETE` messages become migration-internal producer
+  causes and are removed from the frontend-visible refresh-signal path.
 - **A2.** Fold the **events** tail onto it: the events table is already `querypage`-backed;
   convert `eventstream`'s live tail into the A1 doorbell and **delete the
   `/api/v2/stream/events` SSE transport + its frontend client**. (The per-object events
@@ -125,9 +134,11 @@ endpoint stamps and the A1 doorbell references, so cursor, ETag/304, resume, and
 all key off one source-version contract.
 
 - **B0 [design].** Define the source-version contract before code moves:
-  - versions are opaque equality tokens at API boundaries, backed by a monotonic counter
-    plus an app/store epoch so a process restart cannot reuse an old `304` token;
-    the epoch is part of the HTTP validator identity, not a domain freshness clock;
+  - versions are opaque string equality tokens at API boundaries; backend-internal
+    counters, store revisions, and epochs may contribute to the token, but consumers
+    never parse or order it;
+  - the epoch is part of the HTTP validator identity, not a domain freshness clock, so
+    a process/store restart cannot reuse an old `304` token;
   - each refresh domain declares the source clocks that can affect its rows:
     `object`, `metric`, `catalog`, or `event`;
   - object versions advance only when object-backed row membership, fields, sort keys,
@@ -143,8 +154,8 @@ all key off one source-version contract.
   snapshot builders and the A1 doorbell. Ingest-fed domains can derive object changes
   from `StoreResourceVersion`; derived domains must bump their own domain/scope version
   when any object input can affect the projected rows.
-- **B2.** Collapse `liveDomainVersion`'s three components on the frontend to the source
-  version + a real `304` path; delete the `checksum`/`streamRevision` triple.
+- **B2.** Collapse `liveDomainVersion`'s three components on the frontend to the opaque
+  source token + a real `304` path; delete the `checksum`/`streamRevision` triple.
 - **B3.** Retire the per-(domain,scope) sequence numbers in `resourcestream` after A1
   supplies `changed`/`reset` semantics; the A1 doorbell carries the source version
   instead.
@@ -164,38 +175,59 @@ all key off one source-version contract.
 
 ## Phase C — Finish the metrics split (object/metric independence)
 
-**Goal.** Object refetch only on object change; metric refresh on its own clock — the
-object/metric split (see `../architecture/data-layer.md`, Invariant 4), completed.
+**Goal.** Object source invalidation only on object change; metric refresh on its own
+clock — the object/metric split (see `../architecture/data-layer.md`, Invariant 4),
+completed.
 
-- **C0 [design, after A].** Pin down the object-sorted metric freshness contract before
-  implementation. Choose exactly one:
-  - **No automatic metric refresh for object-sorted pages.** Object-sorted pages ignore
-    `source=metric`; visible metric cells refresh on the next object refetch, manual
-    refresh, or query reload.
-  - **Throttled visible-row metric refresh.** Object-sorted pages subscribe to
-    `source=metric` through an explicit throttle interval `N`; only visible metric
-    overlays refresh, and object rows/pages do not refetch.
+- **C0 [design, after A].** Metric freshness for visible query-backed pages uses
+  **throttled same-page refetch**. Pages subscribe to `source=metric` through an explicit
+  throttle interval `N` (initially the existing `metricsRefreshIntervalMs` preference);
+  when the visible page is stale past `N`, the app refetches that same typed-query page
+  through the existing snapshot/query endpoint. Object-sorted pages expect identical
+  object row identity/order/object-only fields with fresh metric cells or metric metadata.
+  Metric-sorted pages re-evaluate membership/order from their existing keyset cursor
+  instead of resetting to page 1; preserve `typed_table_query.go:388-402` and
+  `TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges`. This reuses the
+  existing page (HTTP) + doorbell model; no metric-only fetch shape or client-side
+  query-row overlay is part of the C baseline.
 - **C1 [after C0, can precede B].** Classify query dependency on metrics in one place:
-  metric-sorted or metric-filtered queries listen to `source=metric`; object-sorted queries
-  follow the C0 policy.
+  metric-sorted queries treat `source=metric` as throttled same-page refetch because
+  metrics can affect order; object-sorted queries follow the C0 stable-row policy.
+  Metric-filtered queries should enter the same metric-dependent branch only if a future
+  domain exposes metric filter fields; today `cpu`/`memory` are sortable fields, not
+  filterable fields, on the metric-bearing query-backed tables.
 - **C2 [after A, before or with B].** Remove the metrics revision from
   `snapshotVersionWithDynamicRevision` (`table_window.go:19`) at its three callers
   (`pods.go:354`, `nodes.go:401`, `namespace_workloads.go:238`) and deliver metric
-  freshness as a **separate** A1 doorbell keyed by `metricsRevision`. Metric-dependent
-  views refetch on it; object-only views do not churn on a poll.
+  freshness as a **separate** A1 doorbell keyed by `metricsRevision`. Metric-sorted
+  visible views use C0's throttled keyset-cursor refetch; object-sorted visible views use
+  C0's throttled stable-row refetch; neither path advances the object source token for a
+  metric-only poll.
 - **C3 [after B0/B1].** `metricsRevision` becomes the metric source clock under the same
   source-version contract — "one clock **per source**" (object version + metric version),
   the one deliberate two-of-something.
+- **C4 [after C0/C2].** Retire the legacy `applyMetricsSnapshot` metrics-only scoped-store
+  row overlay for `pods`, `nodes`, and `namespace-workloads`. If any domain-level metric
+  metadata still needs that path, name the remaining non-row consumer and cover it with a
+  focused test; it must not remain as a hidden second row-refresh path for query-backed
+  tables.
 
 **Gate.**
 
 - a metrics poll does **not** bump the object source version;
-- a metrics poll does **not** refetch an object-sorted page;
-- a metrics poll **does** refetch a metric-sorted or metric-filtered page;
-- if C0 chooses no automatic metric refresh, object-sorted metric cells change only after
-  object refetch, manual refresh, or query reload;
-- if C0 chooses throttled visible-row metric refresh, visible metric overlays refresh
-  within the chosen interval `N` without object page refetch;
+- an object-sorted visible page refetch caused by `source=metric` is throttled by `N` and
+  does not reset the pagination cursor;
+- that object-sorted metric refetch returns the same object row identities, order, and
+  object-only fields while allowing only metric cells or metric metadata to change;
+- a metric-sorted visible page refetch caused by `source=metric` is throttled by `N`,
+  resumes from the existing keyset cursor, and does not reset to page 1;
+- the existing backend dynamic-revision cursor test and frontend current-cursor refetch
+  behavior remain covered while C2 changes the source token shape;
+- no metric-filtered branch is implemented unless a domain publishes metric filter fields
+  in `ResourceQueryCapabilities`;
+- the baseline has no metric-only fetch shape or client-side query-row overlay;
+- `applyMetricsSnapshot` is either deleted for the three query-backed metric domains or
+  narrowed to named non-row metadata consumers with tests;
 - disabled/unavailable metrics keep their current diagnostics distinction.
 
 ## Phase D — Smaller cleanups & consistency (low priority, profile-driven)
