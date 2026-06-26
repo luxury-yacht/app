@@ -4,8 +4,7 @@ The contract for how cluster object-state reaches a table. One per-cluster colum
 store + one `Query → Page` engine serve **every typed table and Browse**; everything
 else (detail, object-map, overview, logs, metrics, permissions) is a deliberately
 separate path (see "Boundaries"). This doc is the durable architecture extracted from
-the completed `v2` rewrite plan; the forward work is in
-[`../plans/v2-remaining-work.md`](../plans/v2-remaining-work.md).
+the completed `v2` rewrite plan.
 
 ## Ownership
 
@@ -102,6 +101,9 @@ the completed `v2` rewrite plan; the forward work is in
   (`applyResourceRowUpdates`, `mergeSnapshotRows`, `sortRows`, per-domain collections) is deleted. See
   [`resource-stream-signals.md`](./resource-stream-signals.md) for the frontend contract.
 - **Metrics** reach a view by serve-time overlay (above), not the store or the wire.
+  Metric source clocks and frontend utilization reads are covered by
+  [`resource-stream-signals.md`](./resource-stream-signals.md) and
+  [`resource-metrics.md`](./resource-metrics.md).
 
 ## Boundaries (deliberately NOT this path)
 
@@ -132,10 +134,6 @@ Validated/decided during the rewrite; reasons in git history + the memory record
   **SSAR→SSRR** for the remaining callers (legitimately not SSRR-expressible).
 - **Order-statistics Rank/At index** and a **`metricsRevision` metric index** — only the
   unbuilt delta layer / profiled metric-sorted views would need them.
-
-The ordering/liveness simplification is tracked in
-[`../plans/v2-remaining-work.md`](../plans/v2-remaining-work.md); remaining items there
-are cleanup/profile decisions, not a second delivery model.
 
 ## Provenance
 

@@ -6,7 +6,10 @@ user-invocable: false
 
 # Refresh Subsystem Guide
 
-This subsystem is **fragile**. Changes historically break things. Read this before touching any refresh, streaming, snapshot, or domain code.
+This subsystem is **fragile**. Changes historically break things. Read this
+before touching any refresh, streaming, snapshot, or domain code. For metric
+source clocks and utilization consumers, also read
+`docs/architecture/resource-metrics.md`.
 
 ## Architecture Overview
 
@@ -210,6 +213,14 @@ tests prove their state semantics are identical.
 Missed event resume becomes a `RESET` doorbell so consumers re-snapshot rather
 than keeping stale event rows.
 
+**Source-version contract:** Resource-stream signals carry source-specific
+refetch identity. Treat `Version` as an opaque equality token for the named
+`Source`; `Sequence` is transport resume/high-water metadata only,
+`streamRevision` is diagnostic/backward-compatible frontend state only, and
+Kubernetes `resourceVersion` is reflector metadata only. Metric-only source
+changes may refresh metric-backed pages but must not bump the object source
+version.
+
 **Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path, matching the broader single-cluster refresh-domain contract.
 
 **Stream endpoints:**
@@ -286,6 +297,8 @@ against snapshot runtime permissions by
 - [ ] Confirm backend aggregate handlers still route as a mux and do not merge snapshot/manual/event/resource results across clusters
 - [ ] For streamed table rows, check descriptor parity tests for row identity, update identity, sorting, empty payloads, and drift keys
 - [ ] Check if stream resume semantics are affected
+- [ ] For metric-bearing domains, confirm metric-only changes use the metric
+      source clock and do not re-project or re-store object rows
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)
 - [ ] Verify diagnostics panel still shows correct status

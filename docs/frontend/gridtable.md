@@ -64,6 +64,9 @@ cluster-scoped row keys.
 - Sort keys emitted by `GridTable` must be visible column keys. Hidden data
   fields such as timestamps may be used by a column `sortValue`, but must not be
   published as active table sort keys.
+- Age columns should render relative text from `ageTimestamp` through the
+  live-age contract in [live-age.md](live-age.md). Displayed `age` strings are
+  fallback text only; they are not stable sort values.
 - Query-backed table columns may be `sortable: true` only when the backend
   adapter supports that exact column key, or a documented alias for it, as a
   global query sort.
@@ -86,6 +89,17 @@ cluster-scoped row keys.
   current page/window and emits query changes.
 - A classified table is not automatically production-ready. The UI and actions
   must match the mode.
+
+## Age And Metrics Columns
+
+- Age is display-time relative text. Use `createAgeColumn` or `LiveAgeText` with
+  an absolute timestamp; do not refetch rows only to advance age text.
+- Resource utilization columns should use the shared value adapters in
+  `frontend/src/core/resource-metrics`. Table rows can use adapters directly
+  because many table row shapes do not carry full object GVK identity.
+- Global metric-backed sorts belong to backend query contracts and metric source
+  clocks. Do not locally sort a query-backed table by CPU or memory over the
+  current page.
 
 ## Resource Inventory Tables
 

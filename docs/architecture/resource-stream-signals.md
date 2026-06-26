@@ -10,6 +10,11 @@ query-backed view when to refetch.
 - `streammux.ServerMessage` must not grow a projected row field. The message may
   carry `Ref`, `Source`, `Version`, `Signal`, `Sequence`, `ResourceVersion`,
   cluster routing metadata, and errors.
+- Signal envelopes carry refetch identity only: `clusterId`, `domain`, `scope`,
+  `source`, `version`, and `signal`. The frame must not carry rows, positions,
+  query params, sort/filter state, page limits, cursors, or `continue` tokens.
+- `version` is an opaque source-token string. Consumers compare it for equality
+  only; they must not parse or order it.
 - `Manager.newObjectRowUpdate` may accept a row argument for projector guardrails
   and scope resolution, but it must emit only the signal fields.
 - `ResourceStreamManager.flushUpdates` must coalesce update messages and advance
@@ -19,6 +24,12 @@ query-backed view when to refetch.
   live-data identity so a signal changes the query identity and refetches the
   visible page. `streamRevision` is retained only as diagnostic/backward-
   compatible state and must not drive query identity.
+- `Sequence` is transport resume/high-water metadata only. Per-object Kubernetes
+  `resourceVersion` is reflector metadata only. Snapshot `Sequence` is internal
+  build/debug metadata only.
+- Metric-only changes may advance the `metric` source clock and refetch
+  metric-backed visible pages, but they must not advance the object source
+  version.
 
 ## Contract Vocabulary
 
@@ -33,9 +44,28 @@ truth.
 - Event and catalog domains use `sourceClocks` plus `change-signal` semantics
   on the same resource WebSocket, but their rows are still fetched from their
   snapshot/query domains.
+- `sourceClocks` names the producer clocks that can affect a domain:
+  `object`, `metric`, `catalog`, or `event`.
 - `complete-resync-stream` domains, such as Helm, keep
   `coverageContract: "complete-resync-only"` because the stream sends
   scope-level resync signals rather than object-change signals.
+
+## Source Clocks
+
+- `object` changes object-backed row membership, fields, sort keys, filters, or
+  facts.
+- `metric` changes metric-backed values, metric freshness metadata, or
+  metric-backed sort keys. Metric-bearing query pages refetch through the same
+  snapshot/query endpoint; there is no client-side row overlay path for
+  query-backed tables.
+- `catalog` changes catalog-backed identity or Browse results.
+- `event` changes event-backed query results.
+
+Metric-dependent visible pages should throttle automatic refetches using the
+metrics refresh interval. Object-sorted metric pages should keep the same object
+row identity/order/object-only fields while allowing metric cells and metric
+metadata to change. Metric-sorted pages should resume through the existing
+keyset cursor rather than resetting to page 1.
 
 ## Starting Points
 

@@ -21,6 +21,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
 | How does the backend store, ingest, and serve table data (store, ingest, governor, delivery)? | [architecture/data-layer.md](architecture/data-layer.md) |
 | How do query-backed resource-stream domains refetch from change signals? | [architecture/resource-stream-signals.md](architecture/resource-stream-signals.md) |
+| How should resource utilization metrics be read and refreshed? | [architecture/resource-metrics.md](architecture/resource-metrics.md) |
 | What owns object existence and GVK/GVR identity? | [architecture/catalog.md](architecture/catalog.md) |
 | What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |
 | How is per-kind behavior declared and dispatched, and where does the kind vocabulary live? | [architecture/resource-kind-registry.md](architecture/resource-kind-registry.md) |
@@ -37,6 +38,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | --- | --- |
 | Where should frontend code live? | [frontend/component-structure.md](frontend/component-structure.md) |
 | How should shared tables be built? | [frontend/gridtable.md](frontend/gridtable.md) |
+| How should object age text update? | [frontend/live-age.md](frontend/live-age.md) |
 | How are shortcuts and focus owned? | [frontend/keyboard.md](frontend/keyboard.md) |
 | How should blocking modals work? | [frontend/modals.md](frontend/modals.md) |
 | How do shared tabs and tab dragging work? | [frontend/tabs.md](frontend/tabs.md) |

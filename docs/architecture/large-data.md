@@ -274,11 +274,9 @@ so pagination and table semantics match every other scope.
 
 ## App-Wide Table State
 
-The app-wide hardening pass is complete as of
-[`docs/plans/app-wide-table-hardening.md`](../plans/app-wide-table-hardening.md):
-every production resource table is query-backed, proven owner/scope bounded, or
-visibly Local Partial with matching action limits. Completion does not mean
-every table is globally query-backed; it means no production table may present a
+Every production resource table is query-backed, proven owner/scope bounded, or
+visibly Local Partial with matching action limits. This does not mean every
+table is globally query-backed; it means no production table may present a
 capped, recent, buffered, degraded, or page-limited row set as complete global
 data.
 

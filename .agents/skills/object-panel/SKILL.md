@@ -21,7 +21,9 @@ Read:
 6. `docs/architecture/shared-resource-model.md` for identity, status, links,
    facts, or lifecycle
 7. `docs/architecture/data-access.md` for frontend reads
-8. Workflow docs for the specific tab: `docs/workflows/logs/overview.md`,
+8. `docs/architecture/resource-metrics.md` for Resource Utilization
+9. `docs/frontend/live-age.md` for object/header/embedded-table age display
+10. Workflow docs for the specific tab: `docs/workflows/logs/overview.md`,
    `docs/workflows/shell-debug.md`, or `docs/workflows/object-map.md`
 
 ## Backend Entry Points
@@ -53,6 +55,7 @@ resource identity source and must not be used as a catalog replacement.
 - `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs`
 - `frontend/src/modules/object-panel/hooks`
 - `frontend/src/shared/components/yaml` for shared YAML editor mechanics
+- `frontend/src/core/resource-metrics` for Resource Utilization data/adapters
 - `frontend/src/ui/dockable`
 - `frontend/src/shared/components/modals`
 - `frontend/wailsjs/go/models.ts` when Go DTOs change
@@ -98,6 +101,10 @@ prop drilling through `DetailsTab`, or bespoke action modals.
       consistent.
 - [ ] YAML surfaces use `YamlEditor` for editor mechanics and keep workflow
       state in the caller.
+- [ ] Resource Utilization uses `frontend/src/core/resource-metrics`; object
+      details are fallback only except the documented ReplicaSet exception.
+- [ ] Age display uses `LiveAgeText` or shared age columns with timestamps
+      rather than refetching details to update relative text.
 - [ ] Tests cover the changed tab, action, or identity flow.
 - [ ] Non-doc changes pass `mage qc:prerelease`.
 

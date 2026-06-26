@@ -21,6 +21,8 @@ Read:
 6. `docs/architecture/data-access.md`
 7. `docs/frontend/gridtable.md`
 8. `docs/architecture/large-data.md`
+9. `docs/frontend/live-age.md` when age columns or catalog-backed age display changes
+10. `docs/architecture/resource-metrics.md` when CPU/memory/pod utilization columns change
 
 ## Backend Entry Points
 
@@ -214,6 +216,10 @@ pagination, explicitly check:
       and Local Partial tables visibly limit user claims/actions.
 - [ ] Query-backed tables do not run local full-dataset search, filter, sort, or
       facet generation.
+- [ ] Age columns render from absolute timestamps through the live-age contract
+      and use displayed `age` strings only as fallback text.
+- [ ] Metric columns use shared resource-metrics value adapters where applicable
+      and keep global metric-backed sorts backend-owned.
 - [ ] Metric-backed global sorts are backend-owned and tied to a metrics or
       computed-state snapshot/revision.
 - [ ] New/changed typed sort fields keep the page sort and the keyset cursor

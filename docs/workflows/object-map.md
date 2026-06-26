@@ -30,6 +30,7 @@ rendering, and interaction state.
 - Identity and links:
   [../architecture/shared-resource-model.md](../architecture/shared-resource-model.md)
 - Refresh scopes: [../architecture/refresh-system.md](../architecture/refresh-system.md)
+- Live age rendering: [../frontend/live-age.md](../frontend/live-age.md)
 
 ## Relationship Rules
 
@@ -40,6 +41,9 @@ rendering, and interaction state.
 - Display-only labels are acceptable for unresolved external names, partial
   custom refs, deleted objects, and unsupported sources.
 - Do not invent links from visual proximity or table row strings.
+- Card age text should be derived from backend timestamps through the live-age
+  contract. Updating the displayed age must not rewrite backend graph identity,
+  relationship data, or layout inputs.
 
 ## Change Checklist
 

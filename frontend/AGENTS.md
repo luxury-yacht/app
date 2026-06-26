@@ -7,6 +7,12 @@ Applies to React/TypeScript code under `frontend/`.
 - Favor reusing existing components over creating new components.
 - Render table data with `GridTable` and shared column factories; no ad-hoc tables.
   - Column factories live in `frontend/src/shared/components/tables/columnFactories.tsx`.
+- Render Kubernetes age with the live-age contract in
+  `docs/frontend/live-age.md`; do not refetch data only to advance relative age
+  text.
+- Resource utilization reads and adapters belong to
+  `frontend/src/core/resource-metrics`; follow
+  `docs/architecture/resource-metrics.md` before adding metric consumers.
 - Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
   Follow `docs/architecture/refresh-system.md` and
   `docs/architecture/data-access.md`.
@@ -52,6 +58,7 @@ Applies to React/TypeScript code under `frontend/`.
 ## UI Infrastructure Docs
 
 - Shared table system: `docs/frontend/gridtable.md`.
+- Live object age rendering: `docs/frontend/live-age.md`.
 - Keyboard/focus and shortcut ownership: `docs/frontend/keyboard.md`.
 - Blocking modal foundation: `docs/frontend/modals.md`.
 - Shared tab component and drag coordinator: `docs/frontend/tabs.md`.

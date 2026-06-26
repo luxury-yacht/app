@@ -27,6 +27,7 @@ Read:
    or relationships are involved
 6. `docs/architecture/refresh-system.md` when domain registration, scopes, or
    diagnostics are involved
+7. `docs/frontend/live-age.md` when changing card age text
 
 ## Backend Entry Points
 
@@ -105,6 +106,8 @@ For visual-only renderer work:
 - [ ] Frontend kind support matches backend support.
 - [ ] Payload types match backend shape.
 - [ ] Model, visible state, layout, and renderer agree on new fields.
+- [ ] Card age text is derived from timestamps through the live-age contract and
+      does not change backend graph identity or layout inputs.
 - [ ] Legend/copy uses user-facing terms such as "Objects" and "Links".
 - [ ] Tests cover the changed graph or rendering behavior.
 - [ ] Non-doc changes pass `mage qc:prerelease`.
