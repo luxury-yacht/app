@@ -38,6 +38,10 @@ const (
 	catalogEngineFacetCustom       = "custom"
 )
 
+// catalogEngineNoMatchFacetValue is not a valid catalogEngineKindIdentity value:
+// kind identities contain group/version/kind separated by catalogEngineFieldSep.
+const catalogEngineNoMatchFacetValue = catalogEngineFieldSep + "catalog-engine-no-match"
+
 // catalogEngineFieldSep separates identity components inside an encoded sort/UID
 // value. NUL can never appear in a Kubernetes identifier, so a concatenation of
 // fields with this separator is collision-free and order-preserving componentwise.
@@ -369,8 +373,12 @@ func (s *Service) queryViaEngineWithStore(
 // the namespace facet buckets, and CustomOnly to the custom="true" bucket.
 func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[string][]string {
 	filters := make(map[string][]string)
-	if len(opts.Kinds) > 0 {
-		filters[catalogEngineFacetKindIdentity] = catalogEngineKindFilterIdentities(rows, opts.Kinds)
+	if kinds := normalizeQueryValues(opts.Kinds); len(kinds) > 0 {
+		values := catalogEngineKindFilterIdentities(rows, kinds)
+		if len(values) == 0 {
+			values = []string{catalogEngineNoMatchFacetValue}
+		}
+		filters[catalogEngineFacetKindIdentity] = values
 	}
 	if values := catalogEngineNamespaceFilterValues(opts.Namespaces); len(values) > 0 {
 		filters[catalogEngineFacetNamespace] = values

@@ -114,10 +114,10 @@ func writeInternedField(w *internedWriter, fc *fieldCodec, dicts *codecDicts, ty
 
 // OpenInternedColumnStore reopens a file written by SpillInternedColumns as a read-only Store
 // whose scalar columns and dictionary strings alias the mapping (off-heap), rebuilding the
-// uid→rowID map, sort indexes, and match cache from the aliased columns. The returned closer
-// unmaps the file and MUST outlive all use of the store (its rows alias the mapping). A bad
-// magic / field-shape mismatch / truncation returns an error so the caller falls back to the
-// heap path.
+// uid→rowID map, sort indexes, and match cache from the aliased columns. Rows decoded from
+// the store clone string fields before returning, so Page/Snapshot rows can outlive the
+// mapping closer while the bulk columns stay off-heap. A bad magic / field-shape mismatch /
+// truncation returns an error so the caller falls back to the heap path.
 func OpenInternedColumnStore[R any](path string, schema Schema[R]) (*Store[R], func() error, error) {
 	mf, err := openMmap(path)
 	if err != nil {
@@ -154,6 +154,7 @@ func OpenInternedColumnStore[R any](path string, schema Schema[R]) (*Store[R], f
 		_ = mf.close()
 		return nil, nil, fmt.Errorf("querypage: interned file %q truncated: %w", path, r.err)
 	}
+	cs.cloneStringsOnDecode = true
 
 	// Rebuild the arena bookkeeping + indexes + match cache from the aliased columns. The
 	// column DATA stays in the mapping; only these (smaller) derived structures are heap.
@@ -183,10 +184,11 @@ func OpenInternedColumnStore[R any](path string, schema Schema[R]) (*Store[R], f
 // ReopenInternedColumnsInPlace spills this store's interned columns to path, then swaps the
 // store's internals (columns, indexes, match cache) to a read-only, mmap-aliased view of that
 // file — so the SAME *Store pointer keeps serving queries (callers holding it via a maintained
-// store need no rewiring) but with its column data off-heap. Returns a closer that unmaps the
-// file and MUST be called only after the store is discarded or re-warmed (its rows alias the
-// mapping). On any error the store is left unchanged (safe-degrade: the caller keeps serving
-// from heap). This is the Tier 2.6 Cold-serving transition at the store level.
+// store need no rewiring) but with its column data off-heap. Returned Page/Snapshot rows clone
+// decoded strings, so the closer can run after the store is discarded or re-warmed without
+// invalidating already-returned rows. On any error the store is left unchanged (safe-degrade:
+// the caller keeps serving from heap). This is the Tier 2.6 Cold-serving transition at the
+// store level.
 func (s *Store[R]) ReopenInternedColumnsInPlace(path string) (func() error, error) {
 	if err := s.SpillInternedColumns(path); err != nil {
 		return nil, err
@@ -210,11 +212,11 @@ func (s *Store[R]) ReopenInternedColumnsInPlace(path string) (func() error, erro
 }
 
 // lockSafeCloser wraps the raw unmap closer so it is safe-by-construction against an
-// in-flight Query: Query reconstructs page rows whose strings ALIAS the mapping while
-// holding s.mu.RLock (store.go), so unmapping concurrently is a use-after-free. The
-// wrapper takes s.mu.Lock first, which serializes after every in-flight read lock, so the
-// unmap can never race a reader still touching the columns. It also unmaps at most once: a
-// second call (a re-warm/teardown double-close) is a no-op, never a double-unmap.
+// in-flight Query: Query reconstructs rows while holding s.mu.RLock (store.go), so the
+// mapping must stay live until the in-flight read finishes. The wrapper takes s.mu.Lock
+// first, which serializes after every in-flight read lock, so the unmap can never race a
+// reader still touching the columns. It also unmaps at most once: a second call (a
+// re-warm/teardown double-close) is a no-op, never a double-unmap.
 func (s *Store[R]) lockSafeCloser(unmap func() error) func() error {
 	var once sync.Once
 	var err error

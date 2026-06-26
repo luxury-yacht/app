@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
 )
@@ -269,19 +270,103 @@ func TestReopenInternedColumnsInPlace(t *testing.T) {
 	require.Equal(t, before, orig.Len(), "in-place mmap store ignores Upsert")
 }
 
+func TestMmapQueryRowsDoNotAliasMappingAfterQueryReturns(t *testing.T) {
+	s := buildSpillStore(t)
+	path := filepath.Join(t.TempDir(), "rows-detached.qcm")
+	closer, err := s.ReopenInternedColumnsInPlace(path)
+	require.NoError(t, err)
+
+	page, err := s.Query(Query{
+		ClusterID: "c1",
+		Signature: "sig",
+		Sort:      "name",
+		Direction: Ascending,
+		Limit:     50,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, page.Rows)
+
+	var row spillRow
+	for _, candidate := range page.Rows {
+		if candidate.Owner != nil {
+			row = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, row.UID, "fixture query should return a row with a pointer string")
+
+	rowID, ok := s.rows.rowByUID[row.UID]
+	require.True(t, ok)
+
+	requireDetachedString(t, row.Name, mmapStringFieldValue(t, s, "Name", rowID), "Name")
+	requireDetachedString(t, row.Status, mmapStringFieldValue(t, s, "Status", rowID), "Status")
+	requireDetachedString(t, *row.Owner, mmapStringFieldValue(t, s, "Owner", rowID), "Owner")
+
+	want := row
+	require.NoError(t, closer())
+	require.Equal(t, want.Name, row.Name)
+	require.Equal(t, want.Status, row.Status)
+	require.Equal(t, *want.Owner, *row.Owner)
+}
+
+func mmapStringFieldValue(t *testing.T, s *Store[spillRow], fieldName string, rowID uint32) string {
+	t.Helper()
+	fc := codecFieldByName(t, s.rows.codec, fieldName)
+	switch fc.kind {
+	case fieldString:
+		if fc.promoted {
+			return fc.plainStr[rowID]
+		}
+		return s.rows.dicts.dict(fc).value(fc.strCol[rowID])
+	case fieldPtrScalar:
+		require.True(t, fc.present[rowID], "field %s should be present", fieldName)
+		require.Equal(t, fieldString, fc.elemKind, "field %s should be a pointer-to-string", fieldName)
+		return s.rows.dicts.dict(fc).value(fc.strCol[rowID])
+	default:
+		t.Fatalf("field %s is not string-backed: %v", fieldName, fc.kind)
+		return ""
+	}
+}
+
+func codecFieldByName[R any](t *testing.T, codec *rowCodec[R], fieldName string) *fieldCodec {
+	t.Helper()
+	for _, fc := range codec.fields {
+		field := codec.typ.FieldByIndex(fc.index)
+		if field.Name == fieldName {
+			return fc
+		}
+	}
+	t.Fatalf("field %s not found in codec for %s", fieldName, codec.typ)
+	return nil
+}
+
+func requireDetachedString(t *testing.T, got, source, label string) {
+	t.Helper()
+	if got == "" || source == "" {
+		return
+	}
+	if stringData(got) == stringData(source) {
+		t.Fatalf("%s string aliases mmap-backed column data", label)
+	}
+}
+
+func stringData(value string) uintptr {
+	return uintptr(unsafe.Pointer(unsafe.StringData(value)))
+}
+
 // TestReopenInternedColumnsInPlaceCloserWaitsForInFlightQuery proves the mmap closer is
 // safe-by-construction: a Query in flight (holding the store's read lock while it
-// reconstructs rows whose strings ALIAS the mapping) blocks the unmap until it returns,
-// so the closer can never unmap memory a reader is still touching. The closer must acquire
-// the store's write lock before unmapping, so it serializes after every in-flight Query.
+// reconstructs rows from mmap-backed columns) blocks the unmap until it returns. The closer
+// must acquire the store's write lock before unmapping, so it serializes after every in-flight
+// Query.
 func TestReopenInternedColumnsInPlaceCloserWaitsForInFlightQuery(t *testing.T) {
 	s := buildSpillStore(t)
 	path := filepath.Join(t.TempDir(), "inflight.qcm")
 	closer, err := s.ReopenInternedColumnsInPlace(path)
 	require.NoError(t, err)
 
-	// Hold the store's read lock to simulate a Query in flight reconstructing
-	// mmap-aliased rows. The closer must not unmap while this is held.
+	// Hold the store's read lock to simulate a Query in flight reconstructing rows from
+	// mmap-backed columns. The closer must not unmap while this is held.
 	s.mu.RLock()
 
 	closed := make(chan struct{})

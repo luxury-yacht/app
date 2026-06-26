@@ -374,14 +374,14 @@ func (fc *fieldCodec) encode(v reflect.Value, rowID int, dicts *codecDicts) {
 }
 
 // decode reconstructs field fc of row slot rowID into the root struct value out.
-func (fc *fieldCodec) decode(out reflect.Value, rowID int, dicts *codecDicts) {
+func (fc *fieldCodec) decode(out reflect.Value, rowID int, dicts *codecDicts, cloneStrings bool) {
 	fv := fc.fieldValue(out)
 	switch fc.kind {
 	case fieldString:
 		if fc.promoted {
-			fv.SetString(fc.plainStr[rowID])
+			fv.SetString(cloneDecodedString(fc.plainStr[rowID], cloneStrings))
 		} else {
-			fv.SetString(dicts.dict(fc).value(fc.strCol[rowID]))
+			fv.SetString(cloneDecodedString(dicts.dict(fc).value(fc.strCol[rowID]), cloneStrings))
 		}
 	case fieldInt:
 		fv.SetInt(fc.intCol[rowID])
@@ -400,7 +400,7 @@ func (fc *fieldCodec) decode(out reflect.Value, rowID int, dicts *codecDicts) {
 		el := ptr.Elem()
 		switch fc.elemKind {
 		case fieldString:
-			el.SetString(dicts.dict(fc).value(fc.strCol[rowID]))
+			el.SetString(cloneDecodedString(dicts.dict(fc).value(fc.strCol[rowID]), cloneStrings))
 		case fieldInt:
 			el.SetInt(fc.intCol[rowID])
 		case fieldUint:
@@ -421,6 +421,13 @@ func (fc *fieldCodec) decode(out reflect.Value, rowID int, dicts *codecDicts) {
 		// by (and thus never mutated through) the returned row.
 		fv.Set(deepCopyValue(stored))
 	}
+}
+
+func cloneDecodedString(value string, clone bool) string {
+	if clone {
+		return strings.Clone(value)
+	}
+	return value
 }
 
 // deepCopyValue returns a deep, independent copy of v so neither the stored value
@@ -513,12 +520,13 @@ type matchValues struct {
 
 // columnStore holds rows for one kind in interned columnar form.
 type columnStore[R any] struct {
-	codec    *rowCodec[R]
-	dicts    *codecDicts
-	rowByUID map[string]uint32
-	freeRows []uint32
-	count    int // live row count (== len(rowByUID))
-	live     []bool
+	codec                *rowCodec[R]
+	dicts                *codecDicts
+	rowByUID             map[string]uint32
+	freeRows             []uint32
+	count                int // live row count (== len(rowByUID))
+	live                 []bool
+	cloneStringsOnDecode bool
 }
 
 func newColumnStore[R any](codec *rowCodec[R]) *columnStore[R] {
@@ -586,7 +594,7 @@ func (cs *columnStore[R]) get(uid string) (R, bool) {
 func (cs *columnStore[R]) getByRowID(rowID uint32) R {
 	out := reflect.New(cs.codec.typ).Elem()
 	for _, fc := range cs.codec.fields {
-		fc.decode(out, int(rowID), cs.dicts)
+		fc.decode(out, int(rowID), cs.dicts, cs.cloneStringsOnDecode)
 	}
 	return out.Interface().(R)
 }

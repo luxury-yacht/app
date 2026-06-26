@@ -282,14 +282,16 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 		{"cluster", "kube-system"},
 	}
 
-	// GVK filter dimension: none, single kind, multi-kind, a cluster-scoped kind, and a
-	// custom kind. Kind filters use the catalog's candidate-key matching.
+	// GVK filter dimension: none, single kind, multi-kind, a cluster-scoped kind, a
+	// custom kind, and a no-match kind. Kind filters use the catalog's candidate-key
+	// matching.
 	kindFilters := [][]string{
 		nil,
 		{"Pod"},
 		{"Pod", "Service"},
 		{"Node"},
 		{"Widget"},
+		{"DoesNotExist"},
 	}
 
 	// Search dimension: empty (match-all), a >=3-char stem that hits many rows, a short

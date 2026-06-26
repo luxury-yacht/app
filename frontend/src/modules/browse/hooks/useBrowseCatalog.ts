@@ -7,7 +7,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { requestRefreshDomainState, useRefreshDomainHandle } from '@/core/data-access';
+import {
+  requestRefreshDomainState,
+  useRefreshDomainHandle,
+  type DataRequestReason,
+} from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -416,7 +420,11 @@ export function useBrowseCatalog({
   catalogScopeRef.current = catalogScope;
 
   const requestPage = useCallback(
-    (token: string | null, direction: 'next' | 'previous' | 'current') => {
+    (
+      token: string | null,
+      direction: 'next' | 'previous' | 'current',
+      reason: DataRequestReason = 'user'
+    ) => {
       if (!token || isRequestingMore) {
         return;
       }
@@ -440,7 +448,7 @@ export function useBrowseCatalog({
           const result = await requestRefreshDomainState({
             domain: 'catalog',
             scope: normalizedScope,
-            reason: 'user',
+            reason,
           });
           if (result.status !== 'executed' || catalogScopeRef.current !== baseScopeAtRequest) {
             return;
@@ -512,6 +520,39 @@ export function useBrowseCatalog({
       refreshCatalogScope,
     ]
   );
+
+  const catalogLiveVersion = domain.sourceVersions?.catalog ?? domain.sourceVersion ?? '';
+  const lastCatalogLiveVersionRef = useRef<string>('');
+  useEffect(() => {
+    const previous = lastCatalogLiveVersionRef.current;
+    lastCatalogLiveVersionRef.current = catalogLiveVersion;
+    if (
+      !enabled ||
+      !catalogLiveVersion ||
+      !previous ||
+      previous === catalogLiveVersion ||
+      !hasLoadedOnceRef.current
+    ) {
+      return;
+    }
+
+    const currentPageToken = currentPageTokenRef.current;
+    if (currentPageToken) {
+      requestPage(currentPageToken, 'current', 'background');
+    } else {
+      void refreshCatalogScope('background');
+    }
+    if (!metadataUsesActiveScope) {
+      void refreshMetadataScope('background');
+    }
+  }, [
+    catalogLiveVersion,
+    enabled,
+    metadataUsesActiveScope,
+    refreshCatalogScope,
+    refreshMetadataScope,
+    requestPage,
+  ]);
 
   const handleLoadMore = useCallback(() => {
     requestPage(continueToken, 'next');

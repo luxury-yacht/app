@@ -167,6 +167,97 @@ func TestQueryFromSnapshotReportsUnfilteredTotal(t *testing.T) {
 	}
 }
 
+func TestQueryNoMatchKindFilterReturnsEmptyResult(t *testing.T) {
+	pod := Summary{
+		ClusterID: "cluster-a",
+		Kind:      "Pod",
+		Group:     "",
+		Version:   "v1",
+		Resource:  "pods",
+		Namespace: "default",
+		Name:      "alpha",
+		UID:       "uid-alpha",
+		Scope:     ScopeNamespace,
+	}
+	service := Summary{
+		ClusterID: "cluster-a",
+		Kind:      "Service",
+		Group:     "",
+		Version:   "v1",
+		Resource:  "services",
+		Namespace: "default",
+		Name:      "bravo",
+		UID:       "uid-bravo",
+		Scope:     ScopeNamespace,
+	}
+
+	for _, tc := range []struct {
+		name string
+		svc  *Service
+	}{
+		{
+			name: "published chunks",
+			svc: func() *Service {
+				svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+				svc.publishStreamingState(
+					[]*summaryChunk{{items: []Summary{pod, service}}},
+					map[string]bool{"Pod": true, "Service": true},
+					map[string]struct{}{"default": {}},
+					[]Descriptor{
+						{Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true},
+						{Version: "v1", Resource: "services", Kind: "Service", Scope: ScopeNamespace, Namespaced: true},
+					},
+					true,
+				)
+				return svc
+			}(),
+		},
+		{
+			name: "snapshot items",
+			svc: func() *Service {
+				podDesc := resourceDescriptor{
+					GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+					Namespaced: true,
+					Kind:       "Pod",
+					Group:      "",
+					Version:    "v1",
+					Resource:   "pods",
+					Scope:      ScopeNamespace,
+				}
+				serviceDesc := resourceDescriptor{
+					GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"},
+					Namespaced: true,
+					Kind:       "Service",
+					Group:      "",
+					Version:    "v1",
+					Resource:   "services",
+					Scope:      ScopeNamespace,
+				}
+				svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+				svc.items = map[string]Summary{
+					catalogKey(podDesc, pod.Namespace, pod.Name):             pod,
+					catalogKey(serviceDesc, service.Namespace, service.Name): service,
+				}
+				svc.resources = map[string]resourceDescriptor{
+					podDesc.GVR.String():     podDesc,
+					serviceDesc.GVR.String(): serviceDesc,
+				}
+				return svc
+			}(),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.svc.Query(QueryOptions{Limit: 10, Kinds: []string{"DoesNotExist"}})
+			if result.TotalItems != 0 || len(result.Items) != 0 {
+				t.Fatalf("expected no rows for unmatched kind filter, got total=%d items=%+v", result.TotalItems, result.Items)
+			}
+			if result.UnfilteredTotal != 2 {
+				t.Fatalf("expected unfiltered scope total to remain 2, got %d", result.UnfilteredTotal)
+			}
+		})
+	}
+}
+
 // A previous-page cursor whose predecessors were all deleted must report
 // cursorInvalid so the UI resets to page 1 instead of rendering a dead-end
 // empty page with no tokens.

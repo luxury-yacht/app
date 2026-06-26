@@ -295,6 +295,58 @@ describe('useBrowseCatalog', () => {
     expect(result?.loading).toBe(false);
   });
 
+  it('refetches the current catalog query when a catalog doorbell advances sourceVersion', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    let baseState = {
+      status: 'ready',
+      data: makePayload({ items: [first], total: 1, batchSize: 1 }),
+      scope: baseScope,
+      sourceVersion: 'catalog:1',
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 1, batchSize: 0 }),
+      scope: metadataScope,
+      sourceVersion: 'catalog:1',
+    };
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    mocks.requestRefreshDomain.mockClear();
+
+    baseState = {
+      ...baseState,
+      sourceVersion: 'catalog:2',
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: baseScope,
+      reason: 'background',
+    });
+  });
+
   it('replaces the current row window with the next cursor page', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';
