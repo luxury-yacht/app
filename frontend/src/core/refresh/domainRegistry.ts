@@ -119,7 +119,6 @@ export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDom
     refresherName: StaticRefresherName;
     orchestrator: RefreshOrchestratorKind;
     diagnosticsStream: StreamTelemetryName | null;
-    metricsInterval: boolean;
     timing: RefresherTiming;
     priority?: number;
   };
@@ -132,9 +131,15 @@ export interface StreamResourceContractRecord {
   resource: string;
 }
 
+// RefreshSourceClock mirrors the backend resourcestream.Source taxonomy: the
+// clocks that can advance a domain's rows. It is the single authored source of
+// metric-dependency on both sides; object/metric are the clocks used so far
+// (event/catalog join as the events/catalog domains fold onto the doorbell).
+export type RefreshSourceClock = 'object' | 'metric';
+
 export interface StreamDomainContractEntry {
   scopeKind: 'pod' | 'namespace' | 'cluster';
-  metricsDependency: boolean;
+  sourceClocks: RefreshSourceClock[];
   completeIsScopeLevel: boolean;
   rowProjection?: 'scope-level-complete-only';
   primaryResources: StreamResourceContractRecord[];
@@ -186,7 +191,11 @@ export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
       category: entry.category,
       timing: entry.frontend.timing,
     };
-    if (entry.frontend.metricsInterval) {
+    // metricsInterval derives from the domain's source clocks: a domain runs the
+    // metric refresh interval exactly when it declares the metric source clock.
+    const sourceClocks =
+      refreshDomainContract.resourceStream.domains[entry.domain]?.sourceClocks ?? [];
+    if (sourceClocks.includes('metric')) {
       descriptor.metricsInterval = true;
     }
     if (entry.frontend.diagnosticsStream) {

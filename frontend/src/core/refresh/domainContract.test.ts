@@ -93,7 +93,6 @@ type ContractDomain = {
     refresherName: string;
     orchestrator: OrchestratorKind;
     diagnosticsStream: DiagnosticsStream | null;
-    metricsInterval: boolean;
     timing: {
       interval: number;
       cooldown: number;
@@ -265,7 +264,6 @@ describe('refresh domain contract', () => {
         expect(diagnosticsStreams.has(entry.frontend.diagnosticsStream)).toBe(true);
       }
       expect(entry.frontend.refresherName).toEqual(expect.any(String));
-      expect(entry.frontend.metricsInterval).toEqual(expect.any(Boolean));
       expect(entry.frontend.timing.interval).toBeGreaterThan(0);
       expect(entry.frontend.timing.cooldown).toBeGreaterThan(0);
       expect(entry.frontend.timing.timeout).toBeGreaterThan(0);
@@ -289,6 +287,9 @@ describe('refresh domain contract', () => {
     for (const entry of contract.domains) {
       const descriptor = getRefreshDomainDescriptor(entry.domain);
       const registration = registeredDomains().get(entry.domain);
+      // metricsInterval is derived from the domain's source clocks, not authored.
+      const metricsInterval =
+        contract.resourceStream.domains[entry.domain]?.sourceClocks.includes('metric') ?? false;
       expect(registration).toBeDefined();
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
@@ -299,9 +300,7 @@ describe('refresh domain contract', () => {
       expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.timing).toEqual(entry.frontend.timing);
       expect(descriptor.priority).toBe(entry.frontend.priority);
-      expect(METRICS_INTERVAL_REFRESHERS.has(descriptor.refresherName)).toBe(
-        entry.frontend.metricsInterval
-      );
+      expect(METRICS_INTERVAL_REFRESHERS.has(descriptor.refresherName)).toBe(metricsInterval);
 
       switch (entry.frontend.orchestrator) {
         case 'snapshot':
@@ -312,9 +311,7 @@ describe('refresh domain contract', () => {
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(true);
           expect(entry.frontend.diagnosticsStream).toBe('resources');
-          expect(Boolean(registration?.streaming?.metricsOnly)).toBe(
-            entry.frontend.metricsInterval
-          );
+          expect(Boolean(registration?.streaming?.metricsOnly)).toBe(metricsInterval);
           break;
         case 'event-stream':
           expect(registration?.streaming).toBeDefined();

@@ -66,7 +66,7 @@ type scopeContract struct {
 
 type streamDomainContract struct {
 	ScopeKind            string                 `json:"scopeKind"`
-	MetricsDependency    bool                   `json:"metricsDependency"`
+	SourceClocks         []string               `json:"sourceClocks"`
 	CompleteIsScopeLevel bool                   `json:"completeIsScopeLevel"`
 	RowProjection        string                 `json:"rowProjection,omitempty"`
 	PrimaryResources     []streamResourceRecord `json:"primaryResources"`
@@ -456,11 +456,47 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 		entry, ok := contract.ResourceStream.Domains[domain]
 		require.Truef(t, ok, "resourceStream.domains.%s missing from refresh-domain-contract.json", domain)
 		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
-		require.Equalf(t, descriptor.MetricsDependency, entry.MetricsDependency, "domain %s metricsDependency drift", domain)
+		require.ElementsMatchf(t, entry.SourceClocks, sourceClocksToStrings(descriptor.SourceClocks), "domain %s sourceClocks drift", domain)
 		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
 		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
 		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
 	}
+}
+
+// TestResourceStreamSourceClocksAuthored locks sourceClocks as the single
+// authored per-domain source-clock list: every resource-stream domain declares
+// object, the three metric-bearing domains additionally declare metric, and no
+// other source is used yet. Backend MetricsDependency derives from this list.
+func TestResourceStreamSourceClocksAuthored(t *testing.T) {
+	contract := loadRefreshDomainContract(t)
+	descriptors := resourcestream.ProjectionDescriptors()
+	metricDomains := map[string]bool{"pods": true, "namespace-workloads": true, "nodes": true}
+	validSources := map[string]bool{"object": true, "metric": true}
+
+	for domain, entry := range contract.ResourceStream.Domains {
+		require.NotEmptyf(t, entry.SourceClocks, "domain %s must declare sourceClocks", domain)
+		require.Containsf(t, entry.SourceClocks, "object", "domain %s must declare the object source clock", domain)
+		hasMetric := false
+		for _, s := range entry.SourceClocks {
+			require.Truef(t, validSources[s], "domain %s declares unsupported source clock %q", domain, s)
+			if s == "metric" {
+				hasMetric = true
+			}
+		}
+		require.Equalf(t, metricDomains[domain], hasMetric, "domain %s metric source clock must match the known metric-bearing domains", domain)
+
+		// MetricsDependency is derived, not authored: it must reflect the metric
+		// source clock so the metric flag keeps a single authority.
+		require.Equalf(t, hasMetric, descriptors[domain].MetricsDependency(), "domain %s MetricsDependency must derive from its metric source clock", domain)
+	}
+}
+
+func sourceClocksToStrings(clocks []resourcestream.Source) []string {
+	out := make([]string, len(clocks))
+	for i, c := range clocks {
+		out[i] = string(c)
+	}
+	return out
 }
 
 func requireResourceSetEqual(t *testing.T, domain, label string, code []resourcestream.ResourceDescriptor, contract []streamResourceRecord) {
