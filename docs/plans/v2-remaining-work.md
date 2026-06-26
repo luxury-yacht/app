@@ -19,7 +19,8 @@ data-time axis**:
   multiplicity the redesign set out to remove.
 
 The through-line of this plan: **finish the simplification on liveness/ordering — one
-refetch signal, one scope clock — without resurrecting the complex positional-delta
+refetch signal, one object-state scope clock, and one explicit metric freshness clock
+where metrics are the source — without resurrecting the complex positional-delta
 machinery the team rightly skipped.**
 
 ### The remaining multiplicity (each verified this session)
@@ -65,62 +66,119 @@ push becomes one uniform **scope-changed doorbell** on the existing resources
 WebSocket. Net delivery model: **page (HTTP) + doorbell (one WS)** — the realistic,
 already-proven "one delivery model," minus the positional deltas that were dropped.
 
-- **A1 [design].** Define one signal frame on the resources WS: `{domain, scope,
-  version}` meaning "this query scope advanced to `version` — refetch if subscribed."
-  This is what `streamRevision` already does internally; make it the only shape.
+- **A1 [design].** Define one signal envelope on the resources WS:
+  `{clusterId, domain, scope, source, version, signal}`.
+  - `clusterId` is required; resource-stream scopes remain single-cluster.
+  - `domain` is the refresh domain; `scope` is the canonical transport scope for that
+    domain.
+  - `source` is `object`, `metric`, `catalog`, or `event`; it names the clock that
+    advanced.
+  - `version` is the source version after the change.
+  - `signal` is `changed`, `reset`, or `error`. `changed` means "refetch if this
+    source affects the current query"; `reset` means "resume was lost, re-snapshot";
+    `error` feeds the same terminal-error/diagnostics path as current streams.
+
+  The frame carries no rows, no positions, and no partial table payload. It is the
+  formal version of what `streamRevision` already does internally: bump a live-data
+  identity so a query-backed view refetches.
 - **A2.** Fold the **events** tail onto it: the events table is already `querypage`-backed;
   convert `eventstream`'s live tail into the A1 doorbell and **delete the
   `/api/v2/stream/events` SSE transport + its frontend client**. (The per-object events
-  panel keeps its own `object-events` snapshot domain.)
+  panel keeps its own `object-events` snapshot domain.) Reconnect behavior must map
+  missed/overflowed event resume to a `reset` signal, not to silent freshness loss.
 - **A3.** Fold the **catalog** stream onto it: convert `catalog_stream`'s push into the
   A1 doorbell for the `catalog` scope and **delete `/api/v2/stream/catalog` SSE + its
-  client**. Browse keeps pulling pages from the query endpoint.
+  client**. Browse keeps pulling pages from the query endpoint. Catalog signals use
+  `source=catalog` and must preserve the current single-cluster catalog scope boundary.
 - **A4.** Frontend: one subscription manager consumes the unified doorbell for tables,
-  events, and Browse; delete the two `EventSource` clients.
+  events, and Browse; delete the two `EventSource` clients. The manager owns reconnect,
+  visibility pause/resume, terminal-error notification, and diagnostics status for all
+  doorbell sources; per-domain code decides whether `source=metric` affects the active
+  query.
 
-**Gate.** Per migration, an equivalence test that the same change still triggers the same
-refetch; the deleted SSE transport is the simplification payoff. **Prerequisite for B3 and
-C2.**
+**Gate.** Per migration:
+
+- same event append still refetches the events table;
+- event resume overflow emits `reset` and forces re-snapshot;
+- same catalog change still refetches Browse/catalog consumers;
+- a signal for cluster A cannot refresh cluster B;
+- a denied/unregistered domain does not create an active subscription and still reports
+  diagnostics;
+- frontend stream-health tests cover reconnect, visibility pause/resume, terminal error,
+  and kubeconfig-change suppression through the unified manager.
+
+The deleted SSE transports are the simplification payoff. **Prerequisite for B3 and C2.**
 
 ## Phase B — One scope clock (collapse the four ordering authorities)
 
-**Goal.** Under refetch-on-signal there are no deltas to order, so this does **not** need a
-full LSN delta-log (a from-scratch LSN rewrite was deliberately dropped). It needs **one monotonic
-per-(cluster,domain,scope) version** that the snapshot endpoint stamps and the A1 doorbell
-references, so cursor, ETag/304, resume, and refetch all key off **one number**.
+**Goal.** Under refetch-on-signal there are no row deltas to order, so this does **not**
+need a full LSN delta-log (a from-scratch LSN rewrite was deliberately dropped). It needs
+**one object-state source version per `(clusterId, domain, scope)`** that the snapshot
+endpoint stamps and the A1 doorbell references, so cursor, ETag/304, resume, and refetch
+all key off one source-version contract.
 
-- **B1 [design].** Pick the single authority — generalize the ingest source's per-GVR
-  `StoreResourceVersion` (`pod_aggregate_source.go:34`, today used by the ingest-fed
-  domains pods/network/workloads) into one monotonic per-(cluster,domain,scope) version
-  that every domain's `Build` stamps as the snapshot `ETag`.
-- **B2.** Collapse `liveDomainVersion`'s three components on the frontend to that one
+- **B0 [design].** Define the source-version contract before code moves:
+  - versions are opaque equality tokens at API boundaries, backed by a monotonic counter
+    plus an app/store epoch so a process restart cannot reuse an old `304` token;
+  - each refresh domain declares the source clocks that can affect its rows:
+    `object`, `metric`, `catalog`, or `event`;
+  - object versions advance only when object-backed row membership, fields, sort keys,
+    filters, or facts can change;
+  - metric versions advance only when metric-backed values or metric sort keys can
+    change;
+  - composite domains own their domain/scope version explicitly; `StoreResourceVersion`
+    can be an input, but no composite domain should expose a raw per-GVR RV as its
+    public scope version;
+  - snapshot `Sequence` remains an internal build/debug sequence until retired; it is
+    not the cache/refetch token.
+- **B1.** Implement the single authority from B0 — a domain/scope version source used by
+  snapshot builders and the A1 doorbell. Ingest-fed domains can derive object changes
+  from `StoreResourceVersion`; derived domains must bump their own domain/scope version
+  when any object input can affect the projected rows.
+- **B2.** Collapse `liveDomainVersion`'s three components on the frontend to the source
   version + a real `304` path; delete the `checksum`/`streamRevision` triple.
-- **B3.** Retire the per-(domain,scope) sequence numbers in `resourcestream`; the A1
-  doorbell carries the unified version instead.
+- **B3.** Retire the per-(domain,scope) sequence numbers in `resourcestream` after A1
+  supplies `changed`/`reset` semantics; the A1 doorbell carries the source version
+  instead.
 - **B4.** Keep per-object `resourceVersion` **only** as the apiserver's reflector resume
   token (inside `ingest`), never as an app-level ordering authority — document the boundary
   so it can't leak back out.
 
-**Gate.** Cursor-stability + "no spurious refetch" tests; a `304` returns when the scope
-version is unchanged.
+**Gate.**
+
+- unchanged object source version returns `304`;
+- object source version changes when an object-backed row field/sort/filter input changes;
+- metric-only polling does not change object source version;
+- composite domains have tests proving all row-affecting object inputs bump the
+  domain/scope version;
+- epoch/restart behavior cannot return `304` for stale client tokens;
+- cursor-stability and no-spurious-refetch tests pass with the source-version token.
 
 ## Phase C — Finish the metrics split (object/metric independence)
 
 **Goal.** Object refetch only on object change; metric refresh on its own clock — the
 object/metric split (see `../architecture/data-layer.md`, Invariant 4), completed.
 
-- **C1.** Remove the metrics revision from `snapshotVersionWithDynamicRevision`
-  (`table_window.go:19`) at its three callers (`pods.go:354`, `nodes.go:401`,
-  `namespace_workloads.go:238`); the object scope version (Phase B) reflects object
-  changes only.
-- **C2.** Deliver metric freshness as a **separate** A1 doorbell keyed by a `metricsRevision`
-  (metric-sorted views refetch on it; object-sorted views just get fresher overlaid numbers
-  on their next object refetch or a low-rate metric tick — no full-page churn on a poll).
-- **C3.** `metricsRevision` becomes the metric clock — "one clock **per source**" (object
-  version + metric version), the one deliberate two-of-something.
+- **C1 [after A, can precede B].** Classify query dependency on metrics in one place:
+  metric-sorted or metric-filtered queries listen to `source=metric`; object-sorted queries
+  do not.
+- **C2 [after A, before or with B].** Remove the metrics revision from
+  `snapshotVersionWithDynamicRevision` (`table_window.go:19`) at its three callers
+  (`pods.go:354`, `nodes.go:401`, `namespace_workloads.go:238`) and deliver metric
+  freshness as a **separate** A1 doorbell keyed by `metricsRevision`. Metric-dependent
+  views refetch on it; object-only views do not churn on a poll.
+- **C3 [after B0/B1].** `metricsRevision` becomes the metric source clock under the same
+  source-version contract — "one clock **per source**" (object version + metric version),
+  the one deliberate two-of-something.
 
-**Gate.** Regression test: a metrics poll does **not** bump the object scope version and does
-**not** refetch an object-sorted page.
+**Gate.**
+
+- a metrics poll does **not** bump the object source version;
+- a metrics poll does **not** refetch an object-sorted page;
+- a metrics poll **does** refetch a metric-sorted or metric-filtered page;
+- overlaid metric values remain fresh enough for visible object-sorted rows through the
+  chosen low-rate metric refresh path;
+- disabled/unavailable metrics keep their current diagnostics distinction.
 
 ## Phase D — Smaller cleanups & consistency (low priority, profile-driven)
 
@@ -147,8 +205,12 @@ object/metric split (see `../architecture/data-layer.md`, Invariant 4), complete
 
 ## Principles & sequencing
 
-- **A before B/C** (the unified doorbell is the carrier for the unified version and the
-  metric signal). B and C can then proceed together.
+- **A first** (the unified doorbell is the carrier for the unified version and the metric
+  signal).
+- **C1/C2 may land before B** because they remove the poll-driven object refetch coupling
+  using the A1 signal shape.
+- **B before C3** because the final metric clock should use the same source-version contract
+  as object state.
 - Every step lands behind a **new==old equivalence gate** and leaves the app correct +
   simpler; gated by `mage qc:prerelease`.
 - The goal is **subtraction** — fewer clocks, fewer push channels, fewer "ways to think
@@ -159,10 +221,11 @@ object/metric split (see `../architecture/data-layer.md`, Invariant 4), complete
 | Phase | Removes | Simplification | Effort |
 |---|---|---|---|
 | A — one doorbell | 2 SSE transports + their clients | High (3 push paths → 1) | Medium |
-| B — one scope clock | 3 of 4 ordering authorities | High (the core unmet goal) | Medium–High |
+| B — one object scope clock | 3 of 4 object ordering authorities | High (the core unmet goal) | Medium–High |
 | C — metrics split | object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Medium |
 | D — cleanups | naming/mechanism drift | Low | Low |
 
-**Recommended order: A → C → B → D.** A+C together remove the most day-to-day coupling
-(poll-driven refetch, duplicate push channels) for moderate effort; B is the deeper clock
-unification; D is opportunistic.
+**Recommended order: A → C1/C2 → B → C3 → D.** A+C1/C2 together remove the most
+day-to-day coupling (poll-driven refetch, duplicate push channels) for moderate effort;
+B is the deeper object-clock unification; C3 folds metrics into that same contract; D is
+opportunistic.
