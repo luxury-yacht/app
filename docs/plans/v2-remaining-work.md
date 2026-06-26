@@ -80,16 +80,23 @@ already-proven "one delivery model," minus the positional deltas that were dropp
 
   The frame carries no rows, no positions, and no partial table payload. It is the
   formal version of what `streamRevision` already does internally: bump a live-data
-  identity so a query-backed view refetches.
+  identity so a query-backed view refetches. The added fields formalize existing
+  contracts instead of adding a second delivery model: `clusterId` is the routing
+  identity, `source` names the producer clock that already changed, and `signal`
+  preserves the existing changed/resync/error outcomes.
 - **A2.** Fold the **events** tail onto it: the events table is already `querypage`-backed;
   convert `eventstream`'s live tail into the A1 doorbell and **delete the
   `/api/v2/stream/events` SSE transport + its frontend client**. (The per-object events
   panel keeps its own `object-events` snapshot domain.) Reconnect behavior must map
   missed/overflowed event resume to a `reset` signal, not to silent freshness loss.
+  Deletion includes the per-cluster mux registration, the aggregate mux registration,
+  the aggregate event-stream handler/buffer, and the frontend `EventSource` client.
 - **A3.** Fold the **catalog** stream onto it: convert `catalog_stream`'s push into the
   A1 doorbell for the `catalog` scope and **delete `/api/v2/stream/catalog` SSE + its
   client**. Browse keeps pulling pages from the query endpoint. Catalog signals use
   `source=catalog` and must preserve the current single-cluster catalog scope boundary.
+  Deletion includes the per-cluster mux registration, the aggregate mux registration,
+  the aggregate catalog router, and the frontend `EventSource` client.
 - **A4.** Frontend: one subscription manager consumes the unified doorbell for tables,
   events, and Browse; delete the two `EventSource` clients. The manager owns reconnect,
   visibility pause/resume, terminal-error notification, and diagnostics status for all
@@ -109,7 +116,7 @@ already-proven "one delivery model," minus the positional deltas that were dropp
 
 The deleted SSE transports are the simplification payoff. **Prerequisite for B3 and C2.**
 
-## Phase B — One scope clock (collapse the four ordering authorities)
+## Phase B — One object scope clock (quarantine non-object clocks)
 
 **Goal.** Under refetch-on-signal there are no row deltas to order, so this does **not**
 need a full LSN delta-log (a from-scratch LSN rewrite was deliberately dropped). It needs
@@ -120,6 +127,7 @@ all key off one source-version contract.
 - **B0 [design].** Define the source-version contract before code moves:
   - versions are opaque equality tokens at API boundaries, backed by a monotonic counter
     plus an app/store epoch so a process restart cannot reuse an old `304` token;
+    the epoch is part of the HTTP validator identity, not a domain freshness clock;
   - each refresh domain declares the source clocks that can affect its rows:
     `object`, `metric`, `catalog`, or `event`;
   - object versions advance only when object-backed row membership, fields, sort keys,
@@ -159,9 +167,17 @@ all key off one source-version contract.
 **Goal.** Object refetch only on object change; metric refresh on its own clock — the
 object/metric split (see `../architecture/data-layer.md`, Invariant 4), completed.
 
-- **C1 [after A, can precede B].** Classify query dependency on metrics in one place:
+- **C0 [design, after A].** Pin down the object-sorted metric freshness contract before
+  implementation. Choose exactly one:
+  - **No automatic metric refresh for object-sorted pages.** Object-sorted pages ignore
+    `source=metric`; visible metric cells refresh on the next object refetch, manual
+    refresh, or query reload.
+  - **Throttled visible-row metric refresh.** Object-sorted pages subscribe to
+    `source=metric` through an explicit throttle interval `N`; only visible metric
+    overlays refresh, and object rows/pages do not refetch.
+- **C1 [after C0, can precede B].** Classify query dependency on metrics in one place:
   metric-sorted or metric-filtered queries listen to `source=metric`; object-sorted queries
-  do not.
+  follow the C0 policy.
 - **C2 [after A, before or with B].** Remove the metrics revision from
   `snapshotVersionWithDynamicRevision` (`table_window.go:19`) at its three callers
   (`pods.go:354`, `nodes.go:401`, `namespace_workloads.go:238`) and deliver metric
@@ -176,8 +192,10 @@ object/metric split (see `../architecture/data-layer.md`, Invariant 4), complete
 - a metrics poll does **not** bump the object source version;
 - a metrics poll does **not** refetch an object-sorted page;
 - a metrics poll **does** refetch a metric-sorted or metric-filtered page;
-- overlaid metric values remain fresh enough for visible object-sorted rows through the
-  chosen low-rate metric refresh path;
+- if C0 chooses no automatic metric refresh, object-sorted metric cells change only after
+  object refetch, manual refresh, or query reload;
+- if C0 chooses throttled visible-row metric refresh, visible metric overlays refresh
+  within the chosen interval `N` without object page refetch;
 - disabled/unavailable metrics keep their current diagnostics distinction.
 
 ## Phase D — Smaller cleanups & consistency (low priority, profile-driven)
@@ -220,7 +238,7 @@ object/metric split (see `../architecture/data-layer.md`, Invariant 4), complete
 
 | Phase | Removes | Simplification | Effort |
 |---|---|---|---|
-| A — one doorbell | 2 SSE transports + their clients | High (3 push paths → 1) | Medium |
+| A — one doorbell | 2 SSE transports + aggregate routers + their clients | High (3 push paths → 1) | Medium–High |
 | B — one object scope clock | 3 of 4 object ordering authorities | High (the core unmet goal) | Medium–High |
 | C — metrics split | object↔metric version coupling | Medium (+ kills poll-driven object refetch) | Medium |
 | D — cleanups | naming/mechanism drift | Low | Low |
