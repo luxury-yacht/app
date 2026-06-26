@@ -18,10 +18,13 @@ import {
 } from '@/core/logging/appLogsClient';
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
+  domainSupportsSourceClock,
+  isResourceStreamSourceClock,
   isCompleteResyncStreamDomain,
   isClusterScopedDomain,
   isSupportedDomain,
   type ResourceDomain,
+  type ResourceStreamSourceClock,
 } from './resourceStreamDomains';
 import { ResourceStreamConnection } from './resourceStreamConnection';
 import {
@@ -67,12 +70,30 @@ const MESSAGE_TYPES = {
 
 type StreamMessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
 
+const SIGNAL_TYPES = {
+  changed: 'changed',
+  reset: 'reset',
+  error: 'error',
+} as const;
+
+type StreamSignalType = (typeof SIGNAL_TYPES)[keyof typeof SIGNAL_TYPES];
+
+type SignalEnvelope = {
+  clusterId: string;
+  source: ResourceStreamSourceClock;
+  signal: StreamSignalType;
+  version: string;
+};
+
 type ServerMessage = {
-  type: StreamMessageType;
+  type?: StreamMessageType;
   clusterId?: string;
   clusterName?: string;
   domain?: string;
   scope?: string;
+  source?: string;
+  signal?: string;
+  version?: string;
   resourceVersion?: string;
   sequence?: string;
   ref?: {
@@ -89,10 +110,17 @@ type ServerMessage = {
   errorDetails?: PermissionDeniedStatus;
 };
 
-type UpdateMessage = ServerMessage & { domain: ResourceDomain; scope: string };
+type UpdateMessage = ServerMessage & {
+  domain: ResourceDomain;
+  scope: string;
+  signalEnvelope?: SignalEnvelope;
+};
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
   typeof value === 'string' && Object.values(MESSAGE_TYPES).includes(value as StreamMessageType);
+
+const hasSignalType = (value: unknown): value is StreamSignalType =>
+  typeof value === 'string' && Object.values(SIGNAL_TYPES).includes(value as StreamSignalType);
 
 const normalizeStreamScope = (domain: ResourceDomain, scope: unknown): string | null => {
   if (typeof scope === 'string') {
@@ -111,14 +139,29 @@ const normalizeStreamScope = (domain: ResourceDomain, scope: unknown): string | 
 };
 
 const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
-  if (!hasMessageType(message.type) || !isSupportedDomain(message.domain)) {
+  if (!isSupportedDomain(message.domain)) {
     return null;
   }
   const normalizedScope = normalizeStreamScope(message.domain, message.scope);
   if (normalizedScope === null) {
     return null;
   }
-  return { ...message, domain: message.domain, scope: normalizedScope };
+  const source = message.source;
+  const signal = message.signal;
+  const version = message.version?.trim();
+  const signalClusterId = message.clusterId?.trim();
+  const signalEnvelope =
+    signalClusterId &&
+    version &&
+    isResourceStreamSourceClock(source) &&
+    domainSupportsSourceClock(message.domain, source) &&
+    hasSignalType(signal)
+      ? { clusterId: signalClusterId, source, signal, version }
+      : undefined;
+  if (!hasMessageType(message.type) && !signalEnvelope) {
+    return null;
+  }
+  return { ...message, domain: message.domain, scope: normalizedScope, signalEnvelope };
 };
 
 const normalizeUpdateClusterId = (update: UpdateMessage, clusterId: string): UpdateMessage => {
@@ -306,14 +349,15 @@ export class ResourceStreamManager {
       console.error('Invalid resource stream payload');
       return;
     }
-    if (!parsed || !hasMessageType(parsed.type)) {
+    if (!parsed) {
       return;
     }
     const update = resolveUpdateMessage(parsed);
     if (!update) {
       return;
     }
-    const messageClusterId = update.clusterId?.trim() || clusterId;
+    const messageClusterId =
+      update.signalEnvelope?.clusterId ?? update.clusterId?.trim() ?? clusterId;
     if (!messageClusterId) {
       return;
     }
@@ -325,6 +369,9 @@ export class ResourceStreamManager {
     let subscription = this.subscriptions.get(subscriptionKey);
     let resolvedUpdate = update;
     if (!subscription) {
+      if (update.signalEnvelope) {
+        return;
+      }
       // Fall back when cluster IDs drift but the scope/domain pair is unique.
       subscription = this.findSubscriptionByScope(update.domain, update.scope);
       if (!subscription) {
@@ -334,6 +381,31 @@ export class ResourceStreamManager {
     }
     const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
     this.recordSubscriptionMessage(subscription);
+
+    if (resolvedUpdate.signalEnvelope) {
+      switch (resolvedUpdate.signalEnvelope.signal) {
+        case SIGNAL_TYPES.changed:
+          this.handleUpdate(subscription, resolvedUpdate);
+          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          return;
+        case SIGNAL_TYPES.reset:
+          if (subscription.pendingReset) {
+            subscription.pendingReset = false;
+            this.updateHealthForScope(subscription.domain, subscription.reportScope);
+            return;
+          }
+          void this.resyncSubscription(subscription, 'reset');
+          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          return;
+        case SIGNAL_TYPES.error:
+          this.recordSubscriptionError(subscription, errorMessage || 'stream error');
+          void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
+          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          return;
+        default:
+          return;
+      }
+    }
 
     switch (resolvedUpdate.type) {
       case MESSAGE_TYPES.heartbeat:

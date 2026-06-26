@@ -757,7 +757,7 @@ describe('NsViewPods', () => {
     expect(memoryRender.props.metricsStale).toBe(false);
   });
 
-  it('keeps the column definitions stable across metrics-only rerenders', async () => {
+  it('keeps the column definitions stable across metric interval rerenders', async () => {
     await renderPods({
       metrics: {
         stale: false,

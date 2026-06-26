@@ -119,6 +119,55 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerMetricRefreshBroadcastsMetricSourceForSubscribedMetricDomains(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	podsSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
+	require.NoError(t, err)
+	workloadsSub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
+	require.NoError(t, err)
+	nodesSub, err := subscribeForTest(t, manager, domainNodes, "")
+	require.NoError(t, err)
+	configSub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
+	require.NoError(t, err)
+
+	manager.BroadcastMetricRefresh("1700000000000000000")
+
+	for _, tc := range []struct {
+		name   string
+		sub    *Subscription
+		domain string
+		scope  string
+	}{
+		{name: "pods", sub: podsSub, domain: domainPods, scope: "namespace:default"},
+		{name: "workloads", sub: workloadsSub, domain: domainWorkloads, scope: "namespace:default"},
+		{name: "nodes", sub: nodesSub, domain: domainNodes, scope: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			update := requireNextUpdate(t, tc.sub)
+			require.Equal(t, MessageTypeModified, update.Type)
+			require.Equal(t, tc.domain, update.Domain)
+			require.Equal(t, tc.scope, update.Scope)
+			require.Equal(t, SourceMetric, update.Source)
+			require.Equal(t, SignalChanged, update.Signal)
+			require.Equal(t, "1700000000000000000", update.Version)
+			require.Equal(t, "c1", update.ClusterID)
+			require.Nil(t, update.Ref)
+		})
+	}
+
+	select {
+	case update := <-configSub.Updates:
+		t.Fatalf("namespace-config must not receive metric source signal: %#v", update)
+	default:
+	}
+}
+
 // The namespace-config live notify is now driven by the generic ingest notify sink
 // (ConfigMap/Secret are owned-reflector ingest kinds), proven in ingest_notify_test.go.
 // The resource-stream handleConfigMap/handleSecret handlers carry only the Helm-release

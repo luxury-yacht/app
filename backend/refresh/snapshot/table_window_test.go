@@ -25,19 +25,3 @@ func TestTruncateSnapshotWindowKeepsCompleteWindowsUnmarked(t *testing.T) {
 	require.Empty(t, stats.TotalItems)
 	require.Empty(t, stats.Warnings)
 }
-
-func TestSnapshotVersionWithDynamicRevisionPreservesResourceVersionWhenDynamicRevisionMissing(t *testing.T) {
-	require.Equal(t, uint64(42), snapshotVersionWithDynamicRevision(42, ""))
-	require.Equal(t, uint64(42), snapshotVersionWithDynamicRevision(42, "   "))
-}
-
-func TestSnapshotVersionWithDynamicRevisionChangesForEitherDimension(t *testing.T) {
-	base := snapshotVersionWithDynamicRevision(42, "1700000000000000000")
-	resourceChanged := snapshotVersionWithDynamicRevision(43, "1700000000000000000")
-	dynamicChanged := snapshotVersionWithDynamicRevision(42, "1700000001000000000")
-
-	require.NotEqual(t, uint64(42), base)
-	require.NotEqual(t, base, resourceChanged)
-	require.NotEqual(t, base, dynamicChanged)
-	require.Equal(t, base, snapshotVersionWithDynamicRevision(42, "1700000000000000000"))
-}

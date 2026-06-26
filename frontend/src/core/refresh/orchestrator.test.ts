@@ -21,7 +21,6 @@ import {
   setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
-import { applyMetricsSnapshot } from './metricsSnapshotApplicator';
 import {
   CLUSTER_REFRESHERS,
   NAMESPACE_REFRESHERS,
@@ -329,7 +328,7 @@ describe('refreshOrchestrator', () => {
     ...overrides,
   });
 
-  it('does not let a metrics-only nodes refresh create the initial empty nodes payload', async () => {
+  it('applies a metric interval nodes refresh through the normal snapshot path', async () => {
     registerStreamingNodesDomain();
     const scope = buildClusterScope('cluster-a', '');
     resetAllScopedDomainStates('nodes');
@@ -359,13 +358,13 @@ describe('refreshOrchestrator', () => {
     });
 
     const state = getScopedDomainState('nodes', scope);
-    expect(state.status).toBe('idle');
-    expect(state.data).toBeNull();
+    expect(state.status).toBe('ready');
+    expect(state.data?.rows).toEqual([]);
     expect(
       orchestratorInternals
         .getRuntimeForScope('nodes', scope)
         .isMetricsRefreshFresh('nodes', scope, Number.POSITIVE_INFINITY)
-    ).toBe(false);
+    ).toBe(true);
 
     resetAllScopedDomainStates('nodes');
   });
@@ -2548,7 +2547,6 @@ describe('refreshOrchestrator', () => {
           rows: [
             {
               ...podB,
-              status: 'Pending',
               cpuUsage: '35m',
               memUsage: '45Mi',
             },
@@ -2577,7 +2575,7 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('pods');
   });
 
-  it('records restricted metrics errors without replacing stream rows', async () => {
+  it('records restricted metrics errors through the normal snapshot path', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:default');
     refreshOrchestrator.updateContext({
@@ -2623,7 +2621,6 @@ describe('refreshOrchestrator', () => {
           rows: [
             {
               ...existingPod,
-              status: 'Pending',
             },
           ],
           metrics: {
@@ -2642,330 +2639,11 @@ describe('refreshOrchestrator', () => {
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: false });
 
     const nextState = getScopedDomainState('pods', scope);
-    expect(nextState.data?.rows?.[0]).toBe(existingPod);
+    expect(nextState.data?.rows?.[0]).toEqual(existingPod);
     expect(nextState.data?.metrics?.stale).toBe(true);
     expect(nextState.data?.metrics?.lastError).toContain('forbidden');
 
     resetAllScopedDomainStates('pods');
-  });
-
-  it('preserves node status fields when applying metrics-only snapshots', () => {
-    const scope = buildClusterScope('cluster-a', '');
-    const baseNode = {
-      clusterId: 'cluster-a',
-      name: 'node-a',
-      status: 'Ready',
-      roles: 'worker',
-      age: '2h',
-      version: '1.27',
-      cpuCapacity: '4',
-      cpuAllocatable: '4',
-      cpuRequests: '1',
-      cpuLimits: '2',
-      cpuUsage: '100m',
-      memoryCapacity: '8Gi',
-      memoryAllocatable: '8Gi',
-      memRequests: '1Gi',
-      memLimits: '2Gi',
-      memoryUsage: '200Mi',
-      pods: '10',
-      podsCapacity: '110',
-      podsAllocatable: '110',
-      restarts: 0,
-      kind: 'Node',
-      cpu: '4',
-      memory: '8Gi',
-      unschedulable: true,
-      labels: { role: 'worker' },
-      annotations: { source: 'test' },
-      taints: [{ key: 'dedicated', value: 'infra', effect: 'NoSchedule' }],
-    };
-    const existingNode = {
-      ...baseNode,
-      podMetrics: [
-        {
-          namespace: 'default',
-          name: 'pod-a',
-          cpuUsage: '5m',
-          memoryUsage: '10Mi',
-        },
-      ],
-    };
-
-    setScopedDomainState('nodes', scope, () => ({
-      status: 'ready',
-      data: {
-        clusterId: 'test-cluster',
-        rows: [existingNode],
-        metrics: { stale: false, successCount: 1, failureCount: 0 },
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope,
-    }));
-
-    const incomingNode = {
-      ...baseNode,
-      status: 'NotReady',
-      cpuUsage: '150m',
-      memoryUsage: '250Mi',
-      unschedulable: false,
-      podMetrics: [
-        {
-          namespace: 'default',
-          name: 'pod-a',
-          cpuUsage: '6m',
-          memoryUsage: '12Mi',
-        },
-      ],
-    };
-
-    const applied = applyMetricsSnapshot({
-      domain: 'nodes',
-      snapshot: {
-        domain: 'nodes',
-        scope,
-        version: 2,
-        checksum: 'etag-node',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          clusterId: 'test-cluster',
-          rows: [incomingNode],
-          metrics: { stale: false, successCount: 2, failureCount: 0 },
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      etag: 'etag-node',
-      isManual: false,
-      scope,
-      clearRefreshError: vi.fn(),
-    });
-
-    expect(applied).toBe(true);
-    const nextState = getScopedDomainState('nodes', scope);
-    const updated = nextState.data?.rows?.[0];
-    expect(updated?.cpuUsage).toBe('150m');
-    expect(updated?.memoryUsage).toBe('250Mi');
-    expect(updated?.status).toBe('Ready');
-    expect(updated?.unschedulable).toBe(true);
-    expect(updated?.podMetrics?.[0]?.cpuUsage).toBe('6m');
-
-    resetAllScopedDomainStates('nodes');
-  });
-
-  it('reuses existing pod rows when pod metrics snapshots are unchanged', () => {
-    const scope = buildClusterScope('cluster-a', 'namespace:default');
-    const existingPod = {
-      clusterId: 'cluster-a',
-      name: 'pod-a',
-      namespace: 'default',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      age: '1m',
-      ownerKind: 'Deployment',
-      ownerName: 'web',
-      node: 'node-a',
-      cpuRequest: '10m',
-      cpuLimit: '20m',
-      cpuUsage: '20m',
-      memRequest: '10Mi',
-      memLimit: '20Mi',
-      memUsage: '30Mi',
-    };
-
-    setScopedDomainState('pods', scope, () => ({
-      status: 'ready',
-      data: {
-        clusterId: 'cluster-a',
-        rows: [existingPod],
-        metrics: {
-          stale: false,
-          collectedAt: 123,
-          successCount: 1,
-          failureCount: 0,
-        },
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope,
-    }));
-
-    const previousState = getScopedDomainState('pods', scope);
-    const previousRows = previousState.data?.rows;
-    const previousMetrics = previousState.data?.metrics;
-
-    const applied = applyMetricsSnapshot({
-      domain: 'pods',
-      snapshot: {
-        domain: 'pods',
-        scope,
-        version: 2,
-        checksum: 'etag-pods-stable',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          clusterId: 'cluster-a',
-          rows: [{ ...existingPod }],
-          metrics: {
-            stale: false,
-            collectedAt: 123,
-            successCount: 1,
-            failureCount: 0,
-          },
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      etag: 'etag-pods-stable',
-      isManual: false,
-      scope,
-      clearRefreshError: vi.fn(),
-    });
-
-    expect(applied).toBe(true);
-    const nextState = getScopedDomainState('pods', scope);
-    expect(nextState.data?.rows).toBe(previousRows);
-    expect(nextState.data?.rows?.[0]).toBe(existingPod);
-    expect(nextState.data?.metrics).toBe(previousMetrics);
-
-    resetAllScopedDomainStates('pods');
-  });
-
-  it('preserves workload readiness when applying metrics-only snapshots', () => {
-    const scope = buildClusterScope('cluster-a', 'namespace:default');
-    const existingWorkload = {
-      clusterId: 'cluster-a',
-      kind: 'Deployment',
-      name: 'web',
-      namespace: 'default',
-      ready: '1/1',
-      status: 'Running',
-      restarts: 0,
-      age: '5m',
-      cpuUsage: '20m',
-      memUsage: '30Mi',
-      cpuRequest: '10m',
-      cpuLimit: '40m',
-      memRequest: '15Mi',
-      memLimit: '60Mi',
-    };
-
-    setScopedDomainState('namespace-workloads', scope, () => ({
-      status: 'ready',
-      data: {
-        clusterId: 'test-cluster',
-        rows: [existingWorkload],
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope,
-    }));
-
-    const incomingWorkload = {
-      ...existingWorkload,
-      status: 'Pending',
-      ready: '0/1',
-      cpuUsage: '25m',
-      memUsage: '35Mi',
-    };
-
-    const applied = applyMetricsSnapshot({
-      domain: 'namespace-workloads',
-      snapshot: {
-        domain: 'namespace-workloads',
-        scope,
-        version: 3,
-        checksum: 'etag-workload',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          clusterId: 'test-cluster',
-          rows: [incomingWorkload],
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      etag: 'etag-workload',
-      isManual: false,
-      scope,
-      clearRefreshError: vi.fn(),
-    });
-
-    expect(applied).toBe(true);
-    const nextState = getScopedDomainState('namespace-workloads', scope);
-    const updated = nextState.data?.rows?.[0];
-    expect(updated?.cpuUsage).toBe('25m');
-    expect(updated?.memUsage).toBe('35Mi');
-    expect(updated?.status).toBe('Running');
-    expect(updated?.ready).toBe('1/1');
-
-    resetAllScopedDomainStates('namespace-workloads');
-  });
-
-  it('reuses the existing workload rows when workload metrics snapshots are unchanged', () => {
-    const scope = buildClusterScope('cluster-a', 'namespace:default');
-    const existingWorkload = {
-      clusterId: 'cluster-a',
-      kind: 'Deployment',
-      name: 'web',
-      namespace: 'default',
-      ready: '1/1',
-      status: 'Running',
-      restarts: 0,
-      age: '5m',
-      cpuUsage: '20m',
-      memUsage: '30Mi',
-      cpuRequest: '10m',
-      cpuLimit: '40m',
-      memRequest: '15Mi',
-      memLimit: '60Mi',
-    };
-
-    setScopedDomainState('namespace-workloads', scope, () => ({
-      status: 'ready',
-      data: {
-        clusterId: 'test-cluster',
-        rows: [existingWorkload],
-      },
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-      scope,
-    }));
-
-    const previousState = getScopedDomainState('namespace-workloads', scope);
-    const previousRows = previousState.data?.rows;
-
-    const applied = applyMetricsSnapshot({
-      domain: 'namespace-workloads',
-      snapshot: {
-        domain: 'namespace-workloads',
-        scope,
-        version: 4,
-        checksum: 'etag-workload-stable',
-        generatedAt: Date.now(),
-        sequence: 2,
-        payload: {
-          clusterId: 'test-cluster',
-          rows: [{ ...existingWorkload }],
-        },
-        stats: { itemCount: 1, buildDurationMs: 0 },
-      },
-      etag: 'etag-workload-stable',
-      isManual: false,
-      scope,
-      clearRefreshError: vi.fn(),
-    });
-
-    expect(applied).toBe(true);
-    const nextState = getScopedDomainState('namespace-workloads', scope);
-    expect(nextState.data?.rows).toBe(previousRows);
-    expect(nextState.data?.rows?.[0]).toBe(existingWorkload);
-
-    resetAllScopedDomainStates('namespace-workloads');
   });
 
   it('never treats one-shot query scopes (`?` params) as streaming targets', () => {

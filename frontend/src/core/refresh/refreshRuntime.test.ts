@@ -206,4 +206,39 @@ describe('ClusterRefreshRuntime', () => {
     });
     expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
   });
+
+  it('uses normal snapshot fetches for stale metric intervals', async () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+    const scope = 'cluster-a|namespace:default';
+    const startPromise = Promise.resolve(vi.fn());
+    runtime.beginStreamingStart('pods', scope, startPromise);
+    runtime.finishStreamingStart('pods', scope, await startPromise);
+
+    expect(
+      runtime.resolveStreamingFetchMode({
+        domain: 'pods',
+        scope,
+        isManual: false,
+        shouldStream: true,
+        metricsOnly: true,
+        streamingHealthy: true,
+        metricsMinIntervalMs: 1000,
+        now: 2000,
+      })
+    ).toBe('snapshot');
+
+    runtime.recordMetricsRefresh('pods', scope, 1500);
+    expect(
+      runtime.resolveStreamingFetchMode({
+        domain: 'pods',
+        scope,
+        isManual: false,
+        shouldStream: true,
+        metricsOnly: true,
+        streamingHealthy: true,
+        metricsMinIntervalMs: 1000,
+        now: 2000,
+      })
+    ).toBe('skip');
+  });
 });

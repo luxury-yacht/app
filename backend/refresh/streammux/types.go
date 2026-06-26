@@ -80,6 +80,7 @@ type ServerMessage struct {
 	Domain          string                          `json:"domain,omitempty"`
 	Scope           string                          `json:"scope,omitempty"`
 	Source          Source                          `json:"source,omitempty"`
+	Version         string                          `json:"version,omitempty"`
 	Signal          Signal                          `json:"signal,omitempty"`
 	ResourceVersion string                          `json:"resourceVersion,omitempty"`
 	Sequence        string                          `json:"sequence,omitempty"`

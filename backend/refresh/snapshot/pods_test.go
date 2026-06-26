@@ -213,7 +213,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "node:node-1", snapshot.Scope)
-	require.Equal(t, snapshotVersionWithDynamicRevision(15, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
+	require.Equal(t, uint64(15), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -367,7 +367,7 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:team-a", snapshot.Scope)
-	require.Equal(t, snapshotVersionWithDynamicRevision(101, fmt.Sprint(now.UnixNano())), snapshot.Version)
+	require.Equal(t, uint64(101), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
@@ -377,6 +377,46 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.Equal(t, "25m", payload.Rows[0].CPUUsage)
 	require.Equal(t, "32 MB", payload.Rows[0].MemUsage)
 	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
+}
+
+func TestPodBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
+	now := time.Unix(1000, 0)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "api",
+			Namespace:         "team-a",
+			ResourceVersion:   "101",
+			CreationTimestamp: metav1.NewTime(now.Add(-time.Minute)),
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pod),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+		metrics: fakePodMetricsProvider{
+			usage: map[string]metrics.PodUsage{
+				"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
+			},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+	}
+
+	first, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	require.Equal(t, uint64(101), first.Version)
+	require.Equal(t, "25m", first.Payload.(PodSnapshot).Rows[0].CPUUsage)
+
+	builder.metrics = fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-a/api": {CPUUsageMilli: 75, MemoryUsageBytes: 64 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
+	}
+
+	second, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+	require.Equal(t, first.Version, second.Version)
+	require.Equal(t, "75m", second.Payload.(PodSnapshot).Rows[0].CPUUsage)
 }
 
 func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodUsage, time.Time) {
@@ -575,7 +615,7 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, podDomainName, snapshot.Domain)
 	require.Equal(t, "namespace:all", snapshot.Scope)
-	require.Equal(t, snapshotVersionWithDynamicRevision(25, fmt.Sprint(now.UnixNano())), snapshot.Version)
+	require.Equal(t, uint64(25), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)

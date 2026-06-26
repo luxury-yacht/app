@@ -15,7 +15,7 @@ import {
 const sortedDomains = (domains: Set<string>) => Array.from(domains).sort();
 
 describe('diagnosticsPanelConfig domain behavior sets', () => {
-  test('pins metrics-only domains derived from the contract', () => {
+  test('pins metric-interval domains derived from the contract', () => {
     expect(sortedDomains(METRICS_ONLY_DOMAINS)).toEqual(['namespace-workloads', 'nodes', 'pods']);
   });
 

@@ -1,6 +1,6 @@
 # Luxury Yacht v2 — Remaining Work (finish the simplification)
 
-Status: **Not started.** This is the forward "what's left" plan for the v2 data
+Status: **In progress.** This is the forward "what's left" plan for the v2 data
 layer. The shipped architecture — what was built and the deliberately-dropped
 decisions — is documented in
 [`../architecture/data-layer.md`](../architecture/data-layer.md); this plan covers
@@ -34,12 +34,12 @@ machinery the team rightly skipped.**
    SSE `/api/v2/stream/events` (`eventstream`), and the catalog SSE
    `/api/v2/stream/catalog` (`catalog_stream`) — registered at
    `refresh/system/streams.go`.
-3. **Metrics are only half-decoupled.** The store is metrics-free and overlays at serve,
-   but `snapshotVersionWithDynamicRevision` (`snapshot/table_window.go:19`, folded in by
-   `pods.go:354`, `nodes.go:401`, `namespace_workloads.go:238`) still mixes the metrics
-   revision into the published object version, so a periodic metrics poll bumps the object
-   scope version and triggers a full object-row page refetch even on object-sorted views of
-   those three domains where nothing changed.
+3. ✅ **C2/C4 have landed for the metric-bearing query-backed domains.** The store remains
+   metrics-free and overlays at serve, the published snapshot object version for `pods`,
+   `nodes`, and `namespace-workloads` no longer includes the metrics revision, the metrics
+   poller emits a `source=metric` doorbell through the resource stream manager, and the
+   legacy `applyMetricsSnapshot` client row-overlay path has been deleted. The remaining
+   metric work is C3's final fold into the B0/B1 source-version contract.
 
 ### Out of scope on purpose (NOT "unfinished" — intentional design)
 
@@ -196,9 +196,9 @@ completed.
   Metric-filtered queries should enter the same metric-dependent branch only if a future
   domain exposes metric filter fields; today `cpu`/`memory` are sortable fields, not
   filterable fields, on the metric-bearing query-backed tables.
-- **C2 [after A, before or with B].** Remove the metrics revision from
-  `snapshotVersionWithDynamicRevision` (`table_window.go:19`) at its three callers
-  (`pods.go:354`, `nodes.go:401`, `namespace_workloads.go:238`) and deliver metric
+- ✅ **C2 [after A, before or with B].** Remove the metrics revision from the published
+  object snapshot version at its three callers (`pods.go`, `nodes.go`,
+  `namespace_workloads.go`) and deliver metric
   freshness as a **separate** A1 doorbell keyed by `metricsRevision`. Metric-sorted
   visible views use C0's throttled keyset-cursor refetch; object-sorted visible views use
   C0's throttled stable-row refetch; neither path advances the object source token for a
@@ -206,7 +206,7 @@ completed.
 - **C3 [after B0/B1].** `metricsRevision` becomes the metric source clock under the same
   source-version contract — "one clock **per source**" (object version + metric version),
   the one deliberate two-of-something.
-- **C4 [after C0/C2].** Retire the legacy `applyMetricsSnapshot` metrics-only scoped-store
+- ✅ **C4 [after C0/C2].** Retire the legacy `applyMetricsSnapshot` metrics-only scoped-store
   row overlay for `pods`, `nodes`, and `namespace-workloads`. If any domain-level metric
   metadata still needs that path, name the remaining non-row consumer and cover it with a
   focused test; it must not remain as a hidden second row-refresh path for query-backed

@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -278,7 +277,44 @@ func TestNodeBuilderBuild(t *testing.T) {
 	node.Annotations["example"] = "mutated"
 	require.Equal(t, "annotation", summary.Annotations["example"])
 
-	require.Equal(t, snapshotVersionWithDynamicRevision(42, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
+	require.Equal(t, uint64(42), snapshot.Version)
+}
+
+func TestNodeBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
+	now := time.Unix(1000, 0)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "node-1",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(now.Add(-time.Hour)),
+		},
+	}
+	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
+	builder := newNodeBuilderForTest(
+		ClusterMeta{},
+		"42",
+		fakeMetricsProvider{
+			usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
+			metadata: metrics.Metadata{CollectedAt: now},
+		},
+		ingest,
+		node,
+	)
+
+	first, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, uint64(42), first.Version)
+	require.Equal(t, "650m", first.Payload.(NodeSnapshot).Rows[0].CPUUsage)
+
+	builder.metrics = fakeMetricsProvider{
+		usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 700}},
+		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
+	}
+
+	second, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, first.Version, second.Version)
+	require.Equal(t, "700m", second.Payload.(NodeSnapshot).Rows[0].CPUUsage)
 }
 
 // A malformed query scope must be rejected like every other typed builder does

@@ -11,7 +11,7 @@ export type InFlightRequest = {
   scope?: string;
 };
 
-type StreamingFetchMode = 'snapshot' | 'metrics-only' | 'skip';
+type StreamingFetchMode = 'snapshot' | 'skip';
 
 type StreamingFetchDecisionInput = {
   domain: RefreshDomain;
@@ -416,7 +416,7 @@ export class ClusterRefreshRuntime {
       input.now
     )
       ? 'skip'
-      : 'metrics-only';
+      : 'snapshot';
   }
 
   recordMetricsRefresh(domain: RefreshDomain, scope: string, now = Date.now()): void {

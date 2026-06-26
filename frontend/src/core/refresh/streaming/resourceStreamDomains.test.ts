@@ -122,9 +122,10 @@ describe('resource stream domain descriptors', () => {
       const entry = contractDomains[descriptor.domain];
       expect(entry, `contract missing entry for ${descriptor.domain}`).toBeDefined();
       expect(entry.scopeKind, `${descriptor.domain} scopeKind`).toBe(descriptor.scopeKind);
-      expect(entry.sourceClocks.includes('metric'), `${descriptor.domain} metric source clock`).toBe(
-        descriptor.preserveMetrics
-      );
+      expect(
+        entry.sourceClocks.includes('metric'),
+        `${descriptor.domain} metric source clock`
+      ).toBe(descriptor.preserveMetrics);
       expect(entry.completeIsScopeLevel, `${descriptor.domain} completeIsScopeLevel`).toBe(true);
       const clusterScoped = entry.scopeKind === 'cluster';
       expect(descriptor.isClusterScoped, `${descriptor.domain} isClusterScoped`).toBe(

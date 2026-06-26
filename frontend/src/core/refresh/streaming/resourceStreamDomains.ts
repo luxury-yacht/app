@@ -5,7 +5,7 @@
  */
 
 import type { AppEvents } from '@/core/events';
-import { refreshDomainContract } from '../domainRegistry';
+import { refreshDomainContract, type RefreshSourceClock } from '../domainRegistry';
 
 export type ResourceDomain = AppEvents['refresh:resource-stream-drift']['domain'];
 
@@ -17,6 +17,8 @@ export type ResourceStreamDomainDescriptor = {
   isClusterScoped: boolean;
   preserveMetrics: boolean;
 };
+
+export type ResourceStreamSourceClock = RefreshSourceClock;
 
 const normalizeNamespaceToken = (value: string): string => {
   const trimmed = value.trim();
@@ -196,8 +198,22 @@ const resourceStreamDescriptorByDomain = new Map<ResourceDomain, ResourceStreamD
   resourceStreamDomainDescriptors.map((descriptor) => [descriptor.domain, descriptor])
 );
 
+const sourceClocksByDomain = new Map<ResourceDomain, readonly ResourceStreamSourceClock[]>(
+  Object.entries(refreshDomainContract.resourceStream.domains)
+    .filter(([domain]) => resourceStreamDescriptorByDomain.has(domain as ResourceDomain))
+    .map(([domain, entry]) => [domain as ResourceDomain, entry.sourceClocks])
+);
+
 export const isSupportedDomain = (value: string | undefined): value is ResourceDomain =>
   Boolean(value && resourceStreamDescriptorByDomain.has(value as ResourceDomain));
+
+export const isResourceStreamSourceClock = (value: unknown): value is ResourceStreamSourceClock =>
+  value === 'object' || value === 'metric';
+
+export const domainSupportsSourceClock = (
+  domain: ResourceDomain,
+  source: ResourceStreamSourceClock
+): boolean => sourceClocksByDomain.get(domain)?.includes(source) ?? false;
 
 export const getResourceStreamDomainDescriptor = (
   domain: ResourceDomain

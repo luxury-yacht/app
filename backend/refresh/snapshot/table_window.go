@@ -2,8 +2,6 @@ package snapshot
 
 import (
 	"fmt"
-	"hash/fnv"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 )
@@ -14,16 +12,6 @@ func truncateSnapshotWindow[T any](items []T, limit int) ([]T, int) {
 		return items[:limit], total
 	}
 	return items, total
-}
-
-func snapshotVersionWithDynamicRevision(version uint64, dynamicRevision string) uint64 {
-	dynamicRevision = strings.TrimSpace(dynamicRevision)
-	if dynamicRevision == "" {
-		return version
-	}
-	hasher := fnv.New64a()
-	_, _ = fmt.Fprintf(hasher, "resource:%d\ndynamic:%s", version, dynamicRevision)
-	return hasher.Sum64()
 }
 
 func snapshotWindowStats(itemCount, totalItems int, noun string) refresh.SnapshotStats {

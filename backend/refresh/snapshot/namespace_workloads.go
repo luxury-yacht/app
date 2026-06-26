@@ -235,7 +235,6 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
-	snapshot.Version = snapshotVersionWithDynamicRevision(snapshot.Version, dynamicRevision)
 	return snapshot, nil
 }
 

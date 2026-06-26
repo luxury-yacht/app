@@ -314,6 +314,95 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
+  test('A1 changed signal envelope bumps streamRevision without legacy message type', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('pods', storeScope);
+
+    setScopedDomainState('pods', storeScope, () => ({
+      status: 'ready',
+      data: { rows: [], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        scope: 'namespace:default',
+        source: 'metric',
+        version: 'metrics:2',
+        signal: 'changed',
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    expect(getScopedDomainState('pods', storeScope).streamRevision).toBe(1);
+  });
+
+  test('A1 reset signal envelope forces a resync without legacy message type', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', storeScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        domain: 'namespace-config',
+        scope: 'namespace:default',
+        source: 'object',
+        version: 'object:11',
+        signal: 'reset',
+      })
+    );
+    await flushPromises();
+
+    expect(getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0).toBe(1);
+  });
+
+  test('A1 signal envelope does not fall back across cluster ids', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('pods', storeScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-b',
+        domain: 'pods',
+        scope: 'namespace:default',
+        source: 'object',
+        version: 'object:3',
+        signal: 'changed',
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    expect(getScopedDomainState('pods', storeScope).streamRevision ?? 0).toBe(0);
+  });
+
   // The typed query refetches only when the live-data identity
   // (version/checksum/streamRevision) changes. Streamed row updates do not carry
   // a new backend snapshot version, so they must bump streamRevision or the

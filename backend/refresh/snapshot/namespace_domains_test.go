@@ -1421,7 +1421,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	require.Equal(t, namespaceWorkloadsDomainName, snapshot.Domain)
-	require.Equal(t, snapshotVersionWithDynamicRevision(10, fmt.Sprint(collectedAt.UnixNano())), snapshot.Version)
+	require.Equal(t, uint64(10), snapshot.Version)
 
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
@@ -1442,6 +1442,71 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	require.False(t, deploySummary.PortForwardAvailable)
 	require.NotEmpty(t, deploySummary.Age)
 
+}
+
+func TestNamespaceWorkloadsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
+	now := time.Unix(1000, 0)
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "web",
+			Namespace:         "default",
+			ResourceVersion:   "10",
+			CreationTimestamp: metav1.NewTime(now.Add(-time.Hour)),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	replicaSetOwner := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "web-abc123",
+			Namespace:         "default",
+			ResourceVersion:   "20",
+			CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "ReplicaSet",
+				Name:       "web-abc123",
+				Controller: &replicaSetOwner,
+			}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	provider := &workloadMetricsProvider{
+		pods: map[string]metrics.PodUsage{
+			"default/web-abc123": {CPUUsageMilli: 80, MemoryUsageBytes: 150 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &NamespaceWorkloadsBuilder{
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pod),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+		metrics:             provider,
+	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
+
+	first, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	require.Equal(t, uint64(10), first.Version)
+	require.Equal(t, "80m", first.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsage)
+
+	provider.pods = map[string]metrics.PodUsage{
+		"default/web-abc123": {CPUUsageMilli: 120, MemoryUsageBytes: 175 * 1024 * 1024},
+	}
+	provider.metadata = metrics.Metadata{CollectedAt: now.Add(5 * time.Second)}
+
+	second, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+	require.Equal(t, first.Version, second.Version)
+	require.Equal(t, "120m", second.Payload.(NamespaceWorkloadsSnapshot).Rows[0].CPUUsage)
 }
 
 func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {

@@ -27,6 +27,14 @@ const (
 	SourceMetric = streammux.SourceMetric
 )
 
+type Signal = streammux.Signal
+
+const (
+	SignalChanged = streammux.SignalChanged
+	SignalReset   = streammux.SignalReset
+	SignalError   = streammux.SignalError
+)
+
 // DropReason captures why a subscription was terminated.
 type DropReason = streammux.DropReason
 

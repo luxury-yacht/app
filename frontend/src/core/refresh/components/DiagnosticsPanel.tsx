@@ -846,7 +846,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
       const tooltipParts = [`State: ${refresherState.status}`];
       if (metricsOnly) {
-        tooltipParts.push('Metrics-only polling');
+        tooltipParts.push('Metrics interval polling');
       }
       return { label: 'enabled', tooltip: tooltipParts.join(' • '), enabled: true };
     };
@@ -866,8 +866,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
       if (metricsOnly && streamHealthy) {
         return {
-          label: 'metrics-only',
-          tooltip: 'Stream healthy; polling metrics snapshots only',
+          label: 'metrics interval',
+          tooltip: 'Stream healthy; metric interval triggers snapshot refetches',
         };
       }
       if (streamMode && streamActive && streamHealthy) {

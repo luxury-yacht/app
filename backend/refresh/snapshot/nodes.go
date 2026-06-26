@@ -398,7 +398,7 @@ func finishNodeSnapshot(
 	return &refresh.Snapshot{
 		Domain:  "nodes",
 		Scope:   snapshotScope,
-		Version: snapshotVersionWithDynamicRevision(version, dynamicRevision),
+		Version: version,
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,

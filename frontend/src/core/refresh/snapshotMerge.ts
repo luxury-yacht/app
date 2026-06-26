@@ -10,13 +10,11 @@ import { getScopedDomainState } from './store';
 import {
   buildCatalogResourceRowKey,
   buildClusterNameRowKey,
-  buildKindedNamespacedRowKey,
 } from '@shared/utils/resourceRowIdentity';
 import type {
   CatalogSnapshotPayload,
   DomainPayloadMap,
   NamespaceSnapshotPayload,
-  NamespaceWorkloadSummary,
   NodeMaintenanceSnapshotPayload,
   RefreshDomain,
 } from './types';
@@ -75,55 +73,6 @@ const mergeListByKey = <T extends object>(
     return item;
   });
   return reused ? merged : incoming;
-};
-
-export const mergeWorkloadMetricRows = (
-  previous: NamespaceWorkloadSummary[],
-  incoming: NamespaceWorkloadSummary[],
-  fallbackClusterId: string
-): NamespaceWorkloadSummary[] => {
-  if (previous.length === 0 || incoming.length === 0) {
-    return previous;
-  }
-
-  const incomingByKey = new Map(
-    incoming.map((workload) => [
-      buildKindedNamespacedRowKey(
-        workload.clusterId ?? fallbackClusterId,
-        workload.namespace,
-        workload.kind,
-        workload.name
-      ),
-      workload,
-    ])
-  );
-
-  let changed = false;
-  const next = previous.map((existing) => {
-    const key = buildKindedNamespacedRowKey(
-      existing.clusterId ?? fallbackClusterId,
-      existing.namespace,
-      existing.kind,
-      existing.name
-    );
-    const candidate = incomingByKey.get(key);
-    if (!candidate) {
-      return existing;
-    }
-
-    if (existing.cpuUsage === candidate.cpuUsage && existing.memUsage === candidate.memUsage) {
-      return existing;
-    }
-
-    changed = true;
-    return {
-      ...existing,
-      cpuUsage: candidate.cpuUsage,
-      memUsage: candidate.memUsage,
-    };
-  });
-
-  return changed ? next : previous;
 };
 
 // Incrementally reuse row objects for polling-only list payloads.

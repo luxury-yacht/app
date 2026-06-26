@@ -5,15 +5,15 @@ import {
   type ResourceDomain,
 } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
-
-type StreamMessageType = ResourceStreamClientMessage['type'];
-
 export type ResourceStreamUpdateMessage = {
-  type: StreamMessageType;
+  type?: string;
   clusterId?: string;
   clusterName?: string;
   domain: ResourceDomain;
   scope: string;
+  source?: string;
+  signal?: string;
+  version?: string;
   resourceVersion?: string;
   sequence?: string;
   uid?: string;
