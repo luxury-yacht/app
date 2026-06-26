@@ -297,6 +297,7 @@ describe('BrowseView', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
 
   describe('Cluster scope (namespace=undefined)', () => {
@@ -375,6 +376,55 @@ describe('BrowseView', () => {
       });
 
       expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+    });
+
+    it('renders Age from creationTimestamp and updates without catalog row replacement', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
+      const node = catalogItem({
+        kind: 'Node',
+        resource: 'nodes',
+        namespace: undefined,
+        name: 'query-node',
+        uid: 'node-1',
+        scope: 'Cluster',
+        creationTimestamp: '2026-01-01T00:00:00Z',
+      });
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.data = catalogPayload([node]);
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      const row = gridTablePropsRef.current.data[0];
+      const ageColumn = gridTablePropsRef.current.columns.find(
+        (column: any) => column.key === 'age'
+      );
+      const ageContainer = document.createElement('div');
+      document.body.appendChild(ageContainer);
+      const ageRoot = ReactDOM.createRoot(ageContainer);
+
+      try {
+        await act(async () => {
+          ageRoot.render(ageColumn.render(row));
+          await Promise.resolve();
+        });
+
+        expect(ageContainer.textContent).toBe('10s');
+
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+          await Promise.resolve();
+        });
+
+        expect(ageContainer.textContent).toBe('11s');
+      } finally {
+        act(() => ageRoot.unmount());
+        ageContainer.remove();
+      }
     });
 
     it('publishes header sort changes to cluster browse persistence when no sort is hydrated', async () => {

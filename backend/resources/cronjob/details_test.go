@@ -128,8 +128,10 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 	cron.UID = types.UID("cron-nightly")
 
 	// Create two jobs owned by the cronjob: one completed, one running.
+	completedCreated := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	completedJob := testsupport.JobFixture("default", "nightly-001")
 	completedJob.UID = types.UID("job-001")
+	completedJob.CreationTimestamp = metav1.NewTime(completedCreated)
 	completedJob.OwnerReferences = []metav1.OwnerReference{{
 		APIVersion: "batch/v1",
 		Kind:       "CronJob",
@@ -141,8 +143,10 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 	completedJob.Status.StartTime = &metav1.Time{Time: timeNow().Add(-10 * time.Minute)}
 	completedJob.Status.CompletionTime = &metav1.Time{Time: timeNow().Add(-8 * time.Minute)}
 
+	runningCreated := time.Date(2026, 1, 2, 3, 5, 5, 0, time.UTC)
 	runningJob := testsupport.JobFixture("default", "nightly-002")
 	runningJob.UID = types.UID("job-002")
+	runningJob.CreationTimestamp = metav1.NewTime(runningCreated)
 	runningJob.OwnerReferences = []metav1.OwnerReference{{
 		APIVersion: "batch/v1",
 		Kind:       "CronJob",
@@ -168,20 +172,30 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 	require.Len(t, detail.Jobs, 2, "should include exactly the two owned jobs")
 
 	// Find the completed and running jobs by name.
-	jobsByName := make(map[string]struct{ Status, Completions string })
+	jobsByName := make(map[string]struct {
+		Status       string
+		Completions  string
+		AgeTimestamp int64
+	})
 	for _, j := range detail.Jobs {
 		require.Equal(t, "Job", j.Kind)
 		require.Equal(t, "default", j.Namespace)
-		jobsByName[j.Name] = struct{ Status, Completions string }{j.Status, j.Completions}
+		jobsByName[j.Name] = struct {
+			Status       string
+			Completions  string
+			AgeTimestamp int64
+		}{j.Status, j.Completions, j.AgeTimestamp}
 	}
 
 	require.Contains(t, jobsByName, "nightly-001")
 	require.Equal(t, "Completed", jobsByName["nightly-001"].Status)
 	require.Equal(t, "1/1", jobsByName["nightly-001"].Completions)
+	require.Equal(t, completedCreated.UnixMilli(), jobsByName["nightly-001"].AgeTimestamp)
 
 	require.Contains(t, jobsByName, "nightly-002")
 	require.Equal(t, "Running", jobsByName["nightly-002"].Status)
 	require.Equal(t, "0/1", jobsByName["nightly-002"].Completions)
+	require.Equal(t, runningCreated.UnixMilli(), jobsByName["nightly-002"].AgeTimestamp)
 }
 
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {

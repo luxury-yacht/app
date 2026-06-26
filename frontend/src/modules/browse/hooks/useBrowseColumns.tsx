@@ -10,7 +10,6 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { CatalogItem } from '@/core/refresh/types';
 
@@ -46,7 +45,6 @@ export const toTableRows = (
 ): BrowseTableRow[] => {
   return items.map((item) => {
     const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
-    const age = created ? formatAge(created) : '—';
     const kindLabel = getDisplayKind(item.kind, useShortResourceNames);
     const namespaceDisplay = item.namespace ?? '—';
     return {
@@ -60,7 +58,7 @@ export const toTableRows = (
       resource: item.resource,
       group: item.group,
       version: item.version,
-      age,
+      age: '—',
       ageTimestamp: created ? created.getTime() : 0,
       item,
     };
@@ -91,14 +89,7 @@ export function useBrowseColumns({
   const { navigateToView } = useNavigateToView();
 
   return useMemo<GridColumnDefinition<BrowseTableRow>[]>(() => {
-    // Age column with custom render for tooltip
     const ageColumn = cf.createAgeColumn<BrowseTableRow>('age', 'Age', (row) => row.age);
-    ageColumn.render = (row) =>
-      row.ageTimestamp ? (
-        <span title={formatFullDate(new Date(row.ageTimestamp))}>{row.age}</span>
-      ) : (
-        '—'
-      );
 
     const baseColumns: GridColumnDefinition<BrowseTableRow>[] = [
       cf.createKindColumn<BrowseTableRow>({

@@ -1,6 +1,7 @@
 # Live Object Age Plan
 
-Status: Draft, ready for implementation.
+Status: Implemented with focused validation. `mage qc:prerelease` intentionally
+not run during this performance/fix loop.
 
 ## Problem
 
@@ -136,45 +137,47 @@ changing layout.
 `frontend/src/modules/namespace/contexts/NamespaceContext.tsx:191-207`.
 
 Implementation target: keep the absolute timestamp in the mapped model or render
-age through the shared live age renderer at the consuming surface.
+age through the shared live age renderer at the consuming surface. The current
+sidebar consumer renders namespace name/status/details, not `age`, so no visible
+namespace-summary age renderer was added in this slice.
 
 ## Implementation Slices
 
-1. Shared clock and renderer.
+1. ✅ Shared clock and renderer.
    - Add a small shared age clock hook or external store.
    - Use a minute-oriented tick for ages older than one minute, with faster
      ticks only while any rendered value is in the seconds range.
    - Expose a component/helper that accepts `timestamp`, optional `fallback`,
      and optional full-date title formatting.
 
-2. Shared table column.
+2. ✅ Shared table column.
    - Update `createAgeColumn` to render from `ageTimestamp` when present.
    - Preserve existing `sortValue` behavior for numeric timestamps.
    - Preserve fallback `age` text for rows that have no timestamp.
 
-3. Browse and catalog-backed custom rows.
+3. ✅ Browse and catalog-backed custom rows.
    - Stop baking displayed age into row data when `creationTimestamp` is
      available.
    - Keep `ageTimestamp` as the display/sort source.
 
-4. Object panel header and embedded tables.
+4. ✅ Object panel header and embedded tables.
    - Switch `ResourceHeader` to the shared renderer.
    - Let Pods use the shared timestamp path.
    - Add a timestamp field to `JobSimpleInfo`, populate it in Job summary
      builders, regenerate Wails models, and render Jobs age from the timestamp.
 
-5. Events.
+5. ✅ Events.
    - Route event table age renderers through the shared live renderer.
    - Keep existing event sort values based on `ageTimestamp`.
 
-6. Object map.
+6. ✅ Object map.
    - Pass the age clock value into `ObjectMapG6Renderer` data conversion.
    - Keep layout/model inputs stable so only card age text changes.
    - Verify `cardAgeText` updates flow through the existing apply queue.
 
-7. Namespace summary context.
-   - Replace preformatted namespace `age` where possible with an absolute
-     timestamp plus live rendering at the display edge.
+7. ✅ Namespace summary context.
+   - Verified the current sidebar display edge does not render namespace `age`;
+     visible namespace object ages flow through Browse/resource table paths.
 
 ## Tests
 

@@ -11,6 +11,7 @@ import type { Graph, GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock';
 import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { toObjectMapG6Data } from './objectMapG6Data';
@@ -351,6 +352,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         : 'routed',
     [layout.edges.length, layout.nodes.length]
   );
+  const newestCreationTimestamp = useMemo(() => {
+    let newest: number | null = null;
+    for (const node of layout.nodes) {
+      const timestamp = parseAgeTimestampMillis(node.creationTimestamp);
+      if (timestamp !== null && (newest === null || timestamp > newest)) {
+        newest = timestamp;
+      }
+    }
+    return newest;
+  }, [layout.nodes]);
+  const ageNow = useAgeClock(newestCreationTimestamp);
   const dataResult = useMemo<{ data: GraphData; durationMs: number }>(() => {
     const startedAt = objectMapRendererTimingNow();
     if (!palette) {
@@ -375,10 +387,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       },
       useShortResourceNames,
       cardDetailLevel,
-      edgeDetailLevel
+      edgeDetailLevel,
+      ageNow
     );
     return { data: nextData, durationMs: objectMapRendererTimingNow() - startedAt };
   }, [
+    ageNow,
     cardDetailLevel,
     edgeDetailLevel,
     layout,

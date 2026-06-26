@@ -728,6 +728,7 @@ type JobSimpleInfo struct {
 	Duration        string       `json:"duration,omitempty"`
 	DurationSeconds int64        `json:"durationSeconds,omitempty"`
 	Age             string       `json:"age"`
+	AgeTimestamp    int64        `json:"ageTimestamp,omitempty"`
 }
 type JobTemplateDetails struct {
 	Completions             *int32                   `json:"completions,omitempty"`

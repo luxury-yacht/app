@@ -7,7 +7,6 @@
  */
 
 import './NsViewEvents.css';
-import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -174,9 +173,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
         cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
-        cf.createAgeColumn<EventData>('age', 'Age', (event) =>
-          formatAge(event.ageTimestamp ?? event.age ?? null)
-        )
+        cf.createAgeColumn<EventData>('age', 'Age', (event) => event.age)
       );
 
       const sizing: cf.ColumnSizingMap = {

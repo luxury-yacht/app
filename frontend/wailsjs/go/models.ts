@@ -5010,6 +5010,7 @@ export namespace types {
 	    duration?: string;
 	    durationSeconds?: number;
 	    age: string;
+	    ageTimestamp?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new JobSimpleInfo(source);
@@ -5033,6 +5034,7 @@ export namespace types {
 	        this.duration = source["duration"];
 	        this.durationSeconds = source["durationSeconds"];
 	        this.age = source["age"];
+	        this.ageTimestamp = source["ageTimestamp"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

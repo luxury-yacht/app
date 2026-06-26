@@ -3,13 +3,17 @@
  * @param timestamp - The timestamp to format (Date, string, or number)
  * @returns A formatted age string like "5m", "2h", "3d"
  */
-export function formatAge(timestamp: Date | string | number | null | undefined): string {
+export function formatAge(
+  timestamp: Date | string | number | null | undefined,
+  nowInput: Date | string | number = Date.now()
+): string {
   if (!timestamp) return '-';
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   if (isNaN(date.getTime())) return '-';
 
-  const now = new Date();
+  const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
+  if (isNaN(now.getTime())) return '-';
   const diffMs = now.getTime() - date.getTime();
 
   if (diffMs < 0) return 'future';

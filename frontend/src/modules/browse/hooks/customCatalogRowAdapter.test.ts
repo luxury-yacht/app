@@ -36,7 +36,7 @@ describe('customCatalogRowAdapter', () => {
     });
   });
 
-  it('formats fallback catalog timestamps as Age values', () => {
+  it('preserves fallback catalog creation time for live Age rendering', () => {
     const fallback = catalogItemToFallbackCustomRow({
       clusterId: 'cluster-a',
       kind: 'DBInstance',
@@ -50,8 +50,7 @@ describe('customCatalogRowAdapter', () => {
       scope: 'Cluster',
     });
 
-    expect(fallback.age).toBe('3h');
-    expect(fallback.age).not.toContain('T');
+    expect(fallback.age).toBeUndefined();
     expect(fallback.ageTimestamp).toEqual(expect.any(Number));
   });
 });

@@ -15,7 +15,8 @@ import {
   createTextColumn,
 } from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@hooks/useTableSort';
-import { formatAge, formatFullDate } from '@utils/ageFormatter';
+import { formatAge } from '@utils/ageFormatter';
+import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import { errorHandler } from '@/utils/errorHandler';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
@@ -420,11 +421,19 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         const column = createTextColumn<EventDisplay>(
           'age',
           'Age',
-          (item) => formatAge(item.ageTimestamp),
+          (item) => formatLiveAgeText(item.ageTimestamp, Date.now(), item.age),
           {
             getClassName: () => 'age-cell',
-            getTitle: (item) => formatFullDate(item.ageTimestamp),
           }
+        );
+        column.render = (item) => (
+          <LiveAgeText
+            timestamp={item.ageTimestamp}
+            fallback={item.age}
+            fullDateTitle
+            className="age-cell"
+            data-gridtable-export-text={formatLiveAgeText(item.ageTimestamp, Date.now(), item.age)}
+          />
         );
         column.sortValue = (item) => item.ageTimestamp.getTime();
         return column;

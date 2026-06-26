@@ -125,6 +125,7 @@ describe('JobsTab', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
   });
 
   it('passes panel-scoped clusterId to useGridTablePersistence, not the global sidebar selection', () => {
@@ -241,6 +242,38 @@ describe('JobsTab', () => {
       .map((column: any) => column.key)
       .sort((left: string, right: string) => left.localeCompare(right));
     expect(sortableKeys).toEqual(['age', 'completions', 'duration', 'name', 'namespace', 'status']);
+  });
+
+  it('renders Job age from the live age timestamp', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
+    const createdAt = Date.parse('2026-01-01T00:00:00Z');
+    const job = makeJob({ age: 'stale', ageTimestamp: createdAt });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const ageColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'age');
+    const cellContainer = document.createElement('div');
+    document.body.appendChild(cellContainer);
+    const cellRoot = ReactDOM.createRoot(cellContainer);
+    try {
+      act(() => {
+        cellRoot.render(ageColumn.render(gridTablePropsRef.current.data[0]));
+      });
+      expect(cellContainer.textContent).toBe('10s');
+
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(cellContainer.textContent).toBe('11s');
+    } finally {
+      act(() => cellRoot.unmount());
+      cellContainer.remove();
+    }
   });
 
   it('opens the Map from the job context menu', () => {

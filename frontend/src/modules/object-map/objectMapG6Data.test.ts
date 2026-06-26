@@ -276,6 +276,38 @@ describe('objectMapG6Data', () => {
     );
   });
 
+  it('updates card age text from an explicit age clock without moving layout', () => {
+    const first = toObjectMapG6Data(
+      layout,
+      selectionState('deploy'),
+      () => null,
+      palette,
+      undefined,
+      false,
+      'full',
+      'routed',
+      Date.parse('2024-01-01T00:00:10Z')
+    );
+    const second = toObjectMapG6Data(
+      layout,
+      selectionState('deploy'),
+      () => null,
+      palette,
+      undefined,
+      false,
+      'full',
+      'routed',
+      Date.parse('2024-01-01T00:00:11Z')
+    );
+
+    const firstDeploy = first.nodes?.find((entry) => entry.id === 'deploy');
+    const secondDeploy = second.nodes?.find((entry) => entry.id === 'deploy');
+    expect(firstDeploy?.style?.cardAgeText).toBe('10s');
+    expect(secondDeploy?.style?.cardAgeText).toBe('11s');
+    expect(secondDeploy?.style?.x).toBe(firstDeploy?.style?.x);
+    expect(secondDeploy?.style?.y).toBe(firstDeploy?.style?.y);
+  });
+
   it('does not style raw status state when backend presentation is missing', () => {
     const statusCases = [
       { state: 'True', fill: '#94a3b8' },

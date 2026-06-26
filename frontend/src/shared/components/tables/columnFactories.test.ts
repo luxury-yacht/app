@@ -6,17 +6,21 @@
  */
 
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
+  createAgeColumn,
   createKindColumn,
   createResourceBarColumn,
   createTextColumn,
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -31,9 +35,58 @@ interface RowSample {
 }
 
 describe('columnFactories', () => {
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe('createAgeColumn', () => {
+    it('renders from ageTimestamp and repaints while the row object is unchanged', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = ReactDOM.createRoot(container);
+      const createdAt = Date.parse('2026-01-01T00:00:00Z');
+      const row = { id: 'row-1', age: 'stale', ageTimestamp: createdAt };
+      const column = createAgeColumn<typeof row>();
+
+      try {
+        await act(async () => {
+          root.render(React.createElement(React.Fragment, null, column.render(row)));
+          await Promise.resolve();
+        });
+
+        expect(container.textContent).toBe('10s');
+        expect(getTextContent(column.render(row))).toBe('10s');
+        expect(column.sortValue?.(row)).toBe(-createdAt);
+
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+          await Promise.resolve();
+        });
+
+        expect(container.textContent).toBe('11s');
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+      }
+    });
+
+    it('falls back to the existing age string when no timestamp is available', () => {
+      const column = createAgeColumn<{ age?: string; ageTimestamp?: number }>();
+
+      expect(column.render({ age: '5m' })).toBe('5m');
+      expect(column.sortValue?.({ age: '5m' })).toBe('5m');
+    });
   });
 
   describe('createTextColumn', () => {

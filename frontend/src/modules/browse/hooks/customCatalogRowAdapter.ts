@@ -1,6 +1,5 @@
 import type { CatalogItem } from '@/core/refresh/types';
 import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
-import { formatAge } from '@/utils/ageFormatter';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -132,7 +131,6 @@ export const catalogItemToFallbackCustomRow = (
     crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
-    age: ageTimestamp ? formatAge(created) : undefined,
     ageTimestamp,
   };
 };

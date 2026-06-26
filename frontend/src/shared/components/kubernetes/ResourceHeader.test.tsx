@@ -58,6 +58,7 @@ describe('ResourceHeader', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
     panel.current = {
       objectData: { clusterId: 'c1' },
       creationTimestamp: undefined,
@@ -80,6 +81,25 @@ describe('ResourceHeader', () => {
     // Formatted with the same formatter the Browse table uses, so the two
     // surfaces show byte-identical Age values.
     expect(valueForLabel(container, 'Age')).toBe(formatAge(created));
+  });
+
+  it('updates Age from the object creationTimestamp without receiving new panel data', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
+    panel.current = {
+      objectData: { clusterId: 'c1' },
+      creationTimestamp: '2026-01-01T00:00:00Z',
+    };
+    await render();
+
+    expect(valueForLabel(container, 'Age')).toBe('10s');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(valueForLabel(container, 'Age')).toBe('11s');
   });
 
   it('omits the Age row when no creationTimestamp is available', async () => {

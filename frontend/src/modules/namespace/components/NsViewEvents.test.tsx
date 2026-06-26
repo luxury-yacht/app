@@ -179,6 +179,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 
 vi.mock('@/utils/ageFormatter', () => ({
   formatAge: (timestamp: number) => formatAgeMock(timestamp),
+  formatFullDate: (timestamp: number) => `full:${timestamp}`,
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
@@ -409,21 +410,20 @@ describe('NsViewEvents', () => {
     );
   });
 
-  it('formats age using timestamp when available and falls back to provided age', async () => {
+  it('renders age from timestamp when available and falls back to provided age', async () => {
     const eventWithTimestamp = baseEvent({ ageTimestamp: 99, age: undefined });
     const props = await renderEventsView();
     const ageColumn = props.columns.find((column: any) => column.key === 'age');
     const cell = ageColumn.render(eventWithTimestamp);
-    expect(formatAgeMock).toHaveBeenCalledWith(99);
-    expect(cell).toContain('99s');
+    expect(cell.props.timestamp).toBe(99);
+    expect(cell.props.fallback).toBe('-');
 
     formatAgeMock.mockClear();
     const eventWithAge = baseEvent({ ageTimestamp: undefined, age: '5m' });
     const fallbackProps = await renderEventsView();
     const fallbackAgeColumn = fallbackProps.columns.find((column: any) => column.key === 'age');
-    fallbackAgeColumn.render(eventWithAge);
-    // Age is passed through formatAge for consistency with ClusterViewEvents
-    expect(formatAgeMock).toHaveBeenCalledWith('5m');
+    expect(fallbackAgeColumn.render(eventWithAge)).toBe('5m');
+    expect(formatAgeMock).not.toHaveBeenCalled();
   });
 
   it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {

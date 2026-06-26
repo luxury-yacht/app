@@ -98,9 +98,12 @@ const truncate = (text: string, maxChars: number): string => {
 const formatNamespace = (node: PositionedNode): string =>
   node.ref.namespace?.trim() ? node.ref.namespace : 'cluster-scoped';
 
-const formatNodeAge = (creationTimestamp?: string): string => {
+const formatNodeAge = (
+  creationTimestamp: string | undefined,
+  now?: Date | string | number
+): string => {
   if (!creationTimestamp) return '';
-  const age = formatAge(creationTimestamp);
+  const age = now === undefined ? formatAge(creationTimestamp) : formatAge(creationTimestamp, now);
   return age === '-' ? '' : age;
 };
 
@@ -246,7 +249,8 @@ export const toObjectMapG6Data = (
   kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle,
   useShortResourceNames = false,
   cardDetailLevel: ObjectMapG6CardDetailLevel = 'full',
-  edgeDetailLevel: ObjectMapG6EdgeDetailLevel = 'routed'
+  edgeDetailLevel: ObjectMapG6EdgeDetailLevel = 'routed',
+  ageNow?: Date | string | number
 ): GraphData => {
   const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
 
@@ -255,7 +259,7 @@ export const toObjectMapG6Data = (
       const badge = badgeForNode(node.id);
       const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
       const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
-      const ageLabel = formatNodeAge(node.creationTimestamp);
+      const ageLabel = formatNodeAge(node.creationTimestamp, ageNow);
       const statusFill = objectMapStatusFill(node.status, palette);
       const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
       const states = objectMapG6NodeState(node, selectionState);

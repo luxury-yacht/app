@@ -12,6 +12,7 @@ import {
 } from '@shared/components/tables/GridTable';
 import ResourceBar from '@shared/components/ResourceBar';
 import { getUseShortResourceNames } from '@/core/settings/appPreferences';
+import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 
 /**
  * Column factory functions for GridTable
@@ -30,7 +31,19 @@ export const createAgeColumn = <T extends AgeColumnRow>(
 ): GridColumnDefinition<T> => ({
   key,
   header,
-  render: (item) => getValue(item) || '-',
+  render: (item) => {
+    const fallback = getValue(item) || '-';
+    if (typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)) {
+      return (
+        <LiveAgeText
+          timestamp={item.ageTimestamp}
+          fallback={fallback}
+          data-gridtable-export-text={formatLiveAgeText(item.ageTimestamp, Date.now(), fallback)}
+        />
+      );
+    }
+    return fallback;
+  },
   sortable: true,
   sortValue: (item) =>
     typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)

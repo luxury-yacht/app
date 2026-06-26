@@ -286,6 +286,10 @@ func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleIn
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
+	ageTimestamp := int64(0)
+	if !job.CreationTimestamp.IsZero() {
+		ageTimestamp = job.CreationTimestamp.UnixMilli()
+	}
 	info := restypes.JobSimpleInfo{
 		Kind:             "Job",
 		Name:             job.Name,
@@ -297,6 +301,7 @@ func summarizeJobSimple(clusterID string, job *batchv1.Job) restypes.JobSimpleIn
 		Active:           job.Status.Active,
 		StartTime:        job.Status.StartTime,
 		Age:              common.FormatAge(job.CreationTimestamp.Time),
+		AgeTimestamp:     ageTimestamp,
 	}
 
 	// Duration: elapsed time from start to completion, or start to now if still running.

@@ -46,6 +46,7 @@ interface JobRow {
   startTime?: any;
   duration?: string;
   age: string;
+  ageTimestamp?: number;
   clusterId?: string | null;
   clusterName?: string | null;
 }

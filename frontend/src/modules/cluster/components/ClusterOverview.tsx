@@ -42,8 +42,8 @@ import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { formatAge } from '@/utils/ageFormatter';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { LiveAgeText } from '@shared/components/LiveAgeText';
 import {
   objectPanelId,
   useObjectPanelState,
@@ -1161,7 +1161,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                         event.objectNamespace ? ` · ${event.objectNamespace}` : ''
                       }`}
                     >
-                      <span className="recent-events__age">{formatAge(event.timestamp)}</span>
+                      <LiveAgeText timestamp={event.timestamp} className="recent-events__age" />
                       <span className="recent-events__reason">{event.reason}</span>
                       <span className="recent-events__message">{event.message}</span>
                     </div>
