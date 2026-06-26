@@ -322,7 +322,7 @@ export class ResourceStreamManager {
   }
 
   stop(domain: DoorbellDomain, scope: string, reset = false): void {
-    const subscriptions = this.getSubscriptions(domain, scope);
+    const subscriptions = this.releaseSubscriptions(domain, scope);
     if (subscriptions.length === 0) {
       return;
     }
@@ -386,12 +386,12 @@ export class ResourceStreamManager {
       switch (resolvedUpdate.signalEnvelope.signal) {
         case SIGNAL_TYPES.changed:
           this.handleUpdate(subscription, resolvedUpdate);
-          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          this.updateHealthForSubscription(subscription);
           return;
         case SIGNAL_TYPES.reset:
           if (subscription.pendingReset) {
             subscription.pendingReset = false;
-            this.updateHealthForScope(subscription.domain, subscription.reportScope);
+            this.updateHealthForSubscription(subscription);
             return;
           }
           this.bumpSourceVersionOnly(
@@ -401,12 +401,12 @@ export class ResourceStreamManager {
             resolvedUpdate.signalEnvelope.version
           );
           void this.resyncSubscription(subscription, 'reset');
-          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          this.updateHealthForSubscription(subscription);
           return;
         case SIGNAL_TYPES.error:
           this.recordSubscriptionError(subscription, errorMessage || 'stream error');
           void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
-          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          this.updateHealthForSubscription(subscription);
           return;
         default:
           return;
@@ -419,26 +419,26 @@ export class ResourceStreamManager {
       case MESSAGE_TYPES.reset:
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
-          this.updateHealthForScope(subscription.domain, subscription.reportScope);
+          this.updateHealthForSubscription(subscription);
           return;
         }
         void this.resyncSubscription(subscription, 'reset');
-        this.updateHealthForScope(subscription.domain, subscription.reportScope);
+        this.updateHealthForSubscription(subscription);
         return;
       case MESSAGE_TYPES.complete:
         void this.resyncSubscription(subscription, errorMessage || 'complete');
-        this.updateHealthForScope(subscription.domain, subscription.reportScope);
+        this.updateHealthForSubscription(subscription);
         return;
       case MESSAGE_TYPES.error:
         this.recordSubscriptionError(subscription, errorMessage || 'stream error');
         void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
-        this.updateHealthForScope(subscription.domain, subscription.reportScope);
+        this.updateHealthForSubscription(subscription);
         return;
       case MESSAGE_TYPES.added:
       case MESSAGE_TYPES.modified:
       case MESSAGE_TYPES.deleted:
         this.handleUpdate(subscription, resolvedUpdate);
-        this.updateHealthForScope(subscription.domain, subscription.reportScope);
+        this.updateHealthForSubscription(subscription);
         return;
       default:
         return;
@@ -502,14 +502,12 @@ export class ResourceStreamManager {
 
   private ensureSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const subscriptions = this.subscriptions.ensure(domain, scope);
-    subscriptions.forEach((subscription) =>
-      this.updateHealthForScope(subscription.domain, subscription.reportScope)
-    );
+    subscriptions.forEach((subscription) => this.updateHealthForSubscription(subscription));
     return subscriptions;
   }
 
-  private getSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    return this.subscriptions.getForScope(domain, scope);
+  private releaseSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
+    return this.subscriptions.release(domain, scope);
   }
 
   private getConnection(): ResourceStreamConnection {
@@ -542,7 +540,7 @@ export class ResourceStreamManager {
       window.clearTimeout(subscription.updateTimer);
     }
     this.subscriptions.delete(subscription);
-    this.updateHealthForScope(subscription.domain, subscription.reportScope);
+    this.updateHealthForSubscription(subscription);
 
     if (reset) {
       this.clearStreamError(subscription.clusterId);
@@ -601,7 +599,8 @@ export class ResourceStreamManager {
     reportScope: string
   ): ResourceStreamHealthPayload {
     const subscriptions = Array.from(this.subscriptions.values()).filter(
-      (subscription) => subscription.domain === domain && subscription.reportScope === reportScope
+      (subscription) =>
+        subscription.domain === domain && this.reportScopes(subscription).includes(reportScope)
     );
     if (subscriptions.length === 0) {
       return {
@@ -649,13 +648,33 @@ export class ResourceStreamManager {
     this.streamHealth.set(next);
   }
 
+  private reportScopes(subscription: StreamSubscription): string[] {
+    const scopes = Array.from(subscription.reportScopes ?? []);
+    return scopes.length > 0 ? scopes : [subscription.reportScope];
+  }
+
+  private forEachReportScope(
+    subscription: StreamSubscription,
+    callback: (reportScope: string) => void
+  ): void {
+    this.reportScopes(subscription).forEach(callback);
+  }
+
+  private updateHealthForSubscription(subscription: StreamSubscription): void {
+    this.forEachReportScope(subscription, (reportScope) =>
+      this.updateHealthForScope(subscription.domain, reportScope)
+    );
+  }
+
   private updateAllHealth(): void {
     const targets = new Map<string, { domain: DoorbellDomain; scope: string }>();
     this.subscriptions.forEach((subscription) => {
-      const key = `${subscription.domain}::${subscription.reportScope}`;
-      if (!targets.has(key)) {
-        targets.set(key, { domain: subscription.domain, scope: subscription.reportScope });
-      }
+      this.forEachReportScope(subscription, (reportScope) => {
+        const key = `${subscription.domain}::${reportScope}`;
+        if (!targets.has(key)) {
+          targets.set(key, { domain: subscription.domain, scope: reportScope });
+        }
+      });
     });
     targets.forEach(({ domain, scope }) => this.updateHealthForScope(domain, scope));
   }
@@ -765,21 +784,23 @@ export class ResourceStreamManager {
     sourceVersions: Partial<Record<ResourceStreamSourceClock, string>>,
     latest?: string
   ): void {
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
-      ...previous,
-      status: 'ready',
-      sourceVersion: latest ?? previous.sourceVersion,
-      sourceVersions: {
-        ...(previous.sourceVersions ?? {}),
-        ...sourceVersions,
-      },
-      streamRevision: (previous.streamRevision ?? 0) + 1,
-      lastUpdated: now,
-      lastAutoRefresh: now,
-      error: null,
-      isManual: false,
-      scope: subscription.reportScope,
-    }));
+    this.forEachReportScope(subscription, (reportScope) => {
+      setScopedDomainState(subscription.domain, reportScope, (previous) => ({
+        ...previous,
+        status: 'ready',
+        sourceVersion: latest ?? previous.sourceVersion,
+        sourceVersions: {
+          ...(previous.sourceVersions ?? {}),
+          ...sourceVersions,
+        },
+        streamRevision: (previous.streamRevision ?? 0) + 1,
+        lastUpdated: now,
+        lastAutoRefresh: now,
+        error: null,
+        isManual: false,
+        scope: reportScope,
+      }));
+    });
     this.clearStreamError(subscription.clusterId);
   }
 
@@ -846,7 +867,7 @@ export class ResourceStreamManager {
     if (reason !== 'initial') {
       this.markResyncing(subscription);
     }
-    this.updateHealthForScope(subscription.domain, subscription.reportScope);
+    this.updateHealthForSubscription(subscription);
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
       subscription.updateTimer = null;
@@ -860,30 +881,34 @@ export class ResourceStreamManager {
     subscription.pendingReset = false;
     subscription.resyncInFlight = false;
     this.subscribe(subscription);
-    this.updateHealthForScope(subscription.domain, subscription.reportScope);
+    this.updateHealthForSubscription(subscription);
   }
 
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
-      ...previous,
-      status: previous.data ? 'ready' : 'idle',
-      error: null,
-      lastUpdated: previous.lastUpdated ?? now,
-      lastAutoRefresh: now,
-      scope: subscription.reportScope,
-    }));
+    this.forEachReportScope(subscription, (reportScope) => {
+      setScopedDomainState(subscription.domain, reportScope, (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: reportScope,
+      }));
+    });
     this.clearStreamError(subscription.clusterId);
   }
 
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
-    setScopedDomainState(subscription.domain, subscription.reportScope, (previous) => ({
-      ...previous,
-      status: previous.data ? 'updating' : 'initialising',
-      error: message,
-      scope: subscription.reportScope,
-    }));
+    this.forEachReportScope(subscription, (reportScope) => {
+      setScopedDomainState(subscription.domain, reportScope, (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: reportScope,
+      }));
+    });
   }
 
   private clearStreamError(clusterId: string): void {

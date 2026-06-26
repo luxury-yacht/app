@@ -122,6 +122,7 @@ beforeEach(() => {
   resetAllScopedDomainStates('cluster-config');
   resetAllScopedDomainStates('cluster-crds');
   resetAllScopedDomainStates('cluster-custom');
+  resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
 });
 
@@ -141,6 +142,7 @@ afterEach(() => {
   resetAllScopedDomainStates('cluster-config');
   resetAllScopedDomainStates('cluster-crds');
   resetAllScopedDomainStates('cluster-custom');
+  resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
   delete (globalThis as any).WebSocket;
   vi.useRealTimers();
@@ -321,6 +323,49 @@ describe('ResourceStreamManager', () => {
     expect(state.sourceVersion).toBe('object:7');
     expect(state.sourceVersions?.object).toBe('object:7');
     expect(state.data?.rows ?? []).toEqual([]);
+  });
+
+  test('catalog doorbell updates each active catalog query report scope', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const pageScope = buildClusterScope(
+      'cluster-a',
+      'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
+    );
+    const metadataScope = buildClusterScope(
+      'cluster-a',
+      'limit=1&customOnly=true&namespace=team-a'
+    );
+
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('catalog', pageScope);
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('catalog', metadataScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        domain: 'catalog',
+        scope: '',
+        source: 'catalog',
+        version: 'catalog:42',
+        signal: 'changed',
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    expect(getScopedDomainState('catalog', pageScope).sourceVersion).toBe('catalog:42');
+    expect(getScopedDomainState('catalog', pageScope).sourceVersions?.catalog).toBe('catalog:42');
+    expect(getScopedDomainState('catalog', metadataScope).sourceVersion).toBe('catalog:42');
+    expect(getScopedDomainState('catalog', metadataScope).sourceVersions?.catalog).toBe(
+      'catalog:42'
+    );
   });
 
   test('A1 changed signal envelope updates sourceVersion without legacy message type', () => {
