@@ -78,7 +78,7 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	shared.WaitForCacheSync(syncCtx.Done())
-	return &objectMapBuilder{
+	builder := &objectMapBuilder{
 		client:      client,
 		shared:      shared,
 		permissions: allowAllPermissions{},
@@ -88,6 +88,53 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 		// reflector feeding the object map.
 		ingest: newFakeObjectMapIngestSource(t, shared),
 	}
+	// The object catalog is seeded with a Summary for every object the map collects,
+	// mirroring production: the catalog is fed from the SAME ingest/informer source the
+	// object map reads, so every collected record collides (by node id) with a
+	// catalog-seeded record that addCatalog adds first. Wiring it here means the whole
+	// object-map suite exercises that merge path — without it no test reproduced the
+	// production collision that once dropped `presented`/`ingestEdges` for cut kinds. The
+	// closure reads builder.permissions at Build time so a test that denies a resource
+	// (which production keeps out of the catalog too) sees it absent here as well.
+	builder.catalogService = func() *objectcatalog.Service {
+		return objectMapCatalogService(t, shared, builder.permissions)
+	}
+	return builder
+}
+
+// objectMapCatalogService builds an object-catalog Service seeded with a Summary for
+// every object the object map collects from the started factory, skipping resources the
+// permission checker denies. It mirrors production, where the catalog is fed from the
+// same permission-gated source the object map reads, so each Summary collides by node id
+// with the record the map collects for that object and the build exercises the
+// catalog-merge path. ClusterID and CreationTimestamp are left empty on purpose:
+// addRecord stamps the cluster id from the build meta (so the id collides whatever
+// cluster the test uses), and the merge keeps the collected record's creation timestamp.
+func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactory, permissions objectMapPermissionChecker) *objectcatalog.Service {
+	t.Helper()
+	var summaries []objectcatalog.Summary
+	for _, collector := range objectMapCollectors {
+		if permissions != nil && !permissions.CanListWatch(collector.Identity.Group, collector.Identity.Resource) {
+			continue
+		}
+		scope := objectcatalog.ScopeCluster
+		if collector.Identity.Namespaced {
+			scope = objectcatalog.ScopeNamespace
+		}
+		for _, obj := range fakeIngestCollectorItems(t, collector, shared, collector.Identity.GVR()) {
+			summaries = append(summaries, objectcatalog.Summary{
+				Kind:      collector.Identity.Kind,
+				Group:     collector.Identity.Group,
+				Version:   collector.Identity.Version,
+				Resource:  collector.Identity.Resource,
+				Namespace: obj.GetNamespace(),
+				Name:      obj.GetName(),
+				UID:       string(obj.GetUID()),
+				Scope:     scope,
+			})
+		}
+	}
+	return seedCatalogService(t, summaries)
 }
 
 // fakeObjectMapIngestSource projects the ingest-owned kinds' object-map nodes from
@@ -374,57 +421,6 @@ func TestObjectMapBuildsNamespaceGraph(t *testing.T) {
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
 	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
 	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
-}
-
-// TestObjectMapNamespaceGraphPresentsCutKindsWhenCatalogSeeded reproduces the
-// production wiring the other object-map tests omit: the object catalog is populated.
-// Production feeds the catalog from the SAME ingest path that feeds the object map, so
-// every ingest-owned (cut) record collides by UID with a catalog-seeded record that
-// addCatalog adds FIRST. When the ingest record merges into the catalog record, the
-// merge must preserve the ingest record's `presented` flag (so the namespace filter
-// keeps it) and its pre-resolved `ingestEdges` (so its relationships survive). Without
-// that, every cut kind drops out of the namespace map — only ReplicaSet (still on the
-// shared informer) and HPA (a live LIST) remain. Regression test for that drop.
-func TestObjectMapNamespaceGraphPresentsCutKindsWhenCatalogSeeded(t *testing.T) {
-	objects := objectMapFixtureObjects()
-	client := fake.NewSimpleClientset(objects...)
-	builder := newObjectMapTestBuilder(t, client)
-	builder.catalogService = func() *objectcatalog.Service {
-		return seedCatalogService(t, objectMapFixtureCatalogSummaries())
-	}
-	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
-
-	snap, err := builder.Build(ctx, "cluster-a|namespace:default?maxNodes=100")
-	if err != nil {
-		t.Fatalf("Build returned error: %v", err)
-	}
-	payload := snap.Payload.(ObjectMapSnapshotPayload)
-
-	// Cut kinds, read through the ingest path, must still be presented as namespace
-	// nodes even though the catalog seeded a (obj-less, edge-less) record for each first.
-	assertNode(t, payload, "Deployment", "web")
-	assertNode(t, payload, "Pod", "web-pod")
-	assertNode(t, payload, "ConfigMap", "app-config")
-	assertNode(t, payload, "Service", "web")
-	// Node is cluster-scoped: it appears only if the cut Pod's pre-resolved "schedules"
-	// ingestEdge survives the catalog merge and reverse-expands the graph to it.
-	assertNode(t, payload, "Node", "node-1")
-	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
-}
-
-// objectMapFixtureCatalogSummaries returns object-catalog Summaries for a
-// representative spread of the cut-kind objects in objectMapFixtureObjects, matching
-// their UIDs and identities so each one collides (by node ID) with the ingest record
-// the object map collects for the same object — the collision the production catalog
-// always produces but the bare test builder never did.
-func objectMapFixtureCatalogSummaries() []objectcatalog.Summary {
-	return []objectcatalog.Summary{
-		{ClusterID: "cluster-a", Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "default", Name: "web", UID: "deploy-uid", Scope: objectcatalog.ScopeNamespace},
-		{ClusterID: "cluster-a", Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "default", Name: "web-pod", UID: "pod-uid", Scope: objectcatalog.ScopeNamespace},
-		{ClusterID: "cluster-a", Kind: "ConfigMap", Group: "", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "app-config", UID: "cm-uid", Scope: objectcatalog.ScopeNamespace},
-		{ClusterID: "cluster-a", Kind: "Service", Group: "", Version: "v1", Resource: "services", Namespace: "default", Name: "web", UID: "svc-uid", Scope: objectcatalog.ScopeNamespace},
-		{ClusterID: "cluster-a", Kind: "Node", Group: "", Version: "v1", Resource: "nodes", Namespace: "", Name: "node-1", UID: "node-uid", Scope: objectcatalog.ScopeCluster},
-	}
 }
 
 func TestObjectMapNamespaceGraphDoesNotReverseExpandFromStorageClass(t *testing.T) {
