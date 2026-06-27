@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -373,6 +374,57 @@ func TestObjectMapBuildsNamespaceGraph(t *testing.T) {
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
 	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
 	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
+}
+
+// TestObjectMapNamespaceGraphPresentsCutKindsWhenCatalogSeeded reproduces the
+// production wiring the other object-map tests omit: the object catalog is populated.
+// Production feeds the catalog from the SAME ingest path that feeds the object map, so
+// every ingest-owned (cut) record collides by UID with a catalog-seeded record that
+// addCatalog adds FIRST. When the ingest record merges into the catalog record, the
+// merge must preserve the ingest record's `presented` flag (so the namespace filter
+// keeps it) and its pre-resolved `ingestEdges` (so its relationships survive). Without
+// that, every cut kind drops out of the namespace map — only ReplicaSet (still on the
+// shared informer) and HPA (a live LIST) remain. Regression test for that drop.
+func TestObjectMapNamespaceGraphPresentsCutKindsWhenCatalogSeeded(t *testing.T) {
+	objects := objectMapFixtureObjects()
+	client := fake.NewSimpleClientset(objects...)
+	builder := newObjectMapTestBuilder(t, client)
+	builder.catalogService = func() *objectcatalog.Service {
+		return seedCatalogService(t, objectMapFixtureCatalogSummaries())
+	}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "cluster-a|namespace:default?maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	// Cut kinds, read through the ingest path, must still be presented as namespace
+	// nodes even though the catalog seeded a (obj-less, edge-less) record for each first.
+	assertNode(t, payload, "Deployment", "web")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertNode(t, payload, "ConfigMap", "app-config")
+	assertNode(t, payload, "Service", "web")
+	// Node is cluster-scoped: it appears only if the cut Pod's pre-resolved "schedules"
+	// ingestEdge survives the catalog merge and reverse-expands the graph to it.
+	assertNode(t, payload, "Node", "node-1")
+	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
+}
+
+// objectMapFixtureCatalogSummaries returns object-catalog Summaries for a
+// representative spread of the cut-kind objects in objectMapFixtureObjects, matching
+// their UIDs and identities so each one collides (by node ID) with the ingest record
+// the object map collects for the same object — the collision the production catalog
+// always produces but the bare test builder never did.
+func objectMapFixtureCatalogSummaries() []objectcatalog.Summary {
+	return []objectcatalog.Summary{
+		{ClusterID: "cluster-a", Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "default", Name: "web", UID: "deploy-uid", Scope: objectcatalog.ScopeNamespace},
+		{ClusterID: "cluster-a", Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "default", Name: "web-pod", UID: "pod-uid", Scope: objectcatalog.ScopeNamespace},
+		{ClusterID: "cluster-a", Kind: "ConfigMap", Group: "", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "app-config", UID: "cm-uid", Scope: objectcatalog.ScopeNamespace},
+		{ClusterID: "cluster-a", Kind: "Service", Group: "", Version: "v1", Resource: "services", Namespace: "default", Name: "web", UID: "svc-uid", Scope: objectcatalog.ScopeNamespace},
+		{ClusterID: "cluster-a", Kind: "Node", Group: "", Version: "v1", Resource: "nodes", Namespace: "", Name: "node-1", UID: "node-uid", Scope: objectcatalog.ScopeCluster},
+	}
 }
 
 func TestObjectMapNamespaceGraphDoesNotReverseExpandFromStorageClass(t *testing.T) {

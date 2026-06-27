@@ -602,6 +602,17 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if src.obj != nil {
 		dst.obj = src.obj
 	}
+	// An ingest-owned (cut) record carries no source object; its presence and edges
+	// live in these two fields instead of obj. The catalog seeds an obj-less,
+	// edge-less record first, so the ingest record almost always merges INTO it —
+	// propagate both, or the cut kind drops out of the namespace filter (which gates
+	// on presented) and loses its relationships (recordEdges reads ingestEdges).
+	if src.presented {
+		dst.presented = true
+	}
+	if len(dst.ingestEdges) == 0 {
+		dst.ingestEdges = src.ingestEdges
+	}
 }
 
 func (idx *objectMapIndex) enrichActionFacts() {
