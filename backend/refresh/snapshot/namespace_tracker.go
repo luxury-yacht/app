@@ -30,6 +30,21 @@ type NamespaceWorkloadTracker struct {
 	namespaces map[string]*namespaceState
 	syncFns    []cache.InformerSynced
 	synced     atomic.Bool
+	// source and tracked let WaitForSync seed the per-namespace baseline from each tracked
+	// kind's current ingest rows once the stores report synced. The incremental sinks carry
+	// live deltas, but a store restored from a cooled-cluster spill is marked synced WITHOUT
+	// replaying its rows to those sinks (RestoreBundles), so without this seed the tracker
+	// would miss every restored workload and wrongly report its namespaces inactive.
+	source   trackerPodIngestSource
+	tracked  []trackedWorkloadKind
+	seedOnce sync.Once
+}
+
+// trackedWorkloadKind pairs a cut workload kind's GVR with the tracker's resource bucket,
+// so the sync-time baseline seed reads each kind's ingest rows under the right bucket.
+type trackedWorkloadKind struct {
+	gvr      schema.GroupVersionResource
+	resource workloadResource
 }
 
 type namespaceState struct {
@@ -98,6 +113,10 @@ type trackerPodIngestSource interface {
 	AddSink(gvr schema.GroupVersionResource, sink ingest.Sink) bool
 	AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
+	// CatalogRows returns each stored object's Catalog half (an objectcatalog.Summary,
+	// carrying namespace/name) for gvr. WaitForSync reads it to seed the workload-presence
+	// baseline a restored (no-fan) store never delivered through the sinks.
+	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 // NewNamespaceWorkloadTracker wires the namespace workload-presence counts. Pods AND the
@@ -116,6 +135,7 @@ func NewNamespaceWorkloadTracker(factory informers.SharedInformerFactory, ingest
 		return tracker
 	}
 
+	tracker.source = ingestManager
 	tracker.registerWorkloadIngest(ingestManager, DeploymentGVR, resourceDeployment)
 	tracker.registerWorkloadIngest(ingestManager, StatefulSetGVR, resourceStateful)
 	tracker.registerWorkloadIngest(ingestManager, DaemonSetGVR, resourceDaemon)
@@ -137,6 +157,7 @@ func (t *NamespaceWorkloadTracker) registerWorkloadIngest(ingestManager trackerP
 	}
 	if ingestManager.AddBundleSink(gvr, trackerWorkloadSink{tracker: t, resource: resource}) {
 		t.syncFns = append(t.syncFns, func() bool { return ingestManager.HasSyncedFor(gvr) })
+		t.tracked = append(t.tracked, trackedWorkloadKind{gvr: gvr, resource: resource})
 	}
 }
 
@@ -150,6 +171,7 @@ func (t *NamespaceWorkloadTracker) registerPodIngest(ingestManager trackerPodIng
 	}
 	if ingestManager.AddSink(PodGVR, trackerPodSink{tracker: t}) {
 		t.syncFns = append(t.syncFns, func() bool { return ingestManager.HasSyncedFor(PodGVR) })
+		t.tracked = append(t.tracked, trackedWorkloadKind{gvr: PodGVR, resource: resourcePod})
 	}
 }
 
@@ -209,9 +231,34 @@ func (t *NamespaceWorkloadTracker) WaitForSync(ctx context.Context) bool {
 	}
 	synced := cache.WaitForCacheSync(ctx.Done(), t.syncFns...)
 	if synced {
+		// Seed the baseline from the now-synced stores before latching synced, so a store
+		// restored from a cooled-cluster spill (which set synced=true without replaying its
+		// rows to the sinks) still contributes its workloads. Idempotent: any row already
+		// delivered through the incremental sinks is a keyed no-op here.
+		t.seedOnce.Do(t.seedFromStores)
 		t.synced.Store(true)
 	}
 	return synced
+}
+
+// seedFromStores rebuilds the per-namespace workload-presence baseline from each tracked
+// kind's current ingest rows. It reads the Catalog half (an objectcatalog.Summary carries
+// namespace/name for every cut kind) so one path seeds both pods and the five workload
+// kinds. The incremental sinks keep the counts live afterward; this only supplies the
+// baseline a restored (no-fan) store never delivered. Adds are keyed and idempotent.
+func (t *NamespaceWorkloadTracker) seedFromStores() {
+	if t.source == nil {
+		return
+	}
+	for _, tracked := range t.tracked {
+		for _, row := range t.source.CatalogRows(tracked.gvr) {
+			summary, ok := row.(objectcatalog.Summary)
+			if !ok || summary.Namespace == "" {
+				continue
+			}
+			t.addNamespaceKey(tracked.resource, summary.Namespace, summary.Namespace+"/"+summary.Name)
+		}
+	}
 }
 
 // HasWorkloads reports whether workloads are known for the namespace and if the information is reliable.

@@ -706,6 +706,13 @@ func (s *ProjectingStore) SpillBundles(path string) error {
 // resume builds on). It returns the RV so the caller can resume the watch from it
 // (SetResumeResourceVersion). A missing/corrupt file or a decode error (an unregistered type)
 // returns an error so the caller skips → full sync; the store is left untouched on failure.
+//
+// Unlike Replace, restore does NOT fan the loaded rows to the incremental sinks (Table/
+// Bundle): it sets synced=true silently. Consumers that rebuild their own baseline from a
+// separate spill (the maintained stores) or only want deltas (the live-notify sinks) are
+// fine, but a sink consumer that needs the FULL baseline and has no independent restore must
+// seed itself from the store's rows once it observes sync — see NamespaceWorkloadTracker,
+// which would otherwise miss every restored workload and wrongly dim active namespaces.
 func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {

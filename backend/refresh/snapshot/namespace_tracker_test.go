@@ -1,10 +1,60 @@
 package snapshot
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// fakeRestoredIngestSource models the cooled-cluster restore path: every tracked store
+// reports synced (RestoreBundles set synced=true), but the sinks delivered NOTHING (the
+// restore loaded rows straight into the store without fanning to incremental sinks). Its
+// CatalogRows return the restored baseline the tracker must seed from on sync.
+type fakeRestoredIngestSource struct {
+	catalog map[schema.GroupVersionResource][]interface{}
+}
+
+func (f *fakeRestoredIngestSource) AddSink(schema.GroupVersionResource, ingest.Sink) bool {
+	return true
+}
+func (f *fakeRestoredIngestSource) AddBundleSink(schema.GroupVersionResource, ingest.BundleSink) bool {
+	return true
+}
+func (f *fakeRestoredIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
+func (f *fakeRestoredIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
+	return f.catalog[gvr]
+}
+
+// TestNamespaceWorkloadTrackerSeedsBaselineFromStoresOnSync proves the tracker recovers a
+// namespace's workload presence after a cooled-cluster restore. RestoreBundles populates a
+// store and marks it synced WITHOUT replaying its rows to the tracker's sinks, so the
+// incremental feed alone leaves the tracker empty while the stores report synced — which
+// before the fix made HasWorkloads return (false, known) and dimmed an active namespace.
+func TestNamespaceWorkloadTrackerSeedsBaselineFromStoresOnSync(t *testing.T) {
+	src := &fakeRestoredIngestSource{
+		catalog: map[schema.GroupVersionResource][]interface{}{
+			DeploymentGVR: {objectcatalog.Summary{Namespace: "alpha", Name: "web"}},
+			PodGVR:        {objectcatalog.Summary{Namespace: "alpha", Name: "web-123"}},
+		},
+	}
+	tracker := NewNamespaceWorkloadTracker(nil, src)
+
+	if !tracker.WaitForSync(context.Background()) {
+		t.Fatalf("expected tracker to report synced")
+	}
+
+	if has, known := tracker.HasWorkloads("alpha"); !has || !known {
+		t.Fatalf("expected restored workloads present and known after sync seed, got has=%t known=%t", has, known)
+	}
+	if has, known := tracker.HasWorkloads("beta"); has || !known {
+		t.Fatalf("expected namespace with no restored workloads to be empty and known, got has=%t known=%t", has, known)
+	}
+}
 
 // trackerKey is the "namespace/name" key the tracker stores presence under — the same key
 // the ingest sinks derive from a projected row's namespace/name (and the typed event path

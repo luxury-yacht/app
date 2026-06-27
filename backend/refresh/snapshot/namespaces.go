@@ -39,7 +39,6 @@ type NamespaceBuilder struct {
 type namespacePodIngestSource interface {
 	trackerPodIngestSource
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
-	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 // NamespaceSnapshot payload returned to clients.
