@@ -153,6 +153,8 @@ type session struct {
 	outgoing  chan ServerMessage
 	done      chan struct{}
 	closeOnce sync.Once
+
+	signalVersionCounter uint64
 }
 
 type sessionSubscription struct {
@@ -400,11 +402,27 @@ func (s *session) forwardSubscription(key string, resumeHighWater uint64) {
 }
 
 func (s *session) enqueue(msg ServerMessage) {
+	msg = s.prepareOutgoingMessage(msg)
 	select {
 	case s.outgoing <- msg:
 	default:
 		s.handleBackpressure(msg)
 	}
+}
+
+func (s *session) prepareOutgoingMessage(msg ServerMessage) ServerMessage {
+	msg = withSignalEnvelope(msg)
+	if strings.TrimSpace(msg.Version) == "" && msg.Source != "" && msg.Signal != "" {
+		msg.Version = s.nextSignalVersion(msg.Source)
+	}
+	return msg
+}
+
+func (s *session) nextSignalVersion(source Source) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.signalVersionCounter++
+	return fmt.Sprintf("%s:%d", source, s.signalVersionCounter)
 }
 
 func (s *session) handleBackpressure(msg ServerMessage) {
@@ -442,6 +460,7 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 		ClusterID:   clusterID,
 		ClusterName: clusterName,
 	}
+	reset = s.prepareOutgoingMessage(reset)
 	select {
 	case s.outgoing <- reset:
 		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), logsources.StreamMux, clusterID, clusterName)
@@ -480,7 +499,7 @@ func (s *session) writeMessage(msg ServerMessage) error {
 	// Populate the public {source, signal} doorbell pair from the internal
 	// MessageType at the one send chokepoint, so live and resume-replayed frames
 	// carry it identically.
-	msg = withSignalEnvelope(msg)
+	msg = s.prepareOutgoingMessage(msg)
 	if err := s.conn.SetWriteDeadline(time.Now().Add(config.StreamMuxWriteTimeout)); err != nil {
 		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), logsources.StreamMux)
 	}

@@ -66,6 +66,15 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 		select {
 		case msg := <-session.outgoing:
 			if msg.Type == MessageTypeReset && msg.Domain == "pods" && msg.Scope == "default" {
+				if msg.Source != SourceObject {
+					t.Fatalf("expected reset source %q, got %q", SourceObject, msg.Source)
+				}
+				if msg.Signal != SignalReset {
+					t.Fatalf("expected reset signal %q, got %q", SignalReset, msg.Signal)
+				}
+				if msg.Version == "" {
+					t.Fatal("expected reset version")
+				}
 				foundReset = true
 			}
 		default:

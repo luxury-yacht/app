@@ -255,6 +255,7 @@ export class ResourceStreamManager {
   private lastConnectionError = '';
   private streamHealth = new ResourceStreamHealthStore();
   private errorNotifier = new StreamErrorNotifier();
+  private legacyResyncVersionCounter = 0;
   private visibility = new StreamVisibilityController<StreamSubscription>({
     captureActive: () => Array.from(this.subscriptions.values()),
     suspendActive: () => {
@@ -422,10 +423,12 @@ export class ResourceStreamManager {
           this.updateHealthForSubscription(subscription);
           return;
         }
+        this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
         void this.resyncSubscription(subscription, 'reset');
         this.updateHealthForSubscription(subscription);
         return;
       case MESSAGE_TYPES.complete:
+        this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
         void this.resyncSubscription(subscription, errorMessage || 'complete');
         this.updateHealthForSubscription(subscription);
         return;
@@ -776,6 +779,32 @@ export class ResourceStreamManager {
       latest = version;
     }
     return { sourceVersions, latest };
+  }
+
+  private bumpLegacyResyncSourceVersion(
+    subscription: StreamSubscription,
+    update: UpdateMessage
+  ): void {
+    const source = this.legacyResyncSource(subscription.domain, update);
+    if (!source) {
+      return;
+    }
+    const version = `${source}:resync:${++this.legacyResyncVersionCounter}`;
+    this.bumpSourceVersionOnly(subscription, Date.now(), { [source]: version }, version);
+  }
+
+  private legacyResyncSource(
+    domain: DoorbellDomain,
+    update: UpdateMessage
+  ): ResourceStreamSourceClock | null {
+    const source = update.source;
+    if (isResourceStreamSourceClock(source) && domainSupportsSourceClock(domain, source)) {
+      return source;
+    }
+    if (domainSupportsSourceClock(domain, 'object')) {
+      return 'object';
+    }
+    return null;
   }
 
   private bumpSourceVersionOnly(

@@ -1037,11 +1037,15 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // The first reset acks the subscription and bumps the refetch signal so the
-    // query-backed view fetches page 1.
+    // The first reset only acks the subscription; initial start already set diagnostic state.
     expect(getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0).toBe(1);
 
     vi.advanceTimersByTime(1100);
+    setScopedDomainState('namespace-config', storeScope, (previous) => ({
+      ...previous,
+      sourceVersion: 'object:before-reset',
+      sourceVersions: { object: 'object:before-reset' },
+    }));
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
@@ -1052,10 +1056,11 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // A later reset is a real resync: it re-arms the stream and bumps diagnostic streamRevision.
-    expect(
-      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
-    ).toBeGreaterThan(0);
+    // A later reset is a real resync: it re-arms the stream and advances query identity.
+    const resetState = getScopedDomainState('namespace-config', storeScope);
+    expect(resetState.sourceVersion).not.toBe('object:before-reset');
+    expect(resetState.sourceVersions?.object).toBe(resetState.sourceVersion);
+    expect(resetState.streamRevision ?? 0).toBeGreaterThan(0);
   });
 
   test('resyncs on complete and error stream messages', async () => {
@@ -1083,6 +1088,11 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     vi.advanceTimersByTime(1100);
+    setScopedDomainState('namespace-config', storeScope, (previous) => ({
+      ...previous,
+      sourceVersion: 'object:before-complete',
+      sourceVersions: { object: 'object:before-complete' },
+    }));
 
     manager.handleMessage(
       'cluster-a',
@@ -1094,10 +1104,12 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // COMPLETE triggers a signal-only resync: re-arm + diagnostic streamRevision bump.
-    expect(
-      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
-    ).toBeGreaterThan(0);
+    // COMPLETE triggers a scope-level resync and advances query identity.
+    const completeState = getScopedDomainState('namespace-config', storeScope);
+    expect(completeState.sourceVersion).not.toBe('object:before-complete');
+    expect(completeState.sourceVersions?.object).toBe(completeState.sourceVersion);
+    expect(completeState.streamRevision ?? 0).toBeGreaterThan(0);
+    const sourceVersionAfterComplete = completeState.sourceVersion;
 
     manager.handleMessage(
       'cluster-a',
@@ -1110,11 +1122,11 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // ERROR also resyncs (re-arm + bump); it does not refetch a snapshot.
-    expect(
-      getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0
-    ).toBeGreaterThan(0);
-    expect(manager.getHealthStatus('pods', storeScope)).not.toBe('healthy');
+    // ERROR also re-arms and updates the health for the affected subscription.
+    const errorState = getScopedDomainState('namespace-config', storeScope);
+    expect(errorState.sourceVersion).toBe(sourceVersionAfterComplete);
+    expect(errorState.streamRevision ?? 0).toBeGreaterThan(0);
+    expect(manager.getHealthStatus('namespace-config', storeScope)).not.toBe('healthy');
   });
 
   test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
