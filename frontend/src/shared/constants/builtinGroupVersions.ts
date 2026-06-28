@@ -7,7 +7,7 @@
  * kinds (Pod, Deployment, etc.) are unambiguous: a given Kind string uniquely
  * identifies its API group and version. Custom resources, in contrast, can
  * share a Kind across multiple groups (the kind-only-objects bug) and must
- * carry their apiGroup/apiVersion from the data source. Use this lookup at
+ * carry their group/version from the data source. Use this lookup at
  * `openWithObject` call sites that construct a reference from a built-in
  * resource type, so the resulting `KubernetesObjectReference` carries
  * `group`/`version` consistently with BrowseView (which reads them off

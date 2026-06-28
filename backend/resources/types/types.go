@@ -466,15 +466,6 @@ type NsQuotaInfo struct {
 	Age       string `json:"age"`
 }
 
-// CustomResourceInfo represents a custom resource instance in a namespace
-type NsCustomResourceInfo struct {
-	Kind      string `json:"kind"` // The CRD kind (e.g., "VirtualService", "ServiceMonitor")
-	Name      string `json:"name"`
-	APIGroup  string `json:"apiGroup"` // The API group (e.g., "networking.istio.io")
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
-}
-
 // NsHelmInfo represents basic Helm chart information in a namespace
 type NsHelmInfo struct {
 	Kind       string `json:"kind"`      // always "helmrelease"

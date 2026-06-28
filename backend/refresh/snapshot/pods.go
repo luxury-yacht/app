@@ -484,8 +484,8 @@ func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
 	if err != nil {
 		return false
 	}
-	return gv.Group == scope.apiGroup &&
-		gv.Version == scope.apiVersion &&
+	return gv.Group == scope.group &&
+		gv.Version == scope.version &&
 		row.Namespace == scope.namespace &&
 		row.OwnerKind == scope.kind &&
 		row.OwnerName == scope.name
@@ -704,11 +704,11 @@ func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
 }
 
 type workloadScope struct {
-	namespace  string
-	apiGroup   string
-	apiVersion string
-	kind       string
-	name       string
+	namespace string
+	group     string
+	version   string
+	kind      string
+	name      string
 }
 
 func parseWorkloadScope(value string) (workloadScope, error) {
@@ -717,19 +717,19 @@ func parseWorkloadScope(value string) (workloadScope, error) {
 		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
 	}
 	namespace := strings.TrimSpace(parts[0])
-	apiGroup := strings.TrimSpace(parts[1])
-	apiVersion := strings.TrimSpace(parts[2])
+	group := strings.TrimSpace(parts[1])
+	version := strings.TrimSpace(parts[2])
 	kind := strings.TrimSpace(parts[3])
 	name := strings.TrimSpace(parts[4])
-	if namespace == "" || apiGroup == "" || apiVersion == "" || kind == "" || name == "" {
+	if namespace == "" || group == "" || version == "" || kind == "" || name == "" {
 		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
 	}
 	return workloadScope{
-		namespace:  namespace,
-		apiGroup:   apiGroup,
-		apiVersion: apiVersion,
-		kind:       kind,
-		name:       name,
+		namespace: namespace,
+		group:     group,
+		version:   version,
+		kind:      kind,
+		name:      name,
 	}, nil
 }
 
@@ -761,8 +761,8 @@ func ownerMatchesWorkloadScope(apiVersion, kind, name string, scope workloadScop
 	if err != nil {
 		return false
 	}
-	return gv.Group == scope.apiGroup &&
-		gv.Version == scope.apiVersion &&
+	return gv.Group == scope.group &&
+		gv.Version == scope.version &&
 		kind == scope.kind &&
 		name == scope.name
 }

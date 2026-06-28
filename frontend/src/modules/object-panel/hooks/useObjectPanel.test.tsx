@@ -262,7 +262,7 @@ describe('useObjectPanel', () => {
         act(() => {
           hookResult.openWithObject(brokenRef);
         });
-      }).toThrow(/missing apiVersion/);
+      }).toThrow(/missing version/);
       expect(hookResult.openPanels.size).toBe(0);
     });
 
@@ -289,7 +289,7 @@ describe('useObjectPanel', () => {
         act(() => {
           hookResult.openWithObject(brokenRef);
         });
-      }).toThrow(/missing apiGroup/);
+      }).toThrow(/missing group/);
       expect(hookResult.openPanels.size).toBe(0);
     });
 

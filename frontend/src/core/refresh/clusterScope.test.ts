@@ -122,7 +122,7 @@ describe('clusterScope helpers', () => {
     ).toBe('team-a:/v1:Pod:api');
   });
 
-  it('rejects object scopes missing apiVersion', () => {
+  it('rejects object scopes missing version', () => {
     expect(() =>
       buildObjectScope({
         namespace: 'team-a',
@@ -130,10 +130,10 @@ describe('clusterScope helpers', () => {
         kind: 'Pod',
         name: 'api',
       })
-    ).toThrow(/missing apiVersion/);
+    ).toThrow(/missing version/);
   });
 
-  it('rejects object scopes missing apiGroup', () => {
+  it('rejects object scopes missing group', () => {
     expect(() =>
       buildObjectScope({
         namespace: 'team-a',
@@ -141,6 +141,6 @@ describe('clusterScope helpers', () => {
         kind: 'Pod',
         name: 'api',
       })
-    ).toThrow(/missing apiGroup/);
+    ).toThrow(/missing group/);
   });
 });

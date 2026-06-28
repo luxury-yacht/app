@@ -81,11 +81,11 @@ export function assertObjectRefHasRequiredIdentity(ref: KubernetesObjectReferenc
   if (!version) {
     throw new Error(
       `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
-        `is missing apiVersion. This is the kind-only-objects bug — the ` +
+        `is missing version. This is the kind-only-objects bug — the ` +
         `panel and backend resolvers cannot disambiguate two CRDs sharing ` +
         `a Kind without group+version. Spread ` +
         `\`...resolveBuiltinGroupVersion(kind)\` for built-ins, or thread ` +
-        `the actual apiVersion via \`parseApiVersion(...)\`.`
+        `the parsed version from a wire-form apiVersion via \`parseApiVersion(...)\`.`
     );
   }
 
@@ -96,7 +96,7 @@ export function assertObjectRefHasRequiredIdentity(ref: KubernetesObjectReferenc
   if (!groupWasCarried || (!group && (!isKnownBuiltin || builtinGVK.group))) {
     throw new Error(
       `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
-        `is missing apiGroup. Include \`group: ''\` for core/v1 built-ins, ` +
+        `is missing group. Include \`group: ''\` for core/v1 built-ins, ` +
         `spread \`...resolveBuiltinGroupVersion(kind)\` for other built-ins, ` +
         `or thread group from the catalog/discovery source for custom resources.`
     );

@@ -38,7 +38,7 @@ type ClusterCustomBuilder struct {
 
 // ClusterCustomSummary captures key cluster custom resource fields.
 //
-// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// Group and Version together identify the owning CRD's GroupVersion
 // so the frontend can disambiguate colliding Kinds across API groups.
 // See the NamespaceCustomSummary comment for details.
 // ClusterCustomSummary lives in the streamrows leaf so the customresource package

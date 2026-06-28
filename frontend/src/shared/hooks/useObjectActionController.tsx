@@ -115,7 +115,7 @@ const portForwardTargetFor = (object: ObjectActionData): PortForwardTarget => ({
 const actionTargetFor = (object: ObjectActionData, action: string) => {
   if (object.requiresExplicitVersion && !object.explicitVersionProvided) {
     throw new Error(
-      `Cannot ${action} ${object.kind}/${object.name}: apiVersion missing on custom resource row`
+      `Cannot ${action} ${object.kind}/${object.name}: version missing on custom resource row`
     );
   }
   return buildObjectActionTarget(object, action);

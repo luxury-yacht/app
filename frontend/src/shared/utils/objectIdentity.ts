@@ -70,15 +70,15 @@ export const buildObjectReference = <TExtras extends object = {}>(
 
   if (!version) {
     throw new Error(
-      `Object identity for ${kind}/${name} is missing apiVersion. ` +
+      `Object identity for ${kind}/${name} is missing version. ` +
         `Built-ins must resolve through resolveBuiltinGroupVersion(); custom resources ` +
-        `must thread apiGroup/apiVersion from the data source.`
+        `must thread group/version from the data source.`
     );
   }
 
   if (!group && !builtinGVK.version) {
     throw new Error(
-      `Object identity for ${kind}/${name} is missing apiGroup. ` +
+      `Object identity for ${kind}/${name} is missing group. ` +
         `Custom resources must thread group/version from discovery, catalog, events, ` +
         `owner refs, HPA targets, or manifests.`
     );

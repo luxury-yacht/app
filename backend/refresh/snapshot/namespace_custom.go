@@ -45,10 +45,10 @@ type NamespaceCustomSnapshot struct {
 
 // NamespaceCustomSummary captures key CR instance fields.
 //
-// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// Group and Version together identify the owning CRD's GroupVersion
 // so the frontend can route downstream operations (view YAML, delete,
 // capability checks) through GVK-aware backend paths instead of the
-// first-match-wins kind-only resolver. Without APIVersion, two CRDs that
+// first-match-wins kind-only resolver. Without Version, two CRDs that
 // share a Kind (e.g. DBInstance.rds.services.k8s.aws vs
 // DBInstance.documentdb.services.k8s.aws) would be indistinguishable on
 // the frontend.
@@ -258,8 +258,8 @@ func sortNamespaceCustomSummaries(resources []NamespaceCustomSummary) {
 		if resources[i].Namespace != resources[j].Namespace {
 			return resources[i].Namespace < resources[j].Namespace
 		}
-		if resources[i].APIGroup != resources[j].APIGroup {
-			return resources[i].APIGroup < resources[j].APIGroup
+		if resources[i].Group != resources[j].Group {
+			return resources[i].Group < resources[j].Group
 		}
 		if resources[i].Kind != resources[j].Kind {
 			return resources[i].Kind < resources[j].Kind

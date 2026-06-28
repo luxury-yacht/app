@@ -84,12 +84,12 @@ const resolveActionGVK = (
     if (builtinGVK) {
       const group = groupWasCarried ? suppliedGroup! : builtinGVK.group;
       if (group !== builtinGVK.group || suppliedVersion !== builtinGVK.version) {
-        throw new Error(`Cannot ${action} ${kind}: unsupported apiVersion`);
+        throw new Error(`Cannot ${action} ${kind}: unsupported group/version`);
       }
       return builtinGVK;
     }
     if (!groupWasCarried || !suppliedGroup) {
-      throw new Error(`Cannot ${action} ${kind}: apiGroup is missing`);
+      throw new Error(`Cannot ${action} ${kind}: group is missing`);
     }
     return { group: suppliedGroup, version: suppliedVersion, kind };
   }
@@ -97,7 +97,7 @@ const resolveActionGVK = (
   if (builtinGVK) {
     return builtinGVK;
   }
-  throw new Error(`Cannot ${action} ${kind}: apiVersion is missing`);
+  throw new Error(`Cannot ${action} ${kind}: version is missing`);
 };
 
 export const buildObjectActionTarget = (

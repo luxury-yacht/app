@@ -25,7 +25,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         namespace: 'default',
         name: 'api',
       })
-    ).toThrow(/missing apiGroup/);
+    ).toThrow(/missing group/);
   });
 
   it('rejects custom-resource refs with version but no group', () => {
@@ -38,7 +38,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         namespace: 'default',
         name: 'primary',
       })
-    ).toThrow(/missing apiGroup/);
+    ).toThrow(/missing group/);
   });
 
   it('requires concrete object identity fields before opening a panel', () => {
@@ -69,7 +69,7 @@ describe('assertObjectRefHasRequiredIdentity', () => {
         namespace: 'default',
         name: 'demo',
       })
-    ).toThrow(/missing apiVersion/);
+    ).toThrow(/missing version/);
 
     expect(() =>
       assertObjectRefHasRequiredIdentity({

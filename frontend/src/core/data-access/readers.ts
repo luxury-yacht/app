@@ -51,7 +51,7 @@ const apiVersionForTarget = (target: ObjectYAMLReadTarget): string => {
   }
   const version = target.version?.trim();
   if (!version) {
-    throw new Error(`Object identity for ${target.kind}/${target.name} is missing apiVersion`);
+    throw new Error(`Object identity for ${target.kind}/${target.name} is missing version`);
   }
   const group = target.group?.trim();
   return group ? `${group}/${version}` : version;

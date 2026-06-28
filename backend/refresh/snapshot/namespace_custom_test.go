@@ -19,19 +19,19 @@ import (
 
 func TestSortNamespaceCustomSummaries(t *testing.T) {
 	items := []NamespaceCustomSummary{
-		{Namespace: "staging", APIGroup: "apps.example.com", Kind: "Widget", Name: "zeta"},
-		{Namespace: "default", APIGroup: "alpha.example.com", Kind: "Gadget", Name: "beta"},
-		{Namespace: "default", APIGroup: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
-		{Namespace: "default", APIGroup: "beta.example.com", Kind: "Gadget", Name: "a"},
+		{Namespace: "staging", Group: "apps.example.com", Kind: "Widget", Name: "zeta"},
+		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "beta"},
+		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
+		{Namespace: "default", Group: "beta.example.com", Kind: "Gadget", Name: "a"},
 	}
 
 	sortNamespaceCustomSummaries(items)
 
 	require.Equal(t, []NamespaceCustomSummary{
-		{Namespace: "default", APIGroup: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
-		{Namespace: "default", APIGroup: "alpha.example.com", Kind: "Gadget", Name: "beta"},
-		{Namespace: "default", APIGroup: "beta.example.com", Kind: "Gadget", Name: "a"},
-		{Namespace: "staging", APIGroup: "apps.example.com", Kind: "Widget", Name: "zeta"},
+		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
+		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "beta"},
+		{Namespace: "default", Group: "beta.example.com", Kind: "Gadget", Name: "a"},
+		{Namespace: "staging", Group: "apps.example.com", Kind: "Widget", Name: "zeta"},
 	}, items)
 }
 

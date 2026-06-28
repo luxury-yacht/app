@@ -148,7 +148,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
     const meta = (od?.metadata as Record<string, unknown> | undefined) ?? undefined;
     return overviewRegistry.renderComponent({
       ...props,
-      apiGroup: od?.apiGroup,
+      group: od?.group,
       status: props.status ?? od?.status,
       labels: props.labels ?? od?.labels ?? meta?.labels,
       annotations: props.annotations ?? od?.annotations ?? meta?.annotations,

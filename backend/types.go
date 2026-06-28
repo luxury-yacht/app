@@ -59,7 +59,6 @@ type (
 	NsNetworkInfo                       = types.NsNetworkInfo
 	NsAutoscalingInfo                   = types.NsAutoscalingInfo
 	NsQuotaInfo                         = types.NsQuotaInfo
-	NsCustomResourceInfo                = types.NsCustomResourceInfo
 	NsHelmInfo                          = types.NsHelmInfo
 	HelmReleaseDetails                  = helm.HelmReleaseDetails
 	PodDetailInfoContainer              = types.PodDetailInfoContainer

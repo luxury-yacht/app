@@ -727,7 +727,7 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			rowA := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			rowB := customresource.BuildNamespaceStreamSummary(meta, crB, "databases.example.com", "v1", "DBInstance", "dbinstances.databases.example.com", "data")
 
-			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
+			require.NotEqual(t, rowA.Group, rowB.Group, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName, "CRDName must differ for distinct CRDs")
 			require.Equal(t, "primary", rowA.Name)
 			require.Equal(t, "primary", rowB.Name)
@@ -737,7 +737,7 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(NamespaceCustomSummary)
-				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
 			})
 		},
 	}
@@ -762,13 +762,13 @@ func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
 			rowA := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			rowB := customresource.BuildClusterStreamSummary(meta, crB, "databases.example.com", "v1", "DBCluster", "dbclusters.databases.example.com")
 
-			require.NotEqual(t, rowA.APIGroup, rowB.APIGroup)
+			require.NotEqual(t, rowA.Group, rowB.Group)
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName)
 
 			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(ClusterCustomSummary)
-				return row.APIGroup + "/" + row.APIVersion + "/" + row.Kind + "/" + row.Name
+				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Name
 			})
 		},
 	}

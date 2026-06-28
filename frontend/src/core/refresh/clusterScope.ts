@@ -148,13 +148,11 @@ export const buildObjectScope = (args: {
 
   if (!version) {
     throw new Error(
-      `Object scope for ${kind || 'unknown'}/${name || 'unknown'} is missing apiVersion`
+      `Object scope for ${kind || 'unknown'}/${name || 'unknown'} is missing version`
     );
   }
   if (args.group === undefined || args.group === null) {
-    throw new Error(
-      `Object scope for ${kind || 'unknown'}/${name || 'unknown'} is missing apiGroup`
-    );
+    throw new Error(`Object scope for ${kind || 'unknown'}/${name || 'unknown'} is missing group`);
   }
 
   const group = (args.group ?? '').trim();

@@ -25,7 +25,7 @@
  * across multiple groups (e.g. documentdb.services.k8s.aws/DBInstance vs
  * rds.services.k8s.aws/DBInstance). Without group/version on the
  * KubernetesObjectReference, the panel cannot disambiguate, and the
- * backend's strict GVK resolver hard-errors on missing apiVersion.
+ * backend's strict GVK resolver hard-errors on missing version.
  *
  * If a new call site fails this test, the fix is to add the missing
  * fields rather than to add an exemption. Exemptions exist only for

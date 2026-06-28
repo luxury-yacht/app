@@ -4111,8 +4111,8 @@ export namespace snapshot {
 	    kind: string;
 	    name: string;
 	    namespace?: string;
-	    apiGroup: string;
-	    apiVersion: string;
+	    group: string;
+	    version: string;
 	    crdName?: string;
 	    status?: string;
 	    statusState?: string;
@@ -4135,8 +4135,8 @@ export namespace snapshot {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
-	        this.apiGroup = source["apiGroup"];
-	        this.apiVersion = source["apiVersion"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.crdName = source["crdName"];
 	        this.status = source["status"];
 	        this.statusState = source["statusState"];
@@ -5854,4 +5854,3 @@ export namespace v1 {
 	}
 
 }
-

@@ -11,8 +11,8 @@ type CustomResourceSummary struct {
 	Kind               string                         `json:"kind"`
 	Name               string                         `json:"name"`
 	Namespace          string                         `json:"namespace,omitempty"`
-	APIGroup           string                         `json:"apiGroup"`
-	APIVersion         string                         `json:"apiVersion"`
+	Group              string                         `json:"group"`
+	Version            string                         `json:"version"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
 	StatusState        string                         `json:"statusState,omitempty"`
@@ -31,8 +31,8 @@ func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResour
 		Kind:               row.Kind,
 		Name:               row.Name,
 		Namespace:          row.Namespace,
-		APIGroup:           row.APIGroup,
-		APIVersion:         row.APIVersion,
+		Group:              row.Group,
+		Version:            row.Version,
 		CRDName:            row.CRDName,
 		Status:             row.Status,
 		StatusState:        row.StatusState,
@@ -51,8 +51,8 @@ func CustomResourceSummaryFromCluster(row ClusterCustomSummary) CustomResourceSu
 		ClusterMeta:        row.ClusterMeta,
 		Kind:               row.Kind,
 		Name:               row.Name,
-		APIGroup:           row.APIGroup,
-		APIVersion:         row.APIVersion,
+		Group:              row.Group,
+		Version:            row.Version,
 		CRDName:            row.CRDName,
 		Status:             row.Status,
 		StatusState:        row.StatusState,

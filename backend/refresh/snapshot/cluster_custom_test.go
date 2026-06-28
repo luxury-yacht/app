@@ -77,7 +77,7 @@ func TestClusterCustomBuilder(t *testing.T) {
 	entry := payload.Resources[0]
 	require.Equal(t, "Widget", entry.Kind)
 	require.Equal(t, "cluster-widget", entry.Name)
-	require.Equal(t, "acme.test", entry.APIGroup)
+	require.Equal(t, "acme.test", entry.Group)
 	require.NotEmpty(t, entry.Age)
 }
 
@@ -152,7 +152,7 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 
 	entry := payload.Resources[0]
 	require.Equal(t, "global-widget", entry.Name)
-	require.Equal(t, "acme.test", entry.APIGroup)
+	require.Equal(t, "acme.test", entry.Group)
 	require.NotEmpty(t, entry.Kind)
 }
 

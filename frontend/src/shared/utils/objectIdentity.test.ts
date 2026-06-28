@@ -105,7 +105,7 @@ describe('objectIdentity', () => {
     ).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
 
-  it('throws when a custom resource omits apiVersion', () => {
+  it('throws when a custom resource omits version', () => {
     expect(() =>
       buildObjectReference({
         kind: 'DBInstance',
@@ -113,7 +113,7 @@ describe('objectIdentity', () => {
         namespace: 'ops',
         clusterId: 'alpha:ctx',
       })
-    ).toThrow(/missing apiVersion/);
+    ).toThrow(/missing version/);
   });
 
   it('throws when a custom resource has version but omits group', () => {
@@ -125,7 +125,7 @@ describe('objectIdentity', () => {
         clusterId: 'alpha:ctx',
         version: 'v1alpha1',
       })
-    ).toThrow(/missing apiGroup/);
+    ).toThrow(/missing group/);
   });
 
   it('carries non-identity extras through real object references', () => {

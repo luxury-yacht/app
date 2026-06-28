@@ -123,10 +123,10 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 	group := gvk.Group
 	version := gvk.Version
 	if group != "" {
-		details["apiGroup"] = group
+		details["group"] = group
 	}
 	if version != "" {
-		details["apiVersion"] = version
+		details["version"] = version
 	}
 	if namespace != "" {
 		details["namespace"] = namespace

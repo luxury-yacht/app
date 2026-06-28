@@ -66,8 +66,6 @@ const mergeHydratedRows = (
       group: row.group,
       version: row.version,
       resource: row.resource,
-      apiGroup: row.group,
-      apiVersion: row.version,
       age: hydrated?.age || row.age,
       ageTimestamp: hydrated?.ageTimestamp ?? row.ageTimestamp,
       creationTimestamp: hydrated?.creationTimestamp ?? row.creationTimestamp,

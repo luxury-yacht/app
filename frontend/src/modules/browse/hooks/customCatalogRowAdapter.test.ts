@@ -4,6 +4,7 @@ import {
   catalogItemToFallbackCustomRow,
   customCatalogObjectReference,
   customCatalogRowKey,
+  normalizeHydratedCustomRow,
 } from './customCatalogRowAdapter';
 import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
@@ -58,5 +59,42 @@ describe('customCatalogRowAdapter', () => {
       ageTimestamp: fallback.ageTimestamp,
       creationTimestamp,
     });
+  });
+
+  it('uses group/version row fields without api-prefixed aliases', () => {
+    const fallback = catalogItemToFallbackCustomRow({
+      clusterId: 'cluster-a',
+      kind: 'DBInstance',
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      resource: 'dbinstances',
+      name: 'primary',
+      uid: 'primary-uid',
+      resourceVersion: '1',
+      creationTimestamp: '2026-06-28T00:00:00Z',
+      scope: 'Cluster',
+    });
+
+    expect(fallback.group).toBe('rds.services.k8s.aws');
+    expect(fallback.version).toBe('v1alpha1');
+    expect(fallback).not.toHaveProperty('apiGroup');
+    expect(fallback).not.toHaveProperty('apiVersion');
+  });
+
+  it('normalizes hydrated rows from group/version fields without api-prefixed aliases', () => {
+    const normalized = normalizeHydratedCustomRow({
+      kind: 'DBInstance',
+      name: 'primary',
+      namespace: 'data',
+      clusterId: 'cluster-a',
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      resource: 'dbinstances',
+    });
+
+    expect(normalized.group).toBe('rds.services.k8s.aws');
+    expect(normalized.version).toBe('v1alpha1');
+    expect(normalized).not.toHaveProperty('apiGroup');
+    expect(normalized).not.toHaveProperty('apiVersion');
   });
 });

@@ -48,8 +48,8 @@ export const versionedNamespacedRowIdentity = (
   item: {
     clusterId?: string | null;
     namespace: string;
-    apiGroup: string;
-    apiVersion: string;
+    group: string;
+    version: string;
     kind: string;
     name: string;
   },
@@ -58,8 +58,8 @@ export const versionedNamespacedRowIdentity = (
   buildVersionedNamespacedRowKey(
     item.clusterId ?? clusterId,
     item.namespace,
-    item.apiGroup,
-    item.apiVersion,
+    item.group,
+    item.version,
     item.kind,
     item.name
   );

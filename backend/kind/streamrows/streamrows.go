@@ -313,8 +313,8 @@ type NamespaceCustomSummary struct {
 	ClusterMeta
 	Kind               string                         `json:"kind"`
 	Name               string                         `json:"name"`
-	APIGroup           string                         `json:"apiGroup"`
-	APIVersion         string                         `json:"apiVersion"`
+	Group              string                         `json:"group"`
+	Version            string                         `json:"version"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Namespace          string                         `json:"namespace"`
 	Status             string                         `json:"status,omitempty"`
@@ -333,8 +333,8 @@ type ClusterCustomSummary struct {
 	ClusterMeta
 	Kind               string                         `json:"kind"`
 	Name               string                         `json:"name"`
-	APIGroup           string                         `json:"apiGroup"`
-	APIVersion         string                         `json:"apiVersion"`
+	Group              string                         `json:"group"`
+	Version            string                         `json:"version"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
 	StatusState        string                         `json:"statusState,omitempty"`

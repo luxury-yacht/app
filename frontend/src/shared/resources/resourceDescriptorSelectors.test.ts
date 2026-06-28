@@ -42,8 +42,8 @@ describe('resourceDescriptorSelectors', () => {
       versionedNamespacedRowIdentity({
         clusterId: 'cluster-a',
         namespace: 'default',
-        apiGroup: 'example.com',
-        apiVersion: 'v1',
+        group: 'example.com',
+        version: 'v1',
         kind: 'Widget',
         name: 'api',
       })

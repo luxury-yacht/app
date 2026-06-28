@@ -15,8 +15,6 @@ export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
   group?: string;
   version?: string;
   resource?: string;
-  apiGroup?: string;
-  apiVersion?: string;
   crdName?: string;
   status?: string;
   statusState?: string;
@@ -36,10 +34,8 @@ export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
   annotations?: Record<string, string>;
 }
 
-const canonicalGroup = (row: CatalogBackedCustomResourceRow): string =>
-  row.group || row.apiGroup || '';
-const canonicalVersion = (row: CatalogBackedCustomResourceRow): string =>
-  row.version || row.apiVersion || '';
+const canonicalGroup = (row: CatalogBackedCustomResourceRow): string => row.group || '';
+const canonicalVersion = (row: CatalogBackedCustomResourceRow): string => row.version || '';
 
 export const customCatalogRowKey = (
   row: CatalogBackedCustomResourceRow,
@@ -129,8 +125,6 @@ export const catalogItemToFallbackCustomRow = (
     group: item.group,
     version: item.version,
     resource: item.resource,
-    apiGroup: item.group,
-    apiVersion: item.version,
     crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
@@ -140,8 +134,8 @@ export const catalogItemToFallbackCustomRow = (
 };
 
 export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourceRow => {
-  const group = row.group ?? row.apiGroup ?? '';
-  const version = row.version ?? row.apiVersion ?? '';
+  const group = row.group ?? '';
+  const version = row.version ?? '';
   return {
     kind: row.kind,
     kindAlias: row.kindAlias ?? row.kind,
@@ -152,8 +146,6 @@ export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourc
     group,
     version,
     resource: row.resource ?? '',
-    apiGroup: row.apiGroup ?? group,
-    apiVersion: row.apiVersion ?? version,
     crdName: row.crdName,
     status: row.status,
     statusState: row.statusState,

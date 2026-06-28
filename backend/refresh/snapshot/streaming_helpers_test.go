@@ -5,6 +5,7 @@ package snapshot
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -690,9 +691,30 @@ func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 	)
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "Foo", row.Kind)
-	require.Equal(t, "example.com", row.APIGroup)
-	require.Equal(t, "v1", row.APIVersion)
+	require.Equal(t, "example.com", row.Group)
+	require.Equal(t, "v1", row.Version)
 	require.Equal(t, "foos.example.com", row.CRDName)
+}
+
+func TestBuildNamespaceCustomSummaryWireIdentityUsesGroupVersion(t *testing.T) {
+	row := customresource.BuildNamespaceStreamSummary(
+		ClusterMeta{ClusterID: "c1"},
+		nil,
+		"example.com",
+		"v1",
+		"Foo",
+		"foos.example.com",
+		"fallback-ns",
+	)
+	payload, err := json.Marshal(row)
+	require.NoError(t, err)
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(payload, &fields))
+	require.Equal(t, "example.com", fields["group"])
+	require.Equal(t, "v1", fields["version"])
+	require.NotContains(t, fields, "apiGroup")
+	require.NotContains(t, fields, "apiVersion")
 }
 
 // TestBuildClusterCustomSummaryThreadsCRDName is the cluster-scoped
@@ -720,8 +742,8 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "DBCluster", row.Kind)
 	require.Equal(t, "primary", row.Name)
-	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
-	require.Equal(t, "v1alpha1", row.APIVersion)
+	require.Equal(t, "rds.services.k8s.aws", row.Group)
+	require.Equal(t, "v1alpha1", row.Version)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
 	require.Equal(t, "Unknown", row.Status)
 	require.Equal(t, "unknown", row.StatusState)
@@ -741,8 +763,8 @@ func TestBuildClusterCustomSummaryNilResourceIsSafe(t *testing.T) {
 	)
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "DBCluster", row.Kind)
-	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
-	require.Equal(t, "v1alpha1", row.APIVersion)
+	require.Equal(t, "rds.services.k8s.aws", row.Group)
+	require.Equal(t, "v1alpha1", row.Version)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
 }
 
