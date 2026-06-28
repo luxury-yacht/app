@@ -870,7 +870,7 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
-  test('disambiguates query-backed refresh scopes and collapses cluster aliases', async () => {
+  test('disambiguates durable query-backed scopes and hides transient resource table query scopes', async () => {
     mockKubeconfigState.selectedClusterId = 'cluster-a';
 
     const catalogScope = buildClusterScope('cluster-a', 'limit=200&namespace=default');
@@ -950,13 +950,10 @@ describe('DiagnosticsPanel component', () => {
     );
 
     const nodeRows = rows.filter((row) => row.label === 'Nodes');
-    expect(nodeRows).toHaveLength(2);
-    expect(new Set(nodeRows.map((row) => row.scope)).size).toBe(2);
+    expect(nodeRows).toHaveLength(1);
     expect(nodeRows.some((row) => row.scope === 'cluster-a (active)')).toBe(true);
-    expect(nodeRows.some((row) => row.scope.includes('limit=50'))).toBe(true);
-    expect(nodeRows.map((row) => row.role)).toEqual(
-      expect.arrayContaining(['Live Scope', 'Table Query'])
-    );
+    expect(nodeRows.some((row) => row.scope.includes('limit=50'))).toBe(false);
+    expect(nodeRows.map((row) => row.role)).toEqual(['Live Scope']);
 
     await rendered.unmount();
   });
