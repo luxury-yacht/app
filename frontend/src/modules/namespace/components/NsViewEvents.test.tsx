@@ -252,8 +252,7 @@ describe('NsViewEvents', () => {
 
   const renderEventsView = async (
     showNamespaceColumnOrOptions:
-      | boolean
-      | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
+      boolean | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
   ) => {
     const options =
       typeof showNamespaceColumnOrOptions === 'boolean'

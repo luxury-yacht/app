@@ -66,11 +66,7 @@ vi.mock('./streaming/resourceStreamManager', () => ({
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 type DiagnosticsStream = 'resources' | 'events' | 'catalog' | 'container-logs';
 type OrchestratorKind =
-  | 'snapshot'
-  | 'resource-stream'
-  | 'event-stream'
-  | 'catalog-stream'
-  | 'container-logs-stream';
+  'snapshot' | 'resource-stream' | 'event-stream' | 'catalog-stream' | 'container-logs-stream';
 
 type ContractDomain = {
   domain: RefreshDomain;

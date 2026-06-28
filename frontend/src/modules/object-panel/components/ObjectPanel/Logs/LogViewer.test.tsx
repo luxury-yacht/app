@@ -661,8 +661,7 @@ describe('LogViewer active pod synchronisation', () => {
       registerCalls.length > 0 ? registerCalls[registerCalls.length - 1] : undefined;
     expect(registerCall).toBeTruthy();
     const fallbackFetcher = registerCall?.[1] as
-      | ((isManual?: boolean) => Promise<void>)
-      | undefined;
+      ((isManual?: boolean) => Promise<void>) | undefined;
     expect(typeof fallbackFetcher).toBe('function');
 
     (FetchContainerLogs as unknown as ViMock).mockClear();
@@ -714,8 +713,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     const registerCalls = mockModules.fallbackManager.register.mock.calls;
     const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
-      | ((isManual?: boolean) => Promise<void>)
-      | undefined;
+      ((isManual?: boolean) => Promise<void>) | undefined;
 
     await act(async () => {
       await fallbackFetcher?.(true);

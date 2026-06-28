@@ -11,11 +11,7 @@ import type { DomainPayloadMap } from '@/core/refresh/types';
 
 export type DataRequestReason = 'background' | 'startup' | 'user';
 export type DataAccessAdapter =
-  | 'refresh-domain'
-  | 'context-refresh'
-  | 'rpc-read'
-  | 'permission-read'
-  | 'capability-read';
+  'refresh-domain' | 'context-refresh' | 'rpc-read' | 'permission-read' | 'capability-read';
 
 export type DataBlockedReason = 'auto-refresh-disabled';
 

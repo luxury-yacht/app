@@ -12,9 +12,7 @@ import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
 export type ColumnWidthInput =
-  | number
-  | `${number}${'px' | 'em' | 'rem' | '%'}` /* explicit unit */
-  | 'auto';
+  number | `${number}${'px' | 'em' | 'rem' | '%'}` /* explicit unit */ | 'auto';
 
 export interface ColumnWidthState {
   width: number;

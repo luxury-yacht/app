@@ -337,11 +337,7 @@ const formatSelectedFilterLabel = (
 };
 
 type LogEmptyState =
-  | 'none'
-  | 'no_logs_yet'
-  | 'no_previous_logs'
-  | 'no_filter_matches'
-  | 'unavailable';
+  'none' | 'no_logs_yet' | 'no_previous_logs' | 'no_filter_matches' | 'unavailable';
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind: resourceKind,

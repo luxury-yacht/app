@@ -52,8 +52,7 @@ export interface RefresherState {
 export type RefreshCallback = (isManual: boolean, signal: AbortSignal) => void | Promise<void>;
 
 type RefreshCallbackOutcome =
-  | { status: 'fulfilled' }
-  | { status: 'rejected'; error: Error; timedOut: boolean };
+  { status: 'fulfilled' } | { status: 'rejected'; error: Error; timedOut: boolean };
 
 type RefreshExecutionSummary = {
   successCount: number;

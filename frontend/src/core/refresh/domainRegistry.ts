@@ -23,11 +23,7 @@ export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain
 }
 
 export type RefreshOrchestratorKind =
-  | 'snapshot'
-  | 'resource-stream'
-  | 'event-stream'
-  | 'catalog-stream'
-  | 'container-logs-stream';
+  'snapshot' | 'resource-stream' | 'event-stream' | 'catalog-stream' | 'container-logs-stream';
 
 export type RefreshBehaviorClass =
   | 'snapshot-table'

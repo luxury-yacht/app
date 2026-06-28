@@ -15,17 +15,15 @@ const columns: GridColumnDefinition<Row>[] = [
   { key: 'age', header: 'Age', autoWidth: true, render: (row) => row.name },
 ];
 
-const models = columns.map(
-  (column, index): ColumnRenderModel<Row> => ({
-    column,
-    key: column.key,
-    className: '',
-    cellStyle: { width: '100px' },
-    start: index * 100,
-    end: (index + 1) * 100,
-    width: 100,
-  })
-);
+const models = columns.map((column, index): ColumnRenderModel<Row> => ({
+  column,
+  key: column.key,
+  className: '',
+  cellStyle: { width: '100px' },
+  start: index * 100,
+  end: (index + 1) * 100,
+  width: 100,
+}));
 
 describe('getVisibleAutoColumnKeys', () => {
   it('returns every auto-width column when column virtualization is disabled', () => {

@@ -50,10 +50,7 @@ export interface ResourceGridTableRow {
 }
 
 export type ResourceGridTableMode =
-  | 'Local Complete'
-  | 'Local Partial'
-  | 'Query Backed Static'
-  | 'Query Backed Dynamic';
+  'Local Complete' | 'Local Partial' | 'Query Backed Static' | 'Query Backed Dynamic';
 
 export const isQueryBackedResourceGridTableMode = (mode: ResourceGridTableMode): boolean =>
   mode === 'Query Backed Static' || mode === 'Query Backed Dynamic';

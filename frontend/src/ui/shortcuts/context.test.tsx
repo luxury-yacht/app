@@ -353,8 +353,7 @@ describe('keyboard handling edge cases', () => {
       ([event]) => event === 'menu:cut'
     );
     const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
-      | (() => void)
-      | undefined;
+      (() => void) | undefined;
     expect(typeof cutHandler).toBe('function');
 
     act(() => {
@@ -394,8 +393,7 @@ describe('keyboard handling edge cases', () => {
       ([event]) => event === 'menu:cut'
     );
     const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
-      | (() => void)
-      | undefined;
+      (() => void) | undefined;
     expect(typeof cutHandler).toBe('function');
 
     act(() => {

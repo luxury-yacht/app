@@ -93,8 +93,7 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
   const apiVersion = (parsed as Record<string, unknown>).apiVersion;
   const kind = (parsed as Record<string, unknown>).kind;
   const metadata = (parsed as Record<string, unknown>).metadata as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const name = metadata?.name;
   const namespace = normalizeNamespace(metadata?.namespace);
   const uid = normalizeUID(metadata?.uid);

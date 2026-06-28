@@ -43,8 +43,7 @@ export function useNavigateToView(): NavigateToViewResult {
       // named ''" and break cluster-scoped navigation.
       const clusterId = objectRef.clusterId ?? undefined;
       const namespace = (objectRef.namespace ?? objectRef.metadata?.namespace ?? undefined) as
-        | string
-        | undefined;
+        string | undefined;
 
       // 1. Navigate to the target view type
       setViewType(destination.viewType);

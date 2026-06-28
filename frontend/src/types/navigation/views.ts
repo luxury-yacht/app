@@ -23,11 +23,4 @@ export type NamespaceViewType =
   | 'events';
 
 export type ClusterViewType =
-  | 'nodes'
-  | 'rbac'
-  | 'storage'
-  | 'config'
-  | 'crds'
-  | 'custom'
-  | 'events'
-  | 'browse';
+  'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events' | 'browse';

@@ -483,9 +483,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const setActiveResourceType = useCallback(
     (
       next:
-        | NamespaceViewType
-        | null
-        | ((prev: NamespaceViewType | null) => NamespaceViewType | null)
+        NamespaceViewType | null | ((prev: NamespaceViewType | null) => NamespaceViewType | null)
     ) => {
       setActiveResourceTypeState((prev) =>
         typeof next === 'function'

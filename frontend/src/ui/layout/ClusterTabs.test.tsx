@@ -117,8 +117,7 @@ describe('ClusterTabs', () => {
 
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     const target = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as
-      | HTMLElement
-      | undefined;
+      HTMLElement | undefined;
     expect(target).toBeTruthy();
 
     act(() => {

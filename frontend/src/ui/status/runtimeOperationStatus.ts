@@ -33,9 +33,7 @@ export {
 } from './runtimeOperationStatusAdapter';
 
 type RuntimeOperationStatusReadResource =
-  | 'runtime-operations'
-  | 'shell-sessions'
-  | 'port-forward-sessions';
+  'runtime-operations' | 'shell-sessions' | 'port-forward-sessions';
 
 export interface RuntimeOperationStatusOptions {
   readInitialState?: boolean;

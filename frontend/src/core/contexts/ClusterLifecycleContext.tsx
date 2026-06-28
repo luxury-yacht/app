@@ -65,8 +65,7 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
     // 1. Subscribe to live events.
     const handleLifecycleEvent = (...args: unknown[]) => {
       const payload = args[0] as
-        | { clusterId?: string; state?: string; previousState?: string }
-        | undefined;
+        { clusterId?: string; state?: string; previousState?: string } | undefined;
       if (!active || !payload?.clusterId || !payload.state) {
         return;
       }

@@ -65,12 +65,7 @@ export const MUTATING_OBJECT_ACTION_IDS = [
 export type MutatingObjectActionId = (typeof MUTATING_OBJECT_ACTION_IDS)[number];
 
 export type ObjectActionPayloadField =
-  | 'replicas'
-  | 'suspend'
-  | 'drainOptions'
-  | 'portForward'
-  | 'debugContainer'
-  | 'revision';
+  'replicas' | 'suspend' | 'drainOptions' | 'portForward' | 'debugContainer' | 'revision';
 
 export type ObjectActionPermissionSlot =
   | 'restart'

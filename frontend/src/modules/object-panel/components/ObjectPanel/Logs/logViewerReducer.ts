@@ -34,9 +34,7 @@ export type CopyFeedback = 'idle' | 'copied' | 'error';
  *  - previous: showing a previous container's logs (loading until fetched)
  */
 export type LogViewMode =
-  | { kind: 'live' }
-  | { kind: 'fallback' }
-  | { kind: 'previous'; loading: boolean };
+  { kind: 'live' } | { kind: 'fallback' } | { kind: 'previous'; loading: boolean };
 
 export const LIVE_MODE: LogViewMode = { kind: 'live' };
 

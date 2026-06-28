@@ -174,8 +174,7 @@ describe('SessionsStatus shell session jump action', () => {
 
   const latestCloseSignal = () =>
     statusIndicatorMock.mock.calls[statusIndicatorMock.mock.calls.length - 1]?.[0]?.closeSignal as
-      | number
-      | undefined;
+      number | undefined;
 
   it('opens and focuses the shell tab immediately for sessions on the active cluster', async () => {
     await renderStatus();

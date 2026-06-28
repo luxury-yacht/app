@@ -384,8 +384,7 @@ describe('useContainerLogsStreamFallback', () => {
     const latestCall =
       mockSetScopedDomainState.mock.calls[mockSetScopedDomainState.mock.calls.length - 1];
     const updater = latestCall?.[2] as
-      | ((previous: Record<string, any>) => Record<string, any>)
-      | undefined;
+      ((previous: Record<string, any>) => Record<string, any>) | undefined;
     expect(typeof updater).toBe('function');
 
     const next = updater?.({

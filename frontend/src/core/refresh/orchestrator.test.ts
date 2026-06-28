@@ -1332,8 +1332,7 @@ describe('refreshOrchestrator', () => {
 
     const subscribeResults = refreshManagerMocks.subscribeMock.mock.results;
     const firstUnsubscribe = subscribeResults[subscribeResults.length - 1]?.value as
-      | ReturnType<typeof vi.fn>
-      | undefined;
+      ReturnType<typeof vi.fn> | undefined;
     expect(firstUnsubscribe).toBeDefined();
 
     refreshOrchestrator.registerDomain({

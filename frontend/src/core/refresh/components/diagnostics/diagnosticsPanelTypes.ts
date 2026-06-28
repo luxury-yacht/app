@@ -65,9 +65,7 @@ export interface DiagnosticsRow {
 // connect/socket-backlog drops, since one multiplexed socket spans all clusters)
 // → a cluster group row → per-domain rows (per-domain delivery/recovery).
 export type DiagnosticsStreamRow =
-  | DiagnosticsStreamHeaderRow
-  | DiagnosticsStreamClusterRow
-  | DiagnosticsStreamDomainRow;
+  DiagnosticsStreamHeaderRow | DiagnosticsStreamClusterRow | DiagnosticsStreamDomainRow;
 
 // Stream header: socket-level metrics for one stream (Sessions/Last Connect are
 // a property of the single socket, not any cluster/domain).

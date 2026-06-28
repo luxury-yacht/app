@@ -92,13 +92,7 @@ export type ResourceInventoryCompleteness = 'complete' | 'partial';
  * - `error` — the source failed.
  */
 export type ResourceInventoryStatus =
-  | 'initializing'
-  | 'loading'
-  | 'refreshing'
-  | 'ready'
-  | 'empty'
-  | 'blocked'
-  | 'error';
+  'initializing' | 'loading' | 'refreshing' | 'ready' | 'empty' | 'blocked' | 'error';
 
 /**
  * The normalized input every source produces. `boundedRowsSource` and

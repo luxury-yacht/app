@@ -22,12 +22,7 @@ export interface DrainPodProgress {
 }
 
 export type DrainPhase =
-  | 'pending'
-  | 'cordoning'
-  | 'planning'
-  | 'evicting'
-  | 'waiting'
-  | 'completed';
+  'pending' | 'cordoning' | 'planning' | 'evicting' | 'waiting' | 'completed';
 
 export interface DrainProgress {
   /** Total pods reported by the "plan" event, when present. */

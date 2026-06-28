@@ -707,8 +707,7 @@ describe('YamlEditor', () => {
     const computedDecorations = (
       codeMirrorState.props.extensions as Array<Record<string, unknown>>
     ).find((extension) => extension.type === 'computedDecorations') as
-      | { compute: (state: { doc: { toString: () => string } }) => unknown }
-      | undefined;
+      { compute: (state: { doc: { toString: () => string } }) => unknown } | undefined;
     expect(computedDecorations).toBeTruthy();
 
     codeMirrorState.decorationRanges = [];
