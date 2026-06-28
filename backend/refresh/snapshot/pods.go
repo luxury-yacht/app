@@ -721,7 +721,7 @@ func parseWorkloadScope(value string) (workloadScope, error) {
 	apiVersion := strings.TrimSpace(parts[2])
 	kind := strings.TrimSpace(parts[3])
 	name := strings.TrimSpace(parts[4])
-	if namespace == "" || apiVersion == "" || kind == "" || name == "" {
+	if namespace == "" || apiGroup == "" || apiVersion == "" || kind == "" || name == "" {
 		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
 	}
 	return workloadScope{

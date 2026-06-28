@@ -178,57 +178,36 @@ type resolvedLogTarget struct {
 }
 
 func (s *Service) resolveLogTarget(req types.ContainerLogsFetchRequest) (resolvedLogTarget, error) {
-	if strings.TrimSpace(req.Scope) != "" {
-		identity, err := refresh.ParseObjectScope(req.Scope)
-		if err != nil {
-			return resolvedLogTarget{}, err
-		}
-		if strings.TrimSpace(identity.GVK.Version) == "" {
-			return resolvedLogTarget{}, fmt.Errorf("logs require object scopes to include apiVersion")
-		}
-		if identity.Namespace == "" {
-			return resolvedLogTarget{}, fmt.Errorf("logs require a namespaced object scope")
-		}
-		kind := strings.ToLower(strings.TrimSpace(identity.GVK.Kind))
-		if kind == "" {
-			return resolvedLogTarget{}, fmt.Errorf("object kind missing in scope %q", req.Scope)
-		}
-		target := resolvedLogTarget{
-			Namespace: identity.Namespace,
-			Kind:      kind,
-			Name:      strings.TrimSpace(identity.Name),
-		}
-		if target.Name == "" {
-			return resolvedLogTarget{}, fmt.Errorf("object name missing in scope %q", req.Scope)
-		}
-		if target.Kind == "pod" {
-			target.PodName = target.Name
-		}
-		return target, nil
+	if strings.TrimSpace(req.Scope) == "" {
+		return resolvedLogTarget{}, fmt.Errorf("container logs scope is required")
 	}
 
-	if req.Namespace == "" {
-		return resolvedLogTarget{}, fmt.Errorf("namespace is required")
+	identity, err := refresh.ParseObjectScope(req.Scope)
+	if err != nil {
+		return resolvedLogTarget{}, err
 	}
-
-	if req.WorkloadName != "" && req.WorkloadKind != "" {
-		return resolvedLogTarget{
-			Namespace: req.Namespace,
-			Kind:      strings.ToLower(strings.TrimSpace(req.WorkloadKind)),
-			Name:      strings.TrimSpace(req.WorkloadName),
-		}, nil
+	if strings.TrimSpace(identity.GVK.Version) == "" {
+		return resolvedLogTarget{}, fmt.Errorf("logs require object scopes to include apiVersion")
 	}
-	if req.PodName != "" {
-		podName := strings.TrimSpace(req.PodName)
-		return resolvedLogTarget{
-			Namespace: req.Namespace,
-			Kind:      "pod",
-			Name:      podName,
-			PodName:   podName,
-		}, nil
+	if identity.Namespace == "" {
+		return resolvedLogTarget{}, fmt.Errorf("logs require a namespaced object scope")
 	}
-
-	return resolvedLogTarget{}, fmt.Errorf("either workload or pod must be specified")
+	kind := strings.ToLower(strings.TrimSpace(identity.GVK.Kind))
+	if kind == "" {
+		return resolvedLogTarget{}, fmt.Errorf("object kind missing in scope %q", req.Scope)
+	}
+	target := resolvedLogTarget{
+		Namespace: identity.Namespace,
+		Kind:      kind,
+		Name:      strings.TrimSpace(identity.Name),
+	}
+	if target.Name == "" {
+		return resolvedLogTarget{}, fmt.Errorf("object name missing in scope %q", req.Scope)
+	}
+	if target.Kind == "pod" {
+		target.PodName = target.Name
+	}
+	return target, nil
 }
 
 func (s *Service) resolveTargetPods(req types.ContainerLogsFetchRequest) ([]string, error) {

@@ -112,6 +112,7 @@ func TestParseStreamSelectorRejectsInvalid(t *testing.T) {
 		{domainPods, "", "scope is required"},
 		{domainPods, "node:", "node scope is required"},
 		{domainPods, "workload:prod:apps", "namespace:group:version:kind:name"},
+		{domainPods, "workload:prod::v1:Deployment:web", "namespace:group:version:kind:name"},
 		{domainNodes, "namespace:prod", "does not accept scope"},
 		{"catalog", "limit=50", "does not accept scope"},
 		{"unknown-domain", "anything", "unsupported resource stream domain"},

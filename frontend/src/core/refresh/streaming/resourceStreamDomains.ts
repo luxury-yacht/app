@@ -84,7 +84,7 @@ const normalizePodScope = (scope: string): string => {
       throw new Error('pods workload scope requires namespace:group:version:kind:name');
     }
     const [namespace, group, version, kind, name] = parts;
-    if (!namespace || !version || !kind || !name) {
+    if (!namespace || !group || !version || !kind || !name) {
       throw new Error('pods workload scope requires namespace:group:version:kind:name');
     }
     return `workload:${namespace}:${group}:${version}:${kind}:${name}`;

@@ -4803,10 +4803,6 @@ export namespace types {
 	}
 	export class ContainerLogsFetchRequest {
 	    scope?: string;
-	    namespace: string;
-	    workloadName?: string;
-	    workloadKind?: string;
-	    podName?: string;
 	    podFilter?: string;
 	    podInclude?: string;
 	    podExclude?: string;
@@ -4828,10 +4824,6 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.scope = source["scope"];
-	        this.namespace = source["namespace"];
-	        this.workloadName = source["workloadName"];
-	        this.workloadKind = source["workloadKind"];
-	        this.podName = source["podName"];
 	        this.podFilter = source["podFilter"];
 	        this.podInclude = source["podInclude"];
 	        this.podExclude = source["podExclude"];

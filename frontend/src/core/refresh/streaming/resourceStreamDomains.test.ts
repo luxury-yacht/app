@@ -91,6 +91,9 @@ describe('resource stream domain descriptors', () => {
     expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
       'workload:default:apps:v1:Deployment:web'
     );
+    expect(() => normalizeResourceScope('pods', 'workload:default::v1:Deployment:web')).toThrow(
+      'pods workload scope requires namespace:group:version:kind:name'
+    );
 
     resourceStreamDomainDescriptors
       .filter((descriptor) => descriptor.scopeKind === 'namespace')

@@ -676,7 +676,6 @@ describe('LogViewer active pod synchronisation', () => {
     expect(FetchContainerLogs).toHaveBeenCalledTimes(1);
     expect((FetchContainerLogs as unknown as ViMock).mock.calls[0][1]).toMatchObject({
       scope: defaultScope,
-      workloadKind: 'deployment',
     });
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
   });

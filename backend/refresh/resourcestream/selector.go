@@ -188,7 +188,7 @@ func parsePodSelector(selector StreamSelector, scope string) (StreamSelector, er
 		version := strings.TrimSpace(parts[2])
 		kind := strings.TrimSpace(parts[3])
 		name := strings.TrimSpace(parts[4])
-		if namespace == "" || version == "" || kind == "" || name == "" {
+		if namespace == "" || group == "" || version == "" || kind == "" || name == "" {
 			return StreamSelector{}, fmt.Errorf("pods workload scope requires namespace:group:version:kind:name")
 		}
 		selector.ScopeKind = StreamScopeWorkload

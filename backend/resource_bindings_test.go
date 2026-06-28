@@ -202,6 +202,11 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
 	app := wrapperTestApp(t)
 
+	resp := app.FetchContainerLogs("cluster-a", ContainerLogsFetchRequest{Container: "app"})
+	if !strings.Contains(resp.Error, "container logs scope is required") {
+		t.Fatalf("expected missing scope error, got %q", resp.Error)
+	}
+
 	tests := []struct {
 		name      string
 		clusterID string
@@ -607,7 +612,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		}
 	}
 
-	resp := app.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{Namespace: "ns", PodName: "pod"})
+	resp := app.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{Scope: "cluster-a|ns:/v1:pod:pod"})
 	if resp.Error == "" {
 		t.Fatalf("expected error for FetchContainerLogs without client")
 	}

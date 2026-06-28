@@ -153,10 +153,6 @@ type ContainerLogsEntry struct {
 // ContainerLogsFetchRequest represents parameters for fetching logs
 type ContainerLogsFetchRequest struct {
 	Scope            string   `json:"scope,omitempty"`
-	Namespace        string   `json:"namespace"`
-	WorkloadName     string   `json:"workloadName,omitempty"`
-	WorkloadKind     string   `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
-	PodName          string   `json:"podName,omitempty"`
 	PodFilter        string   `json:"podFilter,omitempty"`
 	PodInclude       string   `json:"podInclude,omitempty"`
 	PodExclude       string   `json:"podExclude,omitempty"`

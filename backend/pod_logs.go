@@ -52,7 +52,7 @@ func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string
 
 func requireMatchingContainerLogsScopeCluster(clusterID, scope string) error {
 	if strings.TrimSpace(scope) == "" {
-		return nil
+		return fmt.Errorf("container logs scope is required")
 	}
 	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
 	if len(clusterIDs) != 1 {

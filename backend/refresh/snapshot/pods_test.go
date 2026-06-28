@@ -291,6 +291,7 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 func TestParseWorkloadScopeRejectsMissingIdentitySegments(t *testing.T) {
 	for _, value := range []string{
 		":apps:v1:Deployment:orders",
+		"prod::v1:Deployment:orders",
 		"prod:apps::Deployment:orders",
 		"prod:apps:v1::orders",
 		"prod:apps:v1:Deployment:",
