@@ -1,5 +1,3 @@
-- does anything still use api/v1 and if so why
-
 - Build a plugin architecture
   - AI
     - Conversational support to perform functions of the app
