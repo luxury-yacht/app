@@ -199,6 +199,48 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 	app.clearNodeCaches(clusterID, "node")
 }
 
+func TestFetchContainerLogsRejectsInvalidScopeCluster(t *testing.T) {
+	app := wrapperTestApp(t)
+
+	tests := []struct {
+		name      string
+		clusterID string
+		scope     string
+		want      string
+	}{
+		{
+			name:      "missing scope cluster",
+			clusterID: "cluster-a",
+			scope:     "default:/v1:pod:demo",
+			want:      "container logs scope requires a single cluster scope",
+		},
+		{
+			name:      "mismatched scope cluster",
+			clusterID: "cluster-a",
+			scope:     "cluster-b|default:/v1:pod:demo",
+			want:      "container logs scope cluster \"cluster-b\" does not match requested cluster \"cluster-a\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := app.FetchContainerLogs(tt.clusterID, ContainerLogsFetchRequest{Scope: tt.scope})
+			if !strings.Contains(resp.Error, tt.want) {
+				t.Fatalf("expected error containing %q, got %q", tt.want, resp.Error)
+			}
+		})
+	}
+}
+
+func TestGetContainerLogsScopeContainersRejectsInvalidScopeCluster(t *testing.T) {
+	app := wrapperTestApp(t)
+
+	_, err := app.GetContainerLogsScopeContainers("cluster-a", "cluster-b|default:/v1:pod:demo")
+	if err == nil || !strings.Contains(err.Error(), "container logs scope cluster \"cluster-b\" does not match requested cluster \"cluster-a\"") {
+		t.Fatalf("expected mismatched scope cluster error, got %v", err)
+	}
+}
+
 func TestDeletePodEvictsDetailCache(t *testing.T) {
 	app := wrapperTestApp(t)
 	app.responseCache = newResponseCache(time.Minute, 10)

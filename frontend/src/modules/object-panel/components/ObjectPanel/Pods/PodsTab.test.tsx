@@ -186,9 +186,11 @@ import { PodsTab } from './PodsTab';
 const DEPLOYMENT_OBJECT_DATA = {
   clusterId: PANEL_CLUSTER_ID,
   clusterName: 'Panel Cluster A',
+  group: 'apps',
   kind: 'Deployment',
   name: 'my-deploy',
   namespace: 'default',
+  version: 'v1',
 };
 
 const NODE_OBJECT_DATA = {
@@ -329,6 +331,21 @@ describe('PodsTab (query-backed)', () => {
 
   it('does not issue a pods query when the tab is inactive', async () => {
     await renderPods({ isActive: false });
+
+    expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
+  });
+
+  it('does not issue a workload-scoped pods query when the panel object omits group identity', async () => {
+    objectPanelRef.current = {
+      clusterId: PANEL_CLUSTER_ID,
+      clusterName: 'Panel Cluster A',
+      kind: 'Deployment',
+      name: 'my-deploy',
+      namespace: 'default',
+      version: 'v1',
+    };
+
+    await renderPods();
 
     expect(requestRefreshDomainStateMock).not.toHaveBeenCalled();
   });

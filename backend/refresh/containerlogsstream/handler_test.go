@@ -51,18 +51,19 @@ func TestParseOptions(t *testing.T) {
 	}{
 		{
 			name:        "valid scope with defaults",
-			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}},
 			kind:        "pod",
+			clusterID:   "cluster-a",
 			namespace:   "default",
 			version:     "v1",
 			objectName:  "nginx",
-			scopeString: "default:/v1:pod:nginx",
+			scopeString: "cluster-a|default:/v1:pod:nginx",
 			tail:        config.ContainerLogsStreamDefaultTailLines,
 		},
 		{
 			name: "custom tail and filters",
 			query: url.Values{
-				"scope":            []string{"prod:apps/v1:deployment:web"},
+				"scope":            []string{"cluster-a|prod:apps/v1:deployment:web"},
 				"tailLines":        []string{"200"},
 				"pod":              []string{"web-123"},
 				"podInclude":       []string{"^web-"},
@@ -85,11 +86,12 @@ func TestParseOptions(t *testing.T) {
 			containerState:   "running",
 			include:          "error|warn",
 			exclude:          "healthcheck",
+			clusterID:        "cluster-a",
 			namespace:        "prod",
 			group:            "apps",
 			version:          "v1",
 			objectName:       "web",
-			scopeString:      "prod:apps/v1:deployment:web",
+			scopeString:      "cluster-a|prod:apps/v1:deployment:web",
 			tail:             200,
 		},
 		{
@@ -106,22 +108,23 @@ func TestParseOptions(t *testing.T) {
 		},
 		{
 			name:        "tail capped at max",
-			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
 			kind:        "pod",
+			clusterID:   "cluster-a",
 			namespace:   "default",
 			version:     "v1",
 			objectName:  "nginx",
-			scopeString: "default:/v1:pod:nginx",
+			scopeString: "cluster-a|default:/v1:pod:nginx",
 			tail:        config.ContainerLogsStreamMaxTailLines,
 		},
 		{
 			name:        "invalid line filter",
-			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "include": []string{"["}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}, "include": []string{"["}},
 			expectError: true,
 		},
 		{
 			name:        "invalid pod filter",
-			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "podInclude": []string{"["}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}, "podInclude": []string{"["}},
 			expectError: true,
 		},
 		{
@@ -130,28 +133,38 @@ func TestParseOptions(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "missing cluster scope",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "multiple cluster scope",
+			query:       url.Values{"scope": []string{"clusters=cluster-a,cluster-b|default:/v1:pod:nginx"}},
+			expectError: true,
+		},
+		{
 			name:        "empty namespace",
-			query:       url.Values{"scope": []string{":/v1:pod:nginx"}},
+			query:       url.Values{"scope": []string{"cluster-a|:/v1:pod:nginx"}},
 			expectError: true,
 		},
 		{
 			name:        "empty kind",
-			query:       url.Values{"scope": []string{"default:/v1::nginx"}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1::nginx"}},
 			expectError: true,
 		},
 		{
 			name:        "empty name",
-			query:       url.Values{"scope": []string{"default:/v1:pod:"}},
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:"}},
 			expectError: true,
 		},
 		{
 			name:        "missing api version rejected",
-			query:       url.Values{"scope": []string{"default:pod:nginx"}},
+			query:       url.Values{"scope": []string{"cluster-a|default:pod:nginx"}},
 			expectError: true,
 		},
 		{
 			name:        "cluster-scoped object invalid",
-			query:       url.Values{"scope": []string{"__cluster__:/v1:Node:n1"}},
+			query:       url.Values{"scope": []string{"cluster-a|__cluster__:/v1:Node:n1"}},
 			expectError: true,
 		},
 	}
@@ -263,7 +276,7 @@ func TestServeHTTPRequiresFlusher(t *testing.T) {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?scope=default:/v1:pod:web", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:web", nil)
 
 	rec := &noFlushRecorder{
 		header: make(http.Header),
@@ -298,7 +311,7 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:my-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=cluster-a|default:/v1:pod:my-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})
@@ -328,14 +341,14 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	// First event is the "connected" event with Reset: true and empty entries
 	connected := events[0]
 	require.True(t, connected.Reset)
-	require.Equal(t, "default:/v1:pod:my-pod", connected.Scope)
+	require.Equal(t, "cluster-a|default:/v1:pod:my-pod", connected.Scope)
 	require.Empty(t, connected.Entries)
 
 	// Second event has the initial log entries and must replace any
 	// preserved client buffer on reconnect/remount.
 	initial := events[1]
 	require.True(t, initial.Reset)
-	require.Equal(t, "default:/v1:pod:my-pod", initial.Scope)
+	require.Equal(t, "cluster-a|default:/v1:pod:my-pod", initial.Scope)
 	require.Len(t, initial.Entries, 1)
 
 	entry := initial.Entries[0]
@@ -358,7 +371,7 @@ func TestServeHTTPRecordsDeliveryPerLogTarget(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:my-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=cluster-a|default:/v1:pod:my-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 	done := make(chan struct{})
 	go func() {
@@ -399,7 +412,7 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/?scope=default:batch/v1:job:my-job", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:batch/v1:job:my-job", nil)
 	rec := newFlushRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -454,7 +467,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:stream-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=cluster-a|default:/v1:pod:stream-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})
@@ -528,7 +541,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:error-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=cluster-a|default:/v1:pod:error-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})

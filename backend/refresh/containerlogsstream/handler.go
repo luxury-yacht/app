@@ -425,6 +425,9 @@ func parseOptions(r *http.Request) (Options, error) {
 		return Options{}, errors.New("scope is required")
 	}
 	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
+	if len(clusterIDs) != 1 {
+		return Options{}, errors.New("log scope requires a single cluster scope")
+	}
 
 	identity, err := refresh.ParseObjectScope(rawScope)
 	if err != nil {

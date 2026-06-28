@@ -1081,7 +1081,7 @@ describe('DiagnosticsPanel component', () => {
 
     scopedEntriesMap['container-logs'] = [
       [
-        'workload:default:deployment:web',
+        'cluster-a|default:apps/v1:deployment:web',
         {
           ...createReadyState({}),
           status: 'ready',
@@ -1089,7 +1089,7 @@ describe('DiagnosticsPanel component', () => {
         },
       ],
       [
-        'workload:default:deployment:api',
+        'cluster-a|default:apps/v1:deployment:api',
         {
           ...createReadyState({}),
           status: 'error',

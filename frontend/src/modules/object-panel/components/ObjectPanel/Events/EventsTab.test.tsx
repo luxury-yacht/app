@@ -202,7 +202,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -223,7 +223,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -260,7 +260,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -297,7 +297,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -315,7 +315,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -384,7 +384,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -406,7 +406,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -449,7 +449,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -546,7 +546,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });
@@ -595,7 +595,7 @@ describe('EventsTab', () => {
         <EventsTab
           objectData={parentObjectData}
           isActive={true}
-          eventsScope="parent-cluster|default:Deployment:my-deploy"
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
         />
       );
     });

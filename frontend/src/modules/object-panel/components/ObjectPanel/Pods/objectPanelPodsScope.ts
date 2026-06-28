@@ -8,16 +8,14 @@
  */
 import type { PanelObjectData } from '../types';
 
-// The kinds whose pods the panel can scope to, with the GVK used as a fallback
-// when PanelObjectData omits the original-case group/version/kind. These keys
-// mirror the pods tab's `onlyForKinds` (see constants.ts) plus `node`.
-const WORKLOAD_SCOPE_GVK: Record<string, { group: string; version: string; kind: string }> = {
-  deployment: { group: 'apps', version: 'v1', kind: 'Deployment' },
-  daemonset: { group: 'apps', version: 'v1', kind: 'DaemonSet' },
-  statefulset: { group: 'apps', version: 'v1', kind: 'StatefulSet' },
-  job: { group: 'batch', version: 'v1', kind: 'Job' },
-  replicaset: { group: 'apps', version: 'v1', kind: 'ReplicaSet' },
-};
+// These keys mirror the pods tab's `onlyForKinds` (see constants.ts) plus `node`.
+const WORKLOAD_SCOPE_KINDS = new Set([
+  'deployment',
+  'daemonset',
+  'statefulset',
+  'job',
+  'replicaset',
+]);
 
 /**
  * Builds the pods-query base scope for an object panel object.
@@ -30,27 +28,28 @@ export function buildObjectPanelPodsScope(
   objectData: PanelObjectData | null,
   objectKind: string | null
 ): string | null {
-  const normalizedKind = objectKind?.toLowerCase() ?? null;
-  if (!objectData?.name || !normalizedKind) {
+  const normalizedKind = objectKind?.trim().toLowerCase() ?? null;
+  if (!objectData || !normalizedKind) {
+    return null;
+  }
+  const objectName = objectData.name?.trim();
+  if (!objectName) {
     return null;
   }
 
   if (normalizedKind === 'node') {
-    return `node:${objectData.name}`;
+    return `node:${objectName}`;
   }
 
   const workloadNamespace = objectData.namespace?.trim();
-  // Prefer the original-case Kind/group/version from PanelObjectData; fall back
-  // to the GVK map only when the data source didn't provide them.
-  const fallbackGVK = WORKLOAD_SCOPE_GVK[normalizedKind];
-  if (workloadNamespace && fallbackGVK) {
-    const workloadKindSegment = objectData.kind ?? fallbackGVK.kind;
-    const workloadGroup = objectData.group ?? fallbackGVK.group;
-    const workloadVersion = objectData.version ?? fallbackGVK.version;
-    if (!workloadVersion || !workloadKindSegment) {
+  if (workloadNamespace && WORKLOAD_SCOPE_KINDS.has(normalizedKind)) {
+    const workloadKindSegment = objectData.kind?.trim();
+    const workloadGroup = objectData.group?.trim();
+    const workloadVersion = objectData.version?.trim();
+    if (!workloadGroup || !workloadVersion || !workloadKindSegment) {
       return null;
     }
-    return `workload:${workloadNamespace}:${workloadGroup}:${workloadVersion}:${workloadKindSegment}:${objectData.name}`;
+    return `workload:${workloadNamespace}:${workloadGroup}:${workloadVersion}:${workloadKindSegment}:${objectName}`;
   }
 
   return null;

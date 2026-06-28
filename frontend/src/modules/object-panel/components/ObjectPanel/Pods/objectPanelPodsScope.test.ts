@@ -36,16 +36,28 @@ describe('buildObjectPanelPodsScope', () => {
     );
   });
 
-  it('falls back to the GVK map when the object omits group/version/kind segments', () => {
-    expect(buildObjectPanelPodsScope({ name: 'api', namespace: 'team-a' }, 'statefulset')).toBe(
-      'workload:team-a:apps:v1:StatefulSet:api'
-    );
+  it('returns null when a workload object omits group/version/kind segments', () => {
+    expect(
+      buildObjectPanelPodsScope({ name: 'api', namespace: 'team-a' }, 'statefulset')
+    ).toBeNull();
+  });
+
+  it('returns null when a workload object has kind and version but omits group', () => {
+    expect(
+      buildObjectPanelPodsScope(
+        { kind: 'Deployment', name: 'api', namespace: 'team-a', version: 'v1' },
+        'deployment'
+      )
+    ).toBeNull();
   });
 
   it('uses the batch group for jobs', () => {
-    expect(buildObjectPanelPodsScope({ name: 'backup', namespace: 'team-a' }, 'job')).toBe(
-      'workload:team-a:batch:v1:Job:backup'
-    );
+    expect(
+      buildObjectPanelPodsScope(
+        { kind: 'Job', name: 'backup', namespace: 'team-a', group: 'batch', version: 'v1' },
+        'job'
+      )
+    ).toBe('workload:team-a:batch:v1:Job:backup');
   });
 
   it('returns null for a workload without a namespace', () => {

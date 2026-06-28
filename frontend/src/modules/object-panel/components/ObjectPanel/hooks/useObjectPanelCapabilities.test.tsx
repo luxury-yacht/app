@@ -118,7 +118,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData,
       objectKind: 'deployment',
-      detailScope: 'team-a:deployment:api',
+      detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
       featureSupport: baseFeatureSupport,
     });
 
@@ -163,7 +163,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
       objectKind: 'deployment',
-      detailScope: 'team-a:deployment:api',
+      detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
       featureSupport: baseFeatureSupport,
     });
 
@@ -233,7 +233,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:api-123',
+      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
     });
 
@@ -261,7 +261,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:api-123',
+      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
     });
 
@@ -295,7 +295,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:api-123',
+      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
     });
 
@@ -323,7 +323,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:demo',
+      detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
     });
 
@@ -344,7 +344,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:demo',
+      detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
     });
 
@@ -372,7 +372,7 @@ describe('useObjectPanelCapabilities', () => {
     const result = await renderHook({
       objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
       objectKind: 'pod',
-      detailScope: 'team-a:pod:demo',
+      detailScope: 'cluster-a|team-a:/v1:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
     });
 

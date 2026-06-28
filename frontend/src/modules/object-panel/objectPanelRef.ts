@@ -14,6 +14,7 @@ import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 export interface ObjectPanelRef extends ResolvedObjectReference {
   clusterId: string;
@@ -111,6 +112,23 @@ const normalizePanelInput = (input: KubernetesObjectReference): KubernetesObject
   };
 };
 
+const hasExplicitScopeGVK = (input: KubernetesObjectReference): boolean => {
+  const version = normalizeOptional(input.version);
+  if (input.group == null || !version) {
+    return false;
+  }
+  const group = input.group.trim();
+  const kind = normalizeOptional(input.kind);
+  const builtinGVK = kind ? resolveBuiltinGroupVersion(kind) : undefined;
+  if (!group && builtinGVK?.group) {
+    return false;
+  }
+  if (!group && !builtinGVK) {
+    return false;
+  }
+  return true;
+};
+
 export const buildObjectPanelRef = (
   input: KubernetesObjectReference,
   options: ObjectPanelRefOptions = {}
@@ -206,9 +224,28 @@ export const getObjectPanelScopes = (
     };
   }
 
+  const normalizedObjectData = normalizePanelInput(objectData);
+  const scopeClusterId =
+    normalizeOptional(normalizedObjectData.clusterId) ??
+    normalizeOptional(options.fallbackClusterId);
+  if (!scopeClusterId || !hasExplicitScopeGVK(normalizedObjectData)) {
+    return {
+      objectKind: objectData.kind.toLowerCase(),
+      scopeNamespace: null,
+      detailScope: null,
+      eventsScope: null,
+      containerLogsScope: null,
+      mapScope: null,
+      helmScope: null,
+      podsScope: null,
+      isHelmRelease: false,
+      isEvent: objectData.kind.trim().toLowerCase() === 'event',
+    };
+  }
+
   let ref: ResolvedObjectReference;
   try {
-    ref = buildObjectReference(normalizePanelInput(objectData));
+    ref = buildObjectReference(normalizedObjectData);
   } catch {
     return {
       objectKind: objectData.kind.toLowerCase(),
@@ -227,7 +264,7 @@ export const getObjectPanelScopes = (
   const objectKind = ref.kind.toLowerCase();
   const clusterScope = options.clusterScope ?? DEFAULT_CLUSTER_SCOPE;
   const scopeNamespace = ref.namespace || clusterScope;
-  const clusterId = ref.clusterId ?? normalizeOptional(options.fallbackClusterId);
+  const clusterId = ref.clusterId ?? scopeClusterId;
   const detailScope = buildClusterObjectScope(
     clusterId,
     buildRequiredObjectScope({

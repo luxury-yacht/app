@@ -38,6 +38,7 @@ describe('getObjectPanelScopeEvictions pods window', () => {
   it('evicts the node pods window for a node panel', () => {
     const evictions = getObjectPanelScopeEvictions({
       clusterId: 'cluster-a',
+      group: '',
       kind: 'Node',
       version: 'v1',
       name: 'worker-1',
@@ -65,21 +66,76 @@ describe('getObjectPanelScopeEvictions pods window', () => {
 describe('getObjectPanelScopes', () => {
   it('normalises kind casing and builds scopes for standard resources', () => {
     const result = getObjectPanelScopes({
+      clusterId: 'cluster-1',
+      group: '',
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
+      version: 'v1',
     });
 
     expect(result.objectKind).toBe('pod');
-    expect(result.detailScope).toBe('team-a:/v1:pod:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:/v1:pod:api');
     expect(result.helmScope).toBeNull();
     expect(result.isHelmRelease).toBe(false);
     expect(result.isEvent).toBe(false);
   });
 
+  it('returns null refresh scopes when cluster identity is missing', () => {
+    const result = getObjectPanelScopes({
+      group: '',
+      kind: 'Pod',
+      name: 'api',
+      namespace: 'team-a',
+      version: 'v1',
+    });
+
+    expect(result.objectKind).toBe('pod');
+    expect(result.detailScope).toBeNull();
+    expect(result.eventsScope).toBeNull();
+    expect(result.containerLogsScope).toBeNull();
+    expect(result.mapScope).toBeNull();
+    expect(result.podsScope).toBeNull();
+  });
+
+  it('returns null refresh scopes when GVK identity is missing', () => {
+    const result = getObjectPanelScopes({
+      clusterId: 'cluster-1',
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+    });
+
+    expect(result.objectKind).toBe('deployment');
+    expect(result.detailScope).toBeNull();
+    expect(result.eventsScope).toBeNull();
+    expect(result.containerLogsScope).toBeNull();
+    expect(result.mapScope).toBeNull();
+    expect(result.podsScope).toBeNull();
+  });
+
+  it('returns null refresh scopes when a non-core builtin has an empty group segment', () => {
+    const result = getObjectPanelScopes({
+      clusterId: 'cluster-1',
+      group: '',
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      version: 'v1',
+    });
+
+    expect(result.objectKind).toBe('deployment');
+    expect(result.detailScope).toBeNull();
+    expect(result.eventsScope).toBeNull();
+    expect(result.containerLogsScope).toBeNull();
+    expect(result.mapScope).toBeNull();
+    expect(result.podsScope).toBeNull();
+  });
+
   it('falls back to cluster scope when namespace is empty', () => {
     const result = getObjectPanelScopes(
       {
+        clusterId: 'cluster-1',
         kind: 'HelmRelease',
         name: 'shopping-cart',
         namespace: '',
@@ -88,8 +144,8 @@ describe('getObjectPanelScopes', () => {
     );
 
     expect(result.objectKind).toBe('helmrelease');
-    expect(result.detailScope).toBe('__cluster__:helm.sh/v3:helmrelease:shopping-cart');
-    expect(result.helmScope).toBe('__cluster__:shopping-cart');
+    expect(result.detailScope).toBe('cluster-1|__cluster__:helm.sh/v3:helmrelease:shopping-cart');
+    expect(result.helmScope).toBe('cluster-1|__cluster__:shopping-cart');
     expect(result.isHelmRelease).toBe(true);
   });
 
@@ -116,13 +172,16 @@ describe('getObjectPanelScopes', () => {
 
   it('marks event resources with event-specific flag', () => {
     const result = getObjectPanelScopes({
+      clusterId: 'cluster-1',
+      group: '',
       kind: 'Event',
       name: 'warning-123',
       namespace: 'default',
+      version: 'v1',
     });
 
     expect(result.isEvent).toBe(true);
-    expect(result.detailScope).toBe('default:/v1:event:warning-123');
+    expect(result.detailScope).toBe('cluster-1|default:/v1:event:warning-123');
   });
 
   it('emits the GVK scope form when PanelObjectData carries group and version', () => {
@@ -134,12 +193,15 @@ describe('getObjectPanelScopes', () => {
       kind: 'DBInstance',
       name: 'my-db',
       namespace: 'default',
+      clusterId: 'cluster-1',
       group: 'rds.services.k8s.aws',
       version: 'v1alpha1',
     });
 
     expect(result.objectKind).toBe('dbinstance');
-    expect(result.detailScope).toBe('default:rds.services.k8s.aws/v1alpha1:dbinstance:my-db');
+    expect(result.detailScope).toBe(
+      'cluster-1|default:rds.services.k8s.aws/v1alpha1:dbinstance:my-db'
+    );
   });
 
   it('emits the GVK scope form for core resources with an empty group', () => {
@@ -150,11 +212,12 @@ describe('getObjectPanelScopes', () => {
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
+      clusterId: 'cluster-1',
       group: '',
       version: 'v1',
     });
 
-    expect(result.detailScope).toBe('team-a:/v1:pod:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:/v1:pod:api');
   });
 
   it('builds eventsScope from the original-case kind so a single source of truth feeds both consumers', () => {
@@ -168,6 +231,8 @@ describe('getObjectPanelScopes', () => {
       name: 'api',
       namespace: 'team-a',
       clusterId: 'cluster-1',
+      group: 'apps',
+      version: 'v1',
     });
 
     // detailScope is lowercase; eventsScope keeps the original case.
@@ -208,6 +273,8 @@ describe('getObjectPanelScopes', () => {
       name: 'api',
       namespace: 'team-a',
       clusterId: 'cluster-1',
+      group: 'apps',
+      version: 'v1',
     });
 
     expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:deployment:api');

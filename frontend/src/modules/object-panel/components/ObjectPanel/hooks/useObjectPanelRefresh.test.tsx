@@ -73,7 +73,7 @@ describe('useObjectPanelRefresh', () => {
   ) => {
     const propsRef = {
       current: {
-        detailScope: 'team-a:deployment:api',
+        detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
         objectKind: 'deployment',
         objectData: baseObjectData,
         isOpen: true,
@@ -150,13 +150,13 @@ describe('useObjectPanelRefresh', () => {
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api',
+      'cluster-a|team-a:apps/v1:deployment:api',
       true,
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api',
+      'cluster-a|team-a:apps/v1:deployment:api',
       expect.objectContaining({ isManual: false })
     );
     expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
@@ -177,13 +177,13 @@ describe('useObjectPanelRefresh', () => {
     // from cache.
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api',
+      'cluster-a|team-a:apps/v1:deployment:api',
       false,
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api'
+      'cluster-a|team-a:apps/v1:deployment:api'
     );
   });
 
@@ -198,7 +198,7 @@ describe('useObjectPanelRefresh', () => {
     await fetchResourceDetails('user');
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api',
+      'cluster-a|team-a:apps/v1:deployment:api',
       expect.objectContaining({ isManual: true })
     );
   });

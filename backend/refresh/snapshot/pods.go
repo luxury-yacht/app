@@ -486,6 +486,7 @@ func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
 	}
 	return gv.Group == scope.apiGroup &&
 		gv.Version == scope.apiVersion &&
+		row.Namespace == scope.namespace &&
 		row.OwnerKind == scope.kind &&
 		row.OwnerName == scope.name
 }
@@ -715,12 +716,20 @@ func parseWorkloadScope(value string) (workloadScope, error) {
 	if len(parts) != 5 {
 		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
 	}
+	namespace := strings.TrimSpace(parts[0])
+	apiGroup := strings.TrimSpace(parts[1])
+	apiVersion := strings.TrimSpace(parts[2])
+	kind := strings.TrimSpace(parts[3])
+	name := strings.TrimSpace(parts[4])
+	if namespace == "" || apiVersion == "" || kind == "" || name == "" {
+		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
+	}
 	return workloadScope{
-		namespace:  parts[0],
-		apiGroup:   parts[1],
-		apiVersion: parts[2],
-		kind:       parts[3],
-		name:       parts[4],
+		namespace:  namespace,
+		apiGroup:   apiGroup,
+		apiVersion: apiVersion,
+		kind:       kind,
+		name:       name,
 	}, nil
 }
 

@@ -48,8 +48,14 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 		Spec:       corev1.PodSpec{NodeName: "node-2", Containers: []corev1.Container{{Name: "c"}}},
 		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	pods := []*corev1.Pod{podOnNode, podOtherNode}
-	rsLister := testsupport.NewReplicaSetLister(t, rs)
+	otherNamespaceRS := rs.DeepCopy()
+	otherNamespaceRS.Namespace = "staging"
+	otherNamespacePod := podOnNode.DeepCopy()
+	otherNamespacePod.Namespace = "staging"
+	otherNamespacePod.Name = "orders-7d9c8b6f5-other"
+	otherNamespacePod.ResourceVersion = "22"
+	pods := []*corev1.Pod{podOnNode, podOtherNode, otherNamespacePod}
+	rsLister := testsupport.NewReplicaSetLister(t, rs, otherNamespaceRS)
 
 	// List builder: typed lister path (unit-test path).
 	listBuilder := &PodBuilder{
@@ -90,4 +96,15 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 			require.ElementsMatch(t, listRows, storeRows, "store-served rows must match list-path rows for scope %s", scope)
 		})
 	}
+
+	t.Run("workload scope is namespace bounded", func(t *testing.T) {
+		ctx := WithClusterMeta(context.Background(), meta)
+		storeSnap, err := storeBuilder.Build(ctx, "workload:prod:apps:v1:Deployment:orders")
+		require.NoError(t, err)
+
+		storeRows := storeSnap.Payload.(PodSnapshot).Rows
+		require.Len(t, storeRows, 1)
+		require.Equal(t, "prod", storeRows[0].Namespace)
+		require.Equal(t, "orders-7d9c8b6f5-abcde", storeRows[0].Name)
+	})
 }

@@ -288,6 +288,20 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 	require.Equal(t, "apps/v1", payload.Rows[0].OwnerAPIVersion)
 }
 
+func TestParseWorkloadScopeRejectsMissingIdentitySegments(t *testing.T) {
+	for _, value := range []string{
+		":apps:v1:Deployment:orders",
+		"prod:apps::Deployment:orders",
+		"prod:apps:v1::orders",
+		"prod:apps:v1:Deployment:",
+	} {
+		t.Run(value, func(t *testing.T) {
+			_, err := parseWorkloadScope(value)
+			require.ErrorContains(t, err, "invalid workload scope")
+		})
+	}
+}
+
 // TestResolvePodOwnerThreadsCRDOwnerAPIVersion verifies that the snapshot
 // pod resolver passes through owner.APIVersion verbatim for CRD-as-Pod-
 // owner targets (Argo Rollout, KubeVirt VirtualMachineInstance, Tekton

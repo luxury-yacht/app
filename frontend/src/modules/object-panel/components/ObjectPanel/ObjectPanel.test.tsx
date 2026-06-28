@@ -8,6 +8,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 type CapabilityState = {
   allowed: boolean;
@@ -319,14 +320,15 @@ describe('ObjectPanel tab availability', () => {
   const renderObjectPanel = async (options: PanelTestOptions) => {
     const clusterId = options.clusterId ?? defaultClusterId;
     const panelId = buildPanelId(clusterId, options.kind, options.namespace, options.name);
+    const builtinGVK = resolveBuiltinGroupVersion(options.kind);
     const objectRef = {
       kind: options.kind,
       name: options.name,
       namespace: options.namespace,
       kindAlias: options.kind,
       clusterId,
-      group: options.group,
-      version: options.version,
+      group: options.group ?? builtinGVK?.group,
+      version: options.version ?? builtinGVK?.version,
     };
 
     capabilityStateMap = options.capabilityOverrides ?? {};
