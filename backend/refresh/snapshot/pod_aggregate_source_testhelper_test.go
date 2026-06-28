@@ -111,6 +111,17 @@ func (s fakePodAggregateSource) AddBundleSink(_ schema.GroupVersionResource, _ i
 	return false
 }
 
+// Tracks reports the cut workload + pod kinds as tracked, standing in for the ingest manager's
+// entry set wherever a namespacePodIngestSource is required.
+func (s fakePodAggregateSource) Tracks(gvr schema.GroupVersionResource) bool {
+	switch gvr {
+	case DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR:
+		return true
+	default:
+		return false
+	}
+}
+
 // withWorkloadCatalog returns a copy of the source carrying `count` projected catalog rows
 // for the workload GVR, marked synced, so a cluster-overview / namespaces test drives the
 // kind's count (the count is len(CatalogRows)). The rows are minimal objectcatalog.Summary

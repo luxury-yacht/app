@@ -286,6 +286,12 @@ func (s *Service) sync(ctx context.Context) error {
 	s.items = newItems
 	s.lastSeen = newLastSeen
 	s.catalogIndex.replaceResources(nil)
+	// Reset the maintained query store before any collector emits, so this sync's incremental
+	// chunk upserts (streamingAggregator.emit) build the streaming view from scratch — the
+	// "this sync only" semantics the previous per-emit wholesale rebuild gave, without its
+	// O(N²) cost. This runs before parallel.RunLimited launches, so it cannot race the emits.
+	// Until the first emit the empty store serves via queryViaEngine's items-map fallback.
+	s.catalogIndex.resetQueryStore()
 	s.mu.Unlock()
 
 	var resultsMu sync.Mutex

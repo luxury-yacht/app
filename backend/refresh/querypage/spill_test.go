@@ -222,6 +222,47 @@ func TestSpillColumnsRoundTrip(t *testing.T) {
 	assertStoresEquivalent(t, orig, restored)
 }
 
+// TestSpillInternedColumnsRoundTripsNilPointerStructFallback proves a nil pointer-to-struct
+// field (the production *resourcemodel.ResourceLink) survives spill+reopen as nil instead of
+// crashing the spill. Such a field goes through the codec's gob "fallback" column, and gob
+// cannot encode a top-level nil pointer — which panicked the whole app when cooling a cluster
+// whose rows carried a nil link.
+func TestSpillInternedColumnsRoundTripsNilPointerStructFallback(t *testing.T) {
+	type link struct{ Group, Kind, Name string }
+	type row struct {
+		UID  string
+		Link *link // pointer-to-struct -> gob fallback column; nil must round-trip
+	}
+	schema := Schema[row]{
+		UID:      func(r row) string { return r.UID },
+		SortKeys: map[string]func(row) string{"uid": func(r row) string { return r.UID }},
+	}
+	s := NewStore(schema)
+	s.Upsert(row{UID: "a", Link: &link{Group: "apps", Kind: "Deployment", Name: "web"}})
+	s.Upsert(row{UID: "b", Link: nil}) // the crashing case
+
+	path := filepath.Join(t.TempDir(), "cols.qcm")
+	if err := s.SpillInternedColumns(path); err != nil {
+		t.Fatalf("SpillInternedColumns: %v", err)
+	}
+	restored, closer, err := OpenInternedColumnStore(path, schema)
+	if err != nil {
+		t.Fatalf("OpenInternedColumnStore: %v", err)
+	}
+	defer closer()
+
+	byUID := make(map[string]*link)
+	for _, r := range restored.Snapshot() {
+		byUID[r.UID] = r.Link
+	}
+	if byUID["a"] == nil || byUID["a"].Name != "web" {
+		t.Fatalf("non-nil link not preserved: %+v", byUID["a"])
+	}
+	if byUID["b"] != nil {
+		t.Fatalf("nil link must round-trip as nil, got %+v", byUID["b"])
+	}
+}
+
 // TestInternedColumnStoreMmapRoundTrip is the Tier 2.6 dual-mode SERVING gate: spilling the
 // interned columns and reopening as a read-only, mmap-aliased store produces a query-equivalent
 // store — proving a Cold cluster can serve directly from off-heap page cache. spillRow exercises

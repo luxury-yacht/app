@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,13 +32,14 @@ type NamespaceBuilder struct {
 	tracker    *NamespaceWorkloadTracker
 }
 
-// namespacePodIngestSource supplies the cut pod + workload kinds' projected rows the
-// namespace domain reads: the tracker's incremental presence Sink + HasSynced gate, the
-// projected pod aggregate rows for the legacy workload-detection pod count, and the
-// projected workload catalog rows for the workload-detection counts. It composes the
-// tracker source so one value wires both. *ingest.IngestManager satisfies it.
+// namespacePodIngestSource is the ingest surface the namespace domain reads: the per-kind sync
+// gate (Tracks/HasSyncedFor, used by NewNamespaceWorkloadTracker) plus the projected rows the
+// per-build workload-presence set is computed from (the cut workload kinds' Catalog rows and the
+// pod kind's Aggregate rows).
 type namespacePodIngestSource interface {
-	trackerPodIngestSource
+	Tracks(gvr schema.GroupVersionResource) bool
+	HasSyncedFor(gvr schema.GroupVersionResource) bool
+	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
 }
 
@@ -63,12 +65,12 @@ type NamespaceSummary struct {
 	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
 }
 
-// RegisterNamespaceDomain registers the namespace domain with the registry. Pods is cut
-// to the ingest path, so both the workload tracker's pod presence and the legacy
-// per-namespace workload-detection pod count read the pod kind's projected rows from the
-// ingest manager rather than a typed pod lister. ingestManager may be nil in a unit test.
+// RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
+// pod kinds' projected rows come from the ingest manager (read per build for workload presence);
+// the tracker only gates the read on those stores having synced. ingestManager may be nil in a
+// unit test.
 func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource) error {
-	tracker := NewNamespaceWorkloadTracker(factory, ingestManager)
+	tracker := NewNamespaceWorkloadTracker(ingestManager)
 	builder := &NamespaceBuilder{
 		namespaces: factory.Core().V1().Namespaces().Lister(),
 		ingest:     ingestManager,
@@ -115,17 +117,22 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		})
 	}
 
-	trackerReady := false
+	trackerReady := true
+	// Best-effort: wait for the cut workload + pod ingest stores to sync so the first build
+	// already reflects real workload presence. The wait is bounded by ctx; positive rows are
+	// usable immediately, but absence is authoritative only after the tracked stores settle.
 	if b.tracker != nil {
 		trackerReady = b.tracker.WaitForSync(ctx)
 	}
+	workloadNamespaces := b.namespacesWithWorkloads()
 
 	items := make([]NamespaceSummary, 0, len(namespaces))
 	var version uint64
 	for _, ns := range namespaces {
-		hasWorkloads, workloadsUnknown := b.namespaceWorkloadsStatus(ns.Name, trackerReady)
-		model := namespacepkg.BuildResourceModel(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil)
-		facts := namespacepkg.BuildFacts(meta.ClusterID, ns, hasWorkloads, !workloadsUnknown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
+		_, hasWorkloads := workloadNamespaces[ns.Name]
+		workloadsKnown := hasWorkloads || trackerReady
+		model := namespacepkg.BuildResourceModel(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil)
+		facts := namespacepkg.BuildFacts(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
 			ClusterMeta:        meta,
 			Ref:                model.Ref,
@@ -153,75 +160,70 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},
+		// The per-namespace workload flag is content that the namespace resourceVersions
+		// (Version, the "object" source clock) do NOT capture — a workload added/removed changes
+		// presence without changing any namespace's RV, and the empty→populated transition as the
+		// ingest stores sync is exactly such a change. Publish the workload-presence set as its
+		// own source clock so the cache validator (SourceVersion) changes when presence or
+		// readiness changes; otherwise an unchanged validator makes the delivery layer return
+		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
+		SourceVersions: map[string]string{
+			"workloads": workloadPresenceSignature(workloadNamespaces, trackerReady),
+		},
 	}
 	return snap, nil
 }
 
-func (b *NamespaceBuilder) namespaceWorkloadsStatus(namespace string, trackerReady bool) (bool, bool) {
-	if namespace == "" {
-		return false, false
+// workloadPresenceSignature is a stable fingerprint of the set of namespaces that have at least
+// one workload and whether empty absence is authoritative yet. It changes when that set or the
+// sync-readiness state changes, so a workload-presence or unknown→known change yields a new
+// snapshot validator and is delivered to the client instead of being 304'd.
+func workloadPresenceSignature(set map[string]struct{}, ready bool) string {
+	names := make([]string, 0, len(set))
+	for ns := range set {
+		names = append(names, ns)
 	}
-
-	if trackerReady && b.tracker != nil {
-		if has, known := b.tracker.HasWorkloads(namespace); known {
-			return has, false
-		}
-		legacy, err := b.namespaceHasWorkloadsLegacy(namespace)
-		if err != nil {
-			b.tracker.MarkUnknown(namespace)
-			return false, true
-		}
-		b.tracker.MarkUnknown(namespace)
-		return legacy, true
+	sort.Strings(names)
+	h := fnv.New64a()
+	if ready {
+		_, _ = h.Write([]byte("ready"))
+	} else {
+		_, _ = h.Write([]byte("not-ready"))
 	}
-
-	legacy, err := b.namespaceHasWorkloadsLegacy(namespace)
-	if err != nil {
-		if b.tracker != nil {
-			b.tracker.MarkUnknown(namespace)
-		}
-		return false, true
+	_, _ = h.Write([]byte{0})
+	for _, ns := range names {
+		_, _ = h.Write([]byte(ns))
+		_, _ = h.Write([]byte{0})
 	}
-	return legacy, false
+	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-func (b *NamespaceBuilder) namespaceHasWorkloadsLegacy(namespace string) (bool, error) {
-	if namespace == "" {
-		return false, nil
-	}
+// namespacesWithWorkloads returns the set of namespaces that have at least one workload, read
+// directly from the ingest stores in a single pass: the five cut workload kinds' projected
+// Catalog rows (Deployment/StatefulSet/DaemonSet/Job/CronJob) plus the pod aggregate rows. It
+// is the authoritative, drift-free source the per-namespace workload flag is derived from —
+// the same projected rows Browse reads (objectcatalog collectViaIngest), so a namespace whose
+// workloads are ingested is never wrongly reported as empty.
+func (b *NamespaceBuilder) namespacesWithWorkloads() map[string]struct{} {
+	set := make(map[string]struct{})
 	if b.ingest == nil {
-		return false, nil
+		return set
 	}
-
-	// Pods and the five workload kinds are cut to ingest: detect workload presence by
-	// counting the namespace's projected rows in each kind's ingest store rather than
-	// listing typed listers. Only presence (a non-empty count) matters for the legacy
-	// signal, so the small projected rows are sufficient and never touch a typed object.
-	if catalogRowsInNamespace(b.ingest, DeploymentGVR, namespace) > 0 ||
-		catalogRowsInNamespace(b.ingest, StatefulSetGVR, namespace) > 0 ||
-		catalogRowsInNamespace(b.ingest, DaemonSetGVR, namespace) > 0 ||
-		catalogRowsInNamespace(b.ingest, JobGVR, namespace) > 0 ||
-		catalogRowsInNamespace(b.ingest, CronJobGVR, namespace) > 0 {
-		return true, nil
+	for _, gvr := range []schema.GroupVersionResource{
+		DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR,
+	} {
+		for _, row := range b.ingest.CatalogRows(gvr) {
+			if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace != "" {
+				set[summary.Namespace] = struct{}{}
+			}
+		}
 	}
 	for _, row := range b.ingest.AggregateRows(PodGVR) {
-		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace == namespace {
-			return true, nil
+		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace != "" {
+			set[agg.Namespace] = struct{}{}
 		}
 	}
-	return false, nil
-}
-
-// catalogRowsInNamespace counts the projected catalog rows for gvr whose Summary belongs to
-// the namespace — the ingest replacement for a typed lister's per-namespace List length.
-func catalogRowsInNamespace(source namespacePodIngestSource, gvr schema.GroupVersionResource, namespace string) int {
-	count := 0
-	for _, row := range source.CatalogRows(gvr) {
-		if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace == namespace {
-			count++
-		}
-	}
-	return count
+	return set
 }
 
 func parseResourceVersion(obj *corev1.Namespace) uint64 {

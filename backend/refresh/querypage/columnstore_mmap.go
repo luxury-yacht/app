@@ -30,7 +30,10 @@ import (
 // mapping via unsafe.String. The mmap base is page-aligned and every supported target is
 // little-endian, so the native-order reinterpretation matches the on-disk encoding.
 
-const internedColumnMagic = "QCM2"
+// internedColumnMagic is the spill-file format tag. Bump it on any encoding change so a stale
+// file from a prior build is rejected (and the caller falls back to a full re-sync) rather than
+// misread. QCM3 added the per-value presence flag to the gob fallback column.
+const internedColumnMagic = "QCM3"
 
 // SpillInternedColumns writes the store's interned columns to path in the mmap-aliasable format.
 func (s *Store[R]) SpillInternedColumns(path string) error {
@@ -101,11 +104,22 @@ func writeInternedField(w *internedWriter, fc *fieldCodec, dicts *codecDicts, ty
 		var gbuf bytes.Buffer
 		enc := gob.NewEncoder(&gbuf)
 		for i := 0; i < n; i++ {
-			v := reflect.Zero(ft).Interface()
+			rv := reflect.Zero(ft)
 			if i < len(fc.fallback) && fc.fallback[i].IsValid() {
-				v = fc.fallback[i].Interface()
+				rv = fc.fallback[i]
 			}
-			_ = enc.Encode(v)
+			// gob cannot encode a top-level nil pointer/interface, so record a presence flag and
+			// only encode the value when present. A nil pointer-to-struct field (e.g. a nil
+			// *resourcemodel.ResourceLink) then round-trips as nil instead of panicking the spill.
+			present := true
+			switch rv.Kind() {
+			case reflect.Ptr, reflect.Interface:
+				present = !rv.IsNil()
+			}
+			_ = enc.Encode(present)
+			if present {
+				_ = enc.Encode(rv.Interface())
+			}
 		}
 		w.u64(uint64(gbuf.Len()))
 		w.bytes(gbuf.Bytes())
@@ -268,6 +282,17 @@ func readInternedField(r *internedReader, fc *fieldCodec, dicts *codecDicts, typ
 		ft := fieldGoType(typ, fc.index)
 		fc.fallback = make([]reflect.Value, n)
 		for i := 0; i < n; i++ {
+			// Mirror the writer: a presence flag precedes each value; an absent value (a nil
+			// pointer/interface the writer could not gob-encode) decodes back to the zero value.
+			var present bool
+			if err := dec.Decode(&present); err != nil {
+				r.fail(err)
+				return
+			}
+			if !present {
+				fc.fallback[i] = reflect.Zero(ft)
+				continue
+			}
 			np := reflect.New(ft)
 			if err := dec.Decode(np.Interface()); err != nil {
 				r.fail(err)

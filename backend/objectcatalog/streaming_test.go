@@ -73,6 +73,40 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 	}
 }
 
+func TestStreamingEmitsMaintainStoreIncrementally(t *testing.T) {
+	svc := newTestServiceForStreaming()
+	agg := newStreamingAggregator(svc)
+
+	emitPod := func(name string) {
+		agg.emit(0, []Summary{{
+			Kind: "Pod", Version: "v1", Resource: "pods",
+			Namespace: "default", Name: name, UID: "uid-" + name,
+			Scope: ScopeNamespace,
+		}})
+	}
+
+	emitPod("a")
+	svc.mu.RLock()
+	first := svc.catalogIndex.queryEngineStore
+	svc.mu.RUnlock()
+
+	emitPod("b")
+	emitPod("c")
+
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
+	// Each emit must upsert into the SAME maintained store, not rebuild a fresh store from
+	// every chunk emitted so far. Rebuilding per emit makes a sync's streaming publishes
+	// O(N^2) in total rows; the pointer staying equal across emits proves the store is
+	// maintained incrementally.
+	if svc.catalogIndex.queryEngineStore != first {
+		t.Fatalf("expected emits to share one incrementally-maintained store, got a fresh store per emit")
+	}
+	if got := svc.catalogIndex.queryEngineStore.Len(); got != 3 {
+		t.Fatalf("expected store to hold the union of all emitted items (3), got %d", got)
+	}
+}
+
 func TestEmitSummariesRoutesToAggregator(t *testing.T) {
 	agg := newStreamingAggregator(newTestServiceForStreaming())
 	summaries := []Summary{{Name: "obj"}}

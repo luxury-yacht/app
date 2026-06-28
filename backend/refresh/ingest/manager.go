@@ -895,6 +895,17 @@ func (m *IngestManager) StoreResourceVersion(gvr schema.GroupVersionResource) st
 	return store.LastStoreSyncResourceVersion()
 }
 
+// Tracks reports whether the manager has an entry (a registered reflector + store) for gvr.
+// A consumer that waits on per-GVR sync uses this to avoid blocking on a kind the manager has
+// no entry for — whose HasSyncedFor is false forever (an unavailable client/scheme at
+// registration), which would otherwise wedge a wait-for-all-synced gate.
+func (m *IngestManager) Tracks(gvr schema.GroupVersionResource) bool {
+	m.mu.Lock()
+	_, ok := m.entries[gvr]
+	m.mu.Unlock()
+	return ok
+}
+
 // HasSyncedFor reports whether gvr's store has SETTLED — synced or degraded past the
 // sync deadline (see entrySettled) — or false when the manager has no entry for gvr.
 // Consumers that read only specific GVRs (the catalog reading the quotas kinds, the

@@ -58,7 +58,6 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 			a.namespaceSet[summary.Namespace] = struct{}{}
 		}
 	}
-	chunksSnapshot := a.cloneChunksLocked()
 	kindSnapshot := cloneKindSet(a.kindSet)
 	namespaceSnapshot := cloneSet(a.namespaceSet)
 	if a.firstFlush.IsZero() {
@@ -66,7 +65,11 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	}
 	a.mu.Unlock()
 
-	a.service.publishStreamingState(chunksSnapshot, kindSnapshot, namespaceSnapshot, nil, false)
+	// Publish only this chunk's items, upserting them into the maintained store, rather than
+	// rebuilding the store from every chunk emitted so far. Concurrent collectors each emit
+	// here; the incremental upsert is order-independent, and the sync resets the store once at
+	// start (Service.sync) so the streaming view holds only the in-progress sync's data.
+	a.service.streamChunk(chunkCopy, kindSnapshot, namespaceSnapshot)
 	if a.service != nil {
 		a.service.broadcastStreaming(false)
 	}
@@ -192,6 +195,16 @@ func (s *Service) CachesReady() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.catalogIndex.cachesAreReady()
+}
+
+// streamChunk publishes one streaming chunk incrementally: it upserts the chunk's items into
+// the maintained query store under the service write lock and refreshes the kind/namespace
+// facet snapshots. It is O(chunk) per call — see catalogIndex.appendStreamingChunk for why the
+// previous per-emit wholesale rebuild was O(N²) across a sync.
+func (s *Service) streamChunk(items []Summary, kindSet map[string]bool, namespaceSet map[string]struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogIndex.appendStreamingChunk(items, kindSet, namespaceSet)
 }
 
 // publishStreamingState updates the streaming state in the service.

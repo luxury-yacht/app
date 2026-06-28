@@ -12,5 +12,7 @@
 ### Fixed
 
 - Pod and node CPU/memory usage cells now show a no-data dash instead of "0m"/"0Mi" when no live sample is available, so "metrics unknown" is no longer indistinguishable from genuinely-zero usage. A pod deleted and recreated under the same name no longer briefly inherits the previous pod's usage numbers — its usage stays no-data until a fresh sample (taken after the new pod was created) arrives.
+- The Browse view and namespace list no longer stall (objects slow to appear, namespaces lingering as inactive) on large clusters while the object catalog syncs. The catalog's searchable index is now maintained incrementally as each batch of objects streams in, instead of being rebuilt from scratch for every batch — work that grew with the square of the object count and serialized every collector behind one lock.
+- Namespaces with running workloads no longer show as inactive/dimmed. The namespace list now reads workload presence directly from the synced cluster data each time it refreshes, instead of from a separately-maintained running tally that could silently miss a namespace and then report it as having no workloads with no way to recover.
 - Views no longer get stuck on a loading spinner the first time you open a view that has none of that resource.
 - Object details now show an Age for every resource type, including custom resources, and the value always matches the Age shown in the cluster/namespace browse tables. Age is now derived once from the object's creation timestamp instead of per resource type.

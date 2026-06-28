@@ -84,6 +84,33 @@ func (idx *catalogIndex) rebuildQueryStore(chunks []*summaryChunk) {
 	idx.queryEngineStore = store
 }
 
+// resetQueryStore replaces the maintained query store with a fresh empty one. The sync
+// pipeline calls it once at sync start (before the parallel collectors emit) so a resync's
+// progressive streaming view holds only the in-progress sync's data — matching the previous
+// per-emit wholesale rebuild's "this sync only" semantics, but without the O(N²) cost.
+func (idx *catalogIndex) resetQueryStore() {
+	idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
+}
+
+// appendStreamingChunk publishes one streaming chunk by upserting its items into the
+// maintained query store and refreshing the published facet snapshots. It maintains the
+// store INCREMENTALLY — O(chunk) per call — instead of rebuilding it from every chunk
+// emitted so far. Emits run once per (kind,namespace) batch across a sync, so a wholesale
+// rebuild per emit was O(N²) in total rows (the namespace-list hang). The store's UID is the
+// unique catalog identity chain, so incremental upserts produce the same store a wholesale
+// rebuild would. cachesReady stays false until finalize/rebuildCacheFromItems flips it.
+func (idx *catalogIndex) appendStreamingChunk(items []Summary, kindSet map[string]bool, namespaceSet map[string]struct{}) {
+	if idx.queryEngineStore == nil {
+		idx.queryEngineStore = querypage.NewStore(newCatalogQueryStoreSchema())
+	}
+	for _, item := range items {
+		idx.queryEngineStore.Upsert(item)
+	}
+	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
+	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)
+	idx.cachesReady = false
+}
+
 func (idx *catalogIndex) snapshot() []Summary {
 	result := make([]Summary, 0, len(idx.items))
 	for _, item := range idx.items {

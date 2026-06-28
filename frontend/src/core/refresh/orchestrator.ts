@@ -17,6 +17,7 @@ import { refreshManager, type RefreshContext } from './RefreshManager';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
 import { refresherConfig, type RefresherTiming } from './refresherConfig';
 import {
+  getRefreshState,
   getScopedDomainState,
   markPendingRequest,
   resetAllScopedDomainStates,
@@ -917,6 +918,13 @@ class RefreshOrchestrator {
       connectedClusterIds.map((clusterId) => clusterId.trim()).filter(Boolean)
     );
 
+    // Reset the global scoped-domain state of every removed cluster up front. This sweeps the
+    // store directly (the diagnostics source of truth) rather than each runtime's enabled-scope
+    // set, so snapshot/stream scopes that carry retained data but no polling lease — e.g.
+    // cluster-events, polling disabled — are cleaned up too. forEachScopedDomain only sees
+    // enabled leases, so it would leave those orphaned for a closed cluster.
+    this.resetScopedStatesForRemovedClusters(connected);
+
     Array.from(this.clusterRuntimes.entries()).forEach(([clusterId, runtime]) => {
       if (connected.has(clusterId)) {
         return;
@@ -926,11 +934,28 @@ class RefreshOrchestrator {
       runtime.forEachInFlight((details, key) => {
         this.teardownInFlight(runtime, key, details);
       });
-      runtime.forEachScopedDomain((domain, scope) => resetScopedDomainState(domain, scope));
       runtime.resetAllState();
       this.clusterRuntimes.delete(clusterId);
       // Let cluster-keyed caches outside the refresh store die with the runtime.
       eventBus.emit('refresh:cluster-pruned', { clusterId });
+    });
+  }
+
+  // resetScopedStatesForRemovedClusters clears the global scoped-domain state of every scope
+  // whose cluster ids are all absent from the connected set. A scope with no cluster id
+  // belongs to the coordinator runtime (not a cluster) and is left untouched.
+  private resetScopedStatesForRemovedClusters(connected: Set<string>): void {
+    const { scopedDomainEntries } = getRefreshState();
+    (Object.keys(scopedDomainEntries) as RefreshDomain[]).forEach((domain) => {
+      (scopedDomainEntries[domain] ?? []).forEach(([scope]) => {
+        const { clusterIds } = parseClusterScopeList(scope);
+        if (clusterIds.length === 0) {
+          return;
+        }
+        if (clusterIds.every((clusterId) => !connected.has(clusterId))) {
+          resetScopedDomainState(domain, scope);
+        }
+      });
     });
   }
 

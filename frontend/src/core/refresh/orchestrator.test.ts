@@ -707,6 +707,31 @@ describe('refreshOrchestrator', () => {
     ).toBe(true);
   });
 
+  it('resets leaked snapshot/stream scoped state for a removed cluster, keeping connected clusters', () => {
+    // cluster-events is snapshot/stream-driven (polling disabled), so its scope is never
+    // tracked as an enabled polling lease and lives only in the global scoped store. When
+    // its cluster is closed, prune must still reset it — otherwise it orphans in the
+    // diagnostics domain list (a closed cluster's domain lingering forever). The stored
+    // scope for a cluster-scoped, empty-tail domain is "<clusterId>|" (buildClusterScope).
+    const removedScope = 'cluster-b|';
+    const keptScope = 'cluster-a|';
+    setScopedDomainState('cluster-events', removedScope, (prev) => ({ ...prev, status: 'ready' }));
+    setScopedDomainState('cluster-events', keptScope, (prev) => ({ ...prev, status: 'ready' }));
+
+    const eventScopes = () =>
+      (getRefreshState().scopedDomainEntries['cluster-events'] ?? []).map(([scope]) => scope);
+    expect(eventScopes()).toEqual(expect.arrayContaining([removedScope, keptScope]));
+
+    refreshOrchestrator.updateContext({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a'],
+    });
+
+    expect(eventScopes()).toContain(keptScope);
+    expect(eventScopes()).not.toContain(removedScope);
+  });
+
   it('stores namespaces enablement in the active cluster runtime', () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespaces',

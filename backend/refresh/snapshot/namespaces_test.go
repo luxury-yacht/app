@@ -99,13 +99,9 @@ func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *tes
 	require.Equal(t, "namespace-alpha", summary.Ref.UID)
 }
 
-func TestNamespaceBuilderUsesTrackerWhenKnown(t *testing.T) {
+func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
 	tracker := newNamespaceWorkloadTracker()
 	tracker.synced.Store(true)
-
-	// Record a Deployment's presence the way the cut workload kinds' ingest sink
-	// does — namespace + "namespace/name" key resolved from the projected row.
-	tracker.addNamespaceKey(resourceDeployment, "alpha", "alpha/web")
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
@@ -114,46 +110,7 @@ func TestNamespaceBuilderUsesTrackerWhenKnown(t *testing.T) {
 
 	builder := &NamespaceBuilder{
 		namespaces: testsupport.NewNamespaceLister(t, ns),
-		tracker:    tracker,
-	}
-
-	snap, err := builder.Build(context.Background(), "")
-	if err != nil {
-		t.Fatalf("build failed: %v", err)
-	}
-
-	payload, ok := snap.Payload.(NamespaceSnapshot)
-	if !ok {
-		t.Fatalf("unexpected payload type: %T", snap.Payload)
-	}
-	if len(payload.Namespaces) != 1 {
-		t.Fatalf("expected one namespace, got %d", len(payload.Namespaces))
-	}
-
-	summary := payload.Namespaces[0]
-	if !summary.HasWorkloads {
-		t.Fatalf("expected HasWorkloads true from tracker")
-	}
-	if summary.WorkloadsUnknown {
-		t.Fatalf("expected WorkloadsUnknown false when tracker has data")
-	}
-	if summary.Status != "Active" || summary.StatusState != "Active" || summary.StatusPresentation != "ready" {
-		t.Fatalf("expected shared namespace status projection, got %#v", summary)
-	}
-}
-
-func TestNamespaceBuilderFallsBackWhenTrackerUnknown(t *testing.T) {
-	tracker := newNamespaceWorkloadTracker()
-	tracker.synced.Store(true)
-	tracker.MarkUnknown("alpha")
-
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1", CreationTimestamp: metav1.NewTime(time.Unix(0, 0))}}
-
-	builder := &NamespaceBuilder{
-		namespaces: testsupport.NewNamespaceLister(t, ns),
-		// One projected Deployment catalog row in "alpha" drives the legacy
-		// workload-presence detection (the ingest replacement for the typed
-		// deployment lister the test used before the workload cut).
+		// Workload presence comes from the synced ingest store — the same projected rows Browse reads.
 		ingest:  fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "alpha", 1),
 		tracker: tracker,
 	}
@@ -173,9 +130,156 @@ func TestNamespaceBuilderFallsBackWhenTrackerUnknown(t *testing.T) {
 
 	summary := payload.Namespaces[0]
 	if !summary.HasWorkloads {
-		t.Fatalf("expected HasWorkloads true from legacy fallback")
+		t.Fatalf("expected HasWorkloads true from the ingest store")
 	}
-	if !summary.WorkloadsUnknown {
-		t.Fatalf("expected WorkloadsUnknown true when fallback used")
+	if summary.WorkloadsUnknown {
+		t.Fatalf("expected WorkloadsUnknown false when the stores are synced")
+	}
+	if summary.Status != "Active" || summary.StatusState != "Active" || summary.StatusPresentation != "ready" {
+		t.Fatalf("expected shared namespace status projection, got %#v", summary)
+	}
+}
+
+func TestNamespaceBuilderDoesNotDimWhenTrackerMissesButIngestHasWorkloads(t *testing.T) {
+	// Fresh-connect failure the fix targets: the ingest store HAS the namespace's workloads
+	// (Browse reads the same CatalogRows and shows them), but the tracker's (old) incremental
+	// map never recorded the namespace. The builder must read workload presence from the
+	// authoritative ingest store, so a tracker-map miss can never dim a namespace that has
+	// workloads.
+	tracker := newNamespaceWorkloadTracker()
+	tracker.synced.Store(true) // synced, but no incremental map records "alpha"
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, ns),
+		// The authoritative ingest store has a Deployment in "alpha" — exactly what Browse shows.
+		ingest:  fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "alpha", 1),
+		tracker: tracker,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	if err != nil {
+		t.Fatalf("build failed: %v", err)
+	}
+	payload, ok := snap.Payload.(NamespaceSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+	if len(payload.Namespaces) != 1 {
+		t.Fatalf("expected one namespace, got %d", len(payload.Namespaces))
+	}
+	if !payload.Namespaces[0].HasWorkloads {
+		t.Fatalf("namespace dimmed despite the ingest store holding its workloads")
+	}
+	if payload.Namespaces[0].WorkloadsUnknown {
+		t.Fatalf("expected workloadsUnknown false once the stores are synced")
+	}
+}
+
+func TestNamespaceBuilderReportsWorkloadsUnknownWhenIngestNotSyncedAndNoRows(t *testing.T) {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+	source := fakePodAggregateSource{}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, ns),
+		ingest:     source,
+		tracker:    NewNamespaceWorkloadTracker(source),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	snap, err := builder.Build(ctx, "")
+	if err != nil {
+		t.Fatalf("build failed: %v", err)
+	}
+	payload, ok := snap.Payload.(NamespaceSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+	if len(payload.Namespaces) != 1 {
+		t.Fatalf("expected one namespace, got %d", len(payload.Namespaces))
+	}
+	if payload.Namespaces[0].HasWorkloads {
+		t.Fatalf("expected no positive workload evidence before ingest sync")
+	}
+	if !payload.Namespaces[0].WorkloadsUnknown {
+		t.Fatalf("expected workload absence to remain unknown before ingest sync")
+	}
+}
+
+func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
+	// The per-namespace workload flag is content the namespace resourceVersions do not capture.
+	// A change in workload presence must change the snapshot's "workloads" source clock, so the
+	// delivery layer's validator differs and the corrected snapshot is delivered instead of
+	// returning 304 Not Modified — the bug that left a stale (pre-sync) snapshot on screen.
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+
+	workloadsSourceVersion := func(catalogCount int) string {
+		tracker := newNamespaceWorkloadTracker()
+		tracker.synced.Store(true)
+		builder := &NamespaceBuilder{
+			namespaces: testsupport.NewNamespaceLister(t, ns),
+			ingest:     fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "alpha", catalogCount),
+			tracker:    tracker,
+		}
+		snap, err := builder.Build(context.Background(), "")
+		if err != nil {
+			t.Fatalf("build failed: %v", err)
+		}
+		return snap.SourceVersions["workloads"]
+	}
+
+	withWorkloads := workloadsSourceVersion(1)
+	withoutWorkloads := workloadsSourceVersion(0)
+	if withWorkloads == "" {
+		t.Fatalf("expected a workloads source version to be published")
+	}
+	if withWorkloads == withoutWorkloads {
+		t.Fatalf("workload presence change did not change the workloads source version (%q) — the correction would be 304'd", withWorkloads)
+	}
+}
+
+func TestNamespaceBuilderWorkloadSyncReadinessChangesSourceVersion(t *testing.T) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	workloadsSourceVersion := func(source fakePodAggregateSource, cancelBeforeBuild bool) string {
+		builder := &NamespaceBuilder{
+			namespaces: testsupport.NewNamespaceLister(t, ns),
+			ingest:     source,
+			tracker:    NewNamespaceWorkloadTracker(source),
+		}
+		ctx := context.Background()
+		if cancelBeforeBuild {
+			cancelled, cancel := context.WithCancel(ctx)
+			cancel()
+			ctx = cancelled
+		}
+		snap, err := builder.Build(ctx, "")
+		if err != nil {
+			t.Fatalf("build failed: %v", err)
+		}
+		return snap.SourceVersions["workloads"]
+	}
+
+	notReady := workloadsSourceVersion(fakePodAggregateSource{}, true)
+	ready := workloadsSourceVersion(
+		fakePodAggregateSource{}.
+			withWorkloadCatalog(DeploymentGVR, "unused", 0).
+			withWorkloadCatalog(StatefulSetGVR, "unused", 0).
+			withWorkloadCatalog(DaemonSetGVR, "unused", 0).
+			withWorkloadCatalog(JobGVR, "unused", 0).
+			withWorkloadCatalog(CronJobGVR, "unused", 0),
+		false,
+	)
+	if notReady == "" || ready == "" {
+		t.Fatalf("expected workload source versions, got notReady=%q ready=%q", notReady, ready)
+	}
+	if notReady == ready {
+		t.Fatalf("workload sync readiness did not change the workloads source version (%q)", ready)
 	}
 }
