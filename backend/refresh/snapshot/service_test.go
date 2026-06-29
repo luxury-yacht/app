@@ -201,31 +201,40 @@ func TestServiceSourceVersionIncludesEpoch(t *testing.T) {
 }
 
 func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
-	reg := domain.New()
-	builds := 0
-	require.NoError(t, reg.Register(refresh.DomainConfig{
-		Name: "pods",
-		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
-			builds++
-			return &refresh.Snapshot{
-				Domain: "pods",
-				Scope:  scope,
-				SourceVersions: map[string]string{
-					"metric": time.Unix(0, int64(builds)).Format(time.RFC3339Nano),
+	for _, domainName := range []string{
+		"pods",
+		podMetricsDomainName,
+		namespaceWorkloadsMetricsDomainName,
+		nodeMetricsDomainName,
+	} {
+		t.Run(domainName, func(t *testing.T) {
+			reg := domain.New()
+			builds := 0
+			require.NoError(t, reg.Register(refresh.DomainConfig{
+				Name: domainName,
+				BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+					builds++
+					return &refresh.Snapshot{
+						Domain: domainName,
+						Scope:  scope,
+						SourceVersions: map[string]string{
+							"metric": time.Unix(0, int64(builds)).Format(time.RFC3339Nano),
+						},
+						Payload: map[string]int{"builds": builds},
+					}, nil
 				},
-				Payload: map[string]int{"builds": builds},
-			}, nil
-		},
-	}))
+			}))
 
-	service := NewService(reg, nil, testClusterMeta())
-	first, err := service.Build(context.Background(), "pods", "namespace:default")
-	require.NoError(t, err)
-	second, err := service.Build(context.Background(), "pods", "namespace:default")
-	require.NoError(t, err)
+			service := NewService(reg, nil, testClusterMeta())
+			first, err := service.Build(context.Background(), domainName, "namespace:default")
+			require.NoError(t, err)
+			second, err := service.Build(context.Background(), domainName, "namespace:default")
+			require.NoError(t, err)
 
-	require.Equal(t, 2, builds)
-	require.NotEqual(t, first.SourceVersions["metric"], second.SourceVersions["metric"])
+			require.Equal(t, 2, builds)
+			require.NotEqual(t, first.SourceVersions["metric"], second.SourceVersions["metric"])
+		})
+	}
 }
 
 func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {

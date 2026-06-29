@@ -1,3 +1,5 @@
+- Obj Panel -> Details -> Containers section tags not live-updating when deployment is modified. Even closing and reopening the panel does not update.
+
 - Build a plugin architecture
   - AI
     - Conversational support to perform functions of the app

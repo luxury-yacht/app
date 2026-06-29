@@ -92,7 +92,7 @@
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NodeMetricsBuilder",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
@@ -220,7 +220,7 @@
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceWorkloadsMetricsBuilder",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
@@ -396,7 +396,7 @@
       },
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.PodMetricsBuilder",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
