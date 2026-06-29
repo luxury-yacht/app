@@ -1894,12 +1894,16 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	require.Equal(t, "500m", webSummary.CPULimit)
 	require.Equal(t, "96Mi", webSummary.MemRequest)
 	require.Equal(t, "192Mi", webSummary.MemLimit)
+	require.Equal(t, "1/1", webSummary.Ready)
+	require.Equal(t, int32(0), webSummary.Restarts)
 	apiSummary, ok := summaries["Deployment/staging/api"]
 	require.True(t, ok)
 	require.Equal(t, "125m", apiSummary.CPURequest)
 	require.Equal(t, "375m", apiSummary.CPULimit)
 	require.Equal(t, "64Mi", apiSummary.MemRequest)
 	require.Equal(t, "160Mi", apiSummary.MemLimit)
+	require.Equal(t, "1/1", apiSummary.Ready)
+	require.Equal(t, int32(1), apiSummary.Restarts)
 }
 
 func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {

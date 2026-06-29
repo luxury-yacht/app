@@ -90,6 +90,9 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		if gotAgg, ok := bundle.Aggregate.(streamrows.PodAggregate); !ok || gotAgg != wantAgg {
 			t.Fatalf("Aggregate half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Aggregate, wantAgg)
 		}
+		if wantIndexes := podAggregateBundleIndexes(wantAgg); !reflect.DeepEqual(bundle.Indexes, wantIndexes) {
+			t.Fatalf("Indexes mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Indexes, wantIndexes)
+		}
 
 		wantCatalog, ok := catalogProject(pod).(objectcatalog.Summary)
 		if !ok {

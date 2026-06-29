@@ -880,6 +880,16 @@ func (m *IngestManager) Rows(gvr schema.GroupVersionResource) []interface{} {
 	return store.List()
 }
 
+// RowsByIndex returns the full projected values whose Bundle index includes one of
+// the supplied values under indexName, or nil when the manager has no entry for gvr.
+func (m *IngestManager) RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{} {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.RowsByIndex(indexName, values)
+}
+
 // StoreResourceVersion returns the latest list/watch resourceVersion gvr's store has
 // observed (from its relist or a watch bookmark), or "" when the manager has no entry
 // for gvr. It is the ingest equivalent of the highest object resourceVersion a typed

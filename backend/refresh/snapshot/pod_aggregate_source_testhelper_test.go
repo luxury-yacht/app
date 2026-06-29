@@ -201,6 +201,26 @@ func (s fakePodWorkloadsIngestSource) Rows(gvr schema.GroupVersionResource) []in
 	return out
 }
 
+func (s fakePodWorkloadsIngestSource) RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{} {
+	if gvr != PodGVR || indexName != podOwnerKeyIndexName || len(values) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		wanted[value] = struct{}{}
+	}
+	out := make([]interface{}, 0, len(s.bundles))
+	for _, b := range s.bundles {
+		for _, ownerKey := range b.Indexes[podOwnerKeyIndexName] {
+			if _, ok := wanted[ownerKey]; ok {
+				out = append(out, b)
+				break
+			}
+		}
+	}
+	return out
+}
+
 func (s fakePodWorkloadsIngestSource) StoreResourceVersion(gvr schema.GroupVersionResource) string {
 	if gvr != PodGVR {
 		return ""
@@ -220,9 +240,11 @@ func newFakePodWorkloadsIngestSource(meta ClusterMeta, rsLister appslisters.Repl
 		if pod == nil {
 			continue
 		}
+		aggregate := projectPodAggregate(pod, rsLister)
 		bundles = append(bundles, ingest.Bundle{
 			Table:     podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister)),
-			Aggregate: projectPodAggregate(pod, rsLister),
+			Aggregate: aggregate,
+			Indexes:   podAggregateBundleIndexes(aggregate),
 		})
 		if rv, err := strconv.ParseUint(pod.ResourceVersion, 10, 64); err == nil && rv > maxRV {
 			maxRV = rv

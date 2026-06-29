@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 
@@ -69,6 +71,23 @@ func (s *recordingSink) snapshot() ([]interface{}, []interface{}) {
 
 func cm(ns, name string) *corev1.ConfigMap {
 	return configMap(ns, name)
+}
+
+func bundleNames(rows []interface{}) string {
+	names := make([]string, 0, len(rows))
+	for _, raw := range rows {
+		bundle, ok := raw.(Bundle)
+		if !ok {
+			continue
+		}
+		table, ok := bundle.Table.(tableRow)
+		if !ok {
+			continue
+		}
+		names = append(names, table.Name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
 }
 
 // TestProjectingStoreBundleAccessorsSplitHalves proves TableRows and CatalogRows
@@ -328,6 +347,67 @@ func TestProjectingStoreAggregateRowsSplitsHalf(t *testing.T) {
 	}
 	if got := len(tableOnly.AggregateRows()); got != 0 {
 		t.Fatalf("AggregateRows len = %d, want 0 when aggregate half is nil", got)
+	}
+}
+
+func TestProjectingStoreRowsByIndexTracksBundleIndexKeys(t *testing.T) {
+	project := func(obj interface{}) (interface{}, error) {
+		cmObj, ok := obj.(*corev1.ConfigMap)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type %T", obj)
+		}
+		return Bundle{
+			Table: tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
+			Indexes: map[string][]string{
+				"owner": []string{cmObj.Labels["owner"]},
+			},
+		}, nil
+	}
+	store := NewProjectingStore(project)
+	store.SetRetainTable(true)
+	alphaA := cm("default", "a")
+	alphaA.Labels = map[string]string{"owner": "alpha"}
+	betaB := cm("default", "b")
+	betaB.Labels = map[string]string{"owner": "beta"}
+
+	if err := store.Add(alphaA); err != nil {
+		t.Fatalf("Add alpha: %v", err)
+	}
+	if err := store.Add(betaB); err != nil {
+		t.Fatalf("Add beta: %v", err)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"alpha"})); got != "a" {
+		t.Fatalf("RowsByIndex owner=alpha names = %q, want a", got)
+	}
+
+	alphaA.Labels = map[string]string{"owner": "beta"}
+	if err := store.Update(alphaA); err != nil {
+		t.Fatalf("Update alpha->beta: %v", err)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"alpha"})); got != "" {
+		t.Fatalf("RowsByIndex owner=alpha after update names = %q, want empty", got)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"beta"})); got != "a,b" {
+		t.Fatalf("RowsByIndex owner=beta after update names = %q, want a,b", got)
+	}
+
+	if err := store.Delete(betaB); err != nil {
+		t.Fatalf("Delete beta: %v", err)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"beta"})); got != "a" {
+		t.Fatalf("RowsByIndex owner=beta after delete names = %q, want a", got)
+	}
+
+	alphaC := cm("default", "c")
+	alphaC.Labels = map[string]string{"owner": "alpha"}
+	if err := store.Replace([]interface{}{alphaC}, "12"); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"beta"})); got != "" {
+		t.Fatalf("RowsByIndex owner=beta after replace names = %q, want empty", got)
+	}
+	if got := bundleNames(store.RowsByIndex("owner", []string{"alpha"})); got != "c" {
+		t.Fatalf("RowsByIndex owner=alpha after replace names = %q, want c", got)
 	}
 }
 

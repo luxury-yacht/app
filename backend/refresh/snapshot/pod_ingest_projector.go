@@ -26,6 +26,7 @@ package snapshot
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -65,13 +66,22 @@ func NewPodIngestProjector(meta ClusterMeta, rsLister appslisters.ReplicaSetList
 		}
 		var metaObj metav1.Object = pod
 		table := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
+		aggregate := projectPodAggregate(pod, rsLister)
 		return ingest.Bundle{
 			Table:     table,
-			Aggregate: projectPodAggregate(pod, rsLister),
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
+			Indexes:   podAggregateBundleIndexes(aggregate),
 		}, nil
 	}
+}
+
+func podAggregateBundleIndexes(aggregate streamrows.PodAggregate) map[string][]string {
+	if aggregate.OwnerKey == "" {
+		return nil
+	}
+	return map[string][]string{podOwnerKeyIndexName: []string{aggregate.OwnerKey}}
 }
 
 // errNotPodObject is returned when the reflector decodes a non-Pod into the pod store;

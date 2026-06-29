@@ -17,6 +17,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 
 	"k8s.io/client-go/tools/cache"
@@ -52,6 +53,10 @@ type Bundle struct {
 	// cluster-overview/nodes/namespace-workloads domains). It is nil for every kind
 	// except pods, exactly as ObjectMap is nil for kinds with no graph node.
 	Aggregate interface{}
+	// Indexes carries optional secondary-index entries for consumers that need keyed
+	// bundle reads without scanning the whole store. The map key is the index name and
+	// the values are the index values this object should be reachable through.
+	Indexes map[string][]string
 }
 
 // Sink receives a kind's Table-half row incrementally as the reflector mutates
@@ -102,6 +107,10 @@ type ProjectingStore struct {
 
 	mu   sync.RWMutex
 	rows map[string]interface{}
+	// indexes maps indexName -> indexValue -> projected-store keys. It is maintained
+	// alongside rows and points back into rows so indexed reads return the same stored
+	// projections as List.
+	indexes map[string]map[string]map[string]struct{}
 
 	// sinks receive each row's Table half incrementally as the store mutates
 	// (Upsert on store, Delete on eviction), so consumers — a maintained store, a
@@ -154,6 +163,7 @@ func NewProjectingStore(project ProjectFunc) *ProjectingStore {
 	return &ProjectingStore{
 		project: project,
 		rows:    make(map[string]interface{}),
+		indexes: make(map[string]map[string]map[string]struct{}),
 	}
 }
 
@@ -180,6 +190,87 @@ func (s *ProjectingStore) storedValue(projected interface{}) interface{} {
 	}
 	b.Table = nil
 	return b
+}
+
+func bundleIndexValues(projected interface{}) map[string][]string {
+	b, ok := projected.(Bundle)
+	if !ok || len(b.Indexes) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(b.Indexes))
+	for name, values := range b.Indexes {
+		if name == "" {
+			continue
+		}
+		seen := make(map[string]struct{}, len(values))
+		next := make([]string, 0, len(values))
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			next = append(next, value)
+		}
+		if len(next) == 0 {
+			continue
+		}
+		sort.Strings(next)
+		out[name] = next
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (s *ProjectingStore) addIndexesForKey(key string, projected interface{}) {
+	for name, values := range bundleIndexValues(projected) {
+		byValue := s.indexes[name]
+		if byValue == nil {
+			byValue = make(map[string]map[string]struct{}, len(values))
+			s.indexes[name] = byValue
+		}
+		for _, value := range values {
+			keys := byValue[value]
+			if keys == nil {
+				keys = make(map[string]struct{})
+				byValue[value] = keys
+			}
+			keys[key] = struct{}{}
+		}
+	}
+}
+
+func (s *ProjectingStore) removeIndexesForKey(key string, projected interface{}) {
+	for name, values := range bundleIndexValues(projected) {
+		byValue := s.indexes[name]
+		if byValue == nil {
+			continue
+		}
+		for _, value := range values {
+			keys := byValue[value]
+			if keys == nil {
+				continue
+			}
+			delete(keys, key)
+			if len(keys) == 0 {
+				delete(byValue, value)
+			}
+		}
+		if len(byValue) == 0 {
+			delete(s.indexes, name)
+		}
+	}
+}
+
+func (s *ProjectingStore) rebuildIndexesLocked() {
+	s.indexes = make(map[string]map[string]map[string]struct{})
+	for key, row := range s.rows {
+		s.addIndexesForKey(key, row)
+	}
 }
 
 // AddSink registers a Sink fed each row's Table half incrementally. It must be
@@ -365,7 +456,12 @@ func (s *ProjectingStore) projectAndStore(obj interface{}) error {
 	if s.hasSinks() {
 		s.emitUpsert(projected)
 	}
-	s.rows[key] = s.storedValue(projected)
+	if stored, existed := s.rows[key]; existed {
+		s.removeIndexesForKey(key, stored)
+	}
+	stored := s.storedValue(projected)
+	s.rows[key] = stored
+	s.addIndexesForKey(key, stored)
 	return nil
 }
 
@@ -396,6 +492,9 @@ func (s *ProjectingStore) Delete(obj interface{}) error {
 	defer s.mu.Unlock()
 	stored, existed := s.rows[key]
 	delete(s.rows, key)
+	if existed {
+		s.removeIndexesForKey(key, stored)
+	}
 	if existed && s.hasSinks() {
 		s.emitDelete(stored)
 	}
@@ -475,6 +574,42 @@ func (s *ProjectingStore) AggregateRows() []interface{} {
 	return out
 }
 
+// RowsByIndex returns full projected rows whose Bundle.Indexes includes one of the
+// supplied values under indexName. The returned rows are the same stored projections
+// List would return, read under one lock and de-duplicated across values.
+func (s *ProjectingStore) RowsByIndex(indexName string, values []string) []interface{} {
+	if indexName == "" || len(values) == 0 {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	byValue := s.indexes[indexName]
+	if len(byValue) == 0 {
+		return nil
+	}
+	keySet := make(map[string]struct{})
+	for _, value := range values {
+		for key := range byValue[value] {
+			keySet[key] = struct{}{}
+		}
+	}
+	if len(keySet) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]interface{}, 0, len(keys))
+	for _, key := range keys {
+		if row, ok := s.rows[key]; ok {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // ListKeys returns a snapshot slice of the keys currently associated with a
 // projected row.
 func (s *ProjectingStore) ListKeys() []string {
@@ -543,6 +678,7 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 		next[key] = s.storedValue(projected)
 	}
 	s.rows = next
+	s.rebuildIndexesLocked()
 	return nil
 }
 
@@ -729,6 +865,7 @@ func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
 	for key, b := range snap.Rows {
 		s.rows[key] = b
 	}
+	s.rebuildIndexesLocked()
 	s.rv = snap.RV
 	s.synced = true
 	s.mu.Unlock()
@@ -745,8 +882,8 @@ func (s *ProjectingStore) MarkSynced() {
 	s.mu.Unlock()
 }
 
-// Resync is a no-op: the projected rows are already current and there is no
-// secondary index to rebuild.
+// Resync is a no-op: the projected rows and secondary indexes are updated by the
+// mutation paths.
 func (s *ProjectingStore) Resync() error {
 	return nil
 }

@@ -56,12 +56,6 @@ const METRIC_SORT_FIELDS = new Set(['cpu', 'memory']);
 const METRIC_OVERLAY_FETCH_SORT: SortConfig = { key: 'name', direction: 'asc' };
 const METRIC_OVERLAY_ROW_KEY_BATCH_SIZE = 250;
 
-const rowKeysPredicateValue = (keys: string[]): string =>
-  keys
-    .map((key) => key.trim())
-    .filter(Boolean)
-    .join('|');
-
 const uniqueRowKeys = (keys: string[]): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -76,11 +70,13 @@ const uniqueRowKeys = (keys: string[]): string[] => {
   return result;
 };
 
+const rowKeysPredicateValue = (keys: string[]): string => uniqueRowKeys(keys).sort().join('|');
+
 const fetchRowsByRowKeys = async <TRow>(
   fetchAllRows: (options?: FetchTypedResourceRowsOptions) => Promise<TRow[]>,
   rowKeys: string[]
 ): Promise<TRow[]> => {
-  const keys = uniqueRowKeys(rowKeys);
+  const keys = uniqueRowKeys(rowKeys).sort();
   if (keys.length === 0) {
     return [];
   }

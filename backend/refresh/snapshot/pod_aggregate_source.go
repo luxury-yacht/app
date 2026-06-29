@@ -16,6 +16,7 @@
 package snapshot
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
@@ -23,6 +24,12 @@ import (
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+const podOwnerKeyIndexName = "pods:owner-key"
+
+type podWorkloadsIndexedIngestSource interface {
+	RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{}
+}
 
 // podAggregateIngestSource supplies the projected per-pod aggregation rows for the cut
 // pod kind, whose objects are no longer cached by the shared informer factory.
@@ -84,7 +91,19 @@ func workloadOwnerPodRowsFromIngest(source podWorkloadsIngestSource, ownRows []W
 	if len(owners) == 0 {
 		return nil, nil
 	}
-	bundles := source.Rows(PodGVR)
+	ownerKeys := make([]string, 0, len(owners))
+	for owner := range owners {
+		ownerKeys = append(ownerKeys, owner)
+	}
+	sort.Strings(ownerKeys)
+	if indexed, ok := source.(podWorkloadsIndexedIngestSource); ok {
+		bundles := indexed.RowsByIndex(PodGVR, podOwnerKeyIndexName, ownerKeys)
+		return workloadOwnerPodRowsFromBundles(bundles, owners)
+	}
+	return workloadOwnerPodRowsFromBundles(source.Rows(PodGVR), owners)
+}
+
+func workloadOwnerPodRowsFromBundles(bundles []interface{}, owners map[string]struct{}) ([]streamrows.PodAggregate, map[string]streamrows.PodSummary) {
 	aggregates := make([]streamrows.PodAggregate, 0, len(bundles))
 	summaries := make(map[string]streamrows.PodSummary, len(bundles))
 	for _, raw := range bundles {

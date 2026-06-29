@@ -40,6 +40,7 @@ func bundleProjectingStore(retainTable bool) *ProjectingStore {
 		return Bundle{
 			Table:   spillTestRow{Name: m.GetName(), N: len(m.GetName())},
 			Catalog: spillTestCatalog{Key: m.GetName()},
+			Indexes: map[string][]string{"name": []string{m.GetName()}},
 		}, nil
 	})
 	s.SetRetainTable(retainTable)
@@ -82,6 +83,9 @@ func TestSpillRestoreBundlesRoundTrip(t *testing.T) {
 		gotCatalog[row.(spillTestCatalog).Key] = true
 	}
 	require.Equal(t, map[string]bool{"a": true, "b": true, "c": true}, gotCatalog)
+	restoredIndexRows := restored.RowsByIndex("name", []string{"b"})
+	require.Len(t, restoredIndexRows, 1)
+	require.Equal(t, spillTestCatalog{Key: "b"}, restoredIndexRows[0].(Bundle).Catalog)
 }
 
 // TestSpillRestoreBundlesRetainsTableHalf proves a retainTable=TRUE store (the pod store)

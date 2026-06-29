@@ -15,6 +15,7 @@ import type { TypedQueryPayload } from './typedResourceQueryScope';
 
 const {
   liveDomainStateRef,
+  liveDomainStatesRef,
   lifecycleCallsRef,
   scopedDomainCallsRef,
   useTypedResourceQueryMock,
@@ -42,6 +43,19 @@ const {
       lastUpdated?: number;
     },
   },
+  liveDomainStatesRef: {
+    current: {} as Record<
+      string,
+      {
+        status?: string;
+        data?: unknown;
+        version?: number;
+        sourceVersion?: string;
+        checksum?: string;
+        lastUpdated?: number;
+      }
+    >,
+  },
   lifecycleCallsRef: { current: [] as unknown[] },
   scopedDomainCallsRef: { current: [] as Array<[string, string]> },
   useTypedResourceQueryMock: vi.fn(),
@@ -56,7 +70,11 @@ const {
 vi.mock('@/core/refresh', () => ({
   useRefreshScopedDomain: (domain: string, scope: string) => {
     scopedDomainCallsRef.current.push([domain, scope]);
-    return liveDomainStateRef.current;
+    return (
+      liveDomainStatesRef.current[`${domain}|${scope}`] ??
+      liveDomainStatesRef.current[domain] ??
+      liveDomainStateRef.current
+    );
   },
 }));
 
@@ -187,6 +205,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       checksum: '',
       lastUpdated: 11,
     };
+    liveDomainStatesRef.current = {};
     scopedDomainCallsRef.current = [];
     lifecycleCallsRef.current = [];
     useTypedResourceQueryMock.mockReset();
@@ -1085,6 +1104,153 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
+  it('keeps the base query decoupled when only the metric domain source version changes', async () => {
+    let result:
+      ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const metricPayload: TestMetricPayload = {
+      rows: [{ rowKey: 'team-a/api', cpuUsage: '250m' }],
+      metrics: { stale: false, collectedAt: 123 },
+    };
+    const scopeKey = 'cluster-a|namespace:team-a';
+    liveDomainStatesRef.current = {
+      [`pods|${scopeKey}`]: {
+        status: 'ready',
+        data: {},
+        version: 1,
+        sourceVersion: 'base:1',
+        checksum: 'base',
+        lastUpdated: 11,
+      },
+      [`pods-metrics|${scopeKey}`]: {
+        status: 'ready',
+        data: {},
+        version: 1,
+        sourceVersion: 'metric:1',
+        checksum: 'metric-1',
+        lastUpdated: 12,
+      },
+    };
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        metricOverlay: testMetricOverlay,
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+    const queryResult = (rows: unknown[], payload: unknown, enabled: boolean) => ({
+      rows: enabled ? rows : [],
+      payload: enabled ? payload : { rows: [] },
+      loading: false,
+      loaded: enabled,
+      error: null,
+      continueToken: null,
+      hasPrevious: false,
+      isRequestingMore: false,
+      loadMore: vi.fn(),
+      loadPrevious: vi.fn(),
+      pageIndex: 1,
+      pageSize: 50,
+      totalCount: enabled ? rows.length : 0,
+      totalIsExact: true,
+      filterOptions: {},
+      kindVocabulary: null,
+      dynamic: null,
+      fetchAllRows: vi.fn().mockResolvedValue([]),
+    });
+    useTypedResourceQueryMock.mockImplementation((params: any) => {
+      if (params.domain === 'pods-metrics') {
+        return queryResult(metricPayload.rows ?? [], metricPayload, params.enabled);
+      }
+      return queryResult(
+        [{ ...row, cpuUsage: undefined }],
+        { rows: [{ ...row, cpuUsage: undefined }] },
+        params.enabled
+      );
+    });
+    useNamespaceResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: { data: params.data },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    const lastCall = (calls: any[]) => calls[calls.length - 1];
+    const latestEnabledBaseCall = () =>
+      lastCall(
+        useTypedResourceQueryMock.mock.calls
+          .map((call: any[]) => call[0])
+          .filter((params: any) => params.domain === 'pods' && params.enabled && !params.predicates)
+      );
+    const latestEnabledMetricOverlayCall = () =>
+      lastCall(
+        useTypedResourceQueryMock.mock.calls
+          .map((call: any[]) => call[0])
+          .filter(
+            (params: any) => params.domain === 'pods-metrics' && params.enabled && params.predicates
+          )
+      );
+
+    expect(latestEnabledBaseCall()).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        liveDataVersion: 'base:1',
+      })
+    );
+    expect(latestEnabledMetricOverlayCall()).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        liveDataVersion: 'metric:1',
+      })
+    );
+    expect(result?.source.loading).toBe(false);
+
+    liveDomainStatesRef.current = {
+      ...liveDomainStatesRef.current,
+      [`pods-metrics|${scopeKey}`]: {
+        status: 'ready',
+        data: {},
+        version: 2,
+        sourceVersion: 'metric:2',
+        checksum: 'metric-2',
+        lastUpdated: 22,
+      },
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(latestEnabledBaseCall()).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        liveDataVersion: 'base:1',
+      })
+    );
+    expect(latestEnabledMetricOverlayCall()).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        liveDataVersion: 'metric:2',
+      })
+    );
+    expect(result?.source.loading).toBe(false);
+  });
+
   it('exports object-sorted rows with all matching metric overlays applied', async () => {
     let result:
       ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
@@ -1251,7 +1417,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({
         domain: 'pods',
         enabled: true,
-        predicates: { rowKeys: 'team-a/worker|team-a/api' },
+        predicates: { rowKeys: 'team-a/api|team-a/worker' },
       })
     );
   });
@@ -1505,7 +1671,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(hydrationFetchAllRows).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        predicates: { rowKeys: 'team-a/worker|team-a/api|team-a/sidecar' },
+        predicates: { rowKeys: 'team-a/api|team-a/sidecar|team-a/worker' },
         sortConfig: { key: 'name', direction: 'asc' },
       })
     );
