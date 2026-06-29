@@ -661,6 +661,19 @@ func parseReadyPair(value string) (int, int, bool) {
 	return ready, total, true
 }
 
+func parseReadyPairInt32(value string) (int32, int32, bool) {
+	parts := strings.Split(strings.TrimSpace(value), "/")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	ready, readyErr := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 32)
+	total, totalErr := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 32)
+	if readyErr != nil || totalErr != nil {
+		return 0, 0, false
+	}
+	return int32(ready), int32(total), true
+}
+
 func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
 	parts := strings.SplitN(scope, ":", 2)
 	if len(parts) != 2 {

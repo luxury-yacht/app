@@ -114,6 +114,18 @@ func TestReaggregateWorkloadSummaryMatchesTypedBuilder(t *testing.T) {
 	}
 }
 
+func TestReaggregateWorkloadSummaryPreservesOutOfRangeReadyFallback(t *testing.T) {
+	own := WorkloadSummary{
+		Kind:  deployment.Identity.Kind,
+		Ready: "2147483648/2147483649",
+	}
+
+	got := reaggregateWorkloadSummary(own, nil, nil)
+	if got.Ready != own.Ready {
+		t.Fatalf("ready fallback changed: got %q, want %q", got.Ready, own.Ready)
+	}
+}
+
 func deploymentWantSummary(b *NamespaceWorkloadsBuilder, clusterID string, deploy *appsv1.Deployment, pods []streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
 	byOwner := map[string][]streamrows.PodAggregate{workloadOwnerKey(deployment.Identity.Kind, deploy.Namespace, deploy.Name): pods}
 	return b.buildDeploymentSummary(clusterID, deploy, byOwner, usage)

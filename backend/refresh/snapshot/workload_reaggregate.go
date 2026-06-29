@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // reaggregateWorkloadSummary overlays the owner's pod-aggregate join + metrics onto a
@@ -39,8 +40,7 @@ func reaggregateWorkloadSummary(own WorkloadSummary, pods []streamrows.PodAggreg
 
 	summary := own
 	if workloadUsesPodReadyStatus(own.Kind) {
-		fallbackReady, fallbackTotal, _ := parseReadyPair(own.Ready)
-		summary.Ready = workloadPodReadyStatus(pods, int32(fallbackReady), int32(fallbackTotal))
+		summary.Ready = reaggregateWorkloadReady(own.Ready, pods)
 	}
 	summary.Restarts = resources.Restarts
 	summary.CPUUsage = formatWorkloadCPUMilli(resources.CPUUsageMilli)
@@ -50,6 +50,26 @@ func reaggregateWorkloadSummary(own WorkloadSummary, pods []streamrows.PodAggreg
 	summary.MemRequest = formatWorkloadMemory(resources.MemoryRequestBytes)
 	summary.MemLimit = formatWorkloadMemory(resources.MemoryLimitBytes)
 	return summary
+}
+
+func reaggregateWorkloadReady(fallback string, pods []streamrows.PodAggregate) string {
+	ready, total, ok := parseReadyPairInt32(fallback)
+	if ok {
+		return workloadPodReadyStatus(pods, ready, total)
+	}
+	if workloadHasReadyStatusPods(pods) {
+		return workloadPodReadyStatus(pods, 0, 0)
+	}
+	return fallback
+}
+
+func workloadHasReadyStatusPods(pods []streamrows.PodAggregate) bool {
+	for _, agg := range pods {
+		if agg.Phase != string(corev1.PodSucceeded) && agg.Phase != string(corev1.PodFailed) {
+			return true
+		}
+	}
+	return false
 }
 
 // workloadUsesPodReadyStatus reports whether a kind's Ready string is the pod-counted
