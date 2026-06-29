@@ -915,16 +915,6 @@ func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
 	return m.metrics.LatestPodUsage()
 }
 
-func (m *Manager) BroadcastMetricRefresh(version string) {
-	if m == nil {
-		return
-	}
-	version = strings.TrimSpace(version)
-	if version == "" {
-		return
-	}
-}
-
 func (m *Manager) BroadcastCatalogRefresh(version string) {
 	if m == nil {
 		return

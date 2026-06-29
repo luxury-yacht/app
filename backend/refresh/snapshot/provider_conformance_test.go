@@ -54,8 +54,6 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 		}
 		builder := newNodeBuilderForTest(
 			ClusterMeta{ClusterID: "cluster-a"},
-			"",
-			fakeMetricsProvider{},
 			newFakePodAggregateSource(nil).withNodes(ClusterMeta{ClusterID: "cluster-a"}, "", node),
 			node,
 		)

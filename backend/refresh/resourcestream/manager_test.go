@@ -124,44 +124,6 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
-func TestManagerMetricRefreshDoesNotBroadcastToObjectStreamDomains(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-		buffers:     make(map[string]*updateBuffer),
-		sequences:   make(map[string]uint64),
-	}
-	podsSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
-	require.NoError(t, err)
-	workloadsSub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
-	require.NoError(t, err)
-	nodesSub, err := subscribeForTest(t, manager, domainNodes, "")
-	require.NoError(t, err)
-	configSub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
-	require.NoError(t, err)
-
-	manager.BroadcastMetricRefresh("1700000000000000000")
-
-	for _, tc := range []struct {
-		name string
-		sub  *Subscription
-	}{
-		{name: "pods", sub: podsSub},
-		{name: "workloads", sub: workloadsSub},
-		{name: "nodes", sub: nodesSub},
-		{name: "namespace-config", sub: configSub},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			select {
-			case update := <-tc.sub.Updates:
-				t.Fatalf("%s must not receive metric source signal: %#v", tc.name, update)
-			default:
-			}
-		})
-	}
-}
-
 func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},

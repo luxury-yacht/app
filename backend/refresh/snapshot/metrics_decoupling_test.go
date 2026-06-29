@@ -11,31 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type forbiddenMetricsProvider struct {
-	t *testing.T
-}
-
-func (f forbiddenMetricsProvider) LatestNodeUsage() map[string]metrics.NodeUsage {
-	f.t.Helper()
-	f.t.Fatal("base snapshot must not read node metrics")
-	return nil
-}
-
-func (f forbiddenMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
-	f.t.Helper()
-	f.t.Fatal("base snapshot must not read pod metrics")
-	return nil
-}
-
-func (f forbiddenMetricsProvider) Metadata() metrics.Metadata {
-	f.t.Helper()
-	f.t.Fatal("base snapshot must not read metrics metadata")
-	return metrics.Metadata{}
-}
 
 func TestBasePodSnapshotDoesNotReadMetricsProvider(t *testing.T) {
 	created := time.Date(2026, 6, 28, 10, 0, 0, 0, time.UTC)
@@ -74,8 +51,6 @@ func TestBaseNodeSnapshotDoesNotReadMetricsProvider(t *testing.T) {
 	}
 	builder := newNodeBuilderForTest(
 		ClusterMeta{},
-		"42",
-		forbiddenMetricsProvider{t: t},
 		newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node),
 		node,
 	)

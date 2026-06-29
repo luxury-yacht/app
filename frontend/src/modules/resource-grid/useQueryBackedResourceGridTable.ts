@@ -488,6 +488,7 @@ function useTypedQueryLifecycle<
         fetchAllRows: fetchAllMergedRows,
       };
     }
+    const unhydratedMetricRowCount = Math.max(0, metricRows.length - mergedRows.length);
     return {
       ...baseQuery,
       rows: mergedRows,
@@ -502,7 +503,7 @@ function useTypedQueryLifecycle<
       loadPrevious: metricQuery.loadPrevious,
       pageIndex: metricQuery.pageIndex,
       pageSize: metricQuery.pageSize,
-      totalCount: metricQuery.totalCount,
+      totalCount: Math.max(0, metricQuery.totalCount - unhydratedMetricRowCount),
       totalIsExact: metricQuery.totalIsExact,
       filterOptions: metricQuery.filterOptions,
       kindVocabulary: metricQuery.kindVocabulary,
@@ -521,6 +522,7 @@ function useTypedQueryLifecycle<
     mergedRows,
     metricOverlay,
     metricQuery,
+    metricRows.length,
   ]);
 
   const metricPayload = useMemo(() => {

@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -406,6 +407,47 @@ func TestPodMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T
 	require.Equal(t, first.Version, second.Version)
 	require.Equal(t, fmt.Sprintf("%d", now.Add(5*time.Second).UnixNano()), second.SourceVersions["metric"])
 	require.Equal(t, "75m", second.Payload.(PodMetricsSnapshot).Rows[0].CPUUsage)
+}
+
+func TestPodMetricsBuilderSurfacesMetricMetadata(t *testing.T) {
+	collectedAt := time.Now().Add(-config.MetricsStaleThreshold - time.Second)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "api",
+			Namespace:         "team-a",
+			ResourceVersion:   "101",
+			CreationTimestamp: metav1.NewTime(collectedAt.Add(-time.Minute)),
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	base := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, pod),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+	}
+	provider := fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{
+			CollectedAt:         collectedAt,
+			LastError:           "metrics API forbidden",
+			ConsecutiveFailures: 2,
+			SuccessCount:        3,
+			FailureCount:        5,
+		},
+	}
+	builder := &PodMetricsBuilder{base: base, metrics: provider}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
+	require.NoError(t, err)
+
+	payload := snapshot.Payload.(PodMetricsSnapshot)
+	require.True(t, payload.Metrics.Stale)
+	require.Equal(t, "metrics API forbidden", payload.Metrics.LastError)
+	require.Equal(t, 2, payload.Metrics.ConsecutiveFailures)
+	require.Equal(t, uint64(3), payload.Metrics.SuccessCount)
+	require.Equal(t, uint64(5), payload.Metrics.FailureCount)
+	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
 }
 
 func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodUsage, time.Time) {

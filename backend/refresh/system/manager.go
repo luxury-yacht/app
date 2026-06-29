@@ -202,11 +202,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
 
 	var (
-		metricsPoller      refresh.MetricsPoller
-		metricsProvider    metrics.Provider
-		metricSignalSource interface {
-			SetSuccessObserver(func(string, metrics.Metadata))
-		}
+		metricsPoller   refresh.MetricsPoller
+		metricsProvider metrics.Provider
 	)
 
 	serverHost := ""
@@ -237,7 +234,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		demandPoller := metrics.NewDemandPoller(poller, poller, idleTimeout)
 		metricsPoller = demandPoller
 		metricsProvider = demandPoller
-		metricSignalSource = poller
 	} else {
 		logSkip("metrics-poller", "metrics.k8s.io", "nodes/pods")
 
@@ -319,11 +315,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	})
 	if err != nil {
 		return nil, err
-	}
-	if metricSignalSource != nil && resourceManager != nil {
-		metricSignalSource.SetSuccessObserver(func(revision string, _ metrics.Metadata) {
-			resourceManager.BroadcastMetricRefresh(revision)
-		})
 	}
 	if eventManager != nil && resourceManager != nil {
 		eventManager.SetSignalObserver(eventSignalObserver(resourceManager))

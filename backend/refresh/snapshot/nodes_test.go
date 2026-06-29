@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -9,12 +10,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
 )
 
 type fakeMetricsProvider struct {
@@ -46,10 +51,9 @@ func (f fakeMetricsProvider) Metadata() metrics.Metadata {
 // newNodeBuilderForTest builds a NodeBuilder wired the production way: node OWN-rows are served
 // from a maintained store fed the SAME Table-half NodeSummary rows the node reflector projects
 // (via the store's Sink, mirroring pods_store_scope_test.go), while the ingest source still
-// supplies the per-node pod aggregates + the node version watermark RV. meta stamps the store +
-// own-row cluster identity; nodeRV drives the version watermark; the typed pods (via ingest) and
-// metrics provider come from the caller.
-func newNodeBuilderForTest(meta ClusterMeta, nodeRV string, provider metrics.Provider, ingest nodeDomainIngestSource, nodes ...*corev1.Node) *NodeBuilder {
+// supplies the per-node pod aggregates. meta stamps the store + own-row cluster
+// identity, and the typed pods come from the caller through ingest.
+func newNodeBuilderForTest(meta ClusterMeta, ingest nodeDomainIngestSource, nodes ...*corev1.Node) *NodeBuilder {
 	maintained := newTypedMaintainedStore(meta, nodesQuerypageSchema(), nodeTableQueryAdapter())
 	sink := maintained.Sink()
 	for _, node := range nodes {
@@ -65,7 +69,6 @@ func newNodeBuilderForTest(meta ClusterMeta, nodeRV string, provider metrics.Pro
 }
 
 func TestNodeBuilderBuild(t *testing.T) {
-	collectedAt := time.Now().Add(-30 * time.Second)
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "node-1",
@@ -180,31 +183,8 @@ func TestNodeBuilderBuild(t *testing.T) {
 		},
 	}
 
-	provider := fakeMetricsProvider{
-		usage: map[string]metrics.NodeUsage{
-			"node-1": {
-				CPUUsageMilli:    650,
-				MemoryUsageBytes: 512 * 1024 * 1024,
-			},
-		},
-		podUsage: map[string]metrics.PodUsage{
-			"default/pod-a": {
-				CPUUsageMilli:    125,
-				MemoryUsageBytes: 128 * 1024 * 1024,
-			},
-			"kube-system/pod-b": {
-				CPUUsageMilli:    250,
-				MemoryUsageBytes: 64 * 1024 * 1024,
-			},
-		},
-		metadata: metrics.Metadata{
-			CollectedAt:  collectedAt,
-			SuccessCount: 7,
-			FailureCount: 2,
-		},
-	}
 	ingest := newFakePodAggregateSource(nil, podA, podB, podOther).withNodes(ClusterMeta{}, "42", node)
-	builder := newNodeBuilderForTest(ClusterMeta{}, "42", provider, ingest, node)
+	builder := newNodeBuilderForTest(ClusterMeta{}, ingest, node)
 
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
@@ -286,8 +266,6 @@ func TestNodeMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.
 	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
 	base := newNodeBuilderForTest(
 		ClusterMeta{},
-		"42",
-		fakeMetricsProvider{},
 		ingest,
 		node,
 	)
@@ -317,14 +295,87 @@ func TestNodeMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.
 	require.Equal(t, "700m", second.Payload.(NodeMetricsSnapshot).Rows[0].CPUUsage)
 }
 
+func TestNodeMetricsBuilderSurfacesMetricMetadata(t *testing.T) {
+	collectedAt := time.Now().Add(-config.MetricsStaleThreshold - time.Second)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "node-1",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(collectedAt.Add(-time.Hour)),
+		},
+	}
+	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
+	base := newNodeBuilderForTest(
+		ClusterMeta{},
+		ingest,
+		node,
+	)
+	provider := fakeMetricsProvider{
+		usage: map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
+		metadata: metrics.Metadata{
+			CollectedAt:         collectedAt,
+			LastError:           "metrics API forbidden",
+			ConsecutiveFailures: 2,
+			SuccessCount:        3,
+			FailureCount:        5,
+		},
+	}
+	builder := &NodeMetricsBuilder{base: base, metrics: provider}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload := snapshot.Payload.(NodeMetricsSnapshot)
+	require.True(t, payload.Metrics.Stale)
+	require.Equal(t, "metrics API forbidden", payload.Metrics.LastError)
+	require.Equal(t, 2, payload.Metrics.ConsecutiveFailures)
+	require.Equal(t, uint64(3), payload.Metrics.SuccessCount)
+	require.Equal(t, uint64(5), payload.Metrics.FailureCount)
+	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
+}
+
+func TestNodeMetricsListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
+	collectedAt := time.Now()
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "node-1",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(collectedAt.Add(-time.Hour)),
+		},
+	}
+	client := fake.NewSimpleClientset(node)
+	client.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(corev1.Resource("pods"), "", errors.New("list pods denied"))
+	})
+	builder := &NodeMetricsBuilder{
+		listClient: client,
+		metrics: fakeMetricsProvider{
+			usage: map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
+			metadata: metrics.Metadata{
+				CollectedAt:  collectedAt,
+				SuccessCount: 1,
+			},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload := snapshot.Payload.(NodeMetricsSnapshot)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "node-1", payload.Rows[0].Name)
+	require.Equal(t, "650m", payload.Rows[0].CPUUsage)
+	require.Empty(t, payload.Rows[0].PodMetrics)
+	require.False(t, payload.Metrics.Stale)
+	require.Equal(t, uint64(1), payload.Metrics.SuccessCount)
+}
+
 // A malformed query scope must be rejected like every other typed builder does
 // — silently serving default-ordered rows under the requested identity is a
 // boundary contract hole.
 func TestNodeBuilderRejectsMalformedQueryScope(t *testing.T) {
 	builder := newNodeBuilderForTest(
 		ClusterMeta{},
-		"",
-		fakeMetricsProvider{},
 		newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, ""),
 	)
 
@@ -358,8 +409,6 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 
 	builder := newNodeBuilderForTest(
 		ClusterMeta{},
-		"",
-		fakeMetricsProvider{},
 		newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "", nodes...),
 		nodes...,
 	)

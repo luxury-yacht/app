@@ -281,4 +281,233 @@ describe('useUtilizationData', () => {
 
     hook.cleanup();
   });
+
+  it.each(['DaemonSet', 'StatefulSet'] as const)(
+    'updates %s utilization from namespace-workloads metric rows',
+    async (kind) => {
+      const objectData = {
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        kind,
+        namespace: 'team-a',
+        name: 'api',
+      };
+      const detail = {
+        podMetricsSummary: {
+          cpuUsage: '100m',
+          cpuRequest: '50m',
+          cpuLimit: '500m',
+          memUsage: '128Mi',
+          memRequest: '64Mi',
+          memLimit: '256Mi',
+          pods: 1,
+          readyPods: 1,
+        },
+      };
+      const hook = await renderUtilizationHook({ objectData, detail });
+
+      await act(async () => {
+        setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
+          ...previous,
+          status: 'ready',
+          scope: 'cluster-a|namespace:team-a',
+          data: {
+            clusterId: 'cluster-a',
+            rows: [
+              {
+                clusterId: 'cluster-a',
+                kind,
+                name: 'api',
+                namespace: 'team-a',
+                ready: '1/2',
+                status: 'Available',
+                restarts: 0,
+                age: '2m',
+                cpuUsage: '-',
+                cpuRequest: '160m',
+                cpuLimit: '800m',
+                memUsage: '-',
+                memRequest: '192Mi',
+                memLimit: '768Mi',
+              },
+            ],
+          },
+        }));
+        setScopedDomainState(
+          'namespace-workloads-metrics',
+          'cluster-a|namespace:team-a',
+          (previous) => ({
+            ...previous,
+            status: 'ready',
+            scope: 'cluster-a|namespace:team-a',
+            data: {
+              clusterId: 'cluster-a',
+              rows: [
+                {
+                  clusterId: 'cluster-a',
+                  group: 'apps',
+                  version: 'v1',
+                  kind,
+                  resource: kind === 'DaemonSet' ? 'daemonsets' : 'statefulsets',
+                  name: 'api',
+                  namespace: 'team-a',
+                  rowKey: `${kind.toLowerCase()}/team-a/api`,
+                  ready: '1/2',
+                  cpuUsage: '320m',
+                  memUsage: '384Mi',
+                },
+              ],
+              metrics: { stale: false, successCount: 1, failureCount: 0 },
+            },
+          })
+        );
+        await Promise.resolve();
+      });
+
+      expect(hook.latest.current).toMatchObject({
+        cpu: { usage: '320m', request: '160m', limit: '800m' },
+        memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
+        podCount: 2,
+        readyPodCount: 1,
+      });
+
+      hook.cleanup();
+    }
+  );
+
+  it('updates Node utilization from nodes metric rows', async () => {
+    const objectData = {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      name: 'node-a',
+    };
+    const detail = {
+      cpuUsage: '100m',
+      cpuCapacity: '4',
+      cpuAllocatable: '3800m',
+      cpuRequests: '1',
+      cpuLimits: '2',
+      memoryUsage: '1Gi',
+      memoryCapacity: '16Gi',
+      memoryAllocatable: '15Gi',
+      memRequests: '4Gi',
+      memLimits: '8Gi',
+      podsCount: 8,
+      podsCapacity: '110',
+      podsAllocatable: '100',
+    };
+    const hook = await renderUtilizationHook({ objectData, detail });
+
+    await act(async () => {
+      setScopedDomainState('nodes', 'cluster-a|', (previous) => ({
+        ...previous,
+        status: 'ready',
+        scope: 'cluster-a|',
+        data: {
+          clusterId: 'cluster-a',
+          rows: [
+            {
+              clusterId: 'cluster-a',
+              name: 'node-a',
+              status: 'Ready',
+              roles: 'worker',
+              age: '1d',
+              version: 'v1.31.0',
+              cpuCapacity: '8',
+              cpuAllocatable: '7600m',
+              cpuRequests: '2',
+              cpuLimits: '4',
+              cpuUsage: '-',
+              memoryCapacity: '32Gi',
+              memoryAllocatable: '30Gi',
+              memRequests: '6Gi',
+              memLimits: '12Gi',
+              memoryUsage: '-',
+              pods: '18',
+              podsCapacity: '110',
+              podsAllocatable: '100',
+              restarts: 0,
+              kind: 'Node',
+              cpu: '1200m',
+              memory: '5Gi',
+              unschedulable: false,
+            },
+          ],
+        },
+      }));
+      setScopedDomainState('nodes-metrics', 'cluster-a|', (previous) => ({
+        ...previous,
+        status: 'ready',
+        scope: 'cluster-a|',
+        data: {
+          clusterId: 'cluster-a',
+          rows: [
+            {
+              clusterId: 'cluster-a',
+              group: '',
+              version: 'v1',
+              kind: 'Node',
+              resource: 'nodes',
+              name: 'node-a',
+              rowKey: 'node/node-a',
+              cpuUsage: '1200m',
+              memoryUsage: '5Gi',
+            },
+          ],
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
+        },
+      }));
+      await Promise.resolve();
+    });
+
+    expect(hook.latest.current).toMatchObject({
+      mode: 'nodeMetrics',
+      cpu: {
+        usage: '1200m',
+        capacity: '8',
+        allocatable: '7600m',
+        request: '2',
+        limit: '4',
+      },
+      memory: {
+        usage: '5Gi',
+        capacity: '32Gi',
+        allocatable: '30Gi',
+        request: '6Gi',
+        limit: '12Gi',
+      },
+      pods: { count: '18', capacity: '110', allocatable: '100' },
+    });
+
+    hook.cleanup();
+  });
+
+  it('keeps inactive ReplicaSet utilization hidden on the detail-backed path', async () => {
+    const hook = await renderUtilizationHook({
+      objectData: {
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'ReplicaSet',
+        namespace: 'team-a',
+        name: 'api-7c9d',
+      },
+      detail: {
+        isActive: false,
+        podMetricsSummary: {
+          cpuUsage: '100m',
+          memUsage: '128Mi',
+          pods: 1,
+          readyPods: 1,
+        },
+      },
+    });
+
+    expect(hook.latest.current).toBeNull();
+
+    hook.cleanup();
+  });
 });

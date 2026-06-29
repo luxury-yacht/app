@@ -224,22 +224,6 @@ func toAnySlice[T any](rows []T) []any {
 	return out
 }
 
-// staticPodMetrics implements metrics.Provider for parity tests that need
-// a deterministic metrics snapshot. The snapshot builder reads
-// LatestPodUsage() directly; the per-row projectors take the same map as
-// a parameter — staticPodMetrics is still useful for proving base snapshot rows
-// ignore live metric samples after metrics moved to dedicated domains.
-type staticPodMetrics struct {
-	pods map[string]metrics.PodUsage
-	meta metrics.Metadata
-}
-
-func (s *staticPodMetrics) LatestPodUsage() map[string]metrics.PodUsage { return s.pods }
-func (s *staticPodMetrics) LatestNodeUsage() map[string]metrics.NodeUsage {
-	return map[string]metrics.NodeUsage{}
-}
-func (s *staticPodMetrics) Metadata() metrics.Metadata { return s.meta }
-
 // ---------- Pods ----------
 
 func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
@@ -947,18 +931,8 @@ func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
 				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
 			}
 
-			usage := map[string]metrics.PodUsage{}
-			if withMetrics {
-				usage = map[string]metrics.PodUsage{
-					"default/p1": {CPUUsageMilli: 100, MemoryUsageBytes: 32 * 1024 * 1024},
-				}
-			}
-			provider := &staticPodMetrics{pods: usage}
-
 			builder := newNodeBuilderForTest(
 				meta,
-				node.ResourceVersion,
-				provider,
 				newFakePodAggregateSource(nil, pod).withNodes(meta, node.ResourceVersion, node),
 				node,
 			)

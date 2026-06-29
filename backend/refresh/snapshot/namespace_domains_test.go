@@ -1518,6 +1518,68 @@ func TestNamespaceWorkloadsMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersi
 	require.Equal(t, "120m", second.Payload.(NamespaceWorkloadMetricsSnapshot).Rows[0].CPUUsage)
 }
 
+func TestNamespaceWorkloadsMetricsBuilderSurfacesMetricMetadata(t *testing.T) {
+	collectedAt := time.Now().Add(-config.MetricsStaleThreshold - time.Second)
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "web",
+			Namespace:         "default",
+			ResourceVersion:   "10",
+			CreationTimestamp: metav1.NewTime(collectedAt.Add(-time.Hour)),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "web-abc123",
+			Namespace:         "default",
+			ResourceVersion:   "11",
+			CreationTimestamp: metav1.NewTime(collectedAt.Add(-30 * time.Minute)),
+			Labels:            map[string]string{"app": "web"},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	provider := &workloadMetricsProvider{
+		pods: map[string]metrics.PodUsage{
+			"default/web-abc123": {CPUUsageMilli: 80, MemoryUsageBytes: 150 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{
+			CollectedAt:         collectedAt,
+			LastError:           "metrics API forbidden",
+			ConsecutiveFailures: 2,
+			SuccessCount:        3,
+			FailureCount:        5,
+		},
+	}
+	base := &NamespaceWorkloadsBuilder{
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil, pod),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+		includeDaemonSets:   true,
+		includeJobs:         true,
+		includeCronJobs:     true,
+	}
+	seedWorkloadsFromBuilderSource(base, ClusterMeta{})
+	builder := &NamespaceWorkloadsMetricsBuilder{base: base, metrics: provider}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+
+	payload := snapshot.Payload.(NamespaceWorkloadMetricsSnapshot)
+	require.True(t, payload.Metrics.Stale)
+	require.Equal(t, "metrics API forbidden", payload.Metrics.LastError)
+	require.Equal(t, 2, payload.Metrics.ConsecutiveFailures)
+	require.Equal(t, uint64(3), payload.Metrics.SuccessCount)
+	require.Equal(t, uint64(5), payload.Metrics.FailureCount)
+	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
+}
+
 func TestNamespaceWorkloadsMetricsBuilderAllNamespacesOverlayAggregatesPodMetrics(t *testing.T) {
 	now := time.Unix(1000, 0)
 	replicas := int32(1)
