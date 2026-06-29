@@ -97,13 +97,13 @@ export const resourceStreamDomainDescriptors = [
     domain: 'pods',
     scopeKind: 'pod',
     isClusterScoped: false,
-    preserveMetrics: true,
+    preserveMetrics: false,
   },
   {
     domain: 'namespace-workloads',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: true,
+    preserveMetrics: false,
   },
   {
     domain: 'namespace-config',
@@ -187,7 +187,7 @@ export const resourceStreamDomainDescriptors = [
     domain: 'nodes',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: true,
+    preserveMetrics: false,
   },
 ] satisfies ResourceStreamDomainDescriptor[];
 

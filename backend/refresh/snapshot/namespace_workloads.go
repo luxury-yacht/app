@@ -60,11 +60,11 @@ type NamespaceWorkloadsPermissions struct {
 // NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots. Pods AND the
 // five workload kinds (Deployment/StatefulSet/DaemonSet/Job/CronJob) are cut to the ingest
 // path. The workload OWN-rows (each kind's projected workload-OWN-fields WorkloadSummary, the
-// Bundle Table half, metrics ZEROED) are served from a per-cluster maintained store fed by the
+// Bundle Table half) are served from a per-cluster maintained store fed by the
 // five workload GVRs' Table-half ingest Sinks — the SAME mechanism nodes/pods use. The pod
 // aggregation (per-owner ready/resources) and the synthesized standalone-pod rows are cross-kind
 // serve-time joins read from the pod ingest source, and the serve path re-joins the owner's pods +
-// metrics + HPA onto each own-row (reaggregateWorkloadSummary), byte-identical to the typed path.
+// HPA onto each own-row (reaggregateWorkloadSummary), byte-identical to the typed path.
 // The include* flags record whether the request is permitted to read each kind (the gate the
 // typed listers' presence used to imply).
 type NamespaceWorkloadsBuilder struct {
@@ -77,19 +77,18 @@ type NamespaceWorkloadsBuilder struct {
 	includeJobs         bool
 	includeCronJobs     bool
 	hpaLister           autoscalinglisters.HorizontalPodAutoscalerLister
-	metrics             metrics.Provider
 	logger              containerlogsstream.Logger
 
 	// workloadsMaintained holds the workload OWN-rows (WorkloadSummary for the five workload
-	// kinds, metrics ZEROED, no pod-join), fed by each workload GVR's Table-half ingest Sink.
-	// Build reads own-rows from it (scope-filtered) and re-joins pods + metrics + HPA +
+	// kinds, no pod-join), fed by each workload GVR's Table-half ingest Sink.
+	// Build reads own-rows from it (scope-filtered) and re-joins pods + HPA +
 	// synthesizes standalone pods at serve (§3.6). nil in a unit test with no store wired, in
 	// which case no workload own-rows are served.
 	//
 	// The standalone-pod determination is intentionally NOT in this store: it is a cross-kind
 	// join (a pod is standalone iff no workload owns it), so it cannot be fed one object per
 	// event — it is computed at serve from the pod ingest source, exactly as the pod-aggregate
-	// + metrics + HPA overlays are.
+	// + HPA overlays are.
 	workloadsMaintained *typedMaintainedStore[WorkloadSummary]
 }
 
@@ -113,7 +112,7 @@ type NamespaceWorkloadsSnapshot struct {
 
 func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
 		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
@@ -166,7 +165,6 @@ func RegisterNamespaceWorkloadsDomain(
 		// workloadIngest supplies only the workload stores' RVs for the version watermark; the
 		// own-rows come from the Sink-fed maintained store.
 		workloadIngest:      ingestManager,
-		metrics:             provider,
 		logger:              logger,
 		workloadsMaintained: maintained,
 	}
@@ -202,8 +200,7 @@ func RegisterNamespaceWorkloadsDomain(
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	dynamicRevision := b.workloadsDynamicRevision()
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, dynamicRevision)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, "")
 	if err != nil {
 		return nil, err
 	}
@@ -235,11 +232,6 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
-	if snapshot.SourceVersions == nil {
-		snapshot.SourceVersions = metricSourceVersions(dynamicRevision)
-	} else if strings.TrimSpace(dynamicRevision) != "" {
-		snapshot.SourceVersions["metric"] = dynamicRevision
-	}
 	return snapshot, nil
 }
 
@@ -253,6 +245,13 @@ func (b *NamespaceWorkloadsBuilder) workloadOwnRows(ctx context.Context, namespa
 	return b.workloadsMaintained.rows(namespace, b.allowedWorkloadKinds(ctx))
 }
 
+func (b *NamespaceWorkloadsBuilder) workloadOwnRowsForDomain(ctx context.Context, domainName string, namespace string) []WorkloadSummary {
+	if b.workloadsMaintained == nil {
+		return nil
+	}
+	return b.workloadsMaintained.rows(namespace, b.allowedWorkloadKindsForDomain(ctx, domainName))
+}
+
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
@@ -264,15 +263,10 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	hpaKnown bool,
 	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
-	podUsage := map[string]metrics.PodUsage{}
-	if b.metrics != nil {
-		podUsage = b.metrics.LatestPodUsage()
-	}
-
 	items, version := assembleWorkloadRows(
 		meta, podAggregates, podSummaries,
 		ownRows,
-		hpas, hpaKnown, podUsage,
+		hpas, hpaKnown, map[string]metrics.PodUsage{},
 		namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
 		namespacePodIngestVersion(b.podIngest),
 	)
@@ -412,23 +406,27 @@ func assembleWorkloadRows(
 // its registration include flag AND the per-request runtime permission, mirroring the list
 // path's per-kind gating so the maintained Build shows the same kinds.
 func (b *NamespaceWorkloadsBuilder) allowedWorkloadKinds(ctx context.Context) map[string]bool {
+	return b.allowedWorkloadKindsForDomain(ctx, namespaceWorkloadsDomainName)
+}
+
+func (b *NamespaceWorkloadsBuilder) allowedWorkloadKindsForDomain(ctx context.Context, domainName string) map[string]bool {
 	allowed := map[string]bool{}
-	if b.includePods && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
+	if b.includePods && runtimeResourceAllowed(ctx, domainName, "", "pods") {
 		allowed[podres.Identity.Kind] = true
 	}
-	if b.includeDeployments && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
+	if b.includeDeployments && runtimeResourceAllowed(ctx, domainName, "apps", "deployments") {
 		allowed[deployment.Identity.Kind] = true
 	}
-	if b.includeStatefulSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
+	if b.includeStatefulSets && runtimeResourceAllowed(ctx, domainName, "apps", "statefulsets") {
 		allowed[statefulset.Identity.Kind] = true
 	}
-	if b.includeDaemonSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
+	if b.includeDaemonSets && runtimeResourceAllowed(ctx, domainName, "apps", "daemonsets") {
 		allowed[daemonset.Identity.Kind] = true
 	}
-	if b.includeJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
+	if b.includeJobs && runtimeResourceAllowed(ctx, domainName, "batch", "jobs") {
 		allowed[jobres.Identity.Kind] = true
 	}
-	if b.includeCronJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
+	if b.includeCronJobs && runtimeResourceAllowed(ctx, domainName, "batch", "cronjobs") {
 		allowed[cronjob.Identity.Kind] = true
 	}
 	return allowed
@@ -476,15 +474,8 @@ func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typed
 	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, b.resourceSources())
 }
 
-func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
-	if b.metrics == nil {
-		return ""
-	}
-	metadata := b.metrics.Metadata()
-	if metadata.CollectedAt.IsZero() {
-		return ""
-	}
-	return strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+func (b *NamespaceWorkloadsBuilder) queryIssuesForDomain(ctx context.Context, domainName string, query typedTableQuery) []ResourceQueryIssue {
+	return typedTableQueryResourceIssues(ctx, domainName, query, b.resourceSources())
 }
 
 // workloadsQuerypageSchema derives the querypage Schema for the workloads table
@@ -494,7 +485,7 @@ func (b *NamespaceWorkloadsBuilder) workloadsDynamicRevision() string {
 func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
 	return querypageSchemaFromAdapter(
 		workloadTableQueryAdapter(),
-		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "age"},
 	)
 }
 
@@ -516,6 +507,8 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		},
 		Predicate: func(row WorkloadSummary, field, value string) bool {
 			switch strings.ToLower(strings.TrimSpace(field)) {
+			case "rowkeys":
+				return rowKeyPredicateMatches(value, fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name)))
 			case "health":
 				switch strings.ToLower(strings.TrimSpace(value)) {
 				case "restarts":
@@ -545,10 +538,6 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 				return row.Ready
 			case "restarts":
 				return strconv.Itoa(int(row.Restarts))
-			case "cpu":
-				return row.CPUUsage
-			case "memory":
-				return row.MemUsage
 			case "age":
 				return row.Age
 			default:
@@ -557,10 +546,6 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		},
 		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
-			case "cpu":
-				return parseFormattedCPUToMilli(row.CPUUsage)
-			case "memory":
-				return parseFormattedMemoryToBytes(row.MemUsage)
 			case "restarts":
 				return float64(row.Restarts), true
 			case "ready":

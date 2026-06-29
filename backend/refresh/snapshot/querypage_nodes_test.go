@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+
+	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
 func makeNodeRows(n int) []NodeSummary {
@@ -65,7 +67,7 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 	type filt struct {
 		search string
 	}
-	sorts := []string{"", "name", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"}
+	sorts := []string{"", "name", "status", "roles", "version", "pods", "restarts", "age"}
 	dirs := []string{"asc", "desc"}
 	filts := []filt{
 		{},
@@ -107,6 +109,82 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
+			}
+		}
+	}
+}
+
+func TestNodeMetricsQueryViaStoreEquivalent(t *testing.T) {
+	adapter := nodeMetricTableQueryAdapter()
+	baseRows := makeNodeRows(250)
+	items := make([]NodeMetricRow, 0, len(baseRows))
+	for _, base := range baseRows {
+		items = append(items, NodeMetricRow{
+			ClusterMeta: ClusterMeta{ClusterID: "c"},
+			Group:       nodepkg.Identity.Group,
+			Version:     nodepkg.Identity.Version,
+			Kind:        nodepkg.Identity.Kind,
+			Resource:    nodepkg.Identity.Resource,
+			Name:        base.Name,
+			RowKey:      nodeTableQueryAdapter().Key(base),
+			CPUUsage:    base.CPUUsage,
+			MemoryUsage: base.MemoryUsage,
+			base:        base,
+		})
+	}
+
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[NodeMetricRow], base typedTableQuery) ([]string, typedTableQueryPage[NodeMetricRow]) {
+		q := base
+		var keys []string
+		var first typedTableQueryPage[NodeMetricRow]
+		for i := 0; ; i++ {
+			if i > 1000 {
+				t.Fatal("pagination did not terminate")
+			}
+			page := serve(q)
+			if i == 0 {
+				first = page
+			}
+			for _, r := range page.Rows {
+				keys = append(keys, adapter.Key(r))
+			}
+			if page.Continue == "" {
+				break
+			}
+			q.Request.Continue = page.Continue
+		}
+		return keys, first
+	}
+
+	for _, sf := range []string{"cpu", "memory"} {
+		for _, d := range []string{"asc", "desc"} {
+			base := typedTableQuery{
+				Enabled: true,
+				Request: ResourceQueryRequest{
+					ClusterID:     "c",
+					SortField:     sf,
+					SortDirection: d,
+					Limit:         17,
+					Search:        "node-0",
+				},
+				DynamicRevision: "metrics-rev-1",
+			}
+			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeMetricRow] {
+				return applyTypedTableQuery(items, q, adapter)
+			}, base)
+			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeMetricRow] {
+				return applyTypedTableQueryViaStore(items, q, adapter, nodeMetricQuerypageSchema())
+			}, base)
+
+			label := fmt.Sprintf("sort=%q dir=%s", sf, d)
+			if !slices.Equal(liveKeys, engineKeys) {
+				t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
+			}
+			if liveFirst.Total != engineFirst.Total {
+				t.Fatalf("%s: total live=%d engine=%d", label, liveFirst.Total, engineFirst.Total)
+			}
+			if liveFirst.Dynamic == nil || engineFirst.Dynamic == nil || *liveFirst.Dynamic != *engineFirst.Dynamic {
+				t.Fatalf("%s: dynamic live=%v engine=%v", label, liveFirst.Dynamic, engineFirst.Dynamic)
 			}
 		}
 	}

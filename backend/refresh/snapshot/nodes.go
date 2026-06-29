@@ -47,28 +47,24 @@ type NodeBuilder struct {
 	maintained *typedMaintainedStore[NodeSummary]
 	// ingest still supplies the per-node pod-aggregate join rows and the node store RV for the
 	// version watermark; the node OWN-rows no longer come from here.
-	ingest  nodeDomainIngestSource
-	metrics metrics.Provider
+	ingest nodeDomainIngestSource
 }
 
 // NodeListBuilder assembles node payloads by issuing direct list calls.
 type NodeListBuilder struct {
-	client  kubernetes.Interface
-	metrics metrics.Provider
+	client kubernetes.Interface
 }
 
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows             []NodeSummary              `json:"rows"`
-	Metrics          NodeMetricsInfo            `json:"metrics"`
-	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
+	Rows []NodeSummary `json:"rows"`
 }
 
 func nodeQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
+		[]string{"name", "kind", "status", "roles", "version", "pods", "restarts", "age"},
 		nil,
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
 		nil, // no kind filtering
@@ -79,7 +75,7 @@ func nodeQueryCapabilities() ResourceQueryCapabilities {
 // typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
 // engine orders rows byte-identically to the live executor.
 func nodesQuerypageSchema() querypage.Schema[NodeSummary] {
-	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"})
+	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "pods", "restarts", "age"})
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
@@ -107,7 +103,7 @@ type NodePodMetric = streamrows.NodePodMetric
 // node reflector's Table-half ingest Sink — the SAME mechanism pods uses (RegisterPodDomain):
 // the bespoke node projector (NewNodeIngestProjector) builds the same OWN-fields NodeSummary
 // the maintained store holds, so the served own-rows are byte-identical and the serve-time
-// pod-aggregate join + metrics overlay are unchanged. The Sink is registered BEFORE the ingest
+// pod-aggregate join is unchanged. The Sink is registered BEFORE the ingest
 // manager starts (this runs during registration), so the snapshot sync gate guarantees the
 // store is populated before the first Build serves from it. The per-node pod aggregation still
 // comes from the ingest manager. ingestManager may be nil in a unit test, in which case the
@@ -122,7 +118,6 @@ func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, cluster
 	builder := &NodeBuilder{
 		maintained: maintained,
 		ingest:     ingestManager,
-		metrics:    provider,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -136,8 +131,7 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 		return fmt.Errorf("nodes: kubernetes client is nil")
 	}
 	builder := &NodeListBuilder{
-		client:  client,
-		metrics: provider,
+		client: client,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -147,27 +141,16 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 
 // Build returns the node snapshot payload. The node OWN-rows and the per-node pod aggregation
 // both read the projected rows from ingest (node and pods are cut — no typed listers); the
-// per-node pod-aggregate join + metrics overlay are re-joined onto each own-row at serve.
+// per-node pod-aggregate join is re-joined onto each own-row at serve.
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	var (
-		nodeMetrics map[string]metrics.NodeUsage
-		podMetrics  map[string]metrics.PodUsage
-		metaSrc     metrics.Metadata
-	)
-	if b.metrics != nil {
-		nodeMetrics = b.metrics.LatestNodeUsage()
-		podMetrics = b.metrics.LatestPodUsage()
-		metaSrc = b.metrics.Metadata()
-	}
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
 		b.ownRows(),
 		nodeIngestVersion(b.ingest),
 		podAggregatesFromIngest(b.ingest),
-		nodeUsageOrEmpty(nodeMetrics),
-		podUsageOrEmpty(podMetrics),
-		metaSrc,
+		map[string]metrics.NodeUsage{},
+		map[string]metrics.PodUsage{},
 	)
 }
 
@@ -239,22 +222,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 		}
 		aggregates = append(aggregates, projectPodAggregate(pod, nil))
 	}
-	return buildNodeSnapshot(ctx, scope, nodes, aggregates, b.metrics)
-}
-
-// buildNodeSnapshot assembles node summaries with cluster metadata.
-func buildNodeSnapshot(ctx context.Context, scope string, nodes []*corev1.Node, podAggregates []streamrows.PodAggregate, provider metrics.Provider) (*refresh.Snapshot, error) {
-	var (
-		nodeMetrics map[string]metrics.NodeUsage
-		podMetrics  map[string]metrics.PodUsage
-		metaSrc     metrics.Metadata
-	)
-	if provider != nil {
-		nodeMetrics = provider.LatestNodeUsage()
-		podMetrics = provider.LatestPodUsage()
-		metaSrc = provider.Metadata()
-	}
-	return buildNodeSnapshotFromUsage(ctx, scope, nodes, podAggregates, nodeUsageOrEmpty(nodeMetrics), podUsageOrEmpty(podMetrics), metaSrc)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, map[string]metrics.NodeUsage{}, map[string]metrics.PodUsage{})
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -271,7 +239,6 @@ func buildNodeSnapshotFromUsage(
 	podAggregates []streamrows.PodAggregate,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
-	metricsMeta metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	items := make([]NodeSummary, 0, len(nodes))
@@ -298,7 +265,7 @@ func buildNodeSnapshotFromUsage(
 		}
 	}
 
-	return finishNodeSnapshot(ctx, scope, items, version, metricsMeta)
+	return finishNodeSnapshot(ctx, scope, items, version)
 }
 
 // buildNodeSnapshotFromIngestUsage assembles the node snapshot from the cut node kind's
@@ -314,14 +281,13 @@ func buildNodeSnapshotFromIngestUsage(
 	podAggregates []streamrows.PodAggregate,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
-	metricsMeta metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	items := make([]NodeSummary, 0, len(ownRows))
 	podsByNode := podAggregatesByNode(podAggregates)
 	for _, own := range ownRows {
 		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Name], podMetrics, nodeMetrics))
 	}
-	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMeta)
+	return finishNodeSnapshot(ctx, scope, items, storeVersion)
 }
 
 // podAggregatesByNode groups the projected pod aggregates by their NodeName for the per-node
@@ -339,15 +305,13 @@ func podAggregatesByNode(podAggregates []streamrows.PodAggregate) map[string][]s
 
 // finishNodeSnapshot is the shared tail both node serve paths (typed list-fallback and ingest)
 // run after they assemble the per-node NodeSummary rows + version watermark: it resolves the
-// metrics metadata, folds the metrics revision into the query, resolves the query page, and
-// builds the snapshot payload. This is the part of the build that is identical regardless of
-// whether the rows came from typed nodes or the ingest store.
+// resolves the query page and builds the snapshot payload. This is the part of the build
+// that is identical regardless of whether the rows came from typed nodes or the ingest store.
 func finishNodeSnapshot(
 	ctx context.Context,
 	scope string,
 	items []NodeSummary,
 	version uint64,
-	metricsMeta metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -358,25 +322,6 @@ func finishNodeSnapshot(
 		return nil, err
 	}
 
-	metricsInfo := NodeMetricsInfo{Stale: true}
-	dynamicRevision := ""
-	if !metricsMeta.CollectedAt.IsZero() {
-		dynamicRevision = strconv.FormatInt(metricsMeta.CollectedAt.UnixNano(), 10)
-		metricsInfo.CollectedAt = metricsMeta.CollectedAt.Unix()
-		metricsInfo.Stale = time.Since(metricsMeta.CollectedAt) > config.MetricsStaleThreshold
-	}
-	if metricsMeta.LastError != "" {
-		metricsInfo.LastError = metricsMeta.LastError
-	}
-	if metricsMeta.ConsecutiveFailures > 0 {
-		metricsInfo.ConsecutiveFailures = metricsMeta.ConsecutiveFailures
-	}
-	metricsInfo.SuccessCount = metricsMeta.SuccessCount
-	metricsInfo.FailureCount = metricsMeta.FailureCount
-
-	// The metrics revision rides on the query so the envelope's dynamic ref (and
-	// metric-sorted keyset cursor) advance with each metrics tick.
-	query.DynamicRevision = dynamicRevision
 	resolved := resolveTypedSnapshotPageViaStore(
 		"nodes",
 		items,
@@ -396,15 +341,13 @@ func finishNodeSnapshot(
 		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
 	return &refresh.Snapshot{
-		Domain:         "nodes",
-		Scope:          snapshotScope,
-		Version:        version,
-		SourceVersions: metricSourceVersions(dynamicRevision),
+		Domain:  "nodes",
+		Scope:   snapshotScope,
+		Version: version,
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
-			Metrics:               metricsInfo,
 		},
 		Stats: resolved.Stats,
 	}, nil

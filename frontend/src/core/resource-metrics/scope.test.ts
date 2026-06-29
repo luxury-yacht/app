@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveResourceMetricsScope } from './scope';
 
 describe('resolveResourceMetricsScope', () => {
-  it('routes Pod metrics to the cluster-prefixed namespace pods scope', () => {
+  it('routes Pod metrics to the cluster-prefixed namespace pod metrics scope', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-a',
@@ -16,12 +16,14 @@ describe('resolveResourceMetricsScope', () => {
     ).toMatchObject({
       kind: 'domain',
       source: 'pods',
-      domain: 'pods',
+      domain: 'pods-metrics',
       scope: 'cluster-a|namespace:team-a',
+      baseDomain: 'pods',
+      baseScope: 'cluster-a|namespace:team-a',
     });
   });
 
-  it('routes Deployment metrics to namespace-workloads and node freshness in the object cluster', () => {
+  it('routes Deployment metrics to namespace-workloads metrics in the object cluster', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-b',
@@ -34,10 +36,10 @@ describe('resolveResourceMetricsScope', () => {
     ).toMatchObject({
       kind: 'domain',
       source: 'namespace-workloads',
-      domain: 'namespace-workloads',
+      domain: 'namespace-workloads-metrics',
       scope: 'cluster-b|namespace:team-b',
-      freshnessDomain: 'nodes',
-      freshnessScope: 'cluster-b|',
+      baseDomain: 'namespace-workloads',
+      baseScope: 'cluster-b|namespace:team-b',
     });
   });
 
@@ -53,8 +55,10 @@ describe('resolveResourceMetricsScope', () => {
     ).toMatchObject({
       kind: 'domain',
       source: 'nodes',
-      domain: 'nodes',
+      domain: 'nodes-metrics',
       scope: 'cluster-c|',
+      baseDomain: 'nodes',
+      baseScope: 'cluster-c|',
     });
   });
 

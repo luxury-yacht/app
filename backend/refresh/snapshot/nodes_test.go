@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
@@ -60,7 +61,6 @@ func newNodeBuilderForTest(meta ClusterMeta, nodeRV string, provider metrics.Pro
 	return &NodeBuilder{
 		maintained: maintained,
 		ingest:     ingest,
-		metrics:    provider,
 	}
 }
 
@@ -228,13 +228,13 @@ func TestNodeBuilderBuild(t *testing.T) {
 
 	require.Equal(t, "8", summary.CPUCapacity)
 	require.Equal(t, "7", summary.CPUAllocatable)
-	require.Equal(t, "650m", summary.CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, summary.CPUUsage)
 	require.Equal(t, "1200m", summary.CPULimits)
 	require.Equal(t, "750m", summary.CPURequests)
 
 	require.Equal(t, "32.0 GB", summary.MemoryCapacity)
 	require.Equal(t, "30.0 GB", summary.MemoryAllocatable)
-	require.Equal(t, "512 MB", summary.MemoryUsage)
+	require.Equal(t, streamrows.MetricsNoData, summary.MemoryUsage)
 	require.Equal(t, "768 MB", summary.MemRequests)
 	require.Equal(t, "1.5 GB", summary.MemLimits)
 
@@ -250,22 +250,15 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Contains(t, summary.PodMetrics, NodePodMetric{
 		Namespace:   "default",
 		Name:        "pod-a",
-		CPUUsage:    "125m",
-		MemoryUsage: "128 MB",
+		CPUUsage:    streamrows.MetricsNoData,
+		MemoryUsage: streamrows.MetricsNoData,
 	})
 	require.Contains(t, summary.PodMetrics, NodePodMetric{
 		Namespace:   "kube-system",
 		Name:        "pod-b",
-		CPUUsage:    "250m",
-		MemoryUsage: "64 MB",
+		CPUUsage:    streamrows.MetricsNoData,
+		MemoryUsage: streamrows.MetricsNoData,
 	})
-
-	require.False(t, payload.Metrics.Stale)
-	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
-	require.Equal(t, 0, payload.Metrics.ConsecutiveFailures)
-	require.Empty(t, payload.Metrics.LastError)
-	require.Equal(t, uint64(7), payload.Metrics.SuccessCount)
-	require.Equal(t, uint64(2), payload.Metrics.FailureCount)
 
 	require.Len(t, summary.Taints, 1)
 	require.Equal(t, NodeTaint{
@@ -281,7 +274,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, uint64(42), snapshot.Version)
 }
 
-func TestNodeBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
+func TestNodeMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 	now := time.Unix(1000, 0)
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -291,33 +284,37 @@ func TestNodeBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 		},
 	}
 	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
-	builder := newNodeBuilderForTest(
+	base := newNodeBuilderForTest(
 		ClusterMeta{},
 		"42",
-		fakeMetricsProvider{
-			usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
-			metadata: metrics.Metadata{CollectedAt: now},
-		},
+		fakeMetricsProvider{},
 		ingest,
 		node,
 	)
+	provider := fakeMetricsProvider{
+		usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &NodeMetricsBuilder{base: base, metrics: provider}
 
 	first, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	require.Equal(t, uint64(42), first.Version)
 	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
-	require.Equal(t, "650m", first.Payload.(NodeSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, nodeMetricsDomainName, first.Domain)
+	require.Equal(t, "650m", first.Payload.(NodeMetricsSnapshot).Rows[0].CPUUsage)
 
-	builder.metrics = fakeMetricsProvider{
+	provider = fakeMetricsProvider{
 		usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 700}},
 		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
 	}
+	builder.metrics = provider
 
 	second, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
 	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
-	require.Equal(t, "700m", second.Payload.(NodeSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, "700m", second.Payload.(NodeMetricsSnapshot).Rows[0].CPUUsage)
 }
 
 // A malformed query scope must be rejected like every other typed builder does
@@ -376,33 +373,34 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")
 }
 
-// TestNodesSortByMetricUsage pins that the nodes table sorts by LIVE metric usage numerically
+// TestNodeMetricsSortByMetricUsage pins that the node metrics table sorts by LIVE metric usage numerically
 // (the metrics overlaid at serve), not lexically by the formatted string. The cpu values are
 // chosen so a lexical sort ("1000m" < "125m" < "650m") differs from the numeric one
 // (1000 > 650 > 125); likewise memory ("1 GB" sorts lexically below "128 MB"). This is the
 // stage-2.7 regression: nodes metrics are honored in the query sort schema.
-func TestNodesSortByMetricUsage(t *testing.T) {
-	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"})
-	items := []NodeSummary{
-		{Name: "alpha", CPUUsage: "1000m", MemoryUsage: "128 MB"},
-		{Name: "beta", CPUUsage: "650m", MemoryUsage: "1 GB"},
-		{Name: "gamma", CPUUsage: "125m", MemoryUsage: "512 MB"},
+func TestNodeMetricsSortByMetricUsage(t *testing.T) {
+	items := []NodeMetricRow{
+		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "alpha", CPUUsage: "1000m", MemoryUsage: "128 MB"}),
+		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "beta", CPUUsage: "650m", MemoryUsage: "1 GB"}),
+		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "gamma", CPUUsage: "125m", MemoryUsage: "512 MB"}),
 	}
 
-	cpuSnap, err := finishNodeSnapshot(ctx, "c1|?sort=cpu&sortDirection=desc", items, 1, metrics.Metadata{})
+	_, cpuQuery, err := parseTypedTableQueryScope("c1", "?sort=cpu&sortDirection=desc", nodeMetricsDomainName, "metrics-rev-1")
 	require.NoError(t, err)
-	require.Equal(t, []string{"alpha", "beta", "gamma"}, nodeRowNames(cpuSnap.Payload.(NodeSnapshot)),
+	cpuPage := applyTypedTableQueryViaStore(items, cpuQuery, nodeMetricTableQueryAdapter(), nodeMetricQuerypageSchema())
+	require.Equal(t, []string{"alpha", "beta", "gamma"}, nodeMetricRowNames(cpuPage.Rows),
 		"cpu sort must be numeric live usage (1000 > 650 > 125), not lexical")
 
-	memSnap, err := finishNodeSnapshot(ctx, "c1|?sort=memory&sortDirection=desc", items, 1, metrics.Metadata{})
+	_, memQuery, err := parseTypedTableQueryScope("c1", "?sort=memory&sortDirection=desc", nodeMetricsDomainName, "metrics-rev-1")
 	require.NoError(t, err)
-	require.Equal(t, []string{"beta", "gamma", "alpha"}, nodeRowNames(memSnap.Payload.(NodeSnapshot)),
+	memPage := applyTypedTableQueryViaStore(items, memQuery, nodeMetricTableQueryAdapter(), nodeMetricQuerypageSchema())
+	require.Equal(t, []string{"beta", "gamma", "alpha"}, nodeMetricRowNames(memPage.Rows),
 		"memory sort must be numeric live usage (1GB > 512MB > 128MB), not lexical")
 }
 
-func nodeRowNames(payload NodeSnapshot) []string {
-	names := make([]string, len(payload.Rows))
-	for i, r := range payload.Rows {
+func nodeMetricRowNames(rows []NodeMetricRow) []string {
+	names := make([]string, len(rows))
+	for i, r := range rows {
 		names[i] = r.Name
 	}
 	return names

@@ -15,9 +15,9 @@ import {
 } from '../refresherTypes';
 
 const METRICS_REFRESHERS: RefresherName[] = [
-  NAMESPACE_REFRESHERS.workloads,
-  CLUSTER_REFRESHERS.nodes,
-  SYSTEM_REFRESHERS.unifiedPods,
+  NAMESPACE_REFRESHERS.workloadMetrics,
+  CLUSTER_REFRESHERS.nodeMetrics,
+  SYSTEM_REFRESHERS.unifiedPodMetrics,
 ];
 
 let metricsIntervalInitialized = false;

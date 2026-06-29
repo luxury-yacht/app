@@ -16,7 +16,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
+import type {
+  PodMetricEntry,
+  PodMetricsInfo,
+  PodMetricsSnapshotPayload,
+  PodSnapshotEntry,
+} from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import {
   getPodsUnhealthyStorageKey,
@@ -54,6 +59,7 @@ interface PodsViewProps {
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
+const METRIC_NO_DATA = '-';
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -76,6 +82,24 @@ const getReadySortValue = (value?: string | null): number => {
   }
   return counts.ready * 1000000 + counts.total;
 };
+
+const podMetricRowKey = (pod: Pick<PodSnapshotEntry, 'namespace' | 'name'>): string =>
+  `${pod.namespace ?? ''}/${pod.name ?? ''}`.toLowerCase();
+
+const mergePodMetric = (
+  pod: PodSnapshotEntry,
+  metric: PodMetricEntry | undefined
+): PodSnapshotEntry => ({
+  ...pod,
+  cpuUsage: metric?.cpuUsage ?? METRIC_NO_DATA,
+  memUsage: metric?.memUsage ?? METRIC_NO_DATA,
+});
+
+const podMetricsState = (info: PodMetricsInfo | null | undefined) => ({
+  stale: Boolean(info?.stale),
+  lastError: info?.lastError || undefined,
+  lastUpdated: info?.collectedAt ? new Date(info.collectedAt * 1000) : undefined,
+});
 
 // The backend owns pod health semantics; this filter only reads the presentation token.
 const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
@@ -119,7 +143,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
     const clusterMetrics = useClusterMetricsAvailability();
-    const effectiveMetrics = metrics ?? clusterMetrics ?? null;
+    const fallbackMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId } = useKubeconfig();
     const { selectedNamespaceClusterId } = useNamespace();
     const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
@@ -248,34 +272,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [selectedClusterId]
     );
 
-    const metricsBanner = useMemo(
-      () => getMetricsBannerInfo(effectiveMetrics ?? null),
-      [effectiveMetrics]
-    );
-
-    const metricsLastUpdated = useMemo(() => {
-      if (!effectiveMetrics?.collectedAt) {
-        return undefined;
-      }
-      return new Date(effectiveMetrics.collectedAt * 1000);
-    }, [effectiveMetrics?.collectedAt]);
     const metricsStateRef = useRef<{
       stale: boolean;
       lastError?: string;
       lastUpdated?: Date;
-    }>({
-      stale: Boolean(effectiveMetrics?.stale),
-      lastError: effectiveMetrics?.lastError || undefined,
-      lastUpdated: metricsLastUpdated,
-    });
-
-    useEffect(() => {
-      metricsStateRef.current = {
-        stale: Boolean(effectiveMetrics?.stale),
-        lastError: effectiveMetrics?.lastError || undefined,
-        lastUpdated: metricsLastUpdated,
-      };
-    }, [effectiveMetrics?.lastError, effectiveMetrics?.stale, metricsLastUpdated]);
+    }>(podMetricsState(fallbackMetrics));
 
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
       // Use the same warning styling as workloads when restarts are non-zero.
@@ -510,16 +511,31 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [unhealthyToggle]
     );
 
+    const metricOverlay = useMemo(
+      () => ({
+        domain: 'pods-metrics' as const,
+        label: `${diagnosticsLabel} Metrics`,
+        selectRows: (payload: unknown) => (payload as PodMetricsSnapshotPayload).rows ?? [],
+        getBaseRowKey: podMetricRowKey,
+        getMetricRowKey: (row: unknown) => (row as PodMetricEntry).rowKey,
+        mergeMetric: (row: PodSnapshotEntry, metric: unknown) =>
+          mergePodMetric(row, metric as PodMetricEntry | undefined),
+      }),
+      [diagnosticsLabel]
+    );
+
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
       source,
       queryPayload,
+      metricPayload,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
       label: diagnosticsLabel,
+      metricOverlay,
       predicates: podQueryPredicates,
       selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
@@ -536,6 +552,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       // now backs single namespaces too — no client-side re-filter of the page.
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
+
+    const podMetricsPayload = metricPayload as PodMetricsSnapshotPayload | null | undefined;
+    const tableMetrics = podMetricsPayload?.metrics ?? null;
+    const effectiveMetrics = tableMetrics ?? fallbackMetrics;
+    const metricsBanner = useMemo(
+      () => getMetricsBannerInfo(effectiveMetrics ?? null),
+      [effectiveMetrics]
+    );
+
+    useEffect(() => {
+      metricsStateRef.current = podMetricsState(effectiveMetrics);
+    }, [effectiveMetrics]);
 
     // Non-display reads come from the single source of truth (the controller
     // source); the wrapper no longer re-exposes rows/error separately.

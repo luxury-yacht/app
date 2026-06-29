@@ -70,12 +70,14 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     'object-helm-values'
   );
   registerContainerLogsDomain();
-  resourceStreamDomain('pods', { metricsOnly: true });
+  resourceStreamDomain('pods');
+  registerSnapshotDomains('pods-metrics');
 
   doorbellStreamDomain('catalog');
   registerSnapshotDomains('catalog-diff');
   doorbellStreamDomain('cluster-events');
-  resourceStreamDomain('nodes', { metricsOnly: true });
+  resourceStreamDomain('nodes');
+  registerSnapshotDomains('nodes-metrics');
   resourceStreamDomain('cluster-rbac');
   resourceStreamDomain('cluster-storage');
   resourceStreamDomain('cluster-config');
@@ -83,7 +85,8 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   resourceStreamDomain('cluster-custom');
 
   doorbellStreamDomain('namespace-events');
-  resourceStreamDomain('namespace-workloads', { metricsOnly: true });
+  resourceStreamDomain('namespace-workloads');
+  registerSnapshotDomains('namespace-workloads-metrics');
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');
   resourceStreamDomain('namespace-rbac');

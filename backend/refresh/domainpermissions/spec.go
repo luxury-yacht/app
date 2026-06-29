@@ -307,6 +307,19 @@ var policySpecs = []policySpec{
 		},
 	},
 	{
+		Domain: "namespace-workloads-metrics",
+		Mode:   ModeAny,
+		Reason: "workload resources",
+		Runtime: []Resource{
+			fromIdentity(pods.Identity),
+			fromIdentity(deployment.Identity),
+			fromIdentity(statefulset.Identity),
+			fromIdentity(daemonset.Identity),
+			fromIdentity(job.Identity),
+			fromIdentity(cronjob.Identity),
+		},
+	},
+	{
 		Domain:  "namespace-config",
 		Mode:    ModeAny,
 		Reason:  "core/configmaps,secrets",
@@ -413,10 +426,20 @@ var policySpecs = []policySpec{
 		Stream:  []Resource{fromIdentity(pods.Identity)},
 	},
 	{
+		Domain:  "pods-metrics",
+		Mode:    ModeAll,
+		Runtime: []Resource{fromIdentity(pods.Identity)},
+	},
+	{
 		Domain:  "nodes",
 		Mode:    ModeAll,
 		Runtime: []Resource{fromIdentity(nodes.Identity)},
 		Stream:  []Resource{fromIdentity(nodes.Identity)},
+	},
+	{
+		Domain:  "nodes-metrics",
+		Mode:    ModeAll,
+		Runtime: []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
 		Domain:  "cluster-overview",

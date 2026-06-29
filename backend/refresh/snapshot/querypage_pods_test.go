@@ -94,7 +94,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 		search     string
 		predicates []ResourceQueryPredicate
 	}
-	sorts := []string{"", "name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"}
+	sorts := []string{"", "name", "namespace", "status", "ready", "restarts", "owner", "node", "age"}
 	dirs := []string{"asc", "desc"}
 	filts := []filt{
 		{},
@@ -144,6 +144,77 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
 			}
+		}
+	}
+}
+
+func TestPodMetricsQueryViaStoreEquivalent(t *testing.T) {
+	adapter := podMetricTableQueryAdapter()
+	baseRows := makePodRows(250)
+	items := make([]PodMetricRow, 0, len(baseRows))
+	for _, base := range baseRows {
+		items = append(items, PodMetricRow{
+			ClusterMeta: ClusterMeta{ClusterID: "c"},
+			Group:       podres.Identity.Group,
+			Version:     podres.Identity.Version,
+			Kind:        podres.Identity.Kind,
+			Resource:    podres.Identity.Resource,
+			Namespace:   base.Namespace,
+			Name:        base.Name,
+			RowKey:      podTableQueryAdapter().Key(base),
+			CPUUsage:    base.CPUUsage,
+			MemUsage:    base.MemUsage,
+			base:        base,
+		})
+	}
+
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[PodMetricRow], base typedTableQuery) ([]string, typedTableQueryPage[PodMetricRow]) {
+		q := base
+		var keys []string
+		var first typedTableQueryPage[PodMetricRow]
+		for i := 0; ; i++ {
+			if i > 1000 {
+				t.Fatal("pagination did not terminate")
+			}
+			page := serve(q)
+			if i == 0 {
+				first = page
+			}
+			for _, r := range page.Rows {
+				keys = append(keys, adapter.Key(r))
+			}
+			if page.Continue == "" {
+				break
+			}
+			q.Request.Continue = page.Continue
+		}
+		return keys, first
+	}
+
+	sorts := []string{"cpu", "memory"}
+	dirs := []string{"asc", "desc"}
+	for _, sf := range sorts {
+		for _, d := range dirs {
+			base := typedTableQuery{
+				Enabled: true,
+				Request: ResourceQueryRequest{
+					ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
+					Namespaces: []string{"default", "app"},
+					Predicates: []ResourceQueryPredicate{{Field: "health", Value: "restarts"}},
+				},
+				DynamicRevision: "metrics-rev-1",
+			}
+			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[PodMetricRow] {
+				return applyTypedTableQuery(items, q, adapter)
+			}, base)
+			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[PodMetricRow] {
+				return applyTypedTableQueryViaStore(items, q, adapter, podMetricQuerypageSchema())
+			}, base)
+
+			label := fmt.Sprintf("sort=%q dir=%s", sf, d)
+			require.Equal(t, liveKeys, engineKeys, label)
+			require.Equal(t, liveFirst.Total, engineFirst.Total, label)
+			require.Equal(t, liveFirst.Dynamic, engineFirst.Dynamic, label)
 		}
 	}
 }
@@ -231,10 +302,13 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 		maintained.upsertRow(podres.BuildStreamSummary(meta, p, 0, 0, rs), p)
 	}
 
-	builder := &PodBuilder{
+	base := &PodBuilder{
 		// No podLister: the namespace scope must be served entirely from the store.
 		rsLister:   rs,
 		maintained: maintained,
+	}
+	builder := &PodMetricsBuilder{
+		base: base,
 		metrics: fakePodMetricsProvider{
 			usage: map[string]metrics.PodUsage{
 				"team-a/alpha": {CPUUsageMilli: 245, MemoryUsageBytes: 256 * 1024 * 1024},
@@ -247,14 +321,14 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	snap, err := builder.Build(ctx, "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("%d", now.UnixNano()), snap.SourceVersions["metric"])
-	payload := snap.Payload.(PodSnapshot)
+	payload := snap.Payload.(PodMetricsSnapshot)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "alpha", payload.Rows[0].Name)
-	require.Equal(t, "245m", payload.Rows[0].CPUUsage, "fresh metrics overlaid at serve")
-	require.Equal(t, "256 MB", payload.Rows[0].MemUsage)
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[1].CPUUsage, "no metrics sample -> no-data marker, never 0 (Risk #9 / §3.6)")
-	require.Equal(t, streamrows.MetricsNoData, payload.Rows[1].MemUsage)
-	require.Equal(t, 2, payload.TotalCount)
+	rowsByName := podMetricRowsByName(payload.Rows)
+	require.Equal(t, "245m", rowsByName["alpha"].CPUUsage, "fresh metrics overlaid at serve")
+	require.Equal(t, "256 MB", rowsByName["alpha"].MemUsage)
+	require.Equal(t, streamrows.MetricsNoData, rowsByName["bravo"].CPUUsage, "no metrics sample -> no-data marker, never 0 (Risk #9 / §3.6)")
+	require.Equal(t, streamrows.MetricsNoData, rowsByName["bravo"].MemUsage)
+	require.Equal(t, 2, payload.Total)
 
 	// Change ONLY the metrics sample (no re-ingest) and re-serve. The new value must
 	// appear, proving metrics live outside the store.
@@ -267,5 +341,14 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	snap2, err := builder.Build(ctx, "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("%d", now.Add(time.Second).UnixNano()), snap2.SourceVersions["metric"])
-	require.Equal(t, "999m", snap2.Payload.(PodSnapshot).Rows[0].CPUUsage, "metrics refreshed without re-ingest")
+	rowsByName = podMetricRowsByName(snap2.Payload.(PodMetricsSnapshot).Rows)
+	require.Equal(t, "999m", rowsByName["alpha"].CPUUsage, "metrics refreshed without re-ingest")
+}
+
+func podMetricRowsByName(rows []PodMetricRow) map[string]PodMetricRow {
+	out := make(map[string]PodMetricRow, len(rows))
+	for _, row := range rows {
+		out[row.Name] = row
+	}
+	return out
 }

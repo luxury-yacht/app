@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
 func wlDeployment(name, namespace, rv string, ready, total int32) *appsv1.Deployment {
@@ -89,12 +88,6 @@ func TestNamespaceWorkloadsBuilderMaintainedMatchesListPath(t *testing.T) {
 	standalonePod := wlPod("loner", "default", "202", "", 3)     // no owner -> standalone
 	otherNsPod := wlPod("solo", "kube-system", "203", "", 1)     // standalone in another ns
 
-	usage := map[string]metrics.PodUsage{
-		"default/web-123":  {CPUUsageMilli: 50, MemoryUsageBytes: 1 << 20},
-		"default/loner":    {CPUUsageMilli: 25, MemoryUsageBytes: 2 << 20},
-		"kube-system/solo": {CPUUsageMilli: 10, MemoryUsageBytes: 3 << 20},
-	}
-
 	mk := func() *NamespaceWorkloadsBuilder {
 		src := newFakeWorkloadIngestSource(meta, dep)
 		b := &NamespaceWorkloadsBuilder{
@@ -106,7 +99,6 @@ func TestNamespaceWorkloadsBuilderMaintainedMatchesListPath(t *testing.T) {
 			includeDaemonSets:   true,
 			includeJobs:         true,
 			includeCronJobs:     true,
-			metrics:             &workloadMetricsProvider{pods: usage},
 		}
 		seedWorkloadsMaintained(b, meta, src)
 		return b
@@ -149,7 +141,6 @@ func TestNamespaceWorkloadsMaintainedStandaloneTransitions(t *testing.T) {
 		includePods:        true,
 		workloadIngest:     src,
 		includeDeployments: true,
-		metrics:            &workloadMetricsProvider{pods: map[string]metrics.PodUsage{}},
 	}
 	seedWorkloadsMaintained(b, meta, src)
 

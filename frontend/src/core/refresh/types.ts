@@ -231,11 +231,27 @@ export interface NodeMetricsInfo {
 
 export interface ClusterNodeSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
   rows: ClusterNodeSnapshotEntry[];
-  metrics?: NodeMetricsInfo;
-  metricsByCluster?: Record<string, NodeMetricsInfo>;
 }
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
+
+export interface ClusterNodeMetricEntry extends ClusterMeta {
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  name: string;
+  rowKey: string;
+  cpuUsage: string;
+  memoryUsage: string;
+  podMetrics?: NodePodMetric[];
+}
+
+export interface ClusterNodeMetricsSnapshotPayload
+  extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: ClusterNodeMetricEntry[];
+  metrics?: NodeMetricsInfo;
+}
 
 export interface ClusterOverviewMetrics {
   collectedAt?: number;
@@ -706,7 +722,6 @@ export interface PodMetricsInfo {
 
 export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
   rows: PodSnapshotEntry[];
-  metrics?: PodMetricsInfo;
   // Scope-level counts (all pods in scope, before search/pagination) so a
   // query-backed view shows total/unhealthy badges and can decide whether a
   // pending health filter has matches — without retaining the live row set.
@@ -715,6 +730,23 @@ export interface PodSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFi
   // docs/architecture/resource-stream-signals.md.
   totalCount?: number;
   healthCounts?: Record<string, number>;
+}
+
+export interface PodMetricEntry extends ClusterMeta {
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  namespace: string;
+  name: string;
+  rowKey: string;
+  cpuUsage: string;
+  memUsage: string;
+}
+
+export interface PodMetricsSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: PodMetricEntry[];
+  metrics?: PodMetricsInfo;
 }
 
 export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
@@ -865,6 +897,25 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
 
 export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta, ResourceQueryEnvelopeFields {
   rows: NamespaceWorkloadSummary[];
+}
+
+export interface NamespaceWorkloadMetricEntry extends ClusterMeta {
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+  namespace: string;
+  name: string;
+  rowKey: string;
+  ready?: string;
+  cpuUsage: string;
+  memUsage: string;
+}
+
+export interface NamespaceWorkloadMetricsSnapshotPayload
+  extends ClusterMeta, ResourceQueryEnvelopeFields {
+  rows: NamespaceWorkloadMetricEntry[];
+  metrics?: PodMetricsInfo;
 }
 
 export interface NamespaceConfigSummary extends ClusterMeta {
@@ -1071,8 +1122,10 @@ export type RefreshDomain =
   | 'namespaces'
   | 'cluster-overview'
   | 'nodes'
+  | 'nodes-metrics'
   | 'object-maintenance'
   | 'pods'
+  | 'pods-metrics'
   | 'object-details'
   | 'object-events'
   | 'object-map'
@@ -1089,6 +1142,7 @@ export type RefreshDomain =
   | 'catalog'
   | 'catalog-diff'
   | 'namespace-workloads'
+  | 'namespace-workloads-metrics'
   | 'namespace-config'
   | 'namespace-network'
   | 'namespace-rbac'
@@ -1103,8 +1157,10 @@ export interface DomainPayloadMap {
   namespaces: NamespaceSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
   nodes: ClusterNodeSnapshotPayload;
+  'nodes-metrics': ClusterNodeMetricsSnapshotPayload;
   'object-maintenance': NodeMaintenanceSnapshotPayload;
   pods: PodSnapshotPayload;
+  'pods-metrics': PodMetricsSnapshotPayload;
   'object-details': ObjectDetailsSnapshotPayload;
   'object-events': ObjectEventsSnapshotPayload;
   'object-map': ObjectMapSnapshotPayload;
@@ -1121,6 +1177,7 @@ export interface DomainPayloadMap {
   catalog: CatalogSnapshotPayload;
   'catalog-diff': CatalogSnapshotPayload;
   'namespace-workloads': NamespaceWorkloadSnapshotPayload;
+  'namespace-workloads-metrics': NamespaceWorkloadMetricsSnapshotPayload;
   'namespace-config': NamespaceConfigSnapshotPayload;
   'namespace-network': NamespaceNetworkSnapshotPayload;
   'namespace-rbac': NamespaceRBACSnapshotPayload;

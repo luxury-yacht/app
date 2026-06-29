@@ -287,7 +287,9 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.data).toEqual([workload]);
+    expect(gridTablePropsRef.current?.data).toEqual([
+      { ...workload, cpuUsage: '-', memUsage: '-' },
+    ]);
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'namespace-workloads',
@@ -343,7 +345,9 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
+    expect(gridTablePropsRef.current?.data).toEqual([
+      { ...queryWorkload, cpuUsage: '-', memUsage: '-' },
+    ]);
     expect(gridTablePropsRef.current?.paginationControls?.props).toMatchObject({
       pageIndex: 1,
       pageSize: 50,
@@ -471,16 +475,19 @@ describe('NsViewWorkloads', () => {
     expect(gridTablePropsRef.current?.data).toEqual([]);
   });
 
-  it('resolves node metrics from the active cluster scope only', async () => {
+  it('resolves workload metrics from the active namespace cluster scope only', async () => {
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
+    expect(scopedDomainCallsRef.current).toContainEqual([
+      'namespace-workloads-metrics',
+      'path:context|namespace:team-a',
+    ]);
     expect(scopedDomainCallsRef.current).not.toContainEqual([
-      'nodes',
-      'clusters=path:context,other:context|',
+      'namespace-workloads-metrics',
+      'clusters=path:context,other:context|namespace:team-a',
     ]);
   });
 

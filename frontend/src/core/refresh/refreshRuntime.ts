@@ -57,7 +57,9 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'namespace-rbac',
   'namespace-storage',
   'namespace-workloads',
+  'namespace-workloads-metrics',
   'nodes',
+  'nodes-metrics',
   'object-details',
   'object-events',
   'object-helm-manifest',
@@ -66,6 +68,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'object-map',
   'object-yaml',
   'pods',
+  'pods-metrics',
 ]);
 
 export class ClusterRefreshRuntime {

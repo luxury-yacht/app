@@ -37,7 +37,6 @@ type PodBuilder struct {
 	podLister  corelisters.PodLister
 	podIndexer cache.Indexer
 	rsLister   appslisters.ReplicaSetLister
-	metrics    metrics.Provider
 	// buildSummary projects a pod into its row. It is a field so tests can count
 	// or inject projections; nil defaults to podres.BuildStreamSummaryFromRSMap.
 	buildSummary func(ClusterMeta, *corev1.Pod, int64, int64, map[string]string) PodSummary
@@ -45,30 +44,25 @@ type PodBuilder struct {
 	// drives reuse work instead of re-projecting every pod each request. nil for
 	// ad-hoc/test builders (projection runs directly).
 	projCache *podProjectionCache
-	// maintained, when set, is an informer-fed store of pod rows with metrics
-	// ZEROED. Namespace-scoped Builds serve rows straight from it (overlaying fresh
-	// metrics at serve) instead of listing + re-projecting. Node/workload scopes
-	// still take the list path because they need live owner-reference / NodeName
-	// matching the store's rows do not carry. nil falls back to the list path.
+	// maintained, when set, is an informer-fed store of pod rows. Namespace,
+	// node, and workload scopes serve rows straight from it; nil falls back to
+	// the list path used by older unit tests.
 	maintained *typedMaintainedStore[PodSummary]
 }
 
 // newPodBuilder wires a PodBuilder with the projection memo cache enabled.
-func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister, provider metrics.Provider) *PodBuilder {
+func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister, _ metrics.Provider) *PodBuilder {
 	return &PodBuilder{
 		podLister:  podLister,
 		podIndexer: podIndexer,
 		rsLister:   rsLister,
-		metrics:    provider,
 		projCache:  newPodProjectionCache(),
 	}
 }
 
-// projectPod returns a pod's row. The object row (status, facts, owner, resource
-// totals) is reused while the pod's resourceVersion is unchanged; CPU/mem are
-// overlaid from the current metrics sample on every call, so a metrics poll never
-// re-projects the row. Metrics advance on their own cadence, so they are not part
-// of the projection-cache key.
+// projectPod returns a pod row from the object plus the explicit usage map supplied by
+// the caller. Base pod snapshots pass an empty usage map; pods-metrics passes the latest
+// metrics sample.
 func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string) PodSummary {
 	usage, ok := podUsage[pod.Namespace+"/"+pod.Name]
 	build := func() PodSummary {
@@ -84,10 +78,6 @@ func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[
 	} else {
 		summary = b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, build)
 	}
-	// Overlay the current metrics sample onto the (possibly cached) object row, so
-	// a metrics poll refreshes CPU/mem without rebuilding the rest of the row. A
-	// missing sample, or one that predates this pod's creation (a recreated
-	// same-name pod), renders no-data rather than stale or zero numbers.
 	creationMillis := streamrows.CreationMillis(pod)
 	summary.CPUUsage = formatPodMetricCPU(usage, ok, creationMillis)
 	summary.MemUsage = formatPodMetricMemory(usage, ok, creationMillis)
@@ -108,9 +98,7 @@ type podProjectionEntry struct {
 // podProjectionCache memoizes pod OBJECT row projections keyed by pod UID. A
 // summary is reused while the pod's resourceVersion is unchanged: a pod change
 // bumps RV, and the RS->Deployment owner is immutable in practice, so RV fully
-// determines the object projection. Metrics are NOT part of the key — CPU/mem are
-// overlaid onto the cached row per request (see projectPod), so a metrics poll
-// reuses the object projection instead of rebuilding it.
+// determines the object projection.
 type podProjectionCache struct {
 	mu        sync.Mutex
 	entries   map[string]podProjectionEntry
@@ -167,8 +155,7 @@ func (c *podProjectionCache) prune(now time.Time) {
 type PodSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows    []PodSummary   `json:"rows"`
-	Metrics PodMetricsInfo `json:"metrics"`
+	Rows []PodSummary `json:"rows"`
 	// TotalCount is the number of pods in the requested scope (before search/
 	// pagination). HealthCounts holds the per-filter-mode counts (keys match the
 	// "health" query predicate: "unhealthy", "restarts", "not-ready"). Together
@@ -195,7 +182,7 @@ func podSummaryUnhealthy(pod PodSummary) bool {
 
 func podQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "age"},
 		[]string{"kinds", "namespaces", "statuses", "nodes"},
 		[]string{"name", "namespace", "status", "ready", "owner", "node"},
 		[]string{podres.Identity.Kind},
@@ -209,7 +196,7 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 func podQuerypageSchema() querypage.Schema[PodSummary] {
 	return querypageSchemaFromAdapter(
 		podTableQueryAdapter(),
-		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "age"},
 	)
 }
 
@@ -238,16 +225,15 @@ const (
 // RegisterPodDomain registers the pods snapshot domain.
 //
 // Pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
-// never instantiated. The per-cluster maintained store of pod rows (metrics ZEROED)
+// never instantiated. The per-cluster maintained store of pod rows
 // is fed by the pod reflector's Table-half ingest Sink — the bespoke pod projector
-// (NewPodIngestProjector) builds the same zeroed-metrics PodSummary the old informer
-// handler did, so the store rows are byte-identical and the serve-time metrics overlay
-// in collectSummaries is unchanged. With no typed lister, the builder serves EVERY
+// (NewPodIngestProjector) builds the same object-state PodSummary the old informer
+// handler did, so the store rows are byte-identical. With no typed lister, the builder serves EVERY
 // scope (namespace/node/workload) from the store rows, which carry the resolved Node
 // and owner the scope filters need. ingestManager may be nil in a unit test, in which
 // case the store has no feed.
 func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
-	// Maintain a per-cluster store of pod rows with metrics ZEROED, fed by the pod
+	// Maintain a per-cluster store of pod rows, fed by the pod
 	// reflector's Table-half Sink. The sink is registered BEFORE the ingest manager
 	// starts (this runs during registration), so the snapshot sync gate guarantees the
 	// store is populated before the first Build serves from it.
@@ -258,7 +244,6 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 	}
 
 	builder := &PodBuilder{
-		metrics:    provider,
 		projCache:  newPodProjectionCache(),
 		maintained: maintained,
 	}
@@ -278,22 +263,12 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, fmt.Errorf("pods scope is required")
 	}
 
-	podUsage := map[string]metrics.PodUsage{}
-	var metadata metrics.Metadata
-	if b.metrics != nil {
-		podUsage = b.metrics.LatestPodUsage()
-		metadata = b.metrics.Metadata()
-	}
-	dynamicRevision := ""
-	if !metadata.CollectedAt.IsZero() {
-		dynamicRevision = strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
-	}
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, trimmed, podDomainName, dynamicRevision)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, trimmed, podDomainName, "")
 	if err != nil {
 		return nil, err
 	}
 
-	summaries, version, err := b.collectSummaries(meta, baseScope, podUsage)
+	summaries, version, err := b.collectSummaries(meta, baseScope, map[string]metrics.PodUsage{})
 	if err != nil {
 		return nil, err
 	}
@@ -336,28 +311,14 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		nil,
 	)
 
-	metricsInfo := PodMetricsInfo{Stale: true}
-	if !metadata.CollectedAt.IsZero() {
-		metricsInfo.CollectedAt = metadata.CollectedAt.Unix()
-		metricsInfo.Stale = time.Since(metadata.CollectedAt) > config.MetricsStaleThreshold
-	} else {
-		metricsInfo.Stale = true
-	}
-	metricsInfo.LastError = metadata.LastError
-	metricsInfo.ConsecutiveFailures = metadata.ConsecutiveFailures
-	metricsInfo.SuccessCount = metadata.SuccessCount
-	metricsInfo.FailureCount = metadata.FailureCount
-
 	snapshot := &refresh.Snapshot{
-		Domain:         podDomainName,
-		Scope:          refresh.JoinClusterScope(clusterID, trimmed),
-		Version:        version,
-		SourceVersions: metricSourceVersions(dynamicRevision),
+		Domain:  podDomainName,
+		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
+		Version: version,
 		Payload: PodSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
-			Metrics:               metricsInfo,
 			TotalCount:            totalCount,
 			HealthCounts:          healthCounts,
 		},
@@ -367,14 +328,12 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	return snapshot, nil
 }
 
-// collectSummaries returns the in-scope pod rows (metrics overlaid) and the
-// snapshot version. When the builder has no typed pod lister (the production,
-// ingest-fed path) every scope — namespace, node, and workload — is served straight
-// from the maintained store's zeroed-metrics rows, with the fresh metrics sample
-// overlaid here. The store rows carry the resolved Node and owner the node/workload
-// scopes filter by, so they need no typed pod. A builder WITH a typed lister (the
-// direct-builder unit tests) takes the list + re-project path, which projects metrics
-// inline.
+// collectSummaries returns the in-scope pod rows and the snapshot version. When the
+// builder has no typed pod lister (the production, ingest-fed path) every scope —
+// namespace, node, and workload — is served straight from the maintained store. The
+// store rows carry the resolved Node and owner the node/workload scopes filter by, so
+// they need no typed pod. pods-metrics supplies a non-empty podUsage map when it needs
+// usage fields.
 func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
 	if b.podLister == nil && b.maintained != nil {
 		return b.collectSummariesFromStore(baseScope, podUsage)
@@ -412,10 +371,10 @@ func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsa
 
 // collectSummariesFromStore serves any pod scope from the maintained store's rows
 // (the ingest-fed, no-typed-lister production path). It filters the stored rows by
-// the scope (namespace / node / workload), overlays the fresh metrics sample, and
-// returns the store's monotonic snapshot version. The filters read only the resolved
-// fields the rows already carry — Node for the node scope, the RS->Deployment-resolved
-// owner for the workload scope — so the result matches the typed-lister list path.
+// the scope (namespace / node / workload) and returns the store's monotonic snapshot
+// version. The filters read only the resolved fields the rows already carry — Node for
+// the node scope, the RS->Deployment-resolved owner for the workload scope — so the
+// result matches the typed-lister list path.
 func (b *PodBuilder) collectSummariesFromStore(baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
 	all := b.maintained.rows("", map[string]bool{podres.Identity.Kind: true})
 	rows, err := filterPodRowsByScope(all, baseScope)
@@ -528,12 +487,10 @@ func formatPodMetricMemory(usage metrics.PodUsage, ok bool, creationMillis int64
 	return streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
 }
 
-// overlayPodMetrics overlays the fresh metrics sample onto each stored (zeroed) row,
-// using the SAME key and format funcs the list path's projectPod uses, so a metrics
-// poll refreshes CPU/mem without the store ever re-projecting. A pod with no sample,
-// or a sample that predates the row's creation (a recreated same-name pod inheriting
-// a prior incarnation's numbers), renders the no-data marker rather than stale or
-// zero numbers.
+// overlayPodMetrics applies an explicit metrics sample to stored rows for the
+// pods-metrics domain. A pod with no sample, or a sample that predates the row's
+// creation (a recreated same-name pod inheriting a prior incarnation's numbers),
+// renders the no-data marker rather than stale or zero numbers.
 func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
 	for i := range rows {
 		usage, ok := podUsage[rows[i].Namespace+"/"+rows[i].Name]
@@ -582,6 +539,8 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		Predicate: func(pod PodSummary, field, value string) bool {
 			switch strings.ToLower(strings.TrimSpace(field)) {
+			case "rowkeys":
+				return rowKeyPredicateMatches(value, fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name)))
 			case "health":
 				switch strings.ToLower(strings.TrimSpace(value)) {
 				case "restarts":
@@ -613,10 +572,6 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 				return pod.OwnerName
 			case "node":
 				return pod.Node
-			case "cpu":
-				return pod.CPUUsage
-			case "memory":
-				return pod.MemUsage
 			case "age":
 				return pod.Age
 			default:
@@ -625,10 +580,6 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		NumericSort: func(pod PodSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
-			case "cpu":
-				return parseFormattedCPUToMilli(pod.CPUUsage)
-			case "memory":
-				return parseFormattedMemoryToBytes(pod.MemUsage)
 			case "restarts":
 				return float64(pod.Restarts), true
 			case "ready":

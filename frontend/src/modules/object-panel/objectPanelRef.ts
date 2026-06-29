@@ -52,7 +52,8 @@ export interface ObjectPanelScopeEviction {
     | 'object-helm-manifest'
     | 'object-helm-values'
     | 'container-logs'
-    | 'pods';
+    | 'pods'
+    | 'pods-metrics';
   scope: string;
 }
 
@@ -354,6 +355,7 @@ export const getObjectPanelScopeEvictions = (
   }
   if (scopes.podsScope) {
     evictions.push({ domain: 'pods', scope: scopes.podsScope });
+    evictions.push({ domain: 'pods-metrics', scope: scopes.podsScope });
   }
   return evictions;
 };

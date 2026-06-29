@@ -16,7 +16,11 @@ const sortedDomains = (domains: Set<string>) => Array.from(domains).sort();
 
 describe('diagnosticsPanelConfig domain behavior sets', () => {
   test('pins metric-interval domains derived from the contract', () => {
-    expect(sortedDomains(METRICS_ONLY_DOMAINS)).toEqual(['namespace-workloads', 'nodes', 'pods']);
+    expect(sortedDomains(METRICS_ONLY_DOMAINS)).toEqual([
+      'namespace-workloads-metrics',
+      'nodes-metrics',
+      'pods-metrics',
+    ]);
   });
 
   test('pins stream-only domains derived from the contract', () => {
@@ -41,6 +45,9 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'namespace-quotas',
       'namespace-rbac',
       'namespace-storage',
+      'namespace-workloads',
+      'nodes',
+      'pods',
     ]);
   });
 });

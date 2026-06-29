@@ -9,6 +9,7 @@ import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/view
 
 const NAMESPACE_REFRESHERS = {
   workloads: 'workloads',
+  workloadMetrics: 'workload-metrics',
   config: 'config',
   network: 'network',
   rbac: 'rbac',
@@ -22,6 +23,7 @@ const NAMESPACE_REFRESHERS = {
 
 const CLUSTER_REFRESHERS = {
   nodes: 'cluster-nodes',
+  nodeMetrics: 'cluster-node-metrics',
   rbac: 'cluster-rbac',
   storage: 'cluster-storage',
   config: 'cluster-config',
@@ -36,6 +38,7 @@ const SYSTEM_REFRESHERS = {
   namespaces: 'namespaces',
   clusterOverview: 'cluster-overview',
   unifiedPods: 'unified-pods',
+  unifiedPodMetrics: 'unified-pod-metrics',
   objectDetails: 'object-details',
   objectEvents: 'object-events',
   objectYaml: 'object-yaml',

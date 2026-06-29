@@ -211,7 +211,6 @@ const useNamespacePodsResource = (
     data,
     (pod) => `${pod.clusterId ?? clusterId ?? ''}::${pod.namespace}::${pod.name}`
   );
-  const stableMetrics = useStableSelectedValue(domainState?.data?.metrics ?? null);
 
   const initialising =
     enabled &&
@@ -234,7 +233,7 @@ const useNamespacePodsResource = (
     isPaused,
     isManualRefreshActive,
   });
-  const metrics = stableMetrics;
+  const metrics = null;
 
   return useMemo(
     () => ({

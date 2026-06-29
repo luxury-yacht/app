@@ -124,7 +124,7 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
-func TestManagerMetricRefreshBroadcastsMetricSourceForSubscribedMetricDomains(t *testing.T) {
+func TestManagerMetricRefreshDoesNotBroadcastToObjectStreamDomains(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      applog.Noop,
@@ -144,32 +144,21 @@ func TestManagerMetricRefreshBroadcastsMetricSourceForSubscribedMetricDomains(t 
 	manager.BroadcastMetricRefresh("1700000000000000000")
 
 	for _, tc := range []struct {
-		name   string
-		sub    *Subscription
-		domain string
-		scope  string
+		name string
+		sub  *Subscription
 	}{
-		{name: "pods", sub: podsSub, domain: domainPods, scope: "namespace:default"},
-		{name: "workloads", sub: workloadsSub, domain: domainWorkloads, scope: "namespace:default"},
-		{name: "nodes", sub: nodesSub, domain: domainNodes, scope: ""},
+		{name: "pods", sub: podsSub},
+		{name: "workloads", sub: workloadsSub},
+		{name: "nodes", sub: nodesSub},
+		{name: "namespace-config", sub: configSub},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			update := requireNextUpdate(t, tc.sub)
-			require.Equal(t, MessageTypeModified, update.Type)
-			require.Equal(t, tc.domain, update.Domain)
-			require.Equal(t, tc.scope, update.Scope)
-			require.Equal(t, SourceMetric, update.Source)
-			require.Equal(t, SignalChanged, update.Signal)
-			require.Equal(t, "1700000000000000000", update.Version)
-			require.Equal(t, "c1", update.ClusterID)
-			require.Nil(t, update.Ref)
+			select {
+			case update := <-tc.sub.Updates:
+				t.Fatalf("%s must not receive metric source signal: %#v", tc.name, update)
+			default:
+			}
 		})
-	}
-
-	select {
-	case update := <-configSub.Updates:
-		t.Fatalf("namespace-config must not receive metric source signal: %#v", update)
-	default:
 	}
 }
 

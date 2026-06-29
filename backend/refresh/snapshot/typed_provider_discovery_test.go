@@ -15,22 +15,25 @@ import (
 // be added here (TestTypedResourceCapabilityConformanceCoversEveryDomain fails
 // otherwise, because the AST discovery below finds a domain this map is missing).
 var typedCapabilityConformance = map[string]ResourceQueryCapabilities{
-	"cluster-config":        clusterConfigQueryCapabilities(),
-	"cluster-storage":       clusterStorageQueryCapabilities(),
-	"cluster-rbac":          clusterRBACQueryCapabilities(),
-	"cluster-crds":          clusterCRDQueryCapabilities(),
-	"cluster-events":        clusterEventsQueryCapabilities(),
-	"namespace-config":      namespaceConfigQueryCapabilities(),
-	"namespace-network":     namespaceNetworkQueryCapabilities(),
-	"namespace-storage":     namespaceStorageQueryCapabilities(),
-	"namespace-rbac":        namespaceRBACQueryCapabilities(),
-	"namespace-quotas":      namespaceQuotasQueryCapabilities(),
-	"namespace-autoscaling": namespaceAutoscalingQueryCapabilities(),
-	"namespace-helm":        namespaceHelmQueryCapabilities(),
-	"namespace-events":      namespaceEventsQueryCapabilities(),
-	"namespace-workloads":   namespaceWorkloadsQueryCapabilities(),
-	"nodes":                 nodeQueryCapabilities(),
-	"pods":                  podQueryCapabilities(),
+	"cluster-config":              clusterConfigQueryCapabilities(),
+	"cluster-storage":             clusterStorageQueryCapabilities(),
+	"cluster-rbac":                clusterRBACQueryCapabilities(),
+	"cluster-crds":                clusterCRDQueryCapabilities(),
+	"cluster-events":              clusterEventsQueryCapabilities(),
+	"namespace-config":            namespaceConfigQueryCapabilities(),
+	"namespace-network":           namespaceNetworkQueryCapabilities(),
+	"namespace-storage":           namespaceStorageQueryCapabilities(),
+	"namespace-rbac":              namespaceRBACQueryCapabilities(),
+	"namespace-quotas":            namespaceQuotasQueryCapabilities(),
+	"namespace-autoscaling":       namespaceAutoscalingQueryCapabilities(),
+	"namespace-helm":              namespaceHelmQueryCapabilities(),
+	"namespace-events":            namespaceEventsQueryCapabilities(),
+	"namespace-workloads":         namespaceWorkloadsQueryCapabilities(),
+	"namespace-workloads-metrics": namespaceWorkloadsMetricQueryCapabilities(),
+	"nodes":                       nodeQueryCapabilities(),
+	"nodes-metrics":               nodeMetricQueryCapabilities(),
+	"pods":                        podQueryCapabilities(),
+	"pods-metrics":                podMetricQueryCapabilities(),
 }
 
 // typedDomainSource describes one typed-resource domain discovered from the
@@ -74,7 +77,7 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 			t.Fatalf("parse %s: %v", name, err)
 		}
 
-		capabilityFunc := ""
+		var capabilityFuncs []string
 		embeds := false
 		usesHelper := false
 
@@ -85,7 +88,7 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 					strings.HasSuffix(node.Name.Name, "QueryCapabilities") &&
 					funcReturnsType(node, "ResourceQueryCapabilities") &&
 					bodyCallsFunc(node.Body, "newTypedResourceCapabilities") {
-					capabilityFunc = node.Name.Name
+					capabilityFuncs = append(capabilityFuncs, node.Name.Name)
 				}
 				// The engine-backed resolveTypedSnapshotPageViaStore wraps both
 				// canonical envelope constructors, so it satisfies the same guarantee.
@@ -104,7 +107,7 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 			return true
 		})
 
-		if capabilityFunc != "" {
+		for _, capabilityFunc := range capabilityFuncs {
 			domains = append(domains, typedDomainSource{
 				file:               name,
 				capabilityFunc:     capabilityFunc,

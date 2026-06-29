@@ -393,16 +393,16 @@ describe('ResourceStreamManager', () => {
         clusterId: 'cluster-a',
         domain: 'pods',
         scope: 'namespace:default',
-        source: 'metric',
-        version: 'metrics:2',
+        source: 'object',
+        version: 'objects:2',
         signal: 'changed',
       })
     );
 
     vi.advanceTimersByTime(200);
 
-    expect(getScopedDomainState('pods', storeScope).sourceVersion).toBe('metrics:2');
-    expect(getScopedDomainState('pods', storeScope).sourceVersions?.metric).toBe('metrics:2');
+    expect(getScopedDomainState('pods', storeScope).sourceVersion).toBe('objects:2');
+    expect(getScopedDomainState('pods', storeScope).sourceVersions?.object).toBe('objects:2');
   });
 
   test('A1 reset signal envelope forces a resync without legacy message type', async () => {

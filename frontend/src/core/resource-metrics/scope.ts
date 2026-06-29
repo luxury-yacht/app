@@ -59,8 +59,10 @@ export const resolveResourceMetricsScope = (
     return {
       kind: 'domain',
       source: 'pods',
-      domain: 'pods',
+      domain: 'pods-metrics',
       scope: namespaceScope(ref.clusterId, ref.namespace),
+      baseDomain: 'pods',
+      baseScope: namespaceScope(ref.clusterId, ref.namespace),
     };
   }
 
@@ -74,10 +76,10 @@ export const resolveResourceMetricsScope = (
     return {
       kind: 'domain',
       source: 'namespace-workloads',
-      domain: 'namespace-workloads',
+      domain: 'namespace-workloads-metrics',
       scope: namespaceScope(ref.clusterId, ref.namespace),
-      freshnessDomain: 'nodes',
-      freshnessScope: buildClusterScope(ref.clusterId, ''),
+      baseDomain: 'namespace-workloads',
+      baseScope: namespaceScope(ref.clusterId, ref.namespace),
     };
   }
 
@@ -85,8 +87,10 @@ export const resolveResourceMetricsScope = (
     return {
       kind: 'domain',
       source: 'nodes',
-      domain: 'nodes',
+      domain: 'nodes-metrics',
       scope: buildClusterScope(ref.clusterId, ''),
+      baseDomain: 'nodes',
+      baseScope: buildClusterScope(ref.clusterId, ''),
     };
   }
 

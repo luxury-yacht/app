@@ -323,6 +323,33 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "core/nodes (and pods)",
 		}),
 
+		listWatchRegistration(listWatchDomainConfig{
+			name:          "nodes-metrics",
+			issueResource: "core/nodes,pods",
+			logGroup:      "",
+			logResource:   "nodes/pods",
+			checks: []listWatchCheck{
+				{group: "", resource: "nodes"},
+				{group: "", resource: "pods"},
+			},
+			registerInformer: func() error {
+				return snapshot.RegisterNodeMetricsDomain(
+					deps.registry,
+					deps.metricsProvider,
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
+				)
+			},
+			fallbackChecks: []listCheck{
+				{group: "", resource: "nodes"},
+			},
+			registerFallback: func() error {
+				return snapshot.RegisterNodeMetricsDomainList(deps.registry, deps.cfg.KubernetesClient, deps.metricsProvider)
+			},
+			fallbackLog:  "Registering nodes metrics domain using list fallback due to missing informer permissions",
+			deniedReason: "core/nodes (and pods)",
+		}),
+
 		accessListRegistration(runtimeAccess, listDomainConfig{
 			name: "cluster-config",
 			register: func(allowed domainpermissions.AllowedResources) error {
@@ -401,6 +428,27 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			name: "namespace-workloads",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceWorkloadsDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					deps.metricsProvider,
+					deps.cfg.Logger,
+					snapshot.NamespaceWorkloadsPermissions{
+						IncludePods:         allowed.Allows("", "pods"),
+						IncludeDeployments:  allowed.Allows("apps", "deployments"),
+						IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
+						IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
+						IncludeJobs:         allowed.Allows("batch", "jobs"),
+						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
+					},
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
+				)
+			},
+		}),
+		accessListRegistration(runtimeAccess, listDomainConfig{
+			name: "namespace-workloads-metrics",
+			register: func(allowed domainpermissions.AllowedResources) error {
+				return snapshot.RegisterNamespaceWorkloadsMetricsDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					deps.metricsProvider,
@@ -512,6 +560,15 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 
 		directRegistration("pods", func() error {
 			return snapshot.RegisterPodDomain(
+				deps.registry,
+				deps.metricsProvider,
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+				deps.ingestManager,
+			)
+		}),
+
+		directRegistration("pods-metrics", func() error {
+			return snapshot.RegisterPodMetricsDomain(
 				deps.registry,
 				deps.metricsProvider,
 				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},

@@ -100,6 +100,10 @@ cluster-scoped row keys.
 - Global metric-backed sorts belong to backend query contracts and metric source
   clocks. Do not locally sort a query-backed table by CPU or memory over the
   current page.
+- Metric-bearing resource tables keep object/status rows and metric rows on
+  separate refresh paths: object-sorted pages overlay metric-domain rows onto the
+  visible base rows, and CPU/memory-sorted pages use the metric-domain query for
+  page membership before hydrating base row data.
 
 ## Resource Inventory Tables
 

@@ -15,9 +15,8 @@ import {
   isObjectMapSupportedKind,
 } from './objectPanelRef';
 
-// The PodsTab leases a `pods` window per panel object; closing the panel must
-// evict it like the other panel scopes or every visited workload/node leaks one
-// window snapshot until the cluster closes.
+// The PodsTab leases base `pods` and metric `pods-metrics` windows per panel object; closing the
+// panel must evict both like the other panel scopes.
 describe('getObjectPanelScopeEvictions pods window', () => {
   it('evicts the workload pods window for a workload panel', () => {
     const evictions = getObjectPanelScopeEvictions({
@@ -31,6 +30,10 @@ describe('getObjectPanelScopeEvictions pods window', () => {
 
     expect(evictions).toContainEqual({
       domain: 'pods',
+      scope: 'cluster-a|workload:team-a:apps:v1:Deployment:web',
+    });
+    expect(evictions).toContainEqual({
+      domain: 'pods-metrics',
       scope: 'cluster-a|workload:team-a:apps:v1:Deployment:web',
     });
   });
@@ -48,6 +51,10 @@ describe('getObjectPanelScopeEvictions pods window', () => {
       domain: 'pods',
       scope: 'cluster-a|node:worker-1',
     });
+    expect(evictions).toContainEqual({
+      domain: 'pods-metrics',
+      scope: 'cluster-a|node:worker-1',
+    });
   });
 
   it('does not evict a pods window for kinds without a pods tab', () => {
@@ -60,6 +67,7 @@ describe('getObjectPanelScopeEvictions pods window', () => {
     });
 
     expect(evictions.some((eviction) => eviction.domain === 'pods')).toBe(false);
+    expect(evictions.some((eviction) => eviction.domain === 'pods-metrics')).toBe(false);
   });
 });
 

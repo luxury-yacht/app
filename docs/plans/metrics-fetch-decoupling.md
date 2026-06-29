@@ -14,8 +14,7 @@ for every metric-bearing table surface:
 
 `cluster-overview` aggregate utilization is explicitly out of scope for this
 table-focused migration. It remains on the existing `cluster-overview` scoped
-payload until a separate overview refresh/read-model change is planned
-(`docs/architecture/resource-metrics.md:35`).
+payload until a separate overview refresh/read-model change is planned.
 
 Target behavior:
 
@@ -30,7 +29,10 @@ Target behavior:
 - The implementation extends `frontend/src/core/resource-metrics`; it does not
   add a second frontend metrics cache.
 
-## Current State Evidence
+## Pre-Implementation Evidence
+
+This section records the coupling that motivated the migration. It is retained
+as design history rather than as a description of the latest worktree behavior.
 
 - The current stream-signals contract says metric-bearing query pages refetch
   through the same snapshot/query endpoint and have no client-side row overlay
@@ -83,8 +85,8 @@ Target behavior:
 - The existing resource-metrics contract already says resource utilization uses
   one frontend read model over refresh store and must not add a second metrics
   cache (`docs/architecture/resource-metrics.md:3-13`). Its Source Map currently
-  points Pod/Workload/Node utilization and metric-bearing tables at base domain
-  rows (`docs/architecture/resource-metrics.md:26-38`).
+  pointed Pod/Workload/Node utilization and metric-bearing tables at base domain
+  rows before this migration.
 - The query-backed table wrapper currently uses live domain source identity to
   refetch typed query pages
   (`frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.ts:195-239`),

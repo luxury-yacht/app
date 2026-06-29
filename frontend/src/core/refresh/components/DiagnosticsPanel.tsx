@@ -1206,7 +1206,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const podRows = podScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
       const payload = state.data as PodSnapshotPayload | null;
-      const metricsInfo = payload?.metrics;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const isStale = lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
@@ -1227,27 +1226,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
       const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
-      const successCount = metricsInfo?.successCount ?? 0;
-      const failureCount = metricsInfo?.failureCount ?? 0;
-      const metricsStatus = metricsInfo
-        ? metricsInfo.lastError
-          ? `Error (${failureCount} fails)`
-          : metricsInfo.stale
-            ? `Unavailable (${failureCount} fails)`
-            : `OK (${successCount} polls)`
-        : 'N/A';
-      const metricsTooltipLines: string[] = [];
-      if (metricsInfo) {
-        metricsTooltipLines.push(`Successful polls: ${successCount}`);
-        metricsTooltipLines.push(`Failed polls: ${failureCount}`);
-        if (metricsInfo.lastError) {
-          metricsTooltipLines.push(`Last error: ${metricsInfo.lastError}`);
-        } else if (metricsInfo.stale) {
-          metricsTooltipLines.push('Metrics API unavailable (pods.metrics.k8s.io)');
-        } else if (metricsInfo.collectedAt) {
-          metricsTooltipLines.push('Metrics are up to date');
-        }
-      }
       const version = state.version != null ? String(state.version) : '—';
       const streamHealth = toStreamHealthSummary(
         resourceStreamManager.getHealthSnapshot('pods', scope)
@@ -1260,7 +1238,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName: DOMAIN_REFRESHER_MAP.pods,
         streamActive,
         streamHealthy,
-        metricsOnly: true,
+        metricsOnly: false,
       });
       const modeDetails = resolveModeDetails({
         domain: 'pods',
@@ -1268,7 +1246,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         streamActive,
         streamHealthy,
         pollingEnabled: pollingDetails.enabled,
-        metricsOnly: true,
+        metricsOnly: false,
       });
       const healthDetails = resolveHealthDetails({
         domain: 'pods',
@@ -1332,15 +1310,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         error: state.error ?? '—',
         telemetryStatus,
         telemetryTooltip,
-        metricsStatus,
-        metricsTooltip:
-          metricsTooltipLines.length > 0 ? metricsTooltipLines.join('\n') : 'No metrics available',
-        metricsStale: Boolean(metricsInfo?.stale),
-        metricsSuccess: successCount,
-        metricsFailure: failureCount,
-        telemetrySuccess: successCount,
-        telemetryFailure: failureCount,
-        hasMetrics: true,
+        metricsStatus: 'N/A',
+        metricsTooltip: 'Pod metrics are reported by the pods-metrics domain',
+        hasMetrics: false,
         count,
         countDisplay,
         countTooltip,

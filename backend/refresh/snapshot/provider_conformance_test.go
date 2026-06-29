@@ -71,7 +71,6 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 		builder := &PodBuilder{
 			podLister: testsupport.NewPodLister(t, pod),
 			rsLister:  testsupport.NewReplicaSetLister(t),
-			metrics:   fakeMetricsProvider{},
 		}
 		snap, err := builder.Build(ctx, "namespace:all")
 		require.NoError(t, err)
@@ -91,7 +90,6 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 			includeDaemonSets:   true,
 			includeJobs:         true,
 			includeCronJobs:     true,
-			metrics:             fakeMetricsProvider{},
 		}
 		seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
 		snap, err := builder.Build(ctx, "namespace:default")

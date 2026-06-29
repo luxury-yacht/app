@@ -2592,7 +2592,7 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('pods');
   });
 
-  it('records restricted metrics errors through the normal snapshot path', async () => {
+  it('keeps the normal pod snapshot path free of metrics errors', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:default');
     refreshOrchestrator.updateContext({
@@ -2617,7 +2617,6 @@ describe('refreshOrchestrator', () => {
       data: {
         clusterId: 'cluster-a',
         rows: [existingPod],
-        metrics: { stale: false, successCount: 1, failureCount: 0 },
       },
       stats: null,
       error: null,
@@ -2640,12 +2639,6 @@ describe('refreshOrchestrator', () => {
               ...existingPod,
             },
           ],
-          metrics: {
-            stale: true,
-            lastError: 'forbidden: cannot list metrics.k8s.io pods',
-            successCount: 1,
-            failureCount: 1,
-          },
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
@@ -2657,8 +2650,7 @@ describe('refreshOrchestrator', () => {
 
     const nextState = getScopedDomainState('pods', scope);
     expect(nextState.data?.rows?.[0]).toEqual(existingPod);
-    expect(nextState.data?.metrics?.stale).toBe(true);
-    expect(nextState.data?.metrics?.lastError).toContain('forbidden');
+    expect(nextState.data).not.toHaveProperty('metrics');
 
     resetAllScopedDomainStates('pods');
   });

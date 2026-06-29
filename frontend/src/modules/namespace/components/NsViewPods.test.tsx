@@ -306,6 +306,20 @@ const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =
   ...override,
 });
 
+const podMetricRows = (rows: PodSnapshotEntry[]) =>
+  rows.map((pod) => ({
+    clusterId: pod.clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    resource: 'pods',
+    namespace: pod.namespace,
+    name: pod.name,
+    rowKey: `${pod.namespace}/${pod.name}`,
+    cpuUsage: pod.cpuUsage,
+    memUsage: pod.memUsage,
+  }));
+
 describe('NsViewPods', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -391,7 +405,7 @@ describe('NsViewPods', () => {
       }),
     ];
 
-    const metrics: PodMetricsInfo = {
+    const defaultMetrics: PodMetricsInfo = {
       stale: false,
       lastError: '',
       collectedAt: Math.floor(Date.now() / 1000),
@@ -404,8 +418,11 @@ describe('NsViewPods', () => {
     // single-namespace assertions still see their pods. All-namespaces tests set their own mock.
     const effectiveNamespace = (props.namespace as string | undefined) ?? 'team-a';
     const effectiveData = (props.data as PodSnapshotEntry[] | undefined) ?? defaultPods;
+    const effectiveMetrics =
+      'metrics' in props ? (props.metrics ?? clusterMetricsMock.current ?? null) : defaultMetrics;
     if (effectiveNamespace !== ALL_NAMESPACES_SCOPE && !skipDefaultQueryMock) {
-      requestRefreshDomainStateMock.mockImplementation((args: { scope?: string }) => {
+      requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
+        const args = request as { domain?: string; scope?: string } | undefined;
         // Mirror the backend: apply the health predicate carried in the query scope, so the
         // unhealthy/restarts/not-ready toggle (a server-side predicate now) yields filtered rows.
         const healthMatch = /predicate\.health=([^&]+)/.exec(args?.scope ?? '');
@@ -414,17 +431,19 @@ describe('NsViewPods', () => {
               matchesPodsFilter(healthMatch[1] as Parameters<typeof matchesPodsFilter>[0], pod)
             )
           : effectiveData;
+        const isMetricDomain = args?.domain === 'pods-metrics';
         return Promise.resolve({
           status: 'executed',
           data: {
             status: 'ready',
             data: {
-              rows,
+              rows: isMetricDomain ? podMetricRows(rows) : rows,
               total: rows.length,
               totalIsExact: true,
               namespaces: [effectiveNamespace],
               kinds: ['Pod'],
               facetsExact: true,
+              metrics: isMetricDomain ? effectiveMetrics : undefined,
               // Scope counts mirror the backend: over all scope pods (effectiveData),
               // not the health-filtered page, so the unhealthy badge stays correct.
               totalCount: effectiveData.length,
@@ -445,7 +464,8 @@ describe('NsViewPods', () => {
     // query-backed now, so it is not a NsViewPods prop.
     const { data: _seedData, ...viewProps } = props;
     await act(async () => {
-      root.render(<NsViewPods namespace="team-a" metrics={metrics} {...viewProps} />);
+      root.render(<NsViewPods namespace="team-a" metrics={defaultMetrics} {...viewProps} />);
+      await Promise.resolve();
       await Promise.resolve();
     });
     return effectiveData;
@@ -478,20 +498,26 @@ describe('NsViewPods', () => {
   it('uses the typed query result for all-namespaces pods on first render', async () => {
     const localPod = createPod({ name: 'local-provider-row', namespace: 'team-a' });
     const queryPod = createPod({ name: 'query-row', namespace: 'team-b' });
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
+    requestRefreshDomainStateMock.mockImplementation((args: { domain?: string }) =>
+      Promise.resolve({
+        status: 'executed',
         data: {
-          rows: [queryPod],
-          total: 1,
-          totalIsExact: true,
-          namespaces: ['team-a', 'team-b'],
-          kinds: ['Pod'],
-          facetsExact: true,
+          status: 'ready',
+          data: {
+            rows: args?.domain === 'pods-metrics' ? podMetricRows([queryPod]) : [queryPod],
+            total: 1,
+            totalIsExact: true,
+            namespaces: ['team-a', 'team-b'],
+            kinds: ['Pod'],
+            facetsExact: true,
+            metrics:
+              args?.domain === 'pods-metrics'
+                ? { stale: false, successCount: 1, failureCount: 0 }
+                : undefined,
+          },
         },
-      },
-    });
+      })
+    );
 
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
@@ -641,7 +667,16 @@ describe('NsViewPods', () => {
       failureCount: 1,
     };
 
-    await renderPods({ metrics: null });
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
+    gridTablePropsRef.current = null;
+    await renderPods({
+      namespace: 'team-b',
+      data: [createPod({ name: 'other', namespace: 'team-b' })],
+      metrics: null,
+    });
 
     expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
       'Metrics API not found'
@@ -748,13 +783,6 @@ describe('NsViewPods', () => {
     expect(cpuElement.props.metricsStale).toBe(true);
     expect(cpuElement.props.metricsError).toBe('cpu metrics unavailable');
     expect(cpuElement.props.metricsLastUpdated).toEqual(new Date(1700001000 * 1000));
-
-    await renderPods({ metrics: null });
-    const memoryColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'memory');
-    const memoryRender = memoryColumn.render(gridTablePropsRef.current.data[0]);
-    expect(React.isValidElement(memoryRender)).toBe(true);
-    expect(memoryRender.props.metricsError).toBeUndefined();
-    expect(memoryRender.props.metricsStale).toBe(false);
   });
 
   it('keeps the column definitions stable across metric interval rerenders', async () => {
@@ -899,22 +927,28 @@ describe('NsViewPods', () => {
         ready: '0/1',
       }),
     ];
-    requestRefreshDomainStateMock.mockImplementation(({ scope }: { scope: string }) =>
-      Promise.resolve({
+    requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
+      const { domain, scope = '' } = (request as { domain?: string; scope?: string }) ?? {};
+      const rows = scope.includes('predicate.health=unhealthy') ? [pods[1]] : [];
+      return Promise.resolve({
         status: 'executed',
         data: {
           status: 'ready',
           data: {
-            rows: scope.includes('predicate.health=unhealthy') ? [pods[1]] : [],
-            total: scope.includes('predicate.health=unhealthy') ? 1 : 0,
+            rows: domain === 'pods-metrics' ? podMetricRows(pods) : rows,
+            total: rows.length,
             totalIsExact: true,
             namespaces: ['team-a', 'team-b'],
             kinds: ['Pod'],
             facetsExact: true,
+            metrics:
+              domain === 'pods-metrics'
+                ? { stale: false, successCount: 1, failureCount: 0 }
+                : undefined,
           },
         },
-      })
-    );
+      });
+    });
 
     await renderPods({
       namespace: ALL_NAMESPACES_SCOPE,
@@ -939,7 +973,7 @@ describe('NsViewPods', () => {
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'pods',
         scope: expect.stringContaining('predicate.health=unhealthy'),

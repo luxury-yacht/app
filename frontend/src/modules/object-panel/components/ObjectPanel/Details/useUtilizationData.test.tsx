@@ -80,8 +80,11 @@ describe('useUtilizationData', () => {
 
   afterEach(() => {
     resetAllScopedDomainStates('pods');
+    resetAllScopedDomainStates('pods-metrics');
     resetAllScopedDomainStates('namespace-workloads');
+    resetAllScopedDomainStates('namespace-workloads-metrics');
     resetAllScopedDomainStates('nodes');
+    resetAllScopedDomainStates('nodes-metrics');
   });
 
   it('updates Pod utilization from the pods scoped domain without a detail DTO change', async () => {
@@ -127,12 +130,34 @@ describe('useUtilizationData', () => {
               age: '1m',
               ownerKind: 'Deployment',
               ownerName: 'api',
-              cpuUsage: '220m',
+              cpuUsage: '-',
               cpuRequest: '75m',
               cpuLimit: '750m',
-              memUsage: '256Mi',
+              memUsage: '-',
               memRequest: '96Mi',
               memLimit: '512Mi',
+            },
+          ],
+        },
+      }));
+      setScopedDomainState('pods-metrics', 'cluster-a|namespace:team-a', (previous) => ({
+        ...previous,
+        status: 'ready',
+        scope: 'cluster-a|namespace:team-a',
+        data: {
+          clusterId: 'cluster-a',
+          rows: [
+            {
+              clusterId: 'cluster-a',
+              group: '',
+              version: 'v1',
+              kind: 'Pod',
+              resource: 'pods',
+              name: 'api',
+              namespace: 'team-a',
+              rowKey: 'team-a/api',
+              cpuUsage: '220m',
+              memUsage: '256Mi',
             },
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -179,16 +204,6 @@ describe('useUtilizationData', () => {
     });
 
     await act(async () => {
-      setScopedDomainState('nodes', 'cluster-a|', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|',
-        data: {
-          clusterId: 'cluster-a',
-          rows: [],
-          metrics: { stale: false, successCount: 1, failureCount: 0 },
-        },
-      }));
       setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
         ...previous,
         status: 'ready',
@@ -205,16 +220,44 @@ describe('useUtilizationData', () => {
               status: 'Available',
               restarts: 0,
               age: '2m',
-              cpuUsage: '320m',
+              cpuUsage: '-',
               cpuRequest: '160m',
               cpuLimit: '800m',
-              memUsage: '384Mi',
+              memUsage: '-',
               memRequest: '192Mi',
               memLimit: '768Mi',
             },
           ],
         },
       }));
+      setScopedDomainState(
+        'namespace-workloads-metrics',
+        'cluster-a|namespace:team-a',
+        (previous) => ({
+          ...previous,
+          status: 'ready',
+          scope: 'cluster-a|namespace:team-a',
+          data: {
+            clusterId: 'cluster-a',
+            rows: [
+              {
+                clusterId: 'cluster-a',
+                group: 'apps',
+                version: 'v1',
+                kind: 'Deployment',
+                resource: 'deployments',
+                name: 'api',
+                namespace: 'team-a',
+                rowKey: 'deployment/team-a/api',
+                ready: '2/3',
+                cpuUsage: '320m',
+                memUsage: '384Mi',
+              },
+            ],
+            metrics: { stale: false, successCount: 1, failureCount: 0 },
+          },
+        })
+      );
       await Promise.resolve();
     });
 

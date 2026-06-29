@@ -209,6 +209,23 @@ const baseNode = {
   ageTimestamp: 1_700_000_000_000,
 };
 
+const nodeMetricRows = (rows: Array<typeof baseNode | Record<string, unknown>>) =>
+  rows.map((rawNode) => {
+    const node = rawNode as Record<string, any>;
+    return {
+      clusterId: node.clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      resource: 'nodes',
+      name: node.name,
+      rowKey: `node/${node.name}`,
+      cpuUsage: node.cpuUsage,
+      memoryUsage: node.memoryUsage,
+      podMetrics: node.podMetrics,
+    };
+  });
+
 describe('ClusterViewNodes', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -233,21 +250,23 @@ describe('ClusterViewNodes', () => {
     };
     openWithObjectMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock.mockImplementation((_request?: unknown) =>
-      Promise.resolve({
+    requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
+      const domain = (request as { domain?: string } | undefined)?.domain;
+      const rows = typedQueryRowsRef.current as Array<typeof baseNode | Record<string, unknown>>;
+      return Promise.resolve({
         status: 'executed',
         data: {
           status: 'ready',
           data: {
-            rows: typedQueryRowsRef.current,
+            rows: domain === 'nodes-metrics' ? nodeMetricRows(rows) : typedQueryRowsRef.current,
             total: typedQueryRowsRef.current.length,
             totalIsExact: true,
             kinds: ['Node'],
             facetsExact: true,
           },
         },
-      })
-    );
+      });
+    });
     useTableSortMock.mockClear();
   });
 
@@ -266,6 +285,11 @@ describe('ClusterViewNodes', () => {
       await Promise.resolve();
     });
   };
+
+  const refreshStateCallsForDomain = (domain: string) =>
+    requestRefreshDomainStateMock.mock.calls.filter(
+      ([request]) => (request as { domain?: string } | undefined)?.domain === domain
+    );
 
   it('passes persisted state to GridTable', async () => {
     await renderNodes([baseNode]);
@@ -481,8 +505,13 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
 
     expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
+    expect(scopedDomainCallsRef.current).toContainEqual(['nodes-metrics', 'path:context|']);
     expect(scopedDomainCallsRef.current).not.toContainEqual([
       'nodes',
+      'clusters=path:context,other:context|',
+    ]);
+    expect(scopedDomainCallsRef.current).not.toContainEqual([
+      'nodes-metrics',
       'clusters=path:context,other:context|',
     ]);
   });
@@ -498,7 +527,7 @@ describe('ClusterViewNodes', () => {
       await Promise.resolve();
     });
 
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+    expect(refreshStateCallsForDomain('nodes')).toHaveLength(1);
     expect(latestTableRowsRef.current).toEqual([initialQueryNode]);
 
     typedQueryRowsRef.current = [updatedQueryNode];
@@ -528,7 +557,7 @@ describe('ClusterViewNodes', () => {
       await Promise.resolve();
     });
 
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(refreshStateCallsForDomain('nodes')).toHaveLength(2);
     expect(latestTableRowsRef.current).toEqual([updatedQueryNode]);
   });
 
@@ -541,33 +570,30 @@ describe('ClusterViewNodes', () => {
     const localNode = { ...baseNode, clusterId: 'path:context' };
     const initialQueryNode = { ...localNode, name: 'node-1' };
 
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
+    const baseResponses = [[initialQueryNode], []];
+    let baseResponseIndex = 0;
+    requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
+      const domain = (request as { domain?: string } | undefined)?.domain;
+      const rows =
+        domain === 'nodes'
+          ? (baseResponses[Math.min(baseResponseIndex++, baseResponses.length - 1)] ?? [])
+          : (baseResponses[
+              Math.min(Math.max(baseResponseIndex - 1, 0), baseResponses.length - 1)
+            ] ?? []);
+      return Promise.resolve({
         status: 'executed',
         data: {
           status: 'ready',
           data: {
-            rows: [initialQueryNode],
-            total: 1,
+            rows: domain === 'nodes-metrics' ? nodeMetricRows(rows) : rows,
+            total: rows.length,
             totalIsExact: true,
-            kinds: ['Node'],
-            facetsExact: true,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [],
-            total: 0,
-            totalIsExact: true,
-            kinds: [],
+            kinds: rows.length > 0 ? ['Node'] : [],
             facetsExact: true,
           },
         },
       });
+    });
 
     await act(async () => {
       root.render(<ClusterViewNodes />);
@@ -589,7 +615,7 @@ describe('ClusterViewNodes', () => {
       await Promise.resolve();
     });
 
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(refreshStateCallsForDomain('nodes')).toHaveLength(2);
     expect(latestTableRowsRef.current).toEqual([]);
     expect(loadingBoundaryPropsRef.current).toEqual(
       expect.objectContaining({

@@ -145,10 +145,12 @@ adding a new frontend source shape.
 
 Typed resource queries use `ResourceQueryRequest` and `ResourceQueryResult` in
 `backend/refresh/snapshot/resource_query_contract.go`, mirrored by frontend
-refresh types. The contract carries full `clusterId` and GVK identity for every
-row, stable projected table fields, dynamic CPU/memory fields, backend
-predicates, facets, exactness flags, partial/degraded issues, and a dynamic
-revision reference.
+refresh types. The base resource contract carries full `clusterId` and GVK
+identity for every row, stable projected table fields, backend predicates,
+facets, exactness flags, partial/degraded issues, and an object revision
+reference. Metric-domain query contracts carry the same query/filter identity
+plus CPU/memory values, metric freshness metadata, metric revision, and ordered
+object identities for metric-backed sorts.
 
 Metadata label/annotation search is not implicitly global for query-backed
 typed tables. A typed table may expose metadata search globally only after that

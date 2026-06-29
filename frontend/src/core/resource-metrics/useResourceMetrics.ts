@@ -3,8 +3,11 @@ import { useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access/useScopedRefreshDomainLifecycle';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type {
+  ClusterNodeMetricsSnapshotPayload,
   ClusterNodeSnapshotPayload,
+  NamespaceWorkloadMetricsSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
+  PodMetricsSnapshotPayload,
   PodSnapshotPayload,
   RefreshDomain,
 } from '@/core/refresh/types';
@@ -13,7 +16,7 @@ import { buildResourceMetricsReference, resolveResourceMetricsScope } from './sc
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
 import type { ResourceMetricsResolution, ResourceMetricsResult } from './types';
 
-const disabledDomain: RefreshDomain = 'pods';
+const disabledDomain: RefreshDomain = 'pods-metrics';
 const disabledScope = '__resource_metrics_disabled__';
 
 const stateStatusToResult = (
@@ -54,17 +57,11 @@ export const useResourceMetrics = (
 
   const domain = resolution.kind === 'domain' ? resolution.domain : disabledDomain;
   const scope = resolution.kind === 'domain' ? resolution.scope : disabledScope;
-  const freshnessDomain = resolution.kind === 'domain' ? resolution.freshnessDomain : undefined;
-  const freshnessScope = resolution.kind === 'domain' ? resolution.freshnessScope : undefined;
-  const hasSeparateFreshnessScope =
-    Boolean(freshnessDomain && freshnessScope) &&
-    (freshnessDomain !== domain || freshnessScope !== scope);
+  const baseDomain = resolution.kind === 'domain' ? resolution.baseDomain : disabledDomain;
+  const baseScope = resolution.kind === 'domain' ? resolution.baseScope : disabledScope;
 
   const state = useRefreshScopedDomain(domain, scope);
-  const freshnessState = useRefreshScopedDomain(
-    freshnessDomain ?? disabledDomain,
-    freshnessScope ?? disabledScope
-  );
+  const baseState = useRefreshScopedDomain(baseDomain, baseScope);
 
   useScopedRefreshDomainLifecycle({
     domain: resolution.kind === 'domain' ? resolution.domain : null,
@@ -75,9 +72,9 @@ export const useResourceMetrics = (
   });
 
   useScopedRefreshDomainLifecycle({
-    domain: hasSeparateFreshnessScope ? freshnessDomain : null,
-    scope: hasSeparateFreshnessScope ? freshnessScope : null,
-    enabled: enabled && hasSeparateFreshnessScope,
+    domain: resolution.kind === 'domain' ? resolution.baseDomain : null,
+    scope: resolution.kind === 'domain' ? resolution.baseScope : null,
+    enabled: enabled && resolution.kind === 'domain',
     preserveState: true,
     fetchOnEnable: 'startup',
   });
@@ -93,23 +90,44 @@ export const useResourceMetrics = (
     }
 
     let metrics = null;
-    if (resolution.domain === 'pods') {
-      metrics = selectPodMetrics(state.data as PodSnapshotPayload | null, ref);
-    } else if (resolution.domain === 'namespace-workloads') {
-      metrics = selectWorkloadMetrics(
-        state.data as NamespaceWorkloadSnapshotPayload | null,
-        ref,
-        (freshnessState.data as ClusterNodeSnapshotPayload | null)?.metrics ?? null
+    if (resolution.domain === 'pods-metrics') {
+      metrics = selectPodMetrics(
+        state.data as PodMetricsSnapshotPayload | null,
+        baseState.data as PodSnapshotPayload | null,
+        ref
       );
-    } else if (resolution.domain === 'nodes') {
-      metrics = selectNodeMetrics(state.data as ClusterNodeSnapshotPayload | null, ref);
+    } else if (resolution.domain === 'namespace-workloads-metrics') {
+      metrics = selectWorkloadMetrics(
+        state.data as NamespaceWorkloadMetricsSnapshotPayload | null,
+        baseState.data as NamespaceWorkloadSnapshotPayload | null,
+        ref
+      );
+    } else if (resolution.domain === 'nodes-metrics') {
+      metrics = selectNodeMetrics(
+        state.data as ClusterNodeMetricsSnapshotPayload | null,
+        baseState.data as ClusterNodeSnapshotPayload | null,
+        ref
+      );
     }
 
+    const metricStateLoading = state.status === 'loading' || state.status === 'initialising';
+    const status = metricStateLoading ? state.status : baseState.status;
     return {
-      status: metrics ? 'available' : stateStatusToResult(resolution, state.status, state.error),
+      status: metrics
+        ? 'available'
+        : stateStatusToResult(resolution, status, state.error ?? baseState.error),
       metrics,
       resolution,
-      error: state.error ?? null,
+      error: state.error ?? baseState.error ?? null,
     };
-  }, [freshnessState.data, ref, resolution, state.data, state.error, state.status]);
+  }, [
+    baseState.data,
+    baseState.error,
+    baseState.status,
+    ref,
+    resolution,
+    state.data,
+    state.error,
+    state.status,
+  ]);
 };

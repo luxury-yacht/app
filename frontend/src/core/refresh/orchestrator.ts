@@ -1281,13 +1281,13 @@ class RefreshOrchestrator {
     if (this.hasEnabledScopedSources('cluster-overview')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('nodes')) {
+    if (this.hasEnabledScopedSources('nodes-metrics')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('pods')) {
+    if (this.hasEnabledScopedSources('pods-metrics')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('namespace-workloads')) {
+    if (this.hasEnabledScopedSources('namespace-workloads-metrics')) {
       return true;
     }
     return false;

@@ -440,16 +440,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   ]);
 
   const nodeSnapshot = nodeDomain.data;
-  const nodeMetricsInfo = useMemo(() => {
-    if (!nodeSnapshot) {
-      return undefined;
-    }
-    const metricsByCluster = nodeSnapshot.metricsByCluster;
-    if (metricsByCluster) {
-      return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? undefined) : undefined;
-    }
-    return nodeSnapshot.metrics;
-  }, [nodeSnapshot, selectedClusterId]);
   const nodeStatus = nodeDomain.status;
   const nodeError = nodeDomain.error;
   const nodeLastUpdated = nodeDomain.lastUpdated;
@@ -484,14 +474,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
 
   const nodes: ResourceDataReturn<ClusterNodeRow[]> = useMemo(() => {
     const data = nodeSnapshot ? filterByClusterId(nodeSnapshot.rows, selectedClusterId) : null;
-    const lastUpdated = nodeMetricsInfo?.collectedAt
-      ? new Date(nodeMetricsInfo.collectedAt * 1000)
-      : nodeLastUpdated
-        ? new Date(nodeLastUpdated)
-        : null;
-    const stale = Boolean(nodeMetricsInfo?.stale);
-    const effectiveError =
-      nodeStatus === 'error' && nodeError ? nodeError : nodeMetricsInfo?.lastError || null;
+    const lastUpdated = nodeLastUpdated ? new Date(nodeLastUpdated) : null;
+    const effectiveError = nodeStatus === 'error' && nodeError ? nodeError : null;
     const loading = nodeStatus === 'loading' && !nodeSnapshot;
     const refreshing = nodeStatus === 'updating';
     const error = effectiveError ? new Error(effectiveError) : null;
@@ -533,12 +517,12 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       lastFetchTime: lastUpdated,
       hasLoaded: passiveLoading.hasLoaded,
       meta: {
-        metricsStale: stale,
-        metricsLastUpdated: lastUpdated || undefined,
-        metricsError: nodeMetricsInfo?.lastError || undefined,
-        metricsConsecutiveFailures: nodeMetricsInfo?.consecutiveFailures || 0,
-        metricsSuccessCount: nodeMetricsInfo?.successCount ?? 0,
-        metricsFailureCount: nodeMetricsInfo?.failureCount ?? 0,
+        metricsStale: false,
+        metricsLastUpdated: undefined,
+        metricsError: undefined,
+        metricsConsecutiveFailures: 0,
+        metricsSuccessCount: 0,
+        metricsFailureCount: 0,
         podMetricsByNode,
         podMetricsByPod,
       },
@@ -550,12 +534,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     nodeLastUpdated,
     nodeSnapshot,
     nodeStatus,
-    nodeMetricsInfo?.collectedAt,
-    nodeMetricsInfo?.stale,
-    nodeMetricsInfo?.lastError,
-    nodeMetricsInfo?.consecutiveFailures,
-    nodeMetricsInfo?.successCount,
-    nodeMetricsInfo?.failureCount,
     isManualRefreshActive,
     isPaused,
     refreshNodes,

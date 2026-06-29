@@ -78,7 +78,7 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 		search     string
 		predicates []ResourceQueryPredicate
 	}
-	sorts := []string{"", "name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"}
+	sorts := []string{"", "name", "kind", "namespace", "status", "ready", "restarts", "age"}
 	dirs := []string{"asc", "desc"}
 	filts := []filt{
 		{},
@@ -127,6 +127,81 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
+			}
+		}
+	}
+}
+
+func TestWorkloadMetricsQueryViaStoreEquivalent(t *testing.T) {
+	adapter := workloadMetricTableQueryAdapter()
+	baseRows := makeWorkloadRows(250)
+	items := make([]NamespaceWorkloadMetricRow, 0, len(baseRows))
+	for _, base := range baseRows {
+		group, version, resource := workloadIdentityParts(base.Kind)
+		items = append(items, NamespaceWorkloadMetricRow{
+			ClusterMeta: ClusterMeta{ClusterID: "c"},
+			Group:       group,
+			Version:     version,
+			Kind:        base.Kind,
+			Resource:    resource,
+			Namespace:   base.Namespace,
+			Name:        base.Name,
+			RowKey:      workloadTableQueryAdapter().Key(base),
+			Ready:       base.Ready,
+			CPUUsage:    base.CPUUsage,
+			MemUsage:    base.MemUsage,
+			base:        base,
+		})
+	}
+
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow], base typedTableQuery) ([]string, typedTableQueryPage[NamespaceWorkloadMetricRow]) {
+		q := base
+		var keys []string
+		var first typedTableQueryPage[NamespaceWorkloadMetricRow]
+		for i := 0; ; i++ {
+			if i > 1000 {
+				t.Fatal("pagination did not terminate")
+			}
+			page := serve(q)
+			if i == 0 {
+				first = page
+			}
+			for _, r := range page.Rows {
+				keys = append(keys, adapter.Key(r))
+			}
+			if page.Continue == "" {
+				break
+			}
+			q.Request.Continue = page.Continue
+		}
+		return keys, first
+	}
+
+	for _, sf := range []string{"cpu", "memory"} {
+		for _, d := range []string{"asc", "desc"} {
+			base := typedTableQuery{
+				Enabled: true,
+				Request: ResourceQueryRequest{
+					ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
+					Namespaces: []string{"default", "app"},
+					Kinds:      []string{"Deployment", "Pod"},
+					Search:     "wl-0",
+				},
+				DynamicRevision: "metrics-rev-1",
+			}
+			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow] {
+				return applyTypedTableQuery(items, q, adapter)
+			}, base)
+			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow] {
+				return applyTypedTableQueryViaStore(items, q, adapter, workloadMetricQuerypageSchema())
+			}, base)
+
+			label := fmt.Sprintf("sort=%q dir=%s", sf, d)
+			if !slices.Equal(liveKeys, engineKeys) {
+				t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
+			}
+			if liveFirst.Total != engineFirst.Total {
+				t.Fatalf("%s: total live=%d engine=%d", label, liveFirst.Total, engineFirst.Total)
 			}
 		}
 	}

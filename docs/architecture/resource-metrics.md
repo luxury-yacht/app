@@ -27,19 +27,25 @@ they are not object age.
 
 | Consumer | Source |
 | --- | --- |
-| Pod object utilization | `pods` scoped rows |
-| Deployment, DaemonSet, StatefulSet utilization | `namespace-workloads` scoped rows |
-| Deployment, DaemonSet, StatefulSet freshness | current `nodes` scoped metrics metadata |
+| Pod object utilization | `pods-metrics` scoped rows joined with base `pods` rows |
+| Deployment, DaemonSet, StatefulSet utilization | `namespace-workloads-metrics` scoped rows joined with base `namespace-workloads` rows |
+| Deployment, DaemonSet, StatefulSet freshness | `namespace-workloads-metrics` scoped metrics metadata |
 | ReplicaSet utilization | object-detail DTO exception |
-| Node utilization | `nodes` scoped rows |
-| Cluster aggregate utilization | `cluster-overview` scoped payload |
-| Pod tables and embedded pod tables | row value adapters over `PodSnapshotEntry` |
-| Workload tables | row value adapters over namespace workload rows |
-| Node tables | row value adapters over node rows |
+| Node utilization | `nodes-metrics` scoped rows joined with base `nodes` rows |
+| Cluster aggregate utilization | `cluster-overview` scoped payload; out of scope for table metrics decoupling |
+| Pod tables and embedded pod tables | base `pods` rows overlaid with `pods-metrics`; CPU/memory sorts query `pods-metrics` and hydrate base `pods` rows |
+| Workload tables | base `namespace-workloads` rows overlaid with `namespace-workloads-metrics`; CPU/memory sorts query `namespace-workloads-metrics` and hydrate base workload rows |
+| Node tables | base `nodes` rows overlaid with `nodes-metrics`; CPU/memory sorts query `nodes-metrics` and hydrate base node rows |
 
-The first-pass workload freshness source is the active cluster `nodes` domain.
-Moving freshness onto `namespace-workloads` is a behavior change and needs a
-backend payload field plus tests.
+Each metric domain exposes two access shapes over the same refresh-domain data:
+a scoped payload selector for object-sorted table overlays and Object Panel
+utilization, and a keyset query shape for CPU/memory sorts that own page
+membership, ordering, totals, and cursor metadata. Do not create parallel
+frontend metric caches for these shapes.
+
+Workload freshness comes from `namespace-workloads-metrics` metadata. Do not keep
+the previous `nodes` domain freshness lease for workload utilization after
+migrating consumers.
 
 ## ReplicaSet Exception
 
@@ -73,13 +79,12 @@ A strict ReplicaSet unification slice must:
 - Object-panel utilization consumer:
   `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts`
 
-`useResourceMetrics` should lease only the needed scoped domain:
+`useResourceMetrics` should lease only the needed scoped metric domain:
 
-- Pod panels use the `pods` namespace scope because there is no single-pod
+- Pod panels use the `pods-metrics` namespace scope because there is no single-pod
   scope.
-- Workload panels use the `namespace-workloads` namespace scope.
-- Node panels use the `nodes` cluster scope.
-- Workload freshness may add a separate `nodes` cluster-scope lease.
+- Workload panels use the `namespace-workloads-metrics` namespace scope.
+- Node panels use the `nodes-metrics` cluster scope.
 - ReplicaSet panels should not lease a pods workload scope under the current
   row-shape contract.
 

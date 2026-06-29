@@ -188,25 +188,9 @@ func TestPodBuilderNodeScope(t *testing.T) {
 		Spec: appsv1.ReplicaSetSpec{},
 	}
 
-	collectedAt := time.Now().Add(-10 * time.Second)
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, podA, podB),
 		rsLister:  testsupport.NewReplicaSetLister(t, rs),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"default/pod-a": {
-					CPUUsageMilli:    150,
-					MemoryUsageBytes: 196 * 1024 * 1024,
-				},
-			},
-			metadata: metrics.Metadata{
-				CollectedAt:         collectedAt,
-				SuccessCount:        5,
-				FailureCount:        1,
-				LastError:           "",
-				ConsecutiveFailures: 0,
-			},
-		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "node:node-1")
@@ -224,13 +208,10 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
 	require.Equal(t, "apps/v1", first.OwnerAPIVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
-	require.Equal(t, "150m", first.CPUUsage)
-	require.Equal(t, "196 MB", first.MemUsage)
+	require.Equal(t, streamrows.MetricsNoData, first.CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, first.MemUsage)
 	require.True(t, strings.HasPrefix(first.Ready, "1/"))
 
-	require.False(t, payload.Metrics.Stale)
-	require.Equal(t, uint64(5), payload.Metrics.SuccessCount)
-	require.Equal(t, uint64(1), payload.Metrics.FailureCount)
 }
 
 func TestPodBuilderWorkloadScope(t *testing.T) {
@@ -272,7 +253,6 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, pod),
 		rsLister:  testsupport.NewReplicaSetLister(t, rs),
-		metrics:   fakePodMetricsProvider{},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "workload:prod:apps:v1:Deployment:orders")
@@ -365,17 +345,6 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, podA, podB),
 		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-a/team-a-pod-1": {
-					CPUUsageMilli:    25,
-					MemoryUsageBytes: 32 * 1024 * 1024,
-				},
-			},
-			metadata: metrics.Metadata{
-				CollectedAt: now,
-			},
-		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
@@ -389,12 +358,12 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 	require.Equal(t, "team-a", payload.Rows[0].Namespace)
 	require.Equal(t, "team-a-pod-1", payload.Rows[0].Name)
-	require.Equal(t, "25m", payload.Rows[0].CPUUsage)
-	require.Equal(t, "32 MB", payload.Rows[0].MemUsage)
+	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
+	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemUsage)
 	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
 }
 
-func TestPodBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
+func TestPodMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 	now := time.Unix(1000, 0)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -405,33 +374,38 @@ func TestPodBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	builder := &PodBuilder{
+	base := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, pod),
 		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
-			},
-			metadata: metrics.Metadata{CollectedAt: now},
-		},
 	}
+	provider := fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-a/api": {CPUUsageMilli: 25, MemoryUsageBytes: 32 * 1024 * 1024},
+		},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &PodMetricsBuilder{base: base, metrics: provider}
 
 	first, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, uint64(101), first.Version)
-	require.Equal(t, "25m", first.Payload.(PodSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, podMetricsDomainName, first.Domain)
+	require.Equal(t, fmt.Sprintf("%d", now.UnixNano()), first.SourceVersions["metric"])
+	require.Equal(t, "25m", first.Payload.(PodMetricsSnapshot).Rows[0].CPUUsage)
 
-	builder.metrics = fakePodMetricsProvider{
+	provider = fakePodMetricsProvider{
 		usage: map[string]metrics.PodUsage{
 			"team-a/api": {CPUUsageMilli: 75, MemoryUsageBytes: 64 * 1024 * 1024},
 		},
 		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
 	}
+	builder.metrics = provider
 
 	second, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
 	require.Equal(t, first.Version, second.Version)
-	require.Equal(t, "75m", second.Payload.(PodSnapshot).Rows[0].CPUUsage)
+	require.Equal(t, fmt.Sprintf("%d", now.Add(5*time.Second).UnixNano()), second.SourceVersions["metric"])
+	require.Equal(t, "75m", second.Payload.(PodMetricsSnapshot).Rows[0].CPUUsage)
 }
 
 func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodUsage, time.Time) {
@@ -476,11 +450,10 @@ func benchmarkPods(tb testing.TB, n int) ([]*corev1.Pod, map[string]metrics.PodU
 // BenchmarkPodBuilderBuildCold measures one full query build (project every pod)
 // for a large scope — the cold-open / cache-miss cost we'd target with an index.
 func BenchmarkPodBuilderBuildCold(b *testing.B) {
-	pods, usage, now := benchmarkPods(b, 10000)
+	pods, _, _ := benchmarkPods(b, 10000)
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(b, pods...),
 		rsLister:  testsupport.NewReplicaSetLister(b),
-		metrics:   fakePodMetricsProvider{usage: usage, metadata: metrics.Metadata{CollectedAt: now}},
 	}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
 	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
@@ -580,7 +553,6 @@ func TestPodBuilderReportsScopeCounts(t *testing.T) {
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, healthy("ok-1"), healthy("ok-2"), evicted),
 		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics:   fakePodMetricsProvider{metadata: metrics.Metadata{CollectedAt: now}},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
@@ -618,12 +590,6 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	builder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, podA, podB),
 		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{},
-			metadata: metrics.Metadata{
-				CollectedAt: now,
-			},
-		},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -667,9 +633,12 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 		},
 	}
 
-	builder := &PodBuilder{
+	base := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, pods...),
 		rsLister:  testsupport.NewReplicaSetLister(t),
+	}
+	builder := &PodMetricsBuilder{
+		base: base,
 		metrics: fakePodMetricsProvider{
 			usage: map[string]metrics.PodUsage{
 				"team-a/alpha":   {CPUUsageMilli: 25},
@@ -682,7 +651,7 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 
 	snapshot, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1")
 	require.NoError(t, err)
-	payload := snapshot.Payload.(PodSnapshot)
+	payload := snapshot.Payload.(PodMetricsSnapshot)
 	require.Equal(t, 2, payload.Total)
 	require.True(t, payload.TotalIsExact)
 	require.Equal(t, []string{"team-b"}, payload.Namespaces)
@@ -693,7 +662,7 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1&continue="+payload.Continue)
 	require.NoError(t, err)
-	nextPayload := next.Payload.(PodSnapshot)
+	nextPayload := next.Payload.(PodMetricsSnapshot)
 	require.Len(t, nextPayload.Rows, 1)
 	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
 	require.Empty(t, nextPayload.Continue)
@@ -720,36 +689,38 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 		},
 	}
 
-	builder := &PodBuilder{
+	base := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, pods...),
 		rsLister:  testsupport.NewReplicaSetLister(t),
-		metrics: fakePodMetricsProvider{
-			usage: map[string]metrics.PodUsage{
-				"team-b/bravo":   {CPUUsageMilli: 300},
-				"team-b/charlie": {CPUUsageMilli: 100},
-			},
-			metadata: metrics.Metadata{CollectedAt: now},
-		},
 	}
+	provider := fakePodMetricsProvider{
+		usage: map[string]metrics.PodUsage{
+			"team-b/bravo":   {CPUUsageMilli: 300},
+			"team-b/charlie": {CPUUsageMilli: 100},
+		},
+		metadata: metrics.Metadata{CollectedAt: now},
+	}
+	builder := &PodMetricsBuilder{base: base, metrics: provider}
 
 	first, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1")
 	require.NoError(t, err)
-	firstPayload := first.Payload.(PodSnapshot)
+	firstPayload := first.Payload.(PodMetricsSnapshot)
 	require.Len(t, firstPayload.Rows, 1)
 	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
 	require.NotEmpty(t, firstPayload.Continue)
 
-	builder.metrics = fakePodMetricsProvider{
+	provider = fakePodMetricsProvider{
 		usage: map[string]metrics.PodUsage{
 			"team-b/bravo":   {CPUUsageMilli: 320},
 			"team-b/charlie": {CPUUsageMilli: 110},
 		},
 		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
 	}
+	builder.metrics = provider
 
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?sort=cpu&sortDirection=desc&limit=1&continue="+firstPayload.Continue)
 	require.NoError(t, err)
-	nextPayload := next.Payload.(PodSnapshot)
+	nextPayload := next.Payload.(PodMetricsSnapshot)
 	require.False(t, nextPayload.CursorInvalid)
 	require.Len(t, nextPayload.Rows, 1)
 	require.Equal(t, "charlie", nextPayload.Rows[0].Name)

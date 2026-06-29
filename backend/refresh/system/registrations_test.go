@@ -467,7 +467,7 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
 	descriptors := resourcestream.ProjectionDescriptors()
-	metricDomains := map[string]bool{"pods": true, "namespace-workloads": true, "nodes": true}
+	metricDomains := map[string]bool{}
 	validSources := map[string]bool{"object": true, "metric": true, "event": true, "catalog": true}
 
 	for _, entry := range contract.Domains {

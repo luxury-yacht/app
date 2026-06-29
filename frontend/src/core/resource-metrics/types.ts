@@ -10,7 +10,13 @@ export type ResourceMetricsSource =
 
 export type ResourceMetricsDomain = Extract<
   RefreshDomain,
-  'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview'
+  | 'pods'
+  | 'pods-metrics'
+  | 'namespace-workloads'
+  | 'namespace-workloads-metrics'
+  | 'nodes'
+  | 'nodes-metrics'
+  | 'cluster-overview'
 >;
 
 export interface ResourceMetricValues {
@@ -53,10 +59,13 @@ export interface ResourceMetricsData {
 export interface DomainResourceMetricsResolution {
   kind: 'domain';
   source: Extract<ResourceMetricsSource, 'pods' | 'namespace-workloads' | 'nodes'>;
-  domain: Extract<ResourceMetricsDomain, 'pods' | 'namespace-workloads' | 'nodes'>;
+  domain: Extract<
+    ResourceMetricsDomain,
+    'pods-metrics' | 'namespace-workloads-metrics' | 'nodes-metrics'
+  >;
   scope: string;
-  freshnessDomain?: Extract<ResourceMetricsDomain, 'nodes'>;
-  freshnessScope?: string;
+  baseDomain: Extract<ResourceMetricsDomain, 'pods' | 'namespace-workloads' | 'nodes'>;
+  baseScope: string;
 }
 
 export interface DetailExceptionResourceMetricsResolution {

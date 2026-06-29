@@ -23,7 +23,13 @@ import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
-import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
+import type {
+  PodMetricEntry,
+  PodMetricsInfo,
+  PodMetricsSnapshotPayload,
+  PodSnapshotEntry,
+  PodSnapshotPayload,
+} from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -62,8 +68,22 @@ const COLUMN_SIZING: ColumnSizingMap = {
   age: { autoWidth: true },
 };
 
+const METRIC_NO_DATA = '-';
+
 const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
   pod.ownerName ? `${pod.ownerName}${pod.ownerKind ? ` (${pod.ownerKind})` : ''}` : '—';
+
+const podMetricRowKey = (pod: Pick<PodSnapshotEntry, 'namespace' | 'name'>): string =>
+  `${pod.namespace ?? ''}/${pod.name ?? ''}`.toLowerCase();
+
+const mergePodMetric = (
+  pod: PodSnapshotEntry,
+  metric: PodMetricEntry | undefined
+): PodSnapshotEntry => ({
+  ...pod,
+  cpuUsage: metric?.cpuUsage ?? METRIC_NO_DATA,
+  memUsage: metric?.memUsage ?? METRIC_NO_DATA,
+});
 
 export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
@@ -254,28 +274,40 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     navigatePod,
   ]);
 
-  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
-    PodSnapshotPayload,
-    PodSnapshotEntry
-  >({
-    queryTableMode: 'Query Backed Dynamic',
-    clusterId: queryClusterId,
-    domain: 'pods',
-    label: 'Object Panel Pods',
-    baseScope: podsScope ?? undefined,
-    selectRows: selectPayloadRows,
-    viewId: 'object-panel-pods',
-    columns,
-    objectIdentity: podIdentity,
-    diagnosticsLabel: 'Object Panel Pods',
-    showKindDropdown: false,
-    // Object-panel pods are already scoped to one workload/node; the namespace
-    // filter UI is not applicable here.
-    filterOptions: { isNamespaceScoped: false },
-  });
+  const metricOverlay = useMemo(
+    () => ({
+      domain: 'pods-metrics' as const,
+      label: 'Object Panel Pod Metrics',
+      selectRows: (payload: unknown) => (payload as PodMetricsSnapshotPayload).rows ?? [],
+      getBaseRowKey: podMetricRowKey,
+      getMetricRowKey: (row: unknown) => (row as PodMetricEntry).rowKey,
+      mergeMetric: (row: PodSnapshotEntry, metric: unknown) =>
+        mergePodMetric(row, metric as PodMetricEntry | undefined),
+    }),
+    []
+  );
 
-  // Payload-scoped metrics: same snapshot as the rows, same cluster.
-  const effectiveMetrics = queryPayload?.metrics ?? null;
+  const { gridTableProps, favModal, source, metricPayload } =
+    useQueryBackedClusterResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
+      queryTableMode: 'Query Backed Dynamic',
+      clusterId: queryClusterId,
+      domain: 'pods',
+      label: 'Object Panel Pods',
+      metricOverlay,
+      baseScope: podsScope ?? undefined,
+      selectRows: selectPayloadRows,
+      viewId: 'object-panel-pods',
+      columns,
+      objectIdentity: podIdentity,
+      diagnosticsLabel: 'Object Panel Pods',
+      showKindDropdown: false,
+      // Object-panel pods are already scoped to one workload/node; the namespace
+      // filter UI is not applicable here.
+      filterOptions: { isNamespaceScoped: false },
+    });
+
+  const podsMetricPayload = metricPayload as PodMetricsSnapshotPayload | null | undefined;
+  const effectiveMetrics = podsMetricPayload?.metrics ?? null;
   metricsRef.current = effectiveMetrics;
   const metricsBanner = useMemo(() => getMetricsBannerInfo(effectiveMetrics), [effectiveMetrics]);
 

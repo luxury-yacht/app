@@ -391,7 +391,7 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		})
 	})
 
-	t.Run("pod relationship and metric columns", func(t *testing.T) {
+	t.Run("pod relationship columns", func(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "owner"
 		page := applyTypedTableQuery([]PodSummary{
@@ -419,27 +419,30 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		requirePageNames(t, page.Rows, []string{"less-ready-pod", "more-ready-pod"}, func(row PodSummary) string {
 			return row.Name
 		})
+	})
 
+	t.Run("pod metric columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
 		query.Request.SortField = "cpu"
-		page = applyTypedTableQuery([]PodSummary{
-			{Name: "high-cpu-pod", CPUUsage: "250m"},
-			{Name: "low-cpu-pod", CPUUsage: "50m"},
-		}, query, podTableQueryAdapter())
-		requirePageNames(t, page.Rows, []string{"low-cpu-pod", "high-cpu-pod"}, func(row PodSummary) string {
+		page := applyTypedTableQuery([]PodMetricRow{
+			{Name: "high-cpu-pod", RowKey: "default/high-cpu-pod", CPUUsage: "250m", base: PodSummary{Name: "high-cpu-pod", Namespace: "default"}},
+			{Name: "low-cpu-pod", RowKey: "default/low-cpu-pod", CPUUsage: "50m", base: PodSummary{Name: "low-cpu-pod", Namespace: "default"}},
+		}, query, podMetricTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-cpu-pod", "high-cpu-pod"}, func(row PodMetricRow) string {
 			return row.Name
 		})
 
 		query.Request.SortField = "memory"
-		page = applyTypedTableQuery([]PodSummary{
-			{Name: "high-memory-pod", MemUsage: "256Mi"},
-			{Name: "low-memory-pod", MemUsage: "64Mi"},
-		}, query, podTableQueryAdapter())
-		requirePageNames(t, page.Rows, []string{"low-memory-pod", "high-memory-pod"}, func(row PodSummary) string {
+		page = applyTypedTableQuery([]PodMetricRow{
+			{Name: "high-memory-pod", RowKey: "default/high-memory-pod", MemUsage: "256Mi", base: PodSummary{Name: "high-memory-pod", Namespace: "default"}},
+			{Name: "low-memory-pod", RowKey: "default/low-memory-pod", MemUsage: "64Mi", base: PodSummary{Name: "low-memory-pod", Namespace: "default"}},
+		}, query, podMetricTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-memory-pod", "high-memory-pod"}, func(row PodMetricRow) string {
 			return row.Name
 		})
 	})
 
-	t.Run("workload metric columns", func(t *testing.T) {
+	t.Run("workload base columns", func(t *testing.T) {
 		query.BaseScope = "namespace:all"
 		query.Request.SortField = "ready"
 		page := applyTypedTableQuery([]WorkloadSummary{
@@ -449,22 +452,25 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 		requirePageNames(t, page.Rows, []string{"less-ready-workload", "more-ready-workload"}, func(row WorkloadSummary) string {
 			return row.Name
 		})
+	})
 
+	t.Run("workload metric columns", func(t *testing.T) {
+		query.BaseScope = "namespace:all"
 		query.Request.SortField = "cpu"
-		page = applyTypedTableQuery([]WorkloadSummary{
-			{Name: "high-cpu-workload", CPUUsage: "250m"},
-			{Name: "low-cpu-workload", CPUUsage: "50m"},
-		}, query, workloadTableQueryAdapter())
-		requirePageNames(t, page.Rows, []string{"low-cpu-workload", "high-cpu-workload"}, func(row WorkloadSummary) string {
+		page := applyTypedTableQuery([]NamespaceWorkloadMetricRow{
+			{Name: "high-cpu-workload", RowKey: "deployment/default/high-cpu-workload", CPUUsage: "250m", base: WorkloadSummary{Kind: "Deployment", Name: "high-cpu-workload", Namespace: "default"}},
+			{Name: "low-cpu-workload", RowKey: "deployment/default/low-cpu-workload", CPUUsage: "50m", base: WorkloadSummary{Kind: "Deployment", Name: "low-cpu-workload", Namespace: "default"}},
+		}, query, workloadMetricTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-cpu-workload", "high-cpu-workload"}, func(row NamespaceWorkloadMetricRow) string {
 			return row.Name
 		})
 
 		query.Request.SortField = "memory"
-		page = applyTypedTableQuery([]WorkloadSummary{
-			{Name: "high-memory-workload", MemUsage: "256Mi"},
-			{Name: "low-memory-workload", MemUsage: "64Mi"},
-		}, query, workloadTableQueryAdapter())
-		requirePageNames(t, page.Rows, []string{"low-memory-workload", "high-memory-workload"}, func(row WorkloadSummary) string {
+		page = applyTypedTableQuery([]NamespaceWorkloadMetricRow{
+			{Name: "high-memory-workload", RowKey: "deployment/default/high-memory-workload", MemUsage: "256Mi", base: WorkloadSummary{Kind: "Deployment", Name: "high-memory-workload", Namespace: "default"}},
+			{Name: "low-memory-workload", RowKey: "deployment/default/low-memory-workload", MemUsage: "64Mi", base: WorkloadSummary{Kind: "Deployment", Name: "low-memory-workload", Namespace: "default"}},
+		}, query, workloadMetricTableQueryAdapter())
+		requirePageNames(t, page.Rows, []string{"low-memory-workload", "high-memory-workload"}, func(row NamespaceWorkloadMetricRow) string {
 			return row.Name
 		})
 	})

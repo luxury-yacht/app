@@ -61,7 +61,6 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 	listBuilder := &PodBuilder{
 		podLister: testsupport.NewPodLister(t, pods...),
 		rsLister:  rsLister,
-		metrics:   fakePodMetricsProvider{},
 		projCache: newPodProjectionCache(),
 	}
 
@@ -74,7 +73,6 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 		sink.Upsert(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
 	}
 	storeBuilder := &PodBuilder{
-		metrics:    fakePodMetricsProvider{},
 		maintained: maintained,
 	}
 

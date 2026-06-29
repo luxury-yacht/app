@@ -84,7 +84,9 @@ const state: RefreshStoreState = {
     // Scoped domains use scopedDomains map below; these entries exist for type safety.
     // They are never read for scoped domains at runtime.
     nodes: createInitialDomainState(),
+    'nodes-metrics': createInitialDomainState(),
     pods: createInitialDomainState(),
+    'pods-metrics': createInitialDomainState(),
     'object-details': createInitialDomainState(),
     'object-events': createInitialDomainState(),
     'object-map': createInitialDomainState(),
@@ -101,6 +103,7 @@ const state: RefreshStoreState = {
     catalog: createInitialDomainState(),
     'catalog-diff': createInitialDomainState(),
     'namespace-workloads': createInitialDomainState(),
+    'namespace-workloads-metrics': createInitialDomainState(),
     'namespace-config': createInitialDomainState(),
     'namespace-network': createInitialDomainState(),
     'namespace-rbac': createInitialDomainState(),
