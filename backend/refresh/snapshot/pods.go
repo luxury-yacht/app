@@ -51,7 +51,7 @@ type PodBuilder struct {
 }
 
 // newPodBuilder wires a PodBuilder with the projection memo cache enabled.
-func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister, _ metrics.Provider) *PodBuilder {
+func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
 	return &PodBuilder{
 		podLister:  podLister,
 		podIndexer: podIndexer,
@@ -60,17 +60,13 @@ func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rs
 	}
 }
 
-// projectPod returns a pod row from the object plus the explicit usage map supplied by
-// the caller. Base pod snapshots pass an empty usage map; pods-metrics passes the latest
-// metrics sample.
-func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[string]metrics.PodUsage, rsMap map[string]string) PodSummary {
-	usage, ok := podUsage[pod.Namespace+"/"+pod.Name]
+func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, rsMap map[string]string) PodSummary {
 	build := func() PodSummary {
 		project := b.buildSummary
 		if project == nil {
 			project = podres.BuildStreamSummaryFromRSMap
 		}
-		return project(meta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, rsMap)
+		return project(meta, pod, 0, 0, rsMap)
 	}
 	var summary PodSummary
 	if b.projCache == nil {
@@ -78,9 +74,12 @@ func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, podUsage map[
 	} else {
 		summary = b.projCache.summaryFor(string(pod.UID), pod.ResourceVersion, build)
 	}
-	creationMillis := streamrows.CreationMillis(pod)
-	summary.CPUUsage = formatPodMetricCPU(usage, ok, creationMillis)
-	summary.MemUsage = formatPodMetricMemory(usage, ok, creationMillis)
+	return podSummaryWithoutMetrics(summary)
+}
+
+func podSummaryWithoutMetrics(summary PodSummary) PodSummary {
+	summary.CPUUsage = streamrows.MetricsNoData
+	summary.MemUsage = streamrows.MetricsNoData
 	return summary
 }
 
@@ -268,7 +267,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, err
 	}
 
-	summaries, version, err := b.collectSummaries(meta, baseScope, map[string]metrics.PodUsage{})
+	summaries, version, err := b.collectSummaries(meta, baseScope)
 	if err != nil {
 		return nil, err
 	}
@@ -331,16 +330,13 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 // collectSummaries returns the in-scope pod rows and the snapshot version. When the
 // builder has no typed pod lister (the production, ingest-fed path) every scope —
 // namespace, node, and workload — is served straight from the maintained store. The
-// store rows carry the resolved Node and owner the node/workload scopes filter by, so
-// they need no typed pod. pods-metrics supplies a non-empty podUsage map when it needs
-// usage fields.
-func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
+// store rows carry the resolved Node and owner the node/workload scopes filter by.
+func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string) ([]PodSummary, uint64, error) {
 	if b.podLister == nil && b.maintained != nil {
-		return b.collectSummariesFromStore(baseScope, podUsage)
+		return b.collectSummariesFromStore(baseScope)
 	}
 	if namespace, ok := podStoreServableNamespace(baseScope); ok && b.maintained != nil {
 		rows := b.maintained.rows(namespace, map[string]bool{podres.Identity.Kind: true})
-		overlayPodMetrics(rows, podUsage)
 		return rows, b.maintained.snapshotVersion(), nil
 	}
 
@@ -361,7 +357,7 @@ func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsa
 		if pod == nil {
 			continue
 		}
-		summaries = append(summaries, b.projectPod(meta, pod, podUsage, rsMap))
+		summaries = append(summaries, b.projectPod(meta, pod, rsMap))
 		if v := parsePodResourceVersion(pod); v > version {
 			version = v
 		}
@@ -375,13 +371,12 @@ func (b *PodBuilder) collectSummaries(meta ClusterMeta, baseScope string, podUsa
 // version. The filters read only the resolved fields the rows already carry — Node for
 // the node scope, the RS->Deployment-resolved owner for the workload scope — so the
 // result matches the typed-lister list path.
-func (b *PodBuilder) collectSummariesFromStore(baseScope string, podUsage map[string]metrics.PodUsage) ([]PodSummary, uint64, error) {
+func (b *PodBuilder) collectSummariesFromStore(baseScope string) ([]PodSummary, uint64, error) {
 	all := b.maintained.rows("", map[string]bool{podres.Identity.Kind: true})
 	rows, err := filterPodRowsByScope(all, baseScope)
 	if err != nil {
 		return nil, 0, err
 	}
-	overlayPodMetrics(rows, podUsage)
 	return rows, b.maintained.snapshotVersion(), nil
 }
 

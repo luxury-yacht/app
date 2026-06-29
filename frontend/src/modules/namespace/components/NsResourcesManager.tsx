@@ -10,7 +10,6 @@ import {
   useNamespaceResource,
   useNamespaceResources,
 } from '@modules/namespace/contexts/NsResourcesContext';
-import type { PodsResourceDataReturn } from '@modules/namespace/contexts/NsResourcesContext';
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';
 
@@ -250,15 +249,11 @@ export function NamespaceResourcesManager({
     void triggerLoad();
   }, [namespace, activeTab, manualLoaders, resourceStates]);
 
-  const podsMetrics = pods && 'metrics' in pods ? (pods as PodsResourceDataReturn).metrics : null;
-
   return (
     <NamespaceResourcesViews
       namespace={namespace}
       activeTab={activeTab || 'workloads'}
       onTabChange={onTabChange}
-      // Pods metrics (pod rows are query-backed)
-      nsPodsMetrics={podsMetrics}
       // Workloads data
       // Config data
       // Network data

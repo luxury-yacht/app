@@ -235,7 +235,7 @@ func (b *PodMetricsBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	if err != nil {
 		return nil, err
 	}
-	baseRows, version, err := b.base.collectSummaries(meta, baseScope, map[string]metrics.PodUsage{})
+	baseRows, version, err := b.base.collectSummaries(meta, baseScope)
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 	"time"
 
@@ -82,37 +81,6 @@ func TestPollerRefreshSuccess(t *testing.T) {
 	require.Equal(t, uint64(1), summary.Metrics.SuccessCount)
 	require.Zero(t, summary.Metrics.ConsecutiveFailures)
 	require.Empty(t, summary.Metrics.LastError)
-}
-
-func TestPollerRefreshSuccessNotifiesObserverWithMetricsRevision(t *testing.T) {
-	ctx := context.Background()
-	nodeList := &metricsv1beta1.NodeMetricsList{}
-	podList := &metricsv1beta1.PodMetricsList{}
-
-	poller := NewPoller(nil, nil, time.Second, nil)
-	poller.client = &metricsclient.Clientset{}
-	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
-	poller.maxRetry = 1
-	poller.maxBackoff = time.Millisecond
-	poller.jitterFactor = 0
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
-		return nodeList, nil
-	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
-		return podList, nil
-	}
-
-	var observedRevision string
-	var observed Metadata
-	poller.SetSuccessObserver(func(revision string, meta Metadata) {
-		observedRevision = revision
-		observed = meta
-	})
-
-	require.NoError(t, poller.refresh(ctx))
-	require.False(t, observed.CollectedAt.IsZero())
-	require.Equal(t, uint64(1), observed.SuccessCount)
-	require.Equal(t, strconv.FormatInt(observed.CollectedAt.UnixNano(), 10), observedRevision)
 }
 
 func TestPollerRefreshHandlesPodMetricsFailure(t *testing.T) {

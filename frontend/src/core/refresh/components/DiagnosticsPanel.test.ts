@@ -575,6 +575,10 @@ describe('DiagnosticsPanel component', () => {
 
     expect(markup).toContain('Cluster Overview');
     expect(markup).toContain('OK (5 polls)');
+    const nodesRow = Array.from(
+      rendered.container.querySelectorAll('.diagnostics-table tbody tr')
+    ).find((row) => row.querySelector('td')?.textContent?.includes('Nodes'));
+    expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('—');
 
     const clusterIndex = markup.indexOf('Cluster Overview');
     const podsIndex = markup.indexOf('Pods');

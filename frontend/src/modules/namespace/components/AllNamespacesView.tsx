@@ -20,10 +20,7 @@ import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import BrowseView from '@modules/browse/components/BrowseView';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import {
-  useNamespaceResource,
-  useNamespaceResources,
-} from '@modules/namespace/contexts/NsResourcesContext';
+import { useNamespaceResource } from '@modules/namespace/contexts/NsResourcesContext';
 
 const AllNamespacesConfigView: React.FC = () => {
   const configResource = useNamespaceResource('config');
@@ -161,15 +158,7 @@ const AllNamespacesHelmView: React.FC = () => {
 };
 
 const AllNamespacesPodsView: React.FC = () => {
-  const { pods: podsResource } = useNamespaceResources();
-
-  return (
-    <NsViewPods
-      namespace={ALL_NAMESPACES_SCOPE}
-      showNamespaceColumn
-      metrics={podsResource.metrics}
-    />
-  );
+  return <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
 };
 
 const AllNamespacesWorkloadsView: React.FC = () => {

@@ -41,7 +41,7 @@ import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { useViewState } from '@/core/contexts/ViewStateContext';
-import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
+import type { PodSnapshotEntry } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -53,12 +53,8 @@ import {
 import { createCatalogBackedCustomResourceHandle } from '@modules/browse/catalogBackedCustomResourceHandle';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
-export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
-  metrics: PodMetricsInfo | null;
-}
-
 interface NamespaceResourcesContextType {
-  pods: PodsResourceDataReturn;
+  pods: ResourceDataReturn<PodSnapshotEntry[]>;
   workloads: ResourceDataReturn<any[]>;
   config: ResourceDataReturn<any[]>;
   network: ResourceDataReturn<any[]>;
@@ -169,7 +165,7 @@ const useNamespacePodsResource = (
   clusterId?: string | null,
   isPaused: boolean = false,
   isManualRefreshActive: boolean = false
-): PodsResourceDataReturn => {
+): ResourceDataReturn<PodSnapshotEntry[]> => {
   const scope = useMemo(
     () => normalizeNamespaceScope(namespace, clusterId),
     [clusterId, namespace]
@@ -233,8 +229,6 @@ const useNamespacePodsResource = (
     isPaused,
     isManualRefreshActive,
   });
-  const metrics = null;
-
   return useMemo(
     () => ({
       data: stableData,
@@ -252,13 +246,11 @@ const useNamespacePodsResource = (
       cancel: reset,
       lastFetchTime: domainState?.lastUpdated ? new Date(domainState.lastUpdated) : null,
       hasLoaded: passiveLoading.hasLoaded,
-      metrics,
     }),
     [
       domainState?.error,
       domainState?.lastUpdated,
       enabled,
-      metrics,
       passiveLoading.hasLoaded,
       passiveLoading.loading,
       refresh,

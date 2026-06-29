@@ -219,8 +219,8 @@ func TestPodMetricsQueryViaStoreEquivalent(t *testing.T) {
 	}
 }
 
-// TestPodMaintainedIngestOverlayMatchesProject proves that zeroed-metric ingest
-// into the store followed by a serve-time metrics overlay yields a PodSummary
+// TestPodMaintainedIngestOverlayMatchesProject proves that no-data metric ingest
+// into the store followed by a metrics-domain overlay yields a PodSummary
 // identical, field-for-field, to the live projection that builds the row with the
 // real cpu/mem values inline. This is the correctness precondition for keeping
 // metrics OUTSIDE the store.
@@ -263,20 +263,20 @@ func TestPodMaintainedIngestOverlayMatchesProject(t *testing.T) {
 	// OLD: project the row with the real metrics inline.
 	live := podres.BuildStreamSummary(meta, pod, cpuMilli, memBytes, rs)
 
-	// NEW: project with metrics ZEROED (what the informer feeds the store), then
-	// overlay the same metrics at serve time exactly as the maintained serve path does.
-	stored := podres.BuildStreamSummary(meta, pod, 0, 0, rs)
+	// NEW: project with no-data metrics (what the informer feeds the store), then
+	// overlay the same metrics exactly as the metrics-domain serve path does.
+	stored := podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, pod, 0, 0, rs))
 	stored.CPUUsage = streamrows.FormatCPUMilli(cpuMilli)
 	stored.MemUsage = streamrows.FormatMemoryBytes(memBytes)
 
-	require.Equal(t, live, stored, "zeroed ingest + serve overlay must equal live projection")
+	require.Equal(t, live, stored, "no-data ingest + metrics overlay must equal live projection")
 }
 
 // TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics drives the
-// actual maintained-store serve path: a builder whose store holds zeroed-metric
-// rows must serve a namespace scope from RAM (no lister), overlaying the FRESH
-// metrics sample at serve. Re-serving after the metrics change must reflect the new
-// values without re-ingesting — proving metrics are NOT stored.
+// actual pod-metrics maintained-store serve path: a builder whose store holds no-data
+// metric rows must serve a namespace scope from RAM (no lister), overlaying the FRESH
+// metrics sample. Re-serving after the metrics change must reflect the new values
+// without re-ingesting — proving metrics are NOT stored.
 func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
 	now := time.Now()
@@ -298,8 +298,8 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
 	rs := testsupport.NewReplicaSetLister(t)
 	for _, p := range []*corev1.Pod{mkPod("alpha"), mkPod("bravo")} {
-		// Ingest the row with metrics ZEROED, exactly as the informer handler does.
-		maintained.upsertRow(podres.BuildStreamSummary(meta, p, 0, 0, rs), p)
+		// Ingest the no-data metric row, exactly as the informer handler does.
+		maintained.upsertRow(podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, p, 0, 0, rs)), p)
 	}
 
 	base := &PodBuilder{

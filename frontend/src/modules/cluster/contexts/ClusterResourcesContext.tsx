@@ -49,7 +49,6 @@ import type {
   ClusterEventEntry,
   DomainPayloadMap,
   RefreshDomain,
-  NodePodMetric,
 } from '@/core/refresh/types';
 import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
@@ -479,23 +478,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     const loading = nodeStatus === 'loading' && !nodeSnapshot;
     const refreshing = nodeStatus === 'updating';
     const error = effectiveError ? new Error(effectiveError) : null;
-    const podMetricsByNode: Record<string, Record<string, NodePodMetric>> = {};
-    const podMetricsByPod: Record<string, NodePodMetric> = {};
-    data?.forEach((node) => {
-      if (!node.podMetrics || node.podMetrics.length === 0) {
-        return;
-      }
-      podMetricsByNode[node.name] = node.podMetrics.reduce<Record<string, NodePodMetric>>(
-        (acc, metric) => {
-          const key = `${metric.namespace}/${metric.name}`;
-          acc[key] = metric;
-          podMetricsByPod[key] = metric;
-          return acc;
-        },
-        {}
-      );
-    });
-
     const isInitialising =
       nodeStatus === 'idle' || nodeStatus === 'initialising' || nodeStatus === 'loading';
     const passiveLoading = applyPassiveLoadingPolicy({
@@ -516,16 +498,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       cancel: cancelNodes,
       lastFetchTime: lastUpdated,
       hasLoaded: passiveLoading.hasLoaded,
-      meta: {
-        metricsStale: false,
-        metricsLastUpdated: undefined,
-        metricsError: undefined,
-        metricsConsecutiveFailures: 0,
-        metricsSuccessCount: 0,
-        metricsFailureCount: 0,
-        podMetricsByNode,
-        podMetricsByPod,
-      },
     };
   }, [
     cancelNodes,

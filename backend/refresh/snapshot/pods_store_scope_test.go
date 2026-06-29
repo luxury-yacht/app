@@ -15,7 +15,7 @@ import (
 
 // TestPodBuilderStoreServedScopesMatchListPath proves the store-served node and
 // workload scopes (production, no typed lister) return rows byte-identical to the
-// typed-lister list path. The store builder is fed the SAME zeroed-metrics PodSummary
+// typed-lister list path. The store builder is fed the SAME no-data-metrics PodSummary
 // rows the pod reflector projects; the list builder reads the typed lister. Both serve
 // the same scope and must produce identical rows.
 func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
@@ -64,13 +64,13 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 		projCache: newPodProjectionCache(),
 	}
 
-	// Store builder: production path. Feed the maintained store the SAME zeroed-metrics
+	// Store builder: production path. Feed the maintained store the SAME no-data-metrics
 	// PodSummary rows the pod reflector projects (Sink carries the Table half).
 	maintained := newTypedMaintainedStore(meta, podQuerypageSchema(), podTableQueryAdapter())
 	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
 	sink := maintained.Sink()
 	for _, pod := range pods {
-		sink.Upsert(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
+		sink.Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister)))
 	}
 	storeBuilder := &PodBuilder{
 		maintained: maintained,

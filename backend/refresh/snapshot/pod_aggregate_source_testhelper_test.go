@@ -221,7 +221,7 @@ func newFakePodWorkloadsIngestSource(meta ClusterMeta, rsLister appslisters.Repl
 			continue
 		}
 		bundles = append(bundles, ingest.Bundle{
-			Table:     podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister),
+			Table:     podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister)),
 			Aggregate: projectPodAggregate(pod, rsLister),
 		})
 		if rv, err := strconv.ParseUint(pod.ResourceVersion, 10, 64); err == nil && rv > maxRV {

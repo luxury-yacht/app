@@ -602,7 +602,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         {
           domain: 'nodes' as RefreshDomain,
           label: 'Nodes',
-          hasMetrics: true,
+          hasMetrics: false,
           entries: nodeScopeEntries,
         },
         {

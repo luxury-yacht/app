@@ -12,8 +12,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { NamespaceViewType } from '@/types/navigation/views';
-import type { PodsResourceDataReturn } from '@modules/namespace/contexts/NsResourcesContext';
-import type { PodMetricsInfo } from '@/core/refresh/types';
 
 const clientMocks = vi.hoisted(() => ({
   fetchSnapshotMock: vi.fn(),
@@ -59,26 +57,9 @@ vi.mock('@modules/namespace/components/NsViewHelm', () => hoistedMocks.makeMock(
 vi.mock('@modules/namespace/components/NsViewEvents', () => hoistedMocks.makeMock('events-view'));
 
 const namespaceResourcesMocks = vi.hoisted(() => {
-  const createPodsResource = (): PodsResourceDataReturn => ({
-    data: [],
-    loading: false,
-    refreshing: false,
-    hasLoaded: false,
-    error: null,
-    load: vi.fn(),
-    refresh: vi.fn(),
-    reset: vi.fn(),
-    cancel: vi.fn(),
-    lastFetchTime: null,
-    metrics: null,
-  });
-
   return {
     providerProps: [] as Array<Record<string, unknown>>,
     useNamespaceResourceMock: vi.fn(),
-    useNamespaceResourcesMock: vi.fn<() => { pods: PodsResourceDataReturn }>(() => ({
-      pods: createPodsResource(),
-    })),
   };
 });
 
@@ -89,7 +70,6 @@ vi.mock('@modules/namespace/contexts/NsResourcesContext', () => ({
   },
   useNamespaceResource: (resourceKey: string) =>
     namespaceResourcesMocks.useNamespaceResourceMock(resourceKey),
-  useNamespaceResources: () => namespaceResourcesMocks.useNamespaceResourcesMock(),
 }));
 
 describe('AllNamespacesView', () => {
@@ -105,7 +85,6 @@ describe('AllNamespacesView', () => {
     Object.values(viewRenderers).forEach((mock) => mock.mockReset());
     namespaceResourcesMocks.providerProps.length = 0;
     namespaceResourcesMocks.useNamespaceResourceMock.mockReset();
-    namespaceResourcesMocks.useNamespaceResourcesMock.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -143,63 +122,15 @@ describe('AllNamespacesView', () => {
     });
   };
 
-  it('renders pods view using namespace resources provider with metrics', async () => {
-    const samplePods = [
-      {
-        clusterId: 'test-cluster',
-        name: 'api-123',
-        namespace: 'team-a',
-        status: 'Running',
-        ready: '1/1',
-        restarts: 0,
-        ownerKind: 'Deployment',
-        ownerName: 'api',
-        node: 'node-a',
-        cpuUsage: '10m',
-        cpuRequest: '50m',
-        cpuLimit: '200m',
-        memUsage: '40Mi',
-        memRequest: '128Mi',
-        memLimit: '256Mi',
-        age: '5m',
-      },
-    ];
-    const metrics: PodMetricsInfo = {
-      stale: false,
-      lastError: undefined,
-      collectedAt: Date.now(),
-      successCount: 1,
-      failureCount: 0,
-    };
-
-    const podsResource: PodsResourceDataReturn = {
-      data: samplePods,
-      loading: false,
-      refreshing: false,
-      hasLoaded: true,
-      error: null,
-      load: vi.fn(),
-      refresh: vi.fn(),
-      reset: vi.fn(),
-      cancel: vi.fn(),
-      lastFetchTime: null,
-      metrics,
-    };
-
-    namespaceResourcesMocks.useNamespaceResourcesMock.mockReturnValue({
-      pods: podsResource,
-    });
-
+  it('renders pods view without fetching a snapshot', async () => {
     await renderView('pods');
     await flush();
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourcesMock).toHaveBeenCalled();
 
     const props = getLatestProps('pods-view');
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    // Pod rows are query-backed; the view no longer takes a live-rows `data` prop.
-    expect(props.metrics).toEqual(metrics);
+    expect(props.metrics).toBeUndefined();
     expect(props.showNamespaceColumn).toBe(true);
   });
 

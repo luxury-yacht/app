@@ -511,8 +511,8 @@ func BenchmarkPodBuilderBuildCold(b *testing.B) {
 // BenchmarkPodBuilderBuildWarm measures a refetch when nothing changed — the
 // memo cache should reuse projections (the busy-cluster steady state).
 func BenchmarkPodBuilderBuildWarm(b *testing.B) {
-	pods, usage, now := benchmarkPods(b, 10000)
-	builder := newPodBuilder(testsupport.NewPodLister(b, pods...), nil, testsupport.NewReplicaSetLister(b), fakePodMetricsProvider{usage: usage, metadata: metrics.Metadata{CollectedAt: now}})
+	pods, _, _ := benchmarkPods(b, 10000)
+	builder := newPodBuilder(testsupport.NewPodLister(b, pods...), nil, testsupport.NewReplicaSetLister(b))
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "c1", ClusterName: "cluster"})
 	scope := "namespace:all?limit=50&sort=name&sortDirection=asc"
 	if _, err := builder.Build(ctx, scope); err != nil {
@@ -545,7 +545,6 @@ func TestPodBuilderReusesProjectionsAcrossBuilds(t *testing.T) {
 		testsupport.NewPodLister(t, mkPod("a"), mkPod("b")),
 		nil,
 		testsupport.NewReplicaSetLister(t),
-		fakePodMetricsProvider{metadata: metrics.Metadata{CollectedAt: now}},
 	)
 	projections := 0
 	builder.buildSummary = func(meta ClusterMeta, pod *corev1.Pod, cpu, mem int64, rsMap map[string]string) PodSummary {

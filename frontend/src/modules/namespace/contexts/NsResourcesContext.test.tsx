@@ -599,7 +599,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.config.meta).toBe(firstMetaRef);
   });
 
-  it('preserves pods data and metrics references when the scoped payload is unchanged', async () => {
+  it('preserves pods data references when the scoped payload is unchanged', async () => {
     const scope = `${testClusterId}|namespace:team-a`;
     const sharedPods = [
       {
@@ -609,17 +609,11 @@ describe('NamespaceResourcesProvider', () => {
         clusterId: testClusterId,
       },
     ];
-    const sharedMetrics = {
-      cpuUsageAvailable: true,
-      memoryUsageAvailable: true,
-      stale: false,
-    };
 
     scopedStates[scope] = {
       status: 'ready',
       data: {
-        pods: sharedPods,
-        metrics: sharedMetrics,
+        rows: sharedPods,
       },
       error: null,
       lastUpdated: null,
@@ -632,7 +626,6 @@ describe('NamespaceResourcesProvider', () => {
     );
 
     const firstDataRef = contextRef.current?.pods.data;
-    const firstMetricsRef = contextRef.current?.pods.metrics;
 
     await render(
       <NamespaceResourcesProvider namespace="team-a" activeView="pods">
@@ -641,7 +634,6 @@ describe('NamespaceResourcesProvider', () => {
     );
 
     expect(contextRef.current?.pods.data).toBe(firstDataRef);
-    expect(contextRef.current?.pods.metrics).toBe(firstMetricsRef);
   });
 
   it('preserves pod row references when refreshed rows are rebuilt with unchanged fields', async () => {
@@ -650,7 +642,7 @@ describe('NamespaceResourcesProvider', () => {
     scopedStates[scope] = {
       status: 'ready',
       data: {
-        pods: [
+        rows: [
           {
             kind: 'Pod',
             name: 'pod-a',
@@ -664,11 +656,6 @@ describe('NamespaceResourcesProvider', () => {
             memUsage: '20Mi',
           },
         ],
-        metrics: {
-          cpuUsageAvailable: true,
-          memoryUsageAvailable: true,
-          stale: false,
-        },
       },
       error: null,
       lastUpdated: null,
@@ -686,7 +673,7 @@ describe('NamespaceResourcesProvider', () => {
     scopedStates[scope] = {
       status: 'ready',
       data: {
-        pods: [
+        rows: [
           {
             kind: 'Pod',
             name: 'pod-a',
@@ -700,11 +687,6 @@ describe('NamespaceResourcesProvider', () => {
             memUsage: '20Mi',
           },
         ],
-        metrics: {
-          cpuUsageAvailable: true,
-          memoryUsageAvailable: true,
-          stale: false,
-        },
       },
       error: null,
       lastUpdated: null,

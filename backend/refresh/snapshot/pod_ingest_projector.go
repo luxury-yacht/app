@@ -8,8 +8,8 @@
  * projects each reflector-decoded Pod into a four-half ingest.Bundle so one intake
  * feeds every pod consumer, and the typed Pod is then dropped:
  *
- *   - Table     = the zeroed-metrics PodSummary (pods.BuildStreamSummary; the metrics
- *                 overlay happens at serve in collectSummaries, exactly as before);
+ *   - Table     = the no-data-metrics PodSummary (pods.BuildStreamSummary plus
+ *                 podSummaryWithoutMetrics);
  *   - Aggregate = the PodAggregate the cluster-overview/nodes/namespace-workloads
  *                 domains read (projectPodAggregate);
  *   - Catalog   = the object-catalog Summary (objectcatalog.SummaryProjector);
@@ -48,8 +48,7 @@ var (
 // PodSummary's cluster identity and the catalog Summary / object-map node cluster id;
 // rsLister resolves the ReplicaSet->Deployment owner for the Table half's OwnerKind
 // and the Aggregate half's WorkloadKind (the metrics-bucketing kind). The Table half
-// carries ZEROED metrics — the serve-time LatestPodUsage overlay is unchanged —
-// exactly as the maintained-store handler projected before the cutover.
+// carries no-data metrics so base pod rows do not depend on the metrics provider.
 func NewPodIngestProjector(meta ClusterMeta, rsLister appslisters.ReplicaSetLister) ingest.ProjectFunc {
 	// ClusterMeta is a type alias of streamrows.ClusterMeta, so meta is the stream meta.
 	streamMeta := meta
@@ -65,8 +64,9 @@ func NewPodIngestProjector(meta ClusterMeta, rsLister appslisters.ReplicaSetList
 			return nil, errNotPodObject
 		}
 		var metaObj metav1.Object = pod
+		table := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
 		return ingest.Bundle{
-			Table:     podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister),
+			Table:     table,
 			Aggregate: projectPodAggregate(pod, rsLister),
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),

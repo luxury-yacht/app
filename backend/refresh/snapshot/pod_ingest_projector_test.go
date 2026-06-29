@@ -19,8 +19,8 @@ import (
 // pod ingest projector builds is byte-equivalent, half by half, to what each live
 // consumer path builds from the typed pod:
 //
-//   - Table     == pods.BuildStreamSummary with ZEROED metrics (the maintained-store
-//     handler's projection, which the serve overlay then refreshes);
+//   - Table     == pods.BuildStreamSummary with no-data metrics (the maintained-store
+//     handler's projection);
 //   - Aggregate == projectPodAggregate with the SAME rsLister (the 3 domains' read);
 //   - Catalog   == objectcatalog.SummaryProjector for pods (the catalog's projection);
 //   - ObjectMap == objectmapnode.NewNodeProjector from the pod descriptor (the
@@ -81,7 +81,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 			t.Fatalf("projector returned %T, want ingest.Bundle", raw)
 		}
 
-		wantTable := podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister)
+		wantTable := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
 		if gotTable, ok := bundle.Table.(streamrows.PodSummary); !ok || gotTable != wantTable {
 			t.Fatalf("Table half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Table, wantTable)
 		}

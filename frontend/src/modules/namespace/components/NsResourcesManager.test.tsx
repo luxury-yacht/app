@@ -57,8 +57,6 @@ const { setActiveResourceTypeMock, resourceStates, viewPropsRef, loadMocks, canc
       };
     });
 
-    states.pods.metrics = { stale: false, lastError: null, collectedAt: Date.now() };
-
     return {
       setActiveResourceTypeMock: vi.fn(),
       resourceStates: states,
@@ -131,8 +129,6 @@ describe('NamespaceResourcesManager', () => {
 
     const props = viewPropsRef.current;
     expect(props).toBeTruthy();
-    // Pod rows are query-backed; only the pods metrics meta is threaded through.
-    expect(props.nsPodsMetrics).toBe(resourceStates.pods.metrics);
     // The Kinds dropdown vocabulary is backend-owned (query capabilities); the
     // manager forwards no kind lists.
     expect(props.nsWorkloadsKinds).toBeUndefined();
