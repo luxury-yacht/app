@@ -364,6 +364,86 @@ describe('NsViewWorkloads', () => {
     );
   });
 
+  it('overlays all-namespaces workload rows with namespace-workloads-metrics rows', async () => {
+    const queryWorkload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-b',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'path:context',
+      clusterName: 'ctx',
+    };
+    requestRefreshDomainStateMock.mockImplementation(({ domain }: { domain: string }) =>
+      Promise.resolve({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data:
+            domain === 'namespace-workloads-metrics'
+              ? {
+                  rows: [
+                    {
+                      rowKey: 'deployment/team-b/api',
+                      kind: 'Deployment',
+                      namespace: 'team-b',
+                      name: 'api',
+                      ready: '1/1',
+                      cpuUsage: '250m',
+                      memUsage: '128Mi',
+                    },
+                  ],
+                  total: 1,
+                  totalIsExact: true,
+                  namespaces: ['team-b'],
+                  kinds: ['Deployment'],
+                  facetsExact: true,
+                  metrics: { stale: false, collectedAt: 1_700_000_000 },
+                }
+              : {
+                  rows: [queryWorkload],
+                  total: 1,
+                  totalIsExact: true,
+                  namespaces: ['team-b'],
+                  kinds: ['Deployment'],
+                  facetsExact: true,
+                },
+        },
+      })
+    );
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace={ALL_NAMESPACES_SCOPE}
+          showNamespaceColumn={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.data).toEqual([
+      { ...queryWorkload, ready: '1/1', cpuUsage: '250m', memUsage: '128Mi' },
+    ]);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads-metrics',
+        scope: expect.stringContaining('namespace:all?'),
+      })
+    );
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-workloads-metrics',
+        scope: expect.stringContaining('predicate.rowKeys=deployment%2Fteam-b%2Fapi'),
+      })
+    );
+  });
+
   it('renders the backend-published kind vocabulary even when facets collapse to the selection', async () => {
     // The Kinds dropdown options are the family's capabilities-published
     // vocabulary. Facets collapse to the active selection by design; selecting

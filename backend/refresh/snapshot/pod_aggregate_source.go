@@ -20,6 +20,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -55,6 +56,47 @@ func namespacePodRowsFromIngest(source podWorkloadsIngestSource, namespace strin
 		}
 		agg, ok := bundle.Aggregate.(streamrows.PodAggregate)
 		if !ok || agg.Namespace != namespace {
+			continue
+		}
+		aggregates = append(aggregates, agg)
+		if summary, ok := bundle.Table.(streamrows.PodSummary); ok {
+			summaries[summary.Namespace+"/"+summary.Name] = summary
+		}
+	}
+	return aggregates, summaries
+}
+
+// workloadOwnerPodRowsFromIngest reads projected pod bundles whose owner keys match the emitted
+// workload OWN-rows. It is used by all-namespaces workload views, where namespace-wide standalone
+// pod rows are intentionally not synthesized but workload-owned pods are still needed for status
+// and resource reservation aggregation.
+func workloadOwnerPodRowsFromIngest(source podWorkloadsIngestSource, ownRows []WorkloadSummary) ([]streamrows.PodAggregate, map[string]streamrows.PodSummary) {
+	if source == nil || len(ownRows) == 0 {
+		return nil, nil
+	}
+	owners := make(map[string]struct{}, len(ownRows))
+	for _, row := range ownRows {
+		if row.Kind == podres.Identity.Kind {
+			continue
+		}
+		owners[workloadOwnerKey(row.Kind, row.Namespace, row.Name)] = struct{}{}
+	}
+	if len(owners) == 0 {
+		return nil, nil
+	}
+	bundles := source.Rows(PodGVR)
+	aggregates := make([]streamrows.PodAggregate, 0, len(bundles))
+	summaries := make(map[string]streamrows.PodSummary, len(bundles))
+	for _, raw := range bundles {
+		bundle, ok := raw.(ingest.Bundle)
+		if !ok {
+			continue
+		}
+		agg, ok := bundle.Aggregate.(streamrows.PodAggregate)
+		if !ok {
+			continue
+		}
+		if _, ok := owners[agg.OwnerKey]; !ok {
 			continue
 		}
 		aggregates = append(aggregates, agg)

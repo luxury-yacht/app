@@ -192,11 +192,10 @@ func RegisterNamespaceWorkloadsDomain(
 
 // Build assembles workload summaries for the requested namespace scope. The workload OWN-rows
 // come from the Sink-fed maintained store (scope-filtered to the request's namespace + permitted
-// kinds); the per-owner pod aggregation, metrics, HPA, and synthesized standalone-pod rows are
-// re-joined at serve from the pod ingest source + HPA lister + metrics provider. The
-// all-namespaces overview reads namespace "" from both, which the pod source returns nothing for
-// (namespacePodRowsFromIngest with "" is empty by design) — so the overview keeps its established
-// behavior of workloads-by-own-status with no standalone rows, with no special-case branch.
+// kinds); the per-owner pod aggregation, HPA, and synthesized standalone-pod rows are re-joined at
+// serve from the pod ingest source + HPA lister. The all-namespaces overview joins pods by the
+// emitted workload OWN-row owner keys so resource reservations and status can be computed without
+// synthesizing standalone pod rows across every namespace.
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -211,18 +210,22 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	namespace := parsedScope.Namespace
 	issues := b.queryIssues(ctx, query)
 
+	// The workload OWN-rows come from the Sink-fed maintained store, scope-filtered to the
+	// namespace ("" = all namespaces) and the kinds this request is permitted to read — the
+	// SAME per-kind runtime gate the typed path applied.
+	ownRows := b.workloadOwnRows(ctx, namespace)
+
 	var (
 		podAggregates []streamrows.PodAggregate
 		podSummaries  map[string]streamrows.PodSummary
 	)
 	if b.includePods && b.podIngest != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
-		podAggregates, podSummaries = namespacePodRowsFromIngest(b.podIngest, namespace)
+		if parsedScope.AllNamespaces {
+			podAggregates, podSummaries = workloadOwnerPodRowsFromIngest(b.podIngest, ownRows)
+		} else {
+			podAggregates, podSummaries = namespacePodRowsFromIngest(b.podIngest, namespace)
+		}
 	}
-
-	// The workload OWN-rows come from the Sink-fed maintained store, scope-filtered to the
-	// namespace ("" = all namespaces) and the kinds this request is permitted to read — the
-	// SAME per-kind runtime gate the typed path applied.
-	ownRows := b.workloadOwnRows(ctx, namespace)
 
 	// List HPAs to mark workloads that are managed by an autoscaler. If this
 	// coverage is unavailable, leave ownership unknown instead of emitting false.

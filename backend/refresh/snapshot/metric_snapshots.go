@@ -293,10 +293,14 @@ func (b *NamespaceWorkloadsMetricsBuilder) Build(ctx context.Context, scope stri
 		podAggregates []streamrows.PodAggregate
 		podSummaries  map[string]streamrows.PodSummary
 	)
-	if b.base.includePods && b.base.podIngest != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsMetricsDomainName, "", "pods") {
-		podAggregates, podSummaries = namespacePodRowsFromIngest(b.base.podIngest, namespace)
-	}
 	ownRows := b.base.workloadOwnRowsForDomain(ctx, namespaceWorkloadsMetricsDomainName, namespace)
+	if b.base.includePods && b.base.podIngest != nil && runtimeResourceAllowed(ctx, namespaceWorkloadsMetricsDomainName, "", "pods") {
+		if parsedScope.AllNamespaces {
+			podAggregates, podSummaries = workloadOwnerPodRowsFromIngest(b.base.podIngest, ownRows)
+		} else {
+			podAggregates, podSummaries = namespacePodRowsFromIngest(b.base.podIngest, namespace)
+		}
+	}
 	hpas, hpaErr := b.base.listHPAs(namespace)
 	items, version := assembleWorkloadRows(
 		meta,
