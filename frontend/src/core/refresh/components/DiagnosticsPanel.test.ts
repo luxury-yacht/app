@@ -588,6 +588,111 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('renders metric domain rows with freshness metadata', async () => {
+    seedBaseDomainStates();
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+    const now = Date.now();
+    const namespaceScope = buildClusterScope('cluster-a', 'namespace:team-a');
+    const clusterScope = buildClusterScope('cluster-a', '');
+
+    setScopedEntries('pods-metrics', [
+      [
+        namespaceScope,
+        {
+          ...createReadyState({
+            rows: [],
+            metrics: {
+              collectedAt: now,
+              stale: false,
+              lastError: '',
+              consecutiveFailures: 0,
+              successCount: 4,
+              failureCount: 0,
+            },
+          }),
+          scope: namespaceScope,
+        },
+      ],
+    ]);
+    setScopedEntries('nodes-metrics', [
+      [
+        clusterScope,
+        {
+          ...createReadyState({
+            rows: [],
+            metrics: {
+              collectedAt: now,
+              stale: true,
+              lastError: '',
+              consecutiveFailures: 2,
+              successCount: 1,
+              failureCount: 2,
+            },
+          }),
+          scope: clusterScope,
+        },
+      ],
+    ]);
+    setScopedEntries('namespace-workloads-metrics', [
+      [
+        namespaceScope,
+        {
+          ...createReadyState({
+            rows: [],
+            metrics: {
+              collectedAt: now,
+              stale: false,
+              lastError: 'workload metrics failed',
+              consecutiveFailures: 1,
+              successCount: 2,
+              failureCount: 1,
+            },
+          }),
+          scope: namespaceScope,
+        },
+      ],
+    ]);
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+
+    const rows = Array.from(
+      rendered.container.querySelectorAll<HTMLTableRowElement>('.diagnostics-table tbody tr')
+    ).map((row) => {
+      const cells = row.querySelectorAll<HTMLTableCellElement>('td');
+      return {
+        label: cells[0]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        metrics: cells[14]?.textContent?.trim() ?? '',
+        metricsTooltip: cells[14]?.getAttribute('title') ?? '',
+      };
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Pod Metrics',
+          scope: 'cluster-a (active) - namespace:team-a',
+          metrics: 'OK (4 polls)',
+        }),
+        expect.objectContaining({
+          label: 'Node Metrics',
+          scope: 'cluster-a (active)',
+          metrics: 'Unavailable (2 fails)',
+        }),
+        expect.objectContaining({
+          label: 'Workload Metrics',
+          scope: 'cluster-a (active) - namespace:team-a',
+          metrics: 'Error (1 fails)',
+          metricsTooltip: expect.stringContaining('Last error: workload metrics failed'),
+        }),
+      ])
+    );
+
+    await rendered.unmount();
+  });
+
   test('renders namespace scoped pod row with namespace label', async () => {
     seedBaseDomainStates();
     const now = Date.now();

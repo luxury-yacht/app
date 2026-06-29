@@ -404,6 +404,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceScopeEntries = useRefreshScopedDomainEntries('namespaces');
   const clusterOverviewScopeEntries = useRefreshScopedDomainEntries('cluster-overview');
   const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
+  const nodeMetricsScopeEntries = useRefreshScopedDomainEntries('nodes-metrics');
   const clusterConfigScopeEntries = useRefreshScopedDomainEntries('cluster-config');
   const clusterCRDScopeEntries = useRefreshScopedDomainEntries('cluster-crds');
   const clusterCustomScopeEntries = useRefreshScopedDomainEntries('cluster-custom');
@@ -413,6 +414,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const catalogScopeEntries = useRefreshScopedDomainEntries('catalog');
   const catalogDiffScopeEntries = useRefreshScopedDomainEntries('catalog-diff');
   const namespaceWorkloadsScopeEntries = useRefreshScopedDomainEntries('namespace-workloads');
+  const namespaceWorkloadsMetricsScopeEntries = useRefreshScopedDomainEntries(
+    'namespace-workloads-metrics'
+  );
   const namespaceAutoscalingScopeEntries = useRefreshScopedDomainEntries('namespace-autoscaling');
   const namespaceConfigScopeEntries = useRefreshScopedDomainEntries('namespace-config');
   const namespaceCustomScopeEntries = useRefreshScopedDomainEntries('namespace-custom');
@@ -423,6 +427,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceRBACScopeEntries = useRefreshScopedDomainEntries('namespace-rbac');
   const namespaceStorageScopeEntries = useRefreshScopedDomainEntries('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
+  const podMetricsScopeEntries = useRefreshScopedDomainEntries('pods-metrics');
   const containerLogsScopeEntries = useRefreshScopedDomainEntries('container-logs');
   // Object panel scoped domains – visible only while the object panel is open.
   const objectDetailsScopeEntries = useRefreshScopedDomainEntries('object-details');
@@ -606,6 +611,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           entries: nodeScopeEntries,
         },
         {
+          domain: 'nodes-metrics' as RefreshDomain,
+          label: 'Node Metrics',
+          hasMetrics: true,
+          entries: nodeMetricsScopeEntries,
+        },
+        {
           domain: 'cluster-config' as RefreshDomain,
           label: 'Cluster Config',
           entries: clusterConfigScopeEntries,
@@ -656,6 +667,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           entries: namespaceWorkloadsScopeEntries,
         },
         {
+          domain: 'namespace-workloads-metrics' as RefreshDomain,
+          label: 'Workload Metrics',
+          hasMetrics: true,
+          entries: namespaceWorkloadsMetricsScopeEntries,
+        },
+        {
           domain: 'namespace-autoscaling' as RefreshDomain,
           label: 'NS Autoscaling',
           entries: namespaceAutoscalingScopeEntries,
@@ -700,6 +717,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           label: 'NS Storage',
           entries: namespaceStorageScopeEntries,
         },
+        {
+          domain: 'pods-metrics' as RefreshDomain,
+          label: 'Pod Metrics',
+          hasMetrics: true,
+          entries: podMetricsScopeEntries,
+        },
       ].flatMap(({ domain, label, hasMetrics, entries }) =>
         entries.map(([scopeKey, state]) => {
           const resolvedScope = state.scope?.trim() ? state.scope : scopeKey;
@@ -716,6 +739,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceScopeEntries,
       clusterOverviewScopeEntries,
       nodeScopeEntries,
+      nodeMetricsScopeEntries,
       clusterConfigScopeEntries,
       clusterCRDScopeEntries,
       clusterCustomScopeEntries,
@@ -725,6 +749,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       catalogScopeEntries,
       catalogDiffScopeEntries,
       namespaceWorkloadsScopeEntries,
+      namespaceWorkloadsMetricsScopeEntries,
       namespaceAutoscalingScopeEntries,
       namespaceConfigScopeEntries,
       namespaceEventsScopeEntries,
@@ -734,6 +759,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceQuotasScopeEntries,
       namespaceRBACScopeEntries,
       namespaceStorageScopeEntries,
+      podMetricsScopeEntries,
     ]
   );
 
