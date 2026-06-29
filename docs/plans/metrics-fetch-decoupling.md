@@ -355,6 +355,8 @@ Frontend tests:
 - Metric-sorted page sends the active table filters/search/predicates to the
   metrics query and renders backend metric order without locally sorting the
   current page.
+- Copy/Export "all matching rows" walks the owning query cursor and applies the
+  same base+metric join used by the visible table rows.
 - Base+metric joins render usage-only, reservation-only, and fully joined states.
 - Object Panel Pods uses the same metric overlay path as main Pods.
 - Object Panel Resource Utilization uses the migrated `resource-metrics` path

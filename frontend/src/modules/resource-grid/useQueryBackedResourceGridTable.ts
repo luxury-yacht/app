@@ -26,6 +26,7 @@ import { backendQuerySource } from './backendQuerySource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   useTypedResourceQuery,
+  type FetchTypedResourceRowsOptions,
   type TypedQueryPayload,
   type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
@@ -52,12 +53,54 @@ const EMPTY_QUERY_FILTERS: GridTableFilterState = {
 };
 
 const METRIC_SORT_FIELDS = new Set(['cpu', 'memory']);
+const METRIC_OVERLAY_FETCH_SORT: SortConfig = { key: 'name', direction: 'asc' };
+const METRIC_OVERLAY_ROW_KEY_BATCH_SIZE = 250;
 
 const rowKeysPredicateValue = (keys: string[]): string =>
   keys
     .map((key) => key.trim())
     .filter(Boolean)
     .join('|');
+
+const uniqueRowKeys = (keys: string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  keys.forEach((key) => {
+    const normalized = key.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+};
+
+const fetchRowsByRowKeys = async <TRow>(
+  fetchAllRows: (options?: FetchTypedResourceRowsOptions) => Promise<TRow[]>,
+  rowKeys: string[]
+): Promise<TRow[]> => {
+  const keys = uniqueRowKeys(rowKeys);
+  if (keys.length === 0) {
+    return [];
+  }
+  const rows: TRow[] = [];
+  for (let index = 0; index < keys.length; index += METRIC_OVERLAY_ROW_KEY_BATCH_SIZE) {
+    const batch = keys.slice(index, index + METRIC_OVERLAY_ROW_KEY_BATCH_SIZE);
+    const predicate = rowKeysPredicateValue(batch);
+    if (!predicate) {
+      continue;
+    }
+    rows.push(
+      ...(await fetchAllRows({
+        filters: EMPTY_QUERY_FILTERS,
+        sortConfig: METRIC_OVERLAY_FETCH_SORT,
+        predicates: { rowKeys: predicate },
+      }))
+    );
+  }
+  return rows;
+};
 
 // A view's persisted page size wins when it is a real option; otherwise the
 // fallback applies (the app-wide Default Page Size preference).
@@ -393,6 +436,47 @@ function useTypedQueryLifecycle<
     );
   }, [baseQuery.rows, baseRowsByKey, isMetricSort, metricOverlay, metricRows, metricRowsByKey]);
 
+  const fetchAllMergedRows = useCallback(async (): Promise<TRow[]> => {
+    if (!metricOverlay) {
+      return baseQuery.fetchAllRows();
+    }
+    if (!isMetricSort) {
+      const allBaseRows = await baseQuery.fetchAllRows();
+      const allMetricRows = await fetchRowsByRowKeys(
+        metricOverlayQuery.fetchAllRows,
+        allBaseRows.map((row) => metricOverlay.getBaseRowKey(row))
+      );
+      const metricsByKey = new Map<string, unknown>();
+      allMetricRows.forEach((metricRow) => {
+        metricsByKey.set(metricOverlay.getMetricRowKey(metricRow), metricRow);
+      });
+      return allBaseRows.map((row) =>
+        metricOverlay.mergeMetric(row, metricsByKey.get(metricOverlay.getBaseRowKey(row)))
+      );
+    }
+
+    const allMetricRows = await metricQuery.fetchAllRows();
+    const allBaseRows = await fetchRowsByRowKeys(
+      baseHydrationQuery.fetchAllRows,
+      allMetricRows.map((metricRow) => metricOverlay.getMetricRowKey(metricRow))
+    );
+    const baseRowsByMetricKey = new Map<string, TRow>();
+    allBaseRows.forEach((row) => {
+      baseRowsByMetricKey.set(metricOverlay.getBaseRowKey(row), row);
+    });
+    return allMetricRows.flatMap((metricRow) => {
+      const baseRow = baseRowsByMetricKey.get(metricOverlay.getMetricRowKey(metricRow));
+      return baseRow ? [metricOverlay.mergeMetric(baseRow, metricRow)] : [];
+    });
+  }, [
+    baseHydrationQuery.fetchAllRows,
+    baseQuery,
+    isMetricSort,
+    metricOverlay,
+    metricOverlayQuery.fetchAllRows,
+    metricQuery,
+  ]);
+
   const query: UseTypedResourceQueryResult<TRow, TPayload> = useMemo(() => {
     if (!metricOverlay) {
       return baseQuery;
@@ -401,7 +485,7 @@ function useTypedQueryLifecycle<
       return {
         ...baseQuery,
         rows: mergedRows,
-        fetchAllRows: baseQuery.fetchAllRows,
+        fetchAllRows: fetchAllMergedRows,
       };
     }
     return {
@@ -423,7 +507,7 @@ function useTypedQueryLifecycle<
       filterOptions: metricQuery.filterOptions,
       kindVocabulary: metricQuery.kindVocabulary,
       dynamic: metricQuery.dynamic,
-      fetchAllRows: async () => mergedRows,
+      fetchAllRows: fetchAllMergedRows,
     };
   }, [
     baseHydrationQuery.error,
@@ -432,6 +516,7 @@ function useTypedQueryLifecycle<
     baseHydrationQuery.loading,
     baseHydrationQuery.payload,
     baseQuery,
+    fetchAllMergedRows,
     isMetricSort,
     mergedRows,
     metricOverlay,

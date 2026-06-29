@@ -1073,6 +1073,85 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     );
   });
 
+  it('exports object-sorted rows with all matching metric overlays applied', async () => {
+    let result:
+      ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const metricPayload: TestMetricPayload = {
+      rows: [{ rowKey: 'team-a/api', cpuUsage: '250m' }],
+      metrics: { stale: false, collectedAt: 123 },
+    };
+    const baseFetchAllRows = vi.fn().mockResolvedValue([row, workerRow]);
+    const metricFetchAllRows = vi.fn().mockResolvedValue([
+      { rowKey: 'team-a/api', cpuUsage: '250m' },
+      { rowKey: 'team-a/worker', cpuUsage: '900m' },
+    ]);
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        metricOverlay: testMetricOverlay,
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockImplementation((params: any) => {
+      const isMetricDomain = params.domain === 'pods-metrics';
+      return {
+        rows: isMetricDomain ? metricPayload.rows : [{ ...row, cpuUsage: undefined }],
+        payload: isMetricDomain ? metricPayload : { rows: [{ ...row, cpuUsage: undefined }] },
+        loading: false,
+        loaded: true,
+        error: null,
+        continueToken: null,
+        hasPrevious: false,
+        isRequestingMore: false,
+        loadMore: vi.fn(),
+        loadPrevious: vi.fn(),
+        pageIndex: 1,
+        pageSize: 50,
+        totalCount: 1,
+        totalIsExact: true,
+        filterOptions: {},
+        kindVocabulary: null,
+        dynamic: null,
+        fetchAllRows: isMetricDomain ? metricFetchAllRows : baseFetchAllRows,
+      };
+    });
+    useNamespaceResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: { data: params.data },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(publishedTableState);
+      await Promise.resolve();
+    });
+
+    await expect(result?.gridTableProps.fetchAllRows?.()).resolves.toEqual([
+      { ...row, cpuUsage: '250m' },
+      { ...workerRow, cpuUsage: '900m' },
+    ]);
+    expect(metricFetchAllRows).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        predicates: { rowKeys: 'team-a/api|team-a/worker' },
+        sortConfig: { key: 'name', direction: 'asc' },
+      })
+    );
+  });
+
   it('uses the metric domain for CPU-sorted membership and hydrates base rows by row key', async () => {
     let result:
       ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
@@ -1161,6 +1240,108 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         domain: 'pods',
         enabled: true,
         predicates: { rowKeys: 'team-a/worker|team-a/api' },
+      })
+    );
+  });
+
+  it('exports CPU-sorted rows by walking metric rows and hydrating all matching base rows', async () => {
+    let result:
+      ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const sidecarRow: TestRow = {
+      kind: 'Pod',
+      name: 'sidecar',
+      namespace: 'team-a',
+      clusterId: 'cluster-a',
+    };
+    const metricPayload: TestMetricPayload = {
+      rows: [
+        { rowKey: 'team-a/worker', cpuUsage: '900m' },
+        { rowKey: 'team-a/api', cpuUsage: '250m' },
+      ],
+      metrics: { stale: false, collectedAt: 456 },
+    };
+    const metricFetchAllRows = vi.fn().mockResolvedValue([
+      { rowKey: 'team-a/worker', cpuUsage: '900m' },
+      { rowKey: 'team-a/api', cpuUsage: '250m' },
+      { rowKey: 'team-a/sidecar', cpuUsage: '100m' },
+    ]);
+    const hydrationFetchAllRows = vi.fn().mockResolvedValue([workerRow, row, sidecarRow]);
+    const cpuSortState = {
+      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+      sortConfig: { key: 'cpu', direction: 'desc' } as const,
+    };
+    const Probe: React.FC = () => {
+      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'Namespace Pods',
+        metricOverlay: testMetricOverlay,
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: 'team-a',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    useTypedResourceQueryMock.mockImplementation((params: any) => {
+      const isMetricDomain = params.domain === 'pods-metrics';
+      const isHydrationQuery = params.domain === 'pods' && params.predicates?.rowKeys;
+      return {
+        rows: isMetricDomain ? metricPayload.rows : isHydrationQuery ? [workerRow, row] : [],
+        payload: isMetricDomain
+          ? metricPayload
+          : { rows: isHydrationQuery ? [workerRow, row] : [] },
+        loading: false,
+        loaded: true,
+        error: null,
+        continueToken: null,
+        hasPrevious: false,
+        isRequestingMore: false,
+        loadMore: vi.fn(),
+        loadPrevious: vi.fn(),
+        pageIndex: 1,
+        pageSize: 50,
+        totalCount: 3,
+        totalIsExact: true,
+        filterOptions: {},
+        kindVocabulary: null,
+        dynamic: null,
+        fetchAllRows: isMetricDomain
+          ? metricFetchAllRows
+          : isHydrationQuery
+            ? hydrationFetchAllRows
+            : vi.fn().mockResolvedValue([]),
+      };
+    });
+    useNamespaceResourceGridTableMock.mockImplementation((params) => ({
+      gridTableProps: { data: params.data },
+      favModal: null,
+    }));
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      const calls = useNamespaceResourceGridTableMock.mock.calls;
+      const params = calls[calls.length - 1]?.[0];
+      params.onTableStateChange(cpuSortState);
+      await Promise.resolve();
+    });
+
+    await expect(result?.gridTableProps.fetchAllRows?.()).resolves.toEqual([
+      { ...workerRow, cpuUsage: '900m' },
+      { ...row, cpuUsage: '250m' },
+      { ...sidecarRow, cpuUsage: '100m' },
+    ]);
+    expect(metricFetchAllRows).toHaveBeenCalledWith();
+    expect(hydrationFetchAllRows).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        predicates: { rowKeys: 'team-a/worker|team-a/api|team-a/sidecar' },
+        sortConfig: { key: 'name', direction: 'asc' },
       })
     );
   });

@@ -30,6 +30,15 @@ export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload,
   selectRows: (payload: TPayload) => TRow[];
 }
 
+export interface FetchTypedResourceRowsOptions {
+  filters?: GridTableFilterState;
+  sortConfig?: SortConfig | null;
+  pageLimit?: number;
+  predicates?: Record<string, string | null | undefined>;
+  baseScope?: string;
+  label?: string;
+}
+
 export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   rows: TRow[];
   /**
@@ -60,7 +69,7 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   kindVocabulary: string[] | null;
   dynamic: ResourceQueryDynamicRef | null;
   /** Fetch every matching row (all pages) for the current filters/sort — used by export. */
-  fetchAllRows: () => Promise<TRow[]>;
+  fetchAllRows: (options?: FetchTypedResourceRowsOptions) => Promise<TRow[]>;
 }
 
 // Each export page requests the backend's max page size to minimise round-trips.
@@ -424,42 +433,51 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setRequestToken(previousToken);
   }, [isRequestingMore, previousTokens, requestToken]);
 
-  const fetchAllRows = useCallback(async (): Promise<TRow[]> => {
-    if (!enabled || !clusterId) {
-      return [];
-    }
-    // Each page uses the export max page size; the shared walk owns the loop,
-    // page guard, and failure semantics (failed/empty pages REJECT).
-    return walkQueryCursorPages<TRow>(label, async (cursor, page) => {
-      const exportScope = buildTypedResourceQueryScope(clusterId, {
-        baseScope,
-        filters: effectiveFilters,
-        sortConfig,
-        pageLimit: EXPORT_PAGE_LIMIT,
-        predicates,
-        continueToken: cursor,
+  const fetchAllRows = useCallback(
+    async (options: FetchTypedResourceRowsOptions = {}): Promise<TRow[]> => {
+      if (!enabled || !clusterId) {
+        return [];
+      }
+      const exportFilters = options.filters ?? effectiveFilters;
+      const exportSortConfig = options.sortConfig === undefined ? sortConfig : options.sortConfig;
+      const exportPredicates = options.predicates === undefined ? predicates : options.predicates;
+      const exportBaseScope = options.baseScope ?? baseScope;
+      const exportLabel = options.label ?? label;
+      const exportPageLimit = options.pageLimit ?? EXPORT_PAGE_LIMIT;
+      // Each page uses the export max page size; the shared walk owns the loop,
+      // page guard, and failure semantics (failed/empty pages REJECT).
+      return walkQueryCursorPages<TRow>(exportLabel, async (cursor, page) => {
+        const exportScope = buildTypedResourceQueryScope(clusterId, {
+          baseScope: exportBaseScope,
+          filters: exportFilters,
+          sortConfig: exportSortConfig,
+          pageLimit: exportPageLimit,
+          predicates: exportPredicates,
+          continueToken: cursor,
+        });
+        if (!exportScope) {
+          return null;
+        }
+        const result = await requestRefreshDomainState({
+          domain,
+          scope: exportScope,
+          reason: 'user',
+          label: exportLabel,
+          cleanup: true,
+          preserveState: false,
+        });
+        if (result.status !== 'executed') {
+          throw new Error(`${exportLabel} export failed: page ${page + 1} request was blocked`);
+        }
+        const payload = result.data?.data as TPayload | null | undefined;
+        if (!payload) {
+          throw new Error(`${exportLabel} export failed: page ${page + 1} returned no data`);
+        }
+        return { items: selectRowsRef.current(payload), continueToken: payload.continue ?? null };
       });
-      if (!exportScope) {
-        return null;
-      }
-      const result = await requestRefreshDomainState({
-        domain,
-        scope: exportScope,
-        reason: 'user',
-        label,
-        cleanup: true,
-        preserveState: false,
-      });
-      if (result.status !== 'executed') {
-        throw new Error(`${label} export failed: page ${page + 1} request was blocked`);
-      }
-      const payload = result.data?.data as TPayload | null | undefined;
-      if (!payload) {
-        throw new Error(`${label} export failed: page ${page + 1} returned no data`);
-      }
-      return { items: selectRowsRef.current(payload), continueToken: payload.continue ?? null };
-    });
-  }, [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]);
+    },
+    [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]
+  );
 
   return {
     rows,

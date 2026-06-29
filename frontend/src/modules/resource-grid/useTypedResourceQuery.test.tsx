@@ -137,6 +137,66 @@ describe('useTypedResourceQuery', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
   });
 
+  it('fetchAllRows can walk an override query scope for exact row-key hydration', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: { status: 'ready', data: { rows: [] } },
+    });
+    await renderQuery();
+    expect(result).toBeDefined();
+
+    requestRefreshDomainStateMock.mockReset();
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: {
+          status: 'ready',
+          data: { rows: [{ name: 'api' }], continue: 'cursor-1' },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [{ name: 'worker' }] } },
+      });
+
+    let all: TestRow[] = [];
+    await act(async () => {
+      all = await result!.fetchAllRows({
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          search: 'api',
+          includeMetadata: true,
+          namespaces: ['team-b', 'team-a'],
+          kinds: ['Pod'],
+        },
+        sortConfig: { key: 'cpu', direction: 'desc' },
+        pageLimit: 25,
+        predicates: { rowKeys: 'team-a/api|team-a/worker' },
+        label: 'Pod Metrics Export',
+      });
+    });
+
+    expect(all.map((row) => row.name)).toEqual(['api', 'worker']);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
+    expect(requestRefreshDomainStateMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        label: 'Pod Metrics Export',
+        scope: expect.stringContaining('limit=25'),
+      })
+    );
+    const firstScope = requestRefreshDomainStateMock.mock.calls[0][0].scope as string;
+    expect(firstScope).toContain('search=api');
+    expect(firstScope).toContain('includeMetadata=true');
+    expect(firstScope).toContain('namespaces=team-a%2Cteam-b');
+    expect(firstScope).toContain('kinds=Pod');
+    expect(firstScope).toContain('sort=cpu');
+    expect(firstScope).toContain('sortDirection=desc');
+    expect(firstScope).toContain('predicate.rowKeys=team-a%2Fapi%7Cteam-a%2Fworker');
+    const secondScope = requestRefreshDomainStateMock.mock.calls[1][0].scope as string;
+    expect(secondScope).toContain('continue=cursor-1');
+  });
+
   it('rolls back a failed page navigation so the cursor, buttons, and retry stay usable', async () => {
     // Page 1 with a next cursor.
     requestRefreshDomainStateMock.mockResolvedValue({
