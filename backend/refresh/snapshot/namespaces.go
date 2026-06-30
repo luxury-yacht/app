@@ -118,11 +118,13 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	}
 
 	trackerReady := true
-	// Best-effort: wait for the cut workload + pod ingest stores to sync so the first build
-	// already reflects real workload presence. The wait is bounded by ctx; positive rows are
-	// usable immediately, but absence is authoritative only after the tracked stores settle.
+	// Non-blocking: read whether the cut workload + pod ingest stores have synced rather than
+	// waiting on them. The namespace list must paint without blocking on the pod/workload initial
+	// LIST. Positive workload rows are usable immediately; a namespace's absence of workloads is
+	// authoritative only once the tracked stores settle, so before then it is reported as
+	// not-yet-known and the workload-presence source clock re-delivers the corrected snapshot.
 	if b.tracker != nil {
-		trackerReady = b.tracker.WaitForSync(ctx)
+		trackerReady = b.tracker.Synced()
 	}
 	workloadNamespaces := b.namespacesWithWorkloads()
 

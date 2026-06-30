@@ -213,6 +213,44 @@ func TestNamespaceBuilderReportsWorkloadsUnknownWhenIngestNotSyncedAndNoRows(t *
 	}
 }
 
+// TestNamespaceBuilderDoesNotBlockOnUnsyncedIngest proves the namespace list paints without
+// waiting for the pod/workload initial LIST. The workload stores never sync, yet with a
+// non-cancellable context Build must return promptly (reporting workload presence as unknown)
+// rather than blocking until they settle — the ~9s cold-start cost the blocking sync gate used
+// to impose on the first build.
+func TestNamespaceBuilderDoesNotBlockOnUnsyncedIngest(t *testing.T) {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "100"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+	// Zero value: the five workload stores report HasSyncedFor=false (never sync).
+	source := fakePodAggregateSource{}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, ns),
+		ingest:     source,
+		tracker:    NewNamespaceWorkloadTracker(source),
+	}
+
+	done := make(chan NamespaceSnapshot, 1)
+	go func() {
+		snap, err := builder.Build(context.Background(), "")
+		if err == nil {
+			if payload, ok := snap.Payload.(NamespaceSnapshot); ok {
+				done <- payload
+			}
+		}
+	}()
+
+	select {
+	case payload := <-done:
+		require.Len(t, payload.Namespaces, 1)
+		require.True(t, payload.Namespaces[0].WorkloadsUnknown,
+			"workload absence must be reported unknown before the ingest stores sync")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Build blocked waiting for the ingest stores to sync")
+	}
+}
+
 func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
 	// The per-namespace workload flag is content the namespace resourceVersions do not capture.
 	// A change in workload presence must change the snapshot's "workloads" source clock, so the

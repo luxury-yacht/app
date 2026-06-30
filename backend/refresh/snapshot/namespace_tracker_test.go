@@ -1,7 +1,6 @@
 package snapshot
 
 import (
-	"context"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,43 +28,38 @@ func allTrackedSyncSource(synced bool) fakeSyncSource {
 
 func TestNamespaceWorkloadTrackerNilSourceIsImmediatelySynced(t *testing.T) {
 	tracker := NewNamespaceWorkloadTracker(nil)
-	if !tracker.WaitForSync(context.Background()) {
+	if !tracker.Synced() {
 		t.Fatalf("expected a nil-source tracker to report synced")
 	}
 }
 
 func TestNamespaceWorkloadTrackerSyncedOnceEveryTrackedStoreSyncs(t *testing.T) {
 	tracker := NewNamespaceWorkloadTracker(allTrackedSyncSource(true))
-	if !tracker.WaitForSync(context.Background()) {
+	if !tracker.Synced() {
 		t.Fatalf("expected tracker to report synced once every tracked store has synced")
 	}
 }
 
 func TestNamespaceWorkloadTrackerNotSyncedWhenATrackedStoreNeverSyncs(t *testing.T) {
-	// Every kind is tracked but none has synced; with an already-cancelled context WaitForSync
-	// gives up and reports not-synced rather than blocking forever.
+	// Every kind is tracked but none has synced; Synced reports not-synced (non-blocking) so the
+	// build reports workload absence as not-yet-known rather than waiting for the stores.
 	tracker := NewNamespaceWorkloadTracker(allTrackedSyncSource(false))
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if tracker.WaitForSync(ctx) {
-		t.Fatalf("expected WaitForSync to report not-synced when a tracked store never syncs")
+	if tracker.Synced() {
+		t.Fatalf("expected Synced to report not-synced when a tracked store never syncs")
 	}
 }
 
 func TestNamespaceWorkloadTrackerWaitsOnlyOnTrackedKinds(t *testing.T) {
-	// A kind the manager has NO entry for reports HasSyncedFor=false forever; it must NOT block
-	// the gate — only kinds the manager actually tracks are waited on. Here only Deployment is
-	// tracked (and synced); the other workload/pod kinds are untracked. Even with a cancelled
-	// context (so an unfiltered gate would give up and return false), WaitForSync must report
+	// A kind the manager has NO entry for reports HasSyncedFor=false forever; it must NOT hold
+	// the gate down — only kinds the manager actually tracks are considered. Here only Deployment
+	// is tracked (and synced); the other workload/pod kinds are untracked, so Synced reports
 	// synced because the one tracked kind has settled.
 	src := fakeSyncSource{
 		tracked: map[schema.GroupVersionResource]bool{DeploymentGVR: true},
 		synced:  map[schema.GroupVersionResource]bool{DeploymentGVR: true},
 	}
 	tracker := NewNamespaceWorkloadTracker(src)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if !tracker.WaitForSync(ctx) {
-		t.Fatalf("expected synced: an untracked, never-syncing kind must not block the gate")
+	if !tracker.Synced() {
+		t.Fatalf("expected synced: an untracked, never-syncing kind must not hold the gate down")
 	}
 }
