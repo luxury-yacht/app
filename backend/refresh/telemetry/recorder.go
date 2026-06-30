@@ -34,6 +34,12 @@ type SnapshotStatus struct {
 	LastBatchSize      int      `json:"lastBatchSize,omitempty"`
 	IsFinalBatch       bool     `json:"isFinalBatch,omitempty"`
 	TimeToFirstBatchMs int64    `json:"timeToFirstBatchMs,omitempty"`
+	// MaxInformerSyncWaitMs is the PEAK time a Build for this domain spent blocked
+	// in waitForInformerSync (the initial-LIST / informer settle gate) before
+	// building. It is recorded as a max, not a last, because the wait is ~0 once the
+	// domain's informers have synced — a "last" value would read 0 by the time anyone
+	// opens diagnostics, hiding the cold-start gating cost the field exists to surface.
+	MaxInformerSyncWaitMs int64 `json:"maxInformerSyncWaitMs,omitempty"`
 }
 
 // MetricsStatus captures metrics poller health.
@@ -186,6 +192,7 @@ func (r *Recorder) RecordSnapshot(
 	batchSize int,
 	isFinal bool,
 	timeToFirstBatchMs int64,
+	informerSyncWaitMs int64,
 ) {
 	if domain == "" {
 		return
@@ -215,6 +222,11 @@ func (r *Recorder) RecordSnapshot(
 	entry.IsFinalBatch = isFinal
 	if batchIndex == 0 && timeToFirstBatchMs > 0 {
 		entry.TimeToFirstBatchMs = timeToFirstBatchMs
+	}
+	// Retain the peak sync-gate wait: warm builds wait ~0, so a plain assignment
+	// would erase the cold-start gating cost this surfaces.
+	if informerSyncWaitMs > entry.MaxInformerSyncWaitMs {
+		entry.MaxInformerSyncWaitMs = informerSyncWaitMs
 	}
 	if len(warnings) > 0 {
 		copyWarnings := make([]string, 0, len(warnings))

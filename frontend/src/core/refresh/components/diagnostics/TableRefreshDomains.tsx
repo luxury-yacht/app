@@ -33,6 +33,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
             <th>Last Updated</th>
             <th>Telemetry</th>
             <th>Duration</th>
+            <th>Sync Wait</th>
             <th>Metrics</th>
             <th>Polls</th>
             <th>Dropped</th>
@@ -43,7 +44,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
         <tbody>
           {rows.length === 0 ? (
             <tr className="diagnostics-empty">
-              <td colSpan={19}>
+              <td colSpan={20}>
                 All refreshers are idle. Enable "Show idle" to view the full list.
               </td>
             </tr>
@@ -85,6 +86,9 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                 <td title={row.lastUpdatedTooltip}>{row.lastUpdated}</td>
                 <td title={row.telemetryTooltip ?? ''}>{row.telemetryStatus ?? '—'}</td>
                 <td>{row.duration ?? '—'}</td>
+                <td title="Peak time a Build for this domain waited on the informer-sync gate (initial-LIST gating) before building">
+                  {row.syncWait ?? '—'}
+                </td>
                 <td title={row.metricsTooltip}>{row.metricsStatus}</td>
                 <td>
                   {row.telemetrySuccess !== undefined

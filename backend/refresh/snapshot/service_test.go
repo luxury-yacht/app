@@ -123,6 +123,46 @@ func (alwaysSyncedHub) HasSynced(context.Context) bool { return true }
 func (alwaysSyncedHub) ResourcesSettled([]string) bool { return true }
 func (alwaysSyncedHub) Shutdown() error                { return nil }
 
+// TestServiceBuildRecordsInformerSyncWait proves a Build that blocks in the informer
+// sync gate (the initial-LIST gating cost) records the wait it paid as the domain's
+// MaxInformerSyncWaitMs telemetry, so the cold-start cost is visible in diagnostics.
+func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
+	reg := domain.New()
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "demo",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "demo", Scope: scope}, nil
+		},
+	}))
+
+	recorder := telemetry.NewRecorder()
+	hub := &fakeInformerHub{} // synced == false: the sync gate stays closed
+	service := NewService(reg, recorder, testClusterMeta()).WithInformerHub(hub)
+	service.informerSyncTimeout = 2 * time.Second
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.Build(context.Background(), "demo", "scope-a")
+		done <- err
+	}()
+
+	// Let the Build block in the sync gate, then release it.
+	time.Sleep(120 * time.Millisecond)
+	hub.setSynced(true)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Build did not complete after the hub reported synced")
+	}
+
+	summary := recorder.SnapshotSummary()
+	require.Len(t, summary.Snapshots, 1)
+	require.GreaterOrEqual(t, summary.Snapshots[0].MaxInformerSyncWaitMs, int64(100),
+		"the ~120ms sync-gate wait must be recorded as MaxInformerSyncWaitMs")
+}
+
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	reg := domain.New()
 	if err := reg.Register(refresh.DomainConfig{

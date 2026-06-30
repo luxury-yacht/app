@@ -1,5 +1,4 @@
 - Delete namespace does not remove it from browse view
-- Remove dependency on binaries for auth
 - Pagination broken?
 - Search and filters broken on Cluster Custom
 

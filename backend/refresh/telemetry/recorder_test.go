@@ -84,8 +84,8 @@ func TestConnectionStatsRecording(t *testing.T) {
 func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	rec := NewRecorder()
 
-	rec.RecordSnapshot("domains", "scopeA", "cluster-1", "cluster-one", 100*time.Millisecond, errors.New("boom"), false, 10, []string{"catalog fallback on namespaces", "hydration failed"}, 0, 2, 5, false, 12)
-	rec.RecordSnapshot("domains", "scopeB", "cluster-1", "cluster-one", 200*time.Millisecond, nil, true, 5, nil, 1, 2, 3, true, 0)
+	rec.RecordSnapshot("domains", "scopeA", "cluster-1", "cluster-one", 100*time.Millisecond, errors.New("boom"), false, 10, []string{"catalog fallback on namespaces", "hydration failed"}, 0, 2, 5, false, 12, 0)
+	rec.RecordSnapshot("domains", "scopeB", "cluster-1", "cluster-one", 200*time.Millisecond, nil, true, 5, nil, 1, 2, 3, true, 0, 0)
 
 	summary := rec.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)
@@ -108,6 +108,21 @@ func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	require.Equal(t, uint64(1), s.FallbackCount)
 	require.Equal(t, uint64(1), s.HydrationCount)
 	require.Equal(t, "", s.LastWarning) // cleared when last call had no warnings
+}
+
+func TestRecordSnapshotTracksPeakInformerSyncWait(t *testing.T) {
+	rec := NewRecorder()
+
+	// Cold-start build: the snapshot blocked 800ms waiting for its informers to
+	// settle (the initial-LIST gate) before building.
+	rec.RecordSnapshot("pods", "cluster:c1", "c1", "c-one", 30*time.Millisecond, nil, false, 5, nil, 0, 0, 0, true, 0, 800)
+	// A later warm build has no wait; the recorded PEAK must not drop to 0, or the
+	// initial-LIST cost would be invisible by the time anyone opens diagnostics.
+	rec.RecordSnapshot("pods", "cluster:c1", "c1", "c-one", 25*time.Millisecond, nil, false, 5, nil, 0, 0, 0, true, 0, 0)
+
+	summary := rec.SnapshotSummary()
+	require.Len(t, summary.Snapshots, 1)
+	require.Equal(t, int64(800), summary.Snapshots[0].MaxInformerSyncWaitMs)
 }
 
 func TestRecordMetrics(t *testing.T) {
