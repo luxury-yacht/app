@@ -631,6 +631,17 @@ func (m *typedMaintainedStore[T]) bundleSinkFor(desc streamspec.Descriptor) inge
 	}
 }
 
+// bundleSinkForKind is the kind-string analogue of bundleSinkFor for a source whose kind has no
+// streamspec.Descriptor (the workload kinds, the network cut kinds). Its bulk ReplaceBundles path
+// sweeps only rows whose adapter kind matches, so one GVR's relist cannot remove another kind's
+// rows from a multi-kind maintained store fed by several GVRs.
+func (m *typedMaintainedStore[T]) bundleSinkForKind(kind string) ingest.BundleSink {
+	return maintainedStoreSink[T]{
+		store: m,
+		owns:  func(row T) bool { return m.adapter.Kind(row) == kind },
+	}
+}
+
 // Sink returns the Table-half ingest.Sink view of the same maintained-store feed. It is the
 // delivery path used by the equivalence/maintained-store gate tests, which feed projected
 // Table rows directly. Production registers BundleSink() instead, because a dropped-Table

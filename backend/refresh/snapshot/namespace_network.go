@@ -132,8 +132,18 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 	// first Build serves from it. nil ingestManager (a unit test) leaves the cut kinds unfed.
 	maintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
 	if ingestManager != nil {
-		for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
-			ingestManager.AddBundleSink(gvr, maintained.BundleSink())
+		// Each GVR's bundle sink is scoped to its kind so a relist of one cut kind's reflector
+		// replaces only that kind's rows and cannot sweep the other three from the shared store.
+		for _, nk := range []struct {
+			GVR  schema.GroupVersionResource
+			Kind string
+		}{
+			{ServiceGVR, service.Identity.Kind},
+			{EndpointSliceGVR, endpointslice.Identity.Kind},
+			{IngressGVR, ingress.Identity.Kind},
+			{NetworkPolicyGVR, networkpolicy.Identity.Kind},
+		} {
+			ingestManager.AddBundleSink(nk.GVR, maintained.bundleSinkForKind(nk.Kind))
 		}
 	}
 	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {

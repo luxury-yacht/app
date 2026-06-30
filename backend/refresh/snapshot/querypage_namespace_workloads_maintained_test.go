@@ -125,42 +125,103 @@ func TestNamespaceWorkloadsBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 }
 
-// TestNamespaceWorkloadsMaintainedStandaloneTransitions pins the cross-kind transition: when the
-// owning workload is removed, its previously-owned pod becomes a standalone row served at serve
-// time. The workload own-rows come from the Sink-fed store; the standalone determination is a
-// serve-time cross-kind join against the pod ingest source, so removing the deployment flips the
-// pod to standalone without re-feeding the store.
-func TestNamespaceWorkloadsMaintainedStandaloneTransitions(t *testing.T) {
+// TestNamespaceWorkloadsMaintainedOwnedPodNeverStandalone pins the workloads-view rule: the view
+// shows workload OWN-rows plus pods that have NO controller owner. A pod with a controller owner
+// must never appear as its own row — not even when its owning workload is absent from the emitted
+// set (owner removed, filtered by permission, or owned by an untracked kind). A bare pod (no owner)
+// is always emitted, independent of the workload set.
+func TestNamespaceWorkloadsMaintainedOwnedPodNeverStandalone(t *testing.T) {
 	meta := ClusterMeta{}
 	dep := wlDeployment("web", "default", "100", 1, 1)
-	ownedPod := wlPod("web-123", "default", "201", "web-123", 0)
+	ownedPod := wlPod("web-123", "default", "201", "web-123", 0) // controller-owned -> never a row
+	barePod := wlPod("loner", "default", "202", "", 0)           // no owner -> always a row
+
+	rowKeys := func(rows []WorkloadSummary) []string {
+		keys := make([]string, len(rows))
+		for i, r := range rows {
+			keys[i] = r.Kind + "/" + r.Namespace + "/" + r.Name
+		}
+		return keys
+	}
 
 	src := newFakeWorkloadIngestSource(meta, dep)
 	b := &NamespaceWorkloadsBuilder{
-		podIngest:          newFakePodWorkloadsIngestSource(meta, nil, ownedPod),
+		podIngest:          newFakePodWorkloadsIngestSource(meta, nil, ownedPod, barePod),
 		includePods:        true,
 		workloadIngest:     src,
 		includeDeployments: true,
 	}
 	seedWorkloadsMaintained(b, meta, src)
 
-	// With the deployment present, web-123 is owned -> no standalone Pod row; one Deployment row.
+	// Deployment present: the Deployment row plus the bare pod row. web-123 is folded into the
+	// Deployment, never shown on its own.
 	snap, err := b.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	rows := snap.Payload.(NamespaceWorkloadsSnapshot).Rows
-	require.Len(t, rows, 1)
-	require.Equal(t, "Deployment", rows[0].Kind)
+	require.ElementsMatch(t, []string{"Deployment/default/web", "Pod/default/loner"}, rowKeys(rows))
 
-	// Remove the deployment from the store: web-123 now has no owning workload -> standalone Pod row.
+	// Remove the deployment from the store: web-123 still must NOT surface as a standalone row — it
+	// has an owner. Only the bare pod remains.
 	emptySrc := newFakeWorkloadIngestSource(meta)
 	seedWorkloadsMaintained(b, meta, emptySrc)
 	b.workloadIngest = emptySrc
 	snap, err = b.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
 	rows = snap.Payload.(NamespaceWorkloadsSnapshot).Rows
-	require.Len(t, rows, 1)
-	require.Equal(t, "Pod", rows[0].Kind)
-	require.Equal(t, "web-123", rows[0].Name)
+	require.ElementsMatch(t, []string{"Pod/default/loner"}, rowKeys(rows))
+}
+
+// TestWorkloadsStoreRelistPreservesOtherKinds pins the multi-kind maintained-store contract: the
+// five workload kinds share ONE store, fed by five reflector GVRs. A relist of one GVR's reflector
+// (initial list / periodic resync) delivers ReplaceBundles carrying ONLY that GVR's kind; it must
+// replace only that kind's rows and leave the other kinds untouched. The unscoped BundleSink()
+// replaced the WHOLE store on every relist, so whichever workload GVR relisted last won and the
+// other four kinds vanished — the "StatefulSets missing" bug.
+func TestWorkloadsStoreRelistPreservesOtherKinds(t *testing.T) {
+	meta := ClusterMeta{}
+	store := newTypedMaintainedStore(meta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
+
+	depBundle := workloadBundle(t, NewDeploymentIngestProjector(meta), wlDeployment("web", "default", "100", 1, 1))
+	stsBundle := workloadBundle(t, NewStatefulSetIngestProjector(meta), &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "cache", Namespace: "default", ResourceVersion: "200"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: ptrInt32(1),
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "c"}}}},
+		},
+	})
+
+	depSink := store.bundleSinkForKind("Deployment")
+	stsSink := store.bundleSinkForKind("StatefulSet")
+
+	// Both kinds present after their reflectors' initial upserts.
+	depSink.UpsertBundle(depBundle)
+	stsSink.UpsertBundle(stsBundle)
+	require.ElementsMatch(t, []string{"Deployment", "StatefulSet"}, workloadStoreKinds(store))
+
+	// The Deployment GVR's reflector relists with only its own kind's bundles.
+	depSink.(ingest.BundleReplaceSink).ReplaceBundles([]ingest.Bundle{depBundle})
+
+	// The StatefulSet row must survive a Deployment relist.
+	require.ElementsMatch(t, []string{"Deployment", "StatefulSet"}, workloadStoreKinds(store))
+}
+
+func workloadBundle(t *testing.T, project ingest.ProjectFunc, obj interface{}) ingest.Bundle {
+	t.Helper()
+	raw, err := project(obj)
+	require.NoError(t, err)
+	bundle, ok := raw.(ingest.Bundle)
+	require.True(t, ok, "projector returned %T, want ingest.Bundle", raw)
+	return bundle
+}
+
+func workloadStoreKinds(store *typedMaintainedStore[WorkloadSummary]) []string {
+	available := map[string]bool{"Deployment": true, "StatefulSet": true, "DaemonSet": true, "Job": true, "CronJob": true}
+	rows := store.rows("", available)
+	kinds := make([]string, len(rows))
+	for i, r := range rows {
+		kinds[i] = r.Kind
+	}
+	return kinds
 }
 
 // TestWorkloadsMaintainedStoreSpillRestoreRoundTrip proves the workloads maintained store — the

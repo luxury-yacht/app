@@ -137,6 +137,36 @@ type WorkloadSummary = streamrows.WorkloadSummary
 // nil in a unit test, in which case the store has no feed and no pods are read. The per-kind
 // include flags gate which kinds the request is permitted to read (the gate the typed listers'
 // presence used to imply).
+// workloadStoreGVRKinds pairs each workload GVR that feeds the shared workloads maintained store
+// with the kind its projected rows carry. The five workload kinds share ONE store, so each GVR's
+// bundle sink must be scoped to its own kind — otherwise a relist of one GVR's reflector replaces
+// the whole store with just that kind and drops the other four (the "StatefulSets missing" bug).
+// GVR and kind both derive from the same resource Identity, so they cannot drift apart.
+var workloadStoreGVRKinds = []struct {
+	GVR  schema.GroupVersionResource
+	Kind string
+}{
+	{DeploymentGVR, deployment.Identity.Kind},
+	{StatefulSetGVR, statefulset.Identity.Kind},
+	{DaemonSetGVR, daemonset.Identity.Kind},
+	{JobGVR, jobres.Identity.Kind},
+	{CronJobGVR, cronjob.Identity.Kind},
+}
+
+// feedWorkloadStoreFromIngest wires each workload GVR's whole-bundle ingest Sink into the one
+// shared workloads store, scoped to that GVR's kind. Each kind's projector emits a WorkloadSummary
+// Table half (upserted by key) and a Catalog half (the delete key), so they all land in this store;
+// a relist of one GVR replaces only that kind's rows. Shared by the workloads domain and its
+// metrics twin. nil ingestManager (a unit test) leaves the store with no feed.
+func feedWorkloadStoreFromIngest(ingestManager *ingest.IngestManager, maintained *typedMaintainedStore[WorkloadSummary]) {
+	if ingestManager == nil {
+		return
+	}
+	for _, wk := range workloadStoreGVRKinds {
+		ingestManager.AddBundleSink(wk.GVR, maintained.bundleSinkForKind(wk.Kind))
+	}
+}
+
 func RegisterNamespaceWorkloadsDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
@@ -150,15 +180,7 @@ func RegisterNamespaceWorkloadsDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	maintained := newTypedMaintainedStore(clusterMeta, workloadsQuerypageSchema(), workloadTableQueryAdapter())
-	// Feed the one store from every workload GVR's whole-bundle Sink. Each kind's projector emits a
-	// WorkloadSummary Table half (upserted by key) and a Catalog half (the delete key), so they all
-	// land in this store; the BundleSink ignores a bundle whose Table half is the wrong type. nil
-	// ingestManager (a unit test) leaves the store with no feed.
-	if ingestManager != nil {
-		for _, gvr := range []schema.GroupVersionResource{DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR} {
-			ingestManager.AddBundleSink(gvr, maintained.BundleSink())
-		}
-	}
+	feedWorkloadStoreFromIngest(ingestManager, maintained)
 	builder := &NamespaceWorkloadsBuilder{
 		// HPA lister is always wired — it's informational and doesn't block on missing perms.
 		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
@@ -302,8 +324,9 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 // assembleWorkloadRows builds the unified workload + standalone-pod rows for the domain from the
 // projected workload own-rows (all five kinds in one slice, from the Sink-fed store), pod
 // aggregates/summaries, HPA targets, and the fresh pod metrics sample. The standalone-pod
-// synthesis is the cross-kind serve-time join: any non-terminal pod whose resolved owner is not in
-// the emitted workload set becomes a standalone row. workloadIngestVersion/podIngestVersion are the
+// synthesis emits one row per non-terminal pod that has no controller owner; an owned pod is folded
+// into its workload (never its own row), regardless of whether that workload is in the emitted set.
+// workloadIngestVersion/podIngestVersion are the
 // cut stores' watermarks, folded into the returned version only when a workload / standalone-pod
 // row is actually emitted (matching the prior per-object RV fold).
 func assembleWorkloadRows(
@@ -330,9 +353,8 @@ func assembleWorkloadRows(
 	}
 
 	var (
-		items           []WorkloadSummary
-		version         uint64
-		processedOwners = map[string]struct{}{}
+		items   []WorkloadSummary
+		version uint64
 	)
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
@@ -345,9 +367,6 @@ func assembleWorkloadRows(
 				managed = true
 			}
 			summary.HPAManaged = &managed
-		}
-		if summary.Kind != podres.Identity.Kind {
-			processedOwners[workloadOwnerKey(summary.Kind, summary.Namespace, summary.Name)] = struct{}{}
 		}
 		items = append(items, summary)
 		if obj == nil {
@@ -381,10 +400,11 @@ func assembleWorkloadRows(
 		if agg.Phase == string(corev1.PodSucceeded) || agg.Phase == string(corev1.PodFailed) {
 			continue
 		}
+		// The workloads view shows OWN-rows plus pods with no owner; a pod with a
+		// controller owner is folded into its workload (podsByOwner above) and is never
+		// emitted as a row, even when its owning workload is absent from this snapshot.
 		if agg.OwnerKey != "" {
-			if _, ok := processedOwners[agg.OwnerKey]; ok {
-				continue
-			}
+			continue
 		}
 		// The standalone row reads the pod's projected PodSummary (status/age/ports/
 		// ready/restarts) plus this aggregate (resources), byte-identical to the prior
