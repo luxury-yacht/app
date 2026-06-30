@@ -66,6 +66,50 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// TestClassifyWindowsErrorShapes confirms the classifier handles the error
+// strings produced on Windows, where kubeconfig exec helpers run through the
+// app's wrapper binary (see backend/exec_wrapper.go) and Go's exec error names
+// %PATH% rather than $PATH. Every shape must still classify as auth-class so the
+// affected cluster enters auth handling rather than being treated as a network
+// blip.
+func TestClassifyWindowsErrorShapes(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantClass Class
+		wantKind  Kind
+	}{
+		{
+			"helper not found (windows %PATH%)",
+			errors.New(`exec: "gke-gcloud-auth-plugin": executable file not found in %PATH%`),
+			ClassAuth, KindMissingHelper,
+		},
+		{
+			"wrapped helper non-zero exit (windows)",
+			errors.New(`getting credentials: exec: executable C:\Program Files\LuxuryYacht\app.exe failed with exit code 1`),
+			ClassAuth, KindHelperFailed,
+		},
+		{
+			"helper .exe non-zero exit (windows)",
+			errors.New(`getting credentials: exec: executable aws.exe failed with exit code 255`),
+			ClassAuth, KindHelperFailed,
+		},
+		{
+			"wrapped failure carrying not-found stderr (windows)",
+			errors.New(`getting credentials: exec: executable app.exe failed with exit code 1: exec: "gke-gcloud-auth-plugin": executable file not found in %PATH%`),
+			ClassAuth, KindMissingHelper,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Classify(tt.err, Context{})
+			require.True(t, got.IsAuth(), "windows credential error must be auth-class")
+			require.Equal(t, tt.wantClass, got.Class, "class")
+			require.Equal(t, tt.wantKind, got.Kind, "kind")
+		})
+	}
+}
+
 // TestClassifySummaryIsSanitized proves the summary never echoes raw provider
 // stderr — it is a fixed, provider-neutral phrase.
 func TestClassifySummaryIsSanitized(t *testing.T) {
