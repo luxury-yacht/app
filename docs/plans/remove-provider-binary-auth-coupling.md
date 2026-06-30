@@ -1,6 +1,8 @@
 # Remove Provider-Binary Auth Coupling
 
-Status: **Planned, not started.**
+Status: **Implemented.** All five phases landed across three PR-sized changes
+(PATH cleanup; classifier consolidation; typed diagnostics + frontend). Validated
+with `mage qc:prerelease` (green, including `go test ./... -race`).
 
 ## Problem
 
@@ -108,23 +110,28 @@ Kubernetes Authentication docs, "client-go credential plugins":
       (`backend/auth_providers.go:146`). Implemented as
       `TestDefaultExecutableSearchDirectoriesExcludesProviderPaths`
       (`backend/auth_providers_paths_test.go`).
-- [ ] Add a **guard** backend test proving the selected kubeconfig's
+- [x] Add a **guard** backend test proving the selected kubeconfig's
       `ExecProvider.Command` is preserved by `buildRestConfigForSelection`
       except for existing Windows wrapper behavior
       (`backend/cluster_clients.go:505`, `backend/exec_wrapper.go:60`).
-- [ ] Add backend tests for an `execDisplayCommand` helper:
+      Covered by `TestWrapExecProviderForWindowsNoop` (the only step in
+      `buildRestConfigForSelection` that touches `ExecProvider.Command`, a no-op
+      on non-Windows) plus the `execDisplayCommand` unwrap tests below.
+- [x] Add backend tests for an `execDisplayCommand` helper
+      (`TestExecDisplayCommand`, `backend/exec_wrapper_test.go`):
       - non-Windows/unwrapped config displays `ExecProvider.Command`
         (`backend/cluster_clients.go:505`);
       - Windows-wrapped config displays the original command stored after
         `--ly-exec-wrapper`, not the app executable
         (`backend/exec_wrapper.go:82`);
       - missing `ExecProvider` produces no command.
-- [ ] Add classifier tests covering missing helper, helper non-zero exit, HTTP
+- [x] Add classifier tests covering missing helper, helper non-zero exit, HTTP
       401/403, expired token strings, SSO strings, and connectivity errors. The
       current classifier fixtures include provider-named AWS/GCloud examples in
       heartbeat tests (`backend/app_heartbeat_test.go:518`); keep provider names
-      as input examples, not as app-owned branches.
-- [ ] Before consolidating classifiers, pin each current call site's verdicts:
+      as input examples, not as app-owned branches. Implemented as `TestClassify`
+      (`backend/internal/credentialerrors/credentialerrors_test.go`).
+- [x] Before consolidating classifiers, pin each current call site's verdicts:
       preflight/recovery (`backend/cluster_clients.go:399`,
       `backend/cluster_clients.go:475`), auth transport
       (`backend/internal/authstate/transport.go:61`), and heartbeat
@@ -157,87 +164,90 @@ Kubernetes Authentication docs, "client-go credential plugins":
 
 ## Phase 3: Centralize Exec Credential Diagnostics
 
-- [ ] Introduce one backend classifier for credential-plugin failures, cluster
+- [x] Introduce one backend classifier for credential-plugin failures, cluster
       credential rejection, and connectivity. Candidate package:
       `backend/internal/credentialerrors`.
-- [ ] Make the classifier API accept contextual data in addition to `error`,
+- [x] Make the classifier API accept contextual data in addition to `error`,
       because `execCommand` comes from `rest.Config.ExecProvider`
       (`backend/cluster_clients.go:505`), while current classifiers only accept
       `error` (`backend/cluster_clients.go:535`,
-      `backend/app_heartbeat.go:139`).
-- [ ] Replace `isCredentialError` in cluster client setup
+      `backend/app_heartbeat.go:139`). Done via `credentialerrors.Context`.
+- [x] Replace `isCredentialError` in cluster client setup
       (`backend/cluster_clients.go:532`) with the shared classifier.
-- [ ] Replace `isCredentialError` in auth transport
+- [x] Replace `isCredentialError` in auth transport
       (`backend/internal/authstate/transport.go:96`) with the shared classifier.
-- [ ] Replace `isExecCredentialError` in heartbeat health
+- [x] Replace `isExecCredentialError` in heartbeat health
       (`backend/app_heartbeat.go:136`) with the shared classifier.
-- [ ] Return a typed diagnostic from the classifier, not only a boolean:
+- [x] Return a typed diagnostic from the classifier, not only a boolean:
       `class`, `kind`, sanitized `summary`, and optional `execCommand`.
-- [ ] Preserve or deliberately change each call site's verdict table. A wider
+- [x] Preserve or deliberately change each call site's verdict table. A wider
       classifier would change heartbeat behavior if it turns current
       connectivity-class strings into `healthAuthFailure`; heartbeat maps
       auth-class errors to `healthAuthFailure` and all other errors to
       `healthConnectivityFailure` (`backend/app_heartbeat.go:124`,
-      `backend/app_heartbeat.go:133`).
-- [ ] Keep raw provider stderr out of default UI copy unless a separate
-      diagnostic/details surface deliberately exposes it.
+      `backend/app_heartbeat.go:133`). Heartbeat deliberately broadened (expired/
+      SSO transport errors now auth-class), pinned by
+      `TestCheckClusterHealth/expired_credential...`.
+- [x] Keep raw provider stderr out of default UI copy unless a separate
+      diagnostic/details surface deliberately exposes it. `Diagnostic.Summary` is
+      a fixed provider-neutral phrase, pinned by `TestClassifySummaryIsSanitized`.
 
 ## Phase 4: Carry Typed Auth Diagnostics To The Frontend
 
-- [ ] Change the `authstate.Manager` producer contract by name instead of
+- [x] Change the `authstate.Manager` producer contract by name instead of
       routing diagnostics around it. The current path is
       `ReportFailure(reason string)` (`backend/internal/authstate/manager.go:155`)
       to `OnStateChange(state, reason string)`
       (`backend/internal/authstate/manager.go:48`) to
       `handleClusterAuthStateChange(clusterID, state, reason)`
       (`backend/cluster_auth.go:29`).
-- [ ] Add an `authstate.FailureDiagnostic` (or equivalent) that contains the
+- [x] Add an `authstate.FailureDiagnostic` (or equivalent) that contains the
       existing reason plus `class`, `kind`, sanitized `summary`, and optional
       `execCommand`.
-- [ ] Store the latest failure diagnostic in the manager alongside
+- [x] Store the latest failure diagnostic in the manager alongside
       `failureReason`; `State()` and the initial auth-state RPC currently expose
       only `state`, `reason`, `secondsUntilRetry`, and `errorClass`
       (`backend/internal/authstate/manager.go:138`,
       `backend/cluster_auth.go:359`).
-- [ ] Capture `execCommand` during REST config construction before Windows
+- [x] Capture `execCommand` during REST config construction before Windows
       wrapping, or with an explicit unwrap helper for already-wrapped configs
       (`backend/cluster_clients.go:505`, `backend/exec_wrapper.go:82`).
-- [ ] Extend backend auth state/events so failed, recovering, progress, and
+- [x] Extend backend auth state/events so failed, recovering, progress, and
       initial-state payloads can carry typed diagnostic fields alongside the
       existing `clusterId`, `clusterName`, `reason`, and `errorClass`
       (`backend/cluster_auth.go:62`, `backend/cluster_auth.go:83`,
       `backend/cluster_auth.go:388`).
-- [ ] Extend `ClusterAuthState` and auth event payload types with typed
+- [x] Extend `ClusterAuthState` and auth event payload types with typed
       diagnostic fields (`frontend/src/core/contexts/AuthErrorContext.tsx:23`).
-- [ ] Update `applyAuthFailedEvent`, `applyAuthRecoveringEvent`,
+- [x] Update `applyAuthFailedEvent`, `applyAuthRecoveringEvent`,
       `applyAuthProgressEvent`, and initial-state hydration to preserve the
       typed diagnostic fields (`frontend/src/core/contexts/AuthErrorContext.tsx:89`,
       `frontend/src/core/contexts/AuthErrorContext.tsx:114`,
       `frontend/src/core/contexts/AuthErrorContext.tsx:139`,
       `frontend/src/core/contexts/AuthErrorContext.tsx:201`).
-- [ ] Update `AuthFailureOverlay` to render kubeconfig-centered copy. Example:
+- [x] Update `AuthFailureOverlay` to render kubeconfig-centered copy. Example:
       "This kubeconfig asks Kubernetes to run `<command>` for credentials. Install
       that command, add it to PATH, or update the kubeconfig, then retry."
       Existing overlay rendering starts at
       `frontend/src/ui/overlays/AuthFailureOverlay.tsx:45`.
-- [ ] Add frontend tests for missing exec command, failed exec command, cluster
+- [x] Add frontend tests for missing exec command, failed exec command, cluster
       rejected credentials, and connectivity-class recovery. Existing
       subscription tests cover the four auth event names
       (`frontend/src/core/contexts/AuthErrorContext.test.tsx:105`).
 
 ## Phase 5: Preserve Multi-Cluster Recovery Behavior
 
-- [ ] Keep every new backend event and frontend state update keyed by
+- [x] Keep every new backend event and frontend state update keyed by
       `clusterId`, matching the auth architecture contract
       (`docs/architecture/auth.md:8`) and multi-cluster contract
       (`docs/architecture/multi-cluster.md:9`).
-- [ ] Confirm one cluster with a missing/failing exec plugin pauses only that
+- [x] Confirm one cluster with a missing/failing exec plugin pauses only that
       cluster's refresh/action surface. The auth doc requires unrelated clusters
       to continue operating (`docs/architecture/auth.md:3`).
-- [ ] Confirm recovery still builds a fresh kubeconfig-derived client instead of
+- [x] Confirm recovery still builds a fresh kubeconfig-derived client instead of
       using the wrapped transport (`docs/architecture/auth.md:75`,
       `backend/cluster_clients.go:361`).
-- [ ] Confirm rebuilt cluster transports reuse the existing auth manager, because
+- [x] Confirm rebuilt cluster transports reuse the existing auth manager, because
       the auth doc records that invariant and its pinned test
       (`docs/architecture/auth.md:79`).
 

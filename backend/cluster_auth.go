@@ -26,7 +26,7 @@ import (
 //
 // NOTE: This is called from the auth manager with the mutex held, so heavy
 // operations must be run asynchronously to avoid blocking other auth operations.
-func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.State, reason string) {
+func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.State, diag authstate.FailureDiagnostic) {
 	if a == nil || clusterID == "" {
 		return
 	}
@@ -57,13 +57,9 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 
 	case authstate.StateRecovering:
-		a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
+		a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
 		// Emit per-cluster recovering event for the frontend
-		a.emitEvent("cluster:auth:recovering", map[string]any{
-			"clusterId":   clusterID,
-			"clusterName": clusterName,
-			"reason":      reason,
-		})
+		a.emitEvent("cluster:auth:recovering", authEventPayload(clusterID, clusterName, diag))
 		// Teardown only this cluster's subsystem through the coordinated mutation path.
 		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ *selectionMutation) error {
 			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
@@ -76,18 +72,29 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 
 	case authstate.StateInvalid:
-		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, reason), logsources.Auth, clusterID, clusterName)
+		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
 		// Capture the auth failure with cluster context for error enhancement
-		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", reason))
+		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", diag.Reason))
 		// Emit per-cluster failure event for the frontend
-		a.emitEvent("cluster:auth:failed", map[string]any{
-			"clusterId":   clusterID,
-			"clusterName": clusterName,
-			"reason":      reason,
-		})
+		a.emitEvent("cluster:auth:failed", authEventPayload(clusterID, clusterName, diag))
 		if a.clusterLifecycle != nil {
 			a.clusterLifecycle.SetState(clusterID, ClusterStateAuthFailed)
 		}
+	}
+}
+
+// authEventPayload builds an auth event payload carrying the per-cluster identity
+// plus the typed credential diagnostic. Every diagnostic field is always present
+// (empty string when unknown) so the frontend can rely on the payload shape.
+func authEventPayload(clusterID, clusterName string, diag authstate.FailureDiagnostic) map[string]any {
+	return map[string]any{
+		"clusterId":   clusterID,
+		"clusterName": clusterName,
+		"reason":      diag.Reason,
+		"class":       diag.Class,
+		"kind":        diag.Kind,
+		"summary":     diag.Summary,
+		"execCommand": diag.ExecCommand,
 	}
 }
 
@@ -356,14 +363,19 @@ func (a *App) GetAllClusterAuthStates() map[string]map[string]any {
 			states[id] = map[string]any{"state": "unknown", "reason": ""}
 			continue
 		}
-		state, reason := clients.authManager.State()
+		state, _ := clients.authManager.State()
+		diag := clients.authManager.FailureDiagnostic()
 		info := clients.authManager.RecoveryInfo()
 		states[id] = map[string]any{
 			"state":             state.String(),
-			"reason":            reason,
+			"reason":            diag.Reason,
 			"clusterName":       clients.meta.Name,
 			"secondsUntilRetry": info.SecondsUntilRetry,
 			"errorClass":        string(info.ErrorClass),
+			"class":             diag.Class,
+			"kind":              diag.Kind,
+			"summary":           diag.Summary,
+			"execCommand":       diag.ExecCommand,
 		}
 	}
 	return states
@@ -376,19 +388,25 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 		return
 	}
 
-	// Get cluster name for better logging/events
+	// Get cluster name and the stored failure diagnostic. FailureDiagnostic is
+	// read outside the manager's lock (OnRecoveryProgress fires after emitProgress
+	// releases it), so this cannot deadlock.
 	clusterName := clusterID
+	var diag authstate.FailureDiagnostic
 	if clients := a.clusterClientsForID(clusterID); clients != nil {
 		clusterName = clients.meta.Name
+		if clients.authManager != nil {
+			diag = clients.authManager.FailureDiagnostic()
+		}
 	}
 
 	// Emit per-cluster progress event for the frontend. errorClass carries the
 	// latest probe verdict ("auth", "connectivity", or "" before any verdict)
 	// so the UI can distinguish an unreachable cluster from rejected credentials.
-	a.emitEvent("cluster:auth:progress", map[string]any{
-		"clusterId":         clusterID,
-		"clusterName":       clusterName,
-		"secondsUntilRetry": progress.SecondsUntilRetry,
-		"errorClass":        string(progress.ErrorClass),
-	})
+	// The typed diagnostic fields let a late-subscribing UI render exec-helper
+	// copy without having seen the failed/recovering event.
+	payload := authEventPayload(clusterID, clusterName, diag)
+	payload["secondsUntilRetry"] = progress.SecondsUntilRetry
+	payload["errorClass"] = string(progress.ErrorClass)
+	a.emitEvent("cluster:auth:progress", payload)
 }

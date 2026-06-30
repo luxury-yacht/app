@@ -33,6 +33,15 @@ export interface ClusterAuthState {
   secondsUntilRetry: number;
   /** Latest recovery verdict; sticky until a probe result contradicts it. */
   errorClass: AuthErrorClass;
+  /**
+   * The kubeconfig exec credential command, when the failure is exec-plugin
+   * related (e.g. a missing helper). '' when unknown or not exec-based.
+   */
+  execCommand: string;
+  /** Finer backend failure classification (e.g. 'missing-helper'); '' when unknown. */
+  diagnosticKind: string;
+  /** Sanitized, provider-neutral one-line summary of the failure; '' when unknown. */
+  diagnosticSummary: string;
 }
 
 /**
@@ -45,6 +54,9 @@ const DEFAULT_AUTH_STATE: ClusterAuthState = {
   isRecovering: false,
   secondsUntilRetry: 0,
   errorClass: '',
+  execCommand: '',
+  diagnosticKind: '',
+  diagnosticSummary: '',
 };
 
 /**
@@ -54,6 +66,12 @@ interface AuthEventPayload {
   clusterId?: string;
   clusterName?: string;
   reason?: string;
+  /** Finer credential classification (credentialerrors.Kind). */
+  kind?: string;
+  /** Sanitized, provider-neutral summary. */
+  summary?: string;
+  /** Kubeconfig exec credential command, when known. */
+  execCommand?: string;
 }
 
 /**
@@ -64,6 +82,9 @@ interface AuthProgressPayload {
   clusterName?: string;
   secondsUntilRetry?: number;
   errorClass?: string;
+  kind?: string;
+  summary?: string;
+  execCommand?: string;
 }
 
 /** Narrows an event payload value to a known error class. */
@@ -102,6 +123,9 @@ export const applyAuthFailedEvent = (
     isRecovering: false,
     secondsUntilRetry: existing?.secondsUntilRetry || 0,
     errorClass: 'auth',
+    execCommand: payload.execCommand || existing?.execCommand || '',
+    diagnosticKind: payload.kind || existing?.diagnosticKind || '',
+    diagnosticSummary: payload.summary || existing?.diagnosticSummary || '',
   });
   return next;
 };
@@ -127,6 +151,9 @@ export const applyAuthRecoveringEvent = (
     isRecovering: true,
     secondsUntilRetry: existing?.secondsUntilRetry || 0,
     errorClass: existing?.errorClass ?? '',
+    execCommand: existing?.execCommand || payload.execCommand || '',
+    diagnosticKind: existing?.diagnosticKind || payload.kind || '',
+    diagnosticSummary: existing?.diagnosticSummary || payload.summary || '',
   });
   return next;
 };
@@ -154,6 +181,9 @@ export const applyAuthProgressEvent = (
     clusterName: payload.clusterName || existing.clusterName,
     secondsUntilRetry: payload.secondsUntilRetry ?? existing.secondsUntilRetry,
     errorClass: normalizeAuthErrorClass(payload.errorClass) || existing.errorClass,
+    execCommand: payload.execCommand || existing.execCommand,
+    diagnosticKind: payload.kind || existing.diagnosticKind,
+    diagnosticSummary: payload.summary || existing.diagnosticSummary,
   });
   return next;
 };
@@ -215,6 +245,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const reason = (stateInfo.reason as string) || '';
           const clusterName = (stateInfo.clusterName as string) || clusterId;
           const secondsUntilRetry = (stateInfo.secondsUntilRetry as number) || 0;
+          const execCommand = (stateInfo.execCommand as string) || '';
+          const diagnosticKind = (stateInfo.kind as string) || '';
+          const diagnosticSummary = (stateInfo.summary as string) || '';
 
           // Only add clusters that are in error or recovering state
           if (state === 'recovering') {
@@ -225,6 +258,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               isRecovering: true,
               secondsUntilRetry,
               errorClass: normalizeAuthErrorClass(stateInfo.errorClass),
+              execCommand,
+              diagnosticKind,
+              diagnosticSummary,
             });
           } else if (state === 'invalid') {
             initialErrors.set(clusterId, {
@@ -237,6 +273,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               secondsUntilRetry,
               // Invalid is only reached by exhausting auth-class failures.
               errorClass: 'auth',
+              execCommand,
+              diagnosticKind,
+              diagnosticSummary,
             });
           }
         }

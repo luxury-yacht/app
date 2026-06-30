@@ -2,12 +2,11 @@ package backend
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // healthStatus distinguishes the outcome of a cluster health check.
@@ -119,31 +118,15 @@ func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
 		return healthOK
 	}
 
-	// Distinguish auth errors from connectivity errors.
-	// HTTP 401/403 are clear auth failures.
-	if k8sErrors.IsUnauthorized(err) || k8sErrors.IsForbidden(err) {
-		return healthAuthFailure
-	}
-	// Exec credential plugin failures (e.g. expired SSO token causing `aws` to exit non-zero)
-	// never produce an HTTP response — the request fails before it's sent.
-	// Detect these by inspecting the error string for exec-plugin patterns.
-	if isExecCredentialError(err) {
+	// Distinguish auth errors from connectivity errors. A rejected credential
+	// (HTTP 401/403) or a failed/missing exec credential plugin is an auth
+	// failure; everything else (network error, timeout, DNS) is connectivity.
+	// Exec-plugin failures never produce an HTTP response — the request fails
+	// before it is sent — so they are detected by the shared classifier too.
+	if credentialerrors.Classify(err, credentialerrors.Context{}).IsAuth() {
 		return healthAuthFailure
 	}
 	return healthConnectivityFailure
-}
-
-// isExecCredentialError returns true when the error looks like an exec-based
-// credential plugin failure (e.g. expired SSO token, missing CLI tool).
-// These fail before the HTTP request is sent so they never produce a status code.
-func isExecCredentialError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "getting credentials: exec:") ||
-		strings.Contains(msg, "exec plugin") ||
-		strings.Contains(msg, "executable") && strings.Contains(msg, "failed")
 }
 
 // startHeartbeatLoop runs runHeartbeatIteration on a periodic schedule.

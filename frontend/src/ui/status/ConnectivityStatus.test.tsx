@@ -19,6 +19,9 @@ let mockAuthState: ClusterAuthState = {
   clusterName: '',
   secondsUntilRetry: 0,
   errorClass: '',
+  execCommand: '',
+  diagnosticKind: '',
+  diagnosticSummary: '',
 };
 
 vi.mock('@shared/components/status/StatusIndicator', () => ({
@@ -124,6 +127,9 @@ describe('ConnectivityStatus', () => {
       clusterName: '',
       secondsUntilRetry: 0,
       errorClass: '',
+      execCommand: '',
+      diagnosticKind: '',
+      diagnosticSummary: '',
     };
   });
 
@@ -172,6 +178,9 @@ describe('ConnectivityStatus', () => {
       clusterName: 'alpha',
       secondsUntilRetry: 0,
       errorClass: 'auth',
+      execCommand: '',
+      diagnosticKind: '',
+      diagnosticSummary: '',
     };
 
     const indicator = renderStatus();

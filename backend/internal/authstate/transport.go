@@ -2,7 +2,8 @@ package authstate
 
 import (
 	"net/http"
-	"strings"
+
+	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 )
 
 // AuthAwareTransport wraps an http.RoundTripper with auth state checks.
@@ -58,8 +59,8 @@ func (t *AuthAwareTransport) RoundTrip(req *http.Request) (*http.Response, error
 		// AWS SSO and other exec credential providers fail during RoundTrip
 		// before an HTTP request is even made, returning an error rather than
 		// an HTTP 401 response.
-		if isCredentialError(err) {
-			t.manager.ReportFailure(err.Error())
+		if d := credentialerrors.Classify(err, credentialerrors.Context{}); d.IsAuth() {
+			t.manager.ReportFailureDiagnostic(NewFailureDiagnostic(err.Error(), d))
 			return nil, &AuthInvalidError{
 				Reason: err.Error(),
 				State:  StateInvalid,
@@ -91,34 +92,4 @@ func (t *AuthAwareTransport) RoundTrip(req *http.Request) (*http.Response, error
 
 	// Step 5: Return the response (including 4xx/5xx errors other than 401)
 	return resp, nil
-}
-
-// isCredentialError checks if an error indicates a credential/auth failure.
-// This catches exec credential provider failures (like AWS SSO) that happen
-// before an HTTP request is made.
-func isCredentialError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := strings.ToLower(err.Error())
-	// Patterns that indicate credential/auth failures from exec providers
-	credentialPatterns := []string{
-		"getting credentials",
-		"exec: executable",
-		"failed with exit code",
-		"token has expired",
-		"token is expired",
-		"sso session",
-		"refresh token",
-		"authentication required",
-		"unauthorized",
-		"access denied",
-		"permission denied",
-	}
-	for _, pattern := range credentialPatterns {
-		if strings.Contains(errStr, pattern) {
-			return true
-		}
-	}
-	return false
 }

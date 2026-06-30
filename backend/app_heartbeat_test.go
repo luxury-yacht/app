@@ -503,6 +503,32 @@ func TestCheckClusterHealth(t *testing.T) {
 		}
 	})
 
+	t.Run("expired credential transport error returns healthAuthFailure", func(t *testing.T) {
+		// An expired token surfaces as a transport error (no HTTP response). After
+		// centralizing classification, heartbeat treats this as an auth failure;
+		// previously the narrow heartbeat classifier let it fall through to
+		// connectivity. Pins the deliberate broadening.
+		expiredDisco := &heartbeatDiscovery{
+			FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+			restClient: &restfake.RESTClient{
+				NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+				Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("token has expired")
+				}),
+			},
+		}
+		expiredClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: expiredDisco}
+
+		cc := &clusterClients{
+			meta:   ClusterMeta{ID: "expired", Name: "Expired"},
+			client: expiredClient,
+		}
+
+		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+			t.Errorf("expected healthAuthFailure for expired credential, got %v", got)
+		}
+	})
+
 	t.Run("nil client returns healthConnectivityFailure", func(t *testing.T) {
 		cc := &clusterClients{
 			meta:   ClusterMeta{ID: "nil-client", Name: "Nil Client"},
@@ -515,29 +541,8 @@ func TestCheckClusterHealth(t *testing.T) {
 	})
 }
 
-// TestIsExecCredentialError verifies pattern matching for exec credential plugin failures.
-func TestIsExecCredentialError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"aws exec failure", errors.New(`getting credentials: exec: executable aws failed with exit code 255`), true},
-		{"gcloud exec failure", errors.New(`getting credentials: exec: executable gcloud failed with exit code 1`), true},
-		{"exec plugin error", errors.New(`exec plugin: some error occurred`), true},
-		{"connection refused", errors.New("connection refused"), false},
-		{"timeout", errors.New("context deadline exceeded"), false},
-		{"nil error", nil, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isExecCredentialError(tt.err); got != tt.want {
-				t.Errorf("isExecCredentialError(%v) = %v, want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
+// Exec-credential pattern matching moved to backend/internal/credentialerrors
+// (see TestClassify). Heartbeat call-site behavior is pinned by TestCheckClusterHealth.
 
 // TestCheckClusterHealthUsesReadyz verifies that checkClusterHealth calls /readyz (not /healthz).
 func TestCheckClusterHealthUsesReadyz(t *testing.T) {

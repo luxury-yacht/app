@@ -253,6 +253,53 @@ describe('auth error state transitions', () => {
     expect(isConfirmedAuthFailure(map.get('c1')!)).toBe(true);
   });
 
+  it('carries the exec command, kind, and summary from a failed event', () => {
+    const next = applyAuthFailedEvent(empty(), {
+      clusterId: 'c1',
+      reason: 'exec: executable gke-gcloud-auth-plugin not found',
+      kind: 'missing-helper',
+      summary: "The kubeconfig's credential helper could not be found.",
+      execCommand: 'gke-gcloud-auth-plugin',
+    });
+
+    const state = next.get('c1')!;
+    expect(state.execCommand).toBe('gke-gcloud-auth-plugin');
+    expect(state.diagnosticKind).toBe('missing-helper');
+    expect(state.diagnosticSummary).toBe("The kubeconfig's credential helper could not be found.");
+  });
+
+  it('carries the exec command from a recovering event', () => {
+    const next = applyAuthRecoveringEvent(empty(), {
+      clusterId: 'c1',
+      reason: 'exec: executable aws not found',
+      execCommand: 'aws',
+    });
+
+    expect(next.get('c1')!.execCommand).toBe('aws');
+  });
+
+  it('keeps the exec command sticky across a progress event without one', () => {
+    let map = applyAuthRecoveringEvent(empty(), {
+      clusterId: 'c1',
+      reason: 'missing helper',
+      execCommand: 'gke-gcloud-auth-plugin',
+    });
+    map = applyAuthProgressEvent(map, { clusterId: 'c1', secondsUntilRetry: 5 });
+
+    expect(map.get('c1')!.execCommand).toBe('gke-gcloud-auth-plugin');
+  });
+
+  it('adopts the exec command from a progress event that carries one', () => {
+    let map = applyAuthRecoveringEvent(empty(), { clusterId: 'c1', reason: 'x' });
+    map = applyAuthProgressEvent(map, {
+      clusterId: 'c1',
+      secondsUntilRetry: 5,
+      execCommand: 'aws',
+    });
+
+    expect(map.get('c1')!.execCommand).toBe('aws');
+  });
+
   it('keeps the previous verdict when a progress event has no verdict yet', () => {
     let map = applyAuthFailedEvent(empty(), { clusterId: 'c1', reason: 'expired' });
     map = applyAuthRecoveringEvent(map, { clusterId: 'c1' });

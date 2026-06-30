@@ -82,6 +82,42 @@ func TestSameExecutablePath(t *testing.T) {
 	}
 }
 
+func TestExecDisplayCommand(t *testing.T) {
+	t.Run("nil config", func(t *testing.T) {
+		if got := execDisplayCommand(nil); got != "" {
+			t.Fatalf("expected empty for nil config, got %q", got)
+		}
+	})
+
+	t.Run("no exec provider", func(t *testing.T) {
+		if got := execDisplayCommand(&rest.Config{}); got != "" {
+			t.Fatalf("expected empty when no exec provider, got %q", got)
+		}
+	})
+
+	t.Run("unwrapped command", func(t *testing.T) {
+		cfg := &rest.Config{ExecProvider: &api.ExecConfig{
+			Command: "gke-gcloud-auth-plugin",
+			Args:    []string{"--version"},
+		}}
+		if got := execDisplayCommand(cfg); got != "gke-gcloud-auth-plugin" {
+			t.Fatalf("expected gke-gcloud-auth-plugin, got %q", got)
+		}
+	})
+
+	t.Run("windows-wrapped command returns the original, not the app exe", func(t *testing.T) {
+		// Wrapped form (see wrapExecProviderForWindows): Command is the app
+		// executable, the original helper is the first wrapper arg.
+		cfg := &rest.Config{ExecProvider: &api.ExecConfig{
+			Command: filepath.Join("C:\\", "Program Files", "LuxuryYacht", "app.exe"),
+			Args:    []string{execWrapperFlag, "gke-gcloud-auth-plugin", "--version"},
+		}}
+		if got := execDisplayCommand(cfg); got != "gke-gcloud-auth-plugin" {
+			t.Fatalf("expected original command gke-gcloud-auth-plugin, got %q", got)
+		}
+	})
+}
+
 func TestWrapExecProviderForWindowsNoop(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test covers non-windows no-op behavior")

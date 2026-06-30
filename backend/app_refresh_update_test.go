@@ -101,7 +101,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	// stays in StateInvalid after ReportFailure is called.
 	authMgrA := authstate.New(authstate.Config{
 		MaxAttempts:   0, // Disable auto-recovery so state stays Invalid
-		OnStateChange: func(authstate.State, string) {},
+		OnStateChange: func(authstate.State, authstate.FailureDiagnostic) {},
 	})
 	// Force auth manager into invalid state by reporting a failure.
 	// With MaxAttempts=0, this immediately transitions to StateInvalid.

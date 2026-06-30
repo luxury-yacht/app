@@ -51,8 +51,13 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	}
 	app.clusterClientsMu.Unlock()
 
-	// Trigger the StateInvalid handler.
-	app.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, "token expired")
+	// Trigger the StateInvalid handler with a typed diagnostic (missing exec helper).
+	app.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{
+		Reason:      "token expired",
+		Kind:        "missing-helper",
+		Summary:     "The kubeconfig's credential helper could not be found.",
+		ExecCommand: "gke-gcloud-auth-plugin",
+	})
 
 	// Verify the event was emitted.
 	mu.Lock()
@@ -69,6 +74,9 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	require.Equal(t, "test-cluster", authFailedEvents[0]["clusterId"])
 	require.Equal(t, "Test Cluster", authFailedEvents[0]["clusterName"])
 	require.Equal(t, "token expired", authFailedEvents[0]["reason"])
+	require.Equal(t, "missing-helper", authFailedEvents[0]["kind"])
+	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0]["execCommand"])
+	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0]["summary"])
 }
 
 // TestHandleClusterAuthStateChange_RecoveringEmitsEvent verifies that
@@ -108,7 +116,10 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 	}
 	app.clusterClientsMu.Unlock()
 
-	app.handleClusterAuthStateChange("cluster-r", authstate.StateRecovering, "401 unauthorized")
+	app.handleClusterAuthStateChange("cluster-r", authstate.StateRecovering, authstate.FailureDiagnostic{
+		Reason:      "401 unauthorized",
+		ExecCommand: "aws",
+	})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -124,6 +135,7 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 	require.Equal(t, "cluster-r", recoveringEvents[0]["clusterId"])
 	require.Equal(t, "Recovering Cluster", recoveringEvents[0]["clusterName"])
 	require.Equal(t, "401 unauthorized", recoveringEvents[0]["reason"])
+	require.Equal(t, "aws", recoveringEvents[0]["execCommand"])
 }
 
 // TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent verifies that
@@ -164,7 +176,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 	}
 	app.clusterClientsMu.Unlock()
 
-	app.handleClusterAuthStateChange("cluster-v", authstate.StateValid, "")
+	app.handleClusterAuthStateChange("cluster-v", authstate.StateValid, authstate.FailureDiagnostic{})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -185,7 +197,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 func TestHandleClusterAuthStateChange_NilAppNoOp(t *testing.T) {
 	var app *App
 	// Should not panic.
-	app.handleClusterAuthStateChange("any-cluster", authstate.StateInvalid, "reason")
+	app.handleClusterAuthStateChange("any-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
 }
 
 // TestHandleClusterAuthStateChange_EmptyClusterIDNoOp verifies the empty clusterID guard.
@@ -200,7 +212,7 @@ func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
 		eventCalled = true
 	}
 
-	app.handleClusterAuthStateChange("", authstate.StateInvalid, "reason")
+	app.handleClusterAuthStateChange("", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
 	require.False(t, eventCalled, "no event should be emitted for empty clusterID")
 }
 
@@ -238,6 +250,81 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 	defer mu.Unlock()
 	require.Len(t, progressEvents, 1)
 	require.Equal(t, "connectivity", progressEvents[0]["errorClass"])
+}
+
+// TestHandleClusterAuthRecoveryProgress_CarriesExecCommand verifies that the
+// progress event surfaces the stored credential diagnostic (read from the
+// manager) so a late-subscribing UI can render exec-helper copy.
+func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+
+	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
+	defer mgr.Shutdown()
+	mgr.ReportFailureDiagnostic(authstate.FailureDiagnostic{
+		Reason:      "exec: executable gke-gcloud-auth-plugin not found",
+		Kind:        "missing-helper",
+		ExecCommand: "gke-gcloud-auth-plugin",
+	})
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-p": {meta: ClusterMeta{ID: "cluster-p", Name: "P"}, authManager: mgr},
+	}
+	app.clusterClientsMu.Unlock()
+
+	var progressEvents []map[string]any
+	var mu sync.Mutex
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		if name != "cluster:auth:progress" || len(args) == 0 {
+			return
+		}
+		if data, ok := args[0].(map[string]any); ok {
+			mu.Lock()
+			progressEvents = append(progressEvents, data)
+			mu.Unlock()
+		}
+	}
+
+	app.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
+		SecondsUntilRetry: 5,
+		ErrorClass:        authstate.ErrorClassAuth,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, progressEvents, 1)
+	require.Equal(t, "gke-gcloud-auth-plugin", progressEvents[0]["execCommand"])
+	require.Equal(t, "missing-helper", progressEvents[0]["kind"])
+	require.Equal(t, 5, progressEvents[0]["secondsUntilRetry"])
+}
+
+// TestGetAllClusterAuthStates_IncludesExecCommand verifies the initial-state RPC
+// surfaces the stored exec command so a freshly mounted frontend can restore the
+// kubeconfig-centered overlay copy.
+func TestGetAllClusterAuthStates_IncludesExecCommand(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
+	defer mgr.Shutdown()
+	mgr.ReportFailureDiagnostic(authstate.FailureDiagnostic{
+		Reason:      "exec: executable aws not found",
+		Kind:        "missing-helper",
+		ExecCommand: "aws",
+	})
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-x": {meta: ClusterMeta{ID: "cluster-x", Name: "X"}, authManager: mgr},
+	}
+	app.clusterClientsMu.Unlock()
+
+	states := app.GetAllClusterAuthStates()
+	require.Equal(t, "invalid", states["cluster-x"]["state"])
+	require.Equal(t, "aws", states["cluster-x"]["execCommand"])
+	require.Equal(t, "missing-helper", states["cluster-x"]["kind"])
 }
 
 // TestGetAllClusterAuthStates_IncludesErrorClass verifies the state RPC

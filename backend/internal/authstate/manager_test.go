@@ -27,7 +27,7 @@ func TestReportFailureTransitionsToInvalid(t *testing.T) {
 	var stateChanges []State
 	var mu sync.Mutex
 	m := New(Config{
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			mu.Lock()
 			stateChanges = append(stateChanges, s)
 			mu.Unlock()
@@ -52,7 +52,7 @@ func TestReportFailureTransitionsToInvalid(t *testing.T) {
 func TestReportFailureIsIdempotent(t *testing.T) {
 	var calls int32
 	m := New(Config{
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			atomic.AddInt32(&calls, 1)
 		},
 		MaxAttempts: 0,
@@ -153,7 +153,7 @@ func TestAuthFailuresSettleInvalidAndKeepProbing(t *testing.T) {
 		ClassifyError: func(error) ErrorClass {
 			return ErrorClassAuth
 		},
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			mu.Lock()
 			states = append(states, s)
 			mu.Unlock()
@@ -272,7 +272,7 @@ func TestOnStateChangeCallback(t *testing.T) {
 	m := New(Config{
 		MaxAttempts:     1,
 		BackoffSchedule: []time.Duration{0},
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			mu.Lock()
 			stateChanges = append(stateChanges, s)
 			mu.Unlock()
@@ -294,11 +294,55 @@ func TestOnStateChangeCallback(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestReportFailureDiagnosticStoresTypedFields(t *testing.T) {
+	m := New(Config{MaxAttempts: 0})
+	defer m.Shutdown()
+
+	diag := FailureDiagnostic{
+		Reason:      "getting credentials: exec: executable gke-gcloud-auth-plugin not found",
+		Class:       "auth",
+		Kind:        "missing-helper",
+		Summary:     "The kubeconfig's credential helper could not be found.",
+		ExecCommand: "gke-gcloud-auth-plugin",
+	}
+	m.ReportFailureDiagnostic(diag)
+
+	state, reason := m.State()
+	require.Equal(t, StateInvalid, state)
+	require.Equal(t, diag.Reason, reason, "State() reason comes from the diagnostic")
+	require.Equal(t, diag, m.FailureDiagnostic())
+
+	// Recovery clears the stored diagnostic.
+	m.ReportSuccess()
+	require.Equal(t, FailureDiagnostic{}, m.FailureDiagnostic())
+}
+
+func TestOnStateChangeReceivesDiagnostic(t *testing.T) {
+	var got FailureDiagnostic
+	var mu sync.Mutex
+	m := New(Config{
+		MaxAttempts: 0,
+		OnStateChange: func(_ State, diag FailureDiagnostic) {
+			mu.Lock()
+			got = diag
+			mu.Unlock()
+		},
+	})
+	defer m.Shutdown()
+
+	want := FailureDiagnostic{Reason: "boom", Class: "auth", ExecCommand: "aws"}
+	m.ReportFailureDiagnostic(want)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, want, got, "the diagnostic flows through OnStateChange unchanged")
+}
+
 func TestReportSuccessWhileValid(t *testing.T) {
 	var calls int32
 	m := New(Config{
 		MaxAttempts: 0,
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			atomic.AddInt32(&calls, 1)
 		},
 	})
@@ -314,7 +358,7 @@ func TestTriggerRetryWhileValid(t *testing.T) {
 	var calls int32
 	m := New(Config{
 		MaxAttempts: 1,
-		OnStateChange: func(s State, reason string) {
+		OnStateChange: func(s State, _ FailureDiagnostic) {
 			atomic.AddInt32(&calls, 1)
 		},
 	})

@@ -2,6 +2,12 @@
 
 ### Changed
 
+- The authentication-failure overlay now explains credential-plugin failures in
+  terms of the kubeconfig. When a cluster's kubeconfig declares an `exec` credential
+  helper the app could not run, the overlay names that command ("This kubeconfig asks
+  Kubernetes to run `<command>` for credentials…") and suggests installing it, adding it
+  to `PATH`, or updating the kubeconfig — instead of showing a raw, provider-specific
+  error string.
 - The app no longer injects cloud-provider install locations (Google Cloud SDK and
   Caskroom paths) into `PATH` at startup, and no longer probes for
   `gke-gcloud-auth-plugin`. Kubeconfig is treated as the auth contract: a kubeconfig's
@@ -13,6 +19,11 @@
 
 ### Fixed
 
+- Cluster credential errors are now classified consistently across the initial
+  connection, live requests, and the periodic health check. An expired token, expired
+  SSO session, or failed/missing credential-plugin error detected by the heartbeat is now
+  treated as an authentication failure (and triggers recovery), where it could previously
+  be misreported as a connectivity issue and skip auth recovery.
 - Object Panel → Details now refreshes when the underlying object changes (e.g. a
   Deployment's container image tag). The details snapshot previously carried a constant
   source-version ETag, so the backend kept replying "not modified" and the panel showed
