@@ -143,6 +143,43 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 	}
 }
 
+// TestAppendKubeconfigFromFileAcceptsMissingExecHelper pins the target contract:
+// kubeconfig discovery validates by parsing YAML only and must accept a kubeconfig
+// whose user declares an exec credential plugin, even when that helper binary does
+// not exist. Discovery must never require a provider binary to be installed.
+func TestAppendKubeconfigFromFileAcceptsMissingExecHelper(t *testing.T) {
+	dir := t.TempDir()
+	content := `apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://127.0.0.1:6443
+  name: exec-cluster
+contexts:
+- context:
+    cluster: exec-cluster
+    user: exec-user
+  name: exec-context
+current-context: exec-context
+kind: Config
+preferences: {}
+users:
+- name: exec-user
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: definitely-missing-helper
+`
+	path := filepath.Join(dir, "exec-config")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	app := newTestAppWithDefaults(t)
+	app.appendKubeconfigFromFile(path, "exec-config", "", false, map[string]struct{}{})
+
+	require.True(t, hasKubeconfig(app.availableKubeconfigs, path, "exec-context"),
+		"discovery must accept a kubeconfig whose user.exec.command helper is missing")
+}
+
 func TestApp_GetKubeconfigs(t *testing.T) {
 	setTestConfigEnv(t)
 	// Setup temp directory with kubeconfig

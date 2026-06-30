@@ -2,8 +2,34 @@ package backend
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+// TestDefaultExecutableSearchDirectoriesExcludesProviderPaths pins the Phase 2
+// contract: the app injects only generic desktop executable directories into
+// PATH and never cloud-provider install locations (Google Cloud SDK / Caskroom),
+// even when those directories exist under HOME.
+func TestDefaultExecutableSearchDirectoriesExcludesProviderPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	localBin := filepath.Join(home, ".local", "bin")
+	gcloudBin := filepath.Join(home, "google-cloud-sdk", "bin")
+	require.NoError(t, os.MkdirAll(localBin, 0o755))
+	require.NoError(t, os.MkdirAll(gcloudBin, 0o755))
+
+	dirs := defaultExecutableSearchDirectories()
+
+	require.Contains(t, dirs, localBin, "generic $HOME/.local/bin must still be offered")
+	require.NotContains(t, dirs, gcloudBin, "provider google-cloud-sdk/bin must not be injected")
+	for _, dir := range dirs {
+		require.NotContains(t, dir, "google-cloud-sdk", "no provider path may be injected: %s", dir)
+		require.NotContains(t, dir, "Caskroom", "no provider path may be injected: %s", dir)
+	}
+}
 
 func TestEnsurePathContainsHandlesDuplicates(t *testing.T) {
 	original := "/usr/bin:/opt/bin"

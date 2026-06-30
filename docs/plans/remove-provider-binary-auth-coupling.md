@@ -91,21 +91,23 @@ Kubernetes Authentication docs, "client-go credential plugins":
 
 ## Phase 1: Characterize The Contract With Tests
 
-- [ ] Add a **characterization/guard** backend test proving kubeconfig discovery
+- [x] Add a **characterization/guard** backend test proving kubeconfig discovery
       accepts a kubeconfig whose user has
       `exec.command: definitely-missing-helper`; app discovery calls
       `clientcmd.LoadFromFile` (`backend/kubeconfigs.go:102`), and
       client-go v0.36.2 `LoadFromFile` reads file bytes and decodes config
       (`k8s.io/client-go@v0.36.2/tools/clientcmd/loader.go:397`).
-- [ ] Keep or rename the existing **guard** coverage proving
+- [x] Keep or rename the existing **guard** coverage proving
       `setupEnvironment` keeps generic executable directories such as
       `$HOME/.local/bin`; current coverage asserts that path
       (`backend/app_lifecycle_test.go:27`).
-- [ ] Add an **expected-red** backend test proving `setupEnvironment` does not
+- [x] Add an **expected-red** backend test proving `setupEnvironment` does not
       append Google Cloud SDK directories when those directories exist under a
       temp `HOME`. The current `authHelperDirectories` list includes those
       directories, so this is the Phase 2 behavior pin
-      (`backend/auth_providers.go:146`).
+      (`backend/auth_providers.go:146`). Implemented as
+      `TestDefaultExecutableSearchDirectoriesExcludesProviderPaths`
+      (`backend/auth_providers_paths_test.go`).
 - [ ] Add a **guard** backend test proving the selected kubeconfig's
       `ExecProvider.Command` is preserved by `buildRestConfigForSelection`
       except for existing Windows wrapper behavior
@@ -132,24 +134,26 @@ Kubernetes Authentication docs, "client-go credential plugins":
 
 ## Phase 2: Remove Provider-Specific PATH Logic
 
-- [ ] Delete the discarded `exec.LookPath("gke-gcloud-auth-plugin")` probe; both
+- [x] Delete the discarded `exec.LookPath("gke-gcloud-auth-plugin")` probe; both
       return values are assigned to blank identifiers today
       (`backend/auth_providers.go:61`).
-- [ ] Replace `authHelperDirectories` with a provider-neutral helper, for
+- [x] Replace `authHelperDirectories` with a provider-neutral helper, for
       example `defaultExecutableSearchDirectories`, containing only generic
       locations:
       - `/usr/local/bin`
       - `/opt/homebrew/bin`
       - `/usr/bin`
       - `$HOME/.local/bin`
-- [ ] Remove Google Cloud SDK home/share/Caskroom paths from the app-owned list
+- [x] Remove Google Cloud SDK home/share/Caskroom paths from the app-owned list
       as an explicit behavior change, not as mechanical cleanup
       (`backend/auth_providers.go:153`, `backend/auth_providers.go:160`).
-- [ ] Keep login-shell PATH merging, because `setupEnvironment` already reads a
+- [x] Keep login-shell PATH merging, because `setupEnvironment` already reads a
       login shell PATH before merging app process PATH (`backend/auth_providers.go:47`).
-- [ ] Update tests in `backend/auth_providers_paths_test.go` and
+- [x] Update tests in `backend/auth_providers_paths_test.go` and
       `backend/app_lifecycle_test.go` to describe generic desktop executable
       discovery instead of provider-specific auth helper discovery.
+      (`app_lifecycle_test.go` already asserted only the generic `$HOME/.local/bin`
+      path, so no provider-specific assertion needed removing.)
 
 ## Phase 3: Centralize Exec Credential Diagnostics
 
