@@ -50,15 +50,13 @@ func (a *App) setupEnvironment() {
 		}
 
 		merged := mergePathLists(loginPath, current)
-		for _, candidate := range authHelperDirectories() {
+		for _, candidate := range defaultExecutableSearchDirectories() {
 			merged = ensurePathContains(merged, candidate)
 		}
 
 		if merged != "" && merged != current {
 			os.Setenv("PATH", merged)
 		}
-
-		_, _ = exec.LookPath("gke-gcloud-auth-plugin")
 	})
 }
 
@@ -143,30 +141,18 @@ func execCommandContext(ctx context.Context, name string, arg ...string) *exec.C
 	return cmd
 }
 
-func authHelperDirectories() []string {
+// defaultExecutableSearchDirectories returns generic desktop locations where
+// user-installed executables commonly live, including any credential helper a
+// kubeconfig's exec plugin names. It is intentionally provider-neutral: the app
+// does not hard-code cloud-provider install paths or probe for provider-specific
+// commands. Only directories that exist are returned, de-duplicated.
+func defaultExecutableSearchDirectories() []string {
 	home := resolveHomeDir()
 	candidates := []string{
 		"/usr/local/bin",
 		"/opt/homebrew/bin",
 		"/usr/bin",
 		filepath.Join(home, ".local", "bin"),
-		filepath.Join(home, "google-cloud-sdk", "bin"),
-		"/usr/local/share/google-cloud-sdk/bin",
-		"/opt/homebrew/share/google-cloud-sdk/bin",
-		"/usr/local/google-cloud-sdk/bin",
-		"/opt/homebrew/google-cloud-sdk/bin",
-	}
-
-	globs := []string{
-		"/opt/homebrew/Caskroom/google-cloud-sdk/*/google-cloud-sdk/bin",
-		"/usr/local/Caskroom/google-cloud-sdk/*/google-cloud-sdk/bin",
-	}
-
-	for _, pattern := range globs {
-		matches, err := filepath.Glob(pattern)
-		if err == nil {
-			candidates = append(candidates, matches...)
-		}
 	}
 
 	seen := make(map[string]struct{})

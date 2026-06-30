@@ -29,7 +29,7 @@ func TestFullRecoveryFlow(t *testing.T) {
 	manager := New(Config{
 		MaxAttempts:     4,
 		BackoffSchedule: []time.Duration{0, 10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond},
-		OnStateChange: func(state State, reason string) {
+		OnStateChange: func(state State, _ FailureDiagnostic) {
 			stateChangesMu.Lock()
 			stateChanges = append(stateChanges, state)
 			stateChangesMu.Unlock()
@@ -76,9 +76,11 @@ func TestFullRecoveryFlow(t *testing.T) {
 	var authErr *AuthInvalidError
 	require.ErrorAs(t, err, &authErr)
 
-	// State should now be Recovering (recovery was triggered).
-	state, _ = manager.State()
-	require.Equal(t, StateRecovering, state)
+	// The 401 triggered recovery. We do not assert the transient Recovering
+	// state synchronously here: with sub-second backoffs the recovery goroutine
+	// can reach Valid before this point under -race scheduling. The Recovering
+	// transition is verified reliably below via the recorded OnStateChange
+	// transitions, which fire regardless of timing.
 
 	// Wait for recovery to complete (should take ~30ms with backoff schedule).
 	time.Sleep(100 * time.Millisecond)
@@ -156,7 +158,7 @@ func TestRecoverySuccessViaRecoveryTest(t *testing.T) {
 	manager := New(Config{
 		MaxAttempts:     4,
 		BackoffSchedule: []time.Duration{0, 0, 0, 0}, // No delay
-		OnStateChange: func(state State, reason string) {
+		OnStateChange: func(state State, _ FailureDiagnostic) {
 			stateChangesMu.Lock()
 			stateChanges = append(stateChanges, state)
 			stateChangesMu.Unlock()
@@ -198,7 +200,7 @@ func TestManualRetryFromInvalid(t *testing.T) {
 	manager := New(Config{
 		MaxAttempts:     4,
 		BackoffSchedule: []time.Duration{0, 0, 0, 0},
-		OnStateChange: func(state State, reason string) {
+		OnStateChange: func(state State, _ FailureDiagnostic) {
 			stateChangesMu.Lock()
 			stateChanges = append(stateChanges, state)
 			stateChangesMu.Unlock()

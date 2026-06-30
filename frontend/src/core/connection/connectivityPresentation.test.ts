@@ -18,6 +18,9 @@ describe('buildConnectivityPresentation', () => {
         clusterName: '',
         secondsUntilRetry: 0,
         errorClass: '',
+        execCommand: '',
+        diagnosticKind: '',
+        diagnosticSummary: '',
       },
     });
 
@@ -43,6 +46,9 @@ describe('buildConnectivityPresentation', () => {
         clusterName: 'alpha',
         secondsUntilRetry: 15,
         errorClass: 'connectivity',
+        execCommand: '',
+        diagnosticKind: '',
+        diagnosticSummary: '',
       },
     });
 
@@ -67,6 +73,9 @@ describe('buildConnectivityPresentation', () => {
         clusterName: 'alpha',
         secondsUntilRetry: 5,
         errorClass: 'auth',
+        execCommand: '',
+        diagnosticKind: '',
+        diagnosticSummary: '',
       },
     });
 

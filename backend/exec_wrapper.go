@@ -57,6 +57,22 @@ func runExecWrapper(command string, args []string) int {
 	return 0
 }
 
+// execDisplayCommand returns the kubeconfig exec credential command suitable for
+// display, or "" when the config declares no exec provider. On Windows the exec
+// provider is rewritten to run through this binary (see wrapExecProviderForWindows);
+// in that case the original helper command is recovered from the wrapper args so
+// diagnostics show the real credential helper, not the app executable.
+func execDisplayCommand(config *rest.Config) string {
+	if config == nil || config.ExecProvider == nil {
+		return ""
+	}
+	args := config.ExecProvider.Args
+	if isExecWrapperConfigured(args) && len(args) >= 2 {
+		return strings.TrimSpace(args[1])
+	}
+	return strings.TrimSpace(config.ExecProvider.Command)
+}
+
 // wrapExecProviderForWindows routes exec helpers through this binary on Windows.
 func wrapExecProviderForWindows(config *rest.Config) {
 	if runtime.GOOS != "windows" || config == nil || config.ExecProvider == nil {

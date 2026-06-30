@@ -166,7 +166,7 @@ func TestTransportReportsFailureOn401(t *testing.T) {
 	var stateChanges []State
 	manager := New(Config{
 		MaxAttempts: 0, // Disable recovery so we go directly to Invalid
-		OnStateChange: func(state State, reason string) {
+		OnStateChange: func(state State, _ FailureDiagnostic) {
 			stateChanges = append(stateChanges, state)
 		},
 	})
@@ -228,7 +228,7 @@ func TestTransportSuccessKeepsValidState(t *testing.T) {
 			var stateChanges []State
 			manager := New(Config{
 				MaxAttempts: 0, // Disable recovery for this test
-				OnStateChange: func(state State, reason string) {
+				OnStateChange: func(state State, _ FailureDiagnostic) {
 					stateChanges = append(stateChanges, state)
 				},
 			})
@@ -289,7 +289,7 @@ func TestTransportPassesThrough4xxErrors(t *testing.T) {
 			var stateChanges []State
 			manager := New(Config{
 				MaxAttempts: 0, // Disable recovery for this test
-				OnStateChange: func(state State, reason string) {
+				OnStateChange: func(state State, _ FailureDiagnostic) {
 					stateChanges = append(stateChanges, state)
 				},
 			})
@@ -443,7 +443,7 @@ func TestTransportReportsFailureOnCredentialError(t *testing.T) {
 			var stateChanges []State
 			manager := New(Config{
 				MaxAttempts: 0, // Disable recovery so we go directly to Invalid
-				OnStateChange: func(state State, reason string) {
+				OnStateChange: func(state State, _ FailureDiagnostic) {
 					stateChanges = append(stateChanges, state)
 				},
 			})

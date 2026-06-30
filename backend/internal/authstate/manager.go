@@ -6,7 +6,36 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 )
+
+// FailureDiagnostic carries the reason for an auth failure together with optional
+// typed fields a UI can use to explain it without echoing raw provider stderr.
+// All fields are strings so the struct stays comparable (setState dedupes by ==).
+type FailureDiagnostic struct {
+	// Reason is the raw/human reason. Kept for existing UI copy and logging.
+	Reason string
+	// Class is the credentialerrors verdict: "auth", "connectivity", or "".
+	Class string
+	// Kind is the finer credentialerrors classification (e.g. "missing-helper").
+	Kind string
+	// Summary is a sanitized, provider-neutral one-line description.
+	Summary string
+	// ExecCommand is the kubeconfig exec credential command, when known.
+	ExecCommand string
+}
+
+// NewFailureDiagnostic builds a FailureDiagnostic from a classified credential
+// error. reason is the raw error text; the typed fields come from the diagnostic.
+func NewFailureDiagnostic(reason string, d credentialerrors.Diagnostic) FailureDiagnostic {
+	return FailureDiagnostic{
+		Reason:      reason,
+		Class:       string(d.Class),
+		Kind:        string(d.Kind),
+		Summary:     d.Summary,
+		ExecCommand: d.ExecCommand,
+	}
+}
 
 // DefaultMaxAttempts is the default number of recovery attempts.
 const DefaultMaxAttempts = config.ClusterAuthRecoveryMaxAttempts
@@ -45,9 +74,10 @@ type Config struct {
 	// settled to invalid. If 0, config.ClusterAuthSteadyRetryInterval is used.
 	SteadyRetryInterval time.Duration
 
-	// OnStateChange is called whenever the auth state changes.
-	// The reason is provided for failure states.
-	OnStateChange func(state State, reason string)
+	// OnStateChange is called whenever the auth state changes. The diagnostic
+	// carries the reason plus typed credential fields for failure states; it is
+	// the zero value for the transition back to StateValid.
+	OnStateChange func(state State, diag FailureDiagnostic)
 
 	// OnRecoveryProgress is called periodically during recovery to report progress.
 	// This allows the UI to show countdown timers and attempt counts.
@@ -78,8 +108,9 @@ type Manager struct {
 	// state is the current authentication state.
 	state State
 
-	// failureReason stores the reason for the current failure.
-	failureReason string
+	// failureDiagnostic stores the diagnostic for the current failure. Its
+	// Reason field is what State() returns; the zero value means no failure.
+	failureDiagnostic FailureDiagnostic
 
 	// secondsUntilRetry tracks seconds until next retry (0 if retry in progress or not recovering).
 	secondsUntilRetry int
@@ -139,7 +170,15 @@ func New(cfg Config) *Manager {
 func (m *Manager) State() (State, string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.state, m.failureReason
+	return m.state, m.failureDiagnostic.Reason
+}
+
+// FailureDiagnostic returns the diagnostic for the current failure (zero value
+// when valid). Safe for concurrent use.
+func (m *Manager) FailureDiagnostic() FailureDiagnostic {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.failureDiagnostic
 }
 
 // IsValid returns true if the current state is StateValid.
@@ -149,10 +188,17 @@ func (m *Manager) IsValid() bool {
 	return m.state == StateValid
 }
 
-// ReportFailure reports an authentication failure.
-// If already in StateInvalid or StateRecovering, this call is ignored (idempotent).
-// If MaxAttempts > 0, recovery is triggered automatically.
+// ReportFailure reports an authentication failure described only by a reason
+// string. Callers with a classified credential error should use
+// ReportFailureDiagnostic to carry the typed fields.
 func (m *Manager) ReportFailure(reason string) {
+	m.ReportFailureDiagnostic(FailureDiagnostic{Reason: reason})
+}
+
+// ReportFailureDiagnostic reports an authentication failure with a typed
+// diagnostic. If already in StateInvalid or StateRecovering, this call is ignored
+// (idempotent). If MaxAttempts > 0, recovery is triggered automatically.
+func (m *Manager) ReportFailureDiagnostic(diag FailureDiagnostic) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -166,10 +212,10 @@ func (m *Manager) ReportFailure(reason string) {
 
 	// Transition to recovering or invalid based on config
 	if m.config.MaxAttempts > 0 {
-		m.setState(StateRecovering, reason)
+		m.setState(StateRecovering, diag)
 		m.startRecoveryLocked()
 	} else {
-		m.setState(StateInvalid, reason)
+		m.setState(StateInvalid, diag)
 	}
 }
 
@@ -186,7 +232,7 @@ func (m *Manager) ReportSuccess() {
 	}
 
 	if m.state != StateValid {
-		m.setState(StateValid, "")
+		m.setState(StateValid, FailureDiagnostic{})
 	}
 }
 
@@ -229,14 +275,14 @@ func (m *Manager) Shutdown() {
 
 // setState changes the current state and calls the OnStateChange callback.
 // Must be called with m.mu held.
-func (m *Manager) setState(newState State, reason string) {
-	if m.state == newState && m.failureReason == reason {
+func (m *Manager) setState(newState State, diag FailureDiagnostic) {
+	if m.state == newState && m.failureDiagnostic == diag {
 		return
 	}
 	m.state = newState
-	m.failureReason = reason
+	m.failureDiagnostic = diag
 	if m.config.OnStateChange != nil {
-		m.config.OnStateChange(newState, reason)
+		m.config.OnStateChange(newState, diag)
 	}
 }
 
@@ -310,7 +356,7 @@ func (m *Manager) runRecovery(ctx context.Context) {
 			m.mu.Lock()
 			// Only update state if we're still the active recovery.
 			if ctx.Err() == nil && m.state != StateValid {
-				m.setState(StateValid, "")
+				m.setState(StateValid, FailureDiagnostic{})
 			}
 			m.mu.Unlock()
 			return
@@ -331,9 +377,14 @@ func (m *Manager) runRecovery(ctx context.Context) {
 		if authFailures >= m.config.MaxAttempts {
 			// Credentials confirmed bad: settle the verdict (idempotent —
 			// setState dedupes repeats) and keep probing at the steady pace.
+			// Preserve the typed fields (kind/execCommand) from the original
+			// failure so the settled overlay can still name the credential
+			// helper; only the human reason changes.
 			m.mu.Lock()
 			if ctx.Err() == nil && m.state == StateRecovering {
-				m.setState(StateInvalid, "Credentials were rejected by the cluster. Please re-authenticate.")
+				settled := m.failureDiagnostic
+				settled.Reason = "Credentials were rejected by the cluster. Please re-authenticate."
+				m.setState(StateInvalid, settled)
 			}
 			m.mu.Unlock()
 			delay = m.steadyRetryDelay()

@@ -101,7 +101,7 @@ func TestHandleClusterAuthStateChangeUsesSelectionMutationBoundary(t *testing.T)
 	app := newTestAppWithDefaults(t)
 	before := app.selectionGeneration.Load()
 
-	app.handleClusterAuthStateChange("cluster-a", authstate.StateRecovering, "unit-test")
+	app.handleClusterAuthStateChange("cluster-a", authstate.StateRecovering, authstate.FailureDiagnostic{Reason: "unit-test"})
 
 	require.Eventually(t, func() bool {
 		return app.selectionGeneration.Load() >= before+1
