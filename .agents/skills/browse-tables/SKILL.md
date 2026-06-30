@@ -159,6 +159,28 @@ Before finishing broad table architecture work, add or update an enforcement
 mechanism so new production `GridTable` usages cannot bypass mode
 classification.
 
+### Metric-Bearing Tables
+
+Pods, Workloads, Nodes, and embedded Object Panel pod tables must keep
+object/status data and metric data on separate refresh paths:
+
+- Base object/status queries own row membership, row order, object fields,
+  filters, search, facets, totals, and pagination for object-sorted pages.
+- Metric queries own membership, ordering, totals, cursor metadata, metric
+  values, freshness metadata, and metric revision for CPU/memory-sorted pages.
+- The frontend joins base rows and metric rows by full object identity; it must
+  not sort query-backed CPU/memory columns locally over the current page.
+- Missing metrics must be represented as unavailable metric values, not by
+  hiding base rows. Missing numeric metric sort values use the backend numeric
+  sentinel contract in `docs/architecture/large-data.md`.
+- Use `frontend/src/core/resource-metrics` for metric selectors, value adapters,
+  and table overlays. Do not add a parallel metrics cache under
+  `resource-grid` or feature components.
+
+Age columns stay outside this path: render absolute timestamps through
+`LiveAgeText` or shared age columns, and test that relative age advances without
+base or metric refetches when changing age behavior.
+
 ## Backend Producer Trace
 
 Before changing table data ownership, sort/filter semantics, caps, refresh

@@ -115,6 +115,27 @@ Every backend domain has a frontend counterpart:
 without a frontend mapping breaks diagnostics. A frontend refresher without a
 backend domain gets empty snapshots.
 
+### Metric Domains
+
+Metric domains must keep live CPU/memory usage and metric freshness/error
+metadata separate from base object/status rows. Base domains keep object
+identity, status, age timestamps, and object-derived reservation values such as
+requests, limits, capacity, and allocatable.
+
+Metric-bearing tables use two access shapes over the same metric domain:
+
+- Object-sorted pages query the base object/status domain for membership,
+  ordering, filters, search, facets, totals, and pagination, then overlay metric
+  values for the visible row refs.
+- CPU/memory-sorted pages query the metric domain for membership, ordering,
+  totals, cursor metadata, metric values, and metric revision, then hydrate base
+  object/status rows by exact refs.
+
+Metric-only refreshes may advance the metric source clock and update
+metric-backed cells, freshness, diagnostics, and metric sort keys. They must not
+advance the object source version, re-project stored object rows, or require
+object/status updates to read the metrics provider.
+
 Resource WebSocket domains also require:
 
 | File                                                                      | What to update                                                                  |

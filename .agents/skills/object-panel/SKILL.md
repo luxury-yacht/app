@@ -87,6 +87,22 @@ port-forward). The object-panel wrapper supplies only lifecycle callbacks
 cordon/drain openers. Do not reintroduce a panel-local action reducer, per-action
 prop drilling through `DetailsTab`, or bespoke action modals.
 
+## Resource Utilization
+
+Object Panel Resource Utilization reads live pod, workload, and node usage
+through `frontend/src/core/resource-metrics`. Pod panels lease `pods-metrics`,
+Deployment/DaemonSet/StatefulSet panels lease `namespace-workloads-metrics`, and
+Node panels lease `nodes-metrics`.
+
+Object-detail DTO utilization values are fallback-only while the metrics domain
+loads, is unavailable, or is permission denied. ReplicaSet is the exception:
+keep it detail-backed until a separate ReplicaSet unification slice adds direct
+owner identity while preserving the existing resolved-owner behavior.
+
+Embedded Object Panel Pods tables use the same base-plus-metric overlay path as
+main Pods tables. Do not read live CPU/memory usage from base pod rows after the
+metric-domain path is available.
+
 ## Checklist
 
 - [ ] Object references include `clusterId`, `group`, `version`, `kind`, and

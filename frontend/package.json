@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "npm@11.17.0",
+  "packageManager": "npm@11.18.0",
   "engines": {
     "node": ">=26.3.0",
     "npm": ">=11.16.0"
@@ -46,8 +46,8 @@
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
-    "@typescript-eslint/parser": "^8.62.0",
+    "@typescript-eslint/eslint-plugin": "^8.62.1",
+    "@typescript-eslint/parser": "^8.62.1",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.6.0",
@@ -55,7 +55,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
     "knip": "^6.23.0",
-    "prettier": "^3.9.1",
+    "prettier": "^3.9.4",
     "storybook": "^10.4.6",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",

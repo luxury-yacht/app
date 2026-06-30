@@ -20,6 +20,12 @@ they are not object age.
 - Table rows may use shared value adapters directly when their local row shape
   lacks full GVK identity. Do not route table rows through the identity-keyed
   `useResourceMetrics` hook unless they carry the full object reference.
+- Base object/status domains carry object identity, status, readiness, restart
+  counts, labels, annotations, absolute age timestamps, and object-derived
+  reservation values such as requests, limits, capacity, and allocatable.
+- Metric domains carry live CPU/memory usage plus metric freshness and error
+  metadata. Joining code must tolerate missing base reservation values, missing
+  metric usage, and fully joined rows.
 - Object age is computed from timestamps by the frontend live-age contract and
   must not participate in metric refresh.
 
@@ -42,6 +48,19 @@ a scoped payload selector for object-sorted table overlays and Object Panel
 utilization, and a keyset query shape for CPU/memory sorts that own page
 membership, ordering, totals, and cursor metadata. Do not create parallel
 frontend metric caches for these shapes.
+
+Object-sorted tables keep base query membership, ordering, filters, search,
+facets, totals, and pagination in the base object/status query. They fetch
+metric values for the visible row identities and overlay those values without
+resetting base pagination, search, filters, or row order.
+
+CPU/memory-sorted tables use the metric-domain query for membership, ordering,
+cursor, total, metric values, freshness metadata, and metric revision. The
+metric query applies the same base scope, search, metadata-search flag,
+namespace filters, kind filters, backend predicates, page size, sort direction,
+and cursor state before sorting and paginating. It returns ordered object refs
+plus metric values; the base object/status path hydrates the corresponding base
+rows by exact refs.
 
 Workload freshness comes from `namespace-workloads-metrics` metadata. Do not keep
 the previous `nodes` domain freshness lease for workload utilization after
