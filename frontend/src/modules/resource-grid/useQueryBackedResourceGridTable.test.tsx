@@ -1254,6 +1254,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
   it('exports object-sorted rows with all matching metric overlays applied', async () => {
     let result:
       ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const metricPayload: TestMetricPayload = {
       rows: [{ rowKey: 'team-a/api', cpuUsage: '250m' }],
       metrics: { stale: false, collectedAt: 123 },
@@ -1262,6 +1263,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     const metricFetchAllRows = vi.fn().mockResolvedValue([
       { rowKey: 'team-a/api', cpuUsage: '250m' },
       { rowKey: 'team-a/worker', cpuUsage: '900m' },
+      { rowKey: 'team-a/missing', cpuUsage: '100m' },
     ]);
     const Probe: React.FC = () => {
       result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
@@ -1321,6 +1323,17 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       { ...row, cpuUsage: '250m' },
       { ...workerRow, cpuUsage: '900m' },
     ]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[ResourceGridTable] Metric rows did not match standard rows',
+      expect.objectContaining({
+        baseDomain: 'pods',
+        metricDomain: 'pods-metrics',
+        label: 'Namespace Pods',
+        source: 'fetchAllRows',
+        rowKeys: ['team-a/missing'],
+      })
+    );
+    consoleErrorSpy.mockRestore();
     expect(metricFetchAllRows).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
@@ -1502,9 +1515,10 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenCalledTimes(queryCallCount);
   });
 
-  it('adjusts CPU-sorted pagination totals when a metric row has no hydrated base row', async () => {
+  it('logs CPU-sorted metric rows that do not hydrate to standard rows', async () => {
     let result:
       ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const metricPayload: TestMetricPayload = {
       rows: [
         { rowKey: 'team-a/worker', cpuUsage: '900m' },
@@ -1573,11 +1587,22 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
     expect(result?.source.rows).toEqual([{ ...workerRow, cpuUsage: '900m' }]);
     expect(paginationTotalCount(result)).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[ResourceGridTable] Metric rows did not match standard rows',
+      expect.objectContaining({
+        baseDomain: 'pods',
+        metricDomain: 'pods-metrics',
+        label: 'Namespace Pods',
+        rowKeys: ['team-a/missing'],
+      })
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it('exports CPU-sorted rows by walking metric rows and hydrating all matching base rows', async () => {
     let result:
       ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const sidecarRow: TestRow = {
       kind: 'Pod',
       name: 'sidecar',
@@ -1595,6 +1620,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       { rowKey: 'team-a/worker', cpuUsage: '900m' },
       { rowKey: 'team-a/api', cpuUsage: '250m' },
       { rowKey: 'team-a/sidecar', cpuUsage: '100m' },
+      { rowKey: 'team-a/missing', cpuUsage: '50m' },
     ]);
     const hydrationFetchAllRows = vi.fn().mockResolvedValue([workerRow, row, sidecarRow]);
     const cpuSortState = {
@@ -1667,11 +1693,22 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       { ...row, cpuUsage: '250m' },
       { ...sidecarRow, cpuUsage: '100m' },
     ]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[ResourceGridTable] Metric rows did not match standard rows',
+      expect.objectContaining({
+        baseDomain: 'pods',
+        metricDomain: 'pods-metrics',
+        label: 'Namespace Pods',
+        source: 'fetchAllRows',
+        rowKeys: ['team-a/missing'],
+      })
+    );
+    consoleErrorSpy.mockRestore();
     expect(metricFetchAllRows).toHaveBeenCalledWith();
     expect(hydrationFetchAllRows).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        predicates: { rowKeys: 'team-a/api|team-a/sidecar|team-a/worker' },
+        predicates: { rowKeys: 'team-a/api|team-a/missing|team-a/sidecar|team-a/worker' },
         sortConfig: { key: 'name', direction: 'asc' },
       })
     );

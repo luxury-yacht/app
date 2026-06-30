@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
@@ -55,12 +55,13 @@ const EMPTY_QUERY_FILTERS: GridTableFilterState = {
 const METRIC_SORT_FIELDS = new Set(['cpu', 'memory']);
 const METRIC_OVERLAY_FETCH_SORT: SortConfig = { key: 'name', direction: 'asc' };
 const METRIC_OVERLAY_ROW_KEY_BATCH_SIZE = 250;
+const METRIC_ROW_MISMATCH_MESSAGE = '[ResourceGridTable] Metric rows did not match standard rows';
 
-const uniqueRowKeys = (keys: string[]): string[] => {
+const uniqueRowKeys = (keys: Array<string | null | undefined>): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
   keys.forEach((key) => {
-    const normalized = key.trim();
+    const normalized = (key ?? '').trim();
     if (!normalized || seen.has(normalized)) {
       return;
     }
@@ -71,6 +72,52 @@ const uniqueRowKeys = (keys: string[]): string[] => {
 };
 
 const rowKeysPredicateValue = (keys: string[]): string => uniqueRowKeys(keys).sort().join('|');
+
+const unmatchedMetricRowKeys = <TRow>(
+  standardRows: TRow[],
+  metricRows: unknown[],
+  getStandardRowKey: (row: TRow) => string,
+  getMetricRowKey: (row: unknown) => string
+): string[] => {
+  if (metricRows.length === 0) {
+    return [];
+  }
+  const standardRowKeys = new Set(uniqueRowKeys(standardRows.map(getStandardRowKey)));
+  return uniqueRowKeys(
+    metricRows.map(getMetricRowKey).filter((metricRowKey) => {
+      const normalized = (metricRowKey ?? '').trim();
+      return normalized && !standardRowKeys.has(normalized);
+    })
+  );
+};
+
+const logMetricRowMismatch = ({
+  baseDomain,
+  metricDomain,
+  label,
+  scope,
+  source,
+  rowKeys,
+}: {
+  baseDomain: RefreshDomain;
+  metricDomain: RefreshDomain;
+  label: string;
+  scope: string;
+  source: 'renderedRows' | 'fetchAllRows';
+  rowKeys: string[];
+}) => {
+  if (rowKeys.length === 0) {
+    return;
+  }
+  console.error(METRIC_ROW_MISMATCH_MESSAGE, {
+    baseDomain,
+    metricDomain,
+    label,
+    scope,
+    source,
+    rowKeys,
+  });
+};
 
 const fetchRowsByRowKeys = async <TRow>(
   fetchAllRows: (options?: FetchTypedResourceRowsOptions) => Promise<TRow[]>,
@@ -417,6 +464,46 @@ function useTypedQueryLifecycle<
     return map;
   }, [baseHydrationQuery.rows, metricOverlay]);
 
+  const metricMatchStandardRows = isMetricSort ? baseHydrationQuery.rows : baseQuery.rows;
+  const metricMatchLoaded = isMetricSort
+    ? metricQuery.loaded &&
+      (metricRows.length === 0 || (Boolean(baseHydrationPredicates) && baseHydrationQuery.loaded))
+    : baseQuery.loaded && metricOverlayQuery.loaded;
+  const visibleUnmatchedMetricRowKeys = useMemo(() => {
+    if (!metricOverlay || !metricMatchLoaded || metricRows.length === 0) {
+      return [];
+    }
+    return unmatchedMetricRowKeys(
+      metricMatchStandardRows,
+      metricRows,
+      metricOverlay.getBaseRowKey,
+      metricOverlay.getMetricRowKey
+    );
+  }, [metricMatchLoaded, metricMatchStandardRows, metricOverlay, metricRows]);
+
+  const metricMismatchLogSignatureRef = useRef('');
+  useEffect(() => {
+    if (!metricOverlay || visibleUnmatchedMetricRowKeys.length === 0) {
+      metricMismatchLogSignatureRef.current = '';
+      return;
+    }
+    const signature = `${domain}|${metricOverlay.domain}|${liveScope}|${visibleUnmatchedMetricRowKeys.join(
+      '|'
+    )}`;
+    if (metricMismatchLogSignatureRef.current === signature) {
+      return;
+    }
+    metricMismatchLogSignatureRef.current = signature;
+    logMetricRowMismatch({
+      baseDomain: domain,
+      metricDomain: metricOverlay.domain,
+      label,
+      scope: liveScope,
+      source: 'renderedRows',
+      rowKeys: visibleUnmatchedMetricRowKeys,
+    });
+  }, [domain, label, liveScope, metricOverlay, visibleUnmatchedMetricRowKeys]);
+
   const mergedRows = useMemo(() => {
     if (!metricOverlay) {
       return baseQuery.rows;
@@ -446,6 +533,19 @@ function useTypedQueryLifecycle<
       allMetricRows.forEach((metricRow) => {
         metricsByKey.set(metricOverlay.getMetricRowKey(metricRow), metricRow);
       });
+      logMetricRowMismatch({
+        baseDomain: domain,
+        metricDomain: metricOverlay.domain,
+        label,
+        scope: liveScope,
+        source: 'fetchAllRows',
+        rowKeys: unmatchedMetricRowKeys(
+          allBaseRows,
+          allMetricRows,
+          metricOverlay.getBaseRowKey,
+          metricOverlay.getMetricRowKey
+        ),
+      });
       return allBaseRows.map((row) =>
         metricOverlay.mergeMetric(row, metricsByKey.get(metricOverlay.getBaseRowKey(row)))
       );
@@ -460,6 +560,19 @@ function useTypedQueryLifecycle<
     allBaseRows.forEach((row) => {
       baseRowsByMetricKey.set(metricOverlay.getBaseRowKey(row), row);
     });
+    logMetricRowMismatch({
+      baseDomain: domain,
+      metricDomain: metricOverlay.domain,
+      label,
+      scope: liveScope,
+      source: 'fetchAllRows',
+      rowKeys: unmatchedMetricRowKeys(
+        allBaseRows,
+        allMetricRows,
+        metricOverlay.getBaseRowKey,
+        metricOverlay.getMetricRowKey
+      ),
+    });
     return allMetricRows.flatMap((metricRow) => {
       const baseRow = baseRowsByMetricKey.get(metricOverlay.getMetricRowKey(metricRow));
       return baseRow ? [metricOverlay.mergeMetric(baseRow, metricRow)] : [];
@@ -467,7 +580,10 @@ function useTypedQueryLifecycle<
   }, [
     baseHydrationQuery.fetchAllRows,
     baseQuery,
+    domain,
     isMetricSort,
+    label,
+    liveScope,
     metricOverlay,
     metricOverlayQuery.fetchAllRows,
     metricQuery,
