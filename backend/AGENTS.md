@@ -50,6 +50,10 @@ Applies to Go code under `backend/`.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
 - Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate stream routes are wired in `backend/app_refresh_setup.go`.
 - Diagnostics/telemetry sources: refresh domain telemetry in `backend/refresh/telemetry/recorder.go`; catalog diagnostics in `backend/app_object_catalog.go`.
+- Wedged backend (views stuck loading, suspected deadlock): capture a SIGUSR1
+  goroutine dump before hypothesizing — opt in with
+  `ENABLE_GOROUTINE_DUMP=true` at launch; see `docs/workflows/goroutine-dump.md`;
+  handler in `backend/app_diagnostic_dump.go`.
 - Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, selection updates in `backend/app_refresh_update.go`, replacement helpers in `backend/app_refresh_subsystems.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, base URL in `backend/app_refresh.go`.
 - Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
 - Multi-cluster refresh behavior is documented in

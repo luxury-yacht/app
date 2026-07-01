@@ -47,6 +47,11 @@ func (a *App) Startup(ctx context.Context) {
 	})
 	a.logger.Info("Application startup initiated", logsources.App)
 
+	// Arm the SIGUSR1 goroutine-dump diagnostic (unix only): `pkill -USR1 luxury-yacht`
+	// writes every goroutine's stack to the user cache diagnostics dir without stopping
+	// the app — the instrument for naming lock holders when a view wedges.
+	a.startDiagnosticDumpHandler(ctx)
+
 	errorcapture.Init()
 	errorcapture.InstallUnhandledErrorDedup()
 	errorcapture.SetEventEmitter(func(message string) {

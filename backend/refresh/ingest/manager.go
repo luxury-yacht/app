@@ -781,11 +781,18 @@ func (m *IngestManager) RegisterObjectMapProjector(gvr schema.GroupVersionResour
 // missed. Reports whether an entry was found.
 func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Outside the manager lock: the store call acquires the store's write lock, and a
+	// store's sink delivery may legally call back into the manager (the pods notify
+	// sink does) — holding both wedged the whole ingest layer (ABBA deadlock, see
+	// TestSinkRegistrationDoesNotDeadlockWithSinkManagerCallback). The manager mutex
+	// is a leaf lock: it guards the entries map only and is never held across a store
+	// call. e.store is set once at entry construction and never reassigned, so the
+	// pointer stays valid after unlock.
 	e.store.AddSink(sink)
 	return true
 }
@@ -797,11 +804,12 @@ func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool
 // an entry was found.
 func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink BundleSink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Store call outside the manager lock — see AddSink for the leaf-lock rule.
 	e.store.AddBundleSink(sink)
 	return true
 }
@@ -813,11 +821,15 @@ func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink Bund
 // was found.
 func (m *IngestManager) AddCatalogSink(gvr schema.GroupVersionResource, sink Sink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Store call outside the manager lock — see AddSink for the leaf-lock rule. This
+	// is the wrapper that wedged production: the catalog registers its sinks right
+	// after a failed initial sync, racing the pods reflector's initial Replace whose
+	// bundle sink calls back into the manager (goroutines-20260701-152259 dump).
 	e.store.AddCatalogSink(sink)
 	return true
 }
