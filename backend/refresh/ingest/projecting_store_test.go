@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -196,6 +197,50 @@ func TestProjectingStoreReplaceSkipsProjectionErrorsKeepsRest(t *testing.T) {
 	}
 	if _, exists, _ := store.GetByKey("default/bad"); exists {
 		t.Fatalf("the unprojectable object should have been skipped, not stored")
+	}
+}
+
+// TestProjectingStoreReplaceProjectsLargeSetWithErrorsSkipped exercises the relist projection
+// over a large set (above the parallel threshold) where a subset fails to project. Every good
+// row must land and every bad one must be skipped — the off-lock parallel projection must match
+// the sequential semantics exactly, dropping or duplicating nothing.
+func TestProjectingStoreReplaceProjectsLargeSetWithErrorsSkipped(t *testing.T) {
+	const n = 1000
+	project := func(obj interface{}) (interface{}, error) {
+		cm := obj.(*corev1.ConfigMap)
+		if strings.HasSuffix(cm.Name, "-bad") {
+			return nil, fmt.Errorf("boom %s", cm.Name)
+		}
+		return row{NS: cm.Namespace, Name: cm.Name}, nil
+	}
+	store := NewProjectingStore(project)
+
+	list := make([]interface{}, 0, n)
+	wantGood := 0
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("cm-%04d", i)
+		if i%7 == 0 {
+			name += "-bad"
+		} else {
+			wantGood++
+		}
+		list = append(list, configMap("default", name))
+	}
+
+	if err := store.Replace(list, "42"); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if got := len(store.ListKeys()); got != wantGood {
+		t.Fatalf("ListKeys = %d, want %d good rows (bad skipped)", got, wantGood)
+	}
+	if !store.HasSynced() {
+		t.Fatal("HasSynced should flip true after Replace")
+	}
+	if v, ok, _ := store.GetByKey("default/cm-0001"); !ok || v != (row{NS: "default", Name: "cm-0001"}) {
+		t.Fatalf("expected projected row for cm-0001, got %#v ok=%v", v, ok)
+	}
+	if _, ok, _ := store.GetByKey("default/cm-0000-bad"); ok {
+		t.Fatal("the unprojectable object should have been skipped, not stored")
 	}
 }
 

@@ -251,6 +251,38 @@ func TestNamespaceBuilderDoesNotBlockOnUnsyncedIngest(t *testing.T) {
 	}
 }
 
+// TestNamespaceBuilderWorkloadsReadyTracksIngestSync pins the readiness signal the cluster
+// lifecycle gate reads: the snapshot's WorkloadsReady is false until the pod/workload ingest
+// stores settle and true once they have, so "Ready" means data has loaded (not just that the
+// namespace list served immediately).
+func TestNamespaceBuilderWorkloadsReadyTracksIngestSync(t *testing.T) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	build := func(source fakePodAggregateSource) NamespaceSnapshot {
+		builder := &NamespaceBuilder{
+			namespaces: testsupport.NewNamespaceLister(t, ns),
+			ingest:     source,
+			tracker:    NewNamespaceWorkloadTracker(source),
+		}
+		snap, err := builder.Build(context.Background(), "")
+		require.NoError(t, err)
+		payload, ok := snap.Payload.(NamespaceSnapshot)
+		require.True(t, ok)
+		return payload
+	}
+
+	// Workload stores not yet synced (zero value) -> not ready.
+	require.False(t, build(fakePodAggregateSource{}).WorkloadsReady)
+
+	// Every tracked workload store synced -> ready.
+	synced := fakePodAggregateSource{}.
+		withWorkloadCatalog(DeploymentGVR, "unused", 0).
+		withWorkloadCatalog(StatefulSetGVR, "unused", 0).
+		withWorkloadCatalog(DaemonSetGVR, "unused", 0).
+		withWorkloadCatalog(JobGVR, "unused", 0).
+		withWorkloadCatalog(CronJobGVR, "unused", 0)
+	require.True(t, build(synced).WorkloadsReady)
+}
+
 func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
 	// The per-namespace workload flag is content the namespace resourceVersions do not capture.
 	// A change in workload presence must change the snapshot's "workloads" source clock, so the

@@ -47,6 +47,13 @@ type namespacePodIngestSource interface {
 type NamespaceSnapshot struct {
 	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
+	// WorkloadsReady reports whether the pod + workload ingest stores this snapshot's
+	// workload-presence flags derive from have SETTLED (synced/degraded/permission-skipped).
+	// It is a backend-internal readiness signal — the cluster lifecycle gate flips a cluster
+	// to Ready only on a namespace snapshot with this true, so "Ready" means data has loaded
+	// rather than merely "the namespace list served" (which is immediate). Not serialized: the
+	// frontend derives per-namespace state from workloadsUnknown, not this whole-snapshot flag.
+	WorkloadsReady bool `json:"-"`
 }
 
 // NamespaceSummary provides high level namespace metadata.
@@ -158,7 +165,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		Domain:  "namespaces",
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items},
+		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items, WorkloadsReady: trackerReady},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

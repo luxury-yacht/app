@@ -14,14 +14,18 @@ package ingest
 
 import (
 	"bufio"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
+	"github.com/luxury-yacht/app/backend/internal/parallel"
 )
 
 // spilledBundles is the on-disk form of a ProjectingStore: the projected Bundle per object
@@ -645,24 +649,93 @@ func (s *ProjectingStore) GetByKey(key string) (item interface{}, exists bool, e
 // rest of the set is still installed. resourceVersion is the relist RV the
 // reflector resumes its watch from; it is recorded for
 // LastStoreSyncResourceVersion.
+// relistProjectParallelThreshold is the relist size at or above which Replace projects objects
+// concurrently. Below it the goroutine setup cost outweighs the parallelism, so small kinds (most
+// relists) project sequentially; large kinds — the cold-start cost, e.g. pods/nodes — cross it.
+const relistProjectParallelThreshold = 256
+
+// projectOffLock projects every object in list WITHOUT holding the store lock, returning the
+// per-index projected value and projection error (both aligned to list). Projection is CPU-bound
+// and the injected project func is pure, so a large relist projects concurrently at GOMAXPROCS;
+// small relists stay sequential. Each result lands in its own index, so the workers never share
+// mutable state. A panicking projector is recovered into a per-object error — it skips that one
+// object instead of crashing, matching the sequential skip-on-error path (and avoiding a worker
+// panic taking down the process). The caller assembles the row map and logs once under the lock.
+func (s *ProjectingStore) projectOffLock(list []interface{}) ([]interface{}, []error) {
+	projected := make([]interface{}, len(list))
+	projErrs := make([]error, len(list))
+	projectOne := func(i int) {
+		defer func() {
+			if r := recover(); r != nil {
+				projErrs[i] = fmt.Errorf("projection panicked: %v", r)
+			}
+		}()
+		p, err := s.project(list[i])
+		if err != nil {
+			projErrs[i] = err
+			return
+		}
+		projected[i] = p
+	}
+
+	if len(list) < relistProjectParallelThreshold {
+		for i := range list {
+			projectOne(i)
+		}
+		return projected, projErrs
+	}
+
+	limit := runtime.GOMAXPROCS(0)
+	if limit < 1 {
+		limit = 1
+	}
+	idx := make([]int, len(list))
+	for i := range idx {
+		idx[i] = i
+	}
+	// fn never returns an error (projection failures are recorded per-index), so ForEach runs
+	// every item; the returned error is always nil.
+	_ = parallel.ForEach(context.Background(), idx, limit, func(_ context.Context, i int) error {
+		projectOne(i)
+		return nil
+	})
+	return projected, projErrs
+}
+
 func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) error {
-	next := make(map[string]interface{}, len(list))
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, obj := range list {
+	// Compute keys first (cheap, sequential): a key error aborts the whole Replace, unchanged.
+	keys := make([]string, len(list))
+	for i, obj := range list {
 		key, err := keyOf(obj)
 		if err != nil {
 			return cache.KeyError{Obj: obj, Err: err}
 		}
-		projected, err := s.project(obj)
-		if err != nil {
-			if !s.projectErrLogged {
-				s.projectErrLogged = true
-				klog.V(2).Infof("ingest: projection failed for %q during replace, skipping (logged once): %v", key, err)
+		keys[i] = key
+	}
+	// Project OFF the store lock — and in parallel for large relists. The projection is
+	// CPU-bound (for pods a four-half bundle per object) and must not run under the write lock:
+	// holding it across an O(N) relist serializes the work and blocks live serves during a
+	// steady-state relist. keyOf and the injected project func are pure, so concurrent
+	// projection is safe; only the swap below needs the lock.
+	projected, projErrs := s.projectOffLock(list)
+
+	next := make(map[string]interface{}, len(list))
+	var firstProjErr error
+	for i := range list {
+		if projErrs[i] != nil {
+			if firstProjErr == nil {
+				firstProjErr = projErrs[i]
 			}
 			continue
 		}
-		next[key] = projected
+		next[keys[i]] = projected[i]
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if firstProjErr != nil && !s.projectErrLogged {
+		s.projectErrLogged = true
+		klog.V(2).Infof("ingest: projection failed during replace, skipping (logged once): %v", firstProjErr)
 	}
 	prev := s.rows
 	s.rv = resourceVersion

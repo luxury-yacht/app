@@ -82,7 +82,8 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces: []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			WorkloadsReady: true,
 		},
 	}
 	services := map[string]refresh.SnapshotService{
@@ -113,6 +114,40 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.Equal(t, []string{"cluster-a", "cluster-a"}, called)
+}
+
+func TestAggregateSnapshotServiceNamespaceSnapshotSkipsCallbackUntilWorkloadsReady(t *testing.T) {
+	// A namespace snapshot served BEFORE its pod/workload ingest stores have settled carries
+	// WorkloadsReady=false (the lever-A fast paint). The readiness gate must NOT fire on it —
+	// otherwise the cluster reports "Ready" before any data has loaded.
+	notReady := &refresh.Snapshot{
+		Domain: "namespaces",
+		Payload: snapshot.NamespaceSnapshot{
+			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			WorkloadsReady: false,
+		},
+	}
+	services := map[string]refresh.SnapshotService{
+		"cluster-a": stubSnapshotService{
+			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+				return notReady, nil
+			},
+		},
+	}
+
+	var called []string
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-a"},
+		services:     services,
+		onNamespaceSnapshot: func(clusterID string) {
+			called = append(called, clusterID)
+		},
+	}
+
+	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	require.Empty(t, called, "readiness callback must not fire until workloads are ready")
 }
 
 func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *testing.T) {
@@ -173,7 +208,8 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces: []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			WorkloadsReady: true,
 		},
 	}
 
@@ -234,7 +270,8 @@ func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces: []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			WorkloadsReady: true,
 		},
 	}
 	aggregate := &aggregateSnapshotService{
@@ -274,7 +311,8 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces: []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			WorkloadsReady: true,
 		},
 	}
 	aggregate := &aggregateSnapshotService{

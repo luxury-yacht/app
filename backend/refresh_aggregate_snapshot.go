@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
@@ -74,13 +75,28 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		return nil, err
 	}
 
-	// Notify the lifecycle module on every successful namespace snapshot.
-	// The lifecycle callback is state-gated, so this also recovers clusters
-	// that re-enter loading after an in-place subsystem rebuild.
-	if domain == "namespaces" {
+	// Notify the lifecycle module only on a namespace snapshot whose pod/workload ingest
+	// stores have SETTLED (WorkloadsReady). The namespace list serves immediately (it no longer
+	// blocks on that sync — the sidebar paints fast), so firing on every namespace serve would
+	// flip the cluster to Ready before any data has loaded. Gating on WorkloadsReady restores
+	// the pre-fast-paint meaning of Ready ("data is loaded") while keeping the fast list. The
+	// callback is itself state-gated, so this also recovers clusters that re-enter loading after
+	// an in-place subsystem rebuild once their stores re-settle.
+	if domain == "namespaces" && namespaceSnapshotWorkloadsReady(snapshotData) {
 		s.notifyNamespaceSnapshot(target)
 	}
 	return snapshotData, nil
+}
+
+// namespaceSnapshotWorkloadsReady reports whether a namespaces snapshot's pod/workload ingest
+// stores have settled, so the readiness gate fires only when the cluster's data has actually
+// loaded. A snapshot with a non-namespace payload (defensive) is treated as not ready.
+func namespaceSnapshotWorkloadsReady(snap *refresh.Snapshot) bool {
+	if snap == nil {
+		return false
+	}
+	payload, ok := snap.Payload.(snapshot.NamespaceSnapshot)
+	return ok && payload.WorkloadsReady
 }
 
 // resolveTarget chooses which cluster should handle the requested domain/scope pair.
