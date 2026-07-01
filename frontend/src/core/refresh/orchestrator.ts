@@ -1059,6 +1059,7 @@ class RefreshOrchestrator {
         metricsOnly: Boolean(config.streaming.metricsOnly),
         streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
         metricsMinIntervalMs: getStreamingMetricsMinIntervalMs(),
+        hasData: Boolean(getScopedDomainState(domain, normalizedScope).data),
       });
       if (fetchMode === 'skip') {
         return;

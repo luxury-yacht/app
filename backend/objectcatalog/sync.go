@@ -171,13 +171,35 @@ func (s *Service) ensureDependencies() error {
 	return nil
 }
 
+// nextCatalogResyncInterval schedules the next full resync. A successful sync uses
+// the normal (full) cadence. A failed/incomplete sync — typically the startup race
+// where ingest stores are not yet synced — retries on a short interval that backs
+// off (doubling) toward full, so a transient failure self-heals in seconds instead
+// of waiting up to the full interval (5 min with reactive updates), while a
+// persistent failure settles at the normal cadence without hammering the cluster.
+// A non-positive or too-large retry interval disables the fast-retry (keeps full).
+func nextCatalogResyncInterval(syncOK bool, current, retry, full time.Duration) time.Duration {
+	if syncOK || retry <= 0 || retry >= full {
+		return full
+	}
+	next := current * 2
+	if next < retry {
+		next = retry
+	}
+	if next > full {
+		next = full
+	}
+	return next
+}
+
 func (s *Service) runLoop(ctx context.Context) error {
 	defer close(s.doneCh)
 	defer s.stopDynamicReflectors()
 
 	// Initial sync.
-	if err := s.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		s.logWarn(fmt.Sprintf("initial catalog sync failed: %v", err))
+	initialSyncErr := s.sync(ctx)
+	if initialSyncErr != nil && !errors.Is(initialSyncErr, context.Canceled) {
+		s.logWarn(fmt.Sprintf("initial catalog sync failed: %v", initialSyncErr))
 	}
 
 	// Start reactive update notifier if enabled.
@@ -200,7 +222,14 @@ func (s *Service) runLoop(ctx context.Context) error {
 			resyncInterval = config.ObjectCatalogReactiveMinResyncInterval
 		}
 	}
-	ticker := time.NewTicker(resyncInterval)
+	// After a failed/incomplete sync (e.g. a startup race where ingest stores are
+	// not yet synced), retry on a short interval that backs off toward the normal
+	// cadence, so the catalog recovers in seconds instead of staying degraded until
+	// the next full resync. A successful sync snaps back to the normal interval.
+	interval := nextCatalogResyncInterval(
+		initialSyncErr == nil, 0, config.ObjectCatalogFailedSyncRetryInterval, resyncInterval,
+	)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -208,8 +237,15 @@ func (s *Service) runLoop(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := s.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			err := s.sync(ctx)
+			if err != nil && !errors.Is(err, context.Canceled) {
 				s.logWarn(fmt.Sprintf("catalog resync failed: %v", err))
+			}
+			if next := nextCatalogResyncInterval(
+				err == nil, interval, config.ObjectCatalogFailedSyncRetryInterval, resyncInterval,
+			); next != interval {
+				interval = next
+				ticker.Reset(interval)
 			}
 		}
 	}

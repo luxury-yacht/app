@@ -412,6 +412,86 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('cluster-config');
   });
 
+  it('fetches a new filtered catalog scope even when the stream is healthy (filter change must fire)', async () => {
+    clusterReadiness.resetForTests();
+    registerCatalogDomain();
+    const filteredScope = buildClusterScope(
+      'cluster-a',
+      'limit=50&customOnly=true&kind=Widget&namespace=cluster'
+    );
+    resetAllScopedDomainStates('catalog');
+    setRuntimeScopeEnabled('catalog', filteredScope, true);
+    clientMocks.fetchSnapshotMock.mockReset();
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'catalog',
+        scope: filteredScope,
+        version: 1,
+        checksum: 'etag-filtered',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { clusterId: 'cluster-a', items: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-filtered',
+      notModified: false,
+    });
+
+    // Make cluster-a serviceable (backend registers services at the 'loading' edge).
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+
+    // After the initial page load, the catalog doorbell stream is healthy.
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    // Picking a Kind refetches the NEW scope with reason 'startup' → isManual:false.
+    // The new scope has no data yet, so a snapshot MUST be fetched — a healthy stream
+    // does not carry the new query's first page.
+    await refreshOrchestrator.fetchScopedDomain('catalog', filteredScope, { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalled();
+
+    clusterReadiness.resetForTests();
+    resetAllScopedDomainStates('catalog');
+  });
+
+  it('still skips a background snapshot for a LOADED catalog scope when the stream is healthy', async () => {
+    clusterReadiness.resetForTests();
+    registerCatalogDomain();
+    const loadedScope = buildClusterScope(
+      'cluster-a',
+      'limit=50&customOnly=true&namespace=cluster'
+    );
+    resetAllScopedDomainStates('catalog');
+    setRuntimeScopeEnabled('catalog', loadedScope, true);
+    // The scope already holds an applied snapshot (the stream keeps it fresh).
+    setScopedDomainState('catalog', loadedScope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      scope: loadedScope,
+      data: { clusterId: 'cluster-a', items: [] } as never,
+    }));
+    clientMocks.fetchSnapshotMock.mockReset();
+
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await refreshOrchestrator.fetchScopedDomain('catalog', loadedScope, { isManual: false });
+
+    // Optimization intact: a loaded scope with a healthy stream skips the redundant poll.
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+
+    clusterReadiness.resetForTests();
+    resetAllScopedDomainStates('catalog');
+  });
+
   it('classifies "no active clusters available" as warm-up instead of toasting', () => {
     clusterReadiness.resetForTests();
     errorHandlerMock.handle.mockClear();

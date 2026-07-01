@@ -379,3 +379,33 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 		t.Fatalf("expected telemetry item count to remain 2, got %d", entry.itemCount)
 	}
 }
+
+func TestNextCatalogResyncInterval(t *testing.T) {
+	const retry = 3 * time.Second
+	const full = 5 * time.Minute
+	cases := []struct {
+		name    string
+		syncOK  bool
+		current time.Duration
+		retry   time.Duration
+		full    time.Duration
+		want    time.Duration
+	}{
+		{"success uses full interval", true, retry, retry, full, full},
+		{"success from full stays full", true, full, retry, full, full},
+		{"first failure retries short", false, 0, retry, full, retry},
+		{"failure backs off by doubling", false, retry, retry, full, 2 * retry},
+		{"backoff caps at full", false, 4 * time.Minute, retry, full, full},
+		{"retry disabled uses full", false, retry, 0, full, full},
+		{"retry >= full uses full", false, retry, full, full, full},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nextCatalogResyncInterval(tc.syncOK, tc.current, tc.retry, tc.full)
+			if got != tc.want {
+				t.Fatalf("nextCatalogResyncInterval(%v,%v,%v,%v)=%v want %v",
+					tc.syncOK, tc.current, tc.retry, tc.full, got, tc.want)
+			}
+		})
+	}
+}

@@ -177,18 +177,17 @@ func buildCatalogSnapshot(
 		totalBatches = (result.TotalItems + effectiveLimit - 1) / effectiveLimit
 	}
 	isFinal := !hasNext || result.TotalItems == 0
-	streamingDisabled := health.Status == objectcatalog.HealthStateError ||
+	// A degraded/stale sync keeps its already-collected data (partial failures
+	// retain the prior data), and the querypage keyset cursor is stable under
+	// churn and self-invalidates (CursorInvalid resets to page 1). So a degraded
+	// catalog keeps paginating — it only downgrades completeness and surfaces a
+	// health issue. It must NOT clear the cursor: doing so disabled Next for every
+	// catalog view whenever a single resource type failed to list.
+	degraded := health.Status == objectcatalog.HealthStateError ||
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
 		health.ConsecutiveFailures > 3
-	issues := catalogSnapshotIssues(result, health, streamingDisabled)
-	if streamingDisabled {
-		isFinal = true
-		result.ContinueToken = ""
-		result.PreviousToken = ""
-		hasNext = false
-		hasPrevious = false
-	}
+	issues := catalogSnapshotIssues(result, health)
 
 	if forceFinal {
 		isFinal = true
@@ -209,7 +208,7 @@ func buildCatalogSnapshot(
 	// off normal paginated browsing.
 	payload := CatalogSnapshot{
 		Provider:        ResourceQueryProviderCatalog,
-		Completeness:    resourceQueryCompleteness(!streamingDisabled),
+		Completeness:    resourceQueryCompleteness(!degraded),
 		Capabilities:    newCatalogCapabilities(),
 		Items:           cloneSummaries(result.Items),
 		Continue:        result.ContinueToken,
@@ -234,7 +233,7 @@ func buildCatalogSnapshot(
 	return payload, truncated
 }
 
-func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus, streamingDisabled bool) []ResourceQueryIssue {
+func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus) []ResourceQueryIssue {
 	issues := make([]ResourceQueryIssue, 0, 4)
 	if result.CursorInvalid {
 		issues = append(issues, ResourceQueryIssue{
@@ -268,12 +267,6 @@ func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalo
 		issues = append(issues, ResourceQueryIssue{
 			Kind:    "Catalog health",
 			Message: message,
-		})
-	}
-	if streamingDisabled {
-		issues = append(issues, ResourceQueryIssue{
-			Kind:    "Catalog pagination",
-			Message: "Pagination is disabled while the catalog is degraded to avoid serving misleading cursor pages.",
 		})
 	}
 	if len(health.DeniedResources) > 0 {

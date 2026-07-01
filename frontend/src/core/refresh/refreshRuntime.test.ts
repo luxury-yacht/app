@@ -224,6 +224,7 @@ describe('ClusterRefreshRuntime', () => {
         streamingHealthy: true,
         metricsMinIntervalMs: 1000,
         now: 2000,
+        hasData: true,
       })
     ).toBe('snapshot');
 
@@ -238,7 +239,26 @@ describe('ClusterRefreshRuntime', () => {
         streamingHealthy: true,
         metricsMinIntervalMs: 1000,
         now: 2000,
+        hasData: true,
       })
     ).toBe('skip');
+  });
+
+  it('fetches a snapshot for a no-data scope even when the stream is healthy, but skips once it has data', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+    const base = {
+      domain: 'catalog' as const,
+      scope: 'cluster-a|limit=50&kind=Widget&namespace=cluster',
+      isManual: false,
+      shouldStream: true,
+      metricsOnly: false,
+      streamingHealthy: true,
+      metricsMinIntervalMs: 1000,
+    };
+    // A brand-new filter/page scope has no data yet — the notify-only stream cannot
+    // deliver its first page, so it MUST fetch even though the stream is healthy.
+    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: false })).toBe('snapshot');
+    // Once the scope holds data, the healthy stream keeps it fresh → skip the poll.
+    expect(runtime.resolveStreamingFetchMode({ ...base, hasData: true })).toBe('skip');
   });
 });
