@@ -236,18 +236,6 @@
   background-color: var(--color-sidebar-active);
 }
 
-.sidebar-item.workloads-unknown {
-  color: var(--color-warning, #f59e0b);
-}
-
-.sidebar-item.workloads-unknown:hover {
-  color: var(--color-warning, #f59e0b);
-}
-
-.sidebar-item .namespace-status-label {
-  margin-left: auto;
-}
-
 /* Sidebar toggle button */
 
 .sidebar-toggle {
