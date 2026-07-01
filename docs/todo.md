@@ -1,6 +1,5 @@
 - Delete namespace does not remove it from browse view
-- Pagination broken?
-- Search and filters broken on Cluster Custom
+- double calls to pod metrics (see Network tab)
 
 - Build a plugin architecture
   - AI
