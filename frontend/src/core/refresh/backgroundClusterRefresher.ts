@@ -139,15 +139,14 @@ export class BackgroundClusterRefresher {
     this.getNamespace = getNamespace;
   }
 
-  /** Single tick: refresh each background cluster's last-viewed domain. */
+  /** Single tick: refresh every background cluster's last-viewed domain. */
   private async tick(): Promise<void> {
-    for (const clusterId of this.backgroundClusterIds) {
-      try {
-        await this.refreshCluster(clusterId);
-      } catch {
-        // Silently ignore per-cluster errors to avoid blocking the loop.
-      }
-    }
+    // Concurrently: background clusters are independent per-cluster requests, and one
+    // slow cluster must not stale every other cluster's warm data by its fetch time.
+    // allSettled preserves the old per-cluster error swallowing.
+    await Promise.allSettled(
+      this.backgroundClusterIds.map((clusterId) => this.refreshCluster(clusterId))
+    );
   }
 
   /** Refresh the appropriate domain for a single background cluster. */

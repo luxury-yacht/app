@@ -129,6 +129,11 @@ type Dependencies struct {
 	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
 	ClusterID                    string                                 // stable identifier for the source cluster
 	ClusterName                  string                                 // display name for the source cluster
+	// WaitForCaches blocks until the informer caches the collect reads from are
+	// synced. sync() calls it between the RBAC preflight and the collect fan-out, so
+	// discovery + preflight (pure API calls) overlap the factory's initial sync
+	// instead of running after it. nil skips the wait (tests, no factory).
+	WaitForCaches func(ctx context.Context) error
 }
 
 // IngestSource supplies the object-catalog Summaries for ingest-owned (cut) kinds,
@@ -170,6 +175,7 @@ type Telemetry interface {
 // Options tunes catalog behaviour; zero values fall back to sensible defaults.
 type Options struct {
 	ResyncInterval             time.Duration     // interval between resyncs
+	FailedSyncRetryInterval    time.Duration     // short retry after a failed/incomplete sync (default config.ObjectCatalogFailedSyncRetryInterval)
 	PageSize                   int               // number of items per page
 	ListWorkers                int               // number of workers for listing resources
 	NamespaceWorkers           int               // number of workers for processing namespaces

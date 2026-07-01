@@ -86,6 +86,16 @@ type Service struct {
 	dynamicMu       sync.RWMutex
 	dynamicIngested map[schema.GroupVersionResource]struct{}
 
+	// suspendCacheRebuilds batches the per-kind published-cache rebuild during
+	// registerIngestCatalogSinks: each sink registration replays a whole store, and
+	// rebuilding once per kind means 7+ full O(items) rebuilds back-to-back at
+	// startup. While set, the incremental appliers mutate the index but skip the
+	// rebuild+broadcast; the registration loop publishes once at the end.
+	suspendCacheRebuilds atomic.Bool
+	// cacheRebuilds counts published-cache rebuilds; it exists so the batched
+	// registration behavior is pinned by test rather than assumed.
+	cacheRebuilds atomic.Int64
+
 	healthMu sync.RWMutex
 	health   healthStatus
 
@@ -123,6 +133,7 @@ type summaryChunk struct {
 func NewService(deps Dependencies, opts *Options) *Service {
 	serviceOpts := Options{
 		ResyncInterval:             config.ObjectCatalogResyncInterval,
+		FailedSyncRetryInterval:    config.ObjectCatalogFailedSyncRetryInterval,
 		PageSize:                   config.ObjectCatalogPageSize,
 		ListWorkers:                adjustedListWorkers(),
 		NamespaceWorkers:           config.ObjectCatalogNamespaceWorkers,
@@ -135,6 +146,9 @@ func NewService(deps Dependencies, opts *Options) *Service {
 	if opts != nil {
 		if opts.ResyncInterval > 0 {
 			serviceOpts.ResyncInterval = opts.ResyncInterval
+		}
+		if opts.FailedSyncRetryInterval > 0 {
+			serviceOpts.FailedSyncRetryInterval = opts.FailedSyncRetryInterval
 		}
 		if opts.PageSize > 0 {
 			serviceOpts.PageSize = opts.PageSize

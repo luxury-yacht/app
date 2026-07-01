@@ -472,6 +472,14 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 	if snap.Stats.TotalBatches > 0 && !snap.Stats.IsFinalBatch {
 		return false
 	}
+	// A namespaces snapshot built before its workload ingest stores settled reports
+	// workload absence as not-yet-known and keeps the cluster readiness gate closed.
+	// Serving it from cache would pin that pre-sync state for the TTL; rebuilding on
+	// the next poll lets the corrected flags and the Ready flip land immediately
+	// after the stores settle.
+	if payload, ok := snap.Payload.(NamespaceSnapshot); ok && !payload.WorkloadsReady {
+		return false
+	}
 	return true
 }
 

@@ -86,20 +86,69 @@ describe('BackgroundClusterRefresher', () => {
     await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
     expect(fetchForCluster).toHaveBeenCalledTimes(4);
-    expect(fetchForCluster).toHaveBeenNthCalledWith(1, 'namespaces', 'cluster-b');
-    expect(fetchForCluster).toHaveBeenNthCalledWith(
-      2,
+    // Clusters tick concurrently, so GLOBAL call order is scheduler-dependent; the
+    // contract is the full call set plus per-cluster ordering (namespaces before the
+    // namespace view for the same cluster).
+    expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
+    expect(fetchForCluster).toHaveBeenCalledWith(
       'namespace-network',
       'cluster-b',
       'namespace:default'
     );
-    expect(fetchForCluster).toHaveBeenNthCalledWith(3, 'nodes', 'cluster-c', undefined);
-    expect(fetchForCluster).toHaveBeenNthCalledWith(4, 'cluster-overview', 'cluster-d', undefined);
+    expect(fetchForCluster).toHaveBeenCalledWith('nodes', 'cluster-c', undefined);
+    expect(fetchForCluster).toHaveBeenCalledWith('cluster-overview', 'cluster-d', undefined);
+    const callIndex = (domain: string) =>
+      fetchForCluster.mock.calls.findIndex(([calledDomain]) => calledDomain === domain);
+    expect(callIndex('namespaces')).toBeLessThan(callIndex('namespace-network'));
     fetchForCluster.mock.calls.forEach(([, clusterId, scope]) => {
       expect(clusterId).not.toBe('cluster-a');
       expect(scope ?? '').not.toContain('clusters=');
       expect(scope ?? '').not.toContain('cluster-b,cluster-c');
     });
+  });
+
+  it('refreshes background clusters concurrently, not one awaited after another', async () => {
+    let releaseFetches!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseFetches = resolve;
+    });
+    const fetchForCluster = vi
+      .spyOn(refreshOrchestrator, 'fetchDomainForCluster')
+      .mockImplementation(() => gate);
+
+    const navigationByCluster: Record<string, NavigationTabState> = {
+      'cluster-b': {
+        viewType: 'cluster',
+        previousView: 'overview',
+        activeNamespaceView: 'workloads',
+        activeClusterView: 'nodes',
+      },
+      'cluster-c': {
+        viewType: 'overview',
+        previousView: 'cluster',
+        activeNamespaceView: 'workloads',
+        activeClusterView: 'nodes',
+      },
+    };
+
+    const refresher = new BackgroundClusterRefresher(
+      (clusterId) => navigationByCluster[clusterId],
+      () => undefined
+    );
+    refresher.updateClusters('cluster-a', ['cluster-a', 'cluster-b', 'cluster-c']);
+
+    const tickPromise = (refresher as unknown as { tick: () => Promise<void> }).tick();
+    // Let every cluster's first fetch start; none has resolved yet. A serial tick
+    // would still be awaiting cluster-b here and cluster-c's fetch would be absent —
+    // one slow cluster must not stale every other background cluster's data.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const clustersFetched = new Set(fetchForCluster.mock.calls.map(([, clusterId]) => clusterId));
+    expect(clustersFetched).toEqual(new Set(['cluster-b', 'cluster-c']));
+
+    releaseFetches();
+    await tickPromise;
   });
 
   it('keeps background namespace pod views warm with namespace support data', async () => {

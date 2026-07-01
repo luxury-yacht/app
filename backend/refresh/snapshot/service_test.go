@@ -163,6 +163,41 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 		"the ~120ms sync-gate wait must be recorded as MaxInformerSyncWaitMs")
 }
 
+// TestServiceDoesNotCacheNotReadyNamespaceSnapshots pins the cache rule for the fast
+// namespace paint: a snapshot built BEFORE the workload ingest stores settle
+// (WorkloadsReady=false) must not be cached — the TTL would pin the pre-sync flags and
+// delay the cluster Ready flip by up to cache TTL + poll. Once ready, caching resumes.
+func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	ready := false
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "namespaces",
+				Scope:   scope,
+				Payload: NamespaceSnapshot{WorkloadsReady: ready},
+			}, nil
+		},
+	}))
+	service := NewService(reg, nil, testClusterMeta())
+
+	for i := 0; i < 2; i++ {
+		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, builds, "not-ready namespace snapshots must not be served from cache")
+
+	ready = true
+	for i := 0; i < 2; i++ {
+		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 3, builds, "ready namespace snapshots must be cached again")
+}
+
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	reg := domain.New()
 	if err := reg.Register(refresh.DomainConfig{

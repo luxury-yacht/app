@@ -9,6 +9,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -77,6 +78,43 @@ func (a *App) setupRefreshSubsystem() error {
 	return nil
 }
 
+// subsystemBuildOutcome is one selection's build result: id is always set once the
+// selection resolves; subsystem stays nil when the cluster is listed but not served
+// (auth failed at init), matching the serial loop's "in clusterOrder, no subsystem".
+type subsystemBuildOutcome struct {
+	id        string
+	subsystem *system.Subsystem
+}
+
+// buildSubsystemsInSelectionOrder runs build for every selection index CONCURRENTLY
+// (bounded by limit) and returns the outcomes in SELECTION order, so parallel
+// construction cannot reorder clusterOrder. Each outcome is written to its own slice
+// slot (no shared writes); any build error cancels the remaining builds and aborts
+// the whole build, mirroring the serial loop's first-error contract.
+func buildSubsystemsInSelectionOrder(
+	ctx context.Context,
+	count, limit int,
+	build func(ctx context.Context, index int) (subsystemBuildOutcome, error),
+) ([]subsystemBuildOutcome, error) {
+	outcomes := make([]subsystemBuildOutcome, count)
+	indices := make([]int, count)
+	for i := range indices {
+		indices[i] = i
+	}
+	err := parallel.ForEach(ctx, indices, limit, func(taskCtx context.Context, index int) error {
+		outcome, buildErr := build(taskCtx, index)
+		if buildErr != nil {
+			return buildErr
+		}
+		outcomes[index] = outcome
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return outcomes, nil
+}
+
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
 // All clusters are treated equally - there is no "primary" or "host" cluster.
 func (a *App) buildRefreshSubsystems(
@@ -94,54 +132,71 @@ func (a *App) buildRefreshSubsystems(
 		return nil, nil, err
 	}
 
-	for _, selection := range selections {
-		// Use the canonical ID from clusterClients rather than re-deriving
-		// from the selection, which can produce inconsistent IDs when a
-		// kubeconfig file contains multiple contexts.
-		clusterMeta := a.clusterMetaForSelection(selection)
-		if clusterMeta.ID == "" {
-			return nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
-		}
-		clients := a.clusterClientsForID(clusterMeta.ID)
-		if clients == nil {
-			// Fallback: try matching by stored meta in clusterClients in case
-			// the re-derived ID doesn't match the canonical one.
-			clients = a.clusterClientsForSelection(selection)
-		}
-		if clients != nil {
-			// Always use the canonical meta from the stored client.
-			clusterMeta = clients.meta
-		}
-		if clients == nil {
-			return nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
-		}
-
-		// Skip subsystem creation if auth is not valid for this cluster.
-		// Check both the explicit flag (set during pre-flight check) and the auth state.
-		if clients.authFailedOnInit {
-			a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-			// Still add to clusterOrder so the cluster appears in the UI.
-			clusterOrder = append(clusterOrder, clusterMeta.ID)
-			continue
-		}
-		if clients.authManager != nil {
-			state, reason := clients.authManager.State()
-			a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-			if !clients.authManager.IsValid() {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
-				// Still add to clusterOrder so the cluster appears in the UI.
-				clusterOrder = append(clusterOrder, clusterMeta.ID)
-				continue
+	// Subsystem construction (informer wiring, permission preflight, spill restore)
+	// is the expensive per-cluster step; build the selections concurrently so N
+	// clusters do not pay it serially. Outcomes are assembled in selection order, so
+	// clusterOrder is exactly what the serial loop produced. Per-cluster internal
+	// ordering (preflight before domain registration) lives inside each build and is
+	// untouched by the fan-out.
+	outcomes, err := buildSubsystemsInSelectionOrder(
+		a.CtxOrBackground(),
+		len(selections),
+		clusterClientBuildConcurrencyLimit(len(selections)),
+		func(_ context.Context, index int) (subsystemBuildOutcome, error) {
+			selection := selections[index]
+			// Use the canonical ID from clusterClients rather than re-deriving
+			// from the selection, which can produce inconsistent IDs when a
+			// kubeconfig file contains multiple contexts.
+			clusterMeta := a.clusterMetaForSelection(selection)
+			if clusterMeta.ID == "" {
+				return subsystemBuildOutcome{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 			}
-		}
+			clients := a.clusterClientsForID(clusterMeta.ID)
+			if clients == nil {
+				// Fallback: try matching by stored meta in clusterClients in case
+				// the re-derived ID doesn't match the canonical one.
+				clients = a.clusterClientsForSelection(selection)
+			}
+			if clients != nil {
+				// Always use the canonical meta from the stored client.
+				clusterMeta = clients.meta
+			}
+			if clients == nil {
+				return subsystemBuildOutcome{}, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+			}
 
-		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
-		if err != nil {
-			return nil, nil, err
-		}
+			// Skip subsystem creation if auth is not valid for this cluster.
+			// Check both the explicit flag (set during pre-flight check) and the auth state.
+			if clients.authFailedOnInit {
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
+				// Still part of clusterOrder so the cluster appears in the UI.
+				return subsystemBuildOutcome{id: clusterMeta.ID}, nil
+			}
+			if clients.authManager != nil {
+				state, reason := clients.authManager.State()
+				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
+				if !clients.authManager.IsValid() {
+					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
+					// Still part of clusterOrder so the cluster appears in the UI.
+					return subsystemBuildOutcome{id: clusterMeta.ID}, nil
+				}
+			}
 
-		subsystems[clusterMeta.ID] = subsystem
-		clusterOrder = append(clusterOrder, clusterMeta.ID)
+			subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
+			if err != nil {
+				return subsystemBuildOutcome{}, err
+			}
+			return subsystemBuildOutcome{id: clusterMeta.ID, subsystem: subsystem}, nil
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, outcome := range outcomes {
+		if outcome.subsystem != nil {
+			subsystems[outcome.id] = outcome.subsystem
+		}
+		clusterOrder = append(clusterOrder, outcome.id)
 	}
 
 	// Note: It's valid to return an empty subsystems map if all clusters have auth failures.
@@ -252,6 +307,9 @@ func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTarg
 	if a == nil {
 		return nil
 	}
+	// Guard the lazy init: per-cluster subsystem builds call this concurrently.
+	a.containerLogsTargetLimiterMu.Lock()
+	defer a.containerLogsTargetLimiterMu.Unlock()
 	if a.containerLogsTargetLimiter == nil {
 		limit := defaultObjPanelLogsTargetGlobalLimit
 		a.settingsMu.Lock()

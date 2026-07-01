@@ -19,6 +19,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"time"
 
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -140,6 +141,10 @@ type ProjectingStore struct {
 	// initial relist has landed — and stays true. The ingest manager gates
 	// readiness on it (HasSynced), mirroring a SharedInformer's HasSynced.
 	synced bool
+	// syncedAt stamps WHEN synced first flipped true, so the manager can report
+	// per-kind initial-sync durations (the cold-start telemetry that names which
+	// kinds dominate the first-connect window). Zero until the first sync.
+	syncedAt time.Time
 
 	// projectErrLogged ensures a recurring projection failure is logged once,
 	// matching the repo rule that recurring identical errors log exactly once.
@@ -666,7 +671,7 @@ func (s *ProjectingStore) Replace(list []interface{}, resourceVersion string) er
 	}
 	prev := s.rows
 	s.rv = resourceVersion
-	s.synced = true
+	s.markSyncedLocked()
 	// Fan the FULL projected values (Table half present) to the sinks first, then store the
 	// (possibly Table-dropped) copies — the same emit-then-drop ordering Add/Update use. A
 	// relist-delete fans each vanished key's PREVIOUS stored bundle, whose Catalog half is
@@ -867,7 +872,7 @@ func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
 	}
 	s.rebuildIndexesLocked()
 	s.rv = snap.RV
-	s.synced = true
+	s.markSyncedLocked()
 	s.mu.Unlock()
 	return snap.RV, nil
 }
@@ -878,8 +883,24 @@ func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
 // turns synced on (readiness latches), mirroring Replace's synced=true.
 func (s *ProjectingStore) MarkSynced() {
 	s.mu.Lock()
-	s.synced = true
+	s.markSyncedLocked()
 	s.mu.Unlock()
+}
+
+// markSyncedLocked latches synced and stamps syncedAt exactly once (the first sync);
+// callers hold the write lock.
+func (s *ProjectingStore) markSyncedLocked() {
+	s.synced = true
+	if s.syncedAt.IsZero() {
+		s.syncedAt = time.Now()
+	}
+}
+
+// SyncedAt reports when the store first synced; zero while unsynced.
+func (s *ProjectingStore) SyncedAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.syncedAt
 }
 
 // Resync is a no-op: the projected rows and secondary indexes are updated by the

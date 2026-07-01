@@ -194,6 +194,12 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		Now:         time.Now,
 		ClusterID:   target.meta.ID,
 		ClusterName: target.meta.Name,
+		// The catalog waits for informer caches INSIDE sync, between the RBAC
+		// preflight and the collect, so discovery + preflight overlap the factory's
+		// initial sync instead of running after it (see Dependencies.WaitForCaches).
+		WaitForCaches: func(waitCtx context.Context) error {
+			return a.waitForCatalogInformerCaches(waitCtx, subsystem.InformerFactory)
+		},
 	}
 
 	svc := objectcatalog.NewService(deps, nil)
@@ -220,14 +226,9 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 
 	go func() {
 		defer close(done)
-		if err := a.waitForCatalogInformerCaches(ctx, subsystem.InformerFactory); err != nil {
-			if !errors.Is(err, context.Canceled) {
-				a.logger.Warn(fmt.Sprintf("Object catalog waiting for informer caches failed: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
+		// No cache wait here: the service starts immediately so discovery and the
+		// RBAC preflight overlap the informer factory's initial sync; sync() itself
+		// waits for caches just before the collect (deps.WaitForCaches above).
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}

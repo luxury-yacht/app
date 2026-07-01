@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +24,7 @@ import (
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/informers"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -408,4 +410,198 @@ func TestNextCatalogResyncInterval(t *testing.T) {
 			}
 		})
 	}
+}
+
+// hookedPreferredDiscovery wraps preferredDiscovery so the test can observe WHEN
+// discovery runs relative to the cache wait and the collect.
+type hookedPreferredDiscovery struct {
+	*preferredDiscovery
+	onDiscover func()
+}
+
+func (h *hookedPreferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
+	h.onDiscover()
+	return h.preferredDiscovery.ServerPreferredResources()
+}
+
+// failingDiscovery makes every sync fail at the discovery step, so retry-scheduling
+// tests can count sync attempts through telemetry.
+type failingDiscovery struct {
+	*fakediscovery.FakeDiscovery
+}
+
+func (f *failingDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
+	return nil, errors.New("discovery unavailable")
+}
+
+// blockingIngestSource parks AddCatalogSink until released, standing in for a
+// sink-registration replay over large ingest stores.
+type blockingIngestSource struct {
+	release chan struct{}
+}
+
+func (b *blockingIngestSource) CatalogRows(schema.GroupVersionResource) []interface{} { return nil }
+func (b *blockingIngestSource) AddCatalogSink(schema.GroupVersionResource, ingest.Sink) bool {
+	<-b.release
+	return false
+}
+func (b *blockingIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
+	return false
+}
+func (b *blockingIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
+func (b *blockingIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return false }
+
+func (r *recordingTelemetry) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.entries)
+}
+
+// TestSyncWaitsForCachesBetweenPreflightAndCollect pins the catalog startup overlap:
+// discovery and the RBAC preflight are pure API calls and must run BEFORE the
+// informer-cache wait (so they overlap the factory's ~10s initial sync); only the
+// collect — which reads listers — runs after the wait. A wait failure must abort the
+// sync: collecting from unsynced listers would publish an incomplete catalog as
+// authoritative.
+func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
+	newFixture := func(waitForCaches func(context.Context) error, order *[]string, mu *sync.Mutex) *Service {
+		record := func(step string) {
+			mu.Lock()
+			*order = append(*order, step)
+			mu.Unlock()
+		}
+
+		scheme := runtime.NewScheme()
+		deployGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+		scheme.AddKnownTypeWithName(deployGVK, &unstructured.Unstructured{})
+		scheme.AddKnownTypeWithName(deployGVK.GroupVersion().WithKind("DeploymentList"), &unstructured.UnstructuredList{})
+		dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+			{Group: "apps", Version: "v1", Resource: "deployments"}: "DeploymentList",
+		})
+		dyn.PrependReactor("list", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+			record("collect")
+			return false, nil, nil
+		})
+
+		client := kubernetesfake.NewClientset()
+		baseDiscovery := client.Discovery().(*fakediscovery.FakeDiscovery)
+		hooked := &hookedPreferredDiscovery{
+			preferredDiscovery: &preferredDiscovery{FakeDiscovery: baseDiscovery, resources: []*metav1.APIResourceList{{
+				GroupVersion: "apps/v1",
+				APIResources: []metav1.APIResource{{Name: "deployments", Namespaced: true, Kind: "Deployment", Verbs: []string{"list"}}},
+			}}},
+			onDiscover: func() { record("discover") },
+		}
+
+		return NewService(Dependencies{
+			Common: common.Dependencies{
+				KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: hooked},
+				DynamicClient:    dyn,
+			},
+			WaitForCaches: waitForCaches,
+		}, nil)
+	}
+
+	t.Run("wait sits between discovery and collect", func(t *testing.T) {
+		var mu sync.Mutex
+		var order []string
+		svc := newFixture(func(context.Context) error {
+			mu.Lock()
+			order = append(order, "wait")
+			mu.Unlock()
+			return nil
+		}, &order, &mu)
+
+		if err := svc.sync(context.Background()); err != nil {
+			t.Fatalf("sync failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		index := func(step string) int {
+			for i, s := range order {
+				if s == step {
+					return i
+				}
+			}
+			return -1
+		}
+		waits := 0
+		for _, s := range order {
+			if s == "wait" {
+				waits++
+			}
+		}
+		if waits != 1 {
+			t.Fatalf("expected exactly one cache wait per sync, got %d (order %v)", waits, order)
+		}
+		if !(index("discover") >= 0 && index("discover") < index("wait")) {
+			t.Fatalf("discovery must run BEFORE the cache wait (overlap), order %v", order)
+		}
+		if !(index("collect") >= 0 && index("wait") < index("collect")) {
+			t.Fatalf("the collect must run AFTER the cache wait, order %v", order)
+		}
+	})
+
+	t.Run("wait failure aborts the sync before any collect", func(t *testing.T) {
+		var mu sync.Mutex
+		var order []string
+		waitErr := errors.New("caches unavailable")
+		svc := newFixture(func(context.Context) error { return waitErr }, &order, &mu)
+
+		err := svc.sync(context.Background())
+		if err == nil || !errors.Is(err, waitErr) {
+			t.Fatalf("expected sync to fail with the cache-wait error, got %v", err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, s := range order {
+			if s == "collect" {
+				t.Fatalf("no collect may run when the cache wait failed, order %v", order)
+			}
+		}
+	})
+}
+
+// TestFailedInitialSyncRetriesWhileReactiveRegistrationBlocks pins that the
+// failed-sync fast retry is not hostage to reactive-updates registration: the
+// sink-registration replay walks populated ingest stores and can take a while, and a
+// failed initial sync — the startup race — is exactly when a prompt retry matters.
+// runLoop must reach its retry ticker regardless of how long registration takes.
+func TestFailedInitialSyncRetriesWhileReactiveRegistrationBlocks(t *testing.T) {
+	client := kubernetesfake.NewClientset()
+	baseDiscovery := client.Discovery().(*fakediscovery.FakeDiscovery)
+	failing := &failingDiscovery{FakeDiscovery: baseDiscovery}
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+
+	release := make(chan struct{})
+	defer close(release)
+	rec := &recordingTelemetry{}
+
+	svc := NewService(Dependencies{
+		Common: common.Dependencies{
+			KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: failing},
+			DynamicClient:    dyn,
+		},
+		Telemetry:       rec,
+		InformerFactory: informers.NewSharedInformerFactory(client, 0),
+		IngestSource:    &blockingIngestSource{release: release},
+	}, &Options{
+		EnableReactiveUpdates:   true,
+		ResyncInterval:          time.Hour,
+		FailedSyncRetryInterval: 25 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = svc.Run(ctx) }()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if rec.count() >= 2 {
+			return // a retry sync ran while AddCatalogSink was still parked
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no failed-sync retry fired while reactive registration was blocked (sync attempts: %d)", rec.count())
 }

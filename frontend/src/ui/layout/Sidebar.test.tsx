@@ -930,9 +930,7 @@ describe('Sidebar', () => {
     expect(itemFor('pending')!.className).not.toContain('dimmed');
     expect(itemFor('pending')!.className).not.toContain('workloads-unknown');
     expect(container!.querySelector('.status-text.warning')).toBeNull();
-    expect(itemFor('pending')!.getAttribute('title') ?? '').not.toContain(
-      'Unable to determine'
-    );
+    expect(itemFor('pending')!.getAttribute('title') ?? '').not.toContain('Unable to determine');
   });
 
   it('does not dim inactive namespaces when the display setting is disabled', () => {

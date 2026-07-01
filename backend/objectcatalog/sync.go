@@ -202,12 +202,19 @@ func (s *Service) runLoop(ctx context.Context) error {
 		s.logWarn(fmt.Sprintf("initial catalog sync failed: %v", initialSyncErr))
 	}
 
-	// Start reactive update notifier if enabled.
+	// Start the reactive update notifier OFF the resync loop's critical path: the
+	// sink-registration replay walks populated ingest stores and can take a while,
+	// and a failed initial sync — the startup race — is exactly when the fast retry
+	// below must fire promptly. Registration racing a sync is safe by design: the
+	// incremental appliers TryLock syncMu and DROP their update while a sync runs
+	// (the sync reconciles from the same stores).
 	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
 		notifier := newWatchNotifier(ctx, s)
-		registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
-		go notifier.run()
-		s.logInfo("catalog reactive updates enabled")
+		go func() {
+			registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
+			go notifier.run()
+			s.logInfo("catalog reactive updates enabled")
+		}()
 	}
 
 	if s.opts.ResyncInterval <= 0 {
@@ -227,7 +234,7 @@ func (s *Service) runLoop(ctx context.Context) error {
 	// cadence, so the catalog recovers in seconds instead of staying degraded until
 	// the next full resync. A successful sync snaps back to the normal interval.
 	interval := nextCatalogResyncInterval(
-		initialSyncErr == nil, 0, config.ObjectCatalogFailedSyncRetryInterval, resyncInterval,
+		initialSyncErr == nil, 0, s.opts.FailedSyncRetryInterval, resyncInterval,
 	)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -242,7 +249,7 @@ func (s *Service) runLoop(ctx context.Context) error {
 				s.logWarn(fmt.Sprintf("catalog resync failed: %v", err))
 			}
 			if next := nextCatalogResyncInterval(
-				err == nil, interval, config.ObjectCatalogFailedSyncRetryInterval, resyncInterval,
+				err == nil, interval, s.opts.FailedSyncRetryInterval, resyncInterval,
 			); next != interval {
 				interval = next
 				ticker.Reset(interval)
@@ -347,6 +354,23 @@ func (s *Service) sync(ctx context.Context) error {
 					allowedSet[desc.GVR.String()] = desc
 				}
 			}
+		}
+	}
+
+	// Discovery and the batch RBAC preflight above are pure API calls; only the
+	// collect below reads informer caches. Waiting HERE — not before the service
+	// starts — lets those seconds overlap the factory's initial sync instead of
+	// running after it. A wait failure aborts the sync (retaining prior data, like
+	// any other sync failure): collecting from unsynced listers would publish an
+	// incomplete catalog as authoritative. On resyncs the factory is already synced
+	// and the wait returns immediately.
+	if wait := s.deps.WaitForCaches; wait != nil {
+		if err := wait(ctx); err != nil {
+			err = fmt.Errorf("waiting for informer caches: %w", err)
+			elapsed := s.now().Sub(start)
+			s.updateHealth(false, true, err, 0)
+			s.recordTelemetry(prevItemCount, prevResourceCount, elapsed, err)
+			return err
 		}
 	}
 
