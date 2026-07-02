@@ -158,7 +158,6 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.coordinatorRuntime?.inFlight?.clear?.();
     orchestratorInternals.coordinatorRuntime?.streamHealth?.clear?.();
     orchestratorInternals.coordinatorRuntime?.blockedStreaming?.clear?.();
-    orchestratorInternals.coordinatorRuntime?.lastMetricsRefreshAt?.clear?.();
     orchestratorInternals.clusterRuntimes?.clear?.();
     orchestratorInternals.suspendedDomains?.clear?.();
     orchestratorInternals.lastNotifiedErrors?.clear?.();
@@ -280,22 +279,7 @@ describe('refreshOrchestrator', () => {
         stop: (scope: string, options?: { reset?: boolean }) =>
           resourceStreamMocks.stop(scope, options),
         refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
-        metricsOnly: true,
-      },
-    });
-  };
-
-  const registerStreamingNodesDomain = () => {
-    refreshOrchestrator.registerDomain({
-      domain: 'nodes',
-      refresherName: CLUSTER_REFRESHERS.nodes,
-      category: 'cluster',
-      streaming: {
-        start: (scope: string) => resourceStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          resourceStreamMocks.stop(scope, options),
-        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
-        metricsOnly: true,
+        pauseRefresherWhenStreaming: true,
       },
     });
   };
@@ -318,47 +302,6 @@ describe('refreshOrchestrator', () => {
     memLimit: '20Mi',
     memUsage: '20Mi',
     ...overrides,
-  });
-
-  it('applies a metric interval nodes refresh through the normal snapshot path', async () => {
-    registerStreamingNodesDomain();
-    const scope = buildClusterScope('cluster-a', '');
-    resetAllScopedDomainStates('nodes');
-    setRuntimeScopeEnabled('nodes', scope, true);
-    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
-      snapshot: {
-        domain: 'nodes',
-        scope,
-        version: 1,
-        checksum: 'etag-node-metrics',
-        generatedAt: Date.now(),
-        sequence: 1,
-        payload: {
-          clusterId: 'cluster-a',
-          rows: [],
-          metrics: { stale: false, successCount: 1, failureCount: 0 },
-        },
-        stats: { itemCount: 0, buildDurationMs: 0 },
-      },
-      etag: 'etag-node-metrics',
-      notModified: false,
-    });
-
-    await orchestratorInternals.performFetch('nodes', scope, {
-      isManual: false,
-      metricsOnly: true,
-    });
-
-    const state = getScopedDomainState('nodes', scope);
-    expect(state.status).toBe('ready');
-    expect(state.data?.rows).toEqual([]);
-    expect(
-      orchestratorInternals
-        .getRuntimeForScope('nodes', scope)
-        .isMetricsRefreshFresh('nodes', scope, Number.POSITIVE_INFINITY)
-    ).toBe(true);
-
-    resetAllScopedDomainStates('nodes');
   });
 
   it('holds scoped fetches for an initializing cluster and dispatches once it becomes serviceable', async () => {
@@ -1626,7 +1569,7 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
-  it('uses resource stream refreshOnce for manual metrics domains with an active stream', async () => {
+  it('uses resource stream refreshOnce for manual refreshes of resource-stream domains with an active stream', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
@@ -1685,7 +1628,7 @@ describe('refreshOrchestrator', () => {
     expect(getScopedDomainState('pods', scope).data?.rows).toHaveLength(1);
   });
 
-  it('falls back to full snapshots for metrics domains when a stream is unhealthy', async () => {
+  it('falls back to full snapshots for resource-stream domains when the stream is unhealthy', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
@@ -2578,7 +2521,10 @@ describe('refreshOrchestrator', () => {
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeB);
   });
 
-  it('keeps metrics freshness isolated to the owning cluster runtime', async () => {
+  it('keeps stream-health polling fallback isolated to the owning cluster scope', async () => {
+    // Cluster A's healthy stream must not suppress the poll fallback for
+    // cluster B's unhealthy stream, and cluster B's fallback fetch must not
+    // touch cluster A's rows.
     registerStreamingPodsDomain();
     const scopeA = buildClusterScope('cluster-a', 'namespace:default');
     const scopeB = buildClusterScope('cluster-b', 'namespace:default');
@@ -2591,7 +2537,8 @@ describe('refreshOrchestrator', () => {
     });
     markResourceStreamActive('pods', scopeA);
     markResourceStreamActive('pods', scopeB);
-    resourceStreamMocks.isHealthy.mockReturnValue(true);
+    // Cluster A's stream is healthy; cluster B's stream is not.
+    resourceStreamMocks.isHealthy.mockImplementation((...args: unknown[]) => args[1] === scopeA);
 
     const podA = makePodRow({
       clusterId: 'cluster-a',
@@ -2627,9 +2574,6 @@ describe('refreshOrchestrator', () => {
       droppedAutoRefreshes: 0,
       scope: scopeB,
     }));
-    orchestratorInternals
-      .getRuntimeForScope('pods', scopeA)
-      .recordMetricsRefresh('pods', scopeA, Date.now());
 
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -2682,7 +2626,8 @@ describe('refreshOrchestrator', () => {
       selectedClusterIds: ['cluster-a'],
     });
     markResourceStreamActive('pods', scope);
-    resourceStreamMocks.isHealthy.mockReturnValue(true);
+    // An unhealthy stream forces the poll fallback so the snapshot path runs.
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
 
     const existingPod = makePodRow({
       clusterId: 'cluster-a',

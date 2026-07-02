@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  METRICS_INTERVAL_REFRESHERS,
   REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
   refreshDomainContract,
@@ -93,7 +92,6 @@ type RegisteredDomain = {
   refresherName: string;
   streaming?: {
     start?: (scope: string) => Promise<(() => void) | void> | (() => void);
-    metricsOnly?: boolean;
   };
 };
 
@@ -277,8 +275,6 @@ describe('refresh domain contract', () => {
     for (const entry of contract.domains) {
       const descriptor = getRefreshDomainDescriptor(entry.domain);
       const registration = registeredDomains().get(entry.domain);
-      // metricsInterval is derived from the domain's source clocks, not authored.
-      const metricsInterval = entry.sourceClocks?.includes('metric') ?? false;
       expect(registration).toBeDefined();
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
@@ -289,7 +285,6 @@ describe('refresh domain contract', () => {
       expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.timing).toEqual(entry.frontend.timing);
       expect(descriptor.priority).toBe(entry.frontend.priority);
-      expect(METRICS_INTERVAL_REFRESHERS.has(descriptor.refresherName)).toBe(metricsInterval);
 
       switch (entry.frontend.orchestrator) {
         case 'snapshot':
@@ -300,7 +295,6 @@ describe('refresh domain contract', () => {
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(true);
           expect(entry.frontend.diagnosticsStream).toBe('resources');
-          expect(Boolean(registration?.streaming?.metricsOnly)).toBe(metricsInterval);
           expect(entry.sourceClocks).toContain('object');
           break;
         case 'event-stream':

@@ -8,7 +8,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
-import { initializeAutoRefresh, initializeMetricsRefreshInterval } from '@/core/refresh';
+import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
 
@@ -19,7 +19,6 @@ if (appElement) {
     // from the persisted settings instead of a temporary default state.
     await hydrateAppPreferences();
     initializeScrollbarActivityTracking();
-    initializeMetricsRefreshInterval();
     initializeAutoRefresh();
 
     const root = ReactDOM.createRoot(appElement);

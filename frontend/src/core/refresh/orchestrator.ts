@@ -32,7 +32,7 @@ import {
   logAppLogsWarn,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
-import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
 import { clusterReadiness } from './clusterReadiness';
 import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
@@ -49,7 +49,6 @@ import { RefreshErrorNotifier } from './refreshErrorNotifier';
 type DomainFetchOptions = {
   isManual: boolean;
   signal?: AbortSignal;
-  metricsOnly?: boolean;
   allowDisabledRetainedScope?: boolean;
 };
 
@@ -61,8 +60,6 @@ type DomainFetchOptions = {
 // Set autoStart: true on individual domain registrations when needed.
 const DEFAULT_AUTO_START = false;
 const noopStreamingCleanup = () => {};
-// Keep streaming metrics refreshes aligned with the configurable metrics cadence.
-const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
@@ -901,10 +898,6 @@ class RefreshOrchestrator {
     this.forEachRuntime((runtime) => runtime.clearBlockedStreaming());
   }
 
-  private clearAllMetricsRefreshTracking(): void {
-    this.forEachRuntime((runtime) => runtime.clearMetricsRefreshTracking());
-  }
-
   private clearAllAsyncStreamingBookkeeping(): void {
     this.forEachRuntime((runtime) => runtime.clearAsyncStreamingBookkeeping());
   }
@@ -1000,11 +993,7 @@ class RefreshOrchestrator {
   }
 
   private shouldAllowRefresher(config: DomainRegistration<RefreshDomain>): boolean {
-    return (
-      !config.streaming ||
-      config.streaming.metricsOnly === true ||
-      config.streaming.pauseRefresherWhenStreaming === true
-    );
+    return !config.streaming || config.streaming.pauseRefresherWhenStreaming === true;
   }
 
   async fetchScopedDomain<K extends RefreshDomain>(
@@ -1056,9 +1045,7 @@ class RefreshOrchestrator {
         scope: normalizedScope,
         shouldStream,
         isManual: Boolean(options.isManual),
-        metricsOnly: Boolean(config.streaming.metricsOnly),
         streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
-        metricsMinIntervalMs: getStreamingMetricsMinIntervalMs(),
         hasData: Boolean(getScopedDomainState(domain, normalizedScope).data),
       });
       if (fetchMode === 'skip') {
@@ -1069,7 +1056,6 @@ class RefreshOrchestrator {
     await this.performFetch(domain, normalizedScope, {
       isManual: options.isManual ?? true,
       signal: options.signal,
-      metricsOnly: Boolean(config.streaming?.metricsOnly),
     });
   }
 
@@ -1078,7 +1064,6 @@ class RefreshOrchestrator {
     scope: string | undefined,
     options: DomainFetchOptions
   ): Promise<void> {
-    const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
     const normalizedScope = this.normalizeDomainScope(domain, scope);
 
@@ -1179,9 +1164,6 @@ class RefreshOrchestrator {
           isManual: options.isManual,
           lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
         }));
-        if (metricsOnly && !options.isManual) {
-          runtime.recordMetricsRefresh(domain, normalizedScope);
-        }
         this.clearRefreshError(domain, normalizedScope);
         return;
       }
@@ -1194,9 +1176,6 @@ class RefreshOrchestrator {
         normalizedScope,
         options.allowDisabledRetainedScope
       );
-      if (metricsOnly && !options.isManual) {
-        runtime.recordMetricsRefresh(domain, normalizedScope);
-      }
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -1402,7 +1381,6 @@ class RefreshOrchestrator {
     // Suppress transient errors while the backend refresh subsystem reinitialises.
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.errorNotifier.clearAll();
     // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
@@ -1417,7 +1395,6 @@ class RefreshOrchestrator {
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.configs.forEach((_, domain) => {
       this.resetDomain(domain);
@@ -1433,7 +1410,6 @@ class RefreshOrchestrator {
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.configs.forEach((_config, domain) => {
       const wasEnabled = this.hasEnabledScopedSources(domain);
@@ -1478,7 +1454,6 @@ class RefreshOrchestrator {
     this.errorNotifier.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
   };
 
@@ -1488,7 +1463,6 @@ class RefreshOrchestrator {
     invalidateRefreshBaseURL();
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
   };
 

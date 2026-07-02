@@ -11,12 +11,7 @@ import type {
   StaticRefresherName,
   SystemRefresherName,
 } from './refresherTypes';
-import {
-  METRICS_INTERVAL_REFRESHERS,
-  REFRESHER_TIMING_BY_NAME,
-  type RefresherTiming,
-} from './domainRegistry';
-import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
+import { REFRESHER_TIMING_BY_NAME, type RefresherTiming } from './domainRegistry';
 
 export type { RefresherTiming };
 
@@ -26,9 +21,6 @@ const resolveTiming = (name: StaticRefresherName): RefresherTiming => {
     throw new Error(`No refresh timing registered for ${name}`);
   }
 
-  if (METRICS_INTERVAL_REFRESHERS.has(name)) {
-    return { ...timing, interval: getMetricsRefreshIntervalMs() };
-  }
   return timing;
 };
 

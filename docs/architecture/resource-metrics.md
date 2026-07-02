@@ -26,16 +26,36 @@ separate metric domains and no client-side metric join.
   `parseFormattedMemoryToBytes`), and the value-based keyset cursor keeps
   paging correctly across metric ticks.
 
-## Refresh cadence
+## Refresh cadence — the metric doorbell
 
-The three domains declare `sourceClocks: ["object", "metric"]` in
-`backend/refresh/domain/refresh-domain-contract.json` (mirrored from
-`resourcestream.ProjectionDescriptors`). On the frontend this makes their
-refresher run at the user metrics-interval preference, and their streaming
-registration sets `metricsOnly: true`, so a healthy object stream does NOT
-pause the poll — the poll is what advances the metric clock between object
-events. Object-change freshness stays stream/signal-driven; typed queries
-refetch when the live scope's `sourceVersion` changes on either clock.
+Both clocks are push-notified; the client never polls while its stream is
+healthy:
+
+- **Object clock:** informer/reflector events emit change signals over the
+  resources WebSocket; the scoped `sourceVersion` advances and typed queries
+  refetch (refetch-on-signal, unchanged).
+- **Metric clock:** the BACKEND metrics poller owns the schedule. After each
+  successful collection it notifies a collection observer
+  (`metrics.Poller.SetCollectionObserver`, wired in
+  `backend/refresh/system/manager.go`), which fans a `SourceMetric` doorbell
+  over the same stream to every subscribed scope of the metric-clock domains
+  (`resourcestream.Manager.BroadcastMetricsRefresh`, domains derived from
+  `ProjectionDescriptors` `MetricsDependency()`). The doorbell version is the
+  collection revision (CollectedAt nanos) — the same value the snapshot
+  builders stamp as `SourceVersions["metric"]`, so the doorbell and the
+  snapshot ETag advance together. The frontend accepts the signal because the
+  three domains declare the `metric` source clock in the contract
+  (`domainSupportsSourceClock`); it advances the scoped `sourceVersion` and the
+  one joined query refetches.
+
+The user's metrics-interval preference configures the backend poller: at
+subsystem build (`resolveMetricsInterval`) and live on preference change
+(`UpdateAppPreferences` side effect → `Manager.SetMetricsInterval` →
+`Poller.SetInterval`, which retimes the running ticker).
+
+Snapshot polling by the frontend refresher exists only as the stream-DOWN
+fallback (`pauseRefresherWhenStreaming` semantics: covered scopes are skipped
+while the stream is healthy), at the domain's authored contract timing.
 
 Backend metrics-poller demand is any active lease on `cluster-overview`,
 `nodes`, `pods`, or `namespace-workloads`
@@ -61,6 +81,8 @@ very large clusters, the revisit knobs are (in order): lengthen the
 metrics-interval preference, then consider splitting usage into a sibling
 sub-payload with its own validator — NOT resurrecting the metric domains or the
 row-key round-trips.
+
+## Invariants
 
 - Live CPU, memory, request, limit, capacity, allocatable, pod-count,
   ready-pod-count, freshness, and error metadata should flow through

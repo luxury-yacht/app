@@ -150,12 +150,15 @@ const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
   const signal = message.signal;
   const version = message.version?.trim();
   const signalClusterId = message.clusterId?.trim();
+  // A message carrying a KNOWN source clock the domain does not declare is a
+  // contract violation (e.g. a metric doorbell aimed at a non-metric domain):
+  // drop it outright rather than letting the legacy `type` path apply it.
+  // Control frames without a source (heartbeat/ack) are unaffected.
+  if (isResourceStreamSourceClock(source) && !domainSupportsSourceClock(message.domain, source)) {
+    return null;
+  }
   const signalEnvelope =
-    signalClusterId &&
-    version &&
-    isResourceStreamSourceClock(source) &&
-    domainSupportsSourceClock(message.domain, source) &&
-    hasSignalType(signal)
+    signalClusterId && version && isResourceStreamSourceClock(source) && hasSignalType(signal)
       ? { clusterId: signalClusterId, source, signal, version }
       : undefined;
   if (!hasMessageType(message.type) && !signalEnvelope) {
@@ -472,11 +475,25 @@ export class ResourceStreamManager {
       if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
       }
-      this.subscribe(subscription);
       if (subscription.lastSequence && !subscription.resyncInFlight) {
-        // Clear resync state when a resume-capable stream reconnects.
+        this.subscribe(subscription);
+        // Clear resync state when a resume-capable stream reconnects: the
+        // sequence token replays anything missed, so the scope is trusted on
+        // this connection without waiting for a fresh delivery.
         this.markResyncComplete(subscription);
+        this.markSubscriptionSynchronized(subscription);
+        this.updateHealthForSubscription(subscription);
+        return;
       }
+      if (!subscription.resyncInFlight) {
+        // No resume token: the subscription's data predates this connection
+        // (fetched while connecting), so changes in the gap could be missed.
+        // A forced resync on the live connection re-establishes trust — its
+        // tail re-subscribes and marks the subscription synchronized.
+        void this.resyncSubscription(subscription, 'reconnect', true);
+        return;
+      }
+      this.subscribe(subscription);
     });
   }
 
@@ -571,6 +588,17 @@ export class ResourceStreamManager {
     subscription.lastDeliveryEpoch = this.connectionEpoch;
   }
 
+  // markSubscriptionSynchronized records that this subscription's data is
+  // trusted on the CURRENT connection (a resync completed, or the stream
+  // resumed via its sequence token). It clears any prior error: the resync is
+  // the recovery protocol, so recovery must not wait for a delivery that a
+  // quiet domain will never produce.
+  private markSubscriptionSynchronized(subscription: StreamSubscription): void {
+    subscription.lastSyncedEpoch = this.connectionEpoch;
+    subscription.lastErrorAt = undefined;
+    subscription.lastErrorReason = undefined;
+  }
+
   private recordSubscriptionError(subscription: StreamSubscription, message: string): void {
     subscription.lastErrorAt = Date.now();
     subscription.lastErrorReason = message;
@@ -593,6 +621,12 @@ export class ResourceStreamManager {
     }
     if (subscription.lastDeliveryEpoch === this.connectionEpoch) {
       return { status: 'healthy', reason: 'delivering' };
+    }
+    // Connected + synchronized on this connection is healthy even with zero
+    // deliveries: quiet domains would otherwise poll forever ("awaiting
+    // updates" only means nothing has changed).
+    if (subscription.lastSyncedEpoch === this.connectionEpoch) {
+      return { status: 'healthy', reason: 'synchronized' };
     }
     return { status: 'degraded', reason: 'awaiting updates' };
   }
@@ -888,6 +922,7 @@ export class ResourceStreamManager {
     subscription.lastResyncAt = now;
     if (this.shouldResetDeliveryOnResync(reason)) {
       subscription.lastDeliveryEpoch = undefined;
+      subscription.lastSyncedEpoch = undefined;
     }
     this.recordResync(subscription, reason);
     // Skip setting a user-visible "Stream resyncing" error for initial stream
@@ -907,6 +942,7 @@ export class ResourceStreamManager {
     const sourceUpdate = this.sourceVersionsFromUpdates(subscription.updateQueue);
     this.bumpSourceVersionOnly(subscription, now, sourceUpdate.sourceVersions, sourceUpdate.latest);
     this.markResyncComplete(subscription);
+    this.markSubscriptionSynchronized(subscription);
     subscription.pendingReset = false;
     subscription.resyncInFlight = false;
     this.subscribe(subscription);

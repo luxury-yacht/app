@@ -91,7 +91,6 @@ export interface AppEvents {
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
-  'settings:metrics-interval': number;
   'settings:kubernetes-client-qps': number;
   'settings:default-table-page-size': number;
   'settings:kubernetes-client-burst': number;

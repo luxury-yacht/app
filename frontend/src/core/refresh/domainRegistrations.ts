@@ -19,27 +19,18 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     });
   };
 
-  const resourceStreamDomain = (
-    domain: RefreshDomain & ResourceStreamDomainName,
-    options?: { metricsOnly?: boolean }
-  ) => {
+  const resourceStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
     registerRefreshDomain(domain, {
       start: (scope) => resourceStreamManager.start(domain, scope),
       stop: (scope, opts) => resourceStreamManager.stop(domain, scope, opts?.reset ?? false),
       refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
-      metricsOnly: options?.metricsOnly,
-      pauseRefresherWhenStreaming: !options?.metricsOnly,
-    });
-  };
-
-  const doorbellStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
-    registerRefreshDomain(domain, {
-      start: (scope) => resourceStreamManager.start(domain, scope),
-      stop: (scope, options) => resourceStreamManager.stop(domain, scope, options?.reset ?? false),
-      refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
       pauseRefresherWhenStreaming: true,
     });
   };
+
+  // Doorbell domains (catalog/events) share the exact stream wiring; the alias
+  // keeps the domain-class distinction readable at the registration sites.
+  const doorbellStreamDomain = resourceStreamDomain;
 
   const registerContainerLogsDomain = () => {
     registerRefreshDomain('container-logs', {
@@ -70,15 +61,15 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     'object-helm-values'
   );
   registerContainerLogsDomain();
-  // pods/nodes/namespace-workloads join live usage at serve, so their refresher
-  // keeps polling (at the metrics min-interval) even while the object stream is
-  // healthy — the poll is what advances the metric clock between object events.
-  resourceStreamDomain('pods', { metricsOnly: true });
+  // pods/nodes/namespace-workloads join live usage at serve; their metric cadence
+  // is push-driven — the backend poller fans a metric doorbell over the stream
+  // after each collection, so no client-side polling is needed for it.
+  resourceStreamDomain('pods');
 
   doorbellStreamDomain('catalog');
   registerSnapshotDomains('catalog-diff');
   doorbellStreamDomain('cluster-events');
-  resourceStreamDomain('nodes', { metricsOnly: true });
+  resourceStreamDomain('nodes');
   resourceStreamDomain('cluster-rbac');
   resourceStreamDomain('cluster-storage');
   resourceStreamDomain('cluster-config');
@@ -86,7 +77,7 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   resourceStreamDomain('cluster-custom');
 
   doorbellStreamDomain('namespace-events');
-  resourceStreamDomain('namespace-workloads', { metricsOnly: true });
+  resourceStreamDomain('namespace-workloads');
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');
   resourceStreamDomain('namespace-rbac');

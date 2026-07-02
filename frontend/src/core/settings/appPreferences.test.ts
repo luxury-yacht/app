@@ -29,7 +29,6 @@ import {
   getObjPanelLogsBufferMaxSize,
   getObjPanelLogsTargetGlobalLimit,
   getObjPanelLogsTargetPerScopeLimit,
-  getMetricsRefreshIntervalMs,
   getPaletteTint,
   getPermissionSSRRFetchConcurrency,
   getUseShortResourceNames,
@@ -462,7 +461,6 @@ describe('appPreferences', () => {
     expect(getExclusiveNamespaces()).toBe(false);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
-    expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getKubernetesClientQPS()).toBe(250);
     expect(getKubernetesClientBurst()).toBe(500);
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
@@ -682,7 +680,6 @@ describe('appPreferences', () => {
     expect(getPermissionSSRRFetchConcurrency()).toBe(16);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
-    expect(getMetricsRefreshIntervalMs()).toBe(6000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 

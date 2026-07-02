@@ -2,9 +2,11 @@
 
 ### Changed
 
-- Live CPU/memory usage is now joined onto table rows by the backend at serve
-  time. Tables issue one query instead of two-to-three correlated requests, the
-  giant `predicate.rowKeys` query strings are gone, and CPU/memory sorting runs
-  server-side with correct keyset pagination.
+- Table data now refreshes purely on server push while streams are healthy: live
+  CPU/memory usage is joined into rows by the backend at serve time, and a new
+  server-side "metric doorbell" tells the app when fresh metrics were collected
+  — eliminating client-side polling, the multi-request metric overlay, and the
+  giant row-key query strings. CPU/memory sorting runs server-side with correct
+  pagination.
 
 ### Fixed

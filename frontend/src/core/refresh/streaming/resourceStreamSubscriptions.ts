@@ -37,6 +37,10 @@ export type StreamSubscription = {
   lastMessageAt?: number;
   lastDeliveryAt?: number;
   lastDeliveryEpoch?: number;
+  // The connection epoch on which this subscription last completed a resync (or
+  // resumed via its sequence token). Connected + synchronized counts as healthy
+  // even with zero deliveries — a quiet domain is not an unhealthy one.
+  lastSyncedEpoch?: number;
   lastErrorAt?: number;
   lastErrorReason?: string;
   updateQueue: ResourceStreamUpdateMessage[];

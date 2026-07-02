@@ -933,6 +933,26 @@ func (m *Manager) BroadcastEventRefresh(domain, scope, version string) {
 	m.broadcastDoorbellRefresh(domain, []string{selector.CanonicalScope()}, SourceEvent, version)
 }
 
+// BroadcastMetricsRefresh fans a SourceMetric doorbell to every subscribed scope
+// of every metric-clock domain (the domains whose rows join live usage at serve,
+// derived from the authored projection descriptors). The metrics poller calls
+// this after each successful collection, so the frontend refetches on the
+// poller's schedule with no client-side polling. version is the collection
+// revision (CollectedAt nanos) — the same value the snapshot builders stamp as
+// SourceVersions["metric"], so the doorbell and the snapshot ETag advance
+// together.
+func (m *Manager) BroadcastMetricsRefresh(version string) {
+	if m == nil {
+		return
+	}
+	for domain, descriptor := range projectionDescriptors {
+		if !descriptor.MetricsDependency() {
+			continue
+		}
+		m.broadcastDoorbellRefresh(domain, m.subscribedScopes(domain), SourceMetric, version)
+	}
+}
+
 func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {
 	if m == nil {
 		return

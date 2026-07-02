@@ -1001,6 +1001,7 @@ type settingsSideEffects struct {
 	kubernetesClientRateLimits bool
 	containerLogsPerScopeLimit bool
 	containerLogsGlobalLimit   bool
+	metricsInterval            bool
 }
 
 func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange, effects *settingsSideEffects) error {
@@ -1056,6 +1057,7 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 			value = defaultMetricsIntervalMs()
 		}
 		settings.MetricsRefreshIntervalMs = value
+		effects.metricsInterval = true
 	case appPreferenceKubernetesClientQPS:
 		value, err := intPreferenceValue(change.Value)
 		if err != nil {
@@ -1378,6 +1380,7 @@ func (a *App) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*Update
 	effectiveBurst := next.KubernetesClientBurst
 	perScopeLimit := next.ObjPanelLogsTargetPerScopeLimit
 	globalLimit := next.ObjPanelLogsTargetGlobalLimit
+	metricsIntervalMs := next.MetricsRefreshIntervalMs
 	responseSettings := copyAppSettings(next)
 	a.settingsMu.Unlock()
 
@@ -1390,6 +1393,17 @@ func (a *App) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*Update
 	if effects.containerLogsGlobalLimit {
 		if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
 			limiter.SetLimit(globalLimit)
+		}
+	}
+	if effects.metricsInterval {
+		// The metric cadence is server-owned (the doorbell rides collections):
+		// retime every connected cluster's running poller live. Clusters that
+		// connect later read the same setting at subsystem build.
+		interval := time.Duration(metricsIntervalMs) * time.Millisecond
+		for _, subsystem := range a.snapshotRefreshSubsystems() {
+			if subsystem != nil && subsystem.Manager != nil {
+				subsystem.Manager.SetMetricsInterval(interval)
+			}
 		}
 	}
 

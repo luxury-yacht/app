@@ -299,7 +299,9 @@ against snapshot runtime permissions by
 
 7. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
 
-8. **Serve-time metric cadence chain** — live usage in tables depends on an easy-to-sever chain: `pods`/`nodes`/`namespace-workloads` declare the `metric` source clock in `ProjectionDescriptors` → contract JSON → frontend `metricsInterval` timing, AND their registrations set `metricsOnly: true` so a healthy object stream does not pause the refresher poll — that poll IS the metric clock (each poll returns a new `SourceVersions["metric"]`, which changes the ETag and triggers typed-query refetch). Removing `metricsOnly: true`, dropping the `metric` source clock, or writing usage into a maintained store each silently freezes usage between object events with no error anywhere. `registrations_test.go` (backend) and `resourceStreamDomains.test.ts` (frontend) pin the clock declarations; there is no test that can pin "the poll keeps running while streaming" end-to-end, so treat those flags as load-bearing.
+8. **Metric doorbell chain** — live usage in tables depends on an easy-to-sever push chain: the metrics poller's collection observer (`SetCollectionObserver`, wired in `system/manager.go` next to the event observer) → `resourcestream.Manager.BroadcastMetricsRefresh` fans a `SourceMetric` doorbell to every subscribed scope of the metric-clock domains (derived from `ProjectionDescriptors` `MetricsDependency()`) → the frontend accepts the signal ONLY because those domains declare the `metric` source clock in the contract (`domainSupportsSourceClock`) → scoped `sourceVersion` advances → typed queries refetch. Severing ANY link — unwiring the observer, dropping the `metric` source clock from a descriptor/contract, or writing usage into a maintained store — silently freezes usage between object events with no error anywhere. Pinned by: poller observer tests (`metrics/poller_test.go`), doorbell fan-out (`resourcestream/manager_test.go`), observer wiring shape (`system/metrics_doorbell_test.go`), and frontend signal application (`resourceStreamManager.test.ts` metric doorbell pin). The user's metrics-interval preference retimes the BACKEND poller live (`Manager.SetMetricsInterval` via UpdateAppPreferences side effects); there is no client-side metric polling.
+
+8b. **Stream health = connected + synchronized, NOT recently-delivered** — the refresher gate polls a scope whenever its stream is not `healthy`. Health has two sufficient conditions (`computeSubscriptionHealth`): a delivery on the current connection epoch (`delivering`), or a completed resync/sequence-token resume on it (`synchronized`, set by `markSubscriptionSynchronized`). If health ever regresses to delivery-only, every QUIET domain (cluster-config, RBAC, storage classes…) silently reverts to timer polling — deliveries never arrive on domains whose objects don't change. On (re)connect, token-less subscriptions are force-resynced (`handleConnectionOpen`) because their data predates the live socket. Pinned by the 'quiet stream is healthy after connect + resync with zero deliveries' test in `resourceStreamManager.test.ts`.
 
 ### Diagnosing a wedge
 
@@ -327,8 +329,8 @@ into the same store).
 - [ ] Check if stream resume semantics are affected
 - [ ] For metric-bearing domains, confirm metric-only changes use the metric
       source clock and do not re-project or re-store object rows
-- [ ] For metric-bearing domains, confirm the registration keeps
-      `metricsOnly: true` and the descriptor keeps the `metric` source clock
+- [ ] For metric-bearing domains, confirm the poller observer → metric doorbell
+      chain stays wired and the descriptor keeps the `metric` source clock
       (fragility point 8 — severing either silently freezes live usage)
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)

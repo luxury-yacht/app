@@ -286,6 +286,88 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
   });
 
+  // A QUIET domain (e.g. cluster-config, whose kinds rarely change) must count
+  // as healthy once it is connected and synchronized — deliveries prove
+  // liveness but their absence is not unhealth. Without this, the refresher
+  // gate ('skip' only when healthy) polls quiet domains forever, defeating
+  // streaming-only refresh.
+  test('quiet stream is healthy after connect + resync with zero deliveries', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'cluster-config',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('cluster-config', storeScope);
+    await flushPromises();
+
+    createdSockets[0].onopen?.(new Event('open'));
+    // The post-open resync re-establishes trust on the live connection.
+    await vi.advanceTimersByTimeAsync(1100);
+    await flushPromises();
+
+    // No change message ever arrives — the domain is simply quiet.
+    expect(manager.getHealthStatus('cluster-config', storeScope)).toBe('healthy');
+  });
+
+  // Pins the metric doorbell contract: the backend poller fans a SourceMetric
+  // doorbell after each collection; on the metric-clock domains it must advance
+  // the scoped sourceVersion (the typed-query refetch trigger) with NO client-side
+  // polling involved. Non-metric domains must drop it at parse time.
+  test('metric doorbell advances sourceVersion on metric-clock domains and is dropped elsewhere', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const podsScope = buildClusterScope('cluster-a', 'namespace:default');
+    const configScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('pods', podsScope);
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', configScope);
+
+    const doorbell = (domain: string) =>
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        type: 'MODIFIED',
+        domain,
+        scope: 'namespace:default',
+        source: 'metric',
+        version: '1700000000000000042',
+        signal: 'changed',
+      });
+
+    manager.handleMessage('cluster-a', doorbell('pods'));
+    manager.handleMessage('cluster-a', doorbell('namespace-config'));
+    vi.advanceTimersByTime(200);
+
+    const podsState = getScopedDomainState('pods', podsScope);
+    expect(podsState.sourceVersion).toBe('1700000000000000042');
+    expect(podsState.sourceVersions?.metric).toBe('1700000000000000042');
+
+    // namespace-config declares no metric source clock: the doorbell is dropped
+    // at parse time and its state stays untouched.
+    const configState = getScopedDomainState('namespace-config', configScope);
+    expect(configState.sourceVersion).toBeUndefined();
+    expect(configState.sourceVersions?.metric).toBeUndefined();
+  });
+
   test('signal-only domain delta updates sourceVersion and never retains rows', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

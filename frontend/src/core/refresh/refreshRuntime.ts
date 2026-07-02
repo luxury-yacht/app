@@ -18,10 +18,7 @@ type StreamingFetchDecisionInput = {
   scope: string;
   shouldStream: boolean;
   isManual: boolean;
-  metricsOnly: boolean;
   streamingHealthy: boolean;
-  metricsMinIntervalMs: number;
-  now?: number;
   /**
    * Whether the scope already holds an applied snapshot. A scope with no data yet
    * (a brand-new filter/page/scope) must fetch its first page regardless of stream
@@ -84,7 +81,6 @@ export class ClusterRefreshRuntime {
   private readonly cancelledStreaming = new Set<string>();
   private readonly streamHealth = new Map<string, AppEvents['refresh:resource-stream-health']>();
   private readonly blockedStreaming = new Set<string>();
-  private readonly lastMetricsRefreshAt = new Map<string, number>();
   private readonly scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
   // Reference counts of mounted lifecycle consumers that need a (domain, scope)
   // enabled. Leases let a newer consumer keep a scope alive across an old
@@ -416,35 +412,14 @@ export class ClusterRefreshRuntime {
       return 'snapshot';
     }
 
-    if (!input.metricsOnly) {
-      return input.streamingHealthy ? 'skip' : 'snapshot';
-    }
-
-    if (!this.isStreamingActive(input.domain, input.scope) || !input.streamingHealthy) {
-      return 'snapshot';
-    }
-
-    return this.isMetricsRefreshFresh(
-      input.domain,
-      input.scope,
-      input.metricsMinIntervalMs,
-      input.now
-    )
-      ? 'skip'
-      : 'snapshot';
-  }
-
-  recordMetricsRefresh(domain: RefreshDomain, scope: string, now = Date.now()): void {
-    this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), now);
-  }
-
-  clearMetricsRefreshTracking(): void {
-    this.lastMetricsRefreshAt.clear();
+    // While the stream is healthy, streaming IS the refresh: change signals
+    // (object clock) and doorbells (metric/event/catalog clocks) drive refetch;
+    // the poll runs only as the stream-down fallback.
+    return input.streamingHealthy ? 'skip' : 'snapshot';
   }
 
   resetTransientState(): void {
     this.blockedStreaming.clear();
-    this.lastMetricsRefreshAt.clear();
     this.streamHealth.clear();
     this.pendingStreaming.clear();
     this.cancelledStreaming.clear();
@@ -457,15 +432,5 @@ export class ClusterRefreshRuntime {
     this.scopedEnabledState.clear();
     this.scopedLeases.clear();
     this.resetTransientState();
-  }
-
-  private isMetricsRefreshFresh(
-    domain: RefreshDomain,
-    scope: string,
-    minIntervalMs: number,
-    now = Date.now()
-  ): boolean {
-    const last = this.lastMetricsRefreshAt.get(makeInFlightKey(domain, scope));
-    return last !== undefined && now - last < minIntervalMs;
   }
 }

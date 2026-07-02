@@ -17,7 +17,6 @@ export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain
   refresherName: StaticRefresherName;
   category: DomainCategory;
   timing: RefresherTiming;
-  metricsInterval?: boolean;
   diagnosticsStream?: StreamTelemetryName;
   priority?: number;
 }
@@ -186,12 +185,6 @@ export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
       category: entry.category,
       timing: entry.frontend.timing,
     };
-    // metricsInterval derives from the domain's source clocks: a domain runs the
-    // metric refresh interval exactly when it declares the metric source clock.
-    const sourceClocks = entry.sourceClocks ?? [];
-    if (sourceClocks.includes('metric')) {
-      descriptor.metricsInterval = true;
-    }
     if (entry.frontend.diagnosticsStream) {
       descriptor.diagnosticsStream = entry.frontend.diagnosticsStream;
     }
@@ -228,9 +221,3 @@ export const PRIORITY_DOMAINS = refreshDomainDescriptors
 export const REFRESHER_TIMING_BY_NAME = Object.fromEntries(
   refreshDomainDescriptors.map((descriptor) => [descriptor.refresherName, descriptor.timing])
 ) as Partial<Record<StaticRefresherName, RefresherTiming>>;
-
-export const METRICS_INTERVAL_REFRESHERS = new Set<StaticRefresherName>(
-  refreshDomainDescriptors
-    .filter((descriptor) => descriptor.metricsInterval)
-    .map((descriptor) => descriptor.refresherName)
-);

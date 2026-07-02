@@ -319,6 +319,17 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	if eventManager != nil && resourceManager != nil {
 		eventManager.SetSignalObserver(eventSignalObserver(resourceManager))
 	}
+	// Metric doorbell: each successful poller collection notifies the stream so
+	// the frontend refetches metric-bearing tables on the poller's schedule —
+	// no client-side metric polling. Wired via type assertion because the
+	// poller may be the disabled stub, which has no observer.
+	if resourceManager != nil {
+		if observable, ok := metricsPoller.(interface {
+			SetCollectionObserver(func(metrics.Metadata))
+		}); ok {
+			observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
+		}
+	}
 
 	return &Subsystem{
 		Manager:          manager,
@@ -335,6 +346,20 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ResourceStream:   resourceManager,
 		ClusterMeta:      clusterMeta,
 	}, nil
+}
+
+// metricsSignalObserver maps a successful poller collection to a SourceMetric
+// doorbell on the resource stream. The version is the collection revision
+// (CollectedAt nanos) — identical to the snapshot builders' metric source clock
+// (metricRevisionFromMetadata), so the doorbell and the snapshot ETag advance
+// together. A zero CollectedAt means no sample exists yet; nothing to announce.
+func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
+	return func(metadata metrics.Metadata) {
+		if resourceManager == nil || metadata.CollectedAt.IsZero() {
+			return
+		}
+		resourceManager.BroadcastMetricsRefresh(strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10))
+	}
 }
 
 func eventSignalObserver(resourceManager *resourcestream.Manager) func(scope string, sequence uint64) {
