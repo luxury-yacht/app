@@ -26,6 +26,7 @@ import {
 } from './store';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
+import { isSupportedDomain as isDoorbellStreamDomain } from './streaming/resourceStreamDomains';
 import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
@@ -50,6 +51,9 @@ type DomainFetchOptions = {
   isManual: boolean;
   signal?: AbortSignal;
   allowDisabledRetainedScope?: boolean;
+  // The fetch was triggered by a stream doorbell; it bypasses the
+  // skip-while-stream-healthy gate (the signal IS the stream's refresh).
+  streamSignal?: boolean;
 };
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -616,14 +620,13 @@ class RefreshOrchestrator {
   }
 
   // Resource stream health gates polling so snapshots stay active until delivery resumes.
+  // Driven by the doorbell descriptor table (resource tables + catalog/events/namespaces
+  // doorbells) so a new doorbell domain cannot silently keep polling here.
   private isStreamingHealthy(domain: RefreshDomain, scope?: string): boolean {
     if (!scope) {
       return false;
     }
-    if (isResourceStreamDomain(domain)) {
-      return resourceStreamManager.isHealthy(domain, scope);
-    }
-    if (domain === 'catalog' || domain === 'cluster-events' || domain === 'namespace-events') {
+    if (isDoorbellStreamDomain(domain)) {
       return resourceStreamManager.isHealthy(domain, scope);
     }
     return false;
@@ -999,7 +1002,7 @@ class RefreshOrchestrator {
   async fetchScopedDomain<K extends RefreshDomain>(
     domain: K,
     scope: string,
-    options: { signal?: AbortSignal; isManual?: boolean } = {}
+    options: { signal?: AbortSignal; isManual?: boolean; streamSignal?: boolean } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
     const normalizedScope = this.normalizeDomainScope(domain, scope);
@@ -1045,6 +1048,7 @@ class RefreshOrchestrator {
         scope: normalizedScope,
         shouldStream,
         isManual: Boolean(options.isManual),
+        streamSignal: Boolean(options.streamSignal),
         streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
         hasData: Boolean(getScopedDomainState(domain, normalizedScope).data),
       });

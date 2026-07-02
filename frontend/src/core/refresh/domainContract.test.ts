@@ -65,7 +65,12 @@ vi.mock('./streaming/resourceStreamManager', () => ({
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 type DiagnosticsStream = 'resources' | 'events' | 'catalog' | 'container-logs';
 type OrchestratorKind =
-  'snapshot' | 'resource-stream' | 'event-stream' | 'catalog-stream' | 'container-logs-stream';
+  | 'snapshot'
+  | 'doorbell-snapshot'
+  | 'resource-stream'
+  | 'event-stream'
+  | 'catalog-stream'
+  | 'container-logs-stream';
 
 type ContractDomain = {
   domain: RefreshDomain;
@@ -223,6 +228,7 @@ describe('refresh domain contract', () => {
     const categories = new Set<DomainCategory>(['system', 'cluster', 'namespace']);
     const orchestrators = new Set<OrchestratorKind>([
       'snapshot',
+      'doorbell-snapshot',
       'resource-stream',
       'event-stream',
       'catalog-stream',
@@ -290,6 +296,14 @@ describe('refresh domain contract', () => {
         case 'snapshot':
           expect(registration?.streaming).toBeUndefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
+          break;
+        case 'doorbell-snapshot':
+          // Doorbell-refetched snapshot domain (namespaces): streaming wiring
+          // exists for the signal-only doorbell, but it is not a resource
+          // table domain and its clock is the object doorbell.
+          expect(registration?.streaming).toBeDefined();
+          expect(resourceStreamDomains.has(entry.domain)).toBe(false);
+          expect(entry.sourceClocks).toEqual(['object']);
           break;
         case 'resource-stream':
           expect(registration?.streaming).toBeDefined();
@@ -444,6 +458,12 @@ describe('refresh domain contract', () => {
           expect(inventory.cachePolicy).toBe('stream-only');
           expect(inventory.streamSemantics).toEqual(['line-stream']);
           expect(inventory.coverageContract).toBe('log-stream-lifecycle');
+          break;
+        case 'doorbell-snapshot':
+          // namespaces: a snapshot-table payload whose refetch trigger is the
+          // signal-only object doorbell instead of the poll.
+          expect(entry.domain).toBe('namespaces');
+          expect(inventory.behaviorClass).toBe('snapshot-table');
           break;
         case 'snapshot':
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(

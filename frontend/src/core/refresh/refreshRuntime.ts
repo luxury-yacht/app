@@ -18,6 +18,9 @@ type StreamingFetchDecisionInput = {
   scope: string;
   shouldStream: boolean;
   isManual: boolean;
+  // A fetch triggered BY a stream signal (doorbell). It must never be skipped
+  // for stream health — the signal is the stream announcing changed data.
+  streamSignal?: boolean;
   streamingHealthy: boolean;
   /**
    * Whether the scope already holds an applied snapshot. A scope with no data yet
@@ -409,6 +412,12 @@ export class ClusterRefreshRuntime {
     // is healthy — the notify-only stream signals changes, it does not deliver a new
     // query's initial snapshot. Without this, a filter/scope change never fetches.
     if (!input.hasData) {
+      return 'snapshot';
+    }
+
+    // A doorbell-triggered fetch IS the stream refresh: skipping it for a
+    // "healthy stream" swallows the very signal the stream sent.
+    if (input.streamSignal) {
       return 'snapshot';
     }
 

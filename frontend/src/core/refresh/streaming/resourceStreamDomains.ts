@@ -195,6 +195,13 @@ const doorbellDomainDescriptors = [
     scopeKind: 'namespace',
     isClusterScoped: false,
   },
+  // Signal-only doorbell for the namespaces snapshot domain: namespace object
+  // changes and workload-presence flips replace the sidebar's poll.
+  {
+    domain: 'namespaces',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(

@@ -22,7 +22,14 @@ export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain
 }
 
 export type RefreshOrchestratorKind =
-  'snapshot' | 'resource-stream' | 'event-stream' | 'catalog-stream' | 'container-logs-stream';
+  | 'snapshot'
+  // A snapshot domain refetched by a stream doorbell instead of its poll (the
+  // authored timing remains the stream-down fallback).
+  | 'doorbell-snapshot'
+  | 'resource-stream'
+  | 'event-stream'
+  | 'catalog-stream'
+  | 'container-logs-stream';
 
 export type RefreshBehaviorClass =
   | 'snapshot-table'

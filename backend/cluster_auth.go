@@ -116,6 +116,11 @@ func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 	// Stop permission revalidation for this cluster.
 	a.stopRefreshPermissionRevalidation(clusterID)
 
+	// Silence the namespaces doorbell notifier BEFORE the stream manager stops:
+	// its debounce/rearm timers outlive the informers and would keep
+	// broadcasting into the dead manager.
+	subsystem.StopNamespaceNotifier()
+
 	// Stop the resource stream if present.
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
@@ -274,8 +279,9 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		}()
 	}
 
-	// Store the subsystem.
-	a.setRefreshSubsystem(clusterID, subsystem)
+	// Store the subsystem, stopping the previous one — overwriting the entry
+	// would leak its informers/reflectors/notifier on stale transports.
+	a.swapRefreshSubsystem(clusterID, subsystem)
 
 	// Build cluster order from current subsystems
 	subsystems := a.snapshotRefreshSubsystems()

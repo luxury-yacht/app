@@ -498,7 +498,7 @@ describe('ObjectDiffModal', () => {
     expect(catalogCalls.length).toBeGreaterThan(0);
     expect(yamlCalls.length).toBeGreaterThan(0);
     for (const call of [...catalogCalls, ...yamlCalls]) {
-      expect(call[2]).toEqual({ isManual: true });
+      expect(call[2]).toEqual({ isManual: true, streamSignal: false });
     }
   });
 

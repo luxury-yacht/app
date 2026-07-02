@@ -281,6 +281,19 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	key := subscriptionKey(selector)
 	s.storeSubscription(key, sub, clusterID, clusterName)
 
+	// Positively confirm EVERY accepted subscribe. The client anchors its
+	// "synchronized" stream health on this frame; without it, a resumed
+	// subscribe with no buffered updates is indistinguishable from an ignored
+	// one, and the client would either poll a healthy stream forever or trust
+	// a dead one. Clients that predate ACK drop the frame at parse.
+	s.enqueue(ServerMessage{
+		Type:        MessageTypeAck,
+		Domain:      msg.Domain,
+		Scope:       normalized,
+		ClusterID:   clusterID,
+		ClusterName: clusterName,
+	})
+
 	resumeToken := parseResumeToken(msg.ResumeToken)
 	resumeUpdates := []ServerMessage(nil)
 	resumeOK := false

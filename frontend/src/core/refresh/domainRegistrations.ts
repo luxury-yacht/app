@@ -49,8 +49,11 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     Metadata such as category, refresher name, timing, diagnostics stream, and
     priority lives in domainRegistry.ts so the refresh surfaces share one source.
   */
+  // The namespaces sidebar refetches on the backend's namespaces doorbell
+  // (namespace object changes + workload-presence flips); its 2s timing is now
+  // only the stream-down fallback.
+  doorbellStreamDomain('namespaces');
   registerSnapshotDomains(
-    'namespaces',
     'cluster-overview',
     'object-maintenance',
     'object-details',

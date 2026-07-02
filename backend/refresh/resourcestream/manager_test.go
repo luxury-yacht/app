@@ -170,6 +170,45 @@ func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	}
 }
 
+// TestManagerBroadcastsNamespacesDoorbell pins the namespaces doorbell: namespace
+// object changes and workload-presence flips fan ONE SourceObject doorbell to the
+// namespaces domain's subscribers, so the sidebar refetches on push instead of the
+// 2s poll.
+func TestManagerBroadcastsNamespacesDoorbell(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	sub, err := subscribeForTest(t, manager, domainNamespaces, "")
+	require.NoError(t, err)
+
+	manager.BroadcastNamespacesRefresh("ns-7")
+
+	update := requireNextUpdate(t, sub)
+	require.Equal(t, MessageTypeModified, update.Type)
+	require.Equal(t, domainNamespaces, update.Domain)
+	require.Equal(t, "", update.Scope)
+	require.Equal(t, SourceObject, update.Source)
+	require.Equal(t, SignalChanged, update.Signal)
+	require.Equal(t, "ns-7", update.Version)
+	require.Nil(t, update.Ref)
+}
+
+// The namespaces doorbell subscription must be accepted as a cluster-scope
+// selector, exactly like the catalog/cluster-events doorbells.
+func TestParseStreamSelectorAcceptsNamespacesClusterScope(t *testing.T) {
+	selector, err := ParseStreamSelector("c1", domainNamespaces, "")
+	require.NoError(t, err)
+	require.Equal(t, StreamScopeCluster, selector.ScopeKind)
+	require.Equal(t, "", selector.CanonicalScope())
+
+	_, err = ParseStreamSelector("c1", domainNamespaces, "namespace:default")
+	require.Error(t, err)
+}
+
 // TestManagerBroadcastsMetricDoorbellToMetricClockDomains pins the metric doorbell:
 // a poller collection fans ONE SourceMetric doorbell to every subscribed scope of
 // every metric-clock domain (pods/nodes/namespace-workloads — the domains whose rows

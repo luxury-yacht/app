@@ -435,6 +435,48 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('catalog');
   });
 
+  it('skips the namespaces poll for a loaded scope while its doorbell stream is healthy', async () => {
+    clusterReadiness.resetForTests();
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'system',
+      streaming: {
+        start: (scope: string) => catalogStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          catalogStreamMocks.stop(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
+        pauseRefresherWhenStreaming: true,
+      },
+    });
+    const scope = buildClusterScope('cluster-a', '');
+    resetAllScopedDomainStates('namespaces');
+    setRuntimeScopeEnabled('namespaces', scope, true);
+    setScopedDomainState('namespaces', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      scope,
+      data: { clusterId: 'cluster-a', namespaces: [] } as never,
+    }));
+    clientMocks.fetchSnapshotMock.mockReset();
+
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await refreshOrchestrator.fetchScopedDomain('namespaces', scope, { isManual: false });
+
+    // The 2s namespaces timing is only the stream-down fallback: a loaded scope
+    // with a healthy doorbell stream must not re-poll.
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+
+    clusterReadiness.resetForTests();
+    resetAllScopedDomainStates('namespaces');
+  });
+
   it('classifies "no active clusters available" as warm-up instead of toasting', () => {
     clusterReadiness.resetForTests();
     errorHandlerMock.handle.mockClear();

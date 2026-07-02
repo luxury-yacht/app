@@ -230,6 +230,29 @@ describe('ClusterRefreshRuntime', () => {
     );
   });
 
+  it('never skips a stream-signal fetch — the doorbell IS the stream saying data changed', async () => {
+    // Found live: the namespaces doorbell was delivered and applied, but the
+    // refetch it triggered routed through the same gate that skips polls while
+    // the stream is healthy — swallowing the doorbell entirely (frozen list).
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+    const scope = 'cluster-a|';
+    const startPromise = Promise.resolve(vi.fn());
+    runtime.beginStreamingStart('namespaces', scope, startPromise);
+    runtime.finishStreamingStart('namespaces', scope, await startPromise);
+
+    expect(
+      runtime.resolveStreamingFetchMode({
+        domain: 'namespaces' as const,
+        scope,
+        isManual: false,
+        shouldStream: true,
+        streamingHealthy: true,
+        hasData: true,
+        streamSignal: true,
+      })
+    ).toBe('snapshot');
+  });
+
   it('fetches a snapshot for a no-data scope even when the stream is healthy, but skips once it has data', () => {
     const runtime = new ClusterRefreshRuntime('cluster-a');
     const base = {

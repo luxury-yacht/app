@@ -60,6 +60,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'catalog',
   'cluster-events',
   'namespace-events',
+  'namespaces',
 ];
 
 describe('resource stream domain descriptors', () => {

@@ -680,10 +680,11 @@
     {
       "domain": "namespaces",
       "category": "system",
+      "sourceClocks": ["object"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "namespaces",
-        "orchestrator": "snapshot",
+        "orchestrator": "doorbell-snapshot",
         "diagnosticsStream": null,
         "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 },
         "priority": 0

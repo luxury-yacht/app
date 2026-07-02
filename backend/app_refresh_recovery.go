@@ -30,6 +30,7 @@ func (a *App) teardownRefreshSubsystem() {
 		if subsystem == nil || subsystem.Manager == nil {
 			continue
 		}
+		subsystem.StopNamespaceNotifier()
 		if subsystem.ResourceStream != nil {
 			subsystem.ResourceStream.Stop()
 		}

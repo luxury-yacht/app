@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -14,11 +15,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
 )
@@ -76,18 +79,77 @@ type NamespaceSummary struct {
 // pod kinds' projected rows come from the ingest manager (read per build for workload presence);
 // the tracker only gates the read on those stores having synced. ingestManager may be nil in a
 // unit test.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource) error {
+//
+// It returns the change notifier that replaces the frontend's namespaces poll: namespace
+// informer events and workload/pod ingest events feed it (handlers/sinks registered HERE,
+// before the informer factory and ingest manager start), and the subsystem wires its
+// broadcast to the resource-stream doorbell once the stream manager exists.
+func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
 	builder := &NamespaceBuilder{
 		namespaces: factory.Core().V1().Namespaces().Lister(),
 		ingest:     ingestManager,
 		tracker:    tracker,
 	}
-	return reg.Register(refresh.DomainConfig{
+	notifier := NewNamespaceChangeNotifier(ingestManager, tracker)
+	if _, err := factory.Core().V1().Namespaces().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(interface{}) { notifier.NamespaceChanged() },
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			// Informer resyncs re-deliver every namespace with an unchanged
+			// ResourceVersion; only real updates ring the doorbell.
+			if namespaceUpdateIsEcho(oldObj, newObj) {
+				return
+			}
+			notifier.NamespaceChanged()
+		},
+		DeleteFunc: func(interface{}) { notifier.NamespaceChanged() },
+	}); err != nil {
+		return nil, fmt.Errorf("namespaces: register namespace handler: %w", err)
+	}
+	// Bundle sinks fire on every Upsert/Delete/Replace for their GVR, which is all
+	// the notifier needs: the flush decides via the presence signature whether the
+	// event actually flipped a namespace's workload presence. AddBundleSink returns
+	// false for an untracked GVR (permission-skipped) — those kinds then simply
+	// never contribute events, matching the builder's per-build read.
+	if sinks, ok := ingestManager.(interface {
+		AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
+	}); ok {
+		for _, gvr := range []schema.GroupVersionResource{
+			DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR,
+		} {
+			sinks.AddBundleSink(gvr, namespaceNotifierSink{notifier: notifier})
+		}
+	}
+	if err := reg.Register(refresh.DomainConfig{
 		Name:          "namespaces",
 		BuildSnapshot: builder.Build,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return notifier, nil
 }
+
+// namespaceUpdateIsEcho reports whether an informer Update delivery is a resync
+// echo (unchanged ResourceVersion) rather than a real object change. Unrecognized
+// objects are treated as real updates — suppression must never lose a signal.
+func namespaceUpdateIsEcho(oldObj, newObj interface{}) bool {
+	oldNs, okOld := oldObj.(*corev1.Namespace)
+	newNs, okNew := newObj.(*corev1.Namespace)
+	if !okOld || !okNew {
+		return false
+	}
+	return oldNs.ResourceVersion != "" && oldNs.ResourceVersion == newNs.ResourceVersion
+}
+
+// namespaceNotifierSink adapts the change notifier to the ingest BundleSink (and
+// bulk Replace) contract: every delivery is just "a workload event happened".
+type namespaceNotifierSink struct {
+	notifier *NamespaceChangeNotifier
+}
+
+func (s namespaceNotifierSink) UpsertBundle(ingest.Bundle)     { s.notifier.WorkloadChanged() }
+func (s namespaceNotifierSink) DeleteBundle(ingest.Bundle)     { s.notifier.WorkloadChanged() }
+func (s namespaceNotifierSink) ReplaceBundles([]ingest.Bundle) { s.notifier.WorkloadChanged() }
 
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -214,20 +276,27 @@ func workloadPresenceSignature(set map[string]struct{}, ready bool) string {
 // the same projected rows Browse reads (objectcatalog collectViaIngest), so a namespace whose
 // workloads are ingested is never wrongly reported as empty.
 func (b *NamespaceBuilder) namespacesWithWorkloads() map[string]struct{} {
+	return namespacesWithWorkloadsFromIngest(b.ingest)
+}
+
+// namespacesWithWorkloadsFromIngest is the shared presence computation: the
+// builder derives per-namespace flags from it, and the change notifier hashes
+// it to decide whether an ingest event actually flipped presence.
+func namespacesWithWorkloadsFromIngest(ingest namespacePodIngestSource) map[string]struct{} {
 	set := make(map[string]struct{})
-	if b.ingest == nil {
+	if ingest == nil {
 		return set
 	}
 	for _, gvr := range []schema.GroupVersionResource{
 		DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR,
 	} {
-		for _, row := range b.ingest.CatalogRows(gvr) {
+		for _, row := range ingest.CatalogRows(gvr) {
 			if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace != "" {
 				set[summary.Namespace] = struct{}{}
 			}
 		}
 	}
-	for _, row := range b.ingest.AggregateRows(PodGVR) {
+	for _, row := range ingest.AggregateRows(PodGVR) {
 		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace != "" {
 			set[agg.Namespace] = struct{}{}
 		}

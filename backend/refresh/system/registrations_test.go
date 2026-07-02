@@ -88,6 +88,9 @@ type refreshDomainRecord struct {
 		Permission     string `json:"permission"`
 		ResourceStream bool   `json:"resourceStream"`
 	} `json:"backend"`
+	Frontend struct {
+		Orchestrator string `json:"orchestrator"`
+	} `json:"frontend"`
 }
 
 func TestDomainRegistrationOrder(t *testing.T) {
@@ -476,7 +479,8 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		inventory := contract.DomainInventory[entry.Domain]
 		requiresDoorbellClock := entry.Backend.ResourceStream ||
 			inventory.BehaviorClass == "event-stream" ||
-			inventory.BehaviorClass == "catalog-stream"
+			inventory.BehaviorClass == "catalog-stream" ||
+			entry.Frontend.Orchestrator == "doorbell-snapshot"
 		if !requiresDoorbellClock {
 			continue
 		}
@@ -484,6 +488,13 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		require.NotEmptyf(t, entry.SourceClocks, "domain %s must declare sourceClocks", entry.Domain)
 		for _, s := range entry.SourceClocks {
 			require.Truef(t, validSources[s], "domain %s declares unsupported source clock %q", entry.Domain, s)
+		}
+
+		if entry.Frontend.Orchestrator == "doorbell-snapshot" {
+			// Doorbell-refetched snapshot domains (namespaces): the doorbell is a
+			// signal-only object clock — no projection descriptor exists.
+			require.ElementsMatchf(t, []string{"object"}, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
+			continue
 		}
 
 		switch inventory.BehaviorClass {

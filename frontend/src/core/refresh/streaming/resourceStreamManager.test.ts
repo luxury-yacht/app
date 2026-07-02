@@ -287,11 +287,11 @@ describe('ResourceStreamManager', () => {
   });
 
   // A QUIET domain (e.g. cluster-config, whose kinds rarely change) must count
-  // as healthy once it is connected and synchronized — deliveries prove
+  // as healthy once the SERVER CONFIRMS its subscription — deliveries prove
   // liveness but their absence is not unhealth. Without this, the refresher
   // gate ('skip' only when healthy) polls quiet domains forever, defeating
   // streaming-only refresh.
-  test('quiet stream is healthy after connect + resync with zero deliveries', async () => {
+  test('quiet stream is healthy after the server ACKs the subscribe, with zero deliveries', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -316,12 +316,97 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     createdSockets[0].onopen?.(new Event('open'));
-    // The post-open resync re-establishes trust on the live connection.
     await vi.advanceTimersByTimeAsync(1100);
     await flushPromises();
 
-    // No change message ever arrives — the domain is simply quiet.
+    // The server confirms the subscribe; no change message ever arrives — the
+    // domain is simply quiet.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'cluster-config', scope: '', clusterId: 'cluster-a' })
+    );
     expect(manager.getHealthStatus('cluster-config', storeScope)).toBe('healthy');
+  });
+
+  // The inverse guard (found live: a backend without the namespaces selector
+  // ignored/rejected the subscribe while the client claimed healthy and froze):
+  // a subscription the server never confirms must NOT report healthy, so the
+  // refresher keeps polling as the fallback.
+  test('unconfirmed subscribe stays degraded so polling falls back; ERROR stays unhealthy', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+    await manager.start('namespaces', storeScope);
+    await flushPromises();
+
+    createdSockets[0].onopen?.(new Event('open'));
+    await vi.advanceTimersByTimeAsync(1100);
+    await flushPromises();
+
+    // Subscribe sent, server silent: NOT healthy.
+    expect(manager.getHealthStatus('namespaces', storeScope)).not.toBe('healthy');
+
+    // Server rejects the domain (e.g. stale backend): unhealthy.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ERROR',
+        domain: 'namespaces',
+        scope: '',
+        clusterId: 'cluster-a',
+        error: 'unsupported resource stream domain "namespaces"',
+      })
+    );
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(manager.getHealthStatus('namespaces', storeScope)).not.toBe('healthy');
+
+    // Server later confirms (backend restarted with the new selector): healthy.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '', clusterId: 'cluster-a' })
+    );
+    expect(manager.getHealthStatus('namespaces', storeScope)).toBe('healthy');
+  });
+
+  // Pins the namespaces doorbell: a SourceObject signal on the namespaces
+  // domain must advance the scoped sourceVersion (NamespaceContext refetches on
+  // it), replacing the sidebar's 2s poll.
+  test('namespaces doorbell advances the scoped sourceVersion', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespaces', storeScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        type: 'MODIFIED',
+        domain: 'namespaces',
+        scope: '',
+        source: 'object',
+        version: 'ns-3',
+        signal: 'changed',
+      })
+    );
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('namespaces', storeScope);
+    expect(state.sourceVersion).toBe('ns-3');
+    expect(state.sourceVersions?.object).toBe('ns-3');
+    // The applied doorbell logs to the app log — the runtime counterpart of the
+    // backend's "namespaces doorbell -> N scope(s)" line.
+    expect(
+      logAppLogsInfoMock.mock.calls.some((call) =>
+        String(call[0]).includes('namespaces doorbell applied version=ns-3')
+      )
+    ).toBe(true);
   });
 
   // Pins the metric doorbell contract: the backend poller fans a SourceMetric

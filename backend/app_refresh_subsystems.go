@@ -34,6 +34,28 @@ func (a *App) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem)
 	a.refreshSubsystems[clusterID] = subsystem
 }
 
+// swapRefreshSubsystem stores next as clusterID's subsystem and STOPS the
+// previous one. Rebuild paths must use this instead of setRefreshSubsystem:
+// overwriting the map entry leaks the old subsystem whole — its manager,
+// informer factory, ingest reflectors, and namespace notifier keep running on
+// stale transports (observed live as duplicate namespaces-doorbell broadcasts
+// to a subscriber-less manager). Next is stored FIRST so the aggregate mux
+// never routes to a stopped subsystem.
+func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	previous := a.getRefreshSubsystem(clusterID)
+	a.setRefreshSubsystem(clusterID, next)
+	if previous == nil || previous == next {
+		return
+	}
+	// stopRefreshSubsystem no-ops without a manager; silence the notifier
+	// explicitly so a partially-built previous subsystem cannot keep it.
+	previous.StopNamespaceNotifier()
+	a.stopRefreshSubsystem(previous)
+}
+
 func (a *App) takeRefreshSubsystem(clusterID string) *system.Subsystem {
 	if a == nil || clusterID == "" {
 		return nil

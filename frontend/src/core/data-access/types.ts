@@ -9,7 +9,10 @@ import type { RefreshContext } from '@/core/refresh/RefreshManager';
 import type { DomainSnapshotState } from '@/core/refresh/store';
 import type { DomainPayloadMap } from '@/core/refresh/types';
 
-export type DataRequestReason = 'background' | 'startup' | 'user';
+// 'stream-signal' marks a fetch triggered by a stream doorbell: auto-refresh
+// gating applies (paused means paused), but the orchestrator must not skip it
+// for a healthy stream — the signal is the stream announcing changed data.
+export type DataRequestReason = 'background' | 'startup' | 'user' | 'stream-signal';
 export type DataAccessAdapter =
   'refresh-domain' | 'context-refresh' | 'rpc-read' | 'permission-read' | 'capability-read';
 

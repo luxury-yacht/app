@@ -60,6 +60,8 @@ const MESSAGE_TYPES = {
   request: 'REQUEST',
   cancel: 'CANCEL',
   heartbeat: 'HEARTBEAT',
+  // Server confirmation of an accepted subscribe; anchors 'synchronized' health.
+  ack: 'ACK',
   reset: 'RESET',
   complete: 'COMPLETE',
   error: 'ERROR',
@@ -420,9 +422,21 @@ export class ResourceStreamManager {
     switch (resolvedUpdate.type) {
       case MESSAGE_TYPES.heartbeat:
         return;
+      case MESSAGE_TYPES.ack:
+        // The server accepted the subscribe on this connection: the scope is
+        // trusted even with zero deliveries (quiet domain). Without a server
+        // confirmation the subscription must stay degraded so polling falls
+        // back — a send alone proves nothing (found live: a backend without
+        // the domain's selector left the client claiming healthy, frozen).
+        this.markSubscriptionSynchronized(subscription);
+        this.updateHealthForSubscription(subscription);
+        return;
       case MESSAGE_TYPES.reset:
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
+          // A post-subscribe RESET is also a server confirmation (backends
+          // that predate the ACK frame confirm fresh subscribes this way).
+          this.markSubscriptionSynchronized(subscription);
           this.updateHealthForSubscription(subscription);
           return;
         }
@@ -477,11 +491,9 @@ export class ResourceStreamManager {
       }
       if (subscription.lastSequence && !subscription.resyncInFlight) {
         this.subscribe(subscription);
-        // Clear resync state when a resume-capable stream reconnects: the
-        // sequence token replays anything missed, so the scope is trusted on
-        // this connection without waiting for a fresh delivery.
+        // Clear resync state when a resume-capable stream reconnects; the
+        // server's ACK (or resumed deliveries) restores synchronized health.
         this.markResyncComplete(subscription);
-        this.markSubscriptionSynchronized(subscription);
         this.updateHealthForSubscription(subscription);
         return;
       }
@@ -847,6 +859,14 @@ export class ResourceStreamManager {
     sourceVersions: Partial<Record<ResourceStreamSourceClock, string>>,
     latest?: string
   ): void {
+    if (subscription.domain === 'namespaces' && sourceVersions.object) {
+      // Rare by design (namespace changes/presence flips); the matching backend
+      // line is "namespaces doorbell <version> -> N scope(s)". Together they
+      // localize a dead doorbell to the backend, the wire, or the consumer.
+      logInfo(
+        `[resource-stream] namespaces doorbell applied version=${sourceVersions.object} scope=${subscription.reportScope}`
+      );
+    }
     this.forEachReportScope(subscription, (reportScope) => {
       setScopedDomainState(subscription.domain, reportScope, (previous) => ({
         ...previous,
@@ -942,9 +962,11 @@ export class ResourceStreamManager {
     const sourceUpdate = this.sourceVersionsFromUpdates(subscription.updateQueue);
     this.bumpSourceVersionOnly(subscription, now, sourceUpdate.sourceVersions, sourceUpdate.latest);
     this.markResyncComplete(subscription);
-    this.markSubscriptionSynchronized(subscription);
     subscription.pendingReset = false;
     subscription.resyncInFlight = false;
+    // Trust is NOT granted here: the tail's subscribe must be confirmed by the
+    // server (ACK, or the pendingReset-absorbed RESET) before health reports
+    // synchronized.
     this.subscribe(subscription);
     this.updateHealthForSubscription(subscription);
   }

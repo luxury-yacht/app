@@ -87,6 +87,10 @@ type Subsystem struct {
 	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
+	// NamespaceNotifier drives the namespaces doorbell. Teardown/cooling MUST
+	// Stop() it (via StopNamespaceNotifier) or its debounce/rearm timers keep
+	// broadcasting into the torn-down stream manager.
+	NamespaceNotifier *snapshot.NamespaceChangeNotifier
 
 	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
@@ -257,6 +261,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		metricsProvider = disabled
 	}
 
+	var namespaceNotifier *snapshot.NamespaceChangeNotifier
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
@@ -265,6 +270,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		cfg:             cfg,
 		gate:            gate,
 		serverHost:      serverHost,
+		noteNamespaceNotifier: func(notifier *snapshot.NamespaceChangeNotifier) {
+			namespaceNotifier = notifier
+		},
 	}
 
 	registrations := domainRegistrations(deps)
@@ -330,22 +338,38 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
 		}
 	}
+	// Namespaces doorbell: namespace object changes and workload-presence flips
+	// broadcast to the namespaces domain's subscribers, replacing the sidebar's
+	// 2s poll (the poll remains only as the stream-down fallback).
+	if resourceManager != nil && namespaceNotifier != nil {
+		namespaceNotifier.SetBroadcast(resourceManager.BroadcastNamespacesRefresh)
+	}
 
 	return &Subsystem{
-		Manager:          manager,
-		Handler:          mux,
-		Telemetry:        telemetryRecorder,
-		PermissionIssues: permissionIssues,
-		InformerFactory:  informerFactory,
-		IngestManager:    ingestManager,
-		RuntimePerms:     runtimePerms,
-		Registry:         registry,
-		SnapshotService:  snapshotService,
-		ManualQueue:      queue,
-		EventStream:      eventManager,
-		ResourceStream:   resourceManager,
-		ClusterMeta:      clusterMeta,
+		Manager:           manager,
+		Handler:           mux,
+		Telemetry:         telemetryRecorder,
+		PermissionIssues:  permissionIssues,
+		InformerFactory:   informerFactory,
+		IngestManager:     ingestManager,
+		RuntimePerms:      runtimePerms,
+		Registry:          registry,
+		SnapshotService:   snapshotService,
+		ManualQueue:       queue,
+		EventStream:       eventManager,
+		ResourceStream:    resourceManager,
+		ClusterMeta:       clusterMeta,
+		NamespaceNotifier: namespaceNotifier,
 	}, nil
+}
+
+// StopNamespaceNotifier silences the namespaces doorbell notifier; nil-safe for
+// subsystems built without one (tests, failed registration).
+func (s *Subsystem) StopNamespaceNotifier() {
+	if s == nil || s.NamespaceNotifier == nil {
+		return
+	}
+	s.NamespaceNotifier.Stop()
 }
 
 // metricsSignalObserver maps a successful poller collection to a SourceMetric

@@ -151,3 +151,60 @@ func TestHandlerSetsHandshakeTimeout(t *testing.T) {
 		t.Fatalf("expected handshake timeout %v, got %v", config.StreamMuxHandshakeTimeout, handler.upgrader.HandshakeTimeout)
 	}
 }
+
+// ackStubAdapter accepts every subscribe and lets the test control resume results.
+type ackStubAdapter struct {
+	resumeUpdates []ServerMessage
+	resumeOK      bool
+}
+
+func (ackStubAdapter) ParseSelector(clusterID, domain, scope string) (Selector, error) {
+	return stubSelector{clusterID: clusterID, domain: domain, scope: scope}, nil
+}
+
+func (ackStubAdapter) Subscribe(Selector) (*Subscription, error) {
+	return &Subscription{
+		Updates: make(chan ServerMessage),
+		Drops:   make(chan DropReason),
+		Cancel:  func() {},
+	}, nil
+}
+
+func (a ackStubAdapter) Resume(Selector, uint64) ([]ServerMessage, bool) {
+	return a.resumeUpdates, a.resumeOK
+}
+
+func drainOutgoingTypes(s *session) []MessageType {
+	types := []MessageType{}
+	for {
+		select {
+		case msg := <-s.outgoing:
+			types = append(types, msg.Type)
+		default:
+			return types
+		}
+	}
+}
+
+// Every ACCEPTED subscribe must be positively confirmed to the client with an
+// ACK frame — the frontend anchors its "synchronized" stream health on it. The
+// resume-with-no-buffered-updates case previously produced NO frame at all,
+// leaving the client unable to distinguish an accepted subscribe from an
+// ignored one.
+func TestHandleSubscribeAcksEveryAcceptedSubscribe(t *testing.T) {
+	// Fresh subscribe: ACK then RESET.
+	fresh := newSession(stubConn{}, ackStubAdapter{}, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	fresh.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1", Domain: "namespaces", Scope: ""})
+	freshTypes := drainOutgoingTypes(fresh)
+	if len(freshTypes) < 2 || freshTypes[0] != MessageTypeAck || freshTypes[1] != MessageTypeReset {
+		t.Fatalf("fresh subscribe must send ACK then RESET, got %v", freshTypes)
+	}
+
+	// Resumed subscribe with ZERO buffered updates: still ACKs (no RESET needed).
+	resumed := newSession(stubConn{}, ackStubAdapter{resumeOK: true}, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	resumed.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1", Domain: "pods", Scope: "namespace:default", ResumeToken: "7"})
+	resumedTypes := drainOutgoingTypes(resumed)
+	if len(resumedTypes) != 1 || resumedTypes[0] != MessageTypeAck {
+		t.Fatalf("resumed-empty subscribe must send exactly ACK, got %v", resumedTypes)
+	}
+}

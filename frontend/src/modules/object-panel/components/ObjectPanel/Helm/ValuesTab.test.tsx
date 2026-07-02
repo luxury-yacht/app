@@ -425,7 +425,7 @@ describe('ValuesTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     await unmount();

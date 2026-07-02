@@ -27,6 +27,10 @@ type registrationDeps struct {
 	cfg             Config                // Configuration settings
 	gate            *permissionGate       // Permission gate for access control
 	serverHost      string                // Hostname of the server
+	// noteNamespaceNotifier receives the namespaces change notifier created during
+	// registration, so the subsystem can wire its doorbell broadcast once the
+	// resource-stream manager exists. Nil in tests that don't exercise streaming.
+	noteNamespaceNotifier func(*snapshot.NamespaceChangeNotifier)
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -251,7 +255,14 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 
 	return []domainRegistration{
 		directRegistration("namespaces", func() error {
-			return snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
+			notifier, err := snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
+			if err != nil {
+				return err
+			}
+			if deps.noteNamespaceNotifier != nil {
+				deps.noteNamespaceNotifier(notifier)
+			}
+			return nil
 		}),
 
 		listWatchRegistration(listWatchDomainConfig{

@@ -58,6 +58,12 @@ vi.mock('@/core/refresh', () => ({
     }
     return namespaceDomainsByScopeRef.current[scope] ?? namespaceDomainRef.current;
   },
+  useRefreshScopedDomainStates: (domain: string) => {
+    if (domain !== 'namespaces') {
+      throw new Error(`Unexpected scoped domain states requested in test: ${domain}`);
+    }
+    return namespaceDomainsByScopeRef.current;
+  },
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -257,12 +263,12 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     cleanup();
@@ -286,7 +292,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'namespaces',
@@ -296,7 +302,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     mockClusterLifecycleStates = new Map([
@@ -316,7 +322,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     cleanup();
@@ -522,13 +528,52 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: true }
+      { isManual: true, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: true }
+      { isManual: true, streamSignal: false }
     );
+    cleanup();
+  });
+
+  it('refetches a scope when its doorbell object clock advances, exactly once per signal', () => {
+    namespaceDomainsByScopeRef.current = {
+      'cluster-a|': createNamespaceDomain('ready', ['alpha']),
+    };
+
+    const { cleanup, rerender } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    // Doorbell: the stream signal bumps only the scoped object clock.
+    namespaceDomainsByScopeRef.current = {
+      'cluster-a|': {
+        ...createNamespaceDomain('ready', ['alpha']),
+        sourceVersions: { object: 'ns-1' },
+      },
+    };
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      { isManual: false, streamSignal: true }
+    );
+
+    // The same signal version must not refetch again (no loop after the 200
+    // replaces sourceVersions with the payload's own map).
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     cleanup();
   });
 
@@ -547,7 +592,7 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
     cleanup();
   });

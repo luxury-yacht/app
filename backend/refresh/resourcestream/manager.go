@@ -82,6 +82,10 @@ const (
 	domainCatalog         = "catalog"
 	domainClusterEvents   = "cluster-events"
 	domainNamespaceEvents = "namespace-events"
+	// domainNamespaces is the namespace-list doorbell domain: signal-only, no
+	// projected rows — namespace object changes and workload-presence flips
+	// tell the frontend to refetch the namespaces snapshot.
+	domainNamespaces = "namespaces"
 )
 
 const (
@@ -951,6 +955,21 @@ func (m *Manager) BroadcastMetricsRefresh(version string) {
 		}
 		m.broadcastDoorbellRefresh(domain, m.subscribedScopes(domain), SourceMetric, version)
 	}
+}
+
+// BroadcastNamespacesRefresh fans a SourceObject doorbell to the namespaces
+// domain's subscribers. The namespace-list notifier calls this when a namespace
+// object changes, when workload presence flips, or when the workload tracker
+// becomes ready — the three (rare) events that change the namespaces snapshot.
+func (m *Manager) BroadcastNamespacesRefresh(version string) {
+	if m == nil {
+		return
+	}
+	scopes := m.subscribedScopes(domainNamespaces)
+	// Rare by design (namespace changes, presence flips, tracker settling), so a
+	// log per broadcast is cheap and makes the doorbell observable at runtime.
+	m.logInfo(fmt.Sprintf("[resource-stream] namespaces doorbell %s -> %d scope(s)", version, len(scopes)))
+	m.broadcastDoorbellRefresh(domainNamespaces, scopes, SourceObject, version)
 }
 
 func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {
