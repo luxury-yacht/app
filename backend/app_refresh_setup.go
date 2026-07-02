@@ -303,6 +303,15 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 	a.refreshPermissionCancels[clusterID] = cancel
 }
 
+// sharedContainerLogsTargetLimiter lazily creates the process-wide container-logs
+// target limiter. containerLogsTargetLimiterMu is a LEAF lock: nothing else may be
+// locked or loaded while it is held. The settings paths (loadAppSettings,
+// GetAppSettings, UpdateAppPreferences) call back into this accessor — some while
+// holding settingsMu — so reading settings here would re-enter settingsMu on the same
+// goroutine (self-deadlock), and a settingsMu-inside-limiterMu nesting would invert
+// their settingsMu→limiterMu order (cross-goroutine ABBA). The limiter therefore
+// starts at the default limit; every settings load/update pushes the configured value
+// via SetLimit immediately afterwards.
 func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
 	if a == nil {
 		return nil
@@ -311,16 +320,7 @@ func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTarg
 	a.containerLogsTargetLimiterMu.Lock()
 	defer a.containerLogsTargetLimiterMu.Unlock()
 	if a.containerLogsTargetLimiter == nil {
-		limit := defaultObjPanelLogsTargetGlobalLimit
-		a.settingsMu.Lock()
-		if a.appSettings == nil {
-			_ = a.loadAppSettings()
-		}
-		if a.appSettings != nil && a.appSettings.ObjPanelLogsTargetGlobalLimit > 0 {
-			limit = clampObjPanelLogsTargetGlobalLimit(a.appSettings.ObjPanelLogsTargetGlobalLimit)
-		}
-		a.settingsMu.Unlock()
-		a.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(limit)
+		a.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(defaultObjPanelLogsTargetGlobalLimit)
 	}
 	return a.containerLogsTargetLimiter
 }

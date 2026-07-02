@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 )
 
 // TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder pins the two
@@ -64,6 +66,32 @@ func TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder(t *tes
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("build did not complete after release")
+	}
+}
+
+// TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad is the
+// regression for the startup self-deadlock: the accessor held
+// containerLogsTargetLimiterMu (and settingsMu) while calling loadAppSettings, whose
+// tail re-entered the accessor and blocked forever on the same non-reentrant mutex
+// (stack: buildRefreshSubsystemForSelection → sharedContainerLogsTargetLimiter →
+// loadAppSettings → sharedContainerLogsTargetLimiter). The accessor must return a
+// limiter without ever calling back into settings loading — containerLogsTargetLimiterMu
+// is a LEAF lock; the settings paths push the configured limit via SetLimit after load.
+func TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad(t *testing.T) {
+	app := &App{} // appSettings == nil: the pre-settings-load startup state
+
+	done := make(chan *containerlogsstream.GlobalTargetLimiter, 1)
+	go func() {
+		done <- app.sharedContainerLogsTargetLimiter()
+	}()
+
+	select {
+	case limiter := <-done:
+		if limiter == nil {
+			t.Fatal("expected the accessor to create a limiter")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("sharedContainerLogsTargetLimiter deadlocked when app settings were not yet loaded")
 	}
 }
 

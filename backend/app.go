@@ -44,7 +44,9 @@ type App struct {
 	telemetryRecorder *telemetry.Recorder
 	// containerLogsTargetLimiter is lazily built by sharedContainerLogsTargetLimiter;
 	// its mutex guards the check-then-set because subsystem builds run concurrently
-	// per cluster. Access the limiter only through the accessor.
+	// per cluster. Access the limiter only through the accessor. The mutex is a LEAF
+	// lock: never lock anything else (settingsMu especially) or load settings while
+	// holding it — the settings paths call the accessor, some under settingsMu.
 	containerLogsTargetLimiterMu sync.Mutex
 	containerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter
 	sharedInformerFactory        informers.SharedInformerFactory
