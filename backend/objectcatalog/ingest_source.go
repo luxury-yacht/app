@@ -165,6 +165,11 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 	itemsCopy := cloneSummaryMap(s.items)
 	s.mu.Unlock()
 
+	// Batched sink registration rebuilds once for all kinds (see
+	// registerIngestCatalogSinks); the index mutation above is still visible to it.
+	if s.suspendCacheRebuilds.Load() {
+		return
+	}
 	descriptors := s.Descriptors()
 	s.rebuildCacheFromItems(itemsCopy, descriptors)
 	s.broadcastStreaming(true)
@@ -214,6 +219,11 @@ func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource,
 	s.mu.Unlock()
 
 	if !changed {
+		return
+	}
+	// Batched sink registration rebuilds once for all kinds (see
+	// registerIngestCatalogSinks); the index mutation above is still visible to it.
+	if s.suspendCacheRebuilds.Load() {
 		return
 	}
 	descriptors := s.Descriptors()

@@ -81,6 +81,12 @@ type informerSyncState struct {
 	hasSynced cache.InformerSynced
 	terminal  atomic.Bool
 	degraded  atomic.Bool
+	// factoryGateExempt excludes this informer from the FACTORY-WIDE settle gate
+	// (cachesSettled → HasSynced/Start): events on a busy cluster is often the
+	// slowest initial LIST of any kind, and only the event domains — which declare
+	// per-resource readiness on core/events — actually need to wait for it. Exempt
+	// informers still count for ResourcesSettled.
+	factoryGateExempt bool
 }
 
 // CanListResource reports whether the current identity can list the supplied resource.
@@ -197,7 +203,10 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// maintained stores, catalog, object map, response-cache) read the ingest projections
 	// instead.
 	result.registerInformer("autoscaling", "horizontalpodautoscalers", kubeFactory.Autoscaling().V1().HorizontalPodAutoscalers().Informer())
-	result.registerInformer("", "events", kubeFactory.Core().V1().Events().Informer())
+	// Events is often the slowest initial LIST on a busy cluster; only the event
+	// domains need it, and they declare per-resource readiness on core/events. It
+	// must not hold the factory-wide gate (metrics poller, undeclared domains).
+	result.registerFactoryGateExemptInformer("", "events", kubeFactory.Core().V1().Events().Informer())
 
 	if apiextClient != nil {
 		result.apiextFactory = apiextinformers.NewSharedInformerFactoryWithOptions(apiextClient, resync, apiextinformers.WithTransform(StripManagedFields))
@@ -343,6 +352,11 @@ func (f *Factory) cachesSettled() bool {
 	copy(states, f.syncStates)
 	f.syncStatesMu.Unlock()
 	for _, state := range states {
+		if state.factoryGateExempt {
+			// Waited on per-resource (ResourcesSettled) by the domains that declare
+			// it; must not hold the whole factory's readiness.
+			continue
+		}
 		if !f.stateSettled(state) {
 			return false
 		}
@@ -488,11 +502,26 @@ func (f *Factory) Shutdown() error {
 	return nil
 }
 
+// registerFactoryGateExemptInformer registers an informer that does NOT hold the
+// factory-wide sync gate (cachesSettled → HasSynced); consumers that need it declare
+// per-resource readiness (ResourcesSettled) instead.
+func (f *Factory) registerFactoryGateExemptInformer(group, resource string, inf cache.SharedIndexInformer) {
+	f.registerInformerState(group, resource, inf, true)
+}
+
 func (f *Factory) registerInformer(group, resource string, inf cache.SharedIndexInformer) {
+	f.registerInformerState(group, resource, inf, false)
+}
+
+func (f *Factory) registerInformerState(group, resource string, inf cache.SharedIndexInformer, factoryGateExempt bool) {
 	if inf == nil {
 		return
 	}
-	state := &informerSyncState{key: permissions.ResourceKey(group, resource), hasSynced: inf.HasSynced}
+	state := &informerSyncState{
+		key:               permissions.ResourceKey(group, resource),
+		hasSynced:         inf.HasSynced,
+		factoryGateExempt: factoryGateExempt,
+	}
 	err := inf.SetWatchErrorHandlerWithContext(func(ctx context.Context, r *cache.Reflector, watchErr error) {
 		cache.DefaultWatchErrorHandler(ctx, r, watchErr)
 		if isTerminalWatchError(watchErr) && state.terminal.CompareAndSwap(false, true) {

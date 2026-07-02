@@ -123,6 +123,81 @@ func (alwaysSyncedHub) HasSynced(context.Context) bool { return true }
 func (alwaysSyncedHub) ResourcesSettled([]string) bool { return true }
 func (alwaysSyncedHub) Shutdown() error                { return nil }
 
+// TestServiceBuildRecordsInformerSyncWait proves a Build that blocks in the informer
+// sync gate (the initial-LIST gating cost) records the wait it paid as the domain's
+// MaxInformerSyncWaitMs telemetry, so the cold-start cost is visible in diagnostics.
+func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
+	reg := domain.New()
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "demo",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "demo", Scope: scope}, nil
+		},
+	}))
+
+	recorder := telemetry.NewRecorder()
+	hub := &fakeInformerHub{} // synced == false: the sync gate stays closed
+	service := NewService(reg, recorder, testClusterMeta()).WithInformerHub(hub)
+	service.informerSyncTimeout = 2 * time.Second
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.Build(context.Background(), "demo", "scope-a")
+		done <- err
+	}()
+
+	// Let the Build block in the sync gate, then release it.
+	time.Sleep(120 * time.Millisecond)
+	hub.setSynced(true)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Build did not complete after the hub reported synced")
+	}
+
+	summary := recorder.SnapshotSummary()
+	require.Len(t, summary.Snapshots, 1)
+	require.GreaterOrEqual(t, summary.Snapshots[0].MaxInformerSyncWaitMs, int64(100),
+		"the ~120ms sync-gate wait must be recorded as MaxInformerSyncWaitMs")
+}
+
+// TestServiceDoesNotCacheNotReadyNamespaceSnapshots pins the cache rule for the fast
+// namespace paint: a snapshot built BEFORE the workload ingest stores settle
+// (WorkloadsReady=false) must not be cached — the TTL would pin the pre-sync flags and
+// delay the cluster Ready flip by up to cache TTL + poll. Once ready, caching resumes.
+func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	ready := false
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "namespaces",
+				Scope:   scope,
+				Payload: NamespaceSnapshot{WorkloadsReady: ready},
+			}, nil
+		},
+	}))
+	service := NewService(reg, nil, testClusterMeta())
+
+	for i := 0; i < 2; i++ {
+		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, builds, "not-ready namespace snapshots must not be served from cache")
+
+	ready = true
+	for i := 0; i < 2; i++ {
+		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 3, builds, "ready namespace snapshots must be cached again")
+}
+
 func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	reg := domain.New()
 	if err := reg.Register(refresh.DomainConfig{

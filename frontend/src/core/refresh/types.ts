@@ -1203,6 +1203,11 @@ export interface TelemetrySnapshotStatus {
   truncated?: boolean;
   totalItems?: number;
   warnings?: string[];
+  // Peak time a Build for this domain spent blocked waiting for its informers to
+  // settle (the initial-LIST gate) before building — the cold-start gating cost.
+  // Absent on warm payloads where the wait was always ~0. Mirrors backend
+  // telemetry.SnapshotStatus.MaxInformerSyncWaitMs.
+  maxInformerSyncWaitMs?: number;
 }
 
 export interface TelemetryMetricsStatus {

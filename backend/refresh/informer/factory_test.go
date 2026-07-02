@@ -493,3 +493,37 @@ func newMinimalFactory(checker *permissions.Checker) *Factory {
 		runtimePermissions: checker,
 	}
 }
+
+// TestFactoryGateExemptInformerDoesNotBlockFactorySync pins the events exclusion: an
+// informer registered as factory-gate-exempt must not hold the FACTORY-WIDE sync gate
+// (HasSynced / Start) even while it has neither synced nor degraded — only
+// per-resource readiness (ResourcesSettled) waits for it. Events uses this: on busy
+// clusters its initial LIST is often the slowest of any kind, and only the event
+// domains — which declare core/events readiness — actually need to wait for it.
+func TestFactoryGateExemptInformerDoesNotBlockFactorySync(t *testing.T) {
+	factory := newStartedFactory(t)
+	// A generous deadline so the degrade path CANNOT be what unblocks the gate.
+	factory.syncDeadline = time.Hour
+
+	hung := brokenInformer(errors.New("connection refused"))
+	factory.registerFactoryGateExemptInformer("", "events", hung)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go hung.Run(ctx.Done())
+
+	if err := factory.Start(ctx); err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("Start only returned because the test context expired — the exempt informer held the factory gate")
+	}
+	if !factory.HasSynced(context.Background()) {
+		t.Fatalf("factory must reach readiness without waiting on a factory-gate-exempt informer")
+	}
+	// Per-resource readiness still tracks it: the event domains declare core/events
+	// and must keep waiting until the informer really syncs (or degrades).
+	if factory.ResourcesSettled([]string{permissions.ResourceKey("", "events")}) {
+		t.Fatalf("core/events must NOT be settled while its informer has not synced")
+	}
+}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 )
 
 // writeTestKubeconfig writes a kubeconfig pointing at the given server URL and
@@ -130,4 +131,33 @@ func TestClusterClientBuildConcurrencyLimit(t *testing.T) {
 	// Large batches are capped at runtime parallelism.
 	taskCount := limit + 3
 	require.Equal(t, limit, clusterClientBuildConcurrencyLimit(taskCount))
+}
+
+// TestProtobufRestConfigNegotiatesProtobufWithJSONFallback pins the content-type
+// contract for the built-in typed clients: request Protobuf (smaller + cheaper to
+// decode than JSON for the initial-sync window), but ACCEPT JSON so any endpoint that
+// cannot serve protobuf (CRDs, third-party metrics adapters) degrades to exactly the
+// old behavior. The helper must copy, never mutate, the shared base config — the
+// dynamic and gateway clients keep using the base and must stay JSON.
+func TestProtobufRestConfigNegotiatesProtobufWithJSONFallback(t *testing.T) {
+	base := &rest.Config{Host: "https://cluster.example"}
+
+	cfg := protobufRestConfig(base)
+
+	if cfg == base {
+		t.Fatal("protobufRestConfig must return a copy, not the shared base config")
+	}
+	if base.ContentType != "" || base.AcceptContentTypes != "" {
+		t.Fatalf("the shared base config must stay untouched (dynamic/gateway clients use it), got ContentType=%q AcceptContentTypes=%q",
+			base.ContentType, base.AcceptContentTypes)
+	}
+	if cfg.ContentType != "application/vnd.kubernetes.protobuf" {
+		t.Fatalf("ContentType = %q, want protobuf", cfg.ContentType)
+	}
+	if cfg.AcceptContentTypes != "application/vnd.kubernetes.protobuf,application/json" {
+		t.Fatalf("AcceptContentTypes = %q, want protobuf with a JSON fallback", cfg.AcceptContentTypes)
+	}
+	if cfg.Host != base.Host {
+		t.Fatalf("the copy must retain the base config's fields, Host = %q", cfg.Host)
+	}
 }

@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -521,6 +523,10 @@ func (m *IngestManager) Start(ctx context.Context) {
 		// full from disk); otherwise — the default — this is exactly e.reflector.Run.
 		go runWithResume(runCtx, e.lw, e.store, e.resumeRV, func() { e.reflector.Run(runCtx) })
 	}
+
+	// One log line when the initial syncs settle, naming the slowest kinds — the
+	// per-kind cold-start telemetry (see InitialSyncDurations).
+	go m.logInitialSyncSummary(runCtx)
 }
 
 // SetResumeResourceVersion records the resourceVersion gvr's reflector should resume its
@@ -781,11 +787,18 @@ func (m *IngestManager) RegisterObjectMapProjector(gvr schema.GroupVersionResour
 // missed. Reports whether an entry was found.
 func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Outside the manager lock: the store call acquires the store's write lock, and a
+	// store's sink delivery may legally call back into the manager (the pods notify
+	// sink does) — holding both wedged the whole ingest layer (ABBA deadlock, see
+	// TestSinkRegistrationDoesNotDeadlockWithSinkManagerCallback). The manager mutex
+	// is a leaf lock: it guards the entries map only and is never held across a store
+	// call. e.store is set once at entry construction and never reassigned, so the
+	// pointer stays valid after unlock.
 	e.store.AddSink(sink)
 	return true
 }
@@ -797,11 +810,12 @@ func (m *IngestManager) AddSink(gvr schema.GroupVersionResource, sink Sink) bool
 // an entry was found.
 func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink BundleSink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Store call outside the manager lock — see AddSink for the leaf-lock rule.
 	e.store.AddBundleSink(sink)
 	return true
 }
@@ -813,11 +827,15 @@ func (m *IngestManager) AddBundleSink(gvr schema.GroupVersionResource, sink Bund
 // was found.
 func (m *IngestManager) AddCatalogSink(gvr schema.GroupVersionResource, sink Sink) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	e, ok := m.entries[gvr]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
+	// Store call outside the manager lock — see AddSink for the leaf-lock rule. This
+	// is the wrapper that wedged production: the catalog registers its sinks right
+	// after a failed initial sync, racing the pods reflector's initial Replace whose
+	// bundle sink calls back into the manager (goroutines-20260701-152259 dump).
 	e.store.AddCatalogSink(sink)
 	return true
 }
@@ -942,3 +960,66 @@ func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 // It exists so the 0 passed to NewProjectingReflector reads as a deliberate
 // choice rather than a magic number.
 const resyncDisabled = time.Duration(0)
+
+// InitialSyncDurations reports, per tracked GVR, how long the kind's initial relist
+// took from Start to the store's first sync. Kinds that have not synced (skipped,
+// degraded, still listing) are absent. It exists to answer, from a live run, WHICH
+// kinds dominate the cold-start window — the per-kind relist telemetry the startup
+// perf work needs before any transport-level parallelization is attempted.
+func (m *IngestManager) InitialSyncDurations() map[schema.GroupVersionResource]time.Duration {
+	m.startedAtMu.Lock()
+	startedAt := m.startedAt
+	m.startedAtMu.Unlock()
+	if startedAt.IsZero() {
+		return nil
+	}
+	m.mu.Lock()
+	stores := make(map[schema.GroupVersionResource]*ProjectingStore, len(m.entries))
+	for gvr, e := range m.entries {
+		stores[gvr] = e.store
+	}
+	m.mu.Unlock()
+	// Leaf-lock rule: store reads happen outside m.mu.
+	out := make(map[schema.GroupVersionResource]time.Duration, len(stores))
+	for gvr, store := range stores {
+		if syncedAt := store.SyncedAt(); !syncedAt.IsZero() && syncedAt.After(startedAt) {
+			out[gvr] = syncedAt.Sub(startedAt)
+		}
+	}
+	return out
+}
+
+// logInitialSyncSummary logs ONE per-cluster line naming the slowest initial relists
+// once the manager settles, so a live run can identify the kinds that dominate the
+// first-connect window without a debugger. It exits quietly when ctx ends first.
+func (m *IngestManager) logInitialSyncSummary(ctx context.Context) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for !m.HasSynced() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+	durations := m.InitialSyncDurations()
+	type kindDuration struct {
+		gvr schema.GroupVersionResource
+		d   time.Duration
+	}
+	sorted := make([]kindDuration, 0, len(durations))
+	for gvr, d := range durations {
+		sorted = append(sorted, kindDuration{gvr: gvr, d: d})
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].d > sorted[j].d })
+	const maxNamed = 8
+	parts := make([]string, 0, maxNamed)
+	for i, kd := range sorted {
+		if i == maxNamed {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s=%dms", kd.gvr.Resource, kd.d.Milliseconds()))
+	}
+	klog.Infof("ingest initial sync settled for cluster %s: %d kind(s) synced; slowest: %s",
+		m.meta.ClusterName, len(durations), strings.Join(parts, " "))
+}

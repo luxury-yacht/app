@@ -364,9 +364,25 @@ func (s *Service) registerIngestCatalogSinks() {
 	if source == nil {
 		return
 	}
+	// Each AddCatalogSink synchronously replays the store's current rows through the
+	// sink, and the incremental apply normally ends in a FULL published-cache rebuild
+	// — one per cut kind (27 at last count), back-to-back, right in the startup
+	// window. Suspend the per-apply rebuild for the loop and publish once at the end;
+	// every replay still mutates the index (s.items) under s.mu, so the single
+	// rebuild sees all of them.
+	s.suspendCacheRebuilds.Store(true)
 	for gvr := range catalogIngestOwnedGVRs {
 		source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})
 	}
+	s.suspendCacheRebuilds.Store(false)
+
+	s.mu.Lock()
+	itemsCopy := cloneSummaryMap(s.items)
+	s.mu.Unlock()
+	// Same publish sequence the appliers use; rebuildCacheFromItems takes s.mu itself,
+	// so it must be called without the lock held.
+	s.rebuildCacheFromItems(itemsCopy, s.Descriptors())
+	s.broadcastStreaming(true)
 }
 
 func (s *Service) resolveGRToDescriptor(gr schema.GroupResource) (string, *resourceDescriptor) {

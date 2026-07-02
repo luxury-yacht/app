@@ -640,3 +640,31 @@ func TestExampleObjectForUsesGatewaySchemeFallback(t *testing.T) {
 		t.Fatal("exampleObjectFor did not fall back to the Gateway scheme for a Gateway kind")
 	}
 }
+
+// TestInitialSyncDurationsRecordPerKindRelistTime pins the per-GVR cold-start
+// telemetry: after the manager syncs, every synced kind reports how long its initial
+// relist took from Start — the measurement needed to name the kinds that dominate the
+// 10s+ first-connect window on real clusters.
+func TestInitialSyncDurationsRecordPerKindRelistTime(t *testing.T) {
+	server := newTrackerAPIServer(t)
+	server.add(t, newCM("default", "seed-cm"), configMapGVK)
+
+	httpSrv := httptest.NewServer(server)
+	defer httpSrv.Close()
+	kube := newKubeClientFor(t, httpSrv)
+
+	mgr := NewIngestManager(testMeta, kube, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	waitForManagerSynced(t, mgr)
+
+	durations := mgr.InitialSyncDurations()
+	d, ok := durations[configMapGVR]
+	if !ok {
+		t.Fatalf("no initial-sync duration recorded for configmaps, got %v", durations)
+	}
+	if d <= 0 || d > time.Minute {
+		t.Fatalf("implausible initial-sync duration for configmaps: %v", d)
+	}
+}

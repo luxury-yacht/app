@@ -961,6 +961,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const durationLabel = telemetryInfo?.lastDurationMs
           ? `${telemetryInfo.lastDurationMs} ms`
           : '—';
+        // Peak time this domain's Build blocked on the informer-sync gate (the
+        // initial-LIST gating cost). Surfaced so a slow cold-start load is visible
+        // here even though the build Duration column excludes the wait.
+        const syncWaitLabel = telemetryInfo?.maxInformerSyncWaitMs
+          ? `${telemetryInfo.maxInformerSyncWaitMs} ms`
+          : '—';
         const telemetrySuccess = telemetryInfo?.successCount;
         const telemetryFailure = telemetryInfo?.failureCount;
         const telemetryLastError = telemetryInfo?.lastError?.trim() ?? '';
@@ -1205,6 +1211,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           metricsSuccess: successCount,
           metricsFailure: failureCount,
           duration: durationLabel,
+          syncWait: syncWaitLabel,
           telemetrySuccess,
           telemetryFailure,
           hasMetrics: hasMetricsFlag,

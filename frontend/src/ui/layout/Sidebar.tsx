@@ -594,12 +594,15 @@ function Sidebar() {
                                 className={buildSidebarItemClassName(
                                   [
                                     'sidebar-item',
+                                    // Only a CONFIRMED absence of workloads changes the
+                                    // presentation; while workload presence is still
+                                    // unknown (ingest stores settling after connect) the
+                                    // namespace renders exactly like a normal one.
                                     dimInactiveNamespaces &&
                                     !namespace.hasWorkloads &&
                                     !namespace.workloadsUnknown
                                       ? 'dimmed'
                                       : '',
-                                    namespace.workloadsUnknown ? 'workloads-unknown' : '',
                                   ].filter(Boolean),
                                   {
                                     kind: 'namespace-toggle',
@@ -616,11 +619,7 @@ function Sidebar() {
                                 data-sidebar-focusable="true"
                                 data-sidebar-target-kind="namespace-toggle"
                                 data-sidebar-target-namespace={namespaceKey}
-                                title={
-                                  namespace.workloadsUnknown
-                                    ? 'Unable to determine workloads in this namespace (check permissions)'
-                                    : namespace.details || undefined
-                                }
+                                title={namespace.details || undefined}
                                 tabIndex={-1}
                               >
                                 {isExpanded ? (
@@ -629,11 +628,6 @@ function Sidebar() {
                                   <NamespaceIcon width={14} height={14} />
                                 )}
                                 <span>{namespace.name}</span>
-                                {namespace.workloadsUnknown && (
-                                  <span className="namespace-status-label">
-                                    <span className="status-text warning">Unknown</span>
-                                  </span>
-                                )}
                               </div>
                               {isExpanded && (
                                 <div className="sidebar-views">

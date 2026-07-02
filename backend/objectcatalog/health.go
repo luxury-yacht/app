@@ -105,6 +105,7 @@ func (s *Service) logDebug(msg string) {
 }
 
 func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
+	s.cacheRebuilds.Add(1)
 	s.mu.Lock()
 	s.catalogIndex.rebuildCacheFromItems(items, descriptors)
 	s.mu.Unlock()

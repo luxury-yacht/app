@@ -1026,6 +1026,40 @@ describe('useBrowseCatalog', () => {
     });
   });
 
+  it('refetches with the kind in scope when the kind filter changes on a cluster-scoped custom query', async () => {
+    const baseScope = 'cluster-1|limit=2&customOnly=true&namespace=cluster';
+    const metadataScope = 'cluster-1|limit=1&customOnly=true&namespace=cluster';
+    const filteredScope = 'cluster-1|limit=2&customOnly=true&kind=Widget&namespace=cluster';
+
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope || scope === metadataScope || scope === filteredScope) {
+        return { status: 'ready', data: makePayload({ items: [], total: 0, batchSize: 0 }), scope };
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness pinnedNamespaces={[]} clusterScopedOnly customOnly />);
+      await Promise.resolve();
+    });
+
+    mocks.requestRefreshDomain.mockClear();
+
+    // Selecting a Kind must issue a NEW backend query whose scope carries the kind.
+    await act(async () => {
+      root.render(
+        <Harness pinnedNamespaces={[]} clusterScopedOnly customOnly kinds={['Widget']} />
+      );
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: filteredScope,
+      reason: 'startup',
+    });
+  });
+
   it('keeps only the current page window across repeated page navigation', async () => {
     const baseScope = 'cluster-1|limit=2&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';

@@ -361,6 +361,13 @@ const (
 	// ObjectCatalogResyncInterval controls periodic full catalog syncs.
 	ObjectCatalogResyncInterval = 1 * time.Minute
 
+	// ObjectCatalogFailedSyncRetryInterval is the short interval the catalog retries
+	// on after a failed/incomplete sync (typically the startup race where ingest
+	// stores are not yet synced), backing off toward the normal resync interval so a
+	// transient failure self-heals promptly instead of leaving the catalog degraded
+	// until the next full resync (up to 5 min with reactive updates enabled).
+	ObjectCatalogFailedSyncRetryInterval = 3 * time.Second
+
 	// ObjectCatalogPageSize controls page size for Kubernetes list calls.
 	ObjectCatalogPageSize = 50
 

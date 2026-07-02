@@ -578,7 +578,9 @@ describe('DiagnosticsPanel component', () => {
     const nodesRow = Array.from(
       rendered.container.querySelectorAll('.diagnostics-table tbody tr')
     ).find((row) => row.querySelector('td')?.textContent?.includes('Nodes'));
+    // Sync Wait (no informer-sync-wait telemetry → em dash); Metrics shifted to 15.
     expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('—');
+    expect(nodesRow?.querySelectorAll('td')[15]?.textContent?.trim()).toBe('—');
 
     const clusterIndex = markup.indexOf('Cluster Overview');
     const podsIndex = markup.indexOf('Pods');
@@ -664,8 +666,8 @@ describe('DiagnosticsPanel component', () => {
       return {
         label: cells[0]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-        metrics: cells[14]?.textContent?.trim() ?? '',
-        metricsTooltip: cells[14]?.getAttribute('title') ?? '',
+        metrics: cells[15]?.textContent?.trim() ?? '',
+        metricsTooltip: cells[15]?.getAttribute('title') ?? '',
       };
     });
 
@@ -965,7 +967,7 @@ describe('DiagnosticsPanel component', () => {
       return {
         scope: cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
         count: cells[9]?.textContent?.trim() ?? '',
-        metrics: cells[14]?.textContent?.trim() ?? '',
+        metrics: cells[15]?.textContent?.trim() ?? '',
       };
     });
     expect(overviewSummaries).toEqual(
@@ -1278,6 +1280,54 @@ describe('DiagnosticsPanel component', () => {
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
+  });
+
+  test('renders the recorded informer-sync-gate wait in the Sync Wait column', async () => {
+    const clusterScope = buildClusterScope('cluster-a', '');
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+
+    setScopedEntries('namespaces', [
+      [clusterScope, { ...createReadyState({ namespaces: [] }), scope: clusterScope }],
+    ]);
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [
+        {
+          domain: 'namespaces',
+          scope: clusterScope,
+          lastStatus: 'success',
+          lastDurationMs: 12,
+          lastUpdated: Date.now(),
+          successCount: 1,
+          failureCount: 0,
+          // Cold-start build blocked 1500ms on the initial-LIST gate.
+          maxInformerSyncWaitMs: 1500,
+        },
+      ],
+      metrics: {
+        lastCollected: Date.now(),
+        lastDurationMs: 0,
+        consecutiveFailures: 0,
+        successCount: 1,
+        failureCount: 0,
+      },
+      streams: [],
+    });
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await selectRefreshDomainsTab(rendered.container);
+    await flushAsync();
+    await flushAsync();
+
+    const namespaceRow = Array.from(
+      rendered.container.querySelectorAll('.diagnostics-table tbody tr')
+    ).find((row) => row.querySelector('td')?.textContent?.includes('Namespaces'));
+    expect(namespaceRow).toBeDefined();
+    // Sync Wait column (index 14, after Duration at 13).
+    expect(namespaceRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('1500 ms');
+
+    await rendered.unmount();
   });
 
   test('renders Kubernetes API client diagnostics on the K8s API tab', async () => {

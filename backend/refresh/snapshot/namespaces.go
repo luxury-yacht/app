@@ -47,6 +47,13 @@ type namespacePodIngestSource interface {
 type NamespaceSnapshot struct {
 	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
+	// WorkloadsReady reports whether the pod + workload ingest stores this snapshot's
+	// workload-presence flags derive from have SETTLED (synced/degraded/permission-skipped).
+	// It is a backend-internal readiness signal — the cluster lifecycle gate flips a cluster
+	// to Ready only on a namespace snapshot with this true, so "Ready" means data has loaded
+	// rather than merely "the namespace list served" (which is immediate). Not serialized: the
+	// frontend derives per-namespace state from workloadsUnknown, not this whole-snapshot flag.
+	WorkloadsReady bool `json:"-"`
 }
 
 // NamespaceSummary provides high level namespace metadata.
@@ -118,11 +125,13 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	}
 
 	trackerReady := true
-	// Best-effort: wait for the cut workload + pod ingest stores to sync so the first build
-	// already reflects real workload presence. The wait is bounded by ctx; positive rows are
-	// usable immediately, but absence is authoritative only after the tracked stores settle.
+	// Non-blocking: read whether the cut workload + pod ingest stores have synced rather than
+	// waiting on them. The namespace list must paint without blocking on the pod/workload initial
+	// LIST. Positive workload rows are usable immediately; a namespace's absence of workloads is
+	// authoritative only once the tracked stores settle, so before then it is reported as
+	// not-yet-known and the workload-presence source clock re-delivers the corrected snapshot.
 	if b.tracker != nil {
-		trackerReady = b.tracker.WaitForSync(ctx)
+		trackerReady = b.tracker.Synced()
 	}
 	workloadNamespaces := b.namespacesWithWorkloads()
 
@@ -156,7 +165,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		Domain:  "namespaces",
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items},
+		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items, WorkloadsReady: trackerReady},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

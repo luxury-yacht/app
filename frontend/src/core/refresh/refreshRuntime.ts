@@ -22,6 +22,14 @@ type StreamingFetchDecisionInput = {
   streamingHealthy: boolean;
   metricsMinIntervalMs: number;
   now?: number;
+  /**
+   * Whether the scope already holds an applied snapshot. A scope with no data yet
+   * (a brand-new filter/page/scope) must fetch its first page regardless of stream
+   * health: the notify-only stream carries change signals, not the new query's
+   * initial snapshot. Skipping is only safe once the scope has data the stream keeps
+   * fresh.
+   */
+  hasData: boolean;
 };
 
 export const makeInFlightKey = (domain: RefreshDomain, scope?: string) =>
@@ -401,6 +409,13 @@ export class ClusterRefreshRuntime {
 
   resolveStreamingFetchMode(input: StreamingFetchDecisionInput): StreamingFetchMode {
     if (input.isManual || !input.shouldStream) {
+      return 'snapshot';
+    }
+
+    // A scope with no applied data yet must load its first page even when the stream
+    // is healthy — the notify-only stream signals changes, it does not deliver a new
+    // query's initial snapshot. Without this, a filter/scope change never fetches.
+    if (!input.hasData) {
       return 'snapshot';
     }
 

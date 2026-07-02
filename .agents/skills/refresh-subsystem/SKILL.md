@@ -306,6 +306,18 @@ against snapshot runtime permissions by
 
 7. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
 
+### Diagnosing a wedge
+
+When a view is stuck loading, a cluster never leaves "loading", or you suspect
+a deadlock anywhere in ingest/catalog/refresh: capture a SIGUSR1 goroutine dump
+FIRST instead of reasoning from logs — relaunch with
+`ENABLE_GOROUTINE_DUMP=true` (opt-in, default off), reproduce, and the app log
+gives the exact `kill -USR1 <pid>` command; the dump names lock holders and
+waiters directly. See `docs/workflows/goroutine-dump.md`. Two invariants keep
+dumps legible: `IngestManager.mu` is a leaf lock (never held across a store
+call), and sink deliveries run under the store write lock (never call back
+into the same store).
+
 ### Before modifying this subsystem
 
 - [ ] Read the specific file you're changing AND its callers

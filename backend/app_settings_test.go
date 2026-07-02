@@ -1008,3 +1008,30 @@ func TestAppSettingsDefaultTablePageSize(t *testing.T) {
 	require.NoError(t, app.loadAppSettings())
 	require.Equal(t, maxTablePageSize, app.appSettings.DefaultTablePageSize)
 }
+
+// TestGetAppSettingsDoesNotDeadlockWhenSettingsNotLoaded pins the settingsMu leaf-lock
+// companion of the limiter fix: GetAppSettings holds settingsMu while loadAppSettings
+// runs, and the settings tail reaches sharedContainerLogsTargetLimiter. The accessor
+// must not lock settingsMu (containerLogsTargetLimiterMu is a leaf lock) — re-locking
+// it on the same goroutine deadlocked forever.
+func TestGetAppSettingsDoesNotDeadlockWhenSettingsNotLoaded(t *testing.T) {
+	app := &App{} // appSettings == nil and no limiter yet: both lazy inits fire
+
+	type result struct {
+		settings *AppSettings
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		settings, err := app.GetAppSettings()
+		done <- result{settings: settings, err: err}
+	}()
+
+	select {
+	case res := <-done:
+		require.NoError(t, res.err)
+		require.NotNil(t, res.settings)
+	case <-time.After(3 * time.Second):
+		t.Fatal("GetAppSettings deadlocked: the limiter accessor re-locked settingsMu")
+	}
+}

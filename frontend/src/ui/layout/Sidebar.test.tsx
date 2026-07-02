@@ -890,35 +890,47 @@ describe('Sidebar', () => {
     expect(container!.textContent).toContain('Auto-refresh is disabled');
   });
 
-  it('applies workload status indicators on namespace entries', () => {
+  it('renders unknown-workload namespaces exactly like normal ones and dims only confirmed-empty', () => {
     namespaceState.namespaces = [
       {
-        name: 'dimmed',
-        scope: 'dimmed',
+        name: 'empty',
+        scope: 'empty',
         resourceVersion: '1',
         hasWorkloads: false,
         workloadsUnknown: false,
         details: '',
       },
       {
-        name: 'unknown',
-        scope: 'unknown',
+        name: 'pending',
+        scope: 'pending',
         resourceVersion: '2',
-        hasWorkloads: true,
+        hasWorkloads: false,
         workloadsUnknown: true,
+        details: '',
+      },
+      {
+        name: 'active',
+        scope: 'active',
+        resourceVersion: '3',
+        hasWorkloads: true,
+        workloadsUnknown: false,
         details: '',
       },
     ];
     renderSidebar();
-    const dimmedItem = container!.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('dimmed')}"]`
-    );
-    expect(dimmedItem).not.toBeNull();
-    expect(dimmedItem!.className).toContain('dimmed');
-    const unknownBadge = container!.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('unknown')}"] .status-text.warning`
-    );
-    expect(unknownBadge?.textContent).toBe('Unknown');
+    const itemFor = (name: string) =>
+      container!.querySelector(`[data-sidebar-target-namespace="${namespaceKey(name)}"]`);
+
+    // Confirmed absence of workloads is the ONLY state that changes presentation.
+    expect(itemFor('empty')!.className).toContain('dimmed');
+
+    // Not-yet-known must be indistinguishable from a normal namespace: the transient
+    // startup state (ingest stores not settled) must not draw the eye.
+    expect(itemFor('pending')!.className).toBe(itemFor('active')!.className);
+    expect(itemFor('pending')!.className).not.toContain('dimmed');
+    expect(itemFor('pending')!.className).not.toContain('workloads-unknown');
+    expect(container!.querySelector('.status-text.warning')).toBeNull();
+    expect(itemFor('pending')!.getAttribute('title') ?? '').not.toContain('Unable to determine');
   });
 
   it('does not dim inactive namespaces when the display setting is disabled', () => {

@@ -315,13 +315,18 @@ func (a *App) buildClusterClientsWithManager(
 		return nil, err
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
+	// Built-in kinds negotiate Protobuf (with a JSON fallback the SERVER picks per
+	// endpoint), cutting the initial-sync transfer and decode cost. The dynamic and
+	// gateway clients below keep the base config: custom resources are JSON-only.
+	typedConfig := protobufRestConfig(config)
+
+	clientset, err := kubernetes.NewForConfig(typedConfig)
 	if err != nil {
 		shutdownOwned()
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
-	apiextensionsClient, err := apiextensionsclientset.NewForConfig(config)
+	apiextensionsClient, err := apiextensionsclientset.NewForConfig(typedConfig)
 	if err != nil {
 		shutdownOwned()
 		return nil, fmt.Errorf("failed to create apiextensions clientset: %w", err)
@@ -334,7 +339,7 @@ func (a *App) buildClusterClientsWithManager(
 	}
 
 	var metrics *metricsclient.Clientset
-	metricsClient, err := metricsclient.NewForConfig(config)
+	metricsClient, err := metricsclient.NewForConfig(typedConfig)
 	if err != nil {
 		a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
 	} else {
@@ -487,6 +492,20 @@ func classifyRecoveryError(err error) authstate.ErrorClass {
 
 // buildRestConfigForSelection loads a REST config for the provided kubeconfig path/context.
 // The clusterAuthMgr parameter is the per-cluster auth manager that will be used to wrap
+// protobufRestConfig returns a COPY of base that negotiates Protobuf for built-in
+// kinds: the Accept header offers protobuf-then-JSON, so the server picks protobuf
+// where it can (every conformant apiserver serves it for built-ins — the control
+// plane itself speaks it) and answers JSON where it cannot (third-party aggregated
+// APIs) — the fallback is byte-for-byte the old behavior. Copying keeps the shared
+// base config pristine for the dynamic and gateway clients, whose custom resources
+// are JSON-only.
+func protobufRestConfig(base *rest.Config) *rest.Config {
+	cfg := rest.CopyConfig(base)
+	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
+	cfg.ContentType = "application/vnd.kubernetes.protobuf"
+	return cfg
+}
+
 // the transport for auth state tracking.
 func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, meta ClusterMeta, clusterAuthMgr *authstate.Manager) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()

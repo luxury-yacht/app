@@ -741,8 +741,11 @@ func (a *App) loadAppSettings() error {
 		Themes:                                   settings.Preferences.Themes,
 	}
 	containerlogs.SetPerScopeTargetLimit(objPanelLogsTargetPerScopeLimit)
-	if a.containerLogsTargetLimiter != nil {
-		a.containerLogsTargetLimiter.SetLimit(objPanelLogsTargetGlobalLimit)
+	// The accessor guards the lazy init (subsystem builds run concurrently); creating
+	// on demand here is correct — the limit then applies to the limiter every
+	// subsystem receives.
+	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
+		limiter.SetLimit(objPanelLogsTargetGlobalLimit)
 	}
 	return nil
 }
@@ -1384,8 +1387,10 @@ func (a *App) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*Update
 	if effects.containerLogsPerScopeLimit {
 		containerlogs.SetPerScopeTargetLimit(perScopeLimit)
 	}
-	if effects.containerLogsGlobalLimit && a.containerLogsTargetLimiter != nil {
-		a.containerLogsTargetLimiter.SetLimit(globalLimit)
+	if effects.containerLogsGlobalLimit {
+		if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
+			limiter.SetLimit(globalLimit)
+		}
 	}
 
 	return &UpdateAppPreferencesResponse{

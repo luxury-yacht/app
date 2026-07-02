@@ -245,11 +245,13 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 		false,
 	)
 
-	if payload.Continue != "" || payload.HasNext {
-		t.Fatalf("expected degraded catalog to disable pagination, continue=%q hasNext=%t", payload.Continue, payload.HasNext)
+	// A degraded catalog keeps its keyset cursor (churn-safe, self-invalidating);
+	// it only downgrades completeness and surfaces the health/approximation issues.
+	if payload.Continue != "next-keyset" || !payload.HasNext {
+		t.Fatalf("expected degraded catalog to keep pagination, continue=%q hasNext=%t", payload.Continue, payload.HasNext)
 	}
-	if payload.Previous != "" || payload.HasPrevious {
-		t.Fatalf("expected degraded catalog to disable previous pagination, previous=%q hasPrevious=%t", payload.Previous, payload.HasPrevious)
+	if payload.Previous != "previous-keyset" || !payload.HasPrevious {
+		t.Fatalf("expected degraded catalog to keep previous pagination, previous=%q hasPrevious=%t", payload.Previous, payload.HasPrevious)
 	}
 	var messages []string
 	for _, issue := range payload.Issues {
@@ -262,10 +264,58 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 		"Catalog facets",
 		"Catalog health",
 		"Failed resources: 2",
-		"Catalog pagination",
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("expected issue text %q in:\n%s", expected, joined)
+		}
+	}
+	if strings.Contains(joined, "Catalog pagination") {
+		t.Fatalf("degraded catalog must not report pagination as disabled:\n%s", joined)
+	}
+}
+
+// A degraded/stale sync RETAINS its already-collected data (see
+// restoreDescriptorEntries), and the querypage keyset cursor stays valid across
+// churn (a mismatched cursor self-resets via CursorInvalid). So pagination MUST
+// keep working while degraded — previously the cursor was cleared, which silently
+// disabled Next for every catalog view whenever a single resource type failed to
+// list (a PartialSyncError flips health.Stale). Regression for that.
+func TestCatalogDegradedSyncKeepsKeysetPagination(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Items: []objectcatalog.Summary{{
+				Kind:      "Pod",
+				Version:   "v1",
+				Resource:  "pods",
+				Namespace: "default",
+				Name:      "pod-a",
+			}},
+			ContinueToken: "next-keyset",
+			PreviousToken: "previous-keyset",
+			TotalItems:    5000,
+			TotalIsExact:  true,
+			FacetsExact:   true,
+		},
+		browseQueryOptions{Limit: 50},
+		objectcatalog.HealthStatus{
+			Status:          objectcatalog.HealthStateDegraded,
+			Stale:           true,
+			FailedResources: 1,
+			LastError:       "list widgets.example.com: the server is currently unable to handle the request",
+		},
+		true,  // cachesReady
+		false, // forceFinal
+	)
+
+	if payload.Continue != "next-keyset" || !payload.HasNext {
+		t.Fatalf("degraded catalog must keep forward pagination: continue=%q hasNext=%t", payload.Continue, payload.HasNext)
+	}
+	if payload.Previous != "previous-keyset" || !payload.HasPrevious {
+		t.Fatalf("degraded catalog must keep backward pagination: previous=%q hasPrevious=%t", payload.Previous, payload.HasPrevious)
+	}
+	for _, issue := range payload.Issues {
+		if issue.Kind == "Catalog pagination" {
+			t.Fatalf("degraded catalog must not report pagination as disabled: %q", issue.Message)
 		}
 	}
 }

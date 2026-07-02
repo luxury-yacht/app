@@ -178,9 +178,10 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.waitForInformerSync(ctx, domainName); err != nil {
+	syncWait, err := s.waitForInformerSync(ctx, domainName)
+	if err != nil {
 		if errors.Is(err, errInformerSyncTimeout) {
-			s.recordTelemetry(domainName, scope, 0, err, false, 0, nil, 0, 0, 0, true, 0)
+			s.recordTelemetry(domainName, scope, 0, err, false, 0, nil, 0, 0, 0, true, 0, syncWait.Milliseconds())
 		}
 		return nil, err
 	}
@@ -225,6 +226,7 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 				0,
 				true,
 				duration.Milliseconds(),
+				syncWait.Milliseconds(),
 			)
 			return nil, buildErr
 		}
@@ -254,6 +256,7 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 			snap.Stats.BatchSize,
 			snap.Stats.IsFinalBatch,
 			snap.Stats.TimeToFirstRowMs,
+			syncWait.Milliseconds(),
 		)
 		s.storeCache(cacheKey, snap)
 		return snap, nil
@@ -264,13 +267,19 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 	return value.(*refresh.Snapshot), nil
 }
 
-func (s *Service) waitForInformerSync(ctx context.Context, domainName string) error {
+// waitForInformerSync blocks until the domain's informers have settled, returning the
+// elapsed wait so the caller can record it as telemetry. The wait is the initial-LIST
+// gating cost a cold-start Build pays before any rows can be served; once the informers
+// have synced it returns ~0 immediately. The returned duration is reported even on the
+// error paths so a timeout's full wait is still attributed to the domain.
+func (s *Service) waitForInformerSync(ctx context.Context, domainName string) (time.Duration, error) {
 	if s == nil {
-		return nil
+		return 0, nil
 	}
 	if s.currentInformerHub() == nil {
-		return nil
+		return 0, nil
 	}
+	start := time.Now()
 	// A domain with declared readiness resources waits only on those informers;
 	// undeclared domains keep the conservative factory-wide gate. The hub is re-read
 	// on every poll, not captured once, so a runtime swap (the Cold-tier cooled-hub
@@ -287,7 +296,7 @@ func (s *Service) waitForInformerSync(ctx context.Context, domainName string) er
 		return hub.HasSynced(ctx)
 	}
 	if settled() {
-		return nil
+		return time.Since(start), nil
 	}
 	timeout := s.informerSyncTimeout
 	if timeout <= 0 {
@@ -303,12 +312,12 @@ func (s *Service) waitForInformerSync(ctx context.Context, domainName string) er
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("refresh informer caches not synced: %w", ctx.Err())
+			return time.Since(start), fmt.Errorf("refresh informer caches not synced: %w", ctx.Err())
 		case <-deadline.C:
-			return fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errInformerSyncTimeout, timeout)
+			return time.Since(start), fmt.Errorf("%w after %s; the cluster API may be unreachable or a watch may be unauthorized", errInformerSyncTimeout, timeout)
 		case <-ticker.C:
 			if settled() {
-				return nil
+				return time.Since(start), nil
 			}
 		}
 	}
@@ -347,6 +356,7 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 			0,
 			true,
 			duration.Milliseconds(),
+			0,
 		)
 		return ctx, permissionCacheKey, err
 	}
@@ -368,6 +378,7 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 		0,
 		true,
 		duration.Milliseconds(),
+		0,
 	)
 	return ctx, permissionCacheKey, denied
 }
@@ -385,6 +396,7 @@ func (s *Service) recordTelemetry(
 	batchSize int,
 	isFinal bool,
 	timeToFirstRowMs int64,
+	informerSyncWaitMs int64,
 ) {
 	if s.telemetry == nil {
 		return
@@ -404,6 +416,7 @@ func (s *Service) recordTelemetry(
 		batchSize,
 		isFinal,
 		timeToFirstRowMs,
+		informerSyncWaitMs,
 	)
 }
 
@@ -457,6 +470,14 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 		return false
 	}
 	if snap.Stats.TotalBatches > 0 && !snap.Stats.IsFinalBatch {
+		return false
+	}
+	// A namespaces snapshot built before its workload ingest stores settled reports
+	// workload absence as not-yet-known and keeps the cluster readiness gate closed.
+	// Serving it from cache would pin that pre-sync state for the TTL; rebuilding on
+	// the next poll lets the corrected flags and the Ready flip land immediately
+	// after the stores settle.
+	if payload, ok := snap.Payload.(NamespaceSnapshot); ok && !payload.WorkloadsReady {
 		return false
 	}
 	return true
