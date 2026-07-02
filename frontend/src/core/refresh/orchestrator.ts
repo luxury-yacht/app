@@ -608,7 +608,9 @@ class RefreshOrchestrator {
     return Boolean(config?.streaming);
   }
 
-  private isStreamingBlocked(domain: RefreshDomain, scope?: string): boolean {
+  // Public for diagnostics: a drift-blocked scope polls until an app-level
+  // reset and must be labeled distinctly from a self-healing fallback.
+  isStreamingBlocked(domain: RefreshDomain, scope?: string): boolean {
     if (!isResourceStreamDomain(domain) || !scope) {
       return false;
     }

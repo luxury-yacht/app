@@ -27,6 +27,8 @@ import type {
 } from '../types';
 import { refreshManager } from '../RefreshManager';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import { refreshOrchestrator } from '../orchestrator';
+import { resolveModeDetails } from './diagnostics/modeDetails';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import {
@@ -859,29 +861,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
     };
 
-    const resolveModeDetails = (params: {
-      domain: RefreshDomain;
-      streamMode: 'streaming' | 'watch' | null;
-      streamActive: boolean;
-      streamHealthy: boolean;
-      pollingEnabled: boolean;
-    }): { label: string; tooltip?: string } => {
-      const { domain, streamMode, streamActive, streamHealthy, pollingEnabled } = params;
-      if (streamMode && STREAM_ONLY_DOMAINS.has(domain)) {
-        return { label: streamMode, tooltip: 'Stream-only domain' };
-      }
-      if (streamMode && streamActive && streamHealthy) {
-        return { label: streamMode, tooltip: 'Stream delivering updates' };
-      }
-      if (pollingEnabled) {
-        return { label: 'polling', tooltip: 'Snapshot polling active' };
-      }
-      if (streamMode && streamActive) {
-        return { label: streamMode, tooltip: 'Stream active but unhealthy' };
-      }
-      return { label: 'snapshot', tooltip: 'Snapshot fetched on demand' };
-    };
-
     const baseRows = domainScopedStates
       .filter(({ domain, state }) => !isTransientResourceTableQueryScope(domain, state.scope))
       .map<DiagnosticsRow>(({ domain, state, label, hasMetrics }) => {
@@ -1140,6 +1119,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           streamActive,
           streamHealthy,
           pollingEnabled: pollingDetails.enabled,
+          streamingBlocked: refreshOrchestrator.isStreamingBlocked(domain, effectiveScope),
+          streamOnly: STREAM_ONLY_DOMAINS.has(domain),
         });
         const healthDetails = resolveHealthDetails({
           domain,
@@ -1236,6 +1217,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         streamActive,
         streamHealthy,
         pollingEnabled: pollingDetails.enabled,
+        streamingBlocked: refreshOrchestrator.isStreamingBlocked('pods', scope),
+        streamOnly: STREAM_ONLY_DOMAINS.has('pods'),
       });
       const healthDetails = resolveHealthDetails({
         domain: 'pods',
@@ -1344,6 +1327,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       streamActive: containerLogsStreamActive,
       streamHealthy: containerLogsStreamHealthy,
       pollingEnabled: logPollingDetails.enabled,
+      streamingBlocked: false,
+      streamOnly: STREAM_ONLY_DOMAINS.has('container-logs'),
     });
     const logRows = containerLogsScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
       const payload = state.data as ContainerLogsSnapshotPayload | null;
