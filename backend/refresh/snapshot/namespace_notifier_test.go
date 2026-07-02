@@ -52,12 +52,23 @@ func (f *fakeNamespaceIngest) set(synced bool, workloadNS ...string) {
 type broadcastRecorder struct {
 	mu       sync.Mutex
 	versions []string
+	reasons  []string
 }
 
-func (r *broadcastRecorder) record(version string) {
+func (r *broadcastRecorder) record(version, reason string) {
 	r.mu.Lock()
 	r.versions = append(r.versions, version)
+	r.reasons = append(r.reasons, reason)
 	r.mu.Unlock()
+}
+
+func (r *broadcastRecorder) lastReason() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.reasons) == 0 {
+		return ""
+	}
+	return r.reasons[len(r.reasons)-1]
 }
 
 func (r *broadcastRecorder) count() int {
@@ -105,6 +116,8 @@ func TestNamespaceNotifierBroadcastsOnNamespaceEvent(t *testing.T) {
 	notifier.NamespaceChanged()
 	waitForBroadcasts(t, recorder, 1)
 	requireNoMoreBroadcasts(t, recorder, 1)
+	require.Contains(t, recorder.lastReason(), "namespace object changed",
+		"the broadcast reason must say WHAT rang the doorbell")
 }
 
 // Workload/pod ingest events broadcast ONLY when the presence signature changes:
@@ -130,6 +143,8 @@ func TestNamespaceNotifierGatesWorkloadEventsOnPresenceSignature(t *testing.T) {
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
 	requireNoMoreBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "workload presence changed",
+		"the broadcast reason must say WHAT rang the doorbell")
 }
 
 // A burst of events inside one debounce window coalesces to a single broadcast.

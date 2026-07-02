@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
 const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
+const logAppLogsDebugMock = vi.hoisted(() => vi.fn());
 const logAppLogsInfoMock = vi.hoisted(() => vi.fn());
 const logAppLogsWarnMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   APP_LOG_SOURCES: {
     ResourceStream: 'ResourceStream',
   },
+  logAppLogsDebug: logAppLogsDebugMock,
   logAppLogsInfo: logAppLogsInfoMock,
   logAppLogsWarn: logAppLogsWarnMock,
 }));
@@ -92,6 +94,7 @@ beforeEach(() => {
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
   fetchSnapshotMock.mockReset();
   invalidateRefreshBaseURLMock.mockReset();
+  logAppLogsDebugMock.mockClear();
   logAppLogsInfoMock.mockClear();
   logAppLogsWarnMock.mockClear();
   errorHandlerMock.handle.mockClear();
@@ -400,11 +403,11 @@ describe('ResourceStreamManager', () => {
     const state = getScopedDomainState('namespaces', storeScope);
     expect(state.sourceVersion).toBe('ns-3');
     expect(state.sourceVersions?.object).toBe('ns-3');
-    // The applied doorbell logs to the app log — the runtime counterpart of the
-    // backend's "namespaces doorbell -> N scope(s)" line.
+    // The applied doorbell logs at DEBUG — the runtime counterpart of the
+    // backend's "namespaces doorbell <v>: <reason> — signaling ..." line.
     expect(
-      logAppLogsInfoMock.mock.calls.some((call) =>
-        String(call[0]).includes('namespaces doorbell applied version=ns-3')
+      logAppLogsDebugMock.mock.calls.some((call) =>
+        String(call[0]).includes('namespaces doorbell ns-3 received')
       )
     ).toBe(true);
   });

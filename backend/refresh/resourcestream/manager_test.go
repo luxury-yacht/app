@@ -185,7 +185,7 @@ func TestManagerBroadcastsNamespacesDoorbell(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainNamespaces, "")
 	require.NoError(t, err)
 
-	manager.BroadcastNamespacesRefresh("ns-7")
+	manager.BroadcastNamespacesRefresh("ns-7", "namespace object changed")
 
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeModified, update.Type)

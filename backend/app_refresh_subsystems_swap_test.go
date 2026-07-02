@@ -28,7 +28,7 @@ func TestSwapRefreshSubsystemStopsPrevious(t *testing.T) {
 	var mu sync.Mutex
 	broadcasts := 0
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
-	notifier.SetBroadcast(func(string) {
+	notifier.SetBroadcast(func(string, string) {
 		mu.Lock()
 		broadcasts++
 		mu.Unlock()

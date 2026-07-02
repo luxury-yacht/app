@@ -301,6 +301,13 @@ func (m *Manager) logInfo(message string) {
 	applog.Info(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
 }
 
+func (m *Manager) logDebug(message string) {
+	if m == nil {
+		return
+	}
+	applog.Debug(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+}
+
 // SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.
 func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(kind, namespace, name string)) {
 	if m == nil {
@@ -961,14 +968,17 @@ func (m *Manager) BroadcastMetricsRefresh(version string) {
 // domain's subscribers. The namespace-list notifier calls this when a namespace
 // object changes, when workload presence flips, or when the workload tracker
 // becomes ready — the three (rare) events that change the namespaces snapshot.
-func (m *Manager) BroadcastNamespacesRefresh(version string) {
+// The reason comes from the notifier and says which of those rang the doorbell.
+func (m *Manager) BroadcastNamespacesRefresh(version, reason string) {
 	if m == nil {
 		return
 	}
 	scopes := m.subscribedScopes(domainNamespaces)
 	// Rare by design (namespace changes, presence flips, tracker settling), so a
 	// log per broadcast is cheap and makes the doorbell observable at runtime.
-	m.logInfo(fmt.Sprintf("[resource-stream] namespaces doorbell %s -> %d scope(s)", version, len(scopes)))
+	m.logDebug(fmt.Sprintf(
+		"namespaces doorbell %s: %s — signaling %d subscribed scope(s) to refetch the namespace list",
+		version, reason, len(scopes)))
 	m.broadcastDoorbellRefresh(domainNamespaces, scopes, SourceObject, version)
 }
 

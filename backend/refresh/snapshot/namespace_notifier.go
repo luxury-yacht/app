@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,7 +32,7 @@ type NamespaceChangeNotifier struct {
 	tracker *NamespaceWorkloadTracker
 
 	mu             sync.Mutex
-	broadcast      func(version string)
+	broadcast      func(version, reason string)
 	timer          *time.Timer
 	debounce       time.Duration
 	namespaceDirty bool
@@ -58,8 +59,9 @@ func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *Namesp
 }
 
 // SetBroadcast wires the doorbell sink. Events recorded before wiring are
-// flushed on the next debounce tick.
-func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version string)) {
+// flushed on the next debounce tick. The reason describes what rang the
+// doorbell, for the debug log at the broadcast site.
+func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version, reason string)) {
 	if n == nil {
 		return
 	}
@@ -146,25 +148,36 @@ func (n *NamespaceChangeNotifier) flush() {
 	// signature's ready bit and must broadcast.
 	needSignature := workloadDirty || !n.signatureKnown || !n.lastSignatureReady
 	n.mu.Unlock()
-	fire := namespaceDirty
+	var reasons []string
+	if namespaceDirty {
+		reasons = append(reasons, "namespace object changed")
+	}
 	if needSignature {
 		signature := workloadPresenceSignature(namespacesWithWorkloadsFromIngest(n.ingest), ready)
 		n.mu.Lock()
 		if !n.signatureKnown || signature != n.lastSignature {
+			hadSignature := n.signatureKnown
 			n.signatureKnown = true
 			n.lastSignature = signature
-			fire = true
+			switch {
+			case !hadSignature:
+				reasons = append(reasons, "workload-presence baseline established")
+			case !ready:
+				reasons = append(reasons, "workload presence changed while stores are still settling")
+			default:
+				reasons = append(reasons, "workload presence changed (a namespace gained its first or lost its last workload, or the stores finished settling)")
+			}
 		}
 		n.lastSignatureReady = ready
 		n.mu.Unlock()
 	}
 
-	if fire {
+	if len(reasons) > 0 {
 		n.mu.Lock()
 		n.counter++
 		version := fmt.Sprintf("ns-%d", n.counter)
 		n.mu.Unlock()
-		broadcast(version)
+		broadcast(version, strings.Join(reasons, "; "))
 	}
 
 	// The cluster-Ready gate needs a build after the tracker settles; keep a

@@ -13,6 +13,7 @@ import { stripClusterScope } from '../clusterScope';
 import { eventBus } from '@/core/events';
 import {
   APP_LOG_SOURCES,
+  logAppLogsDebug,
   logAppLogsInfo,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
@@ -54,6 +55,10 @@ const MAX_UPDATE_QUEUE = 1000;
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream, cluster);
+};
+
+const logDebug = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsDebug(message, APP_LOG_SOURCES.ResourceStream, cluster);
 };
 
 const MESSAGE_TYPES = {
@@ -861,10 +866,11 @@ export class ResourceStreamManager {
   ): void {
     if (subscription.domain === 'namespaces' && sourceVersions.object) {
       // Rare by design (namespace changes/presence flips); the matching backend
-      // line is "namespaces doorbell <version> -> N scope(s)". Together they
-      // localize a dead doorbell to the backend, the wire, or the consumer.
-      logInfo(
-        `[resource-stream] namespaces doorbell applied version=${sourceVersions.object} scope=${subscription.reportScope}`
+      // line is "namespaces doorbell <version>: <reason> — signaling ...".
+      // Together they localize a dead doorbell to the backend, the wire, or the
+      // consumer.
+      logDebug(
+        `namespaces doorbell ${sourceVersions.object} received for scope ${subscription.reportScope}: advancing the object clock so NamespaceContext refetches the namespace list`
       );
     }
     this.forEachReportScope(subscription, (reportScope) => {
