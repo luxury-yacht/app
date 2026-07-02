@@ -448,7 +448,7 @@ func (b *blockingIngestSource) AddCatalogSink(schema.GroupVersionResource, inges
 func (b *blockingIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
 	return false
 }
-func (b *blockingIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
+func (b *blockingIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}
 func (b *blockingIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return false }
 
 func (r *recordingTelemetry) count() int {

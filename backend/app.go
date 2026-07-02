@@ -34,14 +34,14 @@ type App struct {
 	diagnosticsPanelVisible bool
 	appLogsPanelVisible     bool
 
-	refreshManager               *refresh.Manager
-	refreshHTTPServer            *http.Server
-	refreshListener              net.Listener
-	refreshCtx                   context.Context
-	refreshCancel                context.CancelFunc
-	refreshBaseURL               string
-	refreshServerDone            chan struct{}
-	telemetryRecorder            *telemetry.Recorder
+	refreshManager    *refresh.Manager
+	refreshHTTPServer *http.Server
+	refreshListener   net.Listener
+	refreshCtx        context.Context
+	refreshCancel     context.CancelFunc
+	refreshBaseURL    string
+	refreshServerDone chan struct{}
+	telemetryRecorder *telemetry.Recorder
 	// containerLogsTargetLimiter is lazily built by sharedContainerLogsTargetLimiter;
 	// its mutex guards the check-then-set because subsystem builds run concurrently
 	// per cluster. Access the limiter only through the accessor.

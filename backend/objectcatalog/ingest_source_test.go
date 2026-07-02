@@ -31,7 +31,7 @@ func (r replayIngestSource) AddCatalogSink(gvr schema.GroupVersionResource, sink
 func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
 	return false
 }
-func (r replayIngestSource) StopReflectorFor(schema.GroupVersionResource) {}
+func (r replayIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}
 func (r replayIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
 
 // TestRegisterIngestCatalogSinksRebuildsCacheOnce pins the batched registration:
