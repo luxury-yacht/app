@@ -467,7 +467,9 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
 	descriptors := resourcestream.ProjectionDescriptors()
-	metricDomains := map[string]bool{}
+	// The serve-time metric join gives the three metric-bearing table domains a
+	// metric source clock alongside the object clock.
+	metricDomains := map[string]bool{"pods": true, "nodes": true, "namespace-workloads": true}
 	validSources := map[string]bool{"object": true, "metric": true, "event": true, "catalog": true}
 
 	for _, entry := range contract.Domains {

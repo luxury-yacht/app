@@ -16,7 +16,6 @@ export type ResourceStreamDomainDescriptor = {
   domain: DoorbellDomain;
   scopeKind: ResourceStreamScopeKind;
   isClusterScoped: boolean;
-  preserveMetrics: boolean;
 };
 
 export type ResourceStreamSourceClock = RefreshSourceClock;
@@ -97,97 +96,81 @@ export const resourceStreamDomainDescriptors = [
     domain: 'pods',
     scopeKind: 'pod',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-workloads',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-config',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-network',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-rbac',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-custom',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-helm',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-autoscaling',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-quotas',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-storage',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-rbac',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-storage',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-config',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-crds',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-custom',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'nodes',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
 ] satisfies ResourceStreamDomainDescriptor[];
 
@@ -201,19 +184,16 @@ const doorbellDomainDescriptors = [
     domain: 'catalog',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'cluster-events',
     scopeKind: 'cluster',
     isClusterScoped: true,
-    preserveMetrics: false,
   },
   {
     domain: 'namespace-events',
     scopeKind: 'namespace',
     isClusterScoped: false,
-    preserveMetrics: false,
   },
 ] satisfies ResourceStreamDomainDescriptor[];
 
@@ -242,7 +222,7 @@ export const domainSupportsSourceClock = (
   source: ResourceStreamSourceClock
 ): boolean => sourceClocksByDomain.get(domain)?.includes(source) ?? false;
 
-export const getResourceStreamDomainDescriptor = (
+const getResourceStreamDomainDescriptor = (
   domain: DoorbellDomain
 ): ResourceStreamDomainDescriptor => doorbellDescriptorByDomain.get(domain)!;
 

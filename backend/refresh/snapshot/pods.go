@@ -48,6 +48,10 @@ type PodBuilder struct {
 	// node, and workload scopes serve rows straight from it; nil falls back to
 	// the list path used by older unit tests.
 	maintained *typedMaintainedStore[PodSummary]
+	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage
+	// is never written to the maintained store or the projection cache, so a metric
+	// tick cannot re-project stored rows. nil (a unit test) serves the no-data marker.
+	metrics metrics.Provider
 }
 
 // newPodBuilder wires a PodBuilder with the projection memo cache enabled.
@@ -150,11 +154,13 @@ func (c *podProjectionCache) prune(now time.Time) {
 	}
 }
 
-// PodSnapshot is the payload for the pods domain.
+// PodSnapshot is the payload for the pods domain. Rows carry live usage joined at
+// serve from the metrics poller; Metrics is the poller's freshness/error metadata.
 type PodSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows []PodSummary `json:"rows"`
+	Rows    []PodSummary   `json:"rows"`
+	Metrics PodMetricsInfo `json:"metrics"`
 	// TotalCount is the number of pods in the requested scope (before search/
 	// pagination). HealthCounts holds the per-filter-mode counts (keys match the
 	// "health" query predicate: "unhealthy", "restarts", "not-ready"). Together
@@ -181,7 +187,7 @@ func podSummaryUnhealthy(pod PodSummary) bool {
 
 func podQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "age"},
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces", "statuses", "nodes"},
 		[]string{"name", "namespace", "status", "ready", "owner", "node"},
 		[]string{podres.Identity.Kind},
@@ -191,11 +197,12 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 // podQuerypageSchema derives the querypage Schema for the pods table from its
 // typed-table adapter, reusing the adapter's exact sort-value encoder and row key so
 // the engine orders rows byte-identically to the live executor. The sort fields
-// mirror the sortable fields published by podQueryCapabilities.
+// mirror the sortable fields published by podQueryCapabilities; cpu/memory sort the
+// live usage joined at serve.
 func podQuerypageSchema() querypage.Schema[PodSummary] {
 	return querypageSchemaFromAdapter(
 		podTableQueryAdapter(),
-		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "age"},
+		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
 	)
 }
 
@@ -245,6 +252,7 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 	builder := &PodBuilder{
 		projCache:  newPodProjectionCache(),
 		maintained: maintained,
+		metrics:    provider,
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -262,7 +270,9 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		return nil, fmt.Errorf("pods scope is required")
 	}
 
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, trimmed, podDomainName, "")
+	podUsage, metricsMetadata := latestPodMetrics(b.metrics)
+	revision := metricRevisionFromMetadata(metricsMetadata)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, trimmed, podDomainName, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +281,10 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	if err != nil {
 		return nil, err
 	}
+	// Join the latest poller usage onto the served copies. The maintained store's
+	// rows keep the no-data marker: a metric tick changes only this serve output
+	// and the metric source clock, never the stored rows or the object version.
+	overlayPodMetrics(summaries, podUsage)
 
 	adapter := podTableQueryAdapter()
 	totalCount := 0
@@ -311,13 +325,15 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	)
 
 	snapshot := &refresh.Snapshot{
-		Domain:  podDomainName,
-		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
-		Version: version,
+		Domain:         podDomainName,
+		Scope:          refresh.JoinClusterScope(clusterID, trimmed),
+		Version:        version,
+		SourceVersions: metricSourceVersions(revision),
 		Payload: PodSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
+			Metrics:               podMetricsInfoFromMetadata(metricsMetadata),
 			TotalCount:            totalCount,
 			HealthCounts:          healthCounts,
 		},
@@ -482,10 +498,10 @@ func formatPodMetricMemory(usage metrics.PodUsage, ok bool, creationMillis int64
 	return streamrows.FormatMemoryBytes(usage.MemoryUsageBytes)
 }
 
-// overlayPodMetrics applies an explicit metrics sample to stored rows for the
-// pods-metrics domain. A pod with no sample, or a sample that predates the row's
-// creation (a recreated same-name pod inheriting a prior incarnation's numbers),
-// renders the no-data marker rather than stale or zero numbers.
+// overlayPodMetrics joins an explicit metrics sample onto the SERVED row copies
+// (never the stored rows). A pod with no sample, or a sample that predates the
+// row's creation (a recreated same-name pod inheriting a prior incarnation's
+// numbers), renders the no-data marker rather than stale or zero numbers.
 func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
 	for i := range rows {
 		usage, ok := podUsage[rows[i].Namespace+"/"+rows[i].Name]
@@ -534,8 +550,6 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		Predicate: func(pod PodSummary, field, value string) bool {
 			switch strings.ToLower(strings.TrimSpace(field)) {
-			case "rowkeys":
-				return rowKeyPredicateMatches(value, fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name)))
 			case "health":
 				switch strings.ToLower(strings.TrimSpace(value)) {
 				case "restarts":
@@ -567,6 +581,10 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 				return pod.OwnerName
 			case "node":
 				return pod.Node
+			case "cpu":
+				return pod.CPUUsage
+			case "memory":
+				return pod.MemUsage
 			case "age":
 				return pod.Age
 			default:
@@ -575,6 +593,10 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		NumericSort: func(pod PodSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
+			case "cpu":
+				return parseFormattedCPUToMilli(pod.CPUUsage)
+			case "memory":
+				return parseFormattedMemoryToBytes(pod.MemUsage)
 			case "restarts":
 				return float64(pod.Restarts), true
 			case "ready":

@@ -115,21 +115,14 @@ Every backend domain has a frontend counterpart:
 without a frontend mapping breaks diagnostics. A frontend refresher without a
 backend domain gets empty snapshots.
 
-### Metric Domains
+### Serve-Time Metric Join
 
-Metric domains must keep live CPU/memory usage and metric freshness/error
-metadata separate from base object/status rows. Base domains keep object
-identity, status, age timestamps, and object-derived reservation values such as
-requests, limits, capacity, and allocatable.
-
-Metric-bearing tables use two access shapes over the same metric domain:
-
-- Object-sorted pages query the base object/status domain for membership,
-  ordering, filters, search, facets, totals, and pagination, then overlay metric
-  values for the visible row refs.
-- CPU/memory-sorted pages query the metric domain for membership, ordering,
-  totals, cursor metadata, metric values, and metric revision, then hydrate base
-  object/status rows by exact refs.
+The metric-bearing table domains (`pods`, `nodes`, `namespace-workloads`) join
+live CPU/memory usage onto their served rows at serve — usage is never written
+to the stores. Tables issue ONE base-domain query for every sort: cpu/memory
+sort numerically server-side, and the payload's `metrics` block carries the
+poller freshness/error metadata. There are no separate metric domains and no
+client-side metric join (see `docs/architecture/resource-metrics.md`).
 
 Metric-only refreshes may advance the metric source clock and update
 metric-backed cells, freshness, diagnostics, and metric sort keys. They must not
@@ -306,6 +299,8 @@ against snapshot runtime permissions by
 
 7. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
 
+8. **Serve-time metric cadence chain** — live usage in tables depends on an easy-to-sever chain: `pods`/`nodes`/`namespace-workloads` declare the `metric` source clock in `ProjectionDescriptors` → contract JSON → frontend `metricsInterval` timing, AND their registrations set `metricsOnly: true` so a healthy object stream does not pause the refresher poll — that poll IS the metric clock (each poll returns a new `SourceVersions["metric"]`, which changes the ETag and triggers typed-query refetch). Removing `metricsOnly: true`, dropping the `metric` source clock, or writing usage into a maintained store each silently freezes usage between object events with no error anywhere. `registrations_test.go` (backend) and `resourceStreamDomains.test.ts` (frontend) pin the clock declarations; there is no test that can pin "the poll keeps running while streaming" end-to-end, so treat those flags as load-bearing.
+
 ### Diagnosing a wedge
 
 When a view is stuck loading, a cluster never leaves "loading", or you suspect
@@ -332,6 +327,9 @@ into the same store).
 - [ ] Check if stream resume semantics are affected
 - [ ] For metric-bearing domains, confirm metric-only changes use the metric
       source clock and do not re-project or re-store object rows
+- [ ] For metric-bearing domains, confirm the registration keeps
+      `metricsOnly: true` and the descriptor keeps the `metric` source clock
+      (fragility point 8 — severing either silently freezes live usage)
 - [ ] Test with multiple clusters connected
 - [ ] Test with a cluster that has restricted RBAC (not cluster-admin)
 - [ ] Verify diagnostics panel still shows correct status

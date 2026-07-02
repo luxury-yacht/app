@@ -132,32 +132,17 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 	}
 }
 
-func TestWorkloadMetricsQueryViaStoreEquivalent(t *testing.T) {
-	adapter := workloadMetricTableQueryAdapter()
-	baseRows := makeWorkloadRows(250)
-	items := make([]NamespaceWorkloadMetricRow, 0, len(baseRows))
-	for _, base := range baseRows {
-		group, version, resource := workloadIdentityParts(base.Kind)
-		items = append(items, NamespaceWorkloadMetricRow{
-			ClusterMeta: ClusterMeta{ClusterID: "c"},
-			Group:       group,
-			Version:     version,
-			Kind:        base.Kind,
-			Resource:    resource,
-			Namespace:   base.Namespace,
-			Name:        base.Name,
-			RowKey:      workloadTableQueryAdapter().Key(base),
-			Ready:       base.Ready,
-			CPUUsage:    base.CPUUsage,
-			MemUsage:    base.MemUsage,
-			base:        base,
-		})
-	}
+// TestWorkloadMetricSortQueryViaStoreEquivalent proves the engine serves cpu/memory
+// (live usage) sorts byte-identically to the live executor on the BASE workloads
+// adapter — the query shape metric-sorted tables use after the serve-time join.
+func TestWorkloadMetricSortQueryViaStoreEquivalent(t *testing.T) {
+	adapter := workloadTableQueryAdapter()
+	items := makeWorkloadRows(250)
 
-	paginate := func(serve func(typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow], base typedTableQuery) ([]string, typedTableQueryPage[NamespaceWorkloadMetricRow]) {
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[WorkloadSummary], base typedTableQuery) ([]string, typedTableQueryPage[WorkloadSummary]) {
 		q := base
 		var keys []string
-		var first typedTableQueryPage[NamespaceWorkloadMetricRow]
+		var first typedTableQueryPage[WorkloadSummary]
 		for i := 0; ; i++ {
 			if i > 1000 {
 				t.Fatal("pagination did not terminate")
@@ -189,11 +174,11 @@ func TestWorkloadMetricsQueryViaStoreEquivalent(t *testing.T) {
 				},
 				DynamicRevision: "metrics-rev-1",
 			}
-			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow] {
+			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[WorkloadSummary] {
 				return applyTypedTableQuery(items, q, adapter)
 			}, base)
-			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NamespaceWorkloadMetricRow] {
-				return applyTypedTableQueryViaStore(items, q, adapter, workloadMetricQuerypageSchema())
+			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[WorkloadSummary] {
+				return applyTypedTableQueryViaStore(items, q, adapter, workloadsQuerypageSchema())
 			}, base)
 
 			label := fmt.Sprintf("sort=%q dir=%s", sf, d)

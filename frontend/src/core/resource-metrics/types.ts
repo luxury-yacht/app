@@ -10,13 +10,7 @@ export type ResourceMetricsSource =
 
 export type ResourceMetricsDomain = Extract<
   RefreshDomain,
-  | 'pods'
-  | 'pods-metrics'
-  | 'namespace-workloads'
-  | 'namespace-workloads-metrics'
-  | 'nodes'
-  | 'nodes-metrics'
-  | 'cluster-overview'
+  'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview'
 >;
 
 export interface ResourceMetricValues {
@@ -56,16 +50,13 @@ export interface ResourceMetricsData {
   freshness?: ResourceMetricsFreshness;
 }
 
+// One domain serves both halves: the base table domain's scoped payload carries
+// object state, the usage joined at serve, and the poller freshness block.
 export interface DomainResourceMetricsResolution {
   kind: 'domain';
   source: Extract<ResourceMetricsSource, 'pods' | 'namespace-workloads' | 'nodes'>;
-  domain: Extract<
-    ResourceMetricsDomain,
-    'pods-metrics' | 'namespace-workloads-metrics' | 'nodes-metrics'
-  >;
+  domain: Extract<ResourceMetricsDomain, 'pods' | 'namespace-workloads' | 'nodes'>;
   scope: string;
-  baseDomain: Extract<ResourceMetricsDomain, 'pods' | 'namespace-workloads' | 'nodes'>;
-  baseScope: string;
 }
 
 export interface DetailExceptionResourceMetricsResolution {

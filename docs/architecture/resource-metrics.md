@@ -4,28 +4,86 @@ Resource utilization values use one frontend read model over the existing
 refresh store. Metrics are live data, but they are not object detail data and
 they are not object age.
 
-## Invariants
+## Serve-Time Join
+
+Live CPU/memory usage reaches tables and panels through the BASE table domains
+(`pods`, `namespace-workloads`, `nodes`): each Build reads the metrics poller's
+latest sample once and joins usage onto the served row copies. There are no
+separate metric domains and no client-side metric join.
+
+- Usage is joined **at serve, never written to the stores** — a metric tick
+  cannot re-project stored object rows (`backend/refresh/snapshot/pods.go`
+  `overlayPodMetrics`, `nodes.go` via `reaggregateNodeSummary`,
+  `namespace_workloads.go` via `assembleWorkloadRows`).
+- Each snapshot stamps the poller collection revision as its `metric` source
+  clock (`SourceVersions["metric"]`); the service folds it into the snapshot's
+  `sourceVersion`/ETag, so a metric tick breaks the 304 validator without
+  moving the object `Version`.
+- Each payload publishes the poller freshness/error state as a `metrics` block
+  (`PodMetricsInfo` / `NodeMetricsInfo`).
+- `cpu` and `memory` are sortable fields on the base queries: the querypage
+  engine sorts the joined rows numerically (`parseFormattedCPUToMilli` /
+  `parseFormattedMemoryToBytes`), and the value-based keyset cursor keeps
+  paging correctly across metric ticks.
+
+## Refresh cadence
+
+The three domains declare `sourceClocks: ["object", "metric"]` in
+`backend/refresh/domain/refresh-domain-contract.json` (mirrored from
+`resourcestream.ProjectionDescriptors`). On the frontend this makes their
+refresher run at the user metrics-interval preference, and their streaming
+registration sets `metricsOnly: true`, so a healthy object stream does NOT
+pause the poll — the poll is what advances the metric clock between object
+events. Object-change freshness stays stream/signal-driven; typed queries
+refetch when the live scope's `sourceVersion` changes on either clock.
+
+Backend metrics-poller demand is any active lease on `cluster-overview`,
+`nodes`, `pods`, or `namespace-workloads`
+(`frontend/src/core/refresh/orchestrator.ts` `isMetricsDemandActive`).
+
+## Design history and trade-offs
+
+Before 2026-07 these tables used three separate `*-metrics` domains plus a
+client-side join: the frontend queried the base domain for the page, then
+queried the metric domain with the page's row keys as a `predicate.rowKeys`
+URL predicate (up to 250 pipe-joined keys, double-encoded into the `scope`
+query param), inverting the two legs for CPU/memory sorts. That cost 2–3
+correlated HTTP requests per table per tick, tens-of-KB request URLs, batching
+and mismatch-logging machinery, and duplicate maintained stores. The serve-time
+join replaced all of it; do not reintroduce a metric domain, a `rowKeys`-style
+membership predicate, or a client-side metric merge.
+
+The accepted trade-off: a metric tick now re-downloads the full joined page
+(HTTP 200) where the old split let the object page answer 304 while only a
+small metric page re-downloaded. On the loopback transport this is cheap, and
+it is strictly fewer requests. If joined-page re-serialization ever shows up on
+very large clusters, the revisit knobs are (in order): lengthen the
+metrics-interval preference, then consider splitting usage into a sibling
+sub-payload with its own validator — NOT resurrecting the metric domains or the
+row-key round-trips.
 
 - Live CPU, memory, request, limit, capacity, allocatable, pod-count,
   ready-pod-count, freshness, and error metadata should flow through
   `frontend/src/core/resource-metrics`.
 - The metrics module is a selector and lifecycle layer over refresh-domain
   state. Do not add a second frontend metrics cache.
-- Object-detail DTOs may provide initial fallback values while the metrics
-  domain is loading, unavailable, or permission denied. They must not become
-  the live metrics source except for the documented ReplicaSet exception.
+- Object-detail DTOs may provide initial fallback values while the base domain
+  is loading, unavailable, or permission denied. They must not become the live
+  metrics source except for the documented ReplicaSet exception.
 - Metrics reads are keyed by full object identity: `clusterId`, `group`,
   `version`, `kind`, plus `namespace` and `name` for namespaced concrete
   objects.
 - Table rows may use shared value adapters directly when their local row shape
   lacks full GVK identity. Do not route table rows through the identity-keyed
   `useResourceMetrics` hook unless they carry the full object reference.
-- Base object/status domains carry object identity, status, readiness, restart
-  counts, labels, annotations, absolute age timestamps, and object-derived
-  reservation values such as requests, limits, capacity, and allocatable.
-- Metric domains carry live CPU/memory usage plus metric freshness and error
-  metadata. Joining code must tolerate missing base reservation values, missing
-  metric usage, and fully joined rows.
+- Rows carry object identity, status, readiness, restart counts, labels,
+  annotations, absolute age timestamps, object-derived reservation values
+  (requests, limits, capacity, allocatable), AND the live usage joined at
+  serve. Joining code must tolerate the no-data marker for rows with no valid
+  sample.
+- A usage sample scraped before the object's creation belongs to a prior
+  same-named incarnation and renders the no-data marker (`metricSampleValid`),
+  never stale or zero numbers.
 - Object age is computed from timestamps by the frontend live-age contract and
   must not participate in metric refresh.
 
@@ -33,38 +91,18 @@ they are not object age.
 
 | Consumer | Source |
 | --- | --- |
-| Pod object utilization | `pods-metrics` scoped rows joined with base `pods` rows |
-| Deployment, DaemonSet, StatefulSet utilization | `namespace-workloads-metrics` scoped rows joined with base `namespace-workloads` rows |
-| Deployment, DaemonSet, StatefulSet freshness | `namespace-workloads-metrics` scoped metrics metadata |
+| Pod object utilization | `pods` scoped payload rows (usage joined at serve) |
+| Deployment, DaemonSet, StatefulSet utilization | `namespace-workloads` scoped payload rows |
+| Workload freshness | `namespace-workloads` payload `metrics` block |
 | ReplicaSet utilization | object-detail DTO exception |
-| Node utilization | `nodes-metrics` scoped rows joined with base `nodes` rows |
-| Cluster aggregate utilization | `cluster-overview` scoped payload; out of scope for table metrics decoupling |
-| Pod tables and embedded pod tables | base `pods` rows overlaid with `pods-metrics`; CPU/memory sorts query `pods-metrics` and hydrate base `pods` rows |
-| Workload tables | base `namespace-workloads` rows overlaid with `namespace-workloads-metrics`; CPU/memory sorts query `namespace-workloads-metrics` and hydrate base workload rows |
-| Node tables | base `nodes` rows overlaid with `nodes-metrics`; CPU/memory sorts query `nodes-metrics` and hydrate base node rows |
+| Node utilization | `nodes` scoped payload rows |
+| Cluster aggregate utilization | `cluster-overview` scoped payload; out of scope for table metrics |
+| Pod / workload / node tables | ONE base-domain query per table; CPU/memory sorts run server-side on the joined usage |
 
-Each metric domain exposes two access shapes over the same refresh-domain data:
-a scoped payload selector for object-sorted table overlays and Object Panel
-utilization, and a keyset query shape for CPU/memory sorts that own page
-membership, ordering, totals, and cursor metadata. Do not create parallel
-frontend metric caches for these shapes.
-
-Object-sorted tables keep base query membership, ordering, filters, search,
-facets, totals, and pagination in the base object/status query. They fetch
-metric values for the visible row identities and overlay those values without
-resetting base pagination, search, filters, or row order.
-
-CPU/memory-sorted tables use the metric-domain query for membership, ordering,
-cursor, total, metric values, freshness metadata, and metric revision. The
-metric query applies the same base scope, search, metadata-search flag,
-namespace filters, kind filters, backend predicates, page size, sort direction,
-and cursor state before sorting and paginating. It returns ordered object refs
-plus metric values; the base object/status path hydrates the corresponding base
-rows by exact refs.
-
-Workload freshness comes from `namespace-workloads-metrics` metadata. Do not keep
-the previous `nodes` domain freshness lease for workload utilization after
-migrating consumers.
+Tables read the freshness block from the query payload (`queryPayload.metrics`).
+The object panel's `useResourceMetrics` leases one scoped base domain per kind
+(`pods` namespace scope, `namespace-workloads` namespace scope, `nodes` cluster
+scope) and selects the object's row by full identity.
 
 ## ReplicaSet Exception
 
@@ -98,37 +136,30 @@ A strict ReplicaSet unification slice must:
 - Object-panel utilization consumer:
   `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts`
 
-`useResourceMetrics` should lease only the needed scoped metric domain:
+`useResourceMetrics` should lease only the needed scoped base domain:
 
-- Pod panels use the `pods-metrics` namespace scope because there is no single-pod
+- Pod panels use the `pods` namespace scope because there is no single-pod
   scope.
-- Workload panels use the `namespace-workloads-metrics` namespace scope.
-- Node panels use the `nodes-metrics` cluster scope.
+- Workload panels use the `namespace-workloads` namespace scope.
+- Node panels use the `nodes` cluster scope.
 - ReplicaSet panels should not lease a pods workload scope under the current
   row-shape contract.
 
 ## Refresh Contract
 
 Metric refresh is driven by the `metric` source clock described in
-`resource-stream-signals.md`. A metric-only update can refresh metric-backed
-views, but it must not advance the object source version or re-project stored
-object rows.
+`resource-stream-signals.md`. A metric-only update advances the snapshot's
+metric source clock (and therefore its ETag) but must not advance the object
+`Version` or re-project stored object rows.
 
 ## Validation
 
-Focused frontend loop:
+Focused loops:
 
 ```sh
+go test ./backend/refresh/snapshot -run 'MetricsJoin|OverlaysLiveUsage|WithoutProvider|MetricSort'
 npm run test --prefix frontend -- resource-metrics useUtilizationData DetailsTab NsViewPods useWorkloadTableColumns ClusterViewNodes ClusterOverview
 npm run typecheck --prefix frontend
-```
-
-Backend tests belong with changes to pod counts, DTO cleanup, or strict
-ReplicaSet unification:
-
-```sh
-go test ./backend/resources/... ./backend/refresh/snapshot
-go test ./backend/refresh/resourcestream
 ```
 
 For non-documentation changes, finish with `mage qc:prerelease`.

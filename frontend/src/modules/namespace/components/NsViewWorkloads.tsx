@@ -16,12 +16,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import type {
-  NamespaceWorkloadMetricEntry,
-  NamespaceWorkloadMetricsSnapshotPayload,
-  NamespaceWorkloadSnapshotPayload,
-  PodMetricsInfo,
-} from '@/core/refresh/types';
+import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import {
@@ -42,21 +37,6 @@ interface WorkloadsViewProps {
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
-
-const METRIC_NO_DATA = '-';
-
-const workloadMetricRowKey = (row: Pick<WorkloadData, 'kind' | 'namespace' | 'name'>): string =>
-  `${row.kind ?? ''}/${row.namespace ?? ''}/${row.name ?? ''}`.toLowerCase();
-
-const mergeWorkloadMetric = (
-  row: WorkloadData,
-  metric: NamespaceWorkloadMetricEntry | undefined
-): WorkloadData => ({
-  ...row,
-  ready: metric?.ready ?? row.ready,
-  cpuUsage: metric?.cpuUsage ?? METRIC_NO_DATA,
-  memUsage: metric?.memUsage ?? METRIC_NO_DATA,
-});
 
 /**
  * GridTable component for namespace workloads without nested pod expansion
@@ -175,20 +155,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
 
-    const metricOverlay = useMemo(
-      () => ({
-        domain: 'namespace-workloads-metrics' as const,
-        label: `${diagnosticsLabel} Metrics`,
-        selectRows: (payload: unknown) =>
-          (payload as NamespaceWorkloadMetricsSnapshotPayload).rows ?? [],
-        getBaseRowKey: workloadMetricRowKey,
-        getMetricRowKey: (row: unknown) => (row as NamespaceWorkloadMetricEntry).rowKey,
-        mergeMetric: (row: WorkloadData, metric: unknown) =>
-          mergeWorkloadMetric(row, metric as NamespaceWorkloadMetricEntry | undefined),
-      }),
-      [diagnosticsLabel]
-    );
-
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
       appendWorkloadTokens(tokens, row);
@@ -199,13 +165,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       gridTableProps: resolvedGridTableProps,
       favModal,
       source,
-      metricPayload,
+      queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
       label: diagnosticsLabel,
-      metricOverlay,
       selectRows: selectPayloadRows,
       viewId: 'namespace-workloads',
       namespace,
@@ -224,11 +189,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
-    const workloadMetricsPayload = metricPayload as
-      NamespaceWorkloadMetricsSnapshotPayload | null | undefined;
+    // The base query payload carries the poller freshness block for the usage
+    // joined onto the rows at serve.
     useEffect(() => {
-      setTableMetricsInfo(workloadMetricsPayload?.metrics ?? null);
-    }, [workloadMetricsPayload?.metrics]);
+      setTableMetricsInfo(queryPayload?.metrics ?? null);
+    }, [queryPayload?.metrics]);
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {

@@ -278,9 +278,8 @@ func TestServiceSourceVersionIncludesEpoch(t *testing.T) {
 func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
 	for _, domainName := range []string{
 		"pods",
-		podMetricsDomainName,
-		namespaceWorkloadsMetricsDomainName,
-		nodeMetricsDomainName,
+		"namespace-workloads",
+		"nodes",
 	} {
 		t.Run(domainName, func(t *testing.T) {
 			reg := domain.New()

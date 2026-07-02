@@ -306,20 +306,6 @@ const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =
   ...override,
 });
 
-const podMetricRows = (rows: PodSnapshotEntry[]) =>
-  rows.map((pod) => ({
-    clusterId: pod.clusterId,
-    group: '',
-    version: 'v1',
-    kind: 'Pod',
-    resource: 'pods',
-    namespace: pod.namespace,
-    name: pod.name,
-    rowKey: `${pod.namespace}/${pod.name}`,
-    cpuUsage: pod.cpuUsage,
-    memUsage: pod.memUsage,
-  }));
-
 describe('NsViewPods', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -431,19 +417,20 @@ describe('NsViewPods', () => {
               matchesPodsFilter(healthMatch[1] as Parameters<typeof matchesPodsFilter>[0], pod)
             )
           : effectiveData;
-        const isMetricDomain = args?.domain === 'pods-metrics';
         return Promise.resolve({
           status: 'executed',
           data: {
             status: 'ready',
             data: {
-              rows: isMetricDomain ? podMetricRows(rows) : rows,
+              rows,
               total: rows.length,
               totalIsExact: true,
               namespaces: [effectiveNamespace],
               kinds: ['Pod'],
               facetsExact: true,
-              metrics: isMetricDomain ? effectiveMetrics : undefined,
+              // Usage rides the pod rows; the base payload carries the poller
+              // freshness block joined at serve.
+              metrics: effectiveMetrics,
               // Scope counts mirror the backend: over all scope pods (effectiveData),
               // not the health-filtered page, so the unhealthy badge stays correct.
               totalCount: effectiveData.length,
@@ -498,22 +485,19 @@ describe('NsViewPods', () => {
   it('uses the typed query result for all-namespaces pods on first render', async () => {
     const localPod = createPod({ name: 'local-provider-row', namespace: 'team-a' });
     const queryPod = createPod({ name: 'query-row', namespace: 'team-b' });
-    requestRefreshDomainStateMock.mockImplementation((args: { domain?: string }) =>
+    requestRefreshDomainStateMock.mockImplementation(() =>
       Promise.resolve({
         status: 'executed',
         data: {
           status: 'ready',
           data: {
-            rows: args?.domain === 'pods-metrics' ? podMetricRows([queryPod]) : [queryPod],
+            rows: [queryPod],
             total: 1,
             totalIsExact: true,
             namespaces: ['team-a', 'team-b'],
             kinds: ['Pod'],
             facetsExact: true,
-            metrics:
-              args?.domain === 'pods-metrics'
-                ? { stale: false, successCount: 1, failureCount: 0 }
-                : undefined,
+            metrics: { stale: false, successCount: 1, failureCount: 0 },
           },
         },
       })
@@ -928,23 +912,20 @@ describe('NsViewPods', () => {
       }),
     ];
     requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
-      const { domain, scope = '' } = (request as { domain?: string; scope?: string }) ?? {};
+      const { scope = '' } = (request as { domain?: string; scope?: string }) ?? {};
       const rows = scope.includes('predicate.health=unhealthy') ? [pods[1]] : [];
       return Promise.resolve({
         status: 'executed',
         data: {
           status: 'ready',
           data: {
-            rows: domain === 'pods-metrics' ? podMetricRows(pods) : rows,
+            rows,
             total: rows.length,
             totalIsExact: true,
             namespaces: ['team-a', 'team-b'],
             kinds: ['Pod'],
             facetsExact: true,
-            metrics:
-              domain === 'pods-metrics'
-                ? { stale: false, successCount: 1, failureCount: 0 }
-                : undefined,
+            metrics: { stale: false, successCount: 1, failureCount: 0 },
           },
         },
       });

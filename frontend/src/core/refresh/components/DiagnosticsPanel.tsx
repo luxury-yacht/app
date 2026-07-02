@@ -404,7 +404,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceScopeEntries = useRefreshScopedDomainEntries('namespaces');
   const clusterOverviewScopeEntries = useRefreshScopedDomainEntries('cluster-overview');
   const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
-  const nodeMetricsScopeEntries = useRefreshScopedDomainEntries('nodes-metrics');
   const clusterConfigScopeEntries = useRefreshScopedDomainEntries('cluster-config');
   const clusterCRDScopeEntries = useRefreshScopedDomainEntries('cluster-crds');
   const clusterCustomScopeEntries = useRefreshScopedDomainEntries('cluster-custom');
@@ -414,9 +413,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const catalogScopeEntries = useRefreshScopedDomainEntries('catalog');
   const catalogDiffScopeEntries = useRefreshScopedDomainEntries('catalog-diff');
   const namespaceWorkloadsScopeEntries = useRefreshScopedDomainEntries('namespace-workloads');
-  const namespaceWorkloadsMetricsScopeEntries = useRefreshScopedDomainEntries(
-    'namespace-workloads-metrics'
-  );
   const namespaceAutoscalingScopeEntries = useRefreshScopedDomainEntries('namespace-autoscaling');
   const namespaceConfigScopeEntries = useRefreshScopedDomainEntries('namespace-config');
   const namespaceCustomScopeEntries = useRefreshScopedDomainEntries('namespace-custom');
@@ -427,7 +423,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceRBACScopeEntries = useRefreshScopedDomainEntries('namespace-rbac');
   const namespaceStorageScopeEntries = useRefreshScopedDomainEntries('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
-  const podMetricsScopeEntries = useRefreshScopedDomainEntries('pods-metrics');
   const containerLogsScopeEntries = useRefreshScopedDomainEntries('container-logs');
   // Object panel scoped domains – visible only while the object panel is open.
   const objectDetailsScopeEntries = useRefreshScopedDomainEntries('object-details');
@@ -607,14 +602,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         {
           domain: 'nodes' as RefreshDomain,
           label: 'Nodes',
-          hasMetrics: false,
-          entries: nodeScopeEntries,
-        },
-        {
-          domain: 'nodes-metrics' as RefreshDomain,
-          label: 'Node Metrics',
           hasMetrics: true,
-          entries: nodeMetricsScopeEntries,
+          entries: nodeScopeEntries,
         },
         {
           domain: 'cluster-config' as RefreshDomain,
@@ -664,13 +653,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         {
           domain: 'namespace-workloads' as RefreshDomain,
           label: 'Workloads',
-          entries: namespaceWorkloadsScopeEntries,
-        },
-        {
-          domain: 'namespace-workloads-metrics' as RefreshDomain,
-          label: 'Workload Metrics',
           hasMetrics: true,
-          entries: namespaceWorkloadsMetricsScopeEntries,
+          entries: namespaceWorkloadsScopeEntries,
         },
         {
           domain: 'namespace-autoscaling' as RefreshDomain,
@@ -717,12 +701,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           label: 'NS Storage',
           entries: namespaceStorageScopeEntries,
         },
-        {
-          domain: 'pods-metrics' as RefreshDomain,
-          label: 'Pod Metrics',
-          hasMetrics: true,
-          entries: podMetricsScopeEntries,
-        },
       ].flatMap(({ domain, label, hasMetrics, entries }) =>
         entries.map(([scopeKey, state]) => {
           const resolvedScope = state.scope?.trim() ? state.scope : scopeKey;
@@ -739,7 +717,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceScopeEntries,
       clusterOverviewScopeEntries,
       nodeScopeEntries,
-      nodeMetricsScopeEntries,
       clusterConfigScopeEntries,
       clusterCRDScopeEntries,
       clusterCustomScopeEntries,
@@ -749,7 +726,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       catalogScopeEntries,
       catalogDiffScopeEntries,
       namespaceWorkloadsScopeEntries,
-      namespaceWorkloadsMetricsScopeEntries,
       namespaceAutoscalingScopeEntries,
       namespaceConfigScopeEntries,
       namespaceEventsScopeEntries,
@@ -759,7 +735,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceQuotasScopeEntries,
       namespaceRBACScopeEntries,
       namespaceStorageScopeEntries,
-      podMetricsScopeEntries,
     ]
   );
 
@@ -1271,7 +1246,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName: DOMAIN_REFRESHER_MAP.pods,
         streamActive,
         streamHealthy,
-        metricsOnly: false,
+        // pods joins live usage at serve: the refresher keeps polling at the
+        // metrics interval even while the object stream is healthy.
+        metricsOnly: true,
       });
       const modeDetails = resolveModeDetails({
         domain: 'pods',
@@ -1279,7 +1256,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         streamActive,
         streamHealthy,
         pollingEnabled: pollingDetails.enabled,
-        metricsOnly: false,
+        metricsOnly: true,
       });
       const healthDetails = resolveHealthDetails({
         domain: 'pods',
@@ -1344,7 +1321,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         telemetryStatus,
         telemetryTooltip,
         metricsStatus: 'N/A',
-        metricsTooltip: 'Pod metrics are reported by the pods-metrics domain',
+        metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
         hasMetrics: false,
         count,
         countDisplay,

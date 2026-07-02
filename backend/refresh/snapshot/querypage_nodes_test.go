@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"testing"
-
-	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
 func makeNodeRows(n int) []NodeSummary {
@@ -114,29 +112,17 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 	}
 }
 
-func TestNodeMetricsQueryViaStoreEquivalent(t *testing.T) {
-	adapter := nodeMetricTableQueryAdapter()
-	baseRows := makeNodeRows(250)
-	items := make([]NodeMetricRow, 0, len(baseRows))
-	for _, base := range baseRows {
-		items = append(items, NodeMetricRow{
-			ClusterMeta: ClusterMeta{ClusterID: "c"},
-			Group:       nodepkg.Identity.Group,
-			Version:     nodepkg.Identity.Version,
-			Kind:        nodepkg.Identity.Kind,
-			Resource:    nodepkg.Identity.Resource,
-			Name:        base.Name,
-			RowKey:      nodeTableQueryAdapter().Key(base),
-			CPUUsage:    base.CPUUsage,
-			MemoryUsage: base.MemoryUsage,
-			base:        base,
-		})
-	}
+// TestNodeMetricSortQueryViaStoreEquivalent proves the engine serves cpu/memory
+// (live usage) sorts byte-identically to the live executor on the BASE nodes
+// adapter — the query shape metric-sorted tables use after the serve-time join.
+func TestNodeMetricSortQueryViaStoreEquivalent(t *testing.T) {
+	adapter := nodeTableQueryAdapter()
+	items := makeNodeRows(250)
 
-	paginate := func(serve func(typedTableQuery) typedTableQueryPage[NodeMetricRow], base typedTableQuery) ([]string, typedTableQueryPage[NodeMetricRow]) {
+	paginate := func(serve func(typedTableQuery) typedTableQueryPage[NodeSummary], base typedTableQuery) ([]string, typedTableQueryPage[NodeSummary]) {
 		q := base
 		var keys []string
-		var first typedTableQueryPage[NodeMetricRow]
+		var first typedTableQueryPage[NodeSummary]
 		for i := 0; ; i++ {
 			if i > 1000 {
 				t.Fatal("pagination did not terminate")
@@ -169,11 +155,11 @@ func TestNodeMetricsQueryViaStoreEquivalent(t *testing.T) {
 				},
 				DynamicRevision: "metrics-rev-1",
 			}
-			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeMetricRow] {
+			liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeSummary] {
 				return applyTypedTableQuery(items, q, adapter)
 			}, base)
-			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeMetricRow] {
-				return applyTypedTableQueryViaStore(items, q, adapter, nodeMetricQuerypageSchema())
+			engineKeys, engineFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeSummary] {
+				return applyTypedTableQueryViaStore(items, q, adapter, nodesQuerypageSchema())
 			}, base)
 
 			label := fmt.Sprintf("sort=%q dir=%s", sf, d)

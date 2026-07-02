@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveResourceMetricsScope } from './scope';
 
 describe('resolveResourceMetricsScope', () => {
-  it('routes Pod metrics to the cluster-prefixed namespace pod metrics scope', () => {
+  it('routes Pod metrics to the pods base domain in the cluster-prefixed namespace scope', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-a',
@@ -13,17 +13,15 @@ describe('resolveResourceMetricsScope', () => {
         namespace: 'team-a',
         name: 'api-7c9d',
       })
-    ).toMatchObject({
+    ).toEqual({
       kind: 'domain',
       source: 'pods',
-      domain: 'pods-metrics',
+      domain: 'pods',
       scope: 'cluster-a|namespace:team-a',
-      baseDomain: 'pods',
-      baseScope: 'cluster-a|namespace:team-a',
     });
   });
 
-  it('routes Deployment metrics to namespace-workloads metrics in the object cluster', () => {
+  it('routes Deployment metrics to the namespace-workloads base domain in the object cluster', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-b',
@@ -33,17 +31,15 @@ describe('resolveResourceMetricsScope', () => {
         namespace: 'team-b',
         name: 'api',
       })
-    ).toMatchObject({
+    ).toEqual({
       kind: 'domain',
       source: 'namespace-workloads',
-      domain: 'namespace-workloads-metrics',
+      domain: 'namespace-workloads',
       scope: 'cluster-b|namespace:team-b',
-      baseDomain: 'namespace-workloads',
-      baseScope: 'cluster-b|namespace:team-b',
     });
   });
 
-  it('routes Node metrics to the cluster nodes scope', () => {
+  it('routes Node metrics to the nodes base domain in the cluster scope', () => {
     expect(
       resolveResourceMetricsScope({
         clusterId: 'cluster-c',
@@ -52,13 +48,11 @@ describe('resolveResourceMetricsScope', () => {
         kind: 'Node',
         name: 'ip-10-0-0-1',
       })
-    ).toMatchObject({
+    ).toEqual({
       kind: 'domain',
       source: 'nodes',
-      domain: 'nodes-metrics',
+      domain: 'nodes',
       scope: 'cluster-c|',
-      baseDomain: 'nodes',
-      baseScope: 'cluster-c|',
     });
   });
 

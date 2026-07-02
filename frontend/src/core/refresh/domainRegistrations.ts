@@ -70,14 +70,15 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     'object-helm-values'
   );
   registerContainerLogsDomain();
-  resourceStreamDomain('pods');
-  registerSnapshotDomains('pods-metrics');
+  // pods/nodes/namespace-workloads join live usage at serve, so their refresher
+  // keeps polling (at the metrics min-interval) even while the object stream is
+  // healthy — the poll is what advances the metric clock between object events.
+  resourceStreamDomain('pods', { metricsOnly: true });
 
   doorbellStreamDomain('catalog');
   registerSnapshotDomains('catalog-diff');
   doorbellStreamDomain('cluster-events');
-  resourceStreamDomain('nodes');
-  registerSnapshotDomains('nodes-metrics');
+  resourceStreamDomain('nodes', { metricsOnly: true });
   resourceStreamDomain('cluster-rbac');
   resourceStreamDomain('cluster-storage');
   resourceStreamDomain('cluster-config');
@@ -85,8 +86,7 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   resourceStreamDomain('cluster-custom');
 
   doorbellStreamDomain('namespace-events');
-  resourceStreamDomain('namespace-workloads');
-  registerSnapshotDomains('namespace-workloads-metrics');
+  resourceStreamDomain('namespace-workloads', { metricsOnly: true });
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');
   resourceStreamDomain('namespace-rbac');

@@ -33,7 +33,10 @@ the completed `v2` rewrite plan.
 4. **Object state and metrics are two sources joined by UID.** Object columns are
    stored; metrics (CPU/mem) are **overlaid at serve** from the poller
    (`LatestPodUsage()`), never written to the store. A metrics poll must never re-project
-   or re-store an object row.
+   or re-store an object row. The join happens inside the BASE table domains
+   (`pods`/`nodes`/`namespace-workloads`, which carry an extra `metric` source clock) —
+   there are no separate `*-metrics` domains and no client-side metric join
+   (see [`resource-metrics.md`](./resource-metrics.md)).
 5. **All object references carry `clusterId` + group/version/kind** (+ namespace/name
    when specific) — see [`multi-cluster.md`](./multi-cluster.md).
 

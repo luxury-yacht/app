@@ -16,12 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import type {
-  PodMetricEntry,
-  PodMetricsInfo,
-  PodMetricsSnapshotPayload,
-  PodSnapshotEntry,
-} from '@/core/refresh/types';
+import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import {
   getPodsUnhealthyStorageKey,
@@ -59,7 +54,6 @@ interface PodsViewProps {
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
-const METRIC_NO_DATA = '-';
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -82,18 +76,6 @@ const getReadySortValue = (value?: string | null): number => {
   }
   return counts.ready * 1000000 + counts.total;
 };
-
-const podMetricRowKey = (pod: Pick<PodSnapshotEntry, 'namespace' | 'name'>): string =>
-  `${pod.namespace ?? ''}/${pod.name ?? ''}`.toLowerCase();
-
-const mergePodMetric = (
-  pod: PodSnapshotEntry,
-  metric: PodMetricEntry | undefined
-): PodSnapshotEntry => ({
-  ...pod,
-  cpuUsage: metric?.cpuUsage ?? METRIC_NO_DATA,
-  memUsage: metric?.memUsage ?? METRIC_NO_DATA,
-});
 
 const podMetricsState = (info: PodMetricsInfo | null | undefined) => ({
   stale: Boolean(info?.stale),
@@ -511,31 +493,16 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [unhealthyToggle]
     );
 
-    const metricOverlay = useMemo(
-      () => ({
-        domain: 'pods-metrics' as const,
-        label: `${diagnosticsLabel} Metrics`,
-        selectRows: (payload: unknown) => (payload as PodMetricsSnapshotPayload).rows ?? [],
-        getBaseRowKey: podMetricRowKey,
-        getMetricRowKey: (row: unknown) => (row as PodMetricEntry).rowKey,
-        mergeMetric: (row: PodSnapshotEntry, metric: unknown) =>
-          mergePodMetric(row, metric as PodMetricEntry | undefined),
-      }),
-      [diagnosticsLabel]
-    );
-
     const {
       gridTableProps: resolvedGridTableProps,
       favModal,
       source,
       queryPayload,
-      metricPayload,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
       clusterId: queryClusterId,
       domain: 'pods',
       label: diagnosticsLabel,
-      metricOverlay,
       predicates: podQueryPredicates,
       selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
@@ -553,8 +520,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
-    const podMetricsPayload = metricPayload as PodMetricsSnapshotPayload | null | undefined;
-    const tableMetrics = podMetricsPayload?.metrics ?? null;
+    // The base query payload carries the poller freshness block for the usage
+    // joined onto the rows at serve.
+    const tableMetrics = queryPayload?.metrics ?? null;
     const effectiveMetrics = tableMetrics ?? fallbackMetrics;
     const metricsBanner = useMemo(
       () => getMetricsBannerInfo(effectiveMetrics ?? null),

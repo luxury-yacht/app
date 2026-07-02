@@ -287,9 +287,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.data).toEqual([
-      { ...workload, cpuUsage: '-', memUsage: '-' },
-    ]);
+    expect(gridTablePropsRef.current?.data).toEqual([workload]);
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'namespace-workloads',
@@ -345,9 +343,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.data).toEqual([
-      { ...queryWorkload, cpuUsage: '-', memUsage: '-' },
-    ]);
+    expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
     expect(gridTablePropsRef.current?.paginationControls?.props).toMatchObject({
       pageIndex: 1,
       pageSize: 50,
@@ -364,7 +360,7 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it('overlays all-namespaces workload rows with namespace-workloads-metrics rows', async () => {
+  it('renders all-namespaces workload rows with usage joined at serve by the single base query', async () => {
     const queryWorkload = {
       kind: 'Deployment',
       name: 'api',
@@ -375,44 +371,24 @@ describe('NsViewWorkloads', () => {
       age: '5m',
       clusterId: 'path:context',
       clusterName: 'ctx',
+      cpuUsage: '250m',
+      memUsage: '128Mi',
     };
-    requestRefreshDomainStateMock.mockImplementation(({ domain }: { domain: string }) =>
-      Promise.resolve({
-        status: 'executed',
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
         data: {
-          status: 'ready',
-          data:
-            domain === 'namespace-workloads-metrics'
-              ? {
-                  rows: [
-                    {
-                      rowKey: 'deployment/team-b/api',
-                      kind: 'Deployment',
-                      namespace: 'team-b',
-                      name: 'api',
-                      ready: '1/1',
-                      cpuUsage: '250m',
-                      memUsage: '128Mi',
-                    },
-                  ],
-                  total: 1,
-                  totalIsExact: true,
-                  namespaces: ['team-b'],
-                  kinds: ['Deployment'],
-                  facetsExact: true,
-                  metrics: { stale: false, collectedAt: 1_700_000_000 },
-                }
-              : {
-                  rows: [queryWorkload],
-                  total: 1,
-                  totalIsExact: true,
-                  namespaces: ['team-b'],
-                  kinds: ['Deployment'],
-                  facetsExact: true,
-                },
+          rows: [queryWorkload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-b'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+          metrics: { stale: false, collectedAt: 1_700_000_000 },
         },
-      })
-    );
+      },
+    });
 
     await act(async () => {
       root.render(
@@ -427,21 +403,18 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.data).toEqual([
-      { ...queryWorkload, ready: '1/1', cpuUsage: '250m', memUsage: '128Mi' },
-    ]);
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'namespace-workloads-metrics',
-        scope: expect.stringContaining('namespace:all?'),
-      })
+    expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
+    // Exactly one domain serves the table: no metric-domain query and no
+    // rowKeys hydration leg ride alongside the base query.
+    const queriedRequests = requestRefreshDomainStateMock.mock.calls.map(
+      (call) => call[0] as { domain?: string; scope?: string } | undefined
     );
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'namespace-workloads-metrics',
-        scope: expect.stringContaining('predicate.rowKeys=deployment%2Fteam-b%2Fapi'),
-      })
+    expect(new Set(queriedRequests.map((request) => request?.domain))).toEqual(
+      new Set(['namespace-workloads'])
     );
+    expect(
+      queriedRequests.some((request) => (request?.scope ?? '').includes('predicate.rowKeys='))
+    ).toBe(false);
   });
 
   it('renders the backend-published kind vocabulary even when facets collapse to the selection', async () => {
@@ -561,12 +534,14 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
+    // Metrics ride the namespace-workloads domain now; the lease must stay
+    // pinned to the active cluster scope.
     expect(scopedDomainCallsRef.current).toContainEqual([
-      'namespace-workloads-metrics',
+      'namespace-workloads',
       'path:context|namespace:team-a',
     ]);
     expect(scopedDomainCallsRef.current).not.toContainEqual([
-      'namespace-workloads-metrics',
+      'namespace-workloads',
       'clusters=path:context,other:context|namespace:team-a',
     ]);
   });

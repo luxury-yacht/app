@@ -81,6 +81,7 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 		aggregates,
 		nodeMetrics,
 		podMetrics,
+		metrics.Metadata{},
 	)
 	if err != nil {
 		t.Fatalf("buildNodeSnapshotFromUsage error: %v", err)

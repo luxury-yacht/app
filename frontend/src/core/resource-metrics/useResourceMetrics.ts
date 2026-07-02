@@ -3,11 +3,8 @@ import { useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access/useScopedRefreshDomainLifecycle';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type {
-  ClusterNodeMetricsSnapshotPayload,
   ClusterNodeSnapshotPayload,
-  NamespaceWorkloadMetricsSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
-  PodMetricsSnapshotPayload,
   PodSnapshotPayload,
   RefreshDomain,
 } from '@/core/refresh/types';
@@ -16,7 +13,7 @@ import { buildResourceMetricsReference, resolveResourceMetricsScope } from './sc
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
 import type { ResourceMetricsResolution, ResourceMetricsResult } from './types';
 
-const disabledDomain: RefreshDomain = 'pods-metrics';
+const disabledDomain: RefreshDomain = 'pods';
 const disabledScope = '__resource_metrics_disabled__';
 
 const stateStatusToResult = (
@@ -55,25 +52,16 @@ export const useResourceMetrics = (
     }
   }, [objectData]);
 
+  // One lease on the base table domain: its scoped payload carries object state,
+  // the live usage joined at serve, and the poller freshness block.
   const domain = resolution.kind === 'domain' ? resolution.domain : disabledDomain;
   const scope = resolution.kind === 'domain' ? resolution.scope : disabledScope;
-  const baseDomain = resolution.kind === 'domain' ? resolution.baseDomain : disabledDomain;
-  const baseScope = resolution.kind === 'domain' ? resolution.baseScope : disabledScope;
 
   const state = useRefreshScopedDomain(domain, scope);
-  const baseState = useRefreshScopedDomain(baseDomain, baseScope);
 
   useScopedRefreshDomainLifecycle({
     domain: resolution.kind === 'domain' ? resolution.domain : null,
     scope: resolution.kind === 'domain' ? resolution.scope : null,
-    enabled: enabled && resolution.kind === 'domain',
-    preserveState: true,
-    fetchOnEnable: 'startup',
-  });
-
-  useScopedRefreshDomainLifecycle({
-    domain: resolution.kind === 'domain' ? resolution.baseDomain : null,
-    scope: resolution.kind === 'domain' ? resolution.baseScope : null,
     enabled: enabled && resolution.kind === 'domain',
     preserveState: true,
     fetchOnEnable: 'startup',
@@ -90,44 +78,19 @@ export const useResourceMetrics = (
     }
 
     let metrics = null;
-    if (resolution.domain === 'pods-metrics') {
-      metrics = selectPodMetrics(
-        state.data as PodMetricsSnapshotPayload | null,
-        baseState.data as PodSnapshotPayload | null,
-        ref
-      );
-    } else if (resolution.domain === 'namespace-workloads-metrics') {
-      metrics = selectWorkloadMetrics(
-        state.data as NamespaceWorkloadMetricsSnapshotPayload | null,
-        baseState.data as NamespaceWorkloadSnapshotPayload | null,
-        ref
-      );
-    } else if (resolution.domain === 'nodes-metrics') {
-      metrics = selectNodeMetrics(
-        state.data as ClusterNodeMetricsSnapshotPayload | null,
-        baseState.data as ClusterNodeSnapshotPayload | null,
-        ref
-      );
+    if (resolution.domain === 'pods') {
+      metrics = selectPodMetrics(state.data as PodSnapshotPayload | null, ref);
+    } else if (resolution.domain === 'namespace-workloads') {
+      metrics = selectWorkloadMetrics(state.data as NamespaceWorkloadSnapshotPayload | null, ref);
+    } else if (resolution.domain === 'nodes') {
+      metrics = selectNodeMetrics(state.data as ClusterNodeSnapshotPayload | null, ref);
     }
 
-    const metricStateLoading = state.status === 'loading' || state.status === 'initialising';
-    const status = metricStateLoading ? state.status : baseState.status;
     return {
-      status: metrics
-        ? 'available'
-        : stateStatusToResult(resolution, status, state.error ?? baseState.error),
+      status: metrics ? 'available' : stateStatusToResult(resolution, state.status, state.error),
       metrics,
       resolution,
-      error: state.error ?? baseState.error ?? null,
+      error: state.error ?? null,
     };
-  }, [
-    baseState.data,
-    baseState.error,
-    baseState.status,
-    ref,
-    resolution,
-    state.data,
-    state.error,
-    state.status,
-  ]);
+  }, [ref, resolution, state.data, state.error, state.status]);
 };

@@ -1,9 +1,5 @@
 import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
-import {
-  getResourceStreamDomainDescriptor,
-  normalizeResourceScope,
-  type DoorbellDomain,
-} from './resourceStreamDomains';
+import { normalizeResourceScope, type DoorbellDomain } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
 export type ResourceStreamUpdateMessage = {
   type?: string;
@@ -48,7 +44,6 @@ export type StreamSubscription = {
   pendingReset: boolean;
   resyncInFlight: boolean;
   lastResyncAt: number;
-  preserveMetrics: boolean;
 };
 
 type PendingUnsubscribe = {
@@ -303,7 +298,6 @@ export class ResourceStreamSubscriptionStore {
       pendingReset: false,
       resyncInFlight: false,
       lastResyncAt: 0,
-      preserveMetrics: getResourceStreamDomainDescriptor(domain).preserveMetrics,
     };
     this.subscriptions.set(key, subscription);
     this.logInfo(

@@ -16,11 +16,10 @@ const sortedDomains = (domains: Set<string>) => Array.from(domains).sort();
 
 describe('diagnosticsPanelConfig domain behavior sets', () => {
   test('pins metric-interval domains derived from the contract', () => {
-    expect(sortedDomains(METRICS_ONLY_DOMAINS)).toEqual([
-      'namespace-workloads-metrics',
-      'nodes-metrics',
-      'pods-metrics',
-    ]);
+    // The metric refresh domains were deleted; usage is joined onto the base
+    // domains' rows at serve, so the base domains declare the metric clock and
+    // run on the metrics interval.
+    expect(sortedDomains(METRICS_ONLY_DOMAINS)).toEqual(['namespace-workloads', 'nodes', 'pods']);
   });
 
   test('pins stream-only domains derived from the contract', () => {
@@ -28,6 +27,8 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
   });
 
   test('pins domains that pause polling while streaming', () => {
+    // pods/nodes/namespace-workloads now carry the metric clock, so they run on
+    // the metrics interval instead of pausing polling while streaming.
     expect(sortedDomains(PAUSE_POLLING_WHEN_STREAMING_DOMAINS)).toEqual([
       'catalog',
       'cluster-config',
@@ -45,9 +46,6 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'namespace-quotas',
       'namespace-rbac',
       'namespace-storage',
-      'namespace-workloads',
-      'nodes',
-      'pods',
     ]);
   });
 });

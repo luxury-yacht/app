@@ -1279,16 +1279,18 @@ class RefreshOrchestrator {
   }
 
   private isMetricsDemandActive(): boolean {
+    // The metric-bearing domains join live usage at serve, so any active lease
+    // on them (a table or object panel) is metrics demand for the backend poller.
     if (this.hasEnabledScopedSources('cluster-overview')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('nodes-metrics')) {
+    if (this.hasEnabledScopedSources('nodes')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('pods-metrics')) {
+    if (this.hasEnabledScopedSources('pods')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('namespace-workloads-metrics')) {
+    if (this.hasEnabledScopedSources('namespace-workloads')) {
       return true;
     }
     return false;

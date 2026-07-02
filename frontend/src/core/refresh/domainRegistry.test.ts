@@ -49,12 +49,10 @@ describe('refresh domain registry', () => {
     expect(PRIORITY_DOMAINS).toEqual([
       'namespaces',
       'nodes',
-      'nodes-metrics',
       'object-maintenance',
       'cluster-overview',
       'catalog',
       'namespace-workloads',
-      'namespace-workloads-metrics',
     ]);
   });
 

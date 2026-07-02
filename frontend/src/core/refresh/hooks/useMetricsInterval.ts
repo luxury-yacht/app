@@ -7,18 +7,13 @@
 import { eventBus } from '@/core/events';
 import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import { refreshManager } from '../RefreshManager';
-import {
-  CLUSTER_REFRESHERS,
-  NAMESPACE_REFRESHERS,
-  SYSTEM_REFRESHERS,
-  type RefresherName,
-} from '../refresherTypes';
+import { METRICS_INTERVAL_REFRESHERS } from '../domainRegistry';
+import type { RefresherName } from '../refresherTypes';
 
-const METRICS_REFRESHERS: RefresherName[] = [
-  NAMESPACE_REFRESHERS.workloadMetrics,
-  CLUSTER_REFRESHERS.nodeMetrics,
-  SYSTEM_REFRESHERS.unifiedPodMetrics,
-];
+// Contract-derived: every refresher whose domain declares the metric source
+// clock (the base table domains that join usage at serve) follows the user's
+// metrics-interval preference.
+const METRICS_REFRESHERS: RefresherName[] = Array.from(METRICS_INTERVAL_REFRESHERS);
 
 let metricsIntervalInitialized = false;
 

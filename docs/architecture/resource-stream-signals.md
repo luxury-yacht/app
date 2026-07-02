@@ -55,11 +55,11 @@ truth.
 - `object` changes object-backed row membership, fields, sort keys, filters, or
   facts.
 - `metric` changes metric-backed values, metric freshness metadata, or
-  metric-backed sort keys. Object-sorted metric-bearing pages keep their base
-  object query result and overlay metric-domain rows for the visible row
-  identities. Metric-sorted pages query the metric domain for membership,
-  ordering, totals, cursor metadata, and metric values, then hydrate base object
-  rows by the returned identities.
+  metric-backed sort keys. Live usage is joined onto the base domains' rows at
+  serve, so a metric tick advances the snapshot's metric source clock (breaking
+  the 304 validator) without moving the object version; the page — including
+  CPU/memory sorts — is served by the one base query
+  (see [`resource-metrics.md`](./resource-metrics.md)).
 - `catalog` changes catalog-backed identity or Browse results.
 - `event` changes event-backed query results.
 

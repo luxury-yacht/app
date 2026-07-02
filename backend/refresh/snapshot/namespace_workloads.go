@@ -78,6 +78,10 @@ type NamespaceWorkloadsBuilder struct {
 	includeCronJobs     bool
 	hpaLister           autoscalinglisters.HorizontalPodAutoscalerLister
 	logger              containerlogsstream.Logger
+	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage is
+	// never written to the maintained store, so a metric tick cannot re-project stored
+	// rows. nil (a unit test) serves the no-data marker.
+	metrics metrics.Provider
 
 	// workloadsMaintained holds the workload OWN-rows (WorkloadSummary for the five workload
 	// kinds, no pod-join), fed by each workload GVR's Table-half ingest Sink.
@@ -103,16 +107,18 @@ type podWorkloadsIngestSource interface {
 	StoreResourceVersion(gvr schema.GroupVersionResource) string
 }
 
-// NamespaceWorkloadsSnapshot is returned to the frontend.
+// NamespaceWorkloadsSnapshot is returned to the frontend. Rows carry live usage joined
+// at serve from the metrics poller; Metrics is the poller's freshness/error metadata.
 type NamespaceWorkloadsSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows []WorkloadSummary `json:"rows"`
+	Rows    []WorkloadSummary `json:"rows"`
+	Metrics PodMetricsInfo    `json:"metrics"`
 }
 
 func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "age"},
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
 		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
@@ -189,6 +195,7 @@ func RegisterNamespaceWorkloadsDomain(
 		workloadIngest:      ingestManager,
 		logger:              logger,
 		workloadsMaintained: maintained,
+		metrics:             provider,
 	}
 	if perms.IncludePods {
 		// Pods is cut to the ingest path: the per-owner aggregation and standalone-pod
@@ -221,7 +228,8 @@ func RegisterNamespaceWorkloadsDomain(
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, "")
+	podUsage, metricsMetadata := latestPodMetrics(b.metrics)
+	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceWorkloadsDomainName, metricRevisionFromMetadata(metricsMetadata))
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +261,7 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, podAggregates, podSummaries, ownRows, hpas, hpaErr == nil, issues)
+	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, podAggregates, podSummaries, ownRows, hpas, hpaErr == nil, podUsage, metricsMetadata, issues)
 	if err != nil {
 		return nil, err
 	}
@@ -270,13 +278,6 @@ func (b *NamespaceWorkloadsBuilder) workloadOwnRows(ctx context.Context, namespa
 	return b.workloadsMaintained.rows(namespace, b.allowedWorkloadKinds(ctx))
 }
 
-func (b *NamespaceWorkloadsBuilder) workloadOwnRowsForDomain(ctx context.Context, domainName string, namespace string) []WorkloadSummary {
-	if b.workloadsMaintained == nil {
-		return nil
-	}
-	return b.workloadsMaintained.rows(namespace, b.allowedWorkloadKindsForDomain(ctx, domainName))
-}
-
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
@@ -286,12 +287,14 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	ownRows []WorkloadSummary,
 	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 	hpaKnown bool,
+	podUsage map[string]metrics.PodUsage,
+	metricsMetadata metrics.Metadata,
 	issues []ResourceQueryIssue,
 ) (*refresh.Snapshot, error) {
 	items, version := assembleWorkloadRows(
 		meta, podAggregates, podSummaries,
 		ownRows,
-		hpas, hpaKnown, map[string]metrics.PodUsage{},
+		hpas, hpaKnown, podUsage,
 		namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
 		namespacePodIngestVersion(b.podIngest),
 	)
@@ -309,13 +312,15 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		issues,
 	)
 	return &refresh.Snapshot{
-		Domain:  namespaceWorkloadsDomainName,
-		Scope:   scope,
-		Version: version,
+		Domain:         namespaceWorkloadsDomainName,
+		Scope:          scope,
+		Version:        version,
+		SourceVersions: metricSourceVersions(metricRevisionFromMetadata(metricsMetadata)),
 		Payload: NamespaceWorkloadsSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
+			Metrics:               podMetricsInfoFromMetadata(metricsMetadata),
 		},
 		Stats: resolved.Stats,
 	}, nil
@@ -429,27 +434,23 @@ func assembleWorkloadRows(
 // its registration include flag AND the per-request runtime permission, mirroring the list
 // path's per-kind gating so the maintained Build shows the same kinds.
 func (b *NamespaceWorkloadsBuilder) allowedWorkloadKinds(ctx context.Context) map[string]bool {
-	return b.allowedWorkloadKindsForDomain(ctx, namespaceWorkloadsDomainName)
-}
-
-func (b *NamespaceWorkloadsBuilder) allowedWorkloadKindsForDomain(ctx context.Context, domainName string) map[string]bool {
 	allowed := map[string]bool{}
-	if b.includePods && runtimeResourceAllowed(ctx, domainName, "", "pods") {
+	if b.includePods && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "", "pods") {
 		allowed[podres.Identity.Kind] = true
 	}
-	if b.includeDeployments && runtimeResourceAllowed(ctx, domainName, "apps", "deployments") {
+	if b.includeDeployments && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "deployments") {
 		allowed[deployment.Identity.Kind] = true
 	}
-	if b.includeStatefulSets && runtimeResourceAllowed(ctx, domainName, "apps", "statefulsets") {
+	if b.includeStatefulSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "statefulsets") {
 		allowed[statefulset.Identity.Kind] = true
 	}
-	if b.includeDaemonSets && runtimeResourceAllowed(ctx, domainName, "apps", "daemonsets") {
+	if b.includeDaemonSets && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "apps", "daemonsets") {
 		allowed[daemonset.Identity.Kind] = true
 	}
-	if b.includeJobs && runtimeResourceAllowed(ctx, domainName, "batch", "jobs") {
+	if b.includeJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "jobs") {
 		allowed[jobres.Identity.Kind] = true
 	}
-	if b.includeCronJobs && runtimeResourceAllowed(ctx, domainName, "batch", "cronjobs") {
+	if b.includeCronJobs && runtimeResourceAllowed(ctx, namespaceWorkloadsDomainName, "batch", "cronjobs") {
 		allowed[cronjob.Identity.Kind] = true
 	}
 	return allowed
@@ -497,10 +498,6 @@ func (b *NamespaceWorkloadsBuilder) queryIssues(ctx context.Context, query typed
 	return typedTableQueryResourceIssues(ctx, namespaceWorkloadsDomainName, query, b.resourceSources())
 }
 
-func (b *NamespaceWorkloadsBuilder) queryIssuesForDomain(ctx context.Context, domainName string, query typedTableQuery) []ResourceQueryIssue {
-	return typedTableQueryResourceIssues(ctx, domainName, query, b.resourceSources())
-}
-
 // workloadsQuerypageSchema derives the querypage Schema for the workloads table
 // from its typed-table adapter, reusing the adapter's exact sort-value encoder and
 // row key so the engine orders rows byte-identically to the live executor. The sort
@@ -508,7 +505,7 @@ func (b *NamespaceWorkloadsBuilder) queryIssuesForDomain(ctx context.Context, do
 func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
 	return querypageSchemaFromAdapter(
 		workloadTableQueryAdapter(),
-		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "age"},
+		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
 	)
 }
 
@@ -530,8 +527,6 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		},
 		Predicate: func(row WorkloadSummary, field, value string) bool {
 			switch strings.ToLower(strings.TrimSpace(field)) {
-			case "rowkeys":
-				return rowKeyPredicateMatches(value, fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name)))
 			case "health":
 				switch strings.ToLower(strings.TrimSpace(value)) {
 				case "restarts":
@@ -561,6 +556,10 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 				return row.Ready
 			case "restarts":
 				return strconv.Itoa(int(row.Restarts))
+			case "cpu":
+				return row.CPUUsage
+			case "memory":
+				return row.MemUsage
 			case "age":
 				return row.Age
 			default:
@@ -569,6 +568,10 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		},
 		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
+			case "cpu":
+				return parseFormattedCPUToMilli(row.CPUUsage)
+			case "memory":
+				return parseFormattedMemoryToBytes(row.MemUsage)
 			case "restarts":
 				return float64(row.Restarts), true
 			case "ready":
