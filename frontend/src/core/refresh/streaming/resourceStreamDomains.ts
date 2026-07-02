@@ -224,6 +224,13 @@ export const isSupportedDomain = (value: string | undefined): value is DoorbellD
 export const isResourceStreamSourceClock = (value: unknown): value is ResourceStreamSourceClock =>
   value === 'object' || value === 'metric' || value === 'event' || value === 'catalog';
 
+// The doorbell clocks a domain declares in the contract. Signal-driven refetch
+// hooks key on THESE clock values (never the folded sourceVersion): payload
+// applies rewrite sourceVersion/other clocks on every build, and keying on
+// those turns each fetch response into another "signal" — a fetch loop.
+export const doorbellSourceClocks = (domain: string): readonly ResourceStreamSourceClock[] =>
+  sourceClocksByDomain.get(domain as DoorbellDomain) ?? [];
+
 export const domainSupportsSourceClock = (
   domain: DoorbellDomain,
   source: ResourceStreamSourceClock

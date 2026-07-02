@@ -340,10 +340,12 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
+    // 'stream-signal' is load-bearing: a 'background' fetch is skipped by the
+    // stream-healthy gate, silently swallowing the doorbell.
     expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
       domain: 'catalog',
       scope: baseScope,
-      reason: 'background',
+      reason: 'stream-signal',
     });
   });
 

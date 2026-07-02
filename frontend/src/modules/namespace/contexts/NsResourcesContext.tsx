@@ -19,6 +19,7 @@ import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
 import type { SnapshotStats } from '@/core/refresh/client';
 import { useRefreshDomainHandle } from '@/core/data-access';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import {
   ALL_NAMESPACE_PERMISSIONS,
   AUTOSCALING_PERMISSIONS,
@@ -182,6 +183,9 @@ const useNamespacePodsResource = (
     preserveState: true,
   });
   const domainState = scope ? podDomainState : undefined;
+  // Same signal-driven refetch as the generic resource hook above.
+  const podSignalScopes = useMemo(() => (enabled && scope ? [scope] : []), [enabled, scope]);
+  useStreamSignalRefetch('pods', podSignalScopes);
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
@@ -292,6 +296,13 @@ function useRefreshBackedResource<T>(
     preserveState: true,
   });
   const domainData = domainState.data;
+  // Streams only signal; polls skip while healthy. Consumers of this context's
+  // .data (not the query-backed tables) need the signal-driven refetch.
+  const signalScopes = useMemo(
+    () => (enabled && namespaceScope ? [namespaceScope] : []),
+    [enabled, namespaceScope]
+  );
+  useStreamSignalRefetch(domain, signalScopes);
 
   const load = useCallback(
     async (_showSpinner: boolean = true) => {

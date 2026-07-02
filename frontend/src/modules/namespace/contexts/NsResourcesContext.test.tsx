@@ -103,6 +103,9 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
 
 vi.mock('@/core/refresh/store', () => ({
   resetScopedDomainState: (...args: unknown[]) => storeMocks.resetScopedDomainState(...args),
+  // The shared stream-signal refetch hook reads scoped states reactively; an
+  // empty record means "no signals" for these tests.
+  useRefreshScopedDomainStates: () => ({}),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({

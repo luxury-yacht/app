@@ -300,10 +300,13 @@ describe('refresh domain contract', () => {
         case 'doorbell-snapshot':
           // Doorbell-refetched snapshot domain (namespaces): streaming wiring
           // exists for the signal-only doorbell, but it is not a resource
-          // table domain and its clock is the object doorbell.
+          // table domain and its clock is the object doorbell. Its doorbell
+          // rides the resources WebSocket, so diagnostics reflect that stream
+          // instead of mislabeling the domain as polling.
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           expect(entry.sourceClocks).toEqual(['object']);
+          expect(entry.frontend.diagnosticsStream).toBe('resources');
           break;
         case 'resource-stream':
           expect(registration?.streaming).toBeDefined();

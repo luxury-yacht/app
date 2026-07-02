@@ -685,7 +685,7 @@
       "frontend": {
         "refresherName": "namespaces",
         "orchestrator": "doorbell-snapshot",
-        "diagnosticsStream": null,
+        "diagnosticsStream": "resources",
         "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 },
         "priority": 0
       }

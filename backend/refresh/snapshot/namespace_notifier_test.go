@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -215,6 +216,40 @@ func TestNamespaceUpdateIsEchoSkipsResyncDeliveries(t *testing.T) {
 	require.False(t, namespaceUpdateIsEcho(older, newer), "advanced ResourceVersion is a real update")
 	require.False(t, namespaceUpdateIsEcho(nil, newer), "unrecognized old object must not suppress")
 	require.False(t, namespaceUpdateIsEcho(older, nil), "unrecognized new object must not suppress")
+}
+
+// While the workload stores are SETTLING (tracker not ready) the presence
+// signature changes on nearly every ingest batch; unthrottled, that is a
+// doorbell (and a client refetch) every debounce tick for the whole initial
+// sync (observed live as a fetch storm during cluster warm-up). Presence
+// broadcasts are capped at the legacy poll cadence while settling; the
+// ready flip itself stays immediate.
+func TestNamespaceNotifierThrottlesPresenceBroadcastsWhileSettling(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(false, "ns-1")
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	notifier.notReadyMinInterval = 250 * time.Millisecond
+	defer notifier.Stop()
+
+	// Baseline broadcast.
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 1)
+
+	// Rapid presence churn while settling: throttled, not one per debounce.
+	for i := 0; i < 6; i++ {
+		ingest.set(false, "ns-1", fmt.Sprintf("ns-%d", i+2))
+		notifier.WorkloadChanged()
+		time.Sleep(40 * time.Millisecond)
+	}
+	// 6 changes over ~240ms with a 250ms floor: at most one more broadcast.
+	time.Sleep(60 * time.Millisecond)
+	if got := recorder.count(); got > 2 {
+		t.Fatalf("settling presence churn must be throttled, got %d broadcasts", got)
+	}
+
+	// The throttled change is not lost: it lands once the floor elapses.
+	waitForBroadcasts(t, recorder, 2)
 }
 
 // Events arriving before the broadcast sink is wired are retained, not lost.

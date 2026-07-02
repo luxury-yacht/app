@@ -23,11 +23,8 @@ import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
-import {
-  refreshOrchestrator,
-  useRefreshScopedDomain,
-  useRefreshScopedDomainStates,
-} from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -126,29 +123,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
   // Doorbell refetch: the namespaces stream signal only bumps the scoped
-  // object clock (`sourceVersions.object`) — the snapshot itself must be
-  // refetched here. The key is loop-free because a snapshot apply REPLACES
-  // sourceVersions with the payload's own map, which for namespaces carries no
-  // object clock; only a doorbell sets it. Covers every leased cluster scope so
-  // background cluster tabs stay fresh too.
-  const namespaceDomainStates = useRefreshScopedDomainStates('namespaces');
-  const namespaceDoorbellVersionsRef = useRef<Map<string, string>>(new Map());
-  useEffect(() => {
-    const leasedScopes = new Set(
-      namespaceScopes.length > 0 ? namespaceScopes : namespacesScope ? [namespacesScope] : []
-    );
-    Object.entries(namespaceDomainStates).forEach(([scope, scopedState]) => {
-      if (!leasedScopes.has(scope)) {
-        return;
-      }
-      const signal = scopedState?.sourceVersions?.object;
-      if (!signal || namespaceDoorbellVersionsRef.current.get(scope) === signal) {
-        return;
-      }
-      namespaceDoorbellVersionsRef.current.set(scope, signal);
-      void requestRefreshDomain({ domain: 'namespaces', scope, reason: 'stream-signal' });
-    });
-  }, [namespaceDomainStates, namespaceScopes, namespacesScope]);
+  // sourceVersion — the snapshot itself must be refetched. The shared hook
+  // covers every leased cluster scope so background cluster tabs stay fresh.
+  const namespaceSignalScopes = useMemo(
+    () => (namespaceScopes.length > 0 ? namespaceScopes : namespacesScope ? [namespacesScope] : []),
+    [namespaceScopes, namespacesScope]
+  );
+  useStreamSignalRefetch('namespaces', namespaceSignalScopes);
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<

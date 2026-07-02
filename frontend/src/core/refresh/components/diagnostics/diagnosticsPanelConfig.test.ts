@@ -41,6 +41,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'namespace-rbac',
       'namespace-storage',
       'namespace-workloads',
+      'namespaces',
       'nodes',
       'pods',
     ]);

@@ -29,6 +29,7 @@ import {
   useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -318,6 +319,40 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     'cluster-events',
     getScopeForDomain('cluster-events')
   );
+
+  // Streams only signal; polls skip while healthy. The query-backed cluster
+  // tables refetch on their own, but consumers of this context's .data need
+  // the signal-driven refetch for each leased domain scope.
+  const nodesSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('nodes')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('nodes', nodesSignalScopes);
+  const rbacSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('cluster-rbac')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('cluster-rbac', rbacSignalScopes);
+  const storageSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('cluster-storage')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('cluster-storage', storageSignalScopes);
+  const configSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('cluster-config')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('cluster-config', configSignalScopes);
+  const crdSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('cluster-crds')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('cluster-crds', crdSignalScopes);
+  const eventsSignalScopes = useMemo(
+    () => (clusterScope ? [getScopeForDomain('cluster-events')] : []),
+    [clusterScope, getScopeForDomain]
+  );
+  useStreamSignalRefetch('cluster-events', eventsSignalScopes);
   // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
   const permissionClusterId = selectedClusterId || null;
 

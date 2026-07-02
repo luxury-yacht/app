@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 
 let mockClusterId = 'cluster-a';
@@ -538,10 +539,17 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
-  it('refetches a scope when its doorbell object clock advances, exactly once per signal', () => {
-    namespaceDomainsByScopeRef.current = {
-      'cluster-a|': createNamespaceDomain('ready', ['alpha']),
-    };
+  it('refetches a scope when its doorbell signal advances the sourceVersion, exactly once per signal', () => {
+    // The stream-signal hook reads the REAL scoped store. Initial state carries
+    // the initial fetch's validator (applySnapshot always sets sourceVersion
+    // after a 200) — the hook consumes it without fetching.
+    setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: { clusterId: 'cluster-a', namespaces: [] } as never,
+      sourceVersion: 'validator-1',
+      scope: 'cluster-a|',
+    }));
 
     const { cleanup, rerender } = renderWithProvider();
     act(() => {
@@ -549,14 +557,14 @@ describe('NamespaceProvider selection behaviour', () => {
     });
     mockRefreshOrchestrator.fetchScopedDomain.mockClear();
 
-    // Doorbell: the stream signal bumps only the scoped object clock.
-    namespaceDomainsByScopeRef.current = {
-      'cluster-a|': {
-        ...createNamespaceDomain('ready', ['alpha']),
+    // Doorbell: the stream signal advances the scoped sourceVersion.
+    act(() => {
+      setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
+        ...previous,
+        sourceVersion: 'ns-1',
         sourceVersions: { object: 'ns-1' },
-      },
-    };
-    rerender();
+      }));
+    });
     act(() => {
       vi.runAllTimers();
     });
@@ -566,8 +574,7 @@ describe('NamespaceProvider selection behaviour', () => {
       { isManual: false, streamSignal: true }
     );
 
-    // The same signal version must not refetch again (no loop after the 200
-    // replaces sourceVersions with the payload's own map).
+    // The same signal version must not refetch again.
     mockRefreshOrchestrator.fetchScopedDomain.mockClear();
     rerender();
     act(() => {
@@ -575,6 +582,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     cleanup();
+    resetAllScopedDomainStates('namespaces');
   });
 
   it('uses a startup request for the initial namespace load', () => {

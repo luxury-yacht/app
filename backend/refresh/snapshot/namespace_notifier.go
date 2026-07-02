@@ -11,6 +11,14 @@ import (
 // pods, a reflector relist) into one doorbell.
 const namespaceNotifierDebounce = 500 * time.Millisecond
 
+// namespaceNotifierNotReadySettleInterval caps presence-change broadcasts while
+// the workload stores are still SETTLING: the presence signature changes on
+// nearly every ingest batch during initial sync, and an unthrottled doorbell
+// per debounce tick is a client refetch storm for the whole warm-up. Matches
+// the legacy poll cadence, so incremental dimming resolves no slower than the
+// polling it replaced. Namespace-object events and the ready flip bypass it.
+const namespaceNotifierNotReadySettleInterval = 2 * time.Second
+
 // NamespaceChangeNotifier turns the (rare) events that change the namespaces
 // snapshot into a doorbell broadcast, replacing the frontend's 2s poll:
 //
@@ -43,8 +51,12 @@ type NamespaceChangeNotifier struct {
 	// tracker settled; a not-ready signature must be recomputed on the rearm
 	// tick even with no new events, so the readiness flip itself broadcasts.
 	lastSignatureReady bool
-	counter            uint64
-	stopped            bool
+	// notReadyMinInterval floors presence-only broadcasts while settling; see
+	// namespaceNotifierNotReadySettleInterval. Overridable in tests.
+	notReadyMinInterval time.Duration
+	lastPresenceAt      time.Time
+	counter             uint64
+	stopped             bool
 }
 
 // NewNamespaceChangeNotifier builds a notifier over the same ingest source and
@@ -52,9 +64,10 @@ type NamespaceChangeNotifier struct {
 // drift from what Build serves.
 func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker) *NamespaceChangeNotifier {
 	return &NamespaceChangeNotifier{
-		ingest:   ingest,
-		tracker:  tracker,
-		debounce: namespaceNotifierDebounce,
+		ingest:              ingest,
+		tracker:             tracker,
+		debounce:            namespaceNotifierDebounce,
+		notReadyMinInterval: namespaceNotifierNotReadySettleInterval,
 	}
 }
 
@@ -157,15 +170,25 @@ func (n *NamespaceChangeNotifier) flush() {
 		n.mu.Lock()
 		if !n.signatureKnown || signature != n.lastSignature {
 			hadSignature := n.signatureKnown
-			n.signatureKnown = true
-			n.lastSignature = signature
-			switch {
-			case !hadSignature:
-				reasons = append(reasons, "workload-presence baseline established")
-			case !ready:
-				reasons = append(reasons, "workload presence changed while stores are still settling")
-			default:
-				reasons = append(reasons, "workload presence changed (a namespace gained its first or lost its last workload, or the stores finished settling)")
+			// Presence-only churn while SETTLING is floored to the legacy poll
+			// cadence: leave the signature un-consumed so the rearm tick
+			// re-evaluates it once the floor elapses — the change is deferred,
+			// never lost (and the ready flip fires regardless, via the ready
+			// bit changing the signature after lastSignatureReady=false).
+			throttled := hadSignature && !ready && !namespaceDirty &&
+				time.Since(n.lastPresenceAt) < n.notReadyMinInterval
+			if !throttled {
+				n.signatureKnown = true
+				n.lastSignature = signature
+				n.lastPresenceAt = time.Now()
+				switch {
+				case !hadSignature:
+					reasons = append(reasons, "workload-presence baseline established")
+				case !ready:
+					reasons = append(reasons, "workload presence changed while stores are still settling")
+				default:
+					reasons = append(reasons, "workload presence changed (a namespace gained its first or lost its last workload, or the stores finished settling)")
+				}
 			}
 		}
 		n.lastSignatureReady = ready

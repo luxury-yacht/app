@@ -537,13 +537,17 @@ export function useBrowseCatalog({
     }
 
     const currentPageToken = currentPageTokenRef.current;
+    // These fetches are triggered BY the catalog doorbell: 'stream-signal' is
+    // the one non-manual reason the skip-while-stream-healthy gate never
+    // swallows. With 'background' the refetch was skipped for a loaded scope
+    // while the stream was healthy — the doorbell silently did nothing.
     if (currentPageToken) {
-      requestPage(currentPageToken, 'current', 'background');
+      requestPage(currentPageToken, 'current', 'stream-signal');
     } else {
-      void refreshCatalogScope('background');
+      void refreshCatalogScope('stream-signal');
     }
     if (!metadataUsesActiveScope) {
-      void refreshMetadataScope('background');
+      void refreshMetadataScope('stream-signal');
     }
   }, [
     catalogLiveVersion,
