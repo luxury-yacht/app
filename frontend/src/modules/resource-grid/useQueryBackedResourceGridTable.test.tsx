@@ -39,6 +39,8 @@ const {
       data?: unknown;
       version?: number;
       sourceVersion?: string;
+      sourceVersions?: Record<string, string>;
+      streamRevision?: number;
       checksum?: string;
       lastUpdated?: number;
     },
@@ -377,6 +379,54 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         domain: 'pods',
         liveDataVersion: 'source:3',
       })
+    );
+  });
+
+  it('refetches on a metric-only doorbell: the folded sourceVersion advances while data, object version, and checksum stay unchanged', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'pods',
+        label: 'All Namespaces Pods',
+        selectRows,
+        viewId: 'namespace-pods',
+        namespace: ALL_NAMESPACES_SCOPE,
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ domain: 'pods', liveDataVersion: 'source:1' })
+    );
+
+    // Mirror what resourceStreamManager.bumpSourceVersionOnly writes when the
+    // backend metric doorbell arrives (version = the poller collection
+    // revision): the metric clock AND the folded sourceVersion advance. Data,
+    // object version, and checksum stay untouched — no object event happened.
+    const doorbellRevision = '1719964800000000000';
+    liveDomainStateRef.current = {
+      ...liveDomainStateRef.current,
+      status: 'ready',
+      sourceVersion: doorbellRevision,
+      sourceVersions: { metric: doorbellRevision },
+      streamRevision: 1,
+      lastUpdated: 12,
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    // The refetch identity keys on the folded sourceVersion, so the metric
+    // tick alone — no object change — must produce a new liveDataVersion.
+    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ domain: 'pods', liveDataVersion: doorbellRevision })
     );
   });
 

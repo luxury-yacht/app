@@ -137,7 +137,7 @@ describe('useTypedResourceQuery', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
   });
 
-  it('fetchAllRows can walk an override query scope for exact row-key hydration', async () => {
+  it('fetchAllRows can walk an override query scope with custom filters and predicates', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: { status: 'ready', data: { rows: [] } },
@@ -171,8 +171,8 @@ describe('useTypedResourceQuery', () => {
         },
         sortConfig: { key: 'cpu', direction: 'desc' },
         pageLimit: 25,
-        predicates: { rowKeys: 'team-a/api|team-a/worker' },
-        label: 'Pod Metrics Export',
+        predicates: { owner: 'team-a/api|team-a/worker' },
+        label: 'Pod Export',
       });
     });
 
@@ -181,7 +181,7 @@ describe('useTypedResourceQuery', () => {
     expect(requestRefreshDomainStateMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        label: 'Pod Metrics Export',
+        label: 'Pod Export',
         scope: expect.stringContaining('limit=25'),
       })
     );
@@ -192,7 +192,7 @@ describe('useTypedResourceQuery', () => {
     expect(firstScope).toContain('kinds=Pod');
     expect(firstScope).toContain('sort=cpu');
     expect(firstScope).toContain('sortDirection=desc');
-    expect(firstScope).toContain('predicate.rowKeys=team-a%2Fapi%7Cteam-a%2Fworker');
+    expect(firstScope).toContain('predicate.owner=team-a%2Fapi%7Cteam-a%2Fworker');
     const secondScope = requestRefreshDomainStateMock.mock.calls[1][0].scope as string;
     expect(secondScope).toContain('continue=cursor-1');
   });
