@@ -140,6 +140,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const selectedNamespaceClusterId =
     selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
   const lastErrorRef = useRef<string | null>(null);
+  const namespaceScopesRef = useRef<string[]>([]);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   const requestedNamespaceScopesRef = useRef<Set<string>>(new Set());
 
@@ -314,6 +315,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return;
     }
 
+    // Diff-based reconciliation — NEVER a blanket disable/re-enable. This
+    // effect re-runs whenever the scope-set identity changes (any tab
+    // open/close, any cluster lifecycle event), and a disable->enable cycle on
+    // an unchanged scope resets its store: the active cluster's list blanked
+    // (spinner) and its Diagnostics row churned whenever ANY OTHER cluster's
+    // tab or lifecycle moved. One cluster's state must never disturb another's.
     const activeScopeSet = new Set(namespaceScopes);
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
@@ -322,9 +329,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       }
     });
 
+    // Idempotent for already-enabled scopes (the orchestrator early-returns on
+    // an unchanged flag); preserveState keeps any genuine re-enable a quiet
+    // repaint instead of a blank-and-spin.
     namespaceScopes.forEach((scope) => {
-      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled });
+      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled, preserveState: true });
     });
+    namespaceScopesRef.current = namespaceScopes;
 
     if (!enabled) {
       clearSelection();
@@ -346,9 +357,14 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         reason: 'startup',
       });
     });
+  }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);
 
-    return () => {
-      namespaceScopes.forEach((scope) => {
+  // Unmount-only teardown: release whatever scopes are currently held. Kept
+  // separate from the reconciliation effect above so re-runs never release
+  // still-active scopes.
+  useEffect(
+    () => () => {
+      namespaceScopesRef.current.forEach((scope) => {
         setRefreshDomainEnabled({
           domain: 'namespaces',
           scope,
@@ -356,8 +372,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
           preserveState: true,
         });
       });
-    };
-  }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);
+    },
+    []
+  );
 
   useEffect(() => {
     const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;

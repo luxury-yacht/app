@@ -75,6 +75,12 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
         previousState: payload.previousState ?? '',
       });
       setStates((prev) => {
+        // Identity-stable on no-op events: consumers key derived scope lists on
+        // getClusterState identity, and a fresh Map per redundant event re-runs
+        // their reconciliation effects on every heartbeat.
+        if (prev.get(payload.clusterId!) === payload.state) {
+          return prev;
+        }
         const next = new Map(prev);
         next.set(payload.clusterId!, payload.state as ClusterLifecycleState);
         return next;

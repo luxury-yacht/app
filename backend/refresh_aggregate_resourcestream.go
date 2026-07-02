@@ -13,11 +13,56 @@ import (
 )
 
 // aggregateResourceStreamHandler multiplexes resource stream subscriptions across clusters.
+//
+// Manager/name lookups go through the handler's LIVE maps (topologyMu):
+// WebSocket sessions bind the adapter once at connect, so Update must change
+// what that same adapter resolves — a rebuilt mux with a fresh map would leave
+// every existing session rejecting late-connecting clusters forever.
 type aggregateResourceStreamHandler struct {
 	mux      *streammux.Handler
 	logger   containerlogsstream.Logger
 	recorder *telemetry.Recorder
 	mu       sync.RWMutex
+
+	topologyMu   sync.RWMutex
+	managers     map[string]*resourcestream.Manager
+	clusterNames map[string]string
+}
+
+func (h *aggregateResourceStreamHandler) setTopology(subsystems map[string]*system.Subsystem) {
+	managers := make(map[string]*resourcestream.Manager)
+	clusterNames := make(map[string]string)
+	for id, subsystem := range subsystems {
+		if subsystem == nil || subsystem.ResourceStream == nil {
+			continue
+		}
+		managers[id] = subsystem.ResourceStream
+		if subsystem.ClusterMeta.ClusterName != "" {
+			clusterNames[id] = subsystem.ClusterMeta.ClusterName
+		}
+	}
+	h.topologyMu.Lock()
+	h.managers = managers
+	h.clusterNames = clusterNames
+	h.topologyMu.Unlock()
+}
+
+func (h *aggregateResourceStreamHandler) managerFor(clusterID string) *resourcestream.Manager {
+	h.topologyMu.RLock()
+	defer h.topologyMu.RUnlock()
+	return h.managers[clusterID]
+}
+
+func (h *aggregateResourceStreamHandler) clusterNameFor(clusterID string) string {
+	h.topologyMu.RLock()
+	defer h.topologyMu.RUnlock()
+	return h.clusterNames[clusterID]
+}
+
+// sessionAdapter is the adapter sessions bind at connect time; it resolves
+// managers from the handler's live topology on every call.
+func (h *aggregateResourceStreamHandler) sessionAdapter() *resourcestream.ClusterAdapter {
+	return resourcestream.NewResolvingClusterAdapter(h.managerFor)
 }
 
 // newAggregateResourceStreamHandler builds a multiplexed resource stream handler for all clusters.
@@ -30,37 +75,26 @@ func newAggregateResourceStreamHandler(
 		logger = applog.Noop
 	}
 
-	managers := make(map[string]*resourcestream.Manager)
-	clusterNames := make(map[string]string)
-	for id, subsystem := range subsystems {
-		if subsystem == nil || subsystem.ResourceStream == nil {
-			continue
-		}
-		managers[id] = subsystem.ResourceStream
-		if subsystem.ClusterMeta.ClusterName != "" {
-			clusterNames[id] = subsystem.ClusterMeta.ClusterName
-		}
+	handler := &aggregateResourceStreamHandler{
+		logger:   logger,
+		recorder: recorder,
 	}
-	handler, err := streammux.NewHandler(streammux.Config{
-		Adapter:                    resourcestream.NewClusterAdapter(managers),
+	handler.setTopology(subsystems)
+
+	mux, err := streammux.NewHandler(streammux.Config{
+		Adapter:                    handler.sessionAdapter(),
 		Logger:                     logger,
 		Telemetry:                  recorder,
 		StreamName:                 telemetry.StreamResources,
 		SendReset:                  true,
 		AllowClusterScopedRequests: true,
-		ResolveClusterName: func(clusterID string) string {
-			return clusterNames[clusterID]
-		},
+		ResolveClusterName:         handler.clusterNameFor,
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	return &aggregateResourceStreamHandler{
-		mux:      handler,
-		logger:   logger,
-		recorder: recorder,
-	}, nil
+	handler.mux = mux
+	return handler, nil
 }
 
 // ServeHTTP upgrades the websocket and multiplexes resource subscriptions.
@@ -71,17 +105,13 @@ func (h *aggregateResourceStreamHandler) ServeHTTP(w http.ResponseWriter, r *htt
 	mux.ServeHTTP(w, r)
 }
 
-// Update rebuilds the resource stream multiplexer after selection changes.
+// Update swaps the live cluster topology after selection changes. The mux and
+// adapter stay the same instances, so sessions already bound to them resolve
+// the new managers immediately — no reconnect needed.
 func (h *aggregateResourceStreamHandler) Update(subsystems map[string]*system.Subsystem) error {
 	if h == nil {
 		return nil
 	}
-	next, err := newAggregateResourceStreamHandler(subsystems, h.logger, h.recorder)
-	if err != nil {
-		return err
-	}
-	h.mu.Lock()
-	h.mux = next.mux
-	h.mu.Unlock()
+	h.setTopology(subsystems)
 	return nil
 }

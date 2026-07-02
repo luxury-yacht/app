@@ -7,13 +7,29 @@ import (
 )
 
 // ClusterAdapter multiplexes resource stream subscriptions across cluster managers.
+//
+// It resolves managers through a lookup function on EVERY call: WebSocket
+// sessions bind their adapter once, at connect time, so a point-in-time
+// manager map would blind every existing session to clusters whose subsystems
+// come up (or are rebuilt) later — their subscribes fail with "resource stream
+// manager not available" until the socket happens to reconnect.
 type ClusterAdapter struct {
-	managers map[string]*Manager
+	resolve func(clusterID string) *Manager
 }
 
-// NewClusterAdapter builds a cluster-aware resource stream adapter.
+// NewClusterAdapter builds a cluster-aware resource stream adapter over a
+// fixed manager map (tests, single-shot wiring). Live topologies should use
+// NewResolvingClusterAdapter.
 func NewClusterAdapter(managers map[string]*Manager) *ClusterAdapter {
-	return &ClusterAdapter{managers: managers}
+	return NewResolvingClusterAdapter(func(clusterID string) *Manager {
+		return managers[clusterID]
+	})
+}
+
+// NewResolvingClusterAdapter builds an adapter that resolves the cluster's
+// manager at call time, so topology changes reach already-bound sessions.
+func NewResolvingClusterAdapter(resolve func(clusterID string) *Manager) *ClusterAdapter {
+	return &ClusterAdapter{resolve: resolve}
 }
 
 // ParseSelector converts the websocket transport scope into the typed resource
@@ -49,13 +65,13 @@ func (a *ClusterAdapter) Resume(selector streammux.Selector, since uint64) ([]st
 }
 
 func (a *ClusterAdapter) managerFor(clusterID string) (*Manager, error) {
-	if a == nil {
+	if a == nil || a.resolve == nil {
 		return nil, errors.New("resource stream adapter is required")
 	}
 	if clusterID == "" {
 		return nil, errors.New("cluster id is required")
 	}
-	manager := a.managers[clusterID]
+	manager := a.resolve(clusterID)
 	if manager == nil {
 		return nil, errors.New("resource stream manager not available")
 	}

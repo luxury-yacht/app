@@ -146,6 +146,43 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.getClusterState('cluster-b')).toBe('ready');
   });
 
+  it('keeps getClusterState identity stable when a lifecycle event repeats an unchanged state', async () => {
+    // Consumers key derived scope lists on getClusterState identity; a new
+    // identity per redundant event re-runs their reconciliation effects on
+    // every heartbeat (observed live as periodic spinner/diagnostics flicker).
+    await renderProvider();
+
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'loading',
+        previousState: 'connected',
+      });
+    });
+    const firstIdentity = stateRef.current?.getClusterState;
+    expect(firstIdentity).toBeTypeOf('function');
+
+    // Same cluster, same state: a no-op event must not mint a new identity.
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'loading',
+        previousState: 'connected',
+      });
+    });
+    expect(stateRef.current?.getClusterState).toBe(firstIdentity);
+
+    // A REAL change still updates state (and may change identity).
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'ready',
+        previousState: 'loading',
+      });
+    });
+    expect(stateRef.current?.getClusterState('cluster-a')).toBe('ready');
+  });
+
   it('subscribes to cluster:lifecycle events and updates state', async () => {
     await renderProvider();
 
