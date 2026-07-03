@@ -30,6 +30,8 @@ import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/view
 import { isMacPlatform } from '@/utils/platform';
 import type { CatalogNamespaceGroup } from '@/core/refresh/types';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -92,6 +94,26 @@ function Sidebar() {
   const { selectedClusterId } = useKubeconfig();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
+  // The catalog contributes namespace-listing truth beyond the namespaces
+  // domain (restricted-RBAC clusters where the namespace informer is denied),
+  // so the sidebar owns the active cluster's BASE catalog scope itself: a
+  // lease keeps it enabled, and the catalog doorbell refetches it — otherwise
+  // the group list freezes whenever Browse (the only other fetcher) is closed.
+  const sidebarCatalogScope = selectedClusterId?.trim()
+    ? buildClusterScope(selectedClusterId.trim(), '')
+    : null;
+  useScopedRefreshDomainLifecycle({
+    domain: 'catalog',
+    scope: sidebarCatalogScope,
+    enabled: Boolean(sidebarCatalogScope),
+    preserveState: true,
+    fetchOnEnable: 'startup',
+  });
+  const catalogSignalScopes = useMemo(
+    () => (sidebarCatalogScope ? [sidebarCatalogScope] : []),
+    [sidebarCatalogScope]
+  );
+  useStreamSignalRefetch('catalog', catalogSignalScopes);
   // Catalog is scoped — collect namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
   // scope happened to populate first.

@@ -868,9 +868,10 @@ export class ResourceStreamManager {
       // Rare by design (namespace changes/presence flips); the matching backend
       // line is "namespaces doorbell <version>: <reason> — signaling ...".
       // Together they localize a dead doorbell to the backend, the wire, or the
-      // consumer.
+      // consumer — so both halves carry the per-cluster label.
       logDebug(
-        `namespaces doorbell ${sourceVersions.object} received for scope ${subscription.reportScope}: advancing the object clock so NamespaceContext refetches the namespace list`
+        `namespaces doorbell ${sourceVersions.object} received for scope ${subscription.reportScope}: advancing the object clock so NamespaceContext refetches the namespace list`,
+        { clusterId: subscription.clusterId, clusterName: subscription.clusterName }
       );
     }
     this.forEachReportScope(subscription, (reportScope) => {

@@ -46,18 +46,7 @@ const EXEMPT_PATH_PREFIXES = ['src/core/refresh/'];
 
 // Consciously-exempt readers. Every entry needs a reason; an empty reason is a
 // bug. Prefer wiring useStreamSignalRefetch over adding entries here.
-const EXEMPT_FILES = new Map<string, string>([
-  [
-    'src/ui/layout/Sidebar.tsx',
-    // The sidebar reads catalog namespaceGroups as passive enrichment over the
-    // namespaces-domain list (which has its own doorbell): it renders whatever
-    // the catalog already knows and falls back to the legacy list otherwise.
-    // Catalog freshness is owned by Browse's doorbell refetch (active cluster,
-    // while mounted) and the background cluster refresher; the sidebar
-    // deliberately does not fetch catalog scopes it never leased.
-    'passive catalog enrichment; freshness owned by Browse + background refresher',
-  ],
-]);
+const EXEMPT_FILES = new Map<string, string>([]);
 
 export type StreamReaderViolation = {
   path: string;

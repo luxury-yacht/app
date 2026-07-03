@@ -42,6 +42,13 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+// The sidebar owns the active cluster's base catalog scope (lease + doorbell
+// refetch); these record the wiring for the pin test below.
+const catalogWiringMocks = vi.hoisted(() => ({
+  lifecycleCalls: [] as unknown[],
+  signalCalls: [] as Array<[string, readonly string[]]>,
+}));
+
 const testClusterId = 'cluster-a';
 const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 
@@ -64,6 +71,22 @@ vi.mock('@core/refresh', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: testClusterId }),
+}));
+
+vi.mock('@/core/data-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/data-access')>();
+  return {
+    ...actual,
+    useScopedRefreshDomainLifecycle: (params: unknown) => {
+      catalogWiringMocks.lifecycleCalls.push(params);
+    },
+  };
+});
+
+vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
+  useStreamSignalRefetch: (domain: string, scopes: readonly string[]) => {
+    catalogWiringMocks.signalCalls.push([domain, scopes]);
+  },
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -205,6 +228,23 @@ describe('Sidebar', () => {
       toggleButton!.click();
     });
     expect(viewStateMock.toggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  it('owns the active cluster base catalog scope: lease + doorbell refetch', () => {
+    // Without this wiring the catalog-derived namespace groups freeze whenever
+    // Browse (the only other catalog fetcher) is closed — the frozen-reader
+    // bug class the streamConsumerDrift guard enforces against.
+    renderSidebar();
+    const catalogScope = `${testClusterId}|`;
+    expect(catalogWiringMocks.lifecycleCalls).toContainEqual(
+      expect.objectContaining({
+        domain: 'catalog',
+        scope: catalogScope,
+        enabled: true,
+        preserveState: true,
+      })
+    );
+    expect(catalogWiringMocks.signalCalls).toContainEqual(['catalog', [catalogScope]]);
   });
 
   it('activates the browse cluster view when clicked', () => {

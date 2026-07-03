@@ -404,12 +404,15 @@ describe('ResourceStreamManager', () => {
     expect(state.sourceVersion).toBe('ns-3');
     expect(state.sourceVersions?.object).toBe('ns-3');
     // The applied doorbell logs at DEBUG — the runtime counterpart of the
-    // backend's "namespaces doorbell <v>: <reason> — signaling ..." line.
-    expect(
-      logAppLogsDebugMock.mock.calls.some((call) =>
-        String(call[0]).includes('namespaces doorbell ns-3 received')
-      )
-    ).toBe(true);
+    // backend's "namespaces doorbell <v>: <reason> — signaling ..." line. It
+    // must carry the subscription's cluster label (the backend half is
+    // per-cluster labeled; a [Global] frontend half can't be attributed when
+    // several clusters are connected).
+    const doorbellLog = logAppLogsDebugMock.mock.calls.find((call) =>
+      String(call[0]).includes('namespaces doorbell ns-3 received')
+    );
+    expect(doorbellLog).toBeDefined();
+    expect(doorbellLog?.[2]).toEqual(expect.objectContaining({ clusterId: 'cluster-a' }));
   });
 
   // Pins the metric doorbell contract: the backend poller fans a SourceMetric
