@@ -15,7 +15,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
+import type { ClusterNodeRow } from '@/core/refresh/types';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {

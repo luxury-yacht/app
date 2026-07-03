@@ -30,17 +30,7 @@ export function ClusterResourcesManager({
   onTabChange,
   objectPanel,
 }: ClusterResourceManagerProps) {
-  const { nodes, rbac, storage, config, crds, events, setActiveResourceType } =
-    useClusterResources();
-
-  // Only the per-view error is consumed downstream now (each view is query-backed and
-  // sources its own rows); the live domains stay subscribed for those errors + kinds.
-  const { error: nodesError } = nodes;
-  const { error: configError } = config;
-  const { error: crdsError } = crds;
-  const { error: eventsError } = events;
-  const { error: rbacError } = rbac;
-  const { error: storageError } = storage;
+  const { setActiveResourceType } = useClusterResources();
 
   const { selectedClusterId } = useKubeconfig();
   // Scope permission lookups to the active cluster to avoid cache collisions.
@@ -125,15 +115,15 @@ export function ClusterResourcesManager({
     permissionToMessage(configValidatingWebhookPermission) ||
     permissionToMessage(configMutatingWebhookPermission);
 
-  const nodesErrorMessage = nodesError?.message || permissionToMessage(nodesListPermission) || null;
-  const configErrorMessage = configError?.message || configPermissionMessage || null;
-  const crdsErrorMessage = crdsError?.message || permissionToMessage(crdListPermission) || null;
+  // Each view is query-backed and surfaces its own fetch errors; the manager
+  // contributes only the permission-derived denial messages.
+  const nodesErrorMessage = permissionToMessage(nodesListPermission) || null;
+  const configErrorMessage = configPermissionMessage || null;
+  const crdsErrorMessage = permissionToMessage(crdListPermission) || null;
   const customErrorMessage = permissionToMessage(crdListPermission) || null;
-  const eventsErrorMessage =
-    eventsError?.message || permissionToMessage(eventsListPermission) || null;
-  const rbacErrorMessage = rbacError?.message || permissionToMessage(rbacListPermission) || null;
-  const storageErrorMessage =
-    storageError?.message || permissionToMessage(storageListPermission) || null;
+  const eventsErrorMessage = permissionToMessage(eventsListPermission) || null;
+  const rbacErrorMessage = permissionToMessage(rbacListPermission) || null;
+  const storageErrorMessage = permissionToMessage(storageListPermission) || null;
 
   // Keep ClusterResourcesContext informed about the active view for refresh scheduling
   useEffect(() => {
@@ -148,9 +138,9 @@ export function ClusterResourcesManager({
     <ClusterResourcesViews
       activeTab={activeTab}
       onTabChange={onTabChange}
-      // Each view is query-backed and sources its own rows; the manager supplies
-      // only the per-view error (+ kinds for filtered views) derived from the live
-      // domain and permissions. Custom is catalog-backed and takes loading/loaded.
+      // Each view is query-backed and sources its own rows and fetch errors;
+      // the manager supplies only the permission-derived denial message per
+      // view. Custom is catalog-backed and takes loading/loaded.
       nodesError={nodesErrorMessage}
       configError={configErrorMessage}
       crdsError={crdsErrorMessage}
