@@ -185,6 +185,7 @@ const renderNamespaceGrid = (
           selectedNamespace: ALL_NAMESPACES_SCOPE,
           selectedNamespaceClusterId: 'alpha:ctx',
           namespaceLoading: false,
+          namespacesPermissionDenied: false,
           namespaceRefreshing: false,
           namespaceReady: true,
           setSelectedNamespace: () => {},

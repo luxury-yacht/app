@@ -9,13 +9,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import './Sidebar.css';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useNamespace, type NamespaceListItem } from '@modules/namespace/contexts/NamespaceContext';
-import {
-  ALL_NAMESPACES_DETAILS,
-  ALL_NAMESPACES_DISPLAY_NAME,
-  ALL_NAMESPACES_RESOURCE_VERSION,
-  ALL_NAMESPACES_SCOPE,
-} from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
   ExpandSidebarIcon,
@@ -28,10 +23,6 @@ import {
 } from '@shared/components/icons/SharedIcons';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
-import type { CatalogNamespaceGroup } from '@/core/refresh/types';
-import { useRefreshScopedDomainStates } from '@/core/refresh';
-import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -68,12 +59,6 @@ const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
   { id: 'storage', label: 'Storage' },
 ];
 
-type NamespaceGroup = {
-  clusterId: string;
-  clusterName: string;
-  namespaces: NamespaceListItem[];
-};
-
 const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
   const scoped = buildClusterScope(clusterId, scope);
   return scoped || scope;
@@ -86,6 +71,7 @@ function Sidebar() {
   const {
     namespaces,
     namespaceLoading,
+    namespacesPermissionDenied,
     setSelectedNamespace,
     selectedNamespace,
     selectedNamespaceClusterId,
@@ -94,40 +80,10 @@ function Sidebar() {
   const { selectedClusterId } = useKubeconfig();
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
-  // The catalog contributes namespace-listing truth beyond the namespaces
-  // domain (restricted-RBAC clusters where the namespace informer is denied),
-  // so the sidebar owns the active cluster's BASE catalog scope itself: a
-  // lease keeps it enabled, and the catalog doorbell refetches it — otherwise
-  // the group list freezes whenever Browse (the only other fetcher) is closed.
-  const sidebarCatalogScope = selectedClusterId?.trim()
-    ? buildClusterScope(selectedClusterId.trim(), '')
-    : null;
-  useScopedRefreshDomainLifecycle({
-    domain: 'catalog',
-    scope: sidebarCatalogScope,
-    enabled: Boolean(sidebarCatalogScope),
-    preserveState: true,
-    fetchOnEnable: 'startup',
-  });
-  const catalogSignalScopes = useMemo(
-    () => (sidebarCatalogScope ? [sidebarCatalogScope] : []),
-    [sidebarCatalogScope]
-  );
-  useStreamSignalRefetch('catalog', catalogSignalScopes);
-  // Catalog is scoped — collect namespace metadata across active scopes, then
-  // select the active cluster's groups explicitly instead of trusting whichever
-  // scope happened to populate first.
-  const catalogScopedStates = useRefreshScopedDomainStates('catalog');
-  const catalogNamespaceGroups = useMemo<CatalogNamespaceGroup[]>(() => {
-    const groups: CatalogNamespaceGroup[] = [];
-    for (const entry of Object.values(catalogScopedStates)) {
-      const namespaceGroups = entry?.data?.namespaceGroups;
-      if (namespaceGroups?.length) {
-        groups.push(...namespaceGroups);
-      }
-    }
-    return groups;
-  }, [catalogScopedStates]);
+  // The namespaces domain is the ONLY membership source. It is
+  // permission-gated backend-side: without list permission it fails fast and
+  // the sidebar renders the permission message — no catalog inference (manual
+  // namespace entry is future work, docs/todo.md).
   const viewState = useViewState();
   const [expandedNamespaceKeys, setExpandedNamespaceKeys] = useState<Set<string>>(() => new Set());
   const [lastExpandedNamespaceKey, setLastExpandedNamespaceKey] = useState<string | null>(null);
@@ -149,139 +105,7 @@ function Sidebar() {
     keyboardCursorIndexRef.current = null;
   }, []);
 
-  const allNamespacesItem = useMemo<NamespaceListItem>(
-    () => ({
-      name: ALL_NAMESPACES_DISPLAY_NAME,
-      scope: ALL_NAMESPACES_SCOPE,
-      status: 'All namespaces',
-      details: ALL_NAMESPACES_DETAILS,
-      age: '—',
-      hasWorkloads: true,
-      workloadsUnknown: false,
-      resourceVersion: ALL_NAMESPACES_RESOURCE_VERSION,
-      isSynthetic: true,
-    }),
-    []
-  );
-
-  const namespaceDetailsByScope = useMemo(() => {
-    const entries = new Map<string, NamespaceListItem>();
-    namespaces.forEach((namespace) => {
-      const scope = namespace.scope ?? namespace.name;
-      entries.set(scope, namespace);
-    });
-    return entries;
-  }, [namespaces]);
-
   const hasNamespaceData = !namespaceLoading && namespaces.some((item) => !item.isSynthetic);
-
-  const namespaceGroups = useMemo<NamespaceGroup[]>(() => {
-    const activeClusterId = selectedClusterId?.trim();
-    if (!activeClusterId || catalogNamespaceGroups.length === 0) {
-      return [];
-    }
-    const activeGroups = catalogNamespaceGroups.filter(
-      (group) => group.clusterId === activeClusterId
-    );
-    if (activeGroups.length === 0) {
-      return [];
-    }
-
-    const mergedGroups = new Map<
-      string,
-      {
-        clusterId: string;
-        clusterName: string;
-        namespaces: string[];
-      }
-    >();
-
-    for (const group of activeGroups) {
-      if (!group.clusterId) {
-        continue;
-      }
-
-      const existing = mergedGroups.get(group.clusterId) ?? {
-        clusterId: group.clusterId,
-        clusterName: group.clusterName || group.clusterId,
-        namespaces: [],
-      };
-
-      const seenNamespaces = new Set(existing.namespaces.map((name) => name.toLowerCase()));
-      for (const name of group.namespaces) {
-        const trimmed = name?.trim();
-        if (!trimmed) {
-          continue;
-        }
-        const normalized = trimmed.toLowerCase();
-        if (seenNamespaces.has(normalized)) {
-          continue;
-        }
-        seenNamespaces.add(normalized);
-        existing.namespaces.push(trimmed);
-      }
-
-      mergedGroups.set(group.clusterId, existing);
-    }
-
-    return Array.from(mergedGroups.values())
-      .map((group) => {
-        const useDetails = group.clusterId === selectedClusterId;
-        // Membership hierarchy: the namespaces domain is AUTHORITATIVE when it
-        // has real data — its doorbell keeps creates AND deletes coherent
-        // within a second, and trigger + data share one pipeline. Catalog
-        // names follow the catalog's own watch and lag namespace lifecycle
-        // (deletes lingered, creates arrived late), so they are the membership
-        // source ONLY when the namespaces domain has nothing (restricted RBAC:
-        // no namespace list permission — the catalog infers namespaces from
-        // discovered objects). Catalog still contributes the cluster name.
-        const memberNames =
-          useDetails && hasNamespaceData
-            ? namespaces.filter((item) => !item.isSynthetic).map((item) => item.scope)
-            : group.namespaces;
-        // Catalog groups only include names, so borrow rich metadata for the active cluster only.
-        const enrichedNamespaces = memberNames
-          .filter((name) => Boolean(name && name.trim()))
-          .map((name) => {
-            const scope = name.trim();
-            if (useDetails) {
-              const existing = namespaceDetailsByScope.get(scope);
-              if (existing) {
-                return existing;
-              }
-            }
-            return {
-              name: scope,
-              scope,
-              status: '',
-              details: '',
-              age: '',
-              hasWorkloads: true,
-              workloadsUnknown: false,
-              resourceVersion: `catalog-${scope}`,
-            } satisfies NamespaceListItem;
-          });
-
-        const allNamespaces =
-          hasNamespaceData && useDetails
-            ? namespaceDetailsByScope.get(ALL_NAMESPACES_SCOPE) || allNamespacesItem
-            : null;
-
-        return {
-          clusterId: group.clusterId,
-          clusterName: group.clusterName || group.clusterId,
-          namespaces: allNamespaces ? [allNamespaces, ...enrichedNamespaces] : enrichedNamespaces,
-        };
-      })
-      .sort((a, b) => a.clusterName.localeCompare(b.clusterName));
-  }, [
-    allNamespacesItem,
-    catalogNamespaceGroups,
-    hasNamespaceData,
-    namespaceDetailsByScope,
-    namespaces,
-    selectedClusterId,
-  ]);
 
   const resolvedSelectionClusterId = selectedNamespaceClusterId ?? selectedClusterId;
   const selectedNamespaceKey = useMemo(() => {
@@ -482,21 +306,12 @@ function Sidebar() {
     viewState.setActiveNamespaceTab(view);
   };
 
-  // Fall back to the legacy namespace list until catalog groups are available.
-  const namespaceGroupsToRender: NamespaceGroup[] =
-    namespaceGroups.length > 0
-      ? namespaceGroups
-      : [
-          {
-            clusterId: selectedClusterId ?? '',
-            clusterName: '',
-            namespaces: namespaces.length > 0 ? namespaces : [],
-          },
-        ];
-  const showClusterLabels = namespaceGroups.length > 1;
-  const showNamespaceLoading = namespaceLoading;
+  const showNamespaceLoading = namespaceLoading && !namespacesPermissionDenied;
   const showNamespacePausedMessage =
-    suppressPassiveLoading && !showNamespaceLoading && !hasNamespaceData;
+    suppressPassiveLoading &&
+    !showNamespaceLoading &&
+    !hasNamespaceData &&
+    !namespacesPermissionDenied;
 
   return (
     <div
@@ -594,118 +409,109 @@ function Sidebar() {
 
             <div className="sidebar-section namespaces-section">
               <h3>Namespaces</h3>
-              {showNamespaceLoading ? (
+              {namespacesPermissionDenied ? (
+                // Fail fast: the namespaces domain is permission-gated
+                // backend-side; there is no fallback inference (manual
+                // namespace entry is future work, docs/todo.md).
+                <div className="sidebar-empty-message">
+                  You do not have permission to list namespaces.
+                </div>
+              ) : showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
               ) : showNamespacePausedMessage ? (
                 <ClusterDataPausedState className="sidebar-empty-message" />
               ) : (
                 <div className="namespace-items">
-                  {namespaceGroupsToRender.map((group) => {
-                    const groupKey = group.clusterId || group.clusterName || 'default';
+                  {namespaces.map((namespace) => {
+                    const scope = namespace.scope ?? namespace.name;
+                    const namespaceKey = toNamespaceKey(selectedClusterId ?? '', scope);
+                    const isExpanded = expandedNamespaceKeys.has(namespaceKey);
+                    const namespaceViews =
+                      scope === ALL_NAMESPACES_SCOPE
+                        ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
+                        : NAMESPACE_VIEWS;
+
                     return (
-                      <div key={groupKey} className="namespace-cluster-group">
-                        {showClusterLabels && (
-                          <div className="namespace-cluster-label" title={group.clusterName}>
-                            {group.clusterName}
+                      <div key={namespaceKey}>
+                        <div
+                          ref={selectedNamespaceKey === namespaceKey ? selectedNamespaceRef : null}
+                          className={buildSidebarItemClassName(
+                            [
+                              'sidebar-item',
+                              // Only a CONFIRMED absence of workloads changes the
+                              // presentation; while workload presence is still
+                              // unknown (ingest stores settling after connect) the
+                              // namespace renders exactly like a normal one.
+                              dimInactiveNamespaces &&
+                              !namespace.hasWorkloads &&
+                              !namespace.workloadsUnknown
+                                ? 'dimmed'
+                                : '',
+                            ].filter(Boolean),
+                            {
+                              kind: 'namespace-toggle',
+                              namespace: namespaceKey,
+                            }
+                          )}
+                          data-namespace={namespaceKey}
+                          onClick={() => {
+                            if (!keyboardActivationRef.current) {
+                              clearKeyboardPreview();
+                            }
+                            handleNamespaceSelect(scope, selectedClusterId || undefined);
+                          }}
+                          data-sidebar-focusable="true"
+                          data-sidebar-target-kind="namespace-toggle"
+                          data-sidebar-target-namespace={namespaceKey}
+                          title={namespace.details || undefined}
+                          tabIndex={-1}
+                        >
+                          {isExpanded ? (
+                            <NamespaceOpenIcon width={14} height={14} />
+                          ) : (
+                            <NamespaceIcon width={14} height={14} />
+                          )}
+                          <span>{namespace.name}</span>
+                        </div>
+                        {isExpanded && (
+                          <div className="sidebar-views">
+                            {namespaceViews.map((view) => {
+                              const label = view.label;
+                              return (
+                                <div
+                                  key={view.id}
+                                  className={buildSidebarItemClassName(
+                                    ['sidebar-item', 'indented'],
+                                    {
+                                      kind: 'namespace-view',
+                                      namespace: namespaceKey,
+                                      view: view.id,
+                                    }
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!keyboardActivationRef.current) {
+                                      clearKeyboardPreview();
+                                    }
+                                    handleNamespaceViewSelect(
+                                      scope,
+                                      view.id,
+                                      selectedClusterId || undefined
+                                    );
+                                  }}
+                                  data-sidebar-focusable="true"
+                                  data-sidebar-target-kind="namespace-view"
+                                  data-sidebar-target-namespace={namespaceKey}
+                                  data-sidebar-target-view={view.id}
+                                  tabIndex={-1}
+                                >
+                                  <CategoryIcon width={14} height={14} />
+                                  <span>{label}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
-                        {group.namespaces.map((namespace) => {
-                          const scope = namespace.scope ?? namespace.name;
-                          const namespaceKey = toNamespaceKey(group.clusterId, scope);
-                          const isExpanded = expandedNamespaceKeys.has(namespaceKey);
-                          const namespaceViews =
-                            scope === ALL_NAMESPACES_SCOPE
-                              ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
-                              : NAMESPACE_VIEWS;
-
-                          return (
-                            <div key={namespaceKey}>
-                              <div
-                                ref={
-                                  selectedNamespaceKey === namespaceKey
-                                    ? selectedNamespaceRef
-                                    : null
-                                }
-                                className={buildSidebarItemClassName(
-                                  [
-                                    'sidebar-item',
-                                    // Only a CONFIRMED absence of workloads changes the
-                                    // presentation; while workload presence is still
-                                    // unknown (ingest stores settling after connect) the
-                                    // namespace renders exactly like a normal one.
-                                    dimInactiveNamespaces &&
-                                    !namespace.hasWorkloads &&
-                                    !namespace.workloadsUnknown
-                                      ? 'dimmed'
-                                      : '',
-                                  ].filter(Boolean),
-                                  {
-                                    kind: 'namespace-toggle',
-                                    namespace: namespaceKey,
-                                  }
-                                )}
-                                data-namespace={namespaceKey}
-                                onClick={() => {
-                                  if (!keyboardActivationRef.current) {
-                                    clearKeyboardPreview();
-                                  }
-                                  handleNamespaceSelect(scope, group.clusterId || undefined);
-                                }}
-                                data-sidebar-focusable="true"
-                                data-sidebar-target-kind="namespace-toggle"
-                                data-sidebar-target-namespace={namespaceKey}
-                                title={namespace.details || undefined}
-                                tabIndex={-1}
-                              >
-                                {isExpanded ? (
-                                  <NamespaceOpenIcon width={14} height={14} />
-                                ) : (
-                                  <NamespaceIcon width={14} height={14} />
-                                )}
-                                <span>{namespace.name}</span>
-                              </div>
-                              {isExpanded && (
-                                <div className="sidebar-views">
-                                  {namespaceViews.map((view) => {
-                                    const label = view.label;
-                                    return (
-                                      <div
-                                        key={view.id}
-                                        className={buildSidebarItemClassName(
-                                          ['sidebar-item', 'indented'],
-                                          {
-                                            kind: 'namespace-view',
-                                            namespace: namespaceKey,
-                                            view: view.id,
-                                          }
-                                        )}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (!keyboardActivationRef.current) {
-                                            clearKeyboardPreview();
-                                          }
-                                          handleNamespaceViewSelect(
-                                            scope,
-                                            view.id,
-                                            group.clusterId || undefined
-                                          );
-                                        }}
-                                        data-sidebar-focusable="true"
-                                        data-sidebar-target-kind="namespace-view"
-                                        data-sidebar-target-namespace={namespaceKey}
-                                        data-sidebar-target-view={view.id}
-                                        tabIndex={-1}
-                                      >
-                                        <CategoryIcon width={14} height={14} />
-                                        <span>{label}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
                       </div>
                     );
                   })}

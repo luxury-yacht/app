@@ -72,6 +72,15 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 	scoped := refresh.JoinClusterScope(target, scopeValue)
 	snapshotData, err := service.Build(ctx, domain, scoped)
 	if err != nil {
+		// A permission-denied namespaces domain is a SETTLED answer to "is the
+		// cluster's data loaded" — there is no namespace list this user may
+		// load. The Ready transition only ever fires from the namespaces
+		// domain, so without this signal a restricted-RBAC cluster wedges in
+		// "loading" forever. The error still propagates: the client renders
+		// the permission message instead of a namespace list.
+		if domain == "namespaces" && refresh.IsPermissionDenied(err) {
+			s.notifyNamespaceSnapshot(target)
+		}
 		return nil, err
 	}
 

@@ -681,7 +681,7 @@
       "domain": "namespaces",
       "category": "system",
       "sourceClocks": ["object"],
-      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "namespaces",
         "orchestrator": "doorbell-snapshot",

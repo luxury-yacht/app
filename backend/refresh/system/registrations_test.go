@@ -342,10 +342,20 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 		byDomain[registration.name] = registration
 	}
 
+	// Fail fast on missing list permission: the namespaces domain is
+	// permission-gated so a restricted user gets an explicit permission-denied
+	// snapshot (the sidebar renders "You do not have permission to list
+	// namespaces.") instead of an empty list backed by catalog inference.
 	namespaces := byDomain["namespaces"]
-	require.NotNil(t, namespaces.direct, "namespaces must remain a direct snapshot registration")
+	require.Nil(t, namespaces.direct)
 	require.Nil(t, namespaces.list)
-	require.Nil(t, namespaces.listWatch)
+	require.NotNil(t, namespaces.listWatch, "namespaces must be a permission-gated listWatch registration")
+	require.Equal(t, []listWatchCheck{
+		{group: "", resource: "namespaces"},
+	}, namespaces.listWatch.checks)
+	require.Nil(t, namespaces.listWatch.registerFallback,
+		"no fallback: denial must serve the permission-denied domain, not a degraded list")
+	require.Equal(t, "core/namespaces", namespaces.listWatch.deniedReason)
 
 	overview := byDomain["cluster-overview"]
 	require.Nil(t, overview.direct)

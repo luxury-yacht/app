@@ -257,15 +257,30 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 	runtimeAccess := domainpermissions.NewRuntimeAccess()
 
 	return []domainRegistration{
-		directRegistration("namespaces", func() error {
-			notifier, err := snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
-			if err != nil {
-				return err
-			}
-			if deps.noteNamespaceNotifier != nil {
-				deps.noteNamespaceNotifier(notifier)
-			}
-			return nil
+		// Fail fast on missing list permission: a restricted user gets an
+		// explicit permission-denied snapshot (the sidebar renders "You do not
+		// have permission to list namespaces.") instead of an empty list. No
+		// fallback by design — manual namespace entry is future work
+		// (docs/todo.md).
+		listWatchRegistration(listWatchDomainConfig{
+			name:          "namespaces",
+			issueResource: "core/namespaces",
+			logGroup:      "",
+			logResource:   "namespaces",
+			checks: []listWatchCheck{
+				{group: "", resource: "namespaces"},
+			},
+			registerInformer: func() error {
+				notifier, err := snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
+				if err != nil {
+					return err
+				}
+				if deps.noteNamespaceNotifier != nil {
+					deps.noteNamespaceNotifier(notifier)
+				}
+				return nil
+			},
+			deniedReason: "core/namespaces",
 		}),
 
 		listWatchRegistration(listWatchDomainConfig{

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -178,11 +179,44 @@ func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *tes
 	require.False(t, callbackFired, "callback must only fire for namespaces domain")
 }
 
+// A permission-denied namespaces domain is a SETTLED answer to "is the
+// cluster's data loaded" — there is no namespace list this user may load —
+// so the readiness callback MUST fire (while the error still reaches the
+// client, which renders the permission message). Without this the cluster
+// wedges in "loading" forever: the Ready transition only ever fires from the
+// namespaces domain.
+func TestAggregateSnapshotServicePermissionDeniedNamespacesStillSignalsReadiness(t *testing.T) {
+	services := map[string]refresh.SnapshotService{
+		"cluster-a": stubSnapshotService{
+			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+				return nil, refresh.NewPermissionDeniedError(domain, "core/namespaces")
+			},
+		},
+	}
+
+	var called []string
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-a"},
+		services:     services,
+		onNamespaceSnapshot: func(clusterID string) {
+			called = append(called, clusterID)
+		},
+	}
+
+	_, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
+	require.Error(t, err, "the permission error must still reach the client")
+	require.True(t, refresh.IsPermissionDenied(err))
+	require.Equal(t, []string{"cluster-a"}, called,
+		"permission-denied namespaces must still signal readiness")
+}
+
+// Transient (non-permission) failures are NOT settled: the callback must not
+// fire, so the cluster keeps waiting for a real namespaces build.
 func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T) {
 	services := map[string]refresh.SnapshotService{
 		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "")
+				return nil, fmt.Errorf("apiserver timeout")
 			},
 		},
 	}
@@ -197,7 +231,7 @@ func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T)
 	}
 
 	_, _ = aggregate.Build(context.Background(), "namespaces", "cluster-a|")
-	require.False(t, callbackFired, "callback must not fire on build failure")
+	require.False(t, callbackFired, "callback must not fire on transient build failure")
 }
 
 func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t *testing.T) {

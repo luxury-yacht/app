@@ -59,6 +59,11 @@ interface NamespaceContextType {
   namespaceLoading: boolean;
   namespaceRefreshing: boolean;
   namespaceReady: boolean;
+  // True when the backend refused the namespace list for lack of RBAC
+  // permission (the namespaces domain is permission-gated and fails fast).
+  // A designed, rendered state: the sidebar shows "You do not have permission
+  // to list namespaces." — no toast, no fallback inference.
+  namespacesPermissionDenied: boolean;
   setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
@@ -501,8 +506,20 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
   }, [clearSelection, namespaceScopes, updateNamespaces]);
 
+  // The backend's permission-denied message is our own deterministic contract
+  // string (refresh.PermissionDeniedError via the 403 status payload).
+  const namespacesPermissionDenied =
+    namespaceDomain.status === 'error' &&
+    Boolean(namespaceDomain.error?.toLowerCase().startsWith('permission denied'));
+
   useEffect(() => {
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {
+      // Permission denial is a designed, rendered state (the sidebar shows the
+      // message) — not an error to toast.
+      if (namespacesPermissionDenied) {
+        lastErrorRef.current = namespaceDomain.error;
+        return;
+      }
       if (namespaceDomain.error !== lastErrorRef.current) {
         lastErrorRef.current = namespaceDomain.error;
         errorHandler.handle(
@@ -517,7 +534,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     } else {
       lastErrorRef.current = null;
     }
-  }, [namespaceDomain.status, namespaceDomain.error, selectedKubeconfig]);
+  }, [
+    namespaceDomain.status,
+    namespaceDomain.error,
+    namespacesPermissionDenied,
+    selectedKubeconfig,
+  ]);
 
   const contextValue = useMemo(
     () => ({
@@ -527,6 +549,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       namespaceLoading,
       namespaceRefreshing,
       namespaceReady,
+      namespacesPermissionDenied,
       setSelectedNamespace: handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
@@ -539,6 +562,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       namespaceLoading,
       namespaceRefreshing,
       namespaceReady,
+      namespacesPermissionDenied,
       handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,

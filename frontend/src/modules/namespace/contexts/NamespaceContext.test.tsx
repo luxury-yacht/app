@@ -9,6 +9,9 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
+vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
+
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
@@ -650,6 +653,37 @@ describe('NamespaceProvider selection behaviour', () => {
       'cluster-a|',
       { isManual: false, streamSignal: false }
     );
+    cleanup();
+  });
+
+  it('exposes namespacesPermissionDenied for a permission-denied namespaces domain — and does not toast', () => {
+    namespaceDomainRef.current = {
+      status: 'error',
+      data: null,
+      error: 'permission denied for domain namespaces (core/namespaces)',
+    } as unknown as typeof namespaceDomainRef.current;
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(true);
+    // A designed, rendered state — not a toast (the sidebar shows the message).
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('keeps namespacesPermissionDenied false for transient errors (which still toast)', () => {
+    namespaceDomainRef.current = {
+      status: 'error',
+      data: null,
+      error: 'apiserver timeout',
+    } as unknown as typeof namespaceDomainRef.current;
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(false);
+    expect(errorHandlerMock.handle).toHaveBeenCalled();
     cleanup();
   });
 });

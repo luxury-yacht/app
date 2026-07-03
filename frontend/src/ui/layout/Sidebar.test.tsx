@@ -22,31 +22,8 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOff: vi.fn(),
 }));
 
-const refreshMocks = vi.hoisted(() => ({
-  // Scoped domain states: Record<string, DomainState>
-  // The component iterates Object.values() looking for an entry with .data
-  catalogScopedStates: {} as Record<
-    string,
-    {
-      status: 'idle' | 'loading' | 'success' | 'error';
-      data: any;
-      stats: any;
-      error: any;
-      droppedAutoRefreshes: number;
-      scope: string | undefined;
-    }
-  >,
-}));
-
 const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
-}));
-
-// The sidebar owns the active cluster's base catalog scope (lease + doorbell
-// refetch); these record the wiring for the pin test below.
-const catalogWiringMocks = vi.hoisted(() => ({
-  lifecycleCalls: [] as unknown[],
-  signalCalls: [] as Array<[string, readonly string[]]>,
 }));
 
 const testClusterId = 'cluster-a';
@@ -57,36 +34,8 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOff: runtimeMocks.eventsOff,
 }));
 
-vi.mock('@core/refresh', () => ({
-  useRefreshScopedDomain: () => ({
-    status: 'idle',
-    data: null,
-    stats: null,
-    error: null,
-    droppedAutoRefreshes: 0,
-    scope: undefined,
-  }),
-  useRefreshScopedDomainStates: () => refreshMocks.catalogScopedStates,
-}));
-
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: testClusterId }),
-}));
-
-vi.mock('@/core/data-access', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/core/data-access')>();
-  return {
-    ...actual,
-    useScopedRefreshDomainLifecycle: (params: unknown) => {
-      catalogWiringMocks.lifecycleCalls.push(params);
-    },
-  };
-});
-
-vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
-  useStreamSignalRefetch: (domain: string, scopes: readonly string[]) => {
-    catalogWiringMocks.signalCalls.push([domain, scopes]);
-  },
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -103,6 +52,7 @@ type NamespaceEntry = {
 };
 
 type NamespaceState = {
+  namespacesPermissionDenied: boolean;
   namespaces: NamespaceEntry[];
   namespaceLoading: boolean;
   selectedNamespace?: string;
@@ -111,6 +61,7 @@ type NamespaceState = {
 };
 
 const createNamespaceState = (): NamespaceState => ({
+  namespacesPermissionDenied: false,
   namespaces: [
     {
       name: 'default',
@@ -203,7 +154,6 @@ describe('Sidebar', () => {
     root = ReactDOM.createRoot(container);
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
-    refreshMocks.catalogScopedStates = {};
     autoRefreshLoadingState.suppressPassiveLoading = false;
     resetAppPreferencesCacheForTesting();
   });
@@ -220,6 +170,17 @@ describe('Sidebar', () => {
     vi.clearAllMocks();
   });
 
+  it('shows the permission message instead of a namespace list when listing is denied', () => {
+    // Fail-fast design: no catalog inference, no empty list — the user is told
+    // exactly why the sidebar has no namespaces.
+    namespaceState.namespacesPermissionDenied = true;
+    namespaceState.namespaces = [];
+    renderSidebar();
+
+    expect(container!.textContent).toContain('You do not have permission to list namespaces.');
+    expect(container!.querySelector('[data-sidebar-target-kind="namespace-toggle"]')).toBeNull();
+  });
+
   it('toggles the sidebar when the toolbar button is pressed', () => {
     renderSidebar();
     const toggleButton = container!.querySelector<HTMLButtonElement>('.sidebar-toggle');
@@ -228,23 +189,6 @@ describe('Sidebar', () => {
       toggleButton!.click();
     });
     expect(viewStateMock.toggleSidebar).toHaveBeenCalledTimes(1);
-  });
-
-  it('owns the active cluster base catalog scope: lease + doorbell refetch', () => {
-    // Without this wiring the catalog-derived namespace groups freeze whenever
-    // Browse (the only other catalog fetcher) is closed — the frozen-reader
-    // bug class the streamConsumerDrift guard enforces against.
-    renderSidebar();
-    const catalogScope = `${testClusterId}|`;
-    expect(catalogWiringMocks.lifecycleCalls).toContainEqual(
-      expect.objectContaining({
-        domain: 'catalog',
-        scope: catalogScope,
-        enabled: true,
-        preserveState: true,
-      })
-    );
-    expect(catalogWiringMocks.signalCalls).toContainEqual(['catalog', [catalogScope]]);
   });
 
   it('activates the browse cluster view when clicked', () => {
@@ -424,230 +368,6 @@ describe('Sidebar', () => {
     expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
     expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
-  });
-
-  it('filters catalog namespace groups to the active cluster', () => {
-    refreshMocks.catalogScopedStates = {
-      'test-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default'],
-            },
-            {
-              clusterId: 'cluster-b',
-              clusterName: 'Cluster B',
-              namespaces: ['other'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'test-scope',
-      },
-    };
-    renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
-    );
-    expect(otherClusterToggle).toBeNull();
-
-    act(() => {
-      namespaceToggle!.click();
-    });
-
-    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
-  });
-
-  it('namespaces-domain membership is authoritative: a namespace deleted from it disappears even while catalog groups still carry it', () => {
-    // Catalog content follows its own watch pipeline and lags namespace
-    // lifecycle — a deleted namespace lingers in catalog groups for a while
-    // (and a created one arrives late). When the namespaces domain has real
-    // data its doorbell-coherent list owns membership; catalog names are the
-    // membership source ONLY when the namespaces domain has nothing
-    // (restricted RBAC).
-    refreshMocks.catalogScopedStates = {
-      'test-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default', 'ghost'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'test-scope',
-      },
-    };
-    // The namespaces domain (doorbell-fresh) no longer contains 'ghost'.
-    renderSidebar();
-
-    expect(
-      container!.querySelector<HTMLDivElement>(
-        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      )
-    ).not.toBeNull();
-    expect(
-      container!.querySelector<HTMLDivElement>(
-        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-          'ghost'
-        )}"]`
-      )
-    ).toBeNull();
-  });
-
-  it('falls back to catalog membership when the namespaces domain has nothing (restricted RBAC)', () => {
-    refreshMocks.catalogScopedStates = {
-      'test-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['catalog-only'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'test-scope',
-      },
-    };
-    renderSidebar({ namespaces: [] });
-
-    expect(
-      container!.querySelector<HTMLDivElement>(
-        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-          'catalog-only'
-        )}"]`
-      )
-    ).not.toBeNull();
-  });
-
-  it('aggregates catalog namespace groups across scoped states before filtering to the active cluster', () => {
-    refreshMocks.catalogScopedStates = {
-      'cluster-b-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: 'cluster-b',
-              clusterName: 'Cluster B',
-              namespaces: ['other'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'cluster-b-scope',
-      },
-      'cluster-a-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'cluster-a-scope',
-      },
-    };
-
-    renderSidebar();
-
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-
-    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
-    );
-    expect(otherClusterToggle).toBeNull();
-  });
-
-  it('deduplicates repeated namespace groups and namespaces from multiple catalog scopes', () => {
-    refreshMocks.catalogScopedStates = {
-      'scope-a': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default', 'fusionauth-prod-us-east-1'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'scope-a',
-      },
-      'scope-b': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['fusionauth-prod-us-east-1', 'default'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'scope-b',
-      },
-    };
-
-    // Catalog membership is in play only when the namespaces domain has
-    // nothing (restricted RBAC) — the dedup contract applies to that path.
-    renderSidebar({ namespaces: [] });
-
-    const defaultToggles = container!.querySelectorAll(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(defaultToggles).toHaveLength(1);
-
-    const fusionAuthToggles = container!.querySelectorAll(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'fusionauth-prod-us-east-1'
-      )}"]`
-    );
-    expect(fusionAuthToggles).toHaveLength(1);
   });
 
   it('collapses a namespace when clicked repeatedly', () => {
