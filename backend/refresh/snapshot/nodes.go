@@ -88,8 +88,11 @@ func nodesQuerypageSchema() querypage.Schema[NodeSummary] {
 
 // NodeMetricsInfo captures metadata about metrics collection.
 type NodeMetricsInfo struct {
-	CollectedAt         int64  `json:"collectedAt,omitempty"`
-	Stale               bool   `json:"stale"`
+	CollectedAt int64 `json:"collectedAt,omitempty"`
+	Stale       bool  `json:"stale"`
+	// StaleAfterSeconds ships the staleness threshold so the frontend can flip
+	// the stale banner client-side; see PodMetricsInfo.StaleAfterSeconds.
+	StaleAfterSeconds   int64  `json:"staleAfterSeconds,omitempty"`
 	LastError           string `json:"lastError,omitempty"`
 	ConsecutiveFailures int    `json:"consecutiveFailures,omitempty"`
 	SuccessCount        uint64 `json:"successCount"`

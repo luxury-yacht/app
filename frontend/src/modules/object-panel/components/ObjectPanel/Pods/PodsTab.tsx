@@ -21,7 +21,7 @@ import {
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
 import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
@@ -278,7 +278,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // joined onto the rows at serve.
   const effectiveMetrics = queryPayload?.metrics ?? null;
   metricsRef.current = effectiveMetrics;
-  const metricsBanner = useMemo(() => getMetricsBannerInfo(effectiveMetrics), [effectiveMetrics]);
+  const metricsBanner = useMetricsBannerInfo(effectiveMetrics);
 
   // Query pod-action permissions for every (cluster, namespace) pair visible
   // in this tab. Workload-scoped pods share the panel object's namespace, but

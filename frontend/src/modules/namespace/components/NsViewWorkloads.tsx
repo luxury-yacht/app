@@ -11,7 +11,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -141,7 +141,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       [selectedClusterId]
     );
 
-    const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
+    const metricsBanner = useMetricsBannerInfo(metricsInfo);
 
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,

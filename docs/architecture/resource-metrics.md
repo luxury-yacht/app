@@ -106,6 +106,14 @@ row-key round-trips.
 - A usage sample scraped before the object's creation belongs to a prior
   same-named incarnation and renders the no-data marker (`metricSampleValid`),
   never stale or zero numbers.
+- Staleness is evaluated CLIENT-SIDE: the payloads' `metrics` block ships
+  `staleAfterSeconds` alongside `collectedAt`, and `useMetricsBannerInfo`
+  flips the stale banner at that boundary on a local timer — never via a
+  refetch. This matters because the poller rings no doorbell on failure: a
+  dead metrics-server on a quiet cluster produces no refetch, so a
+  server-computed stale flag would never reach the screen. The server's
+  `stale` flag stays authoritative when set (poll-refreshed payloads such as
+  cluster-overview carry no threshold and keep server-stale-only behavior).
 - Object age is computed from timestamps by the frontend live-age contract and
   must not participate in metric refresh.
 

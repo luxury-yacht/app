@@ -212,8 +212,12 @@ type PodSummary = streamrows.PodSummary
 
 // PodMetricsInfo mirrors metrics poller metadata for pods.
 type PodMetricsInfo struct {
-	CollectedAt         int64  `json:"collectedAt,omitempty"`
-	Stale               bool   `json:"stale"`
+	CollectedAt int64 `json:"collectedAt,omitempty"`
+	Stale       bool  `json:"stale"`
+	// StaleAfterSeconds ships the staleness threshold so the frontend can flip
+	// the stale banner client-side: the poller rings no doorbell on failure, so
+	// on a quiet cluster nothing refetches to refresh a server-computed Stale.
+	StaleAfterSeconds   int64  `json:"staleAfterSeconds,omitempty"`
 	LastError           string `json:"lastError,omitempty"`
 	ConsecutiveFailures int    `json:"consecutiveFailures,omitempty"`
 	SuccessCount        uint64 `json:"successCount"`

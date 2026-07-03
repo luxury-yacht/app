@@ -86,6 +86,10 @@ const (
 	// projected rows — namespace object changes and workload-presence flips
 	// tell the frontend to refetch the namespaces snapshot.
 	domainNamespaces = "namespaces"
+	// domainObjectEvents is the per-object events doorbell domain: signal-only,
+	// no projected rows — an event for a panel's object tells the frontend to
+	// refetch that object's events snapshot.
+	domainObjectEvents = "object-events"
 )
 
 const (
@@ -980,6 +984,28 @@ func (m *Manager) BroadcastNamespacesRefresh(version, reason string) {
 		"namespaces doorbell %s: %s — signaling %d subscribed scope(s) to refetch the namespace list",
 		version, reason, len(scopes)))
 	m.broadcastDoorbellRefresh(domainNamespaces, scopes, SourceObject, version)
+}
+
+// BroadcastObjectEventsRefresh fans a SourceEvent doorbell to the subscribed
+// object-events scopes the matcher selects. The object-events notifier calls
+// this after each debounced event-informer flush; matches encapsulates the
+// snapshot package's scope→involved-object matching so subscription state and
+// scope semantics stay in their own packages.
+func (m *Manager) BroadcastObjectEventsRefresh(version string, matches func(scope string) bool) {
+	if m == nil || matches == nil {
+		return
+	}
+	scopes := m.subscribedScopes(domainObjectEvents)
+	targets := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if matches(scope) {
+			targets = append(targets, scope)
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+	m.broadcastDoorbellRefresh(domainObjectEvents, targets, SourceEvent, version)
 }
 
 func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {

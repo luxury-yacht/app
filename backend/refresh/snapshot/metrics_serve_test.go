@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
@@ -53,6 +54,16 @@ func TestLatestPodMetricsReadsUsageAndRevisionFromOneCollection(t *testing.T) {
 	usage, metadata := latestPodMetrics(provider)
 	require.Equal(t, metadata.CollectedAt.Unix(), usage["team-a/pod-1"].CPUUsageMilli,
 		"pod usage and metadata must come from the same collection: the metadata revision is stamped as the snapshot's metric source clock for the usage joined into the rows")
+}
+
+// The payload must carry the staleness threshold so the frontend can flip the
+// stale banner client-side: the poller rings no doorbell on failure, so on a
+// quiet cluster nothing ever refetches to refresh a server-computed Stale flag.
+func TestMetricsInfoCarriesStaleThreshold(t *testing.T) {
+	metadata := metrics.Metadata{CollectedAt: time.Unix(100, 0)}
+	wantSeconds := int64(config.MetricsStaleThreshold / time.Second)
+	require.Equal(t, wantSeconds, podMetricsInfoFromMetadata(metadata).StaleAfterSeconds)
+	require.Equal(t, wantSeconds, nodeMetricsInfoFromMetadata(metadata).StaleAfterSeconds)
 }
 
 func TestLatestNodeMetricsReadsUsageAndRevisionFromOneCollection(t *testing.T) {

@@ -9,23 +9,23 @@
 import React from 'react';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 
 const MetricsStatus: React.FC = () => {
   const metricsInfo = useClusterMetricsAvailability();
+  // Time-aware: flips to the stale banner at the payload threshold even when
+  // no refetch arrives (a dead metrics-server on a quiet cluster).
+  const bannerInfo = useMetricsBannerInfo(metricsInfo);
 
   /** Map metrics state to shared status state. */
   const getStatus = (): StatusState => {
     if (!metricsInfo) return 'inactive';
-
-    const bannerInfo = getMetricsBannerInfo(metricsInfo);
 
     // No banner info means metrics are healthy.
     if (!bannerInfo) return 'healthy';
 
     // Has an error — distinguish degraded (stale/intermittent) vs unhealthy (unavailable).
     if (metricsInfo.lastError) return 'unhealthy';
-    if (metricsInfo.stale) return 'degraded';
 
     return 'degraded';
   };
@@ -33,8 +33,6 @@ const MetricsStatus: React.FC = () => {
   /** Generate the popover message. */
   const getMessage = (): string => {
     if (!metricsInfo) return 'Awaiting metrics data...';
-
-    const bannerInfo = getMetricsBannerInfo(metricsInfo);
     if (!bannerInfo) return 'Metrics available';
 
     return bannerInfo.message;

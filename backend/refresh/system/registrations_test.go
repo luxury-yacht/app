@@ -491,9 +491,15 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		}
 
 		if entry.Frontend.Orchestrator == "doorbell-snapshot" {
-			// Doorbell-refetched snapshot domains (namespaces): the doorbell is a
-			// signal-only object clock — no projection descriptor exists.
-			require.ElementsMatchf(t, []string{"object"}, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
+			// Doorbell-refetched snapshot domains declare exactly the one
+			// signal-only clock their doorbell rides — no projection descriptor
+			// exists: namespaces rides the object clock, object-events the
+			// event clock.
+			expected := []string{"object"}
+			if entry.Domain == "object-events" {
+				expected = []string{"event"}
+			}
+			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
 			continue
 		}
 

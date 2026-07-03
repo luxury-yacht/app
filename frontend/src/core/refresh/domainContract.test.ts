@@ -298,14 +298,17 @@ describe('refresh domain contract', () => {
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           break;
         case 'doorbell-snapshot':
-          // Doorbell-refetched snapshot domain (namespaces): streaming wiring
-          // exists for the signal-only doorbell, but it is not a resource
-          // table domain and its clock is the object doorbell. Its doorbell
-          // rides the resources WebSocket, so diagnostics reflect that stream
-          // instead of mislabeling the domain as polling.
+          // Doorbell-refetched snapshot domains (namespaces, object-events):
+          // streaming wiring exists for the signal-only doorbell, but they are
+          // not resource table domains. Each declares exactly the one clock
+          // its doorbell rides (namespaces: object; object-events: event).
+          // The doorbell rides the resources WebSocket, so diagnostics reflect
+          // that stream instead of mislabeling the domain as polling.
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
-          expect(entry.sourceClocks).toEqual(['object']);
+          expect(entry.sourceClocks).toEqual(
+            entry.domain === 'object-events' ? ['event'] : ['object']
+          );
           expect(entry.frontend.diagnosticsStream).toBe('resources');
           break;
         case 'resource-stream':
@@ -463,10 +466,13 @@ describe('refresh domain contract', () => {
           expect(inventory.coverageContract).toBe('log-stream-lifecycle');
           break;
         case 'doorbell-snapshot':
-          // namespaces: a snapshot-table payload whose refetch trigger is the
-          // signal-only object doorbell instead of the poll.
-          expect(entry.domain).toBe('namespaces');
-          expect(inventory.behaviorClass).toBe('snapshot-table');
+          // A snapshot payload whose refetch trigger is a signal-only doorbell
+          // instead of the poll: namespaces (snapshot-table, object doorbell)
+          // and object-events (event-snapshot, per-object event doorbell).
+          expect(['namespaces', 'object-events']).toContain(entry.domain);
+          expect(inventory.behaviorClass).toBe(
+            entry.domain === 'object-events' ? 'event-snapshot' : 'snapshot-table'
+          );
           break;
         case 'snapshot':
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(

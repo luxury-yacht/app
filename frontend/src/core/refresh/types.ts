@@ -223,6 +223,8 @@ export interface ClusterNodeSnapshotEntry extends ClusterMeta {
 export interface NodeMetricsInfo {
   collectedAt?: number;
   stale: boolean;
+  /** Staleness threshold (seconds) so the banner can flip client-side between doorbells. */
+  staleAfterSeconds?: number;
   lastError?: string;
   consecutiveFailures?: number;
   successCount: number;
@@ -698,6 +700,8 @@ export interface PodSnapshotEntry extends ClusterMeta {
 export interface PodMetricsInfo {
   collectedAt?: number;
   stale: boolean;
+  /** Staleness threshold (seconds) so the banner can flip client-side between doorbells. */
+  staleAfterSeconds?: number;
   lastError?: string;
   consecutiveFailures?: number;
   successCount: number;

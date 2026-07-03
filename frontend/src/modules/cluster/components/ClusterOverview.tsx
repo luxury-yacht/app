@@ -26,7 +26,7 @@ import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import logo from '@assets/luxury-yacht-color-vert.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 import './ClusterOverview.css';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
@@ -193,7 +193,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     overviewDomain.data?.metricsByCluster,
     selectedClusterId,
   ]);
-  const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
+  const metricsBanner = useMetricsBannerInfo(metricsInfo);
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
 
   const selectedOverview = useMemo(() => {

@@ -53,11 +53,13 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   // (namespace object changes + workload-presence flips); its 2s timing is now
   // only the stream-down fallback.
   doorbellStreamDomain('namespaces');
+  // The Object Panel Events tab refetches on the backend's per-object events
+  // doorbell; its 10s timing is now only the stream-down fallback.
+  doorbellStreamDomain('object-events');
   registerSnapshotDomains(
     'cluster-overview',
     'object-maintenance',
     'object-details',
-    'object-events',
     'object-map',
     'object-yaml',
     'object-helm-manifest',

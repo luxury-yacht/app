@@ -991,11 +991,12 @@
     {
       "domain": "object-events",
       "category": "system",
+      "sourceClocks": ["event"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "object-events",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }
     },

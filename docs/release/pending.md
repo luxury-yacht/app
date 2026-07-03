@@ -11,5 +11,13 @@
   — eliminating client-side polling, the multi-request metric overlay, and the
   giant row-key query strings. CPU/memory sorting runs server-side with correct
   pagination.
+- The Object Panel Events tab no longer polls every 10 seconds: a per-object
+  server-side doorbell announces new events for the panel's object, and the tab
+  refetches only then (the poll remains as a fallback while the stream is down).
 
 ### Fixed
+
+- The "Awaiting metrics data..." banner now appears even when nothing else is
+  changing in the cluster: metric staleness is evaluated in the app from the
+  sample's collection time, so a stopped or broken metrics-server surfaces as
+  stale data instead of silently showing outdated usage numbers forever.

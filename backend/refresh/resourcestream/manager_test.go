@@ -209,6 +209,56 @@ func TestParseStreamSelectorAcceptsNamespacesClusterScope(t *testing.T) {
 	require.Error(t, err)
 }
 
+// The object-events doorbell fans a SourceEvent signal ONLY to the subscribed
+// scopes the flush's matcher selects — an event for one object must not ring
+// sibling panels' doorbells.
+func TestManagerBroadcastsObjectEventsDoorbellToMatchingScopes(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	matched, err := subscribeForTest(t, manager, domainObjectEvents, "team-a:/v1:Pod:web-1")
+	require.NoError(t, err)
+	other, err := subscribeForTest(t, manager, domainObjectEvents, "team-a:/v1:Pod:other")
+	require.NoError(t, err)
+
+	manager.BroadcastObjectEventsRefresh("oe-3", func(scope string) bool {
+		return scope == "team-a:/v1:Pod:web-1"
+	})
+
+	update := requireNextUpdate(t, matched)
+	require.Equal(t, MessageTypeModified, update.Type)
+	require.Equal(t, domainObjectEvents, update.Domain)
+	require.Equal(t, "team-a:/v1:Pod:web-1", update.Scope)
+	require.Equal(t, SourceEvent, update.Source)
+	require.Equal(t, SignalChanged, update.Signal)
+	require.Equal(t, "oe-3", update.Version)
+	require.Nil(t, update.Ref)
+
+	select {
+	case unexpected := <-other.Updates:
+		t.Fatalf("non-matching object scope must not receive the doorbell, got %+v", unexpected)
+	default:
+	}
+}
+
+// The object-events doorbell subscription is a per-object selector carrying
+// the same scope tail the snapshot domain parses (namespace:group/version:kind:name).
+func TestParseStreamSelectorAcceptsObjectEventsObjectScope(t *testing.T) {
+	selector, err := ParseStreamSelector("c1", domainObjectEvents, "team-a:/v1:Pod:web-1")
+	require.NoError(t, err)
+	require.Equal(t, StreamScopeObject, selector.ScopeKind)
+	require.Equal(t, "team-a:/v1:Pod:web-1", selector.CanonicalScope())
+
+	_, err = ParseStreamSelector("c1", domainObjectEvents, "")
+	require.Error(t, err)
+	_, err = ParseStreamSelector("c1", domainObjectEvents, "namespace:default")
+	require.Error(t, err)
+}
+
 // TestManagerBroadcastsMetricDoorbellToMetricClockDomains pins the metric doorbell:
 // a poller collection fans ONE SourceMetric doorbell to every subscribed scope of
 // every metric-clock domain (pods/nodes/namespace-workloads — the domains whose rows

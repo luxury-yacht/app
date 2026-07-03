@@ -31,7 +31,12 @@ type ResourceStreamDomain =
   | 'nodes';
 
 type DoorbellStreamDomain =
-  ResourceStreamDomain | 'catalog' | 'cluster-events' | 'namespace-events' | 'namespaces';
+  | ResourceStreamDomain
+  | 'catalog'
+  | 'cluster-events'
+  | 'namespace-events'
+  | 'namespaces'
+  | 'object-events';
 
 type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 type ResourceStreamConnectionStatus = 'connected' | 'disconnected';

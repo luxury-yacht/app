@@ -47,6 +47,7 @@ func metricRevisionFromMetadata(metadata metrics.Metadata) string {
 func podMetricsInfoFromMetadata(metadata metrics.Metadata) PodMetricsInfo {
 	info := PodMetricsInfo{
 		Stale:               true,
+		StaleAfterSeconds:   int64(config.MetricsStaleThreshold / time.Second),
 		LastError:           metadata.LastError,
 		ConsecutiveFailures: metadata.ConsecutiveFailures,
 		SuccessCount:        metadata.SuccessCount,
@@ -62,6 +63,7 @@ func podMetricsInfoFromMetadata(metadata metrics.Metadata) PodMetricsInfo {
 func nodeMetricsInfoFromMetadata(metadata metrics.Metadata) NodeMetricsInfo {
 	info := NodeMetricsInfo{
 		Stale:               true,
+		StaleAfterSeconds:   int64(config.MetricsStaleThreshold / time.Second),
 		LastError:           metadata.LastError,
 		ConsecutiveFailures: metadata.ConsecutiveFailures,
 		SuccessCount:        metadata.SuccessCount,

@@ -133,7 +133,7 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	if subsystem == nil || subsystem.Manager == nil {
 		return
 	}
-	subsystem.StopNamespaceNotifier()
+	subsystem.StopDoorbellNotifiers()
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
 	}

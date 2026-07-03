@@ -116,10 +116,10 @@ func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 	// Stop permission revalidation for this cluster.
 	a.stopRefreshPermissionRevalidation(clusterID)
 
-	// Silence the namespaces doorbell notifier BEFORE the stream manager stops:
-	// its debounce/rearm timers outlive the informers and would keep
-	// broadcasting into the dead manager.
-	subsystem.StopNamespaceNotifier()
+	// Silence the doorbell notifiers (namespaces, object-events) BEFORE the
+	// stream manager stops: their debounce/rearm timers outlive the informers
+	// and would keep broadcasting into the dead manager.
+	subsystem.StopDoorbellNotifiers()
 
 	// Stop the resource stream if present.
 	if subsystem.ResourceStream != nil {

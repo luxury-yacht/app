@@ -50,9 +50,10 @@ func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	if previous == nil || previous == next {
 		return
 	}
-	// stopRefreshSubsystem no-ops without a manager; silence the notifier
-	// explicitly so a partially-built previous subsystem cannot keep it.
-	previous.StopNamespaceNotifier()
+	// stopRefreshSubsystem no-ops without a manager; silence the doorbell
+	// notifiers explicitly so a partially-built previous subsystem cannot keep
+	// them.
+	previous.StopDoorbellNotifiers()
 	a.stopRefreshSubsystem(previous)
 }
 

@@ -43,6 +43,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'namespace-workloads',
       'namespaces',
       'nodes',
+      'object-events',
       'pods',
     ]);
   });

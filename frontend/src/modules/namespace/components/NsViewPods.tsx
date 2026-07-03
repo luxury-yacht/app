@@ -11,7 +11,7 @@ import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAv
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import * as cf from '@shared/components/tables/columnFactories';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -524,10 +524,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // joined onto the rows at serve.
     const tableMetrics = queryPayload?.metrics ?? null;
     const effectiveMetrics = tableMetrics ?? fallbackMetrics;
-    const metricsBanner = useMemo(
-      () => getMetricsBannerInfo(effectiveMetrics ?? null),
-      [effectiveMetrics]
-    );
+    const metricsBanner = useMetricsBannerInfo(effectiveMetrics ?? null);
 
     useEffect(() => {
       metricsStateRef.current = podMetricsState(effectiveMetrics);

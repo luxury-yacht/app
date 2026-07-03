@@ -72,6 +72,9 @@ const appPreferencesMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
+  // Consumed by useStreamSignalRefetch (the object-events doorbell refetch);
+  // no doorbell clocks in these tests, so an empty state map keeps it inert.
+  useRefreshScopedDomainStates: () => ({}),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({

@@ -31,6 +31,9 @@ type registrationDeps struct {
 	// registration, so the subsystem can wire its doorbell broadcast once the
 	// resource-stream manager exists. Nil in tests that don't exercise streaming.
 	noteNamespaceNotifier func(*snapshot.NamespaceChangeNotifier)
+	// noteObjectEventsNotifier is the object-events doorbell counterpart of
+	// noteNamespaceNotifier; same wiring lifecycle.
+	noteObjectEventsNotifier func(*snapshot.ObjectEventsChangeNotifier)
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -546,7 +549,14 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterObjectHelmValuesDomain(deps.registry, helmProvider)
 		}), func() bool { return helmOK }),
 		directRegistration("object-events", func() error {
-			return snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
+			notifier, err := snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
+			if err != nil {
+				return err
+			}
+			if deps.noteObjectEventsNotifier != nil {
+				deps.noteObjectEventsNotifier(notifier)
+			}
+			return nil
 		}),
 		directRegistration("object-map", func() error {
 			return snapshot.RegisterObjectMapDomain(

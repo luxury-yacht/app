@@ -87,10 +87,12 @@ type Subsystem struct {
 	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
-	// NamespaceNotifier drives the namespaces doorbell. Teardown/cooling MUST
-	// Stop() it (via StopNamespaceNotifier) or its debounce/rearm timers keep
-	// broadcasting into the torn-down stream manager.
-	NamespaceNotifier *snapshot.NamespaceChangeNotifier
+	// NamespaceNotifier and ObjectEventsNotifier drive the namespaces and
+	// object-events doorbells. Teardown/cooling MUST Stop() them (via
+	// StopDoorbellNotifiers) or their debounce/rearm timers keep broadcasting
+	// into the torn-down stream manager.
+	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
+	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
 
 	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
@@ -262,6 +264,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	}
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
+	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
@@ -272,6 +275,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		serverHost:      serverHost,
 		noteNamespaceNotifier: func(notifier *snapshot.NamespaceChangeNotifier) {
 			namespaceNotifier = notifier
+		},
+		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
+			objectEventsNotifier = notifier
 		},
 	}
 
@@ -344,32 +350,46 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	if resourceManager != nil && namespaceNotifier != nil {
 		namespaceNotifier.SetBroadcast(resourceManager.BroadcastNamespacesRefresh)
 	}
+	// Object-events doorbell: an event for a panel's object broadcasts to that
+	// object's subscribed events scope, replacing the Events tab's 10s poll
+	// (the poll remains only as the stream-down fallback).
+	if resourceManager != nil && objectEventsNotifier != nil {
+		objectEventsNotifier.SetBroadcast(resourceManager.BroadcastObjectEventsRefresh)
+	}
 
 	return &Subsystem{
-		Manager:           manager,
-		Handler:           mux,
-		Telemetry:         telemetryRecorder,
-		PermissionIssues:  permissionIssues,
-		InformerFactory:   informerFactory,
-		IngestManager:     ingestManager,
-		RuntimePerms:      runtimePerms,
-		Registry:          registry,
-		SnapshotService:   snapshotService,
-		ManualQueue:       queue,
-		EventStream:       eventManager,
-		ResourceStream:    resourceManager,
-		ClusterMeta:       clusterMeta,
-		NamespaceNotifier: namespaceNotifier,
+		Manager:              manager,
+		Handler:              mux,
+		Telemetry:            telemetryRecorder,
+		PermissionIssues:     permissionIssues,
+		InformerFactory:      informerFactory,
+		IngestManager:        ingestManager,
+		RuntimePerms:         runtimePerms,
+		Registry:             registry,
+		SnapshotService:      snapshotService,
+		ManualQueue:          queue,
+		EventStream:          eventManager,
+		ResourceStream:       resourceManager,
+		ClusterMeta:          clusterMeta,
+		NamespaceNotifier:    namespaceNotifier,
+		ObjectEventsNotifier: objectEventsNotifier,
 	}, nil
 }
 
-// StopNamespaceNotifier silences the namespaces doorbell notifier; nil-safe for
-// subsystems built without one (tests, failed registration).
-func (s *Subsystem) StopNamespaceNotifier() {
-	if s == nil || s.NamespaceNotifier == nil {
+// StopDoorbellNotifiers silences every doorbell notifier (namespaces,
+// object-events); nil-safe for subsystems built without them (tests, failed
+// registration). Every teardown/cool path must call this or the notifiers'
+// debounce/rearm timers keep broadcasting into the dead stream manager.
+func (s *Subsystem) StopDoorbellNotifiers() {
+	if s == nil {
 		return
 	}
-	s.NamespaceNotifier.Stop()
+	if s.NamespaceNotifier != nil {
+		s.NamespaceNotifier.Stop()
+	}
+	if s.ObjectEventsNotifier != nil {
+		s.ObjectEventsNotifier.Stop()
+	}
 }
 
 // metricsSignalObserver maps a successful poller collection to a SourceMetric

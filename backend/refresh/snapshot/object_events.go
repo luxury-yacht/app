@@ -64,15 +64,23 @@ type ObjectEventsSnapshotPayload struct {
 }
 
 // RegisterObjectEventsDomain registers the object-events domain.
+//
+// It returns the change notifier that replaces the Object Panel Events tab's
+// poll: the SAME shared events informer the builder reads feeds it (handler
+// registered HERE, before the informer factory starts), and the subsystem
+// wires its broadcast to the resource-stream doorbell once the stream manager
+// exists. The notifier is nil when no informer factory is available (the
+// API-list fallback path has no push source; the poll covers it).
 func RegisterObjectEventsDomain(
 	reg *domain.Registry,
 	client kubernetes.Interface,
 	factory informers.SharedInformerFactory,
-) error {
+) (*ObjectEventsChangeNotifier, error) {
 	if client == nil {
-		return fmt.Errorf("kubernetes client is required for object events domain")
+		return nil, fmt.Errorf("kubernetes client is required for object events domain")
 	}
 	builder := &ObjectEventsBuilder{client: client}
+	var notifier *ObjectEventsChangeNotifier
 	if factory != nil {
 		eventInformer := factory.Core().V1().Events()
 		if eventInformer != nil {
@@ -82,12 +90,36 @@ func RegisterObjectEventsDomain(
 			builder.eventLister = eventInformer.Lister()
 			builder.eventIndexer = eventInformer.Informer().GetIndexer()
 			builder.eventSynced = eventInformer.Informer().HasSynced
+
+			notifier = NewObjectEventsChangeNotifier()
+			record := func(obj interface{}) {
+				if evt, ok := maintainedUnwrap(obj).(*corev1.Event); ok {
+					notifier.EventChanged(evt)
+				}
+			}
+			if _, err := eventInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc: record,
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					// Informer resyncs re-deliver every event with an unchanged
+					// ResourceVersion; only real changes ring the doorbell.
+					if eventUpdateIsEcho(oldObj, newObj) {
+						return
+					}
+					record(newObj)
+				},
+				DeleteFunc: record,
+			}); err != nil {
+				return nil, fmt.Errorf("object-events: register event handler: %w", err)
+			}
 		}
 	}
-	return reg.Register(refresh.DomainConfig{
+	if err := reg.Register(refresh.DomainConfig{
 		Name:          objectEventsDomain,
 		BuildSnapshot: builder.Build,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return notifier, nil
 }
 
 func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {

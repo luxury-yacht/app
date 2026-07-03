@@ -10,7 +10,7 @@ import { refreshDomainContract, type RefreshSourceClock } from '../domainRegistr
 export type ResourceDomain = AppEvents['refresh:resource-stream-drift']['domain'];
 export type DoorbellDomain = AppEvents['refresh:resource-stream-health']['domain'];
 
-export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster';
+export type ResourceStreamScopeKind = 'pod' | 'namespace' | 'cluster' | 'object';
 
 export type ResourceStreamDomainDescriptor = {
   domain: DoorbellDomain;
@@ -202,6 +202,14 @@ const doorbellDomainDescriptors = [
     scopeKind: 'cluster',
     isClusterScoped: true,
   },
+  // Signal-only per-object doorbell for the object-events snapshot domain: an
+  // event for a panel's object replaces the Events tab's poll. The scope is
+  // the snapshot domain's object-scope tail, passed through verbatim.
+  {
+    domain: 'object-events',
+    scopeKind: 'object',
+    isClusterScoped: false,
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(
@@ -267,6 +275,15 @@ export const normalizeResourceScope = (domain: DoorbellDomain, scope: string): s
         return '';
       }
       throw new Error(`${domain} stream does not accept scope ${scope}`);
+    case 'object': {
+      // The object-scope tail (namespace:group/version:kind:name) is the wire
+      // format; the backend selector validates it via its single decoder.
+      const trimmed = scope.trim();
+      if (!trimmed) {
+        throw new Error(`${domain} scope is required`);
+      }
+      return trimmed;
+    }
     default:
       throw new Error(`unsupported resource stream domain ${domain}`);
   }
