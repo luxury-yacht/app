@@ -298,15 +298,18 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		}
 	}
 
-	// Pre-sort by (namespace, name) so the window branch (which truncates input
-	// order) matches the prior window behavior; the query branch re-sorts via the
-	// engine and ignores this order.
-	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Namespace == summaries[j].Namespace {
-			return summaries[i].Name < summaries[j].Name
-		}
-		return summaries[i].Namespace < summaries[j].Namespace
-	})
+	// Pre-sort by (namespace, name) ONLY for the window branch, which truncates
+	// input order. The query branch re-sorts via the engine and ignores this
+	// order — sorting the full scope there is wasted work on every doorbell
+	// refetch (pinned by TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName).
+	if !query.Enabled {
+		sort.Slice(summaries, func(i, j int) bool {
+			if summaries[i].Namespace == summaries[j].Namespace {
+				return summaries[i].Name < summaries[j].Name
+			}
+			return summaries[i].Namespace < summaries[j].Namespace
+		})
+	}
 
 	// Serve the query branch through the querypage engine (proven byte-equivalent to
 	// the bespoke typed-table executor in querypage_pods_test.go); the window branch

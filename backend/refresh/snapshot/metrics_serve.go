@@ -14,18 +14,23 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
+// Both helpers read the provider's Sample — one consistent collection — never
+// the individual accessors: usage paired with another collection's metadata
+// would stamp a metric revision the joined rows don't contain.
 func latestPodMetrics(provider metrics.Provider) (map[string]metrics.PodUsage, metrics.Metadata) {
 	if provider == nil {
 		return map[string]metrics.PodUsage{}, metrics.Metadata{}
 	}
-	return podUsageOrEmpty(provider.LatestPodUsage()), provider.Metadata()
+	sample := provider.Sample()
+	return podUsageOrEmpty(sample.PodUsage), sample.Metadata
 }
 
 func latestNodeMetrics(provider metrics.Provider) (map[string]metrics.NodeUsage, map[string]metrics.PodUsage, metrics.Metadata) {
 	if provider == nil {
 		return map[string]metrics.NodeUsage{}, map[string]metrics.PodUsage{}, metrics.Metadata{}
 	}
-	return nodeUsageOrEmpty(provider.LatestNodeUsage()), podUsageOrEmpty(provider.LatestPodUsage()), provider.Metadata()
+	sample := provider.Sample()
+	return nodeUsageOrEmpty(sample.NodeUsage), podUsageOrEmpty(sample.PodUsage), sample.Metadata
 }
 
 // metricRevisionFromMetadata is the metric source clock: it advances exactly when the

@@ -45,6 +45,14 @@ func (f fakeClusterMetrics) Metadata() metrics.Metadata {
 	return f.meta
 }
 
+func (f fakeClusterMetrics) Sample() metrics.Sample {
+	return metrics.Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
+}
+
 func TestClusterOverviewBuilder(t *testing.T) {
 	now := time.Now()
 

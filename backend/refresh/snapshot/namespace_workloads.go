@@ -298,6 +298,13 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
 		namespacePodIngestVersion(b.podIngest),
 	)
+	// Sort ONLY for the window branch, which truncates input order. The query
+	// branch re-sorts via the engine and ignores this order — sorting the full
+	// scope there is wasted work on every doorbell refetch (pinned by
+	// TestNamespaceWorkloadsBuilderWindowScopeOrdersRowsByKindThenName).
+	if !query.Enabled {
+		sortWorkloadSummaries(items)
+	}
 
 	resolved := resolveTypedSnapshotPageViaStore(
 		namespaceWorkloadsDomainName,
@@ -426,7 +433,8 @@ func assembleWorkloadRows(
 		version = podIngestVersion
 	}
 
-	sortWorkloadSummaries(items)
+	// Ordering is the caller's concern: buildSnapshot sorts only for the window
+	// branch (the query branch's engine ignores input order).
 	return items, version
 }
 

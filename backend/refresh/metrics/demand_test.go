@@ -46,6 +46,14 @@ func (f *fakeDemandPoller) Metadata() Metadata {
 	return Metadata{}
 }
 
+func (f *fakeDemandPoller) Sample() Sample {
+	return Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
+}
+
 func TestDemandPollerStartsOnDemand(t *testing.T) {
 	fake := newFakeDemandPoller()
 	poller := NewDemandPoller(fake, fake, 200*time.Millisecond)

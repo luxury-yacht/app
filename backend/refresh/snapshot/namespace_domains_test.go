@@ -1450,6 +1450,60 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 
 }
 
+// TestNamespaceWorkloadsBuilderWindowScopeOrdersRowsByKindThenName pins the WINDOW
+// branch's (kind, name) ordering with deliberately scrambled input: the window
+// truncates input order, so an unsorted window would truncate a nondeterministic
+// subset. The query branch deliberately has no such pin — the querypage engine owns
+// its order and ignores the builder's.
+func TestNamespaceWorkloadsBuilderWindowScopeOrdersRowsByKindThenName(t *testing.T) {
+	replicas := int32(1)
+	deploymentSpec := func(name string) *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            name,
+				Namespace:       "default",
+				ResourceVersion: "10",
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}},
+			},
+		}
+	}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "db",
+			Namespace:       "default",
+			ResourceVersion: "11",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "db"}},
+		},
+	}
+
+	builder := &NamespaceWorkloadsBuilder{
+		podIngest:           newFakePodWorkloadsIngestSource(ClusterMeta{}, nil),
+		includePods:         true,
+		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deploymentSpec("web"), statefulSet, deploymentSpec("api")),
+		includeDeployments:  true,
+		includeStatefulSets: true,
+	}
+	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Rows, 3)
+	got := make([]string, 0, len(payload.Rows))
+	for _, row := range payload.Rows {
+		got = append(got, row.Kind+"/"+row.Name)
+	}
+	require.Equal(t, []string{"Deployment/api", "Deployment/web", "StatefulSet/db"}, got)
+}
+
 func TestNamespaceWorkloadsBuilderSurfacesMetricMetadata(t *testing.T) {
 	collectedAt := time.Now().Add(-config.MetricsStaleThreshold - time.Second)
 	replicas := int32(1)
@@ -2148,4 +2202,12 @@ func (f *workloadMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
 
 func (f *workloadMetricsProvider) Metadata() metrics.Metadata {
 	return f.metadata
+}
+
+func (f *workloadMetricsProvider) Sample() metrics.Sample {
+	return metrics.Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
 }

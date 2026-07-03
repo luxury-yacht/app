@@ -42,6 +42,14 @@ func (f fakePodMetricsProvider) Metadata() metrics.Metadata {
 	return f.metadata
 }
 
+func (f fakePodMetricsProvider) Sample() metrics.Sample {
+	return metrics.Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
+}
+
 // TestOverlayPodMetricsMissingSampleRendersNoData proves a row whose pod has NO
 // metrics sample renders the no-data marker, never "0m"/"0Mi" — so "metrics
 // unknown" is distinguishable from a real zero (Risk #9 / §3.6).
@@ -597,6 +605,41 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Rows[0].Namespace, payload.Rows[1].Namespace})
+}
+
+// TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName pins the WINDOW branch's
+// (namespace, name) ordering with deliberately scrambled input: the window truncates
+// input order, so an unsorted window would truncate a nondeterministic subset. The
+// query branch deliberately has no such pin — the querypage engine owns its order and
+// ignores the builder's.
+func TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName(t *testing.T) {
+	scrambled := []*corev1.Pod{
+		{ObjectMeta: metav1.ObjectMeta{Name: "zulu", Namespace: "team-b", ResourceVersion: "1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "mike", Namespace: "team-a", ResourceVersion: "2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "alpha", Namespace: "team-b", ResourceVersion: "3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "zulu", Namespace: "team-a", ResourceVersion: "4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "alpha", Namespace: "team-a", ResourceVersion: "5"}},
+	}
+
+	builder := &PodBuilder{
+		podLister: testsupport.NewPodLister(t, scrambled...),
+		rsLister:  testsupport.NewReplicaSetLister(t),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:all")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(PodSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Rows, 5)
+	got := make([]string, 0, len(payload.Rows))
+	for _, row := range payload.Rows {
+		got = append(got, row.Namespace+"/"+row.Name)
+	}
+	require.Equal(t, []string{
+		"team-a/alpha", "team-a/mike", "team-a/zulu",
+		"team-b/alpha", "team-b/zulu",
+	}, got)
 }
 
 func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T) {

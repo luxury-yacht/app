@@ -60,6 +60,19 @@ type Provider interface {
 	LatestNodeUsage() map[string]NodeUsage
 	LatestPodUsage() map[string]PodUsage
 	Metadata() Metadata
+	Sample() Sample
+}
+
+// Sample is a mutually consistent view of one collection: the usage maps and
+// the metadata are read under one lock, so a consumer can never observe usage
+// from one collection paired with another collection's metadata — the serve-time
+// join stamps Metadata.CollectedAt as the snapshot's metric source clock, and a
+// torn pair would stamp a revision the joined rows don't contain. Consumers
+// that pair usage with metadata must use Sample, not the individual accessors.
+type Sample struct {
+	NodeUsage map[string]NodeUsage
+	PodUsage  map[string]PodUsage
+	Metadata  Metadata
 }
 
 func copyNodeUsage(source map[string]NodeUsage) map[string]NodeUsage {
@@ -192,12 +205,29 @@ func (p *Poller) LatestPodUsage() map[string]PodUsage {
 func (p *Poller) Metadata() Metadata {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+	return p.metadataLocked()
+}
+
+// metadataLocked assembles the status struct; callers hold p.mu.
+func (p *Poller) metadataLocked() Metadata {
 	return Metadata{
 		CollectedAt:         p.lastCollected,
 		ConsecutiveFailures: p.consecutiveFailure,
 		LastError:           p.lastError,
 		SuccessCount:        p.successCount,
 		FailureCount:        p.failureCount,
+	}
+}
+
+// Sample returns the usage maps and metadata of one collection under a single
+// lock acquisition; refresh() publishes them atomically under the same lock.
+func (p *Poller) Sample() Sample {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return Sample{
+		NodeUsage: copyNodeUsage(p.nodeUsage),
+		PodUsage:  copyPodUsage(p.podUsage),
+		Metadata:  p.metadataLocked(),
 	}
 }
 

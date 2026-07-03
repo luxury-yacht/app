@@ -150,6 +150,18 @@ func (d *DemandPoller) Metadata() Metadata {
 	return d.provider.Metadata()
 }
 
+// Sample returns one consistent collection view and records demand.
+func (d *DemandPoller) Sample() Sample {
+	if d == nil || d.provider == nil {
+		return Sample{
+			NodeUsage: map[string]NodeUsage{},
+			PodUsage:  map[string]PodUsage{},
+		}
+	}
+	d.touch()
+	return d.provider.Sample()
+}
+
 func (d *DemandPoller) touch() {
 	d.mu.Lock()
 	d.lastDemand = d.now()

@@ -47,6 +47,14 @@ func (f fakeMetricsProvider) Metadata() metrics.Metadata {
 	return f.metadata
 }
 
+func (f fakeMetricsProvider) Sample() metrics.Sample {
+	return metrics.Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
+}
+
 // newNodeBuilderForTest builds a NodeBuilder wired the production way: node OWN-rows are served
 // from a maintained store fed the SAME Table-half NodeSummary rows the node reflector projects
 // (via the store's Sink, mirroring pods_store_scope_test.go), while the ingest source still
