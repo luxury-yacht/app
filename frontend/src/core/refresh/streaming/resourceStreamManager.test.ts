@@ -284,7 +284,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('pods', storeScope);
     expect(state.sourceVersion).toBe('object:2');
-    expect(state.sourceVersions?.object).toBe('object:2');
+    expect(state.signalVersions?.object).toBe('object:2');
     expect(state.data?.rows?.[0]?.status).toBe('Running');
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
   });
@@ -402,7 +402,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespaces', storeScope);
     expect(state.sourceVersion).toBe('ns-3');
-    expect(state.sourceVersions?.object).toBe('ns-3');
+    expect(state.signalVersions?.object).toBe('ns-3');
     // The applied doorbell logs at DEBUG — the runtime counterpart of the
     // backend's "namespaces doorbell <v>: <reason> — signaling ..." line. It
     // must carry the subscription's cluster label (the backend half is
@@ -450,13 +450,13 @@ describe('ResourceStreamManager', () => {
 
     const podsState = getScopedDomainState('pods', podsScope);
     expect(podsState.sourceVersion).toBe('1700000000000000042');
-    expect(podsState.sourceVersions?.metric).toBe('1700000000000000042');
+    expect(podsState.signalVersions?.metric).toBe('1700000000000000042');
 
     // namespace-config declares no metric source clock: the doorbell is dropped
     // at parse time and its state stays untouched.
     const configState = getScopedDomainState('namespace-config', configScope);
     expect(configState.sourceVersion).toBeUndefined();
-    expect(configState.sourceVersions?.metric).toBeUndefined();
+    expect(configState.signalVersions?.metric).toBeUndefined();
   });
 
   test('signal-only domain delta updates sourceVersion and never retains rows', () => {
@@ -494,7 +494,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-workloads', storeScope);
     expect(state.sourceVersion).toBe('object:7');
-    expect(state.sourceVersions?.object).toBe('object:7');
+    expect(state.signalVersions?.object).toBe('object:7');
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
@@ -534,9 +534,9 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     expect(getScopedDomainState('catalog', pageScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', pageScope).sourceVersions?.catalog).toBe('catalog:42');
+    expect(getScopedDomainState('catalog', pageScope).signalVersions?.catalog).toBe('catalog:42');
     expect(getScopedDomainState('catalog', metadataScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).sourceVersions?.catalog).toBe(
+    expect(getScopedDomainState('catalog', metadataScope).signalVersions?.catalog).toBe(
       'catalog:42'
     );
   });
@@ -575,7 +575,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     expect(getScopedDomainState('pods', storeScope).sourceVersion).toBe('objects:2');
-    expect(getScopedDomainState('pods', storeScope).sourceVersions?.object).toBe('objects:2');
+    expect(getScopedDomainState('pods', storeScope).signalVersions?.object).toBe('objects:2');
   });
 
   test('A1 reset signal envelope forces a resync without legacy message type', async () => {
@@ -602,7 +602,7 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     expect(getScopedDomainState('namespace-config', storeScope).sourceVersion).toBe('object:11');
-    expect(getScopedDomainState('namespace-config', storeScope).sourceVersions?.object).toBe(
+    expect(getScopedDomainState('namespace-config', storeScope).signalVersions?.object).toBe(
       'object:11'
     );
   });
@@ -1217,7 +1217,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('namespace-config', storeScope, (previous) => ({
       ...previous,
       sourceVersion: 'object:before-reset',
-      sourceVersions: { object: 'object:before-reset' },
+      signalVersions: { object: 'object:before-reset' },
     }));
     manager.handleMessage(
       'cluster-a',
@@ -1232,7 +1232,7 @@ describe('ResourceStreamManager', () => {
     // A later reset is a real resync: it re-arms the stream and advances query identity.
     const resetState = getScopedDomainState('namespace-config', storeScope);
     expect(resetState.sourceVersion).not.toBe('object:before-reset');
-    expect(resetState.sourceVersions?.object).toBe(resetState.sourceVersion);
+    expect(resetState.signalVersions?.object).toBe(resetState.sourceVersion);
     expect(resetState.streamRevision ?? 0).toBeGreaterThan(0);
   });
 
@@ -1264,7 +1264,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('namespace-config', storeScope, (previous) => ({
       ...previous,
       sourceVersion: 'object:before-complete',
-      sourceVersions: { object: 'object:before-complete' },
+      signalVersions: { object: 'object:before-complete' },
     }));
 
     manager.handleMessage(
@@ -1280,7 +1280,7 @@ describe('ResourceStreamManager', () => {
     // COMPLETE triggers a scope-level resync and advances query identity.
     const completeState = getScopedDomainState('namespace-config', storeScope);
     expect(completeState.sourceVersion).not.toBe('object:before-complete');
-    expect(completeState.sourceVersions?.object).toBe(completeState.sourceVersion);
+    expect(completeState.signalVersions?.object).toBe(completeState.sourceVersion);
     expect(completeState.streamRevision ?? 0).toBeGreaterThan(0);
     const sourceVersionAfterComplete = completeState.sourceVersion;
 

@@ -556,12 +556,13 @@ describe('NamespaceProvider selection behaviour', () => {
     });
     mockRefreshOrchestrator.fetchScopedDomain.mockClear();
 
-    // Doorbell: the stream signal advances the scoped sourceVersion.
+    // Doorbell: the stream signal advances the scoped signal clock
+    // (signalVersions is written only by the stream manager's doorbell path).
     act(() => {
       setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
         ...previous,
         sourceVersion: 'ns-1',
-        sourceVersions: { object: 'ns-1' },
+        signalVersions: { object: 'ns-1' },
       }));
     });
     act(() => {

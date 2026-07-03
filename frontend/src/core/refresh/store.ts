@@ -20,6 +20,13 @@ export interface DomainSnapshotState<TPayload> {
   version?: number;
   sourceVersion?: string;
   sourceVersions?: Partial<Record<RefreshSourceClock, string>>;
+  // Doorbell clock values, written ONLY by the stream manager
+  // (bumpSourceVersionOnly) and never by payload applies — the structural
+  // guarantee that signal-driven refetch keys move exactly when a doorbell
+  // delivers them. Payload applies own sourceVersions (the backend back-fills
+  // an object clock into every snapshot, so sourceVersions churn on every
+  // fetch and CANNOT be a signal key — that was the echo-refetch bug).
+  signalVersions?: Partial<Record<RefreshSourceClock, string>>;
   checksum?: string;
   etag?: string;
   // Retained for stream diagnostics/backward-compatible tests only. Query-backed

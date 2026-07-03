@@ -879,8 +879,13 @@ export class ResourceStreamManager {
         ...previous,
         status: 'ready',
         sourceVersion: latest ?? previous.sourceVersion,
-        sourceVersions: {
-          ...(previous.sourceVersions ?? {}),
+        // Doorbell clocks live in signalVersions, which payload applies never
+        // touch — the structural guarantee that signal-refetch keys move only
+        // when a doorbell delivers them. sourceVersions stays payload-owned
+        // (the backend back-fills an object clock into every snapshot, so it
+        // churns on every fetch and cannot carry signals).
+        signalVersions: {
+          ...(previous.signalVersions ?? {}),
           ...sourceVersions,
         },
         streamRevision: (previous.streamRevision ?? 0) + 1,

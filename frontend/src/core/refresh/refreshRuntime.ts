@@ -9,6 +9,12 @@ export type InFlightRequest = {
   contextVersion: number;
   domain: RefreshDomain;
   scope?: string;
+  // Set when a stream-signal fetch arrived while this request was in flight:
+  // the signal proves this response predates the change, so its finally block
+  // runs exactly ONE trailing stream-signal fetch. Latching (instead of
+  // aborting) keeps busy scopes progressing — signals can arrive faster than
+  // a round trip, and abort-and-replace would starve the scope.
+  rerunStreamSignal?: boolean;
 };
 
 type StreamingFetchMode = 'snapshot' | 'skip';

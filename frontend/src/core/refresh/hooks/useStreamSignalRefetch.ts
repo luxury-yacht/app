@@ -12,16 +12,16 @@
  * announcing changed data). Auto-refresh pause still applies.
  *
  * Loop safety: the hook keys on the domain's DECLARED doorbell clocks
- * (contract sourceClocks) inside sourceVersions, NEVER the folded
- * sourceVersion. Payload applies rewrite sourceVersion (and stamp their own
- * clock values) on every build, so keying on those turns each fetch response
- * into another "signal" and loops — observed live as a fetch storm during
- * cluster warm-up, when the namespaces payload changes on every settling
- * build. Doorbell clock values only move when a doorbell delivers them, so
- * the key is quiet between real signals. The first observed key per scope is
- * consumed without fetching (the scope's data came from the fetch that
- * produced it), and a payload apply that clears the doorbell clocks is our
- * own fetch landing, not a new signal.
+ * (contract sourceClocks) inside signalVersions — the field ONLY the stream
+ * manager's doorbell path writes — NEVER the folded sourceVersion and NEVER
+ * sourceVersions. Payload applies rewrite both of those on every fetch (the
+ * backend back-fills an object clock into every snapshot), so keying on them
+ * turned each fetch response into another "signal": a fetch storm during
+ * cluster warm-up and a doubled (echo) fetch per doorbell in steady state —
+ * both observed live. signalVersions moves exactly when a doorbell delivers
+ * it, so the key is quiet between real signals. The first observed key per
+ * scope is consumed without fetching (the scope's data was fetched at or
+ * after those doorbells).
  */
 
 import { useEffect, useRef } from 'react';
@@ -44,25 +44,25 @@ export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly s
       if (!scope) {
         return;
       }
-      const sourceVersions = domainStates[scope]?.sourceVersions;
-      const key = clocks.map((clock) => clock + ':' + (sourceVersions?.[clock] ?? '')).join(' ');
-      const hasSignal = clocks.some((clock) => Boolean(sourceVersions?.[clock]));
+      // signalVersions is written ONLY by the stream manager's doorbell path;
+      // payload applies never touch it. Keying on it (never sourceVersions,
+      // which the backend back-fills with an object clock on EVERY snapshot)
+      // is what makes a fetch response invisible here — no echo refetch.
+      const signalVersions = domainStates[scope]?.signalVersions;
+      const key = clocks.map((clock) => clock + ':' + (signalVersions?.[clock] ?? '')).join(' ');
+      const hasSignal = clocks.some((clock) => Boolean(signalVersions?.[clock]));
       const consumed = consumedKeysRef.current;
       if (!consumed.has(scope)) {
-        // First observation: whatever clock values exist arrived with the data
-        // this scope already holds — fresh by construction.
+        // First observation: whatever doorbell values exist arrived before
+        // this consumer mounted — the data it reads was fetched at or after
+        // them, fresh by construction.
         consumed.set(scope, key);
         return;
       }
-      if (consumed.get(scope) === key) {
+      if (consumed.get(scope) === key || !hasSignal) {
         return;
       }
       consumed.set(scope, key);
-      if (!hasSignal) {
-        // The payload apply cleared the doorbell clocks (its own map carries
-        // none): that is our fetch landing, not a new signal.
-        return;
-      }
       void requestRefreshDomain({ domain, scope, reason: 'stream-signal' });
     });
   }, [domainStates, scopes, domain]);

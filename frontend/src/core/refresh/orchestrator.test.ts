@@ -355,6 +355,94 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('cluster-config');
   });
 
+  it('a stream-signal fetch latches a trailing refetch behind an in-flight fetch — never dropped, never aborting', async () => {
+    clusterReadiness.resetForTests();
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', 'cluster');
+    resetAllScopedDomainStates('cluster-config');
+    setRuntimeScopeEnabled('cluster-config', scope, true);
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+    clientMocks.fetchSnapshotMock.mockClear();
+
+    // First doorbell's fetch hangs in flight.
+    let resolveFirst: (value: unknown) => void = () => {};
+    let firstSignal: AbortSignal | undefined;
+    clientMocks.fetchSnapshotMock.mockImplementationOnce((_domain: string, args: any) => {
+      firstSignal = args?.signal;
+      return new Promise((resolve) => (resolveFirst = resolve));
+    });
+    const firstFetch = refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {
+      isManual: false,
+      streamSignal: true,
+    });
+    await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1));
+
+    // Doorbells ring (twice) while the first fetch is in flight. The signal
+    // proves the in-flight response predates the change, so it must NOT be
+    // dropped (lost update: nothing refetches until an unrelated event) — but
+    // it must not ABORT the in-flight fetch either: signals can arrive faster
+    // than a round trip, and abort-and-replace starves the scope so no fetch
+    // ever lands. The correct semantics: latch ONE trailing refetch behind
+    // the in-flight fetch, coalescing any number of signals.
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'cluster-config',
+        scope,
+        version: 2,
+        checksum: 'etag-2',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: { clusterId: 'cluster-a', rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-2',
+      notModified: false,
+    });
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {
+      isManual: false,
+      streamSignal: true,
+    });
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {
+      isManual: false,
+      streamSignal: true,
+    });
+    // No new fetch yet, and the in-flight one was not cancelled.
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(firstSignal?.aborted ?? false).toBe(false);
+
+    // The in-flight fetch lands (its data applies — it is newer than whatever
+    // was on screen), then EXACTLY ONE trailing fetch runs for the signals.
+    resolveFirst({
+      snapshot: {
+        domain: 'cluster-config',
+        scope,
+        version: 1,
+        checksum: 'etag-1',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { clusterId: 'cluster-a', rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-1',
+      notModified: false,
+    });
+    await firstFetch;
+    await vi.waitFor(() => expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2));
+
+    // The trailing fetch's (fresh) data wins.
+    const fetchedScope = clientMocks.fetchSnapshotMock.mock.calls[1][1].scope as string;
+    await vi.waitFor(() =>
+      expect(getScopedDomainState('cluster-config', fetchedScope).etag).toBe('etag-2')
+    );
+
+    clusterReadiness.resetForTests();
+    resetAllScopedDomainStates('cluster-config');
+  });
+
   it('fetches a new filtered catalog scope even when the stream is healthy (filter change must fire)', async () => {
     clusterReadiness.resetForTests();
     registerCatalogDomain();

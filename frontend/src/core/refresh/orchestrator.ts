@@ -1062,6 +1062,7 @@ class RefreshOrchestrator {
     await this.performFetch(domain, normalizedScope, {
       isManual: options.isManual ?? true,
       signal: options.signal,
+      streamSignal: Boolean(options.streamSignal),
     });
   }
 
@@ -1095,14 +1096,22 @@ class RefreshOrchestrator {
     const currentInFlight = runtime.getInFlight(domain, normalizedScope);
 
     if (currentInFlight) {
-      if (options.isManual && !currentInFlight.isManual) {
+      if (options.isManual) {
+        // Manual fetches always replace whatever is in flight.
         currentInFlight.controller.abort();
         this.teardownInFlight(runtime, inFlightKey, currentInFlight);
-      } else if (!options.isManual) {
+      } else if (options.streamSignal) {
+        // The doorbell proves the data changed AFTER the in-flight request
+        // started, so that response is already stale — but dropping the signal
+        // loses the update until an unrelated event, and aborting starves the
+        // scope when signals arrive faster than a round trip. Latch exactly
+        // ONE trailing refetch behind the in-flight request; any number of
+        // signals coalesce into it.
+        currentInFlight.rerunStreamSignal = true;
         return;
-      } else if (options.isManual && currentInFlight.isManual) {
-        currentInFlight.controller.abort();
-        this.teardownInFlight(runtime, inFlightKey, currentInFlight);
+      } else {
+        // Plain background polls yield to an in-flight request.
+        return;
       }
     }
 
@@ -1214,6 +1223,14 @@ class RefreshOrchestrator {
       if (tracked && tracked.requestId === requestId) {
         tracked.cleanup?.();
         runtime.deleteInFlight(domain, normalizedScope);
+        // Doorbells that rang during this request latched a trailing refetch:
+        // run it now that the slot is free (one fetch coalesces them all).
+        if (tracked.rerunStreamSignal && contextVersion === this.contextVersion) {
+          void this.performFetch(domain, normalizedScope, {
+            isManual: false,
+            streamSignal: true,
+          });
+        }
       }
 
       markPendingRequest(-1);
