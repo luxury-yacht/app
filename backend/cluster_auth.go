@@ -293,13 +293,15 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// If the HTTP server hasn't been started yet (e.g. all clusters had auth
 	// failures during initial startup), bootstrap the full HTTP infrastructure
 	// now that we have at least one working subsystem.
-	if a.refreshHTTPServer == nil || a.refreshAggregates == nil {
+	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil {
 		mux, aggregates, muxErr := a.buildRefreshMux(subsystems, clusterOrder)
 		if muxErr != nil {
 			a.logger.Error(fmt.Sprintf("Failed to build refresh mux after cluster %s recovery: %v", clusterID, muxErr), logsources.Auth, clusterID, clusterName)
 			return
 		}
-		a.refreshAggregates = aggregates
+		a.refreshAggregates.Store(aggregates)
+		// Heal any readiness settle-ring dropped while aggregates were nil.
+		a.sweepNamespacesReadiness(subsystems)
 		if srvErr := a.startRefreshHTTPServer(mux, subsystems); srvErr != nil {
 			a.logger.Error(fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery: %v", clusterID, srvErr), logsources.Auth, clusterID, clusterName)
 			return
@@ -307,7 +309,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		a.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
 	} else {
 		// Update the aggregate handlers so they know about the new subsystem.
-		if err := a.refreshAggregates.Update(clusterOrder, subsystems); err != nil {
+		if err := a.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
 			a.logger.Error(fmt.Sprintf("Failed to update aggregates for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 		}
 	}

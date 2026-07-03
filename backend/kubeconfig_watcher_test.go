@@ -126,7 +126,7 @@ func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameF
 	app.clusterClients = make(map[string]*clusterClients)
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshCtx = context.Background()
 	app.appSettings = getDefaultAppSettings()
@@ -232,7 +232,7 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	app.appSettings = &AppSettings{SelectedKubeconfigs: []string{"/path/a:ctx-a", "/path/b:ctx-b"}}
 
 	// Force updateRefreshSubsystemSelections to take the setupRefreshSubsystem path and fail.
-	app.refreshAggregates = nil
+	app.refreshAggregates.Store(nil)
 	app.refreshHTTPServer = nil
 	app.refreshCtx = nil
 

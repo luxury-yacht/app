@@ -51,7 +51,7 @@ func (a *App) teardownRefreshSubsystem() {
 	}
 
 	a.refreshManager = nil
-	a.refreshAggregates = nil
+	a.refreshAggregates.Store(nil)
 
 	serverDone := a.refreshServerDone
 	if a.refreshHTTPServer != nil {

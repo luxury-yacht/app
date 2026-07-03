@@ -17,7 +17,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 	if len(selections) == 0 {
 		return nil
 	}
-	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
+	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.refreshCtx == nil {
 		return a.setupRefreshSubsystem()
 	}
 
@@ -93,7 +93,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 
 	a.startRefreshSubsystems(a.refreshCtx, newSubsystems)
 
-	if err := a.refreshAggregates.Update(clusterOrder, nextSubsystems); err != nil {
+	if err := a.refreshAggregates.Load().Update(clusterOrder, nextSubsystems); err != nil {
 		a.stopRefreshSubsystems(newSubsystems)
 		return err
 	}

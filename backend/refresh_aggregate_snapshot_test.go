@@ -260,6 +260,97 @@ func TestNamespacesReadinessSelfBuildFlipsReady(t *testing.T) {
 	require.Equal(t, 1, builds, "no self-build once the cluster is ready")
 }
 
+// Per-cluster readiness wiring must hold for subsystems built AFTER the
+// initial mux (cluster opened via the selector, auth-recovery rebuilds): the
+// notifier's post-settle doorbell is ONE-SHOT, so an empty observer slot
+// drops it and wedges that cluster in loading until visited (field failure:
+// switching to another open cluster tab showed "Starting data services" /
+// "Still loading cluster data").
+func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T) {
+	emitter, _ := collectingEmitter()
+	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	lifecycle.SetState("cluster-b", ClusterStateLoading)
+
+	builds := 0
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-b"},
+		services: map[string]refresh.SnapshotService{
+			"cluster-b": stubSnapshotService{
+				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+					builds++
+					return &refresh.Snapshot{
+						Domain: "namespaces",
+						Payload: snapshot.NamespaceSnapshot{
+							Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+							WorkloadsReady: true,
+						},
+					}, nil
+				},
+			},
+		},
+	}
+	app := &App{clusterLifecycle: lifecycle}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+	aggregate.onNamespaceSnapshot = func(clusterID string) {
+		state := lifecycle.GetState(clusterID)
+		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
+			lifecycle.SetState(clusterID, ClusterStateReady)
+		}
+	}
+
+	// A subsystem built after initial setup — exactly what the selector-open
+	// and auth-recovery paths produce.
+	subsystem := &system.Subsystem{NamespacesDoorbell: &system.NamespacesDoorbellObserver{}}
+	app.wireNamespacesReadinessObserver("cluster-b", subsystem)
+
+	// The tracker settles and the notifier rings its final doorbell.
+	subsystem.NamespacesDoorbell.Invoke("ns-1", "stores finished settling")
+
+	require.Eventually(t, func() bool {
+		return lifecycle.GetState("cluster-b") == ClusterStateReady
+	}, 3*time.Second, 20*time.Millisecond, "late-wired subsystem must still reach ready")
+	require.Equal(t, 1, builds)
+}
+
+// The post-aggregate sweep heals rings dropped while aggregates were still
+// nil at initial startup: every loading cluster gets one self-build attempt.
+func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
+	emitter, _ := collectingEmitter()
+	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	lifecycle.SetState("cluster-a", ClusterStateLoading)
+
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-a"},
+		services: map[string]refresh.SnapshotService{
+			"cluster-a": stubSnapshotService{
+				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+					return &refresh.Snapshot{
+						Domain: "namespaces",
+						Payload: snapshot.NamespaceSnapshot{
+							Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+							WorkloadsReady: true,
+						},
+					}, nil
+				},
+			},
+		},
+	}
+	app := &App{clusterLifecycle: lifecycle}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+	aggregate.onNamespaceSnapshot = func(clusterID string) {
+		if lifecycle.GetState(clusterID) == ClusterStateLoading {
+			lifecycle.SetState(clusterID, ClusterStateReady)
+		}
+	}
+
+	subsystem := &system.Subsystem{NamespacesDoorbell: &system.NamespacesDoorbellObserver{}}
+	app.sweepNamespacesReadiness(map[string]*system.Subsystem{"cluster-a": subsystem})
+
+	require.Eventually(t, func() bool {
+		return lifecycle.GetState("cluster-a") == ClusterStateReady
+	}, 3*time.Second, 20*time.Millisecond, "sweep must self-build for loading clusters")
+}
+
 // Transient (non-permission) failures are NOT settled: the callback must not
 // fire, so the cluster keeps waiting for a real namespaces build.
 func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T) {

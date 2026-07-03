@@ -428,7 +428,9 @@ func (o *NamespacesDoorbellObserver) Set(fn func(version, reason string)) {
 	o.fn.Store(&fn)
 }
 
-func (o *NamespacesDoorbellObserver) invoke(version, reason string) {
+// Invoke fires the hook if one is set; nil-safe. Exported so the doorbell
+// closure and app-level tests share one entry point.
+func (o *NamespacesDoorbellObserver) Invoke(version, reason string) {
 	if o == nil {
 		return
 	}
@@ -448,7 +450,7 @@ func wireNamespacesDoorbell(
 		resourceManager.BroadcastNamespacesRefresh(version, reason)
 		// After invalidate+broadcast: a self-build triggered here always sees
 		// post-change data (the cluster-Ready hook rides this).
-		observer.invoke(version, reason)
+		observer.Invoke(version, reason)
 	})
 }
 
