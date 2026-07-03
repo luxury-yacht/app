@@ -470,6 +470,80 @@ describe('Sidebar', () => {
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
+  it('namespaces-domain membership is authoritative: a namespace deleted from it disappears even while catalog groups still carry it', () => {
+    // Catalog content follows its own watch pipeline and lags namespace
+    // lifecycle — a deleted namespace lingers in catalog groups for a while
+    // (and a created one arrives late). When the namespaces domain has real
+    // data its doorbell-coherent list owns membership; catalog names are the
+    // membership source ONLY when the namespaces domain has nothing
+    // (restricted RBAC).
+    refreshMocks.catalogScopedStates = {
+      'test-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default', 'ghost'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'test-scope',
+      },
+    };
+    // The namespaces domain (doorbell-fresh) no longer contains 'ghost'.
+    renderSidebar();
+
+    expect(
+      container!.querySelector<HTMLDivElement>(
+        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+          'default'
+        )}"]`
+      )
+    ).not.toBeNull();
+    expect(
+      container!.querySelector<HTMLDivElement>(
+        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+          'ghost'
+        )}"]`
+      )
+    ).toBeNull();
+  });
+
+  it('falls back to catalog membership when the namespaces domain has nothing (restricted RBAC)', () => {
+    refreshMocks.catalogScopedStates = {
+      'test-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['catalog-only'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'test-scope',
+      },
+    };
+    renderSidebar({ namespaces: [] });
+
+    expect(
+      container!.querySelector<HTMLDivElement>(
+        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+          'catalog-only'
+        )}"]`
+      )
+    ).not.toBeNull();
+  });
+
   it('aggregates catalog namespace groups across scoped states before filtering to the active cluster', () => {
     refreshMocks.catalogScopedStates = {
       'cluster-b-scope': {
@@ -557,7 +631,9 @@ describe('Sidebar', () => {
       },
     };
 
-    renderSidebar();
+    // Catalog membership is in play only when the namespaces domain has
+    // nothing (restricted RBAC) — the dedup contract applies to that path.
+    renderSidebar({ namespaces: [] });
 
     const defaultToggles = container!.querySelectorAll(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(

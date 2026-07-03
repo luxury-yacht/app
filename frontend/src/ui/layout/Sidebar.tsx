@@ -227,8 +227,20 @@ function Sidebar() {
     return Array.from(mergedGroups.values())
       .map((group) => {
         const useDetails = group.clusterId === selectedClusterId;
+        // Membership hierarchy: the namespaces domain is AUTHORITATIVE when it
+        // has real data — its doorbell keeps creates AND deletes coherent
+        // within a second, and trigger + data share one pipeline. Catalog
+        // names follow the catalog's own watch and lag namespace lifecycle
+        // (deletes lingered, creates arrived late), so they are the membership
+        // source ONLY when the namespaces domain has nothing (restricted RBAC:
+        // no namespace list permission — the catalog infers namespaces from
+        // discovered objects). Catalog still contributes the cluster name.
+        const memberNames =
+          useDetails && hasNamespaceData
+            ? namespaces.filter((item) => !item.isSynthetic).map((item) => item.scope)
+            : group.namespaces;
         // Catalog groups only include names, so borrow rich metadata for the active cluster only.
-        const enrichedNamespaces = group.namespaces
+        const enrichedNamespaces = memberNames
           .filter((name) => Boolean(name && name.trim()))
           .map((name) => {
             const scope = name.trim();
@@ -267,6 +279,7 @@ function Sidebar() {
     catalogNamespaceGroups,
     hasNamespaceData,
     namespaceDetailsByScope,
+    namespaces,
     selectedClusterId,
   ]);
 

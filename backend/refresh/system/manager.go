@@ -348,13 +348,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// broadcast to the namespaces domain's subscribers, replacing the sidebar's
 	// 2s poll (the poll remains only as the stream-down fallback).
 	if resourceManager != nil && namespaceNotifier != nil {
-		namespaceNotifier.SetBroadcast(resourceManager.BroadcastNamespacesRefresh)
+		wireNamespacesDoorbell(snapshotService, namespaceNotifier, resourceManager)
 	}
 	// Object-events doorbell: an event for a panel's object broadcasts to that
 	// object's subscribed events scope, replacing the Events tab's 10s poll
 	// (the poll remains only as the stream-down fallback).
 	if resourceManager != nil && objectEventsNotifier != nil {
-		objectEventsNotifier.SetBroadcast(resourceManager.BroadcastObjectEventsRefresh)
+		wireObjectEventsDoorbell(snapshotService, objectEventsNotifier, resourceManager)
 	}
 
 	return &Subsystem{
@@ -397,6 +397,37 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 // (CollectedAt nanos) — identical to the snapshot builders' metric source clock
 // (metricRevisionFromMetadata), so the doorbell and the snapshot ETag advance
 // together. A zero CollectedAt means no sample exists yet; nothing to announce.
+// wireNamespacesDoorbell and wireObjectEventsDoorbell attach a notifier's
+// broadcast with the ORDERING CONTRACT every doorbell must honor: invalidate
+// the domain's snapshot cache FIRST, then broadcast. The doorbell-triggered
+// refetch arrives ~500ms after the change — inside the snapshot cache TTL —
+// and served from cache it would apply the PRE-change snapshot permanently,
+// because doorbells fire once per change and polling skips while the stream
+// is healthy (observed live: created namespaces missing, deleted namespaces
+// lingering, while every doorbell log line was perfect). The doorbell tests
+// wire through these same helpers so the contract is pinned, not copied.
+func wireNamespacesDoorbell(
+	service *snapshot.Service,
+	notifier *snapshot.NamespaceChangeNotifier,
+	resourceManager *resourcestream.Manager,
+) {
+	notifier.SetBroadcast(func(version, reason string) {
+		service.InvalidateDomainCache("namespaces")
+		resourceManager.BroadcastNamespacesRefresh(version, reason)
+	})
+}
+
+func wireObjectEventsDoorbell(
+	service *snapshot.Service,
+	notifier *snapshot.ObjectEventsChangeNotifier,
+	resourceManager *resourcestream.Manager,
+) {
+	notifier.SetBroadcast(func(version string, matches func(scope string) bool) {
+		service.InvalidateDomainCache("object-events")
+		resourceManager.BroadcastObjectEventsRefresh(version, matches)
+	})
+}
+
 func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
 		if resourceManager == nil || metadata.CollectedAt.IsZero() {

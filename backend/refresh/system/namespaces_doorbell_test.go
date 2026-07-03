@@ -1,19 +1,24 @@
 package system
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/stretchr/testify/require"
 )
 
-// Pins the namespaces doorbell wiring shape: the change notifier's broadcast is
-// the stream manager's BroadcastNamespacesRefresh, so a namespace change fans a
-// SourceObject doorbell to the namespaces domain's subscribers — this is what
-// lets the sidebar refetch on push instead of the 2s poll.
-func TestNamespaceNotifierBroadcastsDoorbellThroughStreamManager(t *testing.T) {
+// Pins the namespaces doorbell wiring: the notifier's broadcast — wired
+// through the SAME helper production uses — invalidates the namespaces
+// snapshot cache FIRST and then fans a SourceObject doorbell to the
+// subscribers. Without the invalidation the doorbell-triggered refetch is
+// served the PRE-change cached snapshot (5s TTL) and the UI never updates —
+// the exact field failure: perfect doorbell logs, frozen namespace list.
+func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 	manager := resourcestream.NewManager(
 		nil,
 		nil,
@@ -28,9 +33,31 @@ func TestNamespaceNotifierBroadcastsDoorbellThroughStreamManager(t *testing.T) {
 	sub, err := manager.SubscribeSelector(selector)
 	require.NoError(t, err)
 
+	// A real snapshot service with a counting namespaces builder, its cache
+	// primed with the pre-change build.
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "namespaces",
+				Scope:   scope,
+				Payload: map[string]int{"build": builds},
+			}, nil
+		},
+	}))
+	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	_, err = service.Build(context.Background(), "namespaces", "c1|")
+	require.NoError(t, err)
+	_, err = service.Build(context.Background(), "namespaces", "c1|")
+	require.NoError(t, err)
+	require.Equal(t, 1, builds, "cache must serve the second pre-change build")
+
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
 	defer notifier.Stop()
-	notifier.SetBroadcast(manager.BroadcastNamespacesRefresh)
+	wireNamespacesDoorbell(service, notifier, manager)
 
 	notifier.NamespaceChanged()
 
@@ -45,4 +72,9 @@ func TestNamespaceNotifierBroadcastsDoorbellThroughStreamManager(t *testing.T) {
 	case <-deadline:
 		t.Fatal("expected a namespaces doorbell update")
 	}
+
+	// The refetch the doorbell triggers must REBUILD, not replay the cache.
+	_, err = service.Build(context.Background(), "namespaces", "c1|")
+	require.NoError(t, err)
+	require.Equal(t, 2, builds, "the doorbell must have invalidated the cached namespaces snapshot")
 }

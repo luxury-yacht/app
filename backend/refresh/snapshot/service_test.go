@@ -573,6 +573,64 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 	}
 }
 
+// The doorbell notifiers invalidate their domain's cache BEFORE broadcasting:
+// the doorbell-triggered refetch arrives ~500ms after the change — inside the
+// 5s cache TTL — and without invalidation it would be served the PRE-change
+// snapshot, permanently (doorbells fire once; polls skip while streaming).
+func TestServiceInvalidateDomainCacheForcesRebuild(t *testing.T) {
+	reg := domain.New()
+	builds := map[string]int{}
+	register := func(name string) {
+		if err := reg.Register(refresh.DomainConfig{
+			Name: name,
+			BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+				builds[name]++
+				return &refresh.Snapshot{
+					Domain:  name,
+					Scope:   scope,
+					Payload: map[string]int{"build": builds[name]},
+					Stats:   refresh.SnapshotStats{TotalItems: 1},
+				}, nil
+			},
+		}); err != nil {
+			t.Fatalf("register %s failed: %v", name, err)
+		}
+	}
+	register("demo-doorbell")
+	register("demo-other")
+
+	service := NewService(reg, nil, testClusterMeta())
+
+	for _, name := range []string{"demo-doorbell", "demo-other"} {
+		if _, err := service.Build(context.Background(), name, "scope-a"); err != nil {
+			t.Fatalf("Build %s returned error: %v", name, err)
+		}
+		if _, err := service.Build(context.Background(), name, "scope-a"); err != nil {
+			t.Fatalf("Build %s returned error: %v", name, err)
+		}
+		if builds[name] != 1 {
+			t.Fatalf("%s: expected cached snapshot to reuse build, got %d builds", name, builds[name])
+		}
+	}
+
+	service.InvalidateDomainCache("demo-doorbell")
+
+	if _, err := service.Build(context.Background(), "demo-doorbell", "scope-a"); err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if builds["demo-doorbell"] != 2 {
+		t.Fatalf("expected invalidation to force a rebuild, got %d builds", builds["demo-doorbell"])
+	}
+
+	// Another domain's cache entries stay untouched.
+	if _, err := service.Build(context.Background(), "demo-other", "scope-a"); err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if builds["demo-other"] != 1 {
+		t.Fatalf("expected other domain to stay cached, got %d builds", builds["demo-other"])
+	}
+}
+
 func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
 	reg := domain.New()
 	buildCount := 0
