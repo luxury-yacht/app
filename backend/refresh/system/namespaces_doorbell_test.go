@@ -57,7 +57,7 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
 	defer notifier.Stop()
-	wireNamespacesDoorbell(service, notifier, manager)
+	wireNamespacesDoorbell(service, notifier, manager, nil)
 
 	notifier.NamespaceChanged()
 
@@ -77,4 +77,71 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
 	require.NoError(t, err)
 	require.Equal(t, 2, builds, "the doorbell must have invalidated the cached namespaces snapshot")
+}
+
+// The cluster-Ready transition must not depend on a frontend fetch arriving:
+// the app attaches an observer that self-builds the namespaces snapshot on
+// each pre-Ready doorbell. The observer fires AFTER invalidate+broadcast so a
+// self-build always sees post-change data.
+func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
+	manager := resourcestream.NewManager(
+		nil,
+		nil,
+		nil,
+		nil,
+		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		nil,
+		nil,
+	)
+	selector, err := resourcestream.ParseStreamSelector("c1", "namespaces", "")
+	require.NoError(t, err)
+	sub, err := manager.SubscribeSelector(selector)
+	require.NoError(t, err)
+
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "namespaces",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "namespaces",
+				Scope:   scope,
+				Payload: map[string]int{"build": builds},
+			}, nil
+		},
+	}))
+	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
+	defer notifier.Stop()
+
+	observer := &NamespacesDoorbellObserver{}
+	observed := make(chan string, 4)
+	// Attached AFTER wiring — mirroring the app, which can only build the
+	// aggregate service (and thus the readiness hook) once every subsystem
+	// exists.
+	wireNamespacesDoorbell(service, notifier, manager, observer)
+	observer.Set(func(version, reason string) {
+		observed <- version
+	})
+
+	notifier.NamespaceChanged()
+
+	deadline := time.After(3 * time.Second)
+	var doorbellVersion string
+	select {
+	case update := <-sub.Updates:
+		doorbellVersion = update.Version
+	case <-deadline:
+		t.Fatal("expected a namespaces doorbell update")
+	}
+
+	select {
+	case version := <-observed:
+		require.Equal(t, doorbellVersion, version,
+			"the observer must see the same doorbell version the stream broadcast")
+	case <-deadline:
+		t.Fatal("expected the doorbell observer to be invoked")
+	}
 }

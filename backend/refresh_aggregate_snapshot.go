@@ -6,6 +6,9 @@ import (
 	"maps"
 	"sort"
 	"sync"
+	"time"
+
+	"k8s.io/klog/v2"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -154,4 +157,37 @@ func (s *aggregateSnapshotService) notifyNamespaceSnapshot(clusterID string) {
 		return
 	}
 	s.onNamespaceSnapshot(clusterID)
+}
+
+// runNamespacesReadinessSelfBuild closes the cluster-Ready loop server-side.
+// The Ready transition only ever fires from a namespaces snapshot build
+// (Build → notifyNamespaceSnapshot above), and historically that build was
+// requested by the FRONTEND — a chain of lifecycle-event relays, scope
+// derivation, and fetch machinery whose failure wedged clusters in
+// loading/loading_slow with no retry (observed in the field: app opened on
+// the Overview view, zero namespaces requests, status stuck until a view
+// switch). The namespaces doorbell notifier re-arms until a post-settle
+// build lands, so self-building here on each pre-Ready doorbell converges to
+// Ready with no frontend involvement — and pre-warms the cache the doorbell
+// just invalidated. In steady state (ready) it is a no-op.
+func runNamespacesReadinessSelfBuild(
+	lifecycle *clusterLifecycle,
+	aggregate *aggregateSnapshotService,
+	clusterID string,
+) {
+	if lifecycle == nil || aggregate == nil || clusterID == "" {
+		return
+	}
+	state := lifecycle.GetState(clusterID)
+	if state != ClusterStateLoading && state != ClusterStateLoadingSlow {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := aggregate.Build(ctx, "namespaces", refresh.JoinClusterScope(clusterID, "")); err != nil {
+		// The doorbell re-arms until a settled build lands; the next ring
+		// retries. Permission-denied namespaces flip readiness via the
+		// error path inside Build.
+		klog.V(2).Infof("namespaces readiness self-build for %s: %v", clusterID, err)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -93,6 +94,10 @@ type Subsystem struct {
 	// into the torn-down stream manager.
 	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
 	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
+	// doorbell; the app attaches the cluster-Ready self-build hook here (see
+	// app_refresh_setup) once the aggregate service exists.
+	NamespacesDoorbell *NamespacesDoorbellObserver
 
 	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
@@ -346,9 +351,11 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	}
 	// Namespaces doorbell: namespace object changes and workload-presence flips
 	// broadcast to the namespaces domain's subscribers, replacing the sidebar's
-	// 2s poll (the poll remains only as the stream-down fallback).
+	// 2s poll (the poll remains only as the stream-down fallback). The observer
+	// slot lets the app attach the cluster-Ready self-build hook post-construction.
+	namespacesDoorbellObserver := &NamespacesDoorbellObserver{}
 	if resourceManager != nil && namespaceNotifier != nil {
-		wireNamespacesDoorbell(snapshotService, namespaceNotifier, resourceManager)
+		wireNamespacesDoorbell(snapshotService, namespaceNotifier, resourceManager, namespacesDoorbellObserver)
 	}
 	// Object-events doorbell: an event for a panel's object broadcasts to that
 	// object's subscribed events scope, replacing the Events tab's 10s poll
@@ -373,6 +380,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ClusterMeta:          clusterMeta,
 		NamespaceNotifier:    namespaceNotifier,
 		ObjectEventsNotifier: objectEventsNotifier,
+		NamespacesDoorbell:   namespacesDoorbellObserver,
 	}, nil
 }
 
@@ -406,14 +414,41 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 // is healthy (observed live: created namespaces missing, deleted namespaces
 // lingering, while every doorbell log line was perfect). The doorbell tests
 // wire through these same helpers so the contract is pinned, not copied.
+// NamespacesDoorbellObserver lets the app attach a post-broadcast hook to the
+// namespaces doorbell AFTER the subsystem is constructed — the aggregate
+// snapshot service and cluster lifecycle (which the hook needs) exist only
+// once every subsystem does. The doorbell path reads it lock-free; unset is
+// a no-op.
+type NamespacesDoorbellObserver struct {
+	fn atomic.Pointer[func(version, reason string)]
+}
+
+// Set installs (or replaces) the hook.
+func (o *NamespacesDoorbellObserver) Set(fn func(version, reason string)) {
+	o.fn.Store(&fn)
+}
+
+func (o *NamespacesDoorbellObserver) invoke(version, reason string) {
+	if o == nil {
+		return
+	}
+	if fn := o.fn.Load(); fn != nil {
+		(*fn)(version, reason)
+	}
+}
+
 func wireNamespacesDoorbell(
 	service *snapshot.Service,
 	notifier *snapshot.NamespaceChangeNotifier,
 	resourceManager *resourcestream.Manager,
+	observer *NamespacesDoorbellObserver,
 ) {
 	notifier.SetBroadcast(func(version, reason string) {
 		service.InvalidateDomainCache("namespaces")
 		resourceManager.BroadcastNamespacesRefresh(version, reason)
+		// After invalidate+broadcast: a self-build triggered here always sees
+		// post-change data (the cluster-Ready hook rides this).
+		observer.invoke(version, reason)
 	})
 }
 

@@ -359,6 +359,21 @@ func (a *App) buildRefreshMux(
 			a.clusterLifecycle.SetState(clusterID, ClusterStateReady)
 		}
 	}
+	// Close the Ready loop server-side: on each namespaces doorbell, while the
+	// cluster is still loading, self-build the namespaces snapshot (the exact
+	// build the transition above rides). Readiness must never depend on the
+	// frontend's fetch machinery asking first — a dropped trigger there wedged
+	// clusters in loading_slow with no retry. The notifier re-arms until a
+	// post-settle build lands, so this converges; once ready it is a no-op.
+	for clusterID, subsystem := range subsystems {
+		if subsystem == nil || subsystem.NamespacesDoorbell == nil {
+			continue
+		}
+		id := clusterID
+		subsystem.NamespacesDoorbell.Set(func(_ string, _ string) {
+			go runNamespacesReadinessSelfBuild(a.clusterLifecycle, aggregateService, id)
+		})
+	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
 	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)

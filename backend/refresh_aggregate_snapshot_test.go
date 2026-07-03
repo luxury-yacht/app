@@ -210,6 +210,56 @@ func TestAggregateSnapshotServicePermissionDeniedNamespacesStillSignalsReadiness
 		"permission-denied namespaces must still signal readiness")
 }
 
+// The cluster-Ready transition must not depend on a frontend fetch arriving:
+// the namespaces doorbell observer self-builds the namespaces snapshot while
+// the cluster is loading, and that build's WorkloadsReady payload flips the
+// lifecycle to ready — entirely server-side. (Field failure: app opened on
+// the Overview view, the frontend never requested a namespaces snapshot, and
+// the cluster sat in loading_slow forever.)
+func TestNamespacesReadinessSelfBuildFlipsReady(t *testing.T) {
+	emitter, _ := collectingEmitter()
+	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	lifecycle.SetState("cluster-a", ClusterStateLoading)
+
+	builds := 0
+	services := map[string]refresh.SnapshotService{
+		"cluster-a": stubSnapshotService{
+			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+				builds++
+				return &refresh.Snapshot{
+					Domain: "namespaces",
+					Payload: snapshot.NamespaceSnapshot{
+						Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+						WorkloadsReady: true,
+					},
+				}, nil
+			},
+		},
+	}
+	aggregate := &aggregateSnapshotService{
+		clusterOrder: []string{"cluster-a"},
+		services:     services,
+	}
+	// The production wiring: a successful WorkloadsReady namespaces build
+	// moves loading/loading_slow to ready.
+	aggregate.onNamespaceSnapshot = func(clusterID string) {
+		state := lifecycle.GetState(clusterID)
+		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
+			lifecycle.SetState(clusterID, ClusterStateReady)
+		}
+	}
+
+	runNamespacesReadinessSelfBuild(lifecycle, aggregate, "cluster-a")
+
+	require.Equal(t, 1, builds, "the self-build must run the namespaces builder")
+	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
+
+	// Once ready (or in any non-loading state), the self-build must be a
+	// no-op — no steady-state rebuild per doorbell.
+	runNamespacesReadinessSelfBuild(lifecycle, aggregate, "cluster-a")
+	require.Equal(t, 1, builds, "no self-build once the cluster is ready")
+}
+
 // Transient (non-permission) failures are NOT settled: the callback must not
 // fire, so the cluster keeps waiting for a real namespaces build.
 func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T) {
