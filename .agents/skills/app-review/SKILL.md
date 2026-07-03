@@ -47,8 +47,10 @@ evidence that overturns the recorded verdict.
   (`docs/frontend/component-structure.md` → "Object-panel Overview rendering").
 - Object-panel actions → shared `useObjectActionController` (no panel-local
   action reducer); see `.agents/skills/object-panel/SKILL.md`.
-- Cluster-view refresh scopes → single `clusterDomainScopes` manifest in
-  `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`.
+- Cluster-view refresh scopes → owned by each query-backed table's own
+  base-scope lease (the context-held `clusterDomainScopes` manifest was
+  deleted with the ClusterResourcesContext data layer; contexts hold no
+  domain data).
 - LogViewer async/loading flags → discriminated `LogViewMode` union in
   `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts`.
 - Resource-kind registry drives object-catalog, table rows, detail dispatch

@@ -101,8 +101,11 @@ You MUST follow these at all times.
   concrete blocker. Do not invent fallback behavior, skip required identity
   fields, or leave TODO-only implementations to keep moving.
 - Add comments where the logic is not self-evident, using plain language.
-- Treat the object catalog as the source of truth for namespace and cluster
-  listings. See `backend/AGENTS.md#Object-Catalog`.
+- Treat the object catalog as the source of truth for object existence,
+  discovery, GVK/GVR identity, Browse, and cluster listings. The app's
+  namespace LIST is owned by the `namespaces` refresh domain (informer-backed,
+  permission-gated — no list permission fails fast with an explicit message;
+  there is no catalog-inference fallback). See `backend/AGENTS.md#Object-Catalog`.
 - Before presenting non-documentation, non-comment-only work as complete, run
   `mage qc:prerelease`
 - You do not need to rerun these checks after every edit during a task, but the

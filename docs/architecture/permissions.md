@@ -38,6 +38,11 @@ shape, failure behavior, and diagnostics differ.
 - Use all-or-nothing mode for single-resource domains.
 - Use partial-data mode for multi-resource domains where showing permitted
   resources is useful.
+- Some domains are deliberately fail-fast with NO degraded fallback: the
+  `namespaces` domain registers permission-denied when the user cannot list
+  namespaces (the sidebar shows an explicit permission message; there is no
+  catalog-inference fallback, and a permission-denied namespaces build still
+  fires the cluster-Ready transition).
 - Partial-data builders must guard nil or missing listers before use.
 - Resource-stream permissions must join with the corresponding snapshot runtime
   permission contract.
@@ -51,6 +56,10 @@ shape, failure behavior, and diagnostics differ.
   `frontend/src/shared/actions/objectActionPolicy.ts`.
 - Exact GVK/GVR resolution should go through the object catalog resolver.
 - Permission cache and diagnostics must remain cluster-scoped.
+- Refresh scopes denied by the backend (typed 403,
+  `SnapshotPermissionDeniedError`) are checked ONCE per session: the scoped
+  state is stamped `permissionDenied` and background refetches stop; only
+  manual refresh re-asks and recovery is an app restart.
 
 ## Ownership
 

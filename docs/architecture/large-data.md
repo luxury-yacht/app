@@ -148,9 +148,10 @@ Typed resource queries use `ResourceQueryRequest` and `ResourceQueryResult` in
 refresh types. The base resource contract carries full `clusterId` and GVK
 identity for every row, stable projected table fields, backend predicates,
 facets, exactness flags, partial/degraded issues, and an object revision
-reference. Metric-domain query contracts carry the same query/filter identity
-plus CPU/memory values, metric freshness metadata, metric revision, and ordered
-object identities for metric-backed sorts.
+reference. Live CPU/memory usage is joined onto the base rows at serve — there
+are no separate metric-domain query contracts; the payload's `metrics` block
+carries the poller freshness/error metadata
+(see [`resource-metrics.md`](resource-metrics.md)).
 
 Metadata label/annotation search is not implicitly global for query-backed
 typed tables. A typed table may expose metadata search globally only after that
@@ -158,10 +159,10 @@ metadata is indexed by the backend query implementation. Until then, metadata
 search remains Local Complete-only, or the large-scope table must show an
 explicit degraded/disabled state.
 
-Metric sorts use a bounded dynamic paging model. The backend response must name
-the metrics source and revision used for the result. Deep metric paging is
-allowed only within the chosen bounded snapshot/top-k policy; cursors must not
-restart merely because the live metrics stream refreshes.
+Metric sorts run server-side on the joined usage values through the same
+keyset cursor as every other sort (`parseFormattedCPUToMilli` /
+`parseFormattedMemoryToBytes` sort keys). Cursors must not restart merely
+because a metric tick refreshed the joined values.
 
 Keyset ordering must be self-consistent. The page sort and the cursor boundary
 must be derived from one comparable value per row, so the order rows are laid out

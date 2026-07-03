@@ -39,14 +39,15 @@ healthy:
   (`metrics.Poller.SetCollectionObserver`, wired in
   `backend/refresh/system/manager.go`), which fans a `SourceMetric` doorbell
   over the same stream to every subscribed scope of the metric-clock domains
-  (`resourcestream.Manager.BroadcastMetricsRefresh`, domains derived from
-  `ProjectionDescriptors` `MetricsDependency()`). The doorbell version is the
-  collection revision (CollectedAt nanos) — the same value the snapshot
-  builders stamp as `SourceVersions["metric"]`, so the doorbell and the
-  snapshot ETag advance together. The frontend accepts the signal because the
-  three domains declare the `metric` source clock in the contract
-  (`domainSupportsSourceClock`); it advances the scoped `sourceVersion` and the
-  one joined query refetches.
+  (`resourcestream.Manager.BroadcastMetricsRefresh`, table domains derived
+  from `ProjectionDescriptors` `MetricsDependency()`, plus an explicit fan-out
+  to `cluster-overview` subscribers). The doorbell version is the collection
+  revision (CollectedAt nanos) — the same value the snapshot builders stamp as
+  `SourceVersions["metric"]`, so the doorbell and the snapshot ETag advance
+  together. The frontend accepts the signal because those domains declare the
+  `metric` source clock in the contract (`domainSupportsSourceClock`); it
+  advances the scoped `signalVersions`/`sourceVersion` and the joined query
+  (or the overview's signal hook) refetches.
 
 The user's metrics-interval preference configures the backend poller: at
 subsystem build (`resolveMetricsInterval`) and live on preference change
@@ -55,7 +56,12 @@ subsystem build (`resolveMetricsInterval`) and live on preference change
 
 Snapshot polling by the frontend refresher exists only as the stream-DOWN
 fallback (`pauseRefresherWhenStreaming` semantics: covered scopes are skipped
-while the stream is healthy), at the domain's authored contract timing.
+while the stream is healthy), at the domain's authored contract timing — with
+one exception: `cluster-overview` is a POLL-AUGMENTED doorbell domain whose
+polls stay on even while its stream is healthy (descriptor
+`pollingContinuesWhileStreaming`), because the metric doorbell only rings on
+successful collections and would otherwise freeze the overview's
+object-derived counts on metrics-less clusters.
 
 Backend metrics-poller demand is any active lease on `cluster-overview`,
 `nodes`, `pods`, or `namespace-workloads`
@@ -112,8 +118,16 @@ row-key round-trips.
   refetch. This matters because the poller rings no doorbell on failure: a
   dead metrics-server on a quiet cluster produces no refetch, so a
   server-computed stale flag would never reach the screen. The server's
-  `stale` flag stays authoritative when set (poll-refreshed payloads such as
-  cluster-overview carry no threshold and keep server-stale-only behavior).
+  `stale` flag stays authoritative when set (the cluster-overview payload
+  carries no threshold and keeps server-stale-only behavior).
+- The PRISTINE first-collection window has its own state: a payload with
+  `successCount == 0`, no failures, and no error means the demand-driven
+  poller has started but nothing has been collected yet — the UI shows
+  "Collecting metrics…" (never zero gauges with no indication). Builders MUST
+  omit `collectedAt` for the zero time (`IsZero` guard) — serializing Go's
+  zero time as a Unix stamp (-62135596800) reads as "present" downstream and
+  suppresses the indication; the frontend additionally treats non-positive
+  `collectedAt` as absent.
 - Object age is computed from timestamps by the frontend live-age contract and
   must not participate in metric refresh.
 

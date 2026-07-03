@@ -93,13 +93,25 @@ the completed `v2` rewrite plan.
   (column data off-heap/OS-reclaimable, indexes resident) rather than full teardown;
   re-warm unroutes then closes the mappings safely. Starting points:
   `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `app_refresh_spill.go`.
+- **Re-warm keeps Ready.** Governor re-warms rebuild the subsystem through the same
+  per-cluster chokepoint as first builds, but serving is continuous (cooled mmap stores
+  serve until the aggregate re-routes; fresh stores warm-paint from spill) —
+  `transitionClusterToLoading` guards the chokepoint so an already-READY cluster is
+  never demoted to loading on a tab switch.
+- **Cluster-Ready is server-driven.** The loading→ready transition rides a namespaces
+  snapshot build after the workload stores settle; the backend self-builds it on each
+  pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
+  `Subsystem.NamespacesDoorbell` observer, wired per cluster in
+  `buildRefreshSubsystemForSelection`). Readiness never depends on the frontend
+  asking first.
 
 ## Delivery — page + refetch-on-signal
 
 - **Pull:** `GET /api/v2/snapshots/{domain}` (`refresh/api/server.go:59`) → `Build`.
 - **Push:** the resources **WebSocket** `/api/v2/stream/resources` carries only a change
-  **signal**; a delta/resync advances the scoped `sourceVersion` and the
-  query-backed view refetches its page. **No live row ever crosses the wire** — the
+  **signal**; a delta/resync advances the scoped doorbell clocks
+  (`signalVersions`, plus the folded `sourceVersion`) and the query-backed view
+  refetches its page. **No live row ever crosses the wire** — the
   envelope (`streammux.ServerMessage`) has no row field, and the live-row-merge path
   (`applyResourceRowUpdates`, `mergeSnapshotRows`, `sortRows`, per-domain collections) is deleted. See
   [`resource-stream-signals.md`](./resource-stream-signals.md) for the frontend contract.

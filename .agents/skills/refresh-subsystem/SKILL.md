@@ -6,334 +6,213 @@ user-invocable: false
 
 # Refresh Subsystem Guide
 
-This subsystem is **fragile**. Changes historically break things. Read this
-before touching any refresh, streaming, snapshot, or domain code. For metric
-source clocks and utilization consumers, also read
-`docs/architecture/resource-metrics.md`.
-
-## Architecture Overview
-
-The refresh subsystem manages how Kubernetes resource data flows from clusters to the UI. Each connected cluster gets its own independent subsystem (manager, registry, informers, permission checker). An aggregate layer multiplexes across clusters for the HTTP API.
-
-```
-Kubernetes API
-    ↓ (informers / polling)
-Per-Cluster Subsystem (manager, registry, informers, permissions)
-    ↓ (snapshots, SSE, WebSocket)
-Aggregate Mux (routes requests to correct cluster)
-    ↓ (HTTP API on loopback)
-Frontend RefreshManager + RefreshOrchestrator
-    ↓ (per-cluster runtimes, stream managers, store writes)
-React UI
-```
-
-The frontend has one global coordinator for app lifecycle concerns, with per-cluster runtimes underneath it. Each runtime owns enabled scopes, in-flight work, stream health, metrics freshness, and streaming cleanup for exactly one cluster. Refresh domains are single-cluster by contract; background cluster refresh fans out as separate per-cluster requests instead of using multi-cluster refresh scopes.
-
-```
-Global coordinator
-    ↓
-ClusterRefreshRuntime(cluster-a)  ClusterRefreshRuntime(cluster-b)
-    ↓                             ↓
-single-cluster snapshots/streams  single-cluster snapshots/streams
-    ↓ (callbacks, store updates)
-React UI
-```
-
-## Initialization Sequence
-
-Order matters. Don't rearrange.
-
-1. Create refresh context with cancel
-2. Start heartbeat loop
-3. **Per cluster:**
-   a. Create informer factory + permission checker
-   b. Prime permissions (preflight cache warming) — **BEFORE** domain registration
-   c. Register domains (universal runtime check + gate logic) — **AFTER** preflight
-   d. Create snapshot service, manual queue, stream managers
-   e. Start manager (informers + metrics polling)
-   f. Start permission revalidation loop
-4. Build aggregate mux wiring all clusters
-5. Start HTTP server on loopback
-
-**Key files:**
-
-- `backend/app_refresh_setup.go` — orchestrates steps 1-5
-- `backend/app_refresh_update.go` — updates active per-cluster subsystems without restarting the HTTP server
-- `backend/app_refresh_subsystems.go` — replaces aggregate subsystem state and shared handlers
-- `backend/app_refresh_recovery.go` — teardown, auth recovery, transport rebuild
-- `backend/refresh/system/manager.go` — per-cluster subsystem creation
-
-## Domain Registration
-
-### Backend
-
-Domains are registered in a fixed order in `backend/refresh/system/registrations.go`. **Order matters** — some domains depend on others (e.g., `cluster-crds` before `cluster-custom`).
-
-Three registration kinds:
-
-| Kind        | Permission Gate                               | Fallback                   |
-| ----------- | --------------------------------------------- | -------------------------- |
-| `direct`    | None — always registers                       | None                       |
-| `list`      | Checks list permission for required resources | Skips if denied            |
-| `listWatch` | Checks list + watch permissions               | Can fall back to list-only |
-
-**Two-layer permission checking:**
-
-1. **Preflight** — bulk SSAR calls to warm the cache at startup
-2. **Per-domain runtime check** — list/watch checks declared on each domain's registration config and evaluated by the `permissionGate` in `backend/refresh/system/permission_gate.go`
-
-To register a new domain, add it to `domainRegistrations()` in `registrations.go`. Consider:
-
-- What permissions does it need? Declare them on the domain's `listDomainConfig`/`listWatchDomainConfig` so the `permissionGate` checks them
-- Does it need informers? Register them in `backend/refresh/informer/factory.go`
-- What order? Place it after any domains it depends on
-
-### Shared Domain Contract
-
-Domain metadata is authored in
-`backend/refresh/domain/refresh-domain-contract.json`. It owns domain category,
-frontend refresher name, timing, diagnostics stream, orchestrator kind, backend
-registration kind, permission policy, and resource-stream participation.
-
-Keep behavior explicit in backend registration functions and frontend stream
-managers. `frontend/src/core/refresh/domainRegistry.ts` imports the contract
-directly and derives metadata maps from it; the contract removes duplicate
-metadata, not real behavior.
-
-### Frontend
-
-Every backend domain has a frontend counterpart:
-
-| File                                                | What to update                                    |
-| --------------------------------------------------- | ------------------------------------------------- |
-| `frontend/src/core/refresh/types.ts`                | Add to `RefreshDomain` union + `DomainPayloadMap` |
-| `frontend/src/core/refresh/refresherTypes.ts`       | Add refresher name + map view to refresher        |
-| `frontend/src/core/refresh/domainRegistrations.ts`  | Register the explicit orchestrator/stream wiring  |
-| `backend/refresh/domain/refresh-domain-contract.json` | Add shared metadata consumed by backend tests and frontend registry |
-
-**These must stay synchronized through the contract tests.** A backend domain
-without a frontend mapping breaks diagnostics. A frontend refresher without a
-backend domain gets empty snapshots.
-
-### Serve-Time Metric Join
-
-The metric-bearing table domains (`pods`, `nodes`, `namespace-workloads`) join
-live CPU/memory usage onto their served rows at serve — usage is never written
-to the stores. Tables issue ONE base-domain query for every sort: cpu/memory
-sort numerically server-side, and the payload's `metrics` block carries the
-poller freshness/error metadata. There are no separate metric domains and no
-client-side metric join (see `docs/architecture/resource-metrics.md`).
-
-Metric-only refreshes may advance the metric source clock and update
-metric-backed cells, freshness, diagnostics, and metric sort keys. They must not
-advance the object source version, re-project stored object rows, or require
-object/status updates to read the metrics provider.
-
-Resource WebSocket domains also require:
-
-| File                                                                      | What to update                                                                  |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`            | Scope kind, row collection, row identity, sort, drift keys, metric preservation |
-| `frontend/src/core/refresh/streaming/resourceStreamRows.ts`               | Pure row replacement, deletion, stable reuse, and metrics-preserving merge logic |
-| `frontend/src/core/refresh/streaming/resourceStreamConnection.ts`         | WebSocket connection lifecycle, queued sends, reconnect, pause/resume           |
-| `frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts`      | Single-cluster scope resolution, subscription state, unsubscribe debounce, resume tokens |
-| `backend/kind/kindregistry/registry.go`                                   | Add the `Stream` facet so `StreamDescriptors()` projects the streamed kind      |
-| `backend/refresh/resourcestream/stream_registration_*.go`                 | Bespoke informer registration and lister/indexer setup for kinds that need it   |
-| `backend/refresh/resourcestream/update_helpers_test.go` and manager tests | Stream envelope metadata and row-shape parity                                   |
-
-Resource stream descriptors describe row behavior only. Domain descriptors must
-not reintroduce multi-cluster capability flags; cross-cluster UI should derive
-from separate per-cluster domain state above the refresh store.
-
-`ResourceStreamManager` should remain responsible for refresh-store mutation,
-snapshot resync, drift detection, health, telemetry, and fallback decisions.
-Keep connection lifecycle in `ResourceStreamConnection`, subscription mechanics
-in `ResourceStreamSubscriptionStore`, and pure row math in
-`resourceStreamRows.ts`. Ready/resync/error store status transitions should use
-one domain-id path; do not add copied branches per streamed domain. Terminal
-stream error notification should use `streamErrorNotifier.ts`.
-
-Resource stream row updates and deletes carry identity only through the
-top-level `ref` (`resourcemodel.ResourceRef`). Legacy top-level identity fields
-(`uid`, `name`, `namespace`, `kind`, `apiGroup`, `apiVersion`) have been
-removed from the wire payload; `clusterId` / `clusterName` remain as envelope
-routing metadata. Do not add new key logic that guesses GVK from kind/name.
-`COMPLETE` is scope-level resync, not targeted row invalidation — any `ref` on
-COMPLETE is diagnostic context only.
-
-Stream selectors are typed (`resourcestream.StreamSelector`). Validate and
-canonicalize transport scope strings at the WebSocket boundary via
-`ParseStreamSelector`; the canonical selector string remains the subscription
-key. Convert selectors to concrete `ResourceRef` values only when resolving a
-specific affected row.
-
-Snapshot vs stream row parity is enforced by
-`backend/refresh/snapshot/parity_test.go`. When you add a streamed domain you
-must add a parity case (or, for COMPLETE-only contracts like
-`namespace-helm`, an explicit excluded entry in
-`TestSnapshotStreamRowParityCoversAllSupportedDomains`). When you add a field
-to a `*Summary` struct, add an assertion in either an existing
-`TestBuild*SummaryPopulatesAllFields` test or the parity case so a missed
-population fails CI rather than silently dropping the field on stream rows.
-
-Per-domain stream metadata (source clocks, scope kind, primary/related
-resources, metrics dependency) is authored once in
-`backend/refresh/domain/refresh-domain-contract.json`. Backend
-(`TestResourceStreamDomainsMatchProjectionDescriptors`) and frontend
-(`resource stream domain descriptors > matches the backend-authored projection
-contract`) tests both lock that JSON to their respective descriptor tables.
-
-Metric-bearing projectors accept the latest usage maps as parameters; they do
-not reach into `metrics.Provider` themselves. Use
-`Manager.podMetricsSnapshot()` / `Manager.nodeMetricsSnapshot()` at the call
-site and pass the maps in, so per-row construction stays deterministic for
-tests and parity comparisons.
-
-## Snapshot Building
-
-**File:** `backend/refresh/snapshot/service.go`
-
-- Uses singleflight to deduplicate concurrent builds for the same cache key
-- Cache bypass appends `:bypass` to key to isolate from normal requests
-- **Caching rules:**
-  - Truncated snapshots are NOT cached
-  - Partial batches are NOT cached
-  - Only final batches are cached
-
-## Streaming
-
-Three stream routes use the refresh HTTP server. Event and catalog liveness now
-travels as source-specific doorbells on the resources WebSocket; their rows are
-still fetched through snapshot/query domains.
-
-| Stream         | Transport         | Backend                                      | Frontend                                                            |
-| -------------- | ----------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| Resources, events, catalog | WebSocket         | `backend/refresh/resourcestream/` plus event/catalog producer bridges | `frontend/src/core/refresh/streaming/resourceStreamManager.ts`      |
-| Container logs | SSE (EventSource) | `backend/refresh/containerlogsstream/`       | `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts` |
-
-Frontend SSE managers share `frontend/src/core/refresh/streaming/sseStreamTransport.ts`
-for EventSource URL creation and listener cleanup. Reconnect delay calculation
-lives in `frontend/src/core/refresh/streaming/streamTiming.ts`, and visibility
-suspend/resume lives in
-`frontend/src/core/refresh/streaming/streamVisibilityController.ts`. Stream
-error notification and kubeconfig-change suppression live in
-`frontend/src/core/refresh/streaming/streamErrorNotifier.ts`. The resource
-WebSocket manager also uses the shared timing, visibility, and terminal-error
-notification helpers. Keep log reducers separate from doorbell reducers unless
-tests prove their state semantics are identical.
-
-**Event/catalog doorbells:** The event and catalog producers emit
-`source=event` / `source=catalog` doorbells on `/api/v2/stream/resources`.
-Missed event resume becomes a `RESET` doorbell so consumers re-snapshot rather
-than keeping stale event rows.
-
-**Source-version contract:** Resource-stream signals carry source-specific
-refetch identity. Treat `Version` as an opaque equality token for the named
-`Source`; `Sequence` is transport resume/high-water metadata only,
-`streamRevision` is diagnostic/backward-compatible frontend state only, and
-Kubernetes `resourceVersion` is reflector metadata only. Metric-only source
-changes may refresh metric-backed pages but must not bump the object source
-version.
-
-**Resource stream resume:** Resource WebSocket subscriptions are keyed by a single cluster, domain, and normalized scope. The frontend sends resume tokens per subscription; expired buffers trigger `RESET` and a snapshot resync. Multi-cluster resource stream scopes are rejected on both the frontend subscription path and backend stream mux path, matching the broader single-cluster refresh-domain contract.
-
-**Stream endpoints:**
-
-- `/api/v2/stream/resources`
-- `/api/v2/stream/container-logs`
-
-## RefreshManager (Frontend)
-
-**File:** `frontend/src/core/refresh/RefreshManager.ts`
-
-Lifecycle per refresher: `idle → refreshing → cooldown → idle`
-
-Key behaviors:
-
-- Callbacks run via `Promise.allSettled` — one failure doesn't kill others, but the refresh is marked failed
-- Exponential backoff on errors: `cooldown * 2^(errorCount-1)`, capped at 60s
-- Context changes (namespace, cluster, view) abort affected refreshers then re-trigger
-- Global pause blocks automatic refresh but not manual refresh
-- Visibility: streams suspend on hidden tab, resume on visible
-
-## Resource Stream Registration
-
-Backend resource stream registration is split by behavior:
-
-| File                              | Purpose                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `stream_descriptor_dispatch.go`   | Generic `registerDescriptorStreams` that wires every plain object→row kind from `kindregistry.StreamDescriptors()` |
-| `stream_registration_helpers.go`  | Permission checks and Add/Update/Delete event mapping                    |
-| `stream_registration_direct.go`   | Bespoke handlers that still need a custom informer/related-object invalidation (configmap, secret, HPA) |
-| `stream_registration_network.go`  | Network handlers that need a manager-level lister (service/endpointslice correlation) |
-| `stream_registration_related.go`  | Pod/node/workload registrations that seed related-object lookup state    |
-
-Plain object→row kinds are now projected from the descriptor registry; only kinds that need a custom handler or lister keep a hand-written registration. Keep permission checks before lazy informer creation. Do not replace the remaining bespoke files with a large descriptor table if the behavior-specific split is clearer.
-Ordinary object updates may use shared `newObjectUpdate`/`newObjectRowUpdate`
-helpers, but keep pods, endpoint slices, workloads, custom resources,
-node-derived updates, and Helm resync signals explicit.
-Do not assign `Update.Row` in stream handlers; add or reuse projection helpers
-so snapshot and stream rows are built by the same canonical constructor path.
-Resource-stream permission resources are declared as the primary/related
-resources on each stream projection descriptor in
-`backend/refresh/resourcestream/projection_descriptors.go` and are checked
-against snapshot runtime permissions by
-`TestDomainPermissionContractsJoinExpectedRequirementSources` in
-`backend/refresh/system/registrations_test.go`.
-
-## Known Fragility Points
-
-### Things that break easily
-
-1. **Permission gate ordering** — Preflight must run before domain registration. Domain registration order is fixed. Moving things around causes cascading failures where later domains can't find data from earlier ones.
-
-2. **Metrics polling** — Can be disabled for two different reasons (permissions vs discovery) with different UI messages. Getting the disabled reason wrong makes diagnostics confusing.
-
-3. **Multi-cluster add/remove** — Aggregate handlers must be updated via the update path, not just init. They route requests to per-cluster subsystems; they must not merge multiple clusters into one refresh-domain result.
-
-4. **Refresh scope ownership** — Refresh domains must target exactly one cluster. Do not pass multi-cluster scopes to snapshot, manual refresh, or resource stream domains; fan out to per-cluster runtimes instead.
-
-5. **Stream reconnection** — Event/resource buffer overflow means resume fails and the frontend must fall back to full re-snapshot. If this detection is wrong, the UI shows stale data with no indication.
-
-6. **Rapid context changes** — Switching namespaces/clusters quickly can leave refreshers in undefined state. The abort→retrigger path has race conditions if context updates arrive faster than abort completes.
-
-7. **Informer shutdown** — `Shutdown()` clears references but doesn't stop informers (context cancellation does that). If the context isn't cancelled before shutdown, informers leak.
-
-8. **Metric doorbell chain** — live usage in tables depends on an easy-to-sever push chain: the metrics poller's collection observer (`SetCollectionObserver`, wired in `system/manager.go` next to the event observer) → `resourcestream.Manager.BroadcastMetricsRefresh` fans a `SourceMetric` doorbell to every subscribed scope of the metric-clock domains (derived from `ProjectionDescriptors` `MetricsDependency()`) → the frontend accepts the signal ONLY because those domains declare the `metric` source clock in the contract (`domainSupportsSourceClock`) → scoped `sourceVersion` advances → typed queries refetch. Severing ANY link — unwiring the observer, dropping the `metric` source clock from a descriptor/contract, or writing usage into a maintained store — silently freezes usage between object events with no error anywhere. Pinned by: poller observer tests (`metrics/poller_test.go`), doorbell fan-out (`resourcestream/manager_test.go`), observer wiring shape (`system/metrics_doorbell_test.go`), and frontend signal application (`resourceStreamManager.test.ts` metric doorbell pin). The user's metrics-interval preference retimes the BACKEND poller live (`Manager.SetMetricsInterval` via UpdateAppPreferences side effects); there is no client-side metric polling. One deliberate exception rides OUTSIDE this chain: the STALENESS banner. The poller rings no doorbell on failure, so a dead metrics-server on a quiet cluster produces no refetch — the payloads therefore ship `staleAfterSeconds` and `useMetricsBannerInfo` flips the banner client-side at `collectedAt + staleAfterSeconds` on a local timer (live-age style; pinned in `useMetricsBannerInfo.test.tsx`). Never make the stale banner depend on a doorbell or refetch.
-
-8a. **Doorbell-snapshot domains (namespaces, object-events)** — a snapshot domain whose refetch trigger is a signal-only doorbell instead of its poll (contract `orchestrator: "doorbell-snapshot"`, `sourceClocks` = the ONE clock the doorbell rides — namespaces: `["object"]`, object-events: `["event"]`; authored timing = stream-down fallback only). object-events mirrors the namespaces chain with per-OBJECT scopes: `snapshot.ObjectEventsChangeNotifier` (fed by the SAME shared events informer the builder reads, handler registered in `RegisterObjectEventsDomain` before factory start, resync echoes skipped via `eventUpdateIsEcho`) buffers involved-object index keys → debounced flush hands a scope matcher (`refresh.ParseObjectScope` → `buildObjectEventIndexKey`, the builder's own index semantics) to `resourcestream.Manager.BroadcastObjectEventsRefresh`, which rings ONLY the matching subscribed object scopes (`StreamScopeObject` selector; scope tail = `namespace:group/version:kind:name`) → EventsTab refetches via `useStreamSignalRefetch('object-events', …)`. Teardown for BOTH notifiers is `Subsystem.StopDoorbellNotifiers()` — adding a doorbell notifier means adding it there, never a new per-notifier call site. A SIXTH invariant (found live: perfect doorbell logs on both sides, permanently frozen namespace list): every doorbell broadcast MUST invalidate its domain's snapshot cache FIRST (`wireNamespacesDoorbell`/`wireObjectEventsDoorbell` in `system/manager.go` → `Service.InvalidateDomainCache`). The doorbell-triggered refetch arrives ~500ms after the change — inside the 5s `SnapshotCacheTTL` — and served from cache it applies the PRE-change snapshot forever (doorbells fire once per change; polls skip while the stream is healthy). The doorbell tests wire through the same helpers so the ordering is pinned, not copied. Related bounded variant, flagged not fixed: regular stream-table domains' change-signal refetches can also hit the 5s cache but heal on the next signal. Doorbell class NOTE (2026-07-03): cluster-overview is a POLL-AUGMENTED doorbell-snapshot — its metric doorbell rides BroadcastMetricsRefresh but its polls STAY ON via the descriptor's pollingContinuesWhileStreaming flag (consulted by orchestrator.isStreamingHealthy): metric doorbells ring ONLY on successful collections, so a healthy-but-silent stream must never suppress polls for a domain whose signal source can be permanently absent. Apply the same flag to any future doorbell whose producer is conditional. TWO field lessons from landing it: (1) a STREAMING-registered domain's enable path RESETS scoped state unless the consumer passes preserveState — converting a snapshot domain to doorbell-snapshot without auditing its enable call sites blanks that view on every remount/tab switch (ClusterOverview pins preserveState:true); (2) LIFECYCLE + GOVERNOR: the governor cools non-warm clusters (KeepWarm=2; pressure collapses to 0) and re-warms them through buildRefreshSubsystemForSelection on tab switch — transitionClusterToLoading GUARDS that chokepoint so an already-READY cluster is never demoted to loading during a re-warm (serving is continuous: cooled mmap stores serve until the aggregate re-routes; fresh stores are warm-painted). Verify UI-facing payload claims against REAL payloads (curl the snapshot endpoint at startup), not imagined shapes — the 'Collecting metrics…' banner was dead in production because Go's zero time serialized as collectedAt:-62135596800, which no unit test imagined. Validator completeness matters too: a domain whose rows JOIN another store's data must fold THAT store's version into its watermark (nodes folds node+pod RVs via nodeDomainIngestVersion; workloads folds workload+pod RVs) or joined-data changes rebuild under an unchanged validator and 304 away real updates. The chain: `snapshot.NamespaceChangeNotifier` (fed by a Namespaces informer handler + bundle sinks on the 6 workload/pod GVRs, registered in `RegisterNamespaceDomain` BEFORE informers/ingest start) → debounced, presence-signature-gated flush → `resourcestream.Manager.BroadcastNamespacesRefresh` (wired in `system/manager.go`) → frontend doorbell descriptor (`resourceStreamDomains.ts`) + `doorbellStreamDomain('namespaces')` registration → NamespaceContext refetches on the scoped `sourceVersions.object` clock. Four invariants (each broken live before being pinned): the notifier must re-arm until the workload tracker settles (the cluster-Ready lifecycle gate needs a namespaces BUILD after settling — see `refresh_aggregate_snapshot.go`; since 2026-07-03 that build is SERVER-SIDE: each pre-Ready doorbell triggers runNamespacesReadinessSelfBuild through the Subsystem.NamespacesDoorbell observer — readiness must NEVER depend on the frontend's fetch machinery asking first, a dropped trigger there wedged clusters in loading_slow with no retry. WIRING INVARIANT: the observer is wired in buildRefreshSubsystemForSelection — the per-cluster chokepoint every construction path passes through (startup, selector-open, auth-recovery) — NEVER in a one-shot loop at aggregate construction: the notifier's post-settle ring is ONE-SHOT, so a later-built subsystem with an empty observer slot drops it and that cluster wedges in loading until visited [the exact multi-cluster regression: switching to another open tab showed 'Starting data services'/'Still loading cluster data']. A sweep after each refreshAggregates assignment heals rings dropped while aggregates were nil; refreshAggregates is an atomic.Pointer because the self-build reads it from doorbell goroutines); `orchestrator.isStreamingHealthy` must stay descriptor-table-driven (a hardcoded doorbell list silently keeps new doorbell domains polling); informer UpdateFunc handlers must skip resync echoes (`namespaceUpdateIsEcho` — unchanged ResourceVersion; without it the doorbell fires every resync period, a 15s metronome per cluster); and every subsystem teardown/cool path must call `Subsystem.StopDoorbellNotifiers()` (`stopClusterFeeds`, `teardownRefreshSubsystem`, `stopRefreshSubsystem`, `swapRefreshSubsystem`) or stale notifiers keep broadcasting into dead managers ("-> 0 scope(s)" log spam, duplicate versions). Both sides log at DEBUG: backend "namespaces doorbell <v>: <reason> — signaling N subscribed scope(s) to refetch the namespace list" (reason from the notifier: namespace object changed / workload presence changed / baseline), frontend "namespaces doorbell <v> received for scope <s>: advancing the object clock so NamespaceContext refetches" — use the pair to localize a dead doorbell. A FIFTH invariant (also broken live): a doorbell-triggered refetch MUST be issued with `reason: 'stream-signal'` (data-access) so `fetchScopedDomain` passes `streamSignal: true` and `resolveStreamingFetchMode` bypasses the skip-while-stream-healthy gate — a doorbell refetch issued as 'background' is swallowed by the very optimization that skips polls, and the doorbell silently does nothing (applied-but-frozen). GENERAL RULE for any consumer that reads a stream-domain scope's `state.data` from the store: signals never fetch and healthy streams skip polls, so the consumer needs `useStreamSignalRefetch(domain, scopes)` (`frontend/src/core/refresh/hooks/useStreamSignalRefetch.ts`) or the query-backed-table equivalent (liveDataVersion in queryIdentity — which ALSO keys on `signalVersions` doorbell clocks, never the folded sourceVersion: a sibling consumer's fetch of the same base scope rewrites the folded value and echoed 0-byte 304 refetches out of every table sharing the scope, observed live in the Web Inspector). The hook MUST key on the domain's declared doorbell clocks (`doorbellSourceClocks`) inside `signalVersions` — the scoped-state field ONLY the stream manager's doorbell path writes — never the folded `sourceVersion` and never `sourceVersions`: payload applies rewrite both on every fetch (the backend back-fills an object clock into EVERY snapshot, service.go sourceVersion fill), so keying on them turns each fetch response into another "signal" — a warm-up fetch storm and a doubled (echo) fetch per doorbell, both observed live (Browse's bespoke effect keys on `signalVersions.catalog` with a has-observed guard: before the first doorbell the value is EMPTY, and an empty-string sentinel swallows the first ring). Relatedly, a stream-signal fetch colliding with an in-flight fetch must LATCH one trailing refetch behind it (`rerunStreamSignal`, orchestrator performFetch finally) — dropping loses the update until an unrelated event, and abort-and-replace starves the scope when signals arrive faster than a round trip (both shipped and reverted before the latch). Relatedly, the namespaces notifier floors presence-only broadcasts at `notReadyMinInterval` (legacy poll cadence) while the workload stores settle. Consumers wired: useResourceMetrics (object-panel usage), NamespaceContext, EventsTab (object-events); useBrowseCatalog has its own page-aware signal effect that must keep reason 'stream-signal'. NsResourcesContext AND ClusterResourcesContext hold NO leases and fetch NOTHING (2026-07-03: both descriptor-backed data layers — sixteen base-scope leases + signal refetches between them — fed rows rendered NOWHERE and doubled every metric-tick fetch; ~4.3k lines net deleted across three rounds. Final shape: ClusterResourcesContext is DELETED (its one live effect — kubeconfig:changing resets the six managed cluster domains — lives in ClusterResourcesManager, same mount lifetime); NsResourcesContext is a value-less effects wrapper (orchestrator selectedNamespace publication + single-namespace permission priming). Tab tracking was write-only everywhere — ViewStateContext already publishes the active view to the orchestrator. Before adding a context-held data copy, name the component that RENDERS it — query-backed tables own their rows and their own base-scope lease.) The Sidebar reads NO stream domain: it renders NamespaceContext's list only, and the namespaces domain is permission-GATED backend-side (fail fast — a denied user sees "You do not have permission to list namespaces."; no catalog inference; the aggregate snapshot service still fires the cluster-Ready notify on a permission-denied namespaces build or the cluster wedges in loading — refresh_aggregate_snapshot.go). Permission-denied scopes are CHECKED ONCE per session: the typed 403 (client.ts SnapshotPermissionDeniedError) stamps `permissionDenied` on the scoped state and performFetch skips all non-manual refetches of that scope (before the loading transition — otherwise the no-data fetch clause retries every ~2s and the loading/error flip flickers the UI; also handled BEFORE the startup grace-window error suppression, which would otherwise swallow the marker). Recovery = app restart (user decision, docs/todo.md). A data reader without one of these freezes at its first load — the exact bug class found live three times, now ENFORCED by the drift guard `frontend/src/core/refresh/streamConsumerDrift.test.ts` (scans literal-domain useRefreshScopedDomain readers of stream-class domains for a refetch mechanism; conscious exemptions live in its EXEMPT_FILES map with reasons).
-
-8b. **Stream health = connected + synchronized, NOT recently-delivered** — the refresher gate polls a scope whenever its stream is not `healthy`. Health has two sufficient conditions (`computeSubscriptionHealth`): a delivery on the current connection epoch (`delivering`), or SERVER-CONFIRMED synchronization on it (`synchronized`, set by `markSubscriptionSynchronized` ONLY when the server confirms the subscribe — the mux ACKs every accepted subscribe (`streammux/handler.go` handleSubscribe), and a pendingReset-absorbed RESET counts too). Never mark synchronized on merely SENDING a subscribe: a backend that rejects or ignores the domain would leave the client claiming healthy with polls skipped — a FROZEN domain with zero traffic (found live 2026-07-02 with a stale backend missing the namespaces selector). If health ever regresses to delivery-only, every QUIET domain (cluster-config, RBAC, storage classes…) silently reverts to timer polling — deliveries never arrive on domains whose objects don't change. On (re)connect, token-less subscriptions are force-resynced (`handleConnectionOpen`) because their data predates the live socket. Pinned by the 'quiet stream is healthy after connect + resync with zero deliveries' test in `resourceStreamManager.test.ts`.
-
-### Diagnosing a wedge
-
-When a view is stuck loading, a cluster never leaves "loading", or you suspect
-a deadlock anywhere in ingest/catalog/refresh: capture a SIGUSR1 goroutine dump
-FIRST instead of reasoning from logs — relaunch with
-`ENABLE_GOROUTINE_DUMP=true` (opt-in, default off), reproduce, and the app log
-gives the exact `kill -USR1 <pid>` command; the dump names lock holders and
-waiters directly. See `docs/workflows/goroutine-dump.md`. Two invariants keep
-dumps legible: `IngestManager.mu` is a leaf lock (never held across a store
-call), and sink deliveries run under the store write lock (never call back
-into the same store).
-
-### Before modifying this subsystem
-
-- [ ] Read the specific file you're changing AND its callers
-- [ ] Check if domain registration order is affected
-- [ ] Check if permission checks need updating (both layers)
-- [ ] Check if frontend mappings need updating (types, refresher config, diagnostics)
-- [ ] For resource streams, check frontend descriptors, backend supported domains, registration files, and single-cluster scope tests
-- [ ] Confirm new refresh-domain code builds one cluster scope at a time and derives any cross-cluster display above refresh state
-- [ ] Confirm `namespaces` and `cluster-overview` remain ordinary per-cluster domains, not aggregate-domain exceptions
-- [ ] Confirm backend aggregate handlers still route as a mux and do not merge snapshot/manual/event/resource results across clusters
-- [ ] For streamed table rows, check descriptor parity tests for row identity, update identity, sorting, empty payloads, and drift keys
-- [ ] Check if stream resume semantics are affected
-- [ ] For metric-bearing domains, confirm metric-only changes use the metric
-      source clock and do not re-project or re-store object rows
-- [ ] For metric-bearing domains, confirm the poller observer → metric doorbell
-      chain stays wired and the descriptor keeps the `metric` source clock
-      (fragility point 8 — severing either silently freezes live usage)
-- [ ] Test with multiple clusters connected
-- [ ] Test with a cluster that has restricted RBAC (not cluster-admin)
-- [ ] Verify diagnostics panel still shows correct status
+This subsystem is **fragile**. Changes historically break things. This skill is
+the modification guide — chokepoints, invariants, and the pre-change checklist.
+Architecture lives in the docs; read the one that owns your change first:
+
+| Topic | Doc |
+| --- | --- |
+| Domain contract, scope rules, behavior classes, normalized query envelope | `docs/architecture/refresh-system.md` |
+| Store, ingest, governor/lifecycle, spill/Cold-serving, delivery | `docs/architecture/data-layer.md` |
+| Stream signal envelope, source clocks, signal-keying contract | `docs/architecture/resource-stream-signals.md` |
+| Serve-time metric join, metric doorbell, staleness/collecting states | `docs/architecture/resource-metrics.md` |
+| Multi-cluster identity and scope rules | `docs/architecture/multi-cluster.md` |
+
+## Initialization order (don't rearrange)
+
+Per cluster: informer factory + permission checker → **preflight permission
+warming** → domain registration (gate checks) → snapshot service/queues/streams
+→ manager start → revalidation loop. Then the aggregate mux and the loopback
+HTTP server. Key files: `backend/app_refresh_setup.go` (orchestration),
+`app_refresh_update.go` (selection changes without server restart),
+`app_refresh_subsystems.go` (subsystem swap/store), `app_refresh_recovery.go`
+(teardown/auth recovery), `refresh/system/manager.go` (per-cluster build).
+
+`buildRefreshSubsystemForSelection` is the **per-cluster chokepoint**: every
+construction path (startup, selector-open, auth-recovery, governor re-warm)
+passes through it. Per-cluster wiring (lifecycle transition, readiness
+observer, response-cache invalidation) belongs there — never in a one-shot
+loop at aggregate construction.
+
+## Adding or changing a domain
+
+**New table/list domains must be signal-covered** — change signals or a
+doorbell, with polls as the stream-down fallback only (plain timer polling
+needs a stated reason; conditional-producer doorbells set
+`pollingContinuesWhileStreaming`). See `refresh-system.md` Behavior Classes.
+
+Backend: add to `domainRegistrations()` in
+`backend/refresh/system/registrations.go` — order matters (dependencies first).
+Registration kinds: `direct` (no gate), `list` (list permission or skip),
+`listWatch` (list+watch, optional list-only fallback, denial registers a
+permission-denied domain). Declare needed permissions on the registration
+config; the `permissionGate` (`permission_gate.go`) evaluates them after
+preflight. Informers register in `backend/refresh/informer/factory.go`.
+
+Shared metadata (category, refresher name, timing, orchestrator kind,
+diagnostics stream, source clocks, stream participation) is authored once in
+`backend/refresh/domain/refresh-domain-contract.json`; backend and frontend
+contract tests lock both sides to it.
+
+Frontend counterpart (all must stay synchronized through the contract tests):
+
+| File | What to update |
+| --- | --- |
+| `frontend/src/core/refresh/types.ts` | `RefreshDomain` union + `DomainPayloadMap` |
+| `frontend/src/core/refresh/refresherTypes.ts` | Refresher name + view mapping |
+| `frontend/src/core/refresh/domainRegistrations.ts` | Orchestrator/stream wiring |
+| `refresh-domain-contract.json` | Shared metadata |
+
+Resource WebSocket (streamed table) domains additionally touch:
+
+| File | What |
+| --- | --- |
+| `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` | Scope kind, descriptor flags |
+| `frontend/src/core/refresh/streaming/resourceStreamManager.ts` | Signal application |
+| `backend/kind/kindregistry/registry.go` | `Stream` facet for the kind |
+| `backend/refresh/resourcestream/projection_descriptors.go` | Projection + clocks + permissions |
+| `backend/refresh/resourcestream/stream_registration_*.go` | Bespoke informer/lister handlers |
+
+Backend stream registration split (keep it; don't collapse into one table):
+`stream_descriptor_dispatch.go` (generic registry-driven kinds),
+`stream_registration_helpers.go` (permissions + event mapping),
+`_direct.go` (bespoke informers: configmap/secret/HPA), `_network.go`
+(service/endpointslice correlation), `_related.go` (pod/node/workload related
+lookups). Do not assign `Update.Row` in stream handlers — snapshot and stream
+rows must come from the same canonical projection helpers. Identity crosses the
+wire only as the top-level `ref`; never guess GVK from kind/name.
+
+**Parity gates**: snapshot-vs-stream row parity
+(`backend/refresh/snapshot/parity_test.go`) needs a case per streamed domain
+(or an explicit exclusion); every new `*Summary` field needs a populate
+assertion. Typed table payloads must embed the normalized query envelope
+(enforced by `TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope`).
+
+## Snapshot service rules
+
+`backend/refresh/snapshot/service.go`: singleflight per cache key; truncated
+and partial-batch snapshots are never cached; only final batches are. Doorbell
+domains invalidate their cache before broadcasting (fragility point 9.1).
+
+## Frontend scheduling in one paragraph
+
+`RefreshManager.ts` runs refreshers `idle → refreshing → cooldown` with
+exponential backoff (capped 60s); callbacks via `Promise.allSettled`; context
+changes abort then re-trigger; global pause blocks automatic but not manual
+refresh; streams suspend on hidden tabs. The orchestrator
+(`orchestrator.ts`) owns per-cluster runtimes: enabled scopes, in-flight
+dedupe, stream health gating, metrics demand.
+
+## Known fragility points
+
+Each numbered item below broke in production at least once. Treat them as a
+checklist when touching anything they name.
+
+1. **Permission gate ordering** — preflight before registration; registration
+   order fixed.
+2. **Metrics polling disable reasons** — permissions vs discovery produce
+   different UI messages; don't conflate.
+3. **Multi-cluster add/remove** — aggregate handlers update via the update
+   path, never merge clusters into one result.
+4. **Single-cluster scopes** — refresh domains target exactly one cluster;
+   fan out per-cluster, never pass multi-cluster scopes.
+5. **Stream resume overflow** — failed resume must fall back to full
+   re-snapshot or the UI silently shows stale rows.
+6. **Rapid context changes** — abort→retrigger races when context updates beat
+   abort completion.
+7. **Informer shutdown** — cancellation stops informers; `Shutdown()` only
+   clears references. Cancel first or leak.
+8. **Metric doorbell chain** — poller collection observer
+   (`system/manager.go`) → `BroadcastMetricsRefresh` → metric-clock domains
+   (projection descriptors + explicit `cluster-overview` fan-out) → contract
+   `metric` source clock → `signalVersions` advance → refetch. Severing any
+   link silently freezes live usage between object events. The staleness
+   banner deliberately rides OUTSIDE this chain (client-side timer at
+   `collectedAt + staleAfterSeconds`) because the poller rings no doorbell on
+   failure. See `docs/architecture/resource-metrics.md`.
+9. **Doorbell-snapshot domains** (`namespaces` object clock, `object-events`
+   event clock, `cluster-overview` metric clock — poll-augmented):
+   1. **Invalidate before broadcast** (`wireNamespacesDoorbell`/
+      `wireObjectEventsDoorbell` → `InvalidateDomainCache`): the refetch lands
+      inside the 5s cache TTL; served from cache it applies the pre-change
+      snapshot forever. Tests wire through the same helpers.
+   2. **Doorbell refetches carry `reason: 'stream-signal'`** or the
+      skip-while-stream-healthy gate swallows them.
+   3. **Key refetch identity on `signalVersions` only** (never folded
+      `sourceVersion`/`sourceVersions` — payload applies rewrite those every
+      fetch → echo refetches/fetch storms). Applies to query tables'
+      `liveDataVersion` too. Watch the first-ring sentinel: an empty-string
+      "previous" swallows the first doorbell (Browse uses a has-observed
+      guard).
+   4. **Latch colliding signals** (`rerunStreamSignal`): one trailing refetch;
+      never drop, never abort-and-replace.
+   5. **Cluster-Ready is server-side**: pre-Ready doorbells trigger
+      `runNamespacesReadinessSelfBuild` via `Subsystem.NamespacesDoorbell`,
+      wired at the per-cluster chokepoint (the post-settle ring is one-shot —
+      an unwired late-built subsystem wedges in loading);
+      `sweepNamespacesReadiness` heals rings dropped while aggregates were
+      nil; `refreshAggregates` is atomic (doorbell-goroutine reads).
+      Permission-denied namespaces builds still fire the Ready notify.
+   6. **Skip resync echoes** (`namespaceUpdateIsEcho`) or the doorbell becomes
+      a resync-period metronome.
+   7. **`isStreamingHealthy` stays descriptor-table-driven** — hardcoded lists
+      silently keep new doorbell domains polling.
+   8. **Every teardown/cool path calls `StopDoorbellNotifiers()`**
+      (`stopClusterFeeds`, `teardownRefreshSubsystem`, `stopRefreshSubsystem`,
+      `swapRefreshSubsystem`).
+   9. **Poll-augmented doorbells**: conditional producers (metric doorbells
+      ring only on success) require `pollingContinuesWhileStreaming` so a
+      healthy-but-silent stream never suppresses polls; and converting a
+      snapshot domain to streaming requires auditing enable call sites for
+      `preserveState: true` (the streaming enable path resets scoped state
+      without it — blank view per remount).
+   10. **Validator completeness**: rows joining another store's data fold that
+       store's version into the watermark (nodes: node+pod;
+       workloads: workload+pod) or joined changes 304 away.
+   11. **Rebuilds must not demote Ready**: the governor re-warms cooled
+       clusters through the build chokepoint on tab switch;
+       `transitionClusterToLoading` keeps an already-ready cluster ready
+       (re-warm serving is continuous).
+10. **Stream health = connected + server-confirmed synchronized**, not
+    recently-delivered (`computeSubscriptionHealth`;
+    `markSubscriptionSynchronized` only on the mux subscribe ACK or an
+    absorbed RESET). Marking synchronized on merely SENDING a subscribe lets a
+    backend that rejects the domain freeze it with polls skipped. If health
+    regresses to delivery-only, every quiet domain reverts to timer polling.
+    Token-less subscriptions force-resync on (re)connect.
+
+**Consumer rule**: any reader of a stream-domain scope's `state.data` needs
+`useStreamSignalRefetch(domain, scopes)` or the query-table `liveDataVersion`
+equivalent — without one it freezes at first load. Enforced by the drift guard
+(`frontend/src/core/refresh/streamConsumerDrift.test.ts`; exemptions in
+EXEMPT_FILES with reasons). Contexts hold NO domain data — before adding a
+context-held copy, name the component that renders it; query-backed tables own
+their rows and their own base-scope lease. Permission-denied scopes are
+checked once per session (typed 403 → `permissionDenied` scoped state; only
+manual refetches retry; recovery = restart).
+
+## Debugging
+
+- Doorbells log at DEBUG on both sides ("namespaces doorbell <v>: <reason> —
+  signaling N scope(s)" / "namespaces doorbell <v> received … advancing the
+  object clock"). Use the pair to localize a dead doorbell; if both look
+  perfect and the UI is frozen, check the snapshot cache (9.1) first.
+- Verify payload-shaped UI claims against a REAL payload (`curl` the snapshot
+  endpoint) — unit tests only prove the shapes you imagined.
+- For wedges/deadlocks anywhere in ingest/catalog/refresh: capture a goroutine
+  dump FIRST (`ENABLE_GOROUTINE_DUMP=true`, then the logged `kill -USR1`
+  command; see `docs/workflows/goroutine-dump.md`). `IngestManager.mu` is a
+  leaf lock; sink deliveries run under the store write lock.
+
+## Before modifying this subsystem
+
+- [ ] Read the file you're changing AND its callers
+- [ ] Check domain registration order and both permission layers
+- [ ] Check frontend mappings (types, refresher config, contract JSON, diagnostics)
+- [ ] For streams: descriptors, supported domains, registration files, single-cluster scope tests, parity cases
+- [ ] One cluster scope at a time; cross-cluster display derives above refresh state
+- [ ] Aggregate handlers route as a mux — never merge cluster results
+- [ ] Metric-only changes ride the metric clock; never re-project or re-store object rows
+- [ ] Doorbell changes: walk fragility points 8–10 as a checklist
+- [ ] Test with multiple clusters connected AND with restricted RBAC
+- [ ] Verify the diagnostics panel still reports correctly
