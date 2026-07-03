@@ -386,6 +386,20 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespaces', storeScope);
 
+    // The server's ACK carries the cluster DISPLAY NAME; the subscription
+    // captures it so subscription-labeled logging matches the backend half
+    // (which logs the name) instead of falling back to the raw composite ID.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ACK',
+        domain: 'namespaces',
+        scope: '',
+        clusterId: 'cluster-a',
+        clusterName: 'Cluster A',
+      })
+    );
+
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
@@ -407,12 +421,15 @@ describe('ResourceStreamManager', () => {
     // backend's "namespaces doorbell <v>: <reason> — signaling ..." line. It
     // must carry the subscription's cluster label (the backend half is
     // per-cluster labeled; a [Global] frontend half can't be attributed when
-    // several clusters are connected).
+    // several clusters are connected) — including the display name captured
+    // from the ACK, so both halves render the same bracket.
     const doorbellLog = logAppLogsDebugMock.mock.calls.find((call) =>
       String(call[0]).includes('namespaces doorbell ns-3 received')
     );
     expect(doorbellLog).toBeDefined();
-    expect(doorbellLog?.[2]).toEqual(expect.objectContaining({ clusterId: 'cluster-a' }));
+    expect(doorbellLog?.[2]).toEqual(
+      expect.objectContaining({ clusterId: 'cluster-a', clusterName: 'Cluster A' })
+    );
   });
 
   // Pins the metric doorbell contract: the backend poller fans a SourceMetric

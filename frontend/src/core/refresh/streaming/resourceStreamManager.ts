@@ -393,6 +393,15 @@ export class ResourceStreamManager {
     const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
     this.recordSubscriptionMessage(subscription);
 
+    // Server frames carry the cluster DISPLAY NAME (the subscribe ACK always
+    // does); capture it so subscription-labeled logging shows the same name
+    // as the backend's per-cluster log lines instead of falling back to the
+    // raw composite cluster ID.
+    const messageClusterName = parsed.clusterName?.trim();
+    if (messageClusterName && subscription.clusterName !== messageClusterName) {
+      subscription.clusterName = messageClusterName;
+    }
+
     if (resolvedUpdate.signalEnvelope) {
       switch (resolvedUpdate.signalEnvelope.signal) {
         case SIGNAL_TYPES.changed:
