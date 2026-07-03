@@ -574,12 +574,17 @@ func buildClusterOverviewSnapshot(
 		}
 
 		metricsSnapshot = ClusterOverviewMetrics{
-			CollectedAt:         meta.CollectedAt.Unix(),
 			Stale:               stale,
 			LastError:           lastError,
 			ConsecutiveFailures: meta.ConsecutiveFailures,
 			SuccessCount:        meta.SuccessCount,
 			FailureCount:        meta.FailureCount,
+		}
+		// Zero time must serve as 0/omitted — Unix() of Go's zero time is
+		// -62135596800, which reads as a PRESENT timestamp downstream and
+		// suppressed the frontend's "Collecting metrics…" indication.
+		if !meta.CollectedAt.IsZero() {
+			metricsSnapshot.CollectedAt = meta.CollectedAt.Unix()
 		}
 	}
 	overview.WorkloadResourceUsage = buildWorkloadResourceUsage(podAggregates, podUsage)

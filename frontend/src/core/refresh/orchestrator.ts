@@ -27,7 +27,10 @@ import {
 } from './store';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
-import { isSupportedDomain as isDoorbellStreamDomain } from './streaming/resourceStreamDomains';
+import {
+  doorbellPollingContinues,
+  isSupportedDomain as isDoorbellStreamDomain,
+} from './streaming/resourceStreamDomains';
 import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
@@ -627,6 +630,14 @@ class RefreshOrchestrator {
   // doorbells) so a new doorbell domain cannot silently keep polling here.
   private isStreamingHealthy(domain: RefreshDomain, scope?: string): boolean {
     if (!scope) {
+      return false;
+    }
+    // Poll-augmented doorbell domains (cluster-overview): the doorbell's
+    // signal source is not guaranteed to ever fire (metric doorbells ring
+    // only on successful collections), so a healthy stream must NOT suppress
+    // their polls — report not-healthy to the fetch gate; signals still
+    // deliver and refetch through the stream subscription.
+    if (doorbellPollingContinues(domain)) {
       return false;
     }
     if (isDoorbellStreamDomain(domain)) {

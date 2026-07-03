@@ -243,9 +243,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 	// start serving data. This is the single place where loading is set,
 	// regardless of whether the cluster was opened at startup, via the
 	// kubeconfig selector, or after auth recovery.
-	if a.clusterLifecycle != nil {
-		a.clusterLifecycle.SetState(clusterMeta.ID, ClusterStateLoading)
-	}
+	a.transitionClusterToLoading(clusterMeta.ID)
 
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
 	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
@@ -488,6 +486,25 @@ func (a *App) startRefreshHTTPServer(
 	}()
 
 	return nil
+}
+
+// transitionClusterToLoading marks a freshly (re)built cluster as loading —
+// EXCEPT when the cluster is already READY. The governor re-warms Cold
+// clusters through this same chokepoint on tab switches, and re-warm serving
+// is CONTINUOUS (the cooled mmap stores serve until the aggregate re-routes;
+// the fresh stores are warm-painted from spill before the manager starts), so
+// demoting a ready cluster painted "Starting data services" over data that
+// never left the screen. Readiness is re-verified anyway: the rebuilt
+// subsystem's namespaces notifier re-arms until its stores resettle, and the
+// readiness self-build no-ops on an already-ready cluster.
+func (a *App) transitionClusterToLoading(clusterID string) {
+	if a == nil || a.clusterLifecycle == nil || clusterID == "" {
+		return
+	}
+	if a.clusterLifecycle.GetState(clusterID) == ClusterStateReady {
+		return
+	}
+	a.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
 }
 
 // wireNamespacesReadinessObserver closes the cluster-Ready loop server-side

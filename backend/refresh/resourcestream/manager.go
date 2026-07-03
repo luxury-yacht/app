@@ -90,6 +90,14 @@ const (
 	// no projected rows — an event for a panel's object tells the frontend to
 	// refetch that object's events snapshot.
 	domainObjectEvents = "object-events"
+	// domainClusterOverview is the overview's metric doorbell domain:
+	// signal-only, no projected rows — a successful metrics collection tells
+	// the frontend to refetch the overview snapshot so live usage appears
+	// within one collection instead of a full poll cycle. Unlike the other
+	// doorbell domains its POLLS STAY ON: the doorbell only rings on
+	// successful collections, so a metrics-less cluster would otherwise
+	// freeze the overview's object-derived counts.
+	domainClusterOverview = "cluster-overview"
 )
 
 const (
@@ -966,6 +974,10 @@ func (m *Manager) BroadcastMetricsRefresh(version string) {
 		}
 		m.broadcastDoorbellRefresh(domain, m.subscribedScopes(domain), SourceMetric, version)
 	}
+	// The cluster-overview snapshot also joins live usage at serve; it has no
+	// projection descriptor (snapshot domain), so fan its doorbell explicitly.
+	m.broadcastDoorbellRefresh(
+		domainClusterOverview, m.subscribedScopes(domainClusterOverview), SourceMetric, version)
 }
 
 // BroadcastNamespacesRefresh fans a SourceObject doorbell to the namespaces

@@ -305,7 +305,10 @@ describe('ClusterOverview', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
-      true
+      true,
+      // preserveState pins the tab-switch fix: the streaming enable path
+      // resets scoped state without it, blanking the overview per switch.
+      { preserveState: true }
     );
     expect(container.querySelector('.cluster-overview')?.classList.contains('selectable')).toBe(
       true
@@ -488,7 +491,10 @@ describe('ClusterOverview', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
-      true
+      true,
+      // preserveState pins the tab-switch fix: the streaming enable path
+      // resets scoped state without it, blanking the overview per switch.
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'cluster-overview',
@@ -891,7 +897,10 @@ describe('ClusterOverview', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
-      false
+      false,
+      // preserveState pins the tab-switch fix: the streaming enable path
+      // resets scoped state without it, blanking the overview per switch.
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('Failed to load cluster overview');

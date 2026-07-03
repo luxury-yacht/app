@@ -60,6 +60,22 @@ export const getMetricsBannerInfo = (
   const successCount = metrics.successCount ?? 0;
   const failureCount = metrics.failureCount ?? 0;
   const consecutiveFailures = metrics.consecutiveFailures ?? failureCount;
+
+  // Pristine first-collection window: the demand-driven poller has started
+  // (a metric-bearing view is open) but no collection has completed and none
+  // has failed. The cluster is healthy — we simply have not collected yet.
+  // Distinct from the stale/awaiting states so a blank utilization card next
+  // to a "Ready" status reads as collection-in-progress, not as a problem.
+  // collectedAt <= 0 counts as absent: older backends serialized Go's zero
+  // time as -62135596800 instead of omitting it.
+  const hasCollected = typeof metrics.collectedAt === 'number' && metrics.collectedAt > 0;
+  if (successCount === 0 && !hasCollected && failureCount === 0 && !metrics.lastError) {
+    return {
+      message: 'Collecting metrics…',
+      tooltip: 'Waiting for the first metrics collection from metrics-server',
+    };
+  }
+
   const awaitingInitialMetrics =
     successCount === 0 && !metrics.collectedAt && failureCount > 0 && consecutiveFailures < 5;
 

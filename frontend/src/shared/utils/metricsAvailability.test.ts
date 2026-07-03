@@ -10,6 +10,35 @@ import { describe, expect, it } from 'vitest';
 import { getMetricsBannerInfo } from './metricsAvailability';
 
 describe('getMetricsBannerInfo', () => {
+  it('reports "Collecting metrics" for the pristine first-collection window', () => {
+    // The demand-driven poller starts when a metric-bearing view opens; the
+    // first successful collection takes a round-trip. During that window the
+    // payload carries successCount 0 with NO failures and NO error — the
+    // cluster is fine, we simply have not collected yet. This must read as
+    // collection-in-progress, not as the generic stale/awaiting state (and
+    // definitely not as a silent blank card next to a "Ready" status).
+    const banner = getMetricsBannerInfo({
+      stale: true,
+      successCount: 0,
+      failureCount: 0,
+      consecutiveFailures: 0,
+    });
+    expect(banner?.message).toBe('Collecting metrics…');
+    expect(banner?.tooltip).toContain('first metrics collection');
+
+    // The REAL payload shape observed live: older backends serialized Go's
+    // zero time as a huge negative Unix stamp instead of omitting the field.
+    // It must still read as "not collected yet".
+    const bannerWithZeroTime = getMetricsBannerInfo({
+      stale: false,
+      successCount: 0,
+      failureCount: 0,
+      consecutiveFailures: 0,
+      collectedAt: -62135596800,
+    });
+    expect(bannerWithZeroTime?.message).toBe('Collecting metrics…');
+  });
+
   it('returns awaiting message during initial transient failures', () => {
     const banner = getMetricsBannerInfo({
       lastError: 'metrics API unavailable (pods.metrics.k8s.io)',

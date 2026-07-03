@@ -104,7 +104,8 @@ func ParseStreamSelector(clusterID, domain, scope string) (StreamSelector, error
 		domainClusterCustom,
 		domainCatalog,
 		domainClusterEvents,
-		domainNamespaces:
+		domainNamespaces,
+		domainClusterOverview:
 		if scope != "" && !strings.EqualFold(strings.TrimSuffix(scope, ":"), "cluster") {
 			return StreamSelector{}, fmt.Errorf("%s stream does not accept scope %q", domain, scope)
 		}

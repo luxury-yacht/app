@@ -693,11 +693,12 @@
     {
       "domain": "cluster-overview",
       "category": "system",
+      "sourceClocks": ["metric"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "cluster-overview",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 },
         "priority": 3
       }

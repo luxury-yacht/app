@@ -280,6 +280,13 @@ func TestManagerBroadcastsMetricDoorbellToMetricClockDomains(t *testing.T) {
 	require.NoError(t, err)
 	configSub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
 	require.NoError(t, err)
+	// The cluster-overview snapshot joins live usage at serve too: its metric
+	// doorbell resolves the "Collecting metrics…" card within one collection
+	// instead of a full poll cycle. (Polls stay on for this domain — the
+	// metric doorbell only rings on SUCCESSFUL collections, so a metrics-less
+	// cluster would otherwise freeze the overview.)
+	overviewSub, err := subscribeForTest(t, manager, domainClusterOverview, "")
+	require.NoError(t, err)
 
 	manager.BroadcastMetricsRefresh("metrics-99")
 
@@ -292,6 +299,7 @@ func TestManagerBroadcastsMetricDoorbellToMetricClockDomains(t *testing.T) {
 		{name: "pods", sub: podsSub, domain: domainPods, scope: "namespace:default"},
 		{name: "nodes", sub: nodesSub, domain: domainNodes, scope: ""},
 		{name: "workloads", sub: workloadsSub, domain: domainWorkloads, scope: "namespace:prod"},
+		{name: "cluster-overview", sub: overviewSub, domain: domainClusterOverview, scope: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			update := requireNextUpdate(t, tc.sub)

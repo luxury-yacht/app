@@ -16,6 +16,7 @@ import {
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   canActivateClusterOverviewRefresh,
@@ -142,6 +143,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const health = getActiveClusterHealth();
   const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
+  // Metric doorbell: each successful collection refetches the overview so
+  // live usage appears within one collection instead of a full poll cycle
+  // (resolves the "Collecting metrics…" card promptly). Polls stay on for
+  // this domain — the doorbell never rings on metrics-less clusters.
+  const overviewSignalScopes = useMemo(
+    () => (overviewScope && canActivateOverviewRefresh ? [overviewScope] : []),
+    [overviewScope, canActivateOverviewRefresh]
+  );
+  useStreamSignalRefetch('cluster-overview', overviewSignalScopes);
   const overviewStatus = useMemo(
     () =>
       buildConnectivityPresentation({
@@ -328,10 +338,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     }
 
     const enableOverview = () => {
+      // preserveState is load-bearing for a STREAMING-registered domain: the
+      // orchestrator's streaming enable path RESETS the scoped state when it
+      // is absent, which blanked the overview on every cluster tab switch.
       setRefreshDomainEnabled({
         domain: 'cluster-overview',
         scope: overviewScope,
         enabled: canActivateOverviewRefresh,
+        preserveState: true,
       });
       if (!canActivateOverviewRefresh) {
         return;

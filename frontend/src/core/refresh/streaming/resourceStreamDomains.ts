@@ -16,6 +16,11 @@ export type ResourceStreamDomainDescriptor = {
   domain: DoorbellDomain;
   scopeKind: ResourceStreamScopeKind;
   isClusterScoped: boolean;
+  // The doorbell AUGMENTS polling instead of replacing it: a healthy stream
+  // must not suppress this domain's polls, because the doorbell's signal
+  // source is not guaranteed to ever fire (e.g. metric doorbells ring only
+  // on SUCCESSFUL collections — absent metrics-server, never).
+  pollingContinuesWhileStreaming?: boolean;
 };
 
 export type ResourceStreamSourceClock = RefreshSourceClock;
@@ -210,6 +215,19 @@ const doorbellDomainDescriptors = [
     scopeKind: 'object',
     isClusterScoped: false,
   },
+  // Signal-only metric doorbell for the cluster-overview snapshot domain: a
+  // successful metrics collection refetches the overview so live usage
+  // appears within one collection instead of a full poll cycle. POLLS STAY
+  // ON for this domain (pollingContinuesWhileStreaming): the metric doorbell
+  // only rings on successful collections, so a metrics-less cluster would
+  // otherwise freeze the overview's object-derived counts behind the
+  // skip-while-stream-healthy gate.
+  {
+    domain: 'cluster-overview',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+    pollingContinuesWhileStreaming: true,
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(
@@ -225,6 +243,11 @@ const sourceClocksByDomain = new Map<DoorbellDomain, readonly ResourceStreamSour
     .filter((entry) => doorbellDescriptorByDomain.has(entry.domain as DoorbellDomain))
     .map((entry) => [entry.domain as DoorbellDomain, entry.sourceClocks ?? []])
 );
+
+// Domains whose doorbell AUGMENTS polling instead of replacing it (see the
+// descriptor flag). Consulted by the orchestrator's stream-health gate.
+export const doorbellPollingContinues = (domain: string): boolean =>
+  doorbellDescriptorByDomain.get(domain as DoorbellDomain)?.pollingContinuesWhileStreaming === true;
 
 export const isSupportedDomain = (value: string | undefined): value is DoorbellDomain =>
   Boolean(value && doorbellDescriptorByDomain.has(value as DoorbellDomain));

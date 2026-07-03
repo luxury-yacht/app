@@ -245,6 +245,29 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, overview.TotalNodes, snapshot.Stats.ItemCount)
 }
 
+// The pristine first-collection window (poller started, nothing collected
+// yet) must serve CollectedAt as ZERO — not Go's zero time as a Unix stamp
+// (-62135596800), which reads as truthy/present downstream and killed the
+// frontend's "Collecting metrics…" indication (observed live: the payload
+// carried collectedAt:-62135596800 while the utilization card showed hard
+// zeros with no banner).
+func TestClusterOverviewMetricsOmitsZeroCollectedAt(t *testing.T) {
+	builder := &ClusterOverviewBuilder{
+		ingest:          newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, ""),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		metrics:         fakeClusterMetrics{},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|")
+	require.NoError(t, err)
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, int64(0), payload.Metrics.CollectedAt,
+		"zero collection time must serialize as 0/omitted, never as the epoch of Go's zero time")
+	require.Equal(t, uint64(0), payload.Metrics.SuccessCount)
+	require.Empty(t, payload.Metrics.LastError)
+}
+
 func TestClusterOverviewBuilderPreservesScopeAndClusterMeta(t *testing.T) {
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{
 		ClusterID:   "cluster-a",

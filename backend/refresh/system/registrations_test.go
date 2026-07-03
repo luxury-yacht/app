@@ -504,10 +504,14 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 			// Doorbell-refetched snapshot domains declare exactly the one
 			// signal-only clock their doorbell rides — no projection descriptor
 			// exists: namespaces rides the object clock, object-events the
-			// event clock.
+			// event clock, cluster-overview the metric clock (its polls stay
+			// on — metric doorbells only ring on successful collections).
 			expected := []string{"object"}
-			if entry.Domain == "object-events" {
+			switch entry.Domain {
+			case "object-events":
 				expected = []string{"event"}
+			case "cluster-overview":
+				expected = []string{"metric"}
 			}
 			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
 			continue

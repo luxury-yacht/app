@@ -358,6 +358,62 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('cluster-config');
   });
 
+  it('cluster-overview polls proceed while its metric-doorbell stream is healthy (doorbell augments polling)', async () => {
+    // The overview's metric doorbell rings ONLY on successful collections;
+    // on a metrics-less cluster it never rings. If a healthy stream
+    // suppressed the overview's polls (as it does for the table domains),
+    // the overview's object-derived counts would freeze forever.
+    clusterReadiness.resetForTests();
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-overview',
+      refresherName: 'cluster-overview',
+      category: 'cluster',
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        pauseRefresherWhenStreaming: true,
+      },
+    });
+    const scope = buildClusterScope('cluster-a', '');
+    resetAllScopedDomainStates('cluster-overview');
+    setRuntimeScopeEnabled('cluster-overview', scope, true);
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+    // Applied data + healthy stream: the exact state where table-domain polls
+    // are skipped.
+    setScopedDomainState('cluster-overview', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: {} as never,
+    }));
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+    clientMocks.fetchSnapshotMock.mockClear();
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'cluster-overview',
+        scope,
+        version: 2,
+        checksum: 'etag-2',
+        generatedAt: 1,
+        sequence: 2,
+        payload: {} as never,
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-2',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('cluster-overview', scope, { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+  });
+
   it('a permission-denied scope is settled: background refetches are skipped and the state never re-enters loading', async () => {
     clusterReadiness.resetForTests();
     registerStreamingClusterConfigDomain();

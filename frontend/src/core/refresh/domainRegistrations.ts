@@ -56,8 +56,11 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   // The Object Panel Events tab refetches on the backend's per-object events
   // doorbell; its 10s timing is now only the stream-down fallback.
   doorbellStreamDomain('object-events');
+  // The overview's metric doorbell refetches on each successful collection;
+  // its polls STAY ON via the descriptor's pollingContinuesWhileStreaming
+  // (the doorbell may never ring on metrics-less clusters).
+  doorbellStreamDomain('cluster-overview');
   registerSnapshotDomains(
-    'cluster-overview',
     'object-maintenance',
     'object-details',
     'object-map',

@@ -351,6 +351,40 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond, "sweep must self-build for loading clusters")
 }
 
+// A READY cluster must stay ready through a subsystem rebuild. The governor
+// re-warms Cold clusters on tab switch via the same build chokepoint that
+// sets 'loading', but re-warm serving is CONTINUOUS (cooled mmap stores
+// serve until the aggregate re-routes; fresh stores are warm-painted from
+// spill before the manager starts) — demoting to loading painted "Starting
+// data services" over a cluster whose data never left the screen (the
+// reported tab-switch regression). Non-ready states still transition to
+// loading: the gate must not block genuinely-loading clusters from their
+// normal loading→ready path.
+func TestTransitionClusterToLoadingKeepsReadyClustersReady(t *testing.T) {
+	emitter, _ := collectingEmitter()
+	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	app := &App{clusterLifecycle: lifecycle}
+
+	// Re-warm of a ready cluster: no demotion.
+	lifecycle.SetState("cluster-ready", ClusterStateReady)
+	app.transitionClusterToLoading("cluster-ready")
+	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-ready"),
+		"a ready cluster must stay ready through a rebuild (re-warm serving is continuous)")
+
+	// Fresh/connecting/recovering clusters still enter loading.
+	lifecycle.SetState("cluster-new", ClusterStateConnected)
+	app.transitionClusterToLoading("cluster-new")
+	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-new"))
+
+	lifecycle.SetState("cluster-auth", ClusterStateAuthFailed)
+	app.transitionClusterToLoading("cluster-auth")
+	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-auth"))
+
+	// Unknown state (first build): loading.
+	app.transitionClusterToLoading("cluster-unknown")
+	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-unknown"))
+}
+
 // Transient (non-permission) failures are NOT settled: the callback must not
 // fire, so the cluster keeps waiting for a real namespaces build.
 func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T) {

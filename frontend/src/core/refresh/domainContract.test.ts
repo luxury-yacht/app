@@ -298,16 +298,23 @@ describe('refresh domain contract', () => {
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           break;
         case 'doorbell-snapshot':
-          // Doorbell-refetched snapshot domains (namespaces, object-events):
-          // streaming wiring exists for the signal-only doorbell, but they are
-          // not resource table domains. Each declares exactly the one clock
-          // its doorbell rides (namespaces: object; object-events: event).
-          // The doorbell rides the resources WebSocket, so diagnostics reflect
-          // that stream instead of mislabeling the domain as polling.
+          // Doorbell-refetched snapshot domains (namespaces, object-events,
+          // cluster-overview): streaming wiring exists for the signal-only
+          // doorbell, but they are not resource table domains. Each declares
+          // exactly the one clock its doorbell rides (namespaces: object;
+          // object-events: event; cluster-overview: metric — and its polls
+          // STAY ON, since metric doorbells only ring on successful
+          // collections). The doorbell rides the resources WebSocket, so
+          // diagnostics reflect that stream instead of mislabeling the
+          // domain as polling.
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           expect(entry.sourceClocks).toEqual(
-            entry.domain === 'object-events' ? ['event'] : ['object']
+            entry.domain === 'object-events'
+              ? ['event']
+              : entry.domain === 'cluster-overview'
+                ? ['metric']
+                : ['object']
           );
           expect(entry.frontend.diagnosticsStream).toBe('resources');
           break;
@@ -466,12 +473,18 @@ describe('refresh domain contract', () => {
           expect(inventory.coverageContract).toBe('log-stream-lifecycle');
           break;
         case 'doorbell-snapshot':
-          // A snapshot payload whose refetch trigger is a signal-only doorbell
-          // instead of the poll: namespaces (snapshot-table, object doorbell)
-          // and object-events (event-snapshot, per-object event doorbell).
-          expect(['namespaces', 'object-events']).toContain(entry.domain);
+          // A snapshot payload whose refetch trigger includes a signal-only
+          // doorbell: namespaces (snapshot-table, object doorbell),
+          // object-events (event-snapshot, per-object event doorbell), and
+          // cluster-overview (aggregate-snapshot, metric doorbell with polls
+          // kept on).
+          expect(['namespaces', 'object-events', 'cluster-overview']).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
-            entry.domain === 'object-events' ? 'event-snapshot' : 'snapshot-table'
+            entry.domain === 'object-events'
+              ? 'event-snapshot'
+              : entry.domain === 'cluster-overview'
+                ? 'aggregate-snapshot'
+                : 'snapshot-table'
           );
           break;
         case 'snapshot':

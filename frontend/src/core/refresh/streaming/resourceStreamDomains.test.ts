@@ -62,6 +62,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'namespace-events',
   'namespaces',
   'object-events',
+  'cluster-overview',
 ];
 
 describe('resource stream domain descriptors', () => {
