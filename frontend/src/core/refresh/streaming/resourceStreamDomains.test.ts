@@ -60,6 +60,9 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'catalog',
   'cluster-events',
   'namespace-events',
+  'namespaces',
+  'object-events',
+  'cluster-overview',
 ];
 
 describe('resource stream domain descriptors', () => {
@@ -72,7 +75,6 @@ describe('resource stream domain descriptors', () => {
   it('declares scope and metrics behavior for every domain', () => {
     resourceStreamDomainDescriptors.forEach((descriptor) => {
       expect(['pod', 'namespace', 'cluster']).toContain(descriptor.scopeKind);
-      expect(typeof descriptor.preserveMetrics).toBe('boolean');
       expect(descriptor.isClusterScoped).toBe(CLUSTER_SCOPED_DOMAINS.has(descriptor.domain));
       expect('supportsMultiCluster' in descriptor).toBe(false);
     });
@@ -139,11 +141,10 @@ describe('resource stream domain descriptors', () => {
 
   // Locks the frontend descriptor table to the backend-authored projection
   // contract. The same JSON file (refresh-domain-contract.json) is the
-  // source of truth for both: this test ensures scopeKind and
-  // preserveMetrics on the frontend match the backend descriptor's
-  // ScopeKind and MetricsDependency. Drift here means the frontend would
-  // preserve-metrics-state for a stream domain in a way the backend
-  // wouldn't expect.
+  // source of truth for both: this test ensures scopeKind on the frontend
+  // matches the backend descriptor's ScopeKind, and pins which stream
+  // domains declare the metric source clock (live usage is joined onto the
+  // base rows at serve by the backend).
   it('matches the backend-authored projection contract', async () => {
     const { refreshDomainContract } = await import('@/core/refresh/domainRegistry');
     const contractDomains = refreshDomainContract.resourceStream.domains;
@@ -152,14 +153,16 @@ describe('resource stream domain descriptors', () => {
     );
     expect(Object.keys(contractDomains).sort()).toEqual([...EXPECTED_DOMAINS].sort());
 
+    const metricClockDomains = resourceStreamDomainDescriptors
+      .filter((descriptor) => sourceClocksByDomain.get(descriptor.domain)?.includes('metric'))
+      .map((descriptor) => descriptor.domain)
+      .sort();
+    expect(metricClockDomains).toEqual(['namespace-workloads', 'nodes', 'pods']);
+
     for (const descriptor of resourceStreamDomainDescriptors) {
       const entry = contractDomains[descriptor.domain];
       expect(entry, `contract missing entry for ${descriptor.domain}`).toBeDefined();
       expect(entry.scopeKind, `${descriptor.domain} scopeKind`).toBe(descriptor.scopeKind);
-      expect(
-        sourceClocksByDomain.get(descriptor.domain)?.includes('metric'),
-        `${descriptor.domain} metric source clock`
-      ).toBe(descriptor.preserveMetrics);
       expect(entry.completeIsScopeLevel, `${descriptor.domain} completeIsScopeLevel`).toBe(true);
       const clusterScoped = entry.scopeKind === 'cluster';
       expect(descriptor.isClusterScoped, `${descriptor.domain} isClusterScoped`).toBe(

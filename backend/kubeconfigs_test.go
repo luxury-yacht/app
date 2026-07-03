@@ -304,7 +304,7 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.appSettings = getDefaultAppSettings()
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshCtx = context.Background()
 

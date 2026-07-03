@@ -82,6 +82,22 @@ const (
 	domainCatalog         = "catalog"
 	domainClusterEvents   = "cluster-events"
 	domainNamespaceEvents = "namespace-events"
+	// domainNamespaces is the namespace-list doorbell domain: signal-only, no
+	// projected rows — namespace object changes and workload-presence flips
+	// tell the frontend to refetch the namespaces snapshot.
+	domainNamespaces = "namespaces"
+	// domainObjectEvents is the per-object events doorbell domain: signal-only,
+	// no projected rows — an event for a panel's object tells the frontend to
+	// refetch that object's events snapshot.
+	domainObjectEvents = "object-events"
+	// domainClusterOverview is the overview's metric doorbell domain:
+	// signal-only, no projected rows — a successful metrics collection tells
+	// the frontend to refetch the overview snapshot so live usage appears
+	// within one collection instead of a full poll cycle. Unlike the other
+	// doorbell domains its POLLS STAY ON: the doorbell only rings on
+	// successful collections, so a metrics-less cluster would otherwise
+	// freeze the overview's object-derived counts.
+	domainClusterOverview = "cluster-overview"
 )
 
 const (
@@ -295,6 +311,13 @@ func (m *Manager) logInfo(message string) {
 		return
 	}
 	applog.Info(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
+}
+
+func (m *Manager) logDebug(message string) {
+	if m == nil {
+		return
+	}
+	applog.Debug(m.logger, message, logsources.ResourceStream, m.clusterMeta.ClusterID, m.clusterMeta.ClusterName)
 }
 
 // SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.
@@ -931,6 +954,70 @@ func (m *Manager) BroadcastEventRefresh(domain, scope, version string) {
 		return
 	}
 	m.broadcastDoorbellRefresh(domain, []string{selector.CanonicalScope()}, SourceEvent, version)
+}
+
+// BroadcastMetricsRefresh fans a SourceMetric doorbell to every subscribed scope
+// of every metric-clock domain (the domains whose rows join live usage at serve,
+// derived from the authored projection descriptors). The metrics poller calls
+// this after each successful collection, so the frontend refetches on the
+// poller's schedule with no client-side polling. version is the collection
+// revision (CollectedAt nanos) — the same value the snapshot builders stamp as
+// SourceVersions["metric"], so the doorbell and the snapshot ETag advance
+// together.
+func (m *Manager) BroadcastMetricsRefresh(version string) {
+	if m == nil {
+		return
+	}
+	for domain, descriptor := range projectionDescriptors {
+		if !descriptor.MetricsDependency() {
+			continue
+		}
+		m.broadcastDoorbellRefresh(domain, m.subscribedScopes(domain), SourceMetric, version)
+	}
+	// The cluster-overview snapshot also joins live usage at serve; it has no
+	// projection descriptor (snapshot domain), so fan its doorbell explicitly.
+	m.broadcastDoorbellRefresh(
+		domainClusterOverview, m.subscribedScopes(domainClusterOverview), SourceMetric, version)
+}
+
+// BroadcastNamespacesRefresh fans a SourceObject doorbell to the namespaces
+// domain's subscribers. The namespace-list notifier calls this when a namespace
+// object changes, when workload presence flips, or when the workload tracker
+// becomes ready — the three (rare) events that change the namespaces snapshot.
+// The reason comes from the notifier and says which of those rang the doorbell.
+func (m *Manager) BroadcastNamespacesRefresh(version, reason string) {
+	if m == nil {
+		return
+	}
+	scopes := m.subscribedScopes(domainNamespaces)
+	// Rare by design (namespace changes, presence flips, tracker settling), so a
+	// log per broadcast is cheap and makes the doorbell observable at runtime.
+	m.logDebug(fmt.Sprintf(
+		"namespaces doorbell %s: %s — signaling %d subscribed scope(s) to refetch the namespace list",
+		version, reason, len(scopes)))
+	m.broadcastDoorbellRefresh(domainNamespaces, scopes, SourceObject, version)
+}
+
+// BroadcastObjectEventsRefresh fans a SourceEvent doorbell to the subscribed
+// object-events scopes the matcher selects. The object-events notifier calls
+// this after each debounced event-informer flush; matches encapsulates the
+// snapshot package's scope→involved-object matching so subscription state and
+// scope semantics stay in their own packages.
+func (m *Manager) BroadcastObjectEventsRefresh(version string, matches func(scope string) bool) {
+	if m == nil || matches == nil {
+		return
+	}
+	scopes := m.subscribedScopes(domainObjectEvents)
+	targets := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if matches(scope) {
+			targets = append(targets, scope)
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+	m.broadcastDoorbellRefresh(domainObjectEvents, targets, SourceEvent, version)
 }
 
 func (m *Manager) broadcastDoorbellRefresh(domain string, scopes []string, source Source, version string) {

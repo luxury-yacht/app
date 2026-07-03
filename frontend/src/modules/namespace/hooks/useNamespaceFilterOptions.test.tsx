@@ -30,6 +30,7 @@ const renderHook = <T,>(hook: () => T) => {
           selectedNamespace: undefined,
           selectedNamespaceClusterId: undefined,
           namespaceLoading: false,
+          namespacesPermissionDenied: false,
           namespaceRefreshing: false,
           namespaceReady: true,
           setSelectedNamespace: () => {},

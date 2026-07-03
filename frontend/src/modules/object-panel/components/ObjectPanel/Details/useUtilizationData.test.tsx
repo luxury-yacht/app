@@ -80,11 +80,8 @@ describe('useUtilizationData', () => {
 
   afterEach(() => {
     resetAllScopedDomainStates('pods');
-    resetAllScopedDomainStates('pods-metrics');
     resetAllScopedDomainStates('namespace-workloads');
-    resetAllScopedDomainStates('namespace-workloads-metrics');
     resetAllScopedDomainStates('nodes');
-    resetAllScopedDomainStates('nodes-metrics');
   });
 
   it('updates Pod utilization from the pods scoped domain without a detail DTO change', async () => {
@@ -112,6 +109,8 @@ describe('useUtilizationData', () => {
     });
 
     await act(async () => {
+      // The pods rows arrive with live usage joined at serve; payload.metrics
+      // carries the poller freshness for that joined usage.
       setScopedDomainState('pods', 'cluster-a|namespace:team-a', (previous) => ({
         ...previous,
         status: 'ready',
@@ -130,34 +129,12 @@ describe('useUtilizationData', () => {
               age: '1m',
               ownerKind: 'Deployment',
               ownerName: 'api',
-              cpuUsage: '-',
+              cpuUsage: '220m',
               cpuRequest: '75m',
               cpuLimit: '750m',
-              memUsage: '-',
+              memUsage: '256Mi',
               memRequest: '96Mi',
               memLimit: '512Mi',
-            },
-          ],
-        },
-      }));
-      setScopedDomainState('pods-metrics', 'cluster-a|namespace:team-a', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|namespace:team-a',
-        data: {
-          clusterId: 'cluster-a',
-          rows: [
-            {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Pod',
-              resource: 'pods',
-              name: 'api',
-              namespace: 'team-a',
-              rowKey: 'team-a/api',
-              cpuUsage: '220m',
-              memUsage: '256Mi',
             },
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
@@ -220,44 +197,17 @@ describe('useUtilizationData', () => {
               status: 'Available',
               restarts: 0,
               age: '2m',
-              cpuUsage: '-',
+              cpuUsage: '320m',
               cpuRequest: '160m',
               cpuLimit: '800m',
-              memUsage: '-',
+              memUsage: '384Mi',
               memRequest: '192Mi',
               memLimit: '768Mi',
             },
           ],
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
         },
       }));
-      setScopedDomainState(
-        'namespace-workloads-metrics',
-        'cluster-a|namespace:team-a',
-        (previous) => ({
-          ...previous,
-          status: 'ready',
-          scope: 'cluster-a|namespace:team-a',
-          data: {
-            clusterId: 'cluster-a',
-            rows: [
-              {
-                clusterId: 'cluster-a',
-                group: 'apps',
-                version: 'v1',
-                kind: 'Deployment',
-                resource: 'deployments',
-                name: 'api',
-                namespace: 'team-a',
-                rowKey: 'deployment/team-a/api',
-                ready: '2/3',
-                cpuUsage: '320m',
-                memUsage: '384Mi',
-              },
-            ],
-            metrics: { stale: false, successCount: 1, failureCount: 0 },
-          },
-        })
-      );
       await Promise.resolve();
     });
 
@@ -324,44 +274,17 @@ describe('useUtilizationData', () => {
                 status: 'Available',
                 restarts: 0,
                 age: '2m',
-                cpuUsage: '-',
+                cpuUsage: '320m',
                 cpuRequest: '160m',
                 cpuLimit: '800m',
-                memUsage: '-',
+                memUsage: '384Mi',
                 memRequest: '192Mi',
                 memLimit: '768Mi',
               },
             ],
+            metrics: { stale: false, successCount: 1, failureCount: 0 },
           },
         }));
-        setScopedDomainState(
-          'namespace-workloads-metrics',
-          'cluster-a|namespace:team-a',
-          (previous) => ({
-            ...previous,
-            status: 'ready',
-            scope: 'cluster-a|namespace:team-a',
-            data: {
-              clusterId: 'cluster-a',
-              rows: [
-                {
-                  clusterId: 'cluster-a',
-                  group: 'apps',
-                  version: 'v1',
-                  kind,
-                  resource: kind === 'DaemonSet' ? 'daemonsets' : 'statefulsets',
-                  name: 'api',
-                  namespace: 'team-a',
-                  rowKey: `${kind.toLowerCase()}/team-a/api`,
-                  ready: '1/2',
-                  cpuUsage: '320m',
-                  memUsage: '384Mi',
-                },
-              ],
-              metrics: { stale: false, successCount: 1, failureCount: 0 },
-            },
-          })
-        );
         await Promise.resolve();
       });
 
@@ -420,12 +343,12 @@ describe('useUtilizationData', () => {
               cpuAllocatable: '7600m',
               cpuRequests: '2',
               cpuLimits: '4',
-              cpuUsage: '-',
+              cpuUsage: '1200m',
               memoryCapacity: '32Gi',
               memoryAllocatable: '30Gi',
               memRequests: '6Gi',
               memLimits: '12Gi',
-              memoryUsage: '-',
+              memoryUsage: '5Gi',
               pods: '18',
               podsCapacity: '110',
               podsAllocatable: '100',
@@ -434,27 +357,6 @@ describe('useUtilizationData', () => {
               cpu: '1200m',
               memory: '5Gi',
               unschedulable: false,
-            },
-          ],
-        },
-      }));
-      setScopedDomainState('nodes-metrics', 'cluster-a|', (previous) => ({
-        ...previous,
-        status: 'ready',
-        scope: 'cluster-a|',
-        data: {
-          clusterId: 'cluster-a',
-          rows: [
-            {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Node',
-              resource: 'nodes',
-              name: 'node-a',
-              rowKey: 'node/node-a',
-              cpuUsage: '1200m',
-              memoryUsage: '5Gi',
             },
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },

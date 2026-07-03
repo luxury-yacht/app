@@ -23,7 +23,13 @@ then stored by the frontend under cluster-aware scopes.
   app-managed state such as node maintenance must bypass stale cache and
   singleflight paths.
 - Permission-denied domains should surface diagnostics and stable denied
-  payloads instead of disappearing.
+  payloads instead of disappearing. The frontend checks a denied scope ONCE per
+  session (typed 403 → `permissionDenied` scoped state, background refetches
+  skipped; recovery is an app restart).
+- The cluster loading→ready transition is SERVER-driven: a namespaces build
+  after workload-store settle (self-built on each pre-Ready doorbell), with a
+  permission-denied namespaces build still firing the transition. Rebuilds of an
+  already-ready cluster (governor re-warm) must not demote it to loading.
 
 ## Domain Contract
 
@@ -76,12 +82,25 @@ Use behavior classes to preserve correctness, not to force inheritance:
   WebSocket change signals
 - event and catalog domains also use resource WebSocket doorbells for liveness
   and refetch rows through their snapshot/query domains
+- doorbell-snapshot domains (`namespaces`, `object-events`, `cluster-overview`)
+  are snapshot domains refetched by a signal-only doorbell; `cluster-overview`
+  additionally keeps polling (poll-augmented — its metric doorbell only rings
+  on successful collections)
 - complete-resync streams use stream messages as resync signals
 - resource-stream signal delivery is documented in
   [resource-stream-signals.md](resource-stream-signals.md)
 - log streams have source-specific reducers
 - detail, graph, Helm, YAML, and operation-state domains keep their own payload
   semantics
+
+**New table/list domains must be signal-covered.** Register object change
+signals (resource-stream table) or a doorbell (doorbell-snapshot) so the domain
+refetches on push; the authored poll timing is the stream-down fallback, never
+the primary refresh mechanism. A doorbell whose producer is conditional (it may
+never fire — e.g. metric doorbells ring only on successful collections) must
+set the descriptor's `pollingContinuesWhileStreaming` flag so polls stay on.
+Plain timer-polled registration is reserved for domains with no push source at
+all, and needs a stated reason.
 
 Keep common lifecycle plumbing shared where behavior matches. Do not collapse
 domain-specific identity, merge, cache, or recovery semantics into a generic

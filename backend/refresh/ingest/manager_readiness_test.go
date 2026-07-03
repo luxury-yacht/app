@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,8 +35,11 @@ func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 	if len(mgr.entries) == 0 {
 		t.Fatal("expected the manager to build at least one reflector entry")
 	}
-	current := time.Unix(1_700_000_000, 0)
-	mgr.now = func() time.Time { return current }
+	// Start's background goroutines read the mocked clock concurrently with the
+	// test's advance, so the clock must be an atomic, not a captured local.
+	var current atomic.Int64
+	base := time.Unix(1_700_000_000, 0)
+	mgr.now = func() time.Time { return base.Add(time.Duration(current.Load())) }
 	mgr.syncDeadline = 50 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -46,7 +50,7 @@ func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 		t.Fatal("HasSynced must be false before the deadline (no store has synced)")
 	}
 
-	current = current.Add(time.Second) // advance past the deadline
+	current.Store(int64(time.Second)) // advance past the deadline
 	if !mgr.HasSynced() {
 		t.Fatal("HasSynced must report settled after the deadline so Start stops blocking")
 	}
@@ -105,8 +109,10 @@ func TestIngestManagerHasSyncedForDegradesAfterDeadline(t *testing.T) {
 	if gvr.Resource == "" {
 		t.Fatal("expected at least one entry GVR")
 	}
-	current := time.Unix(1_700_000_000, 0)
-	mgr.now = func() time.Time { return current }
+	// Same concurrent-clock rule as the whole-manager test above.
+	var current atomic.Int64
+	base := time.Unix(1_700_000_000, 0)
+	mgr.now = func() time.Time { return base.Add(time.Duration(current.Load())) }
 	mgr.syncDeadline = 50 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,7 +122,7 @@ func TestIngestManagerHasSyncedForDegradesAfterDeadline(t *testing.T) {
 	if mgr.HasSyncedFor(gvr) {
 		t.Fatalf("HasSyncedFor(%s) must be false before the deadline", gvr)
 	}
-	current = current.Add(time.Second)
+	current.Store(int64(time.Second))
 	if !mgr.HasSyncedFor(gvr) {
 		t.Fatalf("HasSyncedFor(%s) must report settled after the deadline", gvr)
 	}

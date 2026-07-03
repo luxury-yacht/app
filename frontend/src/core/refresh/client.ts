@@ -234,8 +234,8 @@ export async function fetchSnapshot<TPayload>(
   }
 
   if (!response.ok) {
-    const message = await safeParseError(response);
-    throw new Error(message);
+    const { message, permissionDenied } = await safeParseError(response);
+    throw permissionDenied ? new SnapshotPermissionDeniedError(message) : new Error(message);
   }
 
   const snapshot = (await response.json()) as Snapshot<TPayload>;
@@ -246,19 +246,37 @@ export async function fetchSnapshot<TPayload>(
   };
 }
 
-async function safeParseError(response: Response): Promise<string> {
+// A snapshot request the backend refused for lack of RBAC permission. Typed
+// so the orchestrator can mark the scope permissionDenied structurally and
+// stop background retries (permission is checked ONCE per session — recovery
+// is an app restart), without string-matching messages.
+export class SnapshotPermissionDeniedError extends Error {
+  readonly permissionDenied = true;
+}
+
+// Structural guard (marker property, not instanceof) so it survives module
+// mocking and error re-wrapping.
+export const isSnapshotPermissionDenied = (error: unknown): boolean =>
+  error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true;
+
+async function safeParseError(
+  response: Response
+): Promise<{ message: string; permissionDenied: boolean }> {
   try {
     const data = await response.json();
     if (isPermissionDeniedStatus(data)) {
-      return formatPermissionDeniedStatus(data);
+      return { message: formatPermissionDeniedStatus(data), permissionDenied: true };
     }
     if (data?.message) {
-      return data.message as string;
+      return { message: data.message as string, permissionDenied: false };
     }
   } catch (_) {
     // Ignore JSON parse errors and fall back to status text
   }
-  return `Snapshot request failed: ${response.status} ${response.statusText}`;
+  return {
+    message: `Snapshot request failed: ${response.status} ${response.statusText}`,
+    permissionDenied: false,
+  };
 }
 
 export function invalidateRefreshBaseURL(): void {

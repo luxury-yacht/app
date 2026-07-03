@@ -13,6 +13,7 @@ import { stripClusterScope } from '../clusterScope';
 import { eventBus } from '@/core/events';
 import {
   APP_LOG_SOURCES,
+  logAppLogsDebug,
   logAppLogsInfo,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
@@ -56,10 +57,16 @@ const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.ResourceStream, cluster);
 };
 
+const logDebug = (message: string, cluster?: AppLogsClusterMeta): void => {
+  logAppLogsDebug(message, APP_LOG_SOURCES.ResourceStream, cluster);
+};
+
 const MESSAGE_TYPES = {
   request: 'REQUEST',
   cancel: 'CANCEL',
   heartbeat: 'HEARTBEAT',
+  // Server confirmation of an accepted subscribe; anchors 'synchronized' health.
+  ack: 'ACK',
   reset: 'RESET',
   complete: 'COMPLETE',
   error: 'ERROR',
@@ -150,12 +157,15 @@ const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
   const signal = message.signal;
   const version = message.version?.trim();
   const signalClusterId = message.clusterId?.trim();
+  // A message carrying a KNOWN source clock the domain does not declare is a
+  // contract violation (e.g. a metric doorbell aimed at a non-metric domain):
+  // drop it outright rather than letting the legacy `type` path apply it.
+  // Control frames without a source (heartbeat/ack) are unaffected.
+  if (isResourceStreamSourceClock(source) && !domainSupportsSourceClock(message.domain, source)) {
+    return null;
+  }
   const signalEnvelope =
-    signalClusterId &&
-    version &&
-    isResourceStreamSourceClock(source) &&
-    domainSupportsSourceClock(message.domain, source) &&
-    hasSignalType(signal)
+    signalClusterId && version && isResourceStreamSourceClock(source) && hasSignalType(signal)
       ? { clusterId: signalClusterId, source, signal, version }
       : undefined;
   if (!hasMessageType(message.type) && !signalEnvelope) {
@@ -383,6 +393,15 @@ export class ResourceStreamManager {
     const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
     this.recordSubscriptionMessage(subscription);
 
+    // Server frames carry the cluster DISPLAY NAME (the subscribe ACK always
+    // does); capture it so subscription-labeled logging shows the same name
+    // as the backend's per-cluster log lines instead of falling back to the
+    // raw composite cluster ID.
+    const messageClusterName = parsed.clusterName?.trim();
+    if (messageClusterName && subscription.clusterName !== messageClusterName) {
+      subscription.clusterName = messageClusterName;
+    }
+
     if (resolvedUpdate.signalEnvelope) {
       switch (resolvedUpdate.signalEnvelope.signal) {
         case SIGNAL_TYPES.changed:
@@ -417,9 +436,21 @@ export class ResourceStreamManager {
     switch (resolvedUpdate.type) {
       case MESSAGE_TYPES.heartbeat:
         return;
+      case MESSAGE_TYPES.ack:
+        // The server accepted the subscribe on this connection: the scope is
+        // trusted even with zero deliveries (quiet domain). Without a server
+        // confirmation the subscription must stay degraded so polling falls
+        // back — a send alone proves nothing (found live: a backend without
+        // the domain's selector left the client claiming healthy, frozen).
+        this.markSubscriptionSynchronized(subscription);
+        this.updateHealthForSubscription(subscription);
+        return;
       case MESSAGE_TYPES.reset:
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
+          // A post-subscribe RESET is also a server confirmation (backends
+          // that predate the ACK frame confirm fresh subscribes this way).
+          this.markSubscriptionSynchronized(subscription);
           this.updateHealthForSubscription(subscription);
           return;
         }
@@ -472,11 +503,23 @@ export class ResourceStreamManager {
       if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
       }
-      this.subscribe(subscription);
       if (subscription.lastSequence && !subscription.resyncInFlight) {
-        // Clear resync state when a resume-capable stream reconnects.
+        this.subscribe(subscription);
+        // Clear resync state when a resume-capable stream reconnects; the
+        // server's ACK (or resumed deliveries) restores synchronized health.
         this.markResyncComplete(subscription);
+        this.updateHealthForSubscription(subscription);
+        return;
       }
+      if (!subscription.resyncInFlight) {
+        // No resume token: the subscription's data predates this connection
+        // (fetched while connecting), so changes in the gap could be missed.
+        // A forced resync on the live connection re-establishes trust — its
+        // tail re-subscribes and marks the subscription synchronized.
+        void this.resyncSubscription(subscription, 'reconnect', true);
+        return;
+      }
+      this.subscribe(subscription);
     });
   }
 
@@ -571,6 +614,17 @@ export class ResourceStreamManager {
     subscription.lastDeliveryEpoch = this.connectionEpoch;
   }
 
+  // markSubscriptionSynchronized records that this subscription's data is
+  // trusted on the CURRENT connection (a resync completed, or the stream
+  // resumed via its sequence token). It clears any prior error: the resync is
+  // the recovery protocol, so recovery must not wait for a delivery that a
+  // quiet domain will never produce.
+  private markSubscriptionSynchronized(subscription: StreamSubscription): void {
+    subscription.lastSyncedEpoch = this.connectionEpoch;
+    subscription.lastErrorAt = undefined;
+    subscription.lastErrorReason = undefined;
+  }
+
   private recordSubscriptionError(subscription: StreamSubscription, message: string): void {
     subscription.lastErrorAt = Date.now();
     subscription.lastErrorReason = message;
@@ -593,6 +647,12 @@ export class ResourceStreamManager {
     }
     if (subscription.lastDeliveryEpoch === this.connectionEpoch) {
       return { status: 'healthy', reason: 'delivering' };
+    }
+    // Connected + synchronized on this connection is healthy even with zero
+    // deliveries: quiet domains would otherwise poll forever ("awaiting
+    // updates" only means nothing has changed).
+    if (subscription.lastSyncedEpoch === this.connectionEpoch) {
+      return { status: 'healthy', reason: 'synchronized' };
     }
     return { status: 'degraded', reason: 'awaiting updates' };
   }
@@ -813,13 +873,28 @@ export class ResourceStreamManager {
     sourceVersions: Partial<Record<ResourceStreamSourceClock, string>>,
     latest?: string
   ): void {
+    if (subscription.domain === 'namespaces' && sourceVersions.object) {
+      // Rare by design (namespace changes/presence flips); the matching backend
+      // line is "namespaces doorbell <version>: <reason> — signaling ...".
+      // Together they localize a dead doorbell to the backend, the wire, or the
+      // consumer — so both halves carry the per-cluster label.
+      logDebug(
+        `namespaces doorbell ${sourceVersions.object} received for scope ${subscription.reportScope}: advancing the object clock so NamespaceContext refetches the namespace list`,
+        { clusterId: subscription.clusterId, clusterName: subscription.clusterName }
+      );
+    }
     this.forEachReportScope(subscription, (reportScope) => {
       setScopedDomainState(subscription.domain, reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         sourceVersion: latest ?? previous.sourceVersion,
-        sourceVersions: {
-          ...(previous.sourceVersions ?? {}),
+        // Doorbell clocks live in signalVersions, which payload applies never
+        // touch — the structural guarantee that signal-refetch keys move only
+        // when a doorbell delivers them. sourceVersions stays payload-owned
+        // (the backend back-fills an object clock into every snapshot, so it
+        // churns on every fetch and cannot carry signals).
+        signalVersions: {
+          ...(previous.signalVersions ?? {}),
           ...sourceVersions,
         },
         streamRevision: (previous.streamRevision ?? 0) + 1,
@@ -888,6 +963,7 @@ export class ResourceStreamManager {
     subscription.lastResyncAt = now;
     if (this.shouldResetDeliveryOnResync(reason)) {
       subscription.lastDeliveryEpoch = undefined;
+      subscription.lastSyncedEpoch = undefined;
     }
     this.recordResync(subscription, reason);
     // Skip setting a user-visible "Stream resyncing" error for initial stream
@@ -909,6 +985,9 @@ export class ResourceStreamManager {
     this.markResyncComplete(subscription);
     subscription.pendingReset = false;
     subscription.resyncInFlight = false;
+    // Trust is NOT granted here: the tail's subscribe must be confirmed by the
+    // server (ACK, or the pendingReset-absorbed RESET) before health reports
+    // synchronized.
     this.subscribe(subscription);
     this.updateHealthForSubscription(subscription);
   }

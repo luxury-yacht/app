@@ -18,12 +18,17 @@ query-backed view when to refetch.
 - `Manager.newObjectRowUpdate` may accept a row argument for projector guardrails
   and scope resolution, but it must emit only the signal fields.
 - `ResourceStreamManager.flushUpdates` must coalesce update messages and advance
-  the scoped domain's `sourceVersion` / `sourceVersions`; it must not retain,
+  the scoped domain's `signalVersions` (the doorbell-clock field written ONLY by
+  the stream manager) plus the folded `sourceVersion`; it must not retain,
   merge, or sort streamed rows.
-- Query-backed table hooks must use the scoped domain `sourceVersion` as the
-  live-data identity so a signal changes the query identity and refetches the
-  visible page. `streamRevision` is retained only as diagnostic/backward-
-  compatible state and must not drive query identity.
+- Signal-driven refetch identity keys on `signalVersions` ONLY — query-backed
+  tables' `liveDataVersion` and `useStreamSignalRefetch` both derive from the
+  domain's declared doorbell clocks inside `signalVersions`, never from the
+  folded `sourceVersion`/`sourceVersions`: payload applies rewrite those on
+  every fetch (the backend back-fills an object clock into every snapshot), so
+  keying on them turns each response into another "signal" — echo refetches and
+  warm-up fetch storms. `streamRevision` is diagnostic only and must not drive
+  query identity.
 - `Sequence` is transport resume/high-water metadata only. Per-object Kubernetes
   `resourceVersion` is reflector metadata only. Snapshot `Sequence` is internal
   build/debug metadata only.
@@ -44,6 +49,14 @@ truth.
 - Event and catalog domains use `sourceClocks` plus `change-signal` semantics
   on the same resource WebSocket, but their rows are still fetched from their
   snapshot/query domains.
+- `doorbell-snapshot` domains (`namespaces`, `object-events`,
+  `cluster-overview`) are snapshot domains whose refetch trigger is a
+  signal-only doorbell; each declares exactly the one clock its doorbell rides.
+  `cluster-overview` is POLL-AUGMENTED: its metric doorbell only rings on
+  successful collections, so its polls stay on
+  (descriptor `pollingContinuesWhileStreaming`) — a healthy-but-silent stream
+  must never suppress polls for a domain whose signal producer can be
+  permanently absent.
 - `sourceClocks` names the producer clocks that can affect a domain:
   `object`, `metric`, `catalog`, or `event`.
 - `complete-resync-stream` domains, such as Helm, keep
@@ -55,11 +68,11 @@ truth.
 - `object` changes object-backed row membership, fields, sort keys, filters, or
   facts.
 - `metric` changes metric-backed values, metric freshness metadata, or
-  metric-backed sort keys. Object-sorted metric-bearing pages keep their base
-  object query result and overlay metric-domain rows for the visible row
-  identities. Metric-sorted pages query the metric domain for membership,
-  ordering, totals, cursor metadata, and metric values, then hydrate base object
-  rows by the returned identities.
+  metric-backed sort keys. Live usage is joined onto the base domains' rows at
+  serve, so a metric tick advances the snapshot's metric source clock (breaking
+  the 304 validator) without moving the object version; the page — including
+  CPU/memory sorts — is served by the one base query
+  (see [`resource-metrics.md`](./resource-metrics.md)).
 - `catalog` changes catalog-backed identity or Browse results.
 - `event` changes event-backed query results.
 

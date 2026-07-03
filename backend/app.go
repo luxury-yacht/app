@@ -53,7 +53,7 @@ type App struct {
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystemsMu          sync.RWMutex
 	refreshSubsystems            map[string]*system.Subsystem
-	refreshAggregates            *refreshAggregateHandlers
+	refreshAggregates            atomic.Pointer[refreshAggregateHandlers]
 	refreshPermissionCancels     map[string]context.CancelFunc
 
 	// governor holds the process-wide resource governor state: which open

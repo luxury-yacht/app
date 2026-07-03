@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
 const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
+const logAppLogsDebugMock = vi.hoisted(() => vi.fn());
 const logAppLogsInfoMock = vi.hoisted(() => vi.fn());
 const logAppLogsWarnMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   APP_LOG_SOURCES: {
     ResourceStream: 'ResourceStream',
   },
+  logAppLogsDebug: logAppLogsDebugMock,
   logAppLogsInfo: logAppLogsInfoMock,
   logAppLogsWarn: logAppLogsWarnMock,
 }));
@@ -92,6 +94,7 @@ beforeEach(() => {
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
   fetchSnapshotMock.mockReset();
   invalidateRefreshBaseURLMock.mockReset();
+  logAppLogsDebugMock.mockClear();
   logAppLogsInfoMock.mockClear();
   logAppLogsWarnMock.mockClear();
   errorHandlerMock.handle.mockClear();
@@ -281,9 +284,196 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('pods', storeScope);
     expect(state.sourceVersion).toBe('object:2');
-    expect(state.sourceVersions?.object).toBe('object:2');
+    expect(state.signalVersions?.object).toBe('object:2');
     expect(state.data?.rows?.[0]?.status).toBe('Running');
     expect(state.data?.rows?.[0]?.cpuUsage).toBe('50m');
+  });
+
+  // A QUIET domain (e.g. cluster-config, whose kinds rarely change) must count
+  // as healthy once the SERVER CONFIRMS its subscription — deliveries prove
+  // liveness but their absence is not unhealth. Without this, the refresher
+  // gate ('skip' only when healthy) polls quiet domains forever, defeating
+  // streaming-only refresh.
+  test('quiet stream is healthy after the server ACKs the subscribe, with zero deliveries', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'cluster-config',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('cluster-config', storeScope);
+    await flushPromises();
+
+    createdSockets[0].onopen?.(new Event('open'));
+    await vi.advanceTimersByTimeAsync(1100);
+    await flushPromises();
+
+    // The server confirms the subscribe; no change message ever arrives — the
+    // domain is simply quiet.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'cluster-config', scope: '', clusterId: 'cluster-a' })
+    );
+    expect(manager.getHealthStatus('cluster-config', storeScope)).toBe('healthy');
+  });
+
+  // The inverse guard (found live: a backend without the namespaces selector
+  // ignored/rejected the subscribe while the client claimed healthy and froze):
+  // a subscription the server never confirms must NOT report healthy, so the
+  // refresher keeps polling as the fallback.
+  test('unconfirmed subscribe stays degraded so polling falls back; ERROR stays unhealthy', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+    await manager.start('namespaces', storeScope);
+    await flushPromises();
+
+    createdSockets[0].onopen?.(new Event('open'));
+    await vi.advanceTimersByTimeAsync(1100);
+    await flushPromises();
+
+    // Subscribe sent, server silent: NOT healthy.
+    expect(manager.getHealthStatus('namespaces', storeScope)).not.toBe('healthy');
+
+    // Server rejects the domain (e.g. stale backend): unhealthy.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ERROR',
+        domain: 'namespaces',
+        scope: '',
+        clusterId: 'cluster-a',
+        error: 'unsupported resource stream domain "namespaces"',
+      })
+    );
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(manager.getHealthStatus('namespaces', storeScope)).not.toBe('healthy');
+
+    // Server later confirms (backend restarted with the new selector): healthy.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '', clusterId: 'cluster-a' })
+    );
+    expect(manager.getHealthStatus('namespaces', storeScope)).toBe('healthy');
+  });
+
+  // Pins the namespaces doorbell: a SourceObject signal on the namespaces
+  // domain must advance the scoped sourceVersion (NamespaceContext refetches on
+  // it), replacing the sidebar's 2s poll.
+  test('namespaces doorbell advances the scoped sourceVersion', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespaces', storeScope);
+
+    // The server's ACK carries the cluster DISPLAY NAME; the subscription
+    // captures it so subscription-labeled logging matches the backend half
+    // (which logs the name) instead of falling back to the raw composite ID.
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ACK',
+        domain: 'namespaces',
+        scope: '',
+        clusterId: 'cluster-a',
+        clusterName: 'Cluster A',
+      })
+    );
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        type: 'MODIFIED',
+        domain: 'namespaces',
+        scope: '',
+        source: 'object',
+        version: 'ns-3',
+        signal: 'changed',
+      })
+    );
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('namespaces', storeScope);
+    expect(state.sourceVersion).toBe('ns-3');
+    expect(state.signalVersions?.object).toBe('ns-3');
+    // The applied doorbell logs at DEBUG — the runtime counterpart of the
+    // backend's "namespaces doorbell <v>: <reason> — signaling ..." line. It
+    // must carry the subscription's cluster label (the backend half is
+    // per-cluster labeled; a [Global] frontend half can't be attributed when
+    // several clusters are connected) — including the display name captured
+    // from the ACK, so both halves render the same bracket.
+    const doorbellLog = logAppLogsDebugMock.mock.calls.find((call) =>
+      String(call[0]).includes('namespaces doorbell ns-3 received')
+    );
+    expect(doorbellLog).toBeDefined();
+    expect(doorbellLog?.[2]).toEqual(
+      expect.objectContaining({ clusterId: 'cluster-a', clusterName: 'Cluster A' })
+    );
+  });
+
+  // Pins the metric doorbell contract: the backend poller fans a SourceMetric
+  // doorbell after each collection; on the metric-clock domains it must advance
+  // the scoped sourceVersion (the typed-query refetch trigger) with NO client-side
+  // polling involved. Non-metric domains must drop it at parse time.
+  test('metric doorbell advances sourceVersion on metric-clock domains and is dropped elsewhere', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const podsScope = buildClusterScope('cluster-a', 'namespace:default');
+    const configScope = buildClusterScope('cluster-a', 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('pods', podsScope);
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', configScope);
+
+    const doorbell = (domain: string) =>
+      JSON.stringify({
+        clusterId: 'cluster-a',
+        type: 'MODIFIED',
+        domain,
+        scope: 'namespace:default',
+        source: 'metric',
+        version: '1700000000000000042',
+        signal: 'changed',
+      });
+
+    manager.handleMessage('cluster-a', doorbell('pods'));
+    manager.handleMessage('cluster-a', doorbell('namespace-config'));
+    vi.advanceTimersByTime(200);
+
+    const podsState = getScopedDomainState('pods', podsScope);
+    expect(podsState.sourceVersion).toBe('1700000000000000042');
+    expect(podsState.signalVersions?.metric).toBe('1700000000000000042');
+
+    // namespace-config declares no metric source clock: the doorbell is dropped
+    // at parse time and its state stays untouched.
+    const configState = getScopedDomainState('namespace-config', configScope);
+    expect(configState.sourceVersion).toBeUndefined();
+    expect(configState.signalVersions?.metric).toBeUndefined();
   });
 
   test('signal-only domain delta updates sourceVersion and never retains rows', () => {
@@ -321,7 +511,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-workloads', storeScope);
     expect(state.sourceVersion).toBe('object:7');
-    expect(state.sourceVersions?.object).toBe('object:7');
+    expect(state.signalVersions?.object).toBe('object:7');
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
@@ -361,9 +551,9 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     expect(getScopedDomainState('catalog', pageScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', pageScope).sourceVersions?.catalog).toBe('catalog:42');
+    expect(getScopedDomainState('catalog', pageScope).signalVersions?.catalog).toBe('catalog:42');
     expect(getScopedDomainState('catalog', metadataScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).sourceVersions?.catalog).toBe(
+    expect(getScopedDomainState('catalog', metadataScope).signalVersions?.catalog).toBe(
       'catalog:42'
     );
   });
@@ -402,7 +592,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     expect(getScopedDomainState('pods', storeScope).sourceVersion).toBe('objects:2');
-    expect(getScopedDomainState('pods', storeScope).sourceVersions?.object).toBe('objects:2');
+    expect(getScopedDomainState('pods', storeScope).signalVersions?.object).toBe('objects:2');
   });
 
   test('A1 reset signal envelope forces a resync without legacy message type', async () => {
@@ -429,7 +619,7 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     expect(getScopedDomainState('namespace-config', storeScope).sourceVersion).toBe('object:11');
-    expect(getScopedDomainState('namespace-config', storeScope).sourceVersions?.object).toBe(
+    expect(getScopedDomainState('namespace-config', storeScope).signalVersions?.object).toBe(
       'object:11'
     );
   });
@@ -1044,7 +1234,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('namespace-config', storeScope, (previous) => ({
       ...previous,
       sourceVersion: 'object:before-reset',
-      sourceVersions: { object: 'object:before-reset' },
+      signalVersions: { object: 'object:before-reset' },
     }));
     manager.handleMessage(
       'cluster-a',
@@ -1059,7 +1249,7 @@ describe('ResourceStreamManager', () => {
     // A later reset is a real resync: it re-arms the stream and advances query identity.
     const resetState = getScopedDomainState('namespace-config', storeScope);
     expect(resetState.sourceVersion).not.toBe('object:before-reset');
-    expect(resetState.sourceVersions?.object).toBe(resetState.sourceVersion);
+    expect(resetState.signalVersions?.object).toBe(resetState.sourceVersion);
     expect(resetState.streamRevision ?? 0).toBeGreaterThan(0);
   });
 
@@ -1091,7 +1281,7 @@ describe('ResourceStreamManager', () => {
     setScopedDomainState('namespace-config', storeScope, (previous) => ({
       ...previous,
       sourceVersion: 'object:before-complete',
-      sourceVersions: { object: 'object:before-complete' },
+      signalVersions: { object: 'object:before-complete' },
     }));
 
     manager.handleMessage(
@@ -1107,7 +1297,7 @@ describe('ResourceStreamManager', () => {
     // COMPLETE triggers a scope-level resync and advances query identity.
     const completeState = getScopedDomainState('namespace-config', storeScope);
     expect(completeState.sourceVersion).not.toBe('object:before-complete');
-    expect(completeState.sourceVersions?.object).toBe(completeState.sourceVersion);
+    expect(completeState.signalVersions?.object).toBe(completeState.sourceVersion);
     expect(completeState.streamRevision ?? 0).toBeGreaterThan(0);
     const sourceVersionAfterComplete = completeState.sourceVersion;
 

@@ -14,6 +14,9 @@ export interface ConnectivityPresentationInput {
   clusterName?: string;
   lifecycleState: string;
   namespaceReady: boolean;
+  // The backend refused the namespace list for lack of RBAC permission — a
+  // settled, by-design state (checked once per session), NOT a loading state.
+  namespacesPermissionDenied?: boolean;
   health: ClusterHealthStatus;
   isPaused: boolean;
   isRefreshing: boolean;
@@ -34,6 +37,7 @@ export const buildConnectivityPresentation = ({
   clusterName,
   lifecycleState,
   namespaceReady,
+  namespacesPermissionDenied,
   health,
   isPaused,
   isRefreshing,
@@ -130,6 +134,14 @@ export const buildConnectivityPresentation = ({
       summary: 'Still loading cluster data',
       detail: `Initial data for ${clusterLabel} is taking longer than expected to become usable.`,
       actionLabel: 'Refresh Now',
+    };
+  }
+
+  if (lifecycleState === 'ready' && namespacesPermissionDenied) {
+    return {
+      status: 'healthy',
+      summary: 'Connected — restricted access',
+      detail: `${clusterLabel} is connected, but you do not have permission to list namespaces. Namespace views are unavailable.`,
     };
   }
 

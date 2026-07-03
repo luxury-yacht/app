@@ -31,6 +31,9 @@ Request reasons for cluster/resource reads are:
 - `background`: scheduler-driven upkeep
 - `startup`: passive view activation
 - `user`: explicit user action
+- `stream-signal`: doorbell/change-signal-triggered refetch — bypasses the
+  skip-while-stream-healthy gate (a doorbell refetch issued as `background`
+  is silently swallowed; see `resource-stream-signals.md`)
 
 When auto-refresh is disabled, blocked non-user reads should not show passive
 loading spinners.

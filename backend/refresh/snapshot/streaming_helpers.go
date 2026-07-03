@@ -107,8 +107,10 @@ func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, n
 		}
 		aggregates = append(aggregates, projectPodAggregate(pod, nil))
 	}
-	// Scope "" carries no query string, so the parse cannot fail here.
-	snap, err := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, aggregates, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage))
+	// Scope "" carries no query string, so the parse cannot fail here. The zero metadata
+	// and zero podsVersion are fine: only the projected row is read from the snapshot,
+	// never its Metrics block, source clocks, or version.
+	snap, err := buildNodeSnapshotFromUsage(ctx, "", []*corev1.Node{node}, aggregates, 0, nodeUsageOrEmpty(nodeUsage), podUsageOrEmpty(podUsage), metrics.Metadata{})
 	if err != nil {
 		return NodeSummary{}, err
 	}

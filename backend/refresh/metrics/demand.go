@@ -84,6 +84,29 @@ func (d *DemandPoller) Stop(ctx context.Context) error {
 	return nil
 }
 
+// SetInterval passes the cadence through to the wrapped poller. A wrapped
+// poller without interval support is a no-op.
+func (d *DemandPoller) SetInterval(interval time.Duration) {
+	if d == nil {
+		return
+	}
+	if p, ok := d.poller.(interface{ SetInterval(time.Duration) }); ok {
+		p.SetInterval(interval)
+	}
+}
+
+// SetCollectionObserver passes the observer through to the wrapped poller (the
+// metric doorbell wiring holds this wrapper, not the inner Poller). A wrapped
+// poller without observer support is a no-op.
+func (d *DemandPoller) SetCollectionObserver(observer func(Metadata)) {
+	if d == nil {
+		return
+	}
+	if p, ok := d.poller.(interface{ SetCollectionObserver(func(Metadata)) }); ok {
+		p.SetCollectionObserver(observer)
+	}
+}
+
 // SetActive enables or disables metrics polling demand.
 func (d *DemandPoller) SetActive(active bool) {
 	if d == nil {
@@ -125,6 +148,18 @@ func (d *DemandPoller) Metadata() Metadata {
 	}
 	d.touch()
 	return d.provider.Metadata()
+}
+
+// Sample returns one consistent collection view and records demand.
+func (d *DemandPoller) Sample() Sample {
+	if d == nil || d.provider == nil {
+		return Sample{
+			NodeUsage: map[string]NodeUsage{},
+			PodUsage:  map[string]PodUsage{},
+		}
+	}
+	d.touch()
+	return d.provider.Sample()
 }
 
 func (d *DemandPoller) touch() {

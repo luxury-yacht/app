@@ -2,6 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { buildConnectivityPresentation } from './connectivityPresentation';
 
 describe('buildConnectivityPresentation', () => {
+  it('shows restricted access — not perpetual loading — when namespace listing is permission-denied', () => {
+    const presentation = buildConnectivityPresentation({
+      clusterId: 'cluster-a',
+      clusterName: 'alpha',
+      lifecycleState: 'ready',
+      namespaceReady: false,
+      namespacesPermissionDenied: true,
+      health: 'healthy',
+      isPaused: false,
+      isRefreshing: false,
+      authState: {
+        hasError: false,
+        isRecovering: false,
+        reason: '',
+        clusterName: '',
+        secondsUntilRetry: 0,
+        errorClass: '',
+        execCommand: '',
+        diagnosticKind: '',
+        diagnosticSummary: '',
+      },
+    });
+
+    // Permission-denied is a SETTLED, by-design state: connectivity is fine
+    // and nothing is loading. "Loading namespaces ... not ready to render
+    // yet" (the old copy) misreports it as pending forever.
+    expect(presentation.status).toBe('healthy');
+    expect(presentation.summary).toBe('Connected — restricted access');
+    expect(presentation.detail).toBe(
+      'alpha is connected, but you do not have permission to list namespaces. Namespace views are unavailable.'
+    );
+    expect(presentation.actionLabel).toBeUndefined();
+  });
   it('keeps ready copy stable while a connected cluster is refreshing', () => {
     const presentation = buildConnectivityPresentation({
       clusterId: 'cluster-a',

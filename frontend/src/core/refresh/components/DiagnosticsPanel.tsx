@@ -27,6 +27,8 @@ import type {
 } from '../types';
 import { refreshManager } from '../RefreshManager';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import { refreshOrchestrator } from '../orchestrator';
+import { resolveModeDetails } from './diagnostics/modeDetails';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import {
@@ -68,7 +70,6 @@ import {
   CLUSTER_SCOPE,
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  METRICS_ONLY_DOMAINS,
   PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
   PRIORITY_DOMAINS,
   STREAM_MODE_BY_NAME,
@@ -404,7 +405,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceScopeEntries = useRefreshScopedDomainEntries('namespaces');
   const clusterOverviewScopeEntries = useRefreshScopedDomainEntries('cluster-overview');
   const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
-  const nodeMetricsScopeEntries = useRefreshScopedDomainEntries('nodes-metrics');
   const clusterConfigScopeEntries = useRefreshScopedDomainEntries('cluster-config');
   const clusterCRDScopeEntries = useRefreshScopedDomainEntries('cluster-crds');
   const clusterCustomScopeEntries = useRefreshScopedDomainEntries('cluster-custom');
@@ -414,9 +414,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const catalogScopeEntries = useRefreshScopedDomainEntries('catalog');
   const catalogDiffScopeEntries = useRefreshScopedDomainEntries('catalog-diff');
   const namespaceWorkloadsScopeEntries = useRefreshScopedDomainEntries('namespace-workloads');
-  const namespaceWorkloadsMetricsScopeEntries = useRefreshScopedDomainEntries(
-    'namespace-workloads-metrics'
-  );
   const namespaceAutoscalingScopeEntries = useRefreshScopedDomainEntries('namespace-autoscaling');
   const namespaceConfigScopeEntries = useRefreshScopedDomainEntries('namespace-config');
   const namespaceCustomScopeEntries = useRefreshScopedDomainEntries('namespace-custom');
@@ -427,7 +424,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceRBACScopeEntries = useRefreshScopedDomainEntries('namespace-rbac');
   const namespaceStorageScopeEntries = useRefreshScopedDomainEntries('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
-  const podMetricsScopeEntries = useRefreshScopedDomainEntries('pods-metrics');
   const containerLogsScopeEntries = useRefreshScopedDomainEntries('container-logs');
   // Object panel scoped domains – visible only while the object panel is open.
   const objectDetailsScopeEntries = useRefreshScopedDomainEntries('object-details');
@@ -607,14 +603,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         {
           domain: 'nodes' as RefreshDomain,
           label: 'Nodes',
-          hasMetrics: false,
-          entries: nodeScopeEntries,
-        },
-        {
-          domain: 'nodes-metrics' as RefreshDomain,
-          label: 'Node Metrics',
           hasMetrics: true,
-          entries: nodeMetricsScopeEntries,
+          entries: nodeScopeEntries,
         },
         {
           domain: 'cluster-config' as RefreshDomain,
@@ -664,13 +654,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         {
           domain: 'namespace-workloads' as RefreshDomain,
           label: 'Workloads',
-          entries: namespaceWorkloadsScopeEntries,
-        },
-        {
-          domain: 'namespace-workloads-metrics' as RefreshDomain,
-          label: 'Workload Metrics',
           hasMetrics: true,
-          entries: namespaceWorkloadsMetricsScopeEntries,
+          entries: namespaceWorkloadsScopeEntries,
         },
         {
           domain: 'namespace-autoscaling' as RefreshDomain,
@@ -717,12 +702,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           label: 'NS Storage',
           entries: namespaceStorageScopeEntries,
         },
-        {
-          domain: 'pods-metrics' as RefreshDomain,
-          label: 'Pod Metrics',
-          hasMetrics: true,
-          entries: podMetricsScopeEntries,
-        },
       ].flatMap(({ domain, label, hasMetrics, entries }) =>
         entries.map(([scopeKey, state]) => {
           const resolvedScope = state.scope?.trim() ? state.scope : scopeKey;
@@ -739,7 +718,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceScopeEntries,
       clusterOverviewScopeEntries,
       nodeScopeEntries,
-      nodeMetricsScopeEntries,
       clusterConfigScopeEntries,
       clusterCRDScopeEntries,
       clusterCustomScopeEntries,
@@ -749,7 +727,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       catalogScopeEntries,
       catalogDiffScopeEntries,
       namespaceWorkloadsScopeEntries,
-      namespaceWorkloadsMetricsScopeEntries,
       namespaceAutoscalingScopeEntries,
       namespaceConfigScopeEntries,
       namespaceEventsScopeEntries,
@@ -759,7 +736,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceQuotasScopeEntries,
       namespaceRBACScopeEntries,
       namespaceStorageScopeEntries,
-      podMetricsScopeEntries,
     ]
   );
 
@@ -863,9 +839,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
       streamActive: boolean;
       streamHealthy: boolean;
-      metricsOnly: boolean;
     }): { label: string; tooltip?: string; enabled: boolean } => {
-      const { domain, refresherName, streamActive, streamHealthy, metricsOnly } = params;
+      const { domain, refresherName, streamActive, streamHealthy } = params;
       if (!refresherName) {
         return { label: '—', tooltip: 'No polling refresher', enabled: false };
       }
@@ -883,42 +858,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
         return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
       }
-      const tooltipParts = [`State: ${refresherState.status}`];
-      if (metricsOnly) {
-        tooltipParts.push('Metrics interval polling');
-      }
-      return { label: 'enabled', tooltip: tooltipParts.join(' • '), enabled: true };
-    };
-
-    const resolveModeDetails = (params: {
-      domain: RefreshDomain;
-      streamMode: 'streaming' | 'watch' | null;
-      streamActive: boolean;
-      streamHealthy: boolean;
-      pollingEnabled: boolean;
-      metricsOnly: boolean;
-    }): { label: string; tooltip?: string } => {
-      const { domain, streamMode, streamActive, streamHealthy, pollingEnabled, metricsOnly } =
-        params;
-      if (streamMode && STREAM_ONLY_DOMAINS.has(domain)) {
-        return { label: streamMode, tooltip: 'Stream-only domain' };
-      }
-      if (metricsOnly && streamHealthy) {
-        return {
-          label: 'metrics interval',
-          tooltip: 'Stream healthy; metric interval triggers snapshot refetches',
-        };
-      }
-      if (streamMode && streamActive && streamHealthy) {
-        return { label: streamMode, tooltip: 'Stream delivering updates' };
-      }
-      if (pollingEnabled) {
-        return { label: 'polling', tooltip: 'Snapshot polling active' };
-      }
-      if (streamMode && streamActive) {
-        return { label: streamMode, tooltip: 'Stream active but unhealthy' };
-      }
-      return { label: 'snapshot', tooltip: 'Snapshot fetched on demand' };
+      return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
     };
 
     const baseRows = domainScopedStates
@@ -1167,13 +1107,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           ? Boolean(streamHealth && streamHealth.reason !== 'inactive')
           : Boolean(streamTelemetry?.activeSessions);
         const streamHealthy = streamHealth?.status === 'healthy';
-        const metricsOnly = METRICS_ONLY_DOMAINS.has(domain);
         const pollingDetails = resolvePollingDetails({
           domain,
           refresherName,
           streamActive,
           streamHealthy,
-          metricsOnly,
         });
         const modeDetails = resolveModeDetails({
           domain,
@@ -1181,7 +1119,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           streamActive,
           streamHealthy,
           pollingEnabled: pollingDetails.enabled,
-          metricsOnly,
+          streamingBlocked: refreshOrchestrator.isStreamingBlocked(domain, effectiveScope),
+          streamOnly: STREAM_ONLY_DOMAINS.has(domain),
         });
         const healthDetails = resolveHealthDetails({
           domain,
@@ -1271,7 +1210,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName: DOMAIN_REFRESHER_MAP.pods,
         streamActive,
         streamHealthy,
-        metricsOnly: false,
       });
       const modeDetails = resolveModeDetails({
         domain: 'pods',
@@ -1279,7 +1217,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         streamActive,
         streamHealthy,
         pollingEnabled: pollingDetails.enabled,
-        metricsOnly: false,
+        streamingBlocked: refreshOrchestrator.isStreamingBlocked('pods', scope),
+        streamOnly: STREAM_ONLY_DOMAINS.has('pods'),
       });
       const healthDetails = resolveHealthDetails({
         domain: 'pods',
@@ -1344,7 +1283,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         telemetryStatus,
         telemetryTooltip,
         metricsStatus: 'N/A',
-        metricsTooltip: 'Pod metrics are reported by the pods-metrics domain',
+        metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
         hasMetrics: false,
         count,
         countDisplay,
@@ -1381,7 +1320,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
       streamActive: containerLogsStreamActive,
       streamHealthy: containerLogsStreamHealthy,
-      metricsOnly: false,
     });
     const logModeDetails = resolveModeDetails({
       domain: 'container-logs',
@@ -1389,7 +1327,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       streamActive: containerLogsStreamActive,
       streamHealthy: containerLogsStreamHealthy,
       pollingEnabled: logPollingDetails.enabled,
-      metricsOnly: false,
+      streamingBlocked: false,
+      streamOnly: STREAM_ONLY_DOMAINS.has('container-logs'),
     });
     const logRows = containerLogsScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
       const payload = state.data as ContainerLogsSnapshotPayload | null;

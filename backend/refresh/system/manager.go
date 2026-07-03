@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -87,6 +88,16 @@ type Subsystem struct {
 	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
+	// NamespaceNotifier and ObjectEventsNotifier drive the namespaces and
+	// object-events doorbells. Teardown/cooling MUST Stop() them (via
+	// StopDoorbellNotifiers) or their debounce/rearm timers keep broadcasting
+	// into the torn-down stream manager.
+	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
+	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
+	// doorbell; the app attaches the cluster-Ready self-build hook here (see
+	// app_refresh_setup) once the aggregate service exists.
+	NamespacesDoorbell *NamespacesDoorbellObserver
 
 	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
@@ -257,6 +268,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		metricsProvider = disabled
 	}
 
+	var namespaceNotifier *snapshot.NamespaceChangeNotifier
+	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
@@ -265,6 +278,12 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		cfg:             cfg,
 		gate:            gate,
 		serverHost:      serverHost,
+		noteNamespaceNotifier: func(notifier *snapshot.NamespaceChangeNotifier) {
+			namespaceNotifier = notifier
+		},
+		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
+			objectEventsNotifier = notifier
+		},
 	}
 
 	registrations := domainRegistrations(deps)
@@ -319,22 +338,140 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	if eventManager != nil && resourceManager != nil {
 		eventManager.SetSignalObserver(eventSignalObserver(resourceManager))
 	}
+	// Metric doorbell: each successful poller collection notifies the stream so
+	// the frontend refetches metric-bearing tables on the poller's schedule —
+	// no client-side metric polling. Wired via type assertion because the
+	// poller may be the disabled stub, which has no observer.
+	if resourceManager != nil {
+		if observable, ok := metricsPoller.(interface {
+			SetCollectionObserver(func(metrics.Metadata))
+		}); ok {
+			observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
+		}
+	}
+	// Namespaces doorbell: namespace object changes and workload-presence flips
+	// broadcast to the namespaces domain's subscribers, replacing the sidebar's
+	// 2s poll (the poll remains only as the stream-down fallback). The observer
+	// slot lets the app attach the cluster-Ready self-build hook post-construction.
+	namespacesDoorbellObserver := &NamespacesDoorbellObserver{}
+	if resourceManager != nil && namespaceNotifier != nil {
+		wireNamespacesDoorbell(snapshotService, namespaceNotifier, resourceManager, namespacesDoorbellObserver)
+	}
+	// Object-events doorbell: an event for a panel's object broadcasts to that
+	// object's subscribed events scope, replacing the Events tab's 10s poll
+	// (the poll remains only as the stream-down fallback).
+	if resourceManager != nil && objectEventsNotifier != nil {
+		wireObjectEventsDoorbell(snapshotService, objectEventsNotifier, resourceManager)
+	}
 
 	return &Subsystem{
-		Manager:          manager,
-		Handler:          mux,
-		Telemetry:        telemetryRecorder,
-		PermissionIssues: permissionIssues,
-		InformerFactory:  informerFactory,
-		IngestManager:    ingestManager,
-		RuntimePerms:     runtimePerms,
-		Registry:         registry,
-		SnapshotService:  snapshotService,
-		ManualQueue:      queue,
-		EventStream:      eventManager,
-		ResourceStream:   resourceManager,
-		ClusterMeta:      clusterMeta,
+		Manager:              manager,
+		Handler:              mux,
+		Telemetry:            telemetryRecorder,
+		PermissionIssues:     permissionIssues,
+		InformerFactory:      informerFactory,
+		IngestManager:        ingestManager,
+		RuntimePerms:         runtimePerms,
+		Registry:             registry,
+		SnapshotService:      snapshotService,
+		ManualQueue:          queue,
+		EventStream:          eventManager,
+		ResourceStream:       resourceManager,
+		ClusterMeta:          clusterMeta,
+		NamespaceNotifier:    namespaceNotifier,
+		ObjectEventsNotifier: objectEventsNotifier,
+		NamespacesDoorbell:   namespacesDoorbellObserver,
 	}, nil
+}
+
+// StopDoorbellNotifiers silences every doorbell notifier (namespaces,
+// object-events); nil-safe for subsystems built without them (tests, failed
+// registration). Every teardown/cool path must call this or the notifiers'
+// debounce/rearm timers keep broadcasting into the dead stream manager.
+func (s *Subsystem) StopDoorbellNotifiers() {
+	if s == nil {
+		return
+	}
+	if s.NamespaceNotifier != nil {
+		s.NamespaceNotifier.Stop()
+	}
+	if s.ObjectEventsNotifier != nil {
+		s.ObjectEventsNotifier.Stop()
+	}
+}
+
+// metricsSignalObserver maps a successful poller collection to a SourceMetric
+// doorbell on the resource stream. The version is the collection revision
+// (CollectedAt nanos) — identical to the snapshot builders' metric source clock
+// (metricRevisionFromMetadata), so the doorbell and the snapshot ETag advance
+// together. A zero CollectedAt means no sample exists yet; nothing to announce.
+// wireNamespacesDoorbell and wireObjectEventsDoorbell attach a notifier's
+// broadcast with the ORDERING CONTRACT every doorbell must honor: invalidate
+// the domain's snapshot cache FIRST, then broadcast. The doorbell-triggered
+// refetch arrives ~500ms after the change — inside the snapshot cache TTL —
+// and served from cache it would apply the PRE-change snapshot permanently,
+// because doorbells fire once per change and polling skips while the stream
+// is healthy (observed live: created namespaces missing, deleted namespaces
+// lingering, while every doorbell log line was perfect). The doorbell tests
+// wire through these same helpers so the contract is pinned, not copied.
+// NamespacesDoorbellObserver lets the app attach a post-broadcast hook to the
+// namespaces doorbell AFTER the subsystem is constructed — the aggregate
+// snapshot service and cluster lifecycle (which the hook needs) exist only
+// once every subsystem does. The doorbell path reads it lock-free; unset is
+// a no-op.
+type NamespacesDoorbellObserver struct {
+	fn atomic.Pointer[func(version, reason string)]
+}
+
+// Set installs (or replaces) the hook.
+func (o *NamespacesDoorbellObserver) Set(fn func(version, reason string)) {
+	o.fn.Store(&fn)
+}
+
+// Invoke fires the hook if one is set; nil-safe. Exported so the doorbell
+// closure and app-level tests share one entry point.
+func (o *NamespacesDoorbellObserver) Invoke(version, reason string) {
+	if o == nil {
+		return
+	}
+	if fn := o.fn.Load(); fn != nil {
+		(*fn)(version, reason)
+	}
+}
+
+func wireNamespacesDoorbell(
+	service *snapshot.Service,
+	notifier *snapshot.NamespaceChangeNotifier,
+	resourceManager *resourcestream.Manager,
+	observer *NamespacesDoorbellObserver,
+) {
+	notifier.SetBroadcast(func(version, reason string) {
+		service.InvalidateDomainCache("namespaces")
+		resourceManager.BroadcastNamespacesRefresh(version, reason)
+		// After invalidate+broadcast: a self-build triggered here always sees
+		// post-change data (the cluster-Ready hook rides this).
+		observer.Invoke(version, reason)
+	})
+}
+
+func wireObjectEventsDoorbell(
+	service *snapshot.Service,
+	notifier *snapshot.ObjectEventsChangeNotifier,
+	resourceManager *resourcestream.Manager,
+) {
+	notifier.SetBroadcast(func(version string, matches func(scope string) bool) {
+		service.InvalidateDomainCache("object-events")
+		resourceManager.BroadcastObjectEventsRefresh(version, matches)
+	})
+}
+
+func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
+	return func(metadata metrics.Metadata) {
+		if resourceManager == nil || metadata.CollectedAt.IsZero() {
+			return
+		}
+		resourceManager.BroadcastMetricsRefresh(strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10))
+	}
 }
 
 func eventSignalObserver(resourceManager *resourcestream.Manager) func(scope string, sequence uint64) {

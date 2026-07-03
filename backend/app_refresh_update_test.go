@@ -24,7 +24,7 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
@@ -85,7 +85,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
@@ -165,7 +165,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
@@ -226,7 +226,7 @@ func TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState(t *testing
 	// Stub refresh wiring so selection updates exercise in-place updates only.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -320,7 +320,7 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	// Keep selection updates on the in-place refresh reconciliation path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
@@ -447,7 +447,7 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 	// Keep selection updates on the in-place refresh reconciliation path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
@@ -560,7 +560,7 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 	// Keep selection updates on the in-place refresh reconciliation path.
 	app.refreshCtx = context.Background()
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.responseCache = newResponseCache(time.Minute, 64)
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}

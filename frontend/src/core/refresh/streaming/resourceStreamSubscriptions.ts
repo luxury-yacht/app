@@ -1,9 +1,5 @@
 import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
-import {
-  getResourceStreamDomainDescriptor,
-  normalizeResourceScope,
-  type DoorbellDomain,
-} from './resourceStreamDomains';
+import { normalizeResourceScope, type DoorbellDomain } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
 export type ResourceStreamUpdateMessage = {
   type?: string;
@@ -41,6 +37,10 @@ export type StreamSubscription = {
   lastMessageAt?: number;
   lastDeliveryAt?: number;
   lastDeliveryEpoch?: number;
+  // The connection epoch on which this subscription last completed a resync (or
+  // resumed via its sequence token). Connected + synchronized counts as healthy
+  // even with zero deliveries — a quiet domain is not an unhealthy one.
+  lastSyncedEpoch?: number;
   lastErrorAt?: number;
   lastErrorReason?: string;
   updateQueue: ResourceStreamUpdateMessage[];
@@ -48,7 +48,6 @@ export type StreamSubscription = {
   pendingReset: boolean;
   resyncInFlight: boolean;
   lastResyncAt: number;
-  preserveMetrics: boolean;
 };
 
 type PendingUnsubscribe = {
@@ -303,7 +302,6 @@ export class ResourceStreamSubscriptionStore {
       pendingReset: false,
       resyncInFlight: false,
       lastResyncAt: 0,
-      preserveMetrics: getResourceStreamDomainDescriptor(domain).preserveMetrics,
     };
     this.subscriptions.set(key, subscription);
     this.logInfo(

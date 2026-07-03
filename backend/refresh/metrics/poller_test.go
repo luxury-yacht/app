@@ -83,6 +83,125 @@ func TestPollerRefreshSuccess(t *testing.T) {
 	require.Empty(t, summary.Metrics.LastError)
 }
 
+// A successful collection must notify the observer with the fresh metadata (the
+// metric doorbell rides this hook); a failed collection must NOT notify, because
+// failures do not advance the metric revision and a doorbell would only trigger
+// refetches that 304.
+func TestPollerNotifiesObserverAfterSuccessfulCollection(t *testing.T) {
+	ctx := context.Background()
+
+	nodeList := &metricsv1beta1.NodeMetricsList{
+		Items: []metricsv1beta1.NodeMetrics{{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
+			Usage: corev1.ResourceList{
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(250, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(512*1024*1024, resource.BinarySI),
+			},
+		}},
+	}
+	podList := &metricsv1beta1.PodMetricsList{}
+
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.maxRetry = 1
+	poller.maxBackoff = time.Millisecond
+	poller.jitterFactor = 0
+	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+		return nodeList, nil
+	}
+	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+		return podList, nil
+	}
+
+	var notified []Metadata
+	poller.SetCollectionObserver(func(metadata Metadata) {
+		notified = append(notified, metadata)
+	})
+
+	require.NoError(t, poller.refresh(ctx))
+	require.Len(t, notified, 1)
+	require.False(t, notified[0].CollectedAt.IsZero())
+	require.Equal(t, uint64(1), notified[0].SuccessCount)
+
+	// A failing collection advances failure metadata but must not notify.
+	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+		return nil, errors.New("pods down")
+	}
+	require.Error(t, poller.refresh(ctx))
+	require.Len(t, notified, 1)
+}
+
+// The demand wrapper must pass the observer through to the inner poller so the
+// doorbell wiring can be done once against the Provider the subsystem holds.
+func TestDemandPollerPassesCollectionObserverThrough(t *testing.T) {
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	demand := NewDemandPoller(poller, poller, time.Minute)
+
+	called := false
+	demand.SetCollectionObserver(func(Metadata) { called = true })
+	poller.notifyCollectionObserver()
+	require.True(t, called)
+}
+
+// SetInterval must retime a RUNNING poll loop: the metric cadence is now
+// server-owned (the doorbell rides collections), so the user's metrics-interval
+// preference has to reach a live poller without a subsystem rebuild.
+func TestPollerSetIntervalRetimesRunningLoop(t *testing.T) {
+	poller := NewPoller(nil, nil, time.Hour, telemetry.NewRecorder())
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.maxRetry = 1
+	poller.maxBackoff = time.Millisecond
+	poller.jitterFactor = 0
+	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+		return &metricsv1beta1.NodeMetricsList{}, nil
+	}
+	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+		return &metricsv1beta1.PodMetricsList{}, nil
+	}
+
+	collections := make(chan struct{}, 16)
+	poller.SetCollectionObserver(func(Metadata) {
+		select {
+		case collections <- struct{}{}:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = poller.Start(ctx) }()
+
+	// The immediate startup collection fires regardless of interval.
+	select {
+	case <-collections:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected the startup collection")
+	}
+
+	// With a 1h interval no second collection would arrive; retiming to 20ms must
+	// produce one promptly.
+	poller.SetInterval(20 * time.Millisecond)
+	select {
+	case <-collections:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetInterval did not retime the running poll loop")
+	}
+}
+
+// The demand wrapper passes SetInterval through to the wrapped poller.
+func TestDemandPollerPassesSetIntervalThrough(t *testing.T) {
+	poller := NewPoller(nil, nil, time.Hour, telemetry.NewRecorder())
+	demand := NewDemandPoller(poller, poller, time.Minute)
+
+	demand.SetInterval(123 * time.Millisecond)
+
+	poller.mu.RLock()
+	defer poller.mu.RUnlock()
+	require.Equal(t, 123*time.Millisecond, poller.interval)
+}
+
 func TestPollerRefreshHandlesPodMetricsFailure(t *testing.T) {
 	t.Helper()
 

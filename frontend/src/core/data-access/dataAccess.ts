@@ -100,6 +100,7 @@ export const requestRefreshDomain = async ({
     read: async () => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
         isManual: reason === 'user',
+        streamSignal: reason === 'stream-signal',
       });
     },
   });

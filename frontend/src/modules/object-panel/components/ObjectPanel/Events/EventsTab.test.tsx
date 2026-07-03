@@ -72,6 +72,9 @@ const appPreferencesMocks = vi.hoisted(() => ({
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
+  // Consumed by useStreamSignalRefetch (the object-events doorbell refetch);
+  // no doorbell clocks in these tests, so an empty state map keeps it inert.
+  useRefreshScopedDomainStates: () => ({}),
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -329,6 +332,7 @@ describe('EventsTab', () => {
     });
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: true,
+      streamSignal: false,
     });
 
     // Scheduled refresh — orchestrator should see isManual: false.
@@ -338,6 +342,7 @@ describe('EventsTab', () => {
     });
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: false,
+      streamSignal: false,
     });
   });
 

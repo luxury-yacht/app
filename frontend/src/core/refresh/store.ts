@@ -20,6 +20,18 @@ export interface DomainSnapshotState<TPayload> {
   version?: number;
   sourceVersion?: string;
   sourceVersions?: Partial<Record<RefreshSourceClock, string>>;
+  // Doorbell clock values, written ONLY by the stream manager
+  // (bumpSourceVersionOnly) and never by payload applies — the structural
+  // guarantee that signal-driven refetch keys move exactly when a doorbell
+  // delivers them. Payload applies own sourceVersions (the backend back-fills
+  // an object clock into every snapshot, so sourceVersions churn on every
+  // fetch and CANNOT be a signal key — that was the echo-refetch bug).
+  signalVersions?: Partial<Record<RefreshSourceClock, string>>;
+  // The backend refused this scope for lack of RBAC permission (typed 403).
+  // TERMINAL for the session: background refetches skip the scope entirely
+  // (permission is checked once; recovery is an app restart). Cleared only by
+  // a successful fetch or a scoped-state reset.
+  permissionDenied?: boolean;
   checksum?: string;
   etag?: string;
   // Retained for stream diagnostics/backward-compatible tests only. Query-backed
@@ -84,9 +96,7 @@ const state: RefreshStoreState = {
     // Scoped domains use scopedDomains map below; these entries exist for type safety.
     // They are never read for scoped domains at runtime.
     nodes: createInitialDomainState(),
-    'nodes-metrics': createInitialDomainState(),
     pods: createInitialDomainState(),
-    'pods-metrics': createInitialDomainState(),
     'object-details': createInitialDomainState(),
     'object-events': createInitialDomainState(),
     'object-map': createInitialDomainState(),
@@ -103,7 +113,6 @@ const state: RefreshStoreState = {
     catalog: createInitialDomainState(),
     'catalog-diff': createInitialDomainState(),
     'namespace-workloads': createInitialDomainState(),
-    'namespace-workloads-metrics': createInitialDomainState(),
     'namespace-config': createInitialDomainState(),
     'namespace-network': createInitialDomainState(),
     'namespace-rbac': createInitialDomainState(),

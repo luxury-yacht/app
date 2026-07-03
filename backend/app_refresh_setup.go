@@ -62,7 +62,8 @@ func (a *App) setupRefreshSubsystem() error {
 	if err != nil {
 		return err
 	}
-	a.refreshAggregates = aggregates
+	a.refreshAggregates.Store(aggregates)
+	a.sweepNamespacesReadiness(subsystems)
 
 	if err := a.startRefreshHTTPServer(mux, subsystems); err != nil {
 		return err
@@ -242,12 +243,14 @@ func (a *App) buildRefreshSubsystemForSelection(
 	// start serving data. This is the single place where loading is set,
 	// regardless of whether the cluster was opened at startup, via the
 	// kubeconfig selector, or after auth recovery.
-	if a.clusterLifecycle != nil {
-		a.clusterLifecycle.SetState(clusterMeta.ID, ClusterStateLoading)
-	}
+	a.transitionClusterToLoading(clusterMeta.ID)
 
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
 	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+
+	// Cluster-Ready self-build rides the namespaces doorbell; wired here so
+	// selector-opened and auth-recovery subsystems get it too.
+	a.wireNamespacesReadinessObserver(clusterMeta.ID, subsystem)
 
 	// Warm-paint the freshly-built maintained stores from this cluster's last spill BEFORE
 	// the manager starts feeding (cross-restart cold-start, Tier 2.5 stage 2). Shared by every
@@ -483,6 +486,67 @@ func (a *App) startRefreshHTTPServer(
 	}()
 
 	return nil
+}
+
+// transitionClusterToLoading marks a freshly (re)built cluster as loading —
+// EXCEPT when the cluster is already READY. The governor re-warms Cold
+// clusters through this same chokepoint on tab switches, and re-warm serving
+// is CONTINUOUS (the cooled mmap stores serve until the aggregate re-routes;
+// the fresh stores are warm-painted from spill before the manager starts), so
+// demoting a ready cluster painted "Starting data services" over data that
+// never left the screen. Readiness is re-verified anyway: the rebuilt
+// subsystem's namespaces notifier re-arms until its stores resettle, and the
+// readiness self-build no-ops on an already-ready cluster.
+func (a *App) transitionClusterToLoading(clusterID string) {
+	if a == nil || a.clusterLifecycle == nil || clusterID == "" {
+		return
+	}
+	if a.clusterLifecycle.GetState(clusterID) == ClusterStateReady {
+		return
+	}
+	a.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
+}
+
+// wireNamespacesReadinessObserver closes the cluster-Ready loop server-side
+// for ONE cluster: on each namespaces doorbell, while the cluster is still
+// loading, self-build the namespaces snapshot (the exact build the
+// loading→ready transition rides). Readiness must never depend on the
+// frontend's fetch machinery asking first. This is wired at the per-cluster
+// subsystem chokepoint — NOT in a one-shot loop at aggregate construction —
+// because the notifier's post-settle doorbell is ONE-SHOT and subsystems
+// built later (selector-opened clusters, auth-recovery rebuilds) would drop
+// it on an empty observer slot and wedge in loading until visited. The
+// aggregate service is resolved at ring time: it is (re)built after
+// subsystems exist.
+func (a *App) wireNamespacesReadinessObserver(clusterID string, subsystem *system.Subsystem) {
+	if a == nil || subsystem == nil || subsystem.NamespacesDoorbell == nil || clusterID == "" {
+		return
+	}
+	subsystem.NamespacesDoorbell.Set(func(_ string, _ string) {
+		go a.namespacesReadinessSelfBuild(clusterID)
+	})
+}
+
+func (a *App) namespacesReadinessSelfBuild(clusterID string) {
+	// Atomic load: this runs on doorbell goroutines while setup/teardown
+	// (re)assign the aggregates.
+	aggregates := a.refreshAggregates.Load()
+	if aggregates == nil {
+		return
+	}
+	runNamespacesReadinessSelfBuild(a.clusterLifecycle, aggregates.snapshot, clusterID)
+}
+
+// sweepNamespacesReadiness wires the readiness observer on every subsystem
+// (idempotent) and fires one self-build attempt per cluster. Called right
+// after a.refreshAggregates is (re)assigned: any settle ring that fired while
+// aggregates were still nil — or before an observer was attached — is healed
+// here instead of being lost (the notifier stops re-arming once settled).
+func (a *App) sweepNamespacesReadiness(subsystems map[string]*system.Subsystem) {
+	for clusterID, subsystem := range subsystems {
+		a.wireNamespacesReadinessObserver(clusterID, subsystem)
+		go a.namespacesReadinessSelfBuild(clusterID)
+	}
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.

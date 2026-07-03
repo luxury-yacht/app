@@ -25,13 +25,7 @@ const walkSourceFiles = (dir: string): string[] => {
 };
 
 describe('resource metrics contracts', () => {
-  it('keeps metric-bearing table usage cells on metric overlays and value adapters', () => {
-    const overlayFiles = [
-      'frontend/src/modules/cluster/components/ClusterViewNodes.tsx',
-      'frontend/src/modules/namespace/components/NsViewPods.tsx',
-      'frontend/src/modules/namespace/components/NsViewWorkloads.tsx',
-      'frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx',
-    ];
+  it('keeps metric-bearing table usage cells on the shared value adapters', () => {
     const columnFiles = [
       {
         file: 'frontend/src/modules/cluster/components/ClusterViewNodes.tsx',
@@ -51,9 +45,6 @@ describe('resource metrics contracts', () => {
       },
     ];
 
-    const overlayViolations = overlayFiles
-      .filter((file) => !readRepoFile(file).includes('metricOverlay'))
-      .map((file) => `${file}: metricOverlay`);
     const columnViolations = columnFiles.flatMap(({ file, helpers }) => {
       const source = readRepoFile(file);
       const missing = helpers
@@ -64,7 +55,7 @@ describe('resource metrics contracts', () => {
       return directUsageGetter ? [...missing, `${file}: direct usage getter`] : missing;
     });
 
-    expect([...overlayViolations, ...columnViolations]).toEqual([]);
+    expect(columnViolations).toEqual([]);
   });
 
   it('does not introduce a resource metrics cache outside core/resource-metrics', () => {

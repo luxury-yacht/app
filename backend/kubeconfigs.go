@@ -559,7 +559,7 @@ func (a *App) executeSelectionChangeWork(
 		return err
 	}
 	refreshStart := time.Now()
-	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
+	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.refreshCtx == nil {
 		if err := a.setupRefreshSubsystem(); err != nil {
 			return err
 		}

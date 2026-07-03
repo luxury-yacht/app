@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  METRICS_INTERVAL_REFRESHERS,
   REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
   refreshDomainContract,
@@ -66,7 +65,12 @@ vi.mock('./streaming/resourceStreamManager', () => ({
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 type DiagnosticsStream = 'resources' | 'events' | 'catalog' | 'container-logs';
 type OrchestratorKind =
-  'snapshot' | 'resource-stream' | 'event-stream' | 'catalog-stream' | 'container-logs-stream';
+  | 'snapshot'
+  | 'doorbell-snapshot'
+  | 'resource-stream'
+  | 'event-stream'
+  | 'catalog-stream'
+  | 'container-logs-stream';
 
 type ContractDomain = {
   domain: RefreshDomain;
@@ -93,7 +97,6 @@ type RegisteredDomain = {
   refresherName: string;
   streaming?: {
     start?: (scope: string) => Promise<(() => void) | void> | (() => void);
-    metricsOnly?: boolean;
   };
 };
 
@@ -225,6 +228,7 @@ describe('refresh domain contract', () => {
     const categories = new Set<DomainCategory>(['system', 'cluster', 'namespace']);
     const orchestrators = new Set<OrchestratorKind>([
       'snapshot',
+      'doorbell-snapshot',
       'resource-stream',
       'event-stream',
       'catalog-stream',
@@ -277,8 +281,6 @@ describe('refresh domain contract', () => {
     for (const entry of contract.domains) {
       const descriptor = getRefreshDomainDescriptor(entry.domain);
       const registration = registeredDomains().get(entry.domain);
-      // metricsInterval is derived from the domain's source clocks, not authored.
-      const metricsInterval = entry.sourceClocks?.includes('metric') ?? false;
       expect(registration).toBeDefined();
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
@@ -289,18 +291,37 @@ describe('refresh domain contract', () => {
       expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.timing).toEqual(entry.frontend.timing);
       expect(descriptor.priority).toBe(entry.frontend.priority);
-      expect(METRICS_INTERVAL_REFRESHERS.has(descriptor.refresherName)).toBe(metricsInterval);
 
       switch (entry.frontend.orchestrator) {
         case 'snapshot':
           expect(registration?.streaming).toBeUndefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           break;
+        case 'doorbell-snapshot':
+          // Doorbell-refetched snapshot domains (namespaces, object-events,
+          // cluster-overview): streaming wiring exists for the signal-only
+          // doorbell, but they are not resource table domains. Each declares
+          // exactly the one clock its doorbell rides (namespaces: object;
+          // object-events: event; cluster-overview: metric — and its polls
+          // STAY ON, since metric doorbells only ring on successful
+          // collections). The doorbell rides the resources WebSocket, so
+          // diagnostics reflect that stream instead of mislabeling the
+          // domain as polling.
+          expect(registration?.streaming).toBeDefined();
+          expect(resourceStreamDomains.has(entry.domain)).toBe(false);
+          expect(entry.sourceClocks).toEqual(
+            entry.domain === 'object-events'
+              ? ['event']
+              : entry.domain === 'cluster-overview'
+                ? ['metric']
+                : ['object']
+          );
+          expect(entry.frontend.diagnosticsStream).toBe('resources');
+          break;
         case 'resource-stream':
           expect(registration?.streaming).toBeDefined();
           expect(resourceStreamDomains.has(entry.domain)).toBe(true);
           expect(entry.frontend.diagnosticsStream).toBe('resources');
-          expect(Boolean(registration?.streaming?.metricsOnly)).toBe(metricsInterval);
           expect(entry.sourceClocks).toContain('object');
           break;
         case 'event-stream':
@@ -450,6 +471,21 @@ describe('refresh domain contract', () => {
           expect(inventory.cachePolicy).toBe('stream-only');
           expect(inventory.streamSemantics).toEqual(['line-stream']);
           expect(inventory.coverageContract).toBe('log-stream-lifecycle');
+          break;
+        case 'doorbell-snapshot':
+          // A snapshot payload whose refetch trigger includes a signal-only
+          // doorbell: namespaces (snapshot-table, object doorbell),
+          // object-events (event-snapshot, per-object event doorbell), and
+          // cluster-overview (aggregate-snapshot, metric doorbell with polls
+          // kept on).
+          expect(['namespaces', 'object-events', 'cluster-overview']).toContain(entry.domain);
+          expect(inventory.behaviorClass).toBe(
+            entry.domain === 'object-events'
+              ? 'event-snapshot'
+              : entry.domain === 'cluster-overview'
+                ? 'aggregate-snapshot'
+                : 'snapshot-table'
+          );
           break;
         case 'snapshot':
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(

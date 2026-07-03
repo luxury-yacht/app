@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for refresherConfig.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   clusterRefresherConfig,
@@ -13,14 +13,8 @@ import {
   systemRefresherConfig,
 } from './refresherConfig';
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 describe('refresherConfig cadence defaults', () => {
-  beforeEach(() => {
-    // Ensure metrics interval defaults are reset between test runs.
-    resetAppPreferencesCacheForTesting();
-  });
-
   it('exposes expected namespace refresher timings', () => {
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.events)).toEqual({
       interval: 3000,
@@ -28,6 +22,8 @@ describe('refresherConfig cadence defaults', () => {
       timeout: 10,
     });
 
+    // namespace-workloads uses its authored contract timing; metric cadence is
+    // push-driven over the resources stream, not a client-side polling override.
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.workloads)).toEqual({
       interval: 5000,
       cooldown: 500,
@@ -36,6 +32,7 @@ describe('refresherConfig cadence defaults', () => {
   });
 
   it('exposes expected cluster refresher timings', () => {
+    // nodes uses its authored contract timing (metric cadence is push-driven).
     expect(clusterRefresherConfig(CLUSTER_REFRESHERS.nodes)).toEqual({
       interval: 5000,
       cooldown: 1000,
@@ -49,6 +46,13 @@ describe('refresherConfig cadence defaults', () => {
   });
 
   it('exposes expected system refresher timings', () => {
+    // pods uses its authored contract timing (metric cadence is push-driven).
+    expect(systemRefresherConfig(SYSTEM_REFRESHERS.unifiedPods)).toEqual({
+      interval: 5000,
+      cooldown: 1000,
+      timeout: 30,
+    });
+
     expect(systemRefresherConfig(SYSTEM_REFRESHERS.objectMaintenance)).toEqual({
       interval: 5000,
       cooldown: 1000,

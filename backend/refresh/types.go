@@ -199,6 +199,18 @@ func (m *Manager) SetMetricsActive(active bool) {
 	}
 }
 
+// SetMetricsInterval retimes the metrics poll cadence when supported. The
+// cadence is server-owned (the metric doorbell rides collections), so the
+// user's metrics-interval preference must reach running pollers live.
+func (m *Manager) SetMetricsInterval(interval time.Duration) {
+	if m == nil || m.metricsPoller == nil {
+		return
+	}
+	if controller, ok := m.metricsPoller.(interface{ SetInterval(time.Duration) }); ok {
+		controller.SetInterval(interval)
+	}
+}
+
 // Shutdown terminates running background services.
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()

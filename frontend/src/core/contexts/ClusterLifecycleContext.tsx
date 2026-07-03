@@ -61,6 +61,12 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
   useEffect(() => {
     let active = true;
     const runtime = (window as any).runtime;
+    // Clusters whose state arrived via a LIVE event. Hydration backfills the
+    // rest — and must backfill eventBus consumers too (clusterReadiness,
+    // capability hooks), or the refresh layer stays split-brained from the UI
+    // map when the relay misses events (mount gaps): the UI shows "loading"
+    // while held fetches are never re-dispatched and readiness wedges.
+    const eventDelivered = new Set<string>();
 
     // 1. Subscribe to live events.
     const handleLifecycleEvent = (...args: unknown[]) => {
@@ -69,12 +75,19 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
       if (!active || !payload?.clusterId || !payload.state) {
         return;
       }
+      eventDelivered.add(payload.clusterId);
       eventBus.emit('cluster:lifecycle', {
         clusterId: payload.clusterId,
         state: payload.state,
         previousState: payload.previousState ?? '',
       });
       setStates((prev) => {
+        // Identity-stable on no-op events: consumers key derived scope lists on
+        // getClusterState identity, and a fresh Map per redundant event re-runs
+        // their reconciliation effects on every heartbeat.
+        if (prev.get(payload.clusterId!) === payload.state) {
+          return prev;
+        }
         const next = new Map(prev);
         next.set(payload.clusterId!, payload.state as ClusterLifecycleState);
         return next;
@@ -96,6 +109,18 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
           // Events received after the RPC was sent take precedence.
           prev.forEach((state, id) => merged.set(id, state));
           return merged;
+        });
+        // Backfill eventBus consumers for clusters the relay hasn't spoken
+        // for. Everything the UI map learns, the refresh layer must learn.
+        Object.entries(result).forEach(([clusterId, state]) => {
+          if (!clusterId || !state || eventDelivered.has(clusterId)) {
+            return;
+          }
+          eventBus.emit('cluster:lifecycle', {
+            clusterId,
+            state,
+            previousState: '',
+          });
         });
       }
     });

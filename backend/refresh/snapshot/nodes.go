@@ -48,23 +48,30 @@ type NodeBuilder struct {
 	// ingest still supplies the per-node pod-aggregate join rows and the node store RV for the
 	// version watermark; the node OWN-rows no longer come from here.
 	ingest nodeDomainIngestSource
+	// metrics supplies the poller usage joined onto the served rows AT SERVE — usage is
+	// never written to the maintained store, so a metric tick cannot re-project stored
+	// rows. nil (a unit test) serves rows without usage.
+	metrics metrics.Provider
 }
 
 // NodeListBuilder assembles node payloads by issuing direct list calls.
 type NodeListBuilder struct {
-	client kubernetes.Interface
+	client  kubernetes.Interface
+	metrics metrics.Provider
 }
 
-// NodeSnapshot is the payload for the nodes domain.
+// NodeSnapshot is the payload for the nodes domain. Rows carry live usage joined at
+// serve from the metrics poller; Metrics is the poller's freshness/error metadata.
 type NodeSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows []NodeSummary `json:"rows"`
+	Rows    []NodeSummary   `json:"rows"`
+	Metrics NodeMetricsInfo `json:"metrics"`
 }
 
 func nodeQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
-		[]string{"name", "kind", "status", "roles", "version", "pods", "restarts", "age"},
+		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
 		nil,
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
 		nil, // no kind filtering
@@ -73,15 +80,19 @@ func nodeQueryCapabilities() ResourceQueryCapabilities {
 
 // nodesQuerypageSchema derives the querypage Schema for the nodes table from its
 // typed-table adapter (reusing the adapter's exact sort encoder + row key), so the
-// engine orders rows byte-identically to the live executor.
+// engine orders rows byte-identically to the live executor. cpu/memory sort the
+// live usage joined at serve.
 func nodesQuerypageSchema() querypage.Schema[NodeSummary] {
-	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "pods", "restarts", "age"})
+	return querypageSchemaFromAdapter(nodeTableQueryAdapter(), []string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"})
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
 type NodeMetricsInfo struct {
-	CollectedAt         int64  `json:"collectedAt,omitempty"`
-	Stale               bool   `json:"stale"`
+	CollectedAt int64 `json:"collectedAt,omitempty"`
+	Stale       bool  `json:"stale"`
+	// StaleAfterSeconds ships the staleness threshold so the frontend can flip
+	// the stale banner client-side; see PodMetricsInfo.StaleAfterSeconds.
+	StaleAfterSeconds   int64  `json:"staleAfterSeconds,omitempty"`
 	LastError           string `json:"lastError,omitempty"`
 	ConsecutiveFailures int    `json:"consecutiveFailures,omitempty"`
 	SuccessCount        uint64 `json:"successCount"`
@@ -118,6 +129,7 @@ func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, cluster
 	builder := &NodeBuilder{
 		maintained: maintained,
 		ingest:     ingestManager,
+		metrics:    provider,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -131,7 +143,8 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 		return fmt.Errorf("nodes: kubernetes client is nil")
 	}
 	builder := &NodeListBuilder{
-		client: client,
+		client:  client,
+		metrics: provider,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -141,16 +154,23 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 
 // Build returns the node snapshot payload. The node OWN-rows and the per-node pod aggregation
 // both read the projected rows from ingest (node and pods are cut — no typed listers); the
-// per-node pod-aggregate join is re-joined onto each own-row at serve.
+// per-node pod-aggregate join AND the latest poller usage are re-joined onto each own-row at
+// serve. The store rows stay usage-free: a metric tick changes only the served copies and the
+// metric source clock, never the object version.
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
 		b.ownRows(),
-		nodeIngestVersion(b.ingest),
+		// Two-store watermark (node + pod RVs): the rows join pod aggregates,
+		// so pod changes must advance the validator or refetches 304 with
+		// stale pod counts.
+		nodeDomainIngestVersion(b.ingest),
 		podAggregatesFromIngest(b.ingest),
-		map[string]metrics.NodeUsage{},
-		map[string]metrics.PodUsage{},
+		nodeUsage,
+		podUsage,
+		metadata,
 	)
 }
 
@@ -215,14 +235,22 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	// The list fallback projects its typed pods to the same PodAggregate rows the
 	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
 	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
+	// Pod RVs fold into the version watermark for the same reason the ingest path
+	// folds the pod store RV: pod changes alter served aggregates and must
+	// advance the validator.
 	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	var podsVersion uint64
 	for _, pod := range pods {
 		if pod == nil {
 			continue
 		}
 		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+		if v := parsePodResourceVersion(pod); v > podsVersion {
+			podsVersion = v
+		}
 	}
-	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, map[string]metrics.NodeUsage{}, map[string]metrics.PodUsage{})
+	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, podsVersion, nodeUsage, podUsage, metadata)
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -237,12 +265,18 @@ func buildNodeSnapshotFromUsage(
 	scope string,
 	nodes []*corev1.Node,
 	podAggregates []streamrows.PodAggregate,
+	// podsVersion is the max RV of the pods the aggregates were projected from;
+	// it floors the version watermark so pod-driven aggregate changes advance
+	// the validator (0 when the caller has no pod versions, e.g. the
+	// single-node stream projection, which never reads the snapshot version).
+	podsVersion uint64,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
+	metricsMetadata metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	items := make([]NodeSummary, 0, len(nodes))
-	var version uint64
+	version := podsVersion
 
 	podsByNode := podAggregatesByNode(podAggregates)
 
@@ -265,7 +299,7 @@ func buildNodeSnapshotFromUsage(
 		}
 	}
 
-	return finishNodeSnapshot(ctx, scope, items, version)
+	return finishNodeSnapshot(ctx, scope, items, version, metricsMetadata)
 }
 
 // buildNodeSnapshotFromIngestUsage assembles the node snapshot from the cut node kind's
@@ -281,13 +315,14 @@ func buildNodeSnapshotFromIngestUsage(
 	podAggregates []streamrows.PodAggregate,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
+	metricsMetadata metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	items := make([]NodeSummary, 0, len(ownRows))
 	podsByNode := podAggregatesByNode(podAggregates)
 	for _, own := range ownRows {
 		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Name], podMetrics, nodeMetrics))
 	}
-	return finishNodeSnapshot(ctx, scope, items, storeVersion)
+	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMetadata)
 }
 
 // podAggregatesByNode groups the projected pod aggregates by their NodeName for the per-node
@@ -305,17 +340,22 @@ func podAggregatesByNode(podAggregates []streamrows.PodAggregate) map[string][]s
 
 // finishNodeSnapshot is the shared tail both node serve paths (typed list-fallback and ingest)
 // run after they assemble the per-node NodeSummary rows + version watermark: it resolves the
-// resolves the query page and builds the snapshot payload. This is the part of the build
-// that is identical regardless of whether the rows came from typed nodes or the ingest store.
+// query page and builds the snapshot payload. This is the part of the build that is identical
+// regardless of whether the rows came from typed nodes or the ingest store. metricsMetadata is
+// the poller sample the rows were joined with: its revision is stamped as the snapshot's
+// metric source clock (so a metric tick breaks the 304 validator without moving the object
+// Version) and its freshness/error state is published as the payload's Metrics block.
 func finishNodeSnapshot(
 	ctx context.Context,
 	scope string,
 	items []NodeSummary,
 	version uint64,
+	metricsMetadata metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", "")
+	revision := metricRevisionFromMetadata(metricsMetadata)
+	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), "nodes", revision)
 	if err != nil {
 		// Every typed builder rejects a malformed query scope; silently serving
 		// default-ordered rows under the requested identity is a contract hole.
@@ -341,13 +381,15 @@ func finishNodeSnapshot(
 		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
 	}
 	return &refresh.Snapshot{
-		Domain:  "nodes",
-		Scope:   snapshotScope,
-		Version: version,
+		Domain:         "nodes",
+		Scope:          snapshotScope,
+		Version:        version,
+		SourceVersions: metricSourceVersions(revision),
 		Payload: NodeSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
+			Metrics:               nodeMetricsInfoFromMetadata(metricsMetadata),
 		},
 		Stats: resolved.Stats,
 	}, nil

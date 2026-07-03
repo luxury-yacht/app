@@ -30,6 +30,7 @@ func (a *App) teardownRefreshSubsystem() {
 		if subsystem == nil || subsystem.Manager == nil {
 			continue
 		}
+		subsystem.StopDoorbellNotifiers()
 		if subsystem.ResourceStream != nil {
 			subsystem.ResourceStream.Stop()
 		}
@@ -50,7 +51,7 @@ func (a *App) teardownRefreshSubsystem() {
 	}
 
 	a.refreshManager = nil
-	a.refreshAggregates = nil
+	a.refreshAggregates.Store(nil)
 
 	serverDone := a.refreshServerDone
 	if a.refreshHTTPServer != nil {

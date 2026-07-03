@@ -16,6 +16,7 @@ import {
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   canActivateClusterOverviewRefresh,
@@ -26,7 +27,7 @@ import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import logo from '@assets/luxury-yacht-color-vert.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 import './ClusterOverview.css';
-import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
@@ -142,6 +143,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const health = getActiveClusterHealth();
   const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
+  // Metric doorbell: each successful collection refetches the overview so
+  // live usage appears within one collection instead of a full poll cycle
+  // (resolves the "Collecting metrics…" card promptly). Polls stay on for
+  // this domain — the doorbell never rings on metrics-less clusters.
+  const overviewSignalScopes = useMemo(
+    () => (overviewScope && canActivateOverviewRefresh ? [overviewScope] : []),
+    [overviewScope, canActivateOverviewRefresh]
+  );
+  useStreamSignalRefetch('cluster-overview', overviewSignalScopes);
   const overviewStatus = useMemo(
     () =>
       buildConnectivityPresentation({
@@ -193,7 +203,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     overviewDomain.data?.metricsByCluster,
     selectedClusterId,
   ]);
-  const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
+  const metricsBanner = useMetricsBannerInfo(metricsInfo);
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
 
   const selectedOverview = useMemo(() => {
@@ -328,10 +338,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     }
 
     const enableOverview = () => {
+      // preserveState is load-bearing for a STREAMING-registered domain: the
+      // orchestrator's streaming enable path RESETS the scoped state when it
+      // is absent, which blanked the overview on every cluster tab switch.
       setRefreshDomainEnabled({
         domain: 'cluster-overview',
         scope: overviewScope,
         enabled: canActivateOverviewRefresh,
+        preserveState: true,
       });
       if (!canActivateOverviewRefresh) {
         return;
@@ -846,13 +860,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          <h2>Resource Utilization</h2>
-          {metricsBanner && !errorMessage && (
-            <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
-              <span className="metrics-warning-banner__dot" />
-              {metricsBanner.message}
-            </div>
-          )}
+          {/* Header row: the metrics indicator sits in the card's upper right
+              so its presence never shifts the utilization content below. */}
+          <div className="overview-section-header">
+            <h2>Resource Utilization</h2>
+            {metricsBanner && !errorMessage && (
+              <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
+                <span className="metrics-warning-banner__dot" />
+                <span className="metrics-warning-banner__text">{metricsBanner.message}</span>
+              </div>
+            )}
+          </div>
 
           <div className="resource-group">
             <div className="metric-header metric-header--usage">

@@ -88,6 +88,9 @@ type refreshDomainRecord struct {
 		Permission     string `json:"permission"`
 		ResourceStream bool   `json:"resourceStream"`
 	} `json:"backend"`
+	Frontend struct {
+		Orchestrator string `json:"orchestrator"`
+	} `json:"frontend"`
 }
 
 func TestDomainRegistrationOrder(t *testing.T) {
@@ -339,10 +342,20 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 		byDomain[registration.name] = registration
 	}
 
+	// Fail fast on missing list permission: the namespaces domain is
+	// permission-gated so a restricted user gets an explicit permission-denied
+	// snapshot (the sidebar renders "You do not have permission to list
+	// namespaces.") instead of an empty list backed by catalog inference.
 	namespaces := byDomain["namespaces"]
-	require.NotNil(t, namespaces.direct, "namespaces must remain a direct snapshot registration")
+	require.Nil(t, namespaces.direct)
 	require.Nil(t, namespaces.list)
-	require.Nil(t, namespaces.listWatch)
+	require.NotNil(t, namespaces.listWatch, "namespaces must be a permission-gated listWatch registration")
+	require.Equal(t, []listWatchCheck{
+		{group: "", resource: "namespaces"},
+	}, namespaces.listWatch.checks)
+	require.Nil(t, namespaces.listWatch.registerFallback,
+		"no fallback: denial must serve the permission-denied domain, not a degraded list")
+	require.Equal(t, "core/namespaces", namespaces.listWatch.deniedReason)
 
 	overview := byDomain["cluster-overview"]
 	require.Nil(t, overview.direct)
@@ -467,14 +480,17 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	contract := loadRefreshDomainContract(t)
 	descriptors := resourcestream.ProjectionDescriptors()
-	metricDomains := map[string]bool{}
+	// The serve-time metric join gives the three metric-bearing table domains a
+	// metric source clock alongside the object clock.
+	metricDomains := map[string]bool{"pods": true, "nodes": true, "namespace-workloads": true}
 	validSources := map[string]bool{"object": true, "metric": true, "event": true, "catalog": true}
 
 	for _, entry := range contract.Domains {
 		inventory := contract.DomainInventory[entry.Domain]
 		requiresDoorbellClock := entry.Backend.ResourceStream ||
 			inventory.BehaviorClass == "event-stream" ||
-			inventory.BehaviorClass == "catalog-stream"
+			inventory.BehaviorClass == "catalog-stream" ||
+			entry.Frontend.Orchestrator == "doorbell-snapshot"
 		if !requiresDoorbellClock {
 			continue
 		}
@@ -482,6 +498,23 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 		require.NotEmptyf(t, entry.SourceClocks, "domain %s must declare sourceClocks", entry.Domain)
 		for _, s := range entry.SourceClocks {
 			require.Truef(t, validSources[s], "domain %s declares unsupported source clock %q", entry.Domain, s)
+		}
+
+		if entry.Frontend.Orchestrator == "doorbell-snapshot" {
+			// Doorbell-refetched snapshot domains declare exactly the one
+			// signal-only clock their doorbell rides — no projection descriptor
+			// exists: namespaces rides the object clock, object-events the
+			// event clock, cluster-overview the metric clock (its polls stay
+			// on — metric doorbells only ring on successful collections).
+			expected := []string{"object"}
+			switch entry.Domain {
+			case "object-events":
+				expected = []string{"event"}
+			case "cluster-overview":
+				expected = []string{"metric"}
+			}
+			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
+			continue
 		}
 
 		switch inventory.BehaviorClass {

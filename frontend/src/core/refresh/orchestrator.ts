@@ -8,6 +8,7 @@
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
+  isSnapshotPermissionDenied,
   invalidateRefreshBaseURL,
   setMetricsActive,
   type Snapshot,
@@ -27,12 +28,16 @@ import {
 import type { DomainPayloadMap, RefreshDomain } from './types';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import {
+  doorbellPollingContinues,
+  isSupportedDomain as isDoorbellStreamDomain,
+} from './streaming/resourceStreamDomains';
+import {
   APP_LOG_SOURCES,
   logAppLogsInfo,
   logAppLogsWarn,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
-import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
 import { clusterReadiness } from './clusterReadiness';
 import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
@@ -49,8 +54,10 @@ import { RefreshErrorNotifier } from './refreshErrorNotifier';
 type DomainFetchOptions = {
   isManual: boolean;
   signal?: AbortSignal;
-  metricsOnly?: boolean;
   allowDisabledRetainedScope?: boolean;
+  // The fetch was triggered by a stream doorbell; it bypasses the
+  // skip-while-stream-healthy gate (the signal IS the stream's refresh).
+  streamSignal?: boolean;
 };
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -61,8 +68,6 @@ type DomainFetchOptions = {
 // Set autoStart: true on individual domain registrations when needed.
 const DEFAULT_AUTO_START = false;
 const noopStreamingCleanup = () => {};
-// Keep streaming metrics refreshes aligned with the configurable metrics cadence.
-const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
@@ -607,7 +612,9 @@ class RefreshOrchestrator {
     return Boolean(config?.streaming);
   }
 
-  private isStreamingBlocked(domain: RefreshDomain, scope?: string): boolean {
+  // Public for diagnostics: a drift-blocked scope polls until an app-level
+  // reset and must be labeled distinctly from a self-healing fallback.
+  isStreamingBlocked(domain: RefreshDomain, scope?: string): boolean {
     if (!isResourceStreamDomain(domain) || !scope) {
       return false;
     }
@@ -619,14 +626,21 @@ class RefreshOrchestrator {
   }
 
   // Resource stream health gates polling so snapshots stay active until delivery resumes.
+  // Driven by the doorbell descriptor table (resource tables + catalog/events/namespaces
+  // doorbells) so a new doorbell domain cannot silently keep polling here.
   private isStreamingHealthy(domain: RefreshDomain, scope?: string): boolean {
     if (!scope) {
       return false;
     }
-    if (isResourceStreamDomain(domain)) {
-      return resourceStreamManager.isHealthy(domain, scope);
+    // Poll-augmented doorbell domains (cluster-overview): the doorbell's
+    // signal source is not guaranteed to ever fire (metric doorbells ring
+    // only on successful collections), so a healthy stream must NOT suppress
+    // their polls — report not-healthy to the fetch gate; signals still
+    // deliver and refetch through the stream subscription.
+    if (doorbellPollingContinues(domain)) {
+      return false;
     }
-    if (domain === 'catalog' || domain === 'cluster-events' || domain === 'namespace-events') {
+    if (isDoorbellStreamDomain(domain)) {
       return resourceStreamManager.isHealthy(domain, scope);
     }
     return false;
@@ -901,10 +915,6 @@ class RefreshOrchestrator {
     this.forEachRuntime((runtime) => runtime.clearBlockedStreaming());
   }
 
-  private clearAllMetricsRefreshTracking(): void {
-    this.forEachRuntime((runtime) => runtime.clearMetricsRefreshTracking());
-  }
-
   private clearAllAsyncStreamingBookkeeping(): void {
     this.forEachRuntime((runtime) => runtime.clearAsyncStreamingBookkeeping());
   }
@@ -1000,17 +1010,13 @@ class RefreshOrchestrator {
   }
 
   private shouldAllowRefresher(config: DomainRegistration<RefreshDomain>): boolean {
-    return (
-      !config.streaming ||
-      config.streaming.metricsOnly === true ||
-      config.streaming.pauseRefresherWhenStreaming === true
-    );
+    return !config.streaming || config.streaming.pauseRefresherWhenStreaming === true;
   }
 
   async fetchScopedDomain<K extends RefreshDomain>(
     domain: K,
     scope: string,
-    options: { signal?: AbortSignal; isManual?: boolean } = {}
+    options: { signal?: AbortSignal; isManual?: boolean; streamSignal?: boolean } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
     const normalizedScope = this.normalizeDomainScope(domain, scope);
@@ -1056,9 +1062,8 @@ class RefreshOrchestrator {
         scope: normalizedScope,
         shouldStream,
         isManual: Boolean(options.isManual),
-        metricsOnly: Boolean(config.streaming.metricsOnly),
+        streamSignal: Boolean(options.streamSignal),
         streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
-        metricsMinIntervalMs: getStreamingMetricsMinIntervalMs(),
         hasData: Boolean(getScopedDomainState(domain, normalizedScope).data),
       });
       if (fetchMode === 'skip') {
@@ -1069,7 +1074,7 @@ class RefreshOrchestrator {
     await this.performFetch(domain, normalizedScope, {
       isManual: options.isManual ?? true,
       signal: options.signal,
-      metricsOnly: Boolean(config.streaming?.metricsOnly),
+      streamSignal: Boolean(options.streamSignal),
     });
   }
 
@@ -1078,7 +1083,6 @@ class RefreshOrchestrator {
     scope: string | undefined,
     options: DomainFetchOptions
   ): Promise<void> {
-    const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
     const normalizedScope = this.normalizeDomainScope(domain, scope);
 
@@ -1104,18 +1108,35 @@ class RefreshOrchestrator {
     const currentInFlight = runtime.getInFlight(domain, normalizedScope);
 
     if (currentInFlight) {
-      if (options.isManual && !currentInFlight.isManual) {
+      if (options.isManual) {
+        // Manual fetches always replace whatever is in flight.
         currentInFlight.controller.abort();
         this.teardownInFlight(runtime, inFlightKey, currentInFlight);
-      } else if (!options.isManual) {
+      } else if (options.streamSignal) {
+        // The doorbell proves the data changed AFTER the in-flight request
+        // started, so that response is already stale — but dropping the signal
+        // loses the update until an unrelated event, and aborting starves the
+        // scope when signals arrive faster than a round trip. Latch exactly
+        // ONE trailing refetch behind the in-flight request; any number of
+        // signals coalesce into it.
+        currentInFlight.rerunStreamSignal = true;
         return;
-      } else if (options.isManual && currentInFlight.isManual) {
-        currentInFlight.controller.abort();
-        this.teardownInFlight(runtime, inFlightKey, currentInFlight);
+      } else {
+        // Plain background polls yield to an in-flight request.
+        return;
       }
     }
 
     const previousState = getScopedDomainState(domain, normalizedScope);
+    // A permission-denied scope is SETTLED: the backend refused it with a
+    // typed 403 and permission changes are not expected mid-session (recovery
+    // is an app restart). Background retries here caused a request every ~2s
+    // (the no-data fetch clause) and flicked the state through 'loading' —
+    // observed live as a spinner flashing over the permission message. Manual
+    // refresh remains a deliberate re-ask.
+    if (!options.isManual && previousState.permissionDenied) {
+      return;
+    }
     const nextStatus = previousState.data ? 'updating' : 'loading';
 
     setScopedDomainState(domain, normalizedScope, (prev) => ({
@@ -1179,9 +1200,6 @@ class RefreshOrchestrator {
           isManual: options.isManual,
           lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
         }));
-        if (metricsOnly && !options.isManual) {
-          runtime.recordMetricsRefresh(domain, normalizedScope);
-        }
         this.clearRefreshError(domain, normalizedScope);
         return;
       }
@@ -1194,9 +1212,6 @@ class RefreshOrchestrator {
         normalizedScope,
         options.allowDisabledRetainedScope
       );
-      if (metricsOnly && !options.isManual) {
-        runtime.recordMetricsRefresh(domain, normalizedScope);
-      }
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -1207,6 +1222,20 @@ class RefreshOrchestrator {
       }
 
       const message = error instanceof Error ? error.message : String(error);
+      if (isSnapshotPermissionDenied(error)) {
+        // Handled BEFORE the startup grace-window suppression: a typed 403 is
+        // a real answer, not a transient network blip — swallowing it would
+        // leave the scope unmarked and the retry loop running.
+        setScopedDomainState(domain, normalizedScope, (prev) => ({
+          ...prev,
+          status: 'error',
+          error: message,
+          permissionDenied: true,
+          isManual: options.isManual,
+        }));
+        this.notifyRefreshError(domain, normalizedScope, message);
+        return;
+      }
       if (this.errorNotifier.shouldSuppressNetworkError(message)) {
         setScopedDomainState(domain, normalizedScope, (prev) => ({
           ...prev,
@@ -1229,6 +1258,14 @@ class RefreshOrchestrator {
       if (tracked && tracked.requestId === requestId) {
         tracked.cleanup?.();
         runtime.deleteInFlight(domain, normalizedScope);
+        // Doorbells that rang during this request latched a trailing refetch:
+        // run it now that the slot is free (one fetch coalesces them all).
+        if (tracked.rerunStreamSignal && contextVersion === this.contextVersion) {
+          void this.performFetch(domain, normalizedScope, {
+            isManual: false,
+            streamSignal: true,
+          });
+        }
       }
 
       markPendingRequest(-1);
@@ -1271,6 +1308,7 @@ class RefreshOrchestrator {
         lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
         error: null,
+        permissionDenied: false,
         isManual,
         scope: resolvedScope,
       }));
@@ -1279,16 +1317,18 @@ class RefreshOrchestrator {
   }
 
   private isMetricsDemandActive(): boolean {
+    // The metric-bearing domains join live usage at serve, so any active lease
+    // on them (a table or object panel) is metrics demand for the backend poller.
     if (this.hasEnabledScopedSources('cluster-overview')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('nodes-metrics')) {
+    if (this.hasEnabledScopedSources('nodes')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('pods-metrics')) {
+    if (this.hasEnabledScopedSources('pods')) {
       return true;
     }
-    if (this.hasEnabledScopedSources('namespace-workloads-metrics')) {
+    if (this.hasEnabledScopedSources('namespace-workloads')) {
       return true;
     }
     return false;
@@ -1400,7 +1440,6 @@ class RefreshOrchestrator {
     // Suppress transient errors while the backend refresh subsystem reinitialises.
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.errorNotifier.clearAll();
     // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
@@ -1415,7 +1454,6 @@ class RefreshOrchestrator {
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.configs.forEach((_, domain) => {
       this.resetDomain(domain);
@@ -1431,7 +1469,6 @@ class RefreshOrchestrator {
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
     this.configs.forEach((_config, domain) => {
       const wasEnabled = this.hasEnabledScopedSources(domain);
@@ -1476,7 +1513,6 @@ class RefreshOrchestrator {
     this.errorNotifier.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
   };
 
@@ -1486,7 +1522,6 @@ class RefreshOrchestrator {
     invalidateRefreshBaseURL();
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
-    this.clearAllMetricsRefreshTracking();
     this.clearAllStreamHealth();
   };
 

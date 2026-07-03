@@ -9,7 +9,11 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
+vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
+
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
 
 let mockClusterId = 'cluster-a';
@@ -57,6 +61,12 @@ vi.mock('@/core/refresh', () => ({
       throw new Error(`Unexpected scoped domain requested in test: ${domain}`);
     }
     return namespaceDomainsByScopeRef.current[scope] ?? namespaceDomainRef.current;
+  },
+  useRefreshScopedDomainStates: (domain: string) => {
+    if (domain !== 'namespaces') {
+      throw new Error(`Unexpected scoped domain states requested in test: ${domain}`);
+    }
+    return namespaceDomainsByScopeRef.current;
   },
 }));
 
@@ -247,22 +257,24 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     cleanup();
@@ -281,22 +293,24 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     mockClusterLifecycleStates = new Map([
@@ -311,12 +325,13 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      true
+      true,
+      { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     cleanup();
@@ -399,18 +414,12 @@ describe('NamespaceProvider selection behaviour', () => {
     ]);
     expect(namespaceRef.current?.namespaceLoading).toBe(false);
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      false,
-      { preserveState: true }
+    // Switching the ACTIVE tab must not disable any still-open cluster's scope
+    // — both leases stay live so both stay warm (no disable/re-enable churn).
+    const disables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
+      (call) => call[2] === false
     );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      false,
-      { preserveState: true }
-    );
+    expect(disables).toEqual([]);
 
     cleanup();
   });
@@ -522,13 +531,108 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: true }
+      { isManual: true, streamSignal: false }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-b|',
-      { isManual: true }
+      { isManual: true, streamSignal: false }
     );
+    cleanup();
+  });
+
+  it('refetches a scope when its doorbell signal advances the sourceVersion, exactly once per signal', () => {
+    // The stream-signal hook reads the REAL scoped store. Initial state carries
+    // the initial fetch's validator (applySnapshot always sets sourceVersion
+    // after a 200) — the hook consumes it without fetching.
+    setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: { clusterId: 'cluster-a', namespaces: [] } as never,
+      sourceVersion: 'validator-1',
+      scope: 'cluster-a|',
+    }));
+
+    const { cleanup, rerender } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    // Doorbell: the stream signal advances the scoped signal clock
+    // (signalVersions is written only by the stream manager's doorbell path).
+    act(() => {
+      setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
+        ...previous,
+        sourceVersion: 'ns-1',
+        signalVersions: { object: 'ns-1' },
+      }));
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      { isManual: false, streamSignal: true }
+    );
+
+    // The same signal version must not refetch again.
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    cleanup();
+    resetAllScopedDomainStates('namespaces');
+  });
+
+  it('leaves existing clusters untouched when another cluster tab opens', () => {
+    // Multi-cluster invariant: one cluster's tab lifecycle must never disturb
+    // another cluster's scoped refresh state. The old effect disabled and
+    // re-enabled EVERY scope on each scope-set change; the disable->enable
+    // cycle reset the active scope's store (blank list + spinner + diagnostics
+    // row churn) whenever ANY tab opened/closed or ANY lifecycle event fired.
+    mockClusterIds = ['cluster-a'];
+    const { cleanup, rerender } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.resetDomain.mockClear();
+
+    // Open a second cluster tab.
+    mockClusterIds = ['cluster-a', 'cluster-b'];
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // The new cluster's scope is enabled...
+    const clusterBEnables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
+      (call) => call[0] === 'namespaces' && call[1] === 'cluster-b|' && call[2] === true
+    );
+    expect(clusterBEnables.length).toBeGreaterThan(0);
+    // ...and cluster-a's scope is never disabled or reset by the change.
+    const clusterADisables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
+      (call) => call[1] === 'cluster-a|' && call[2] === false
+    );
+    expect(clusterADisables).toEqual([]);
+    expect(mockRefreshOrchestrator.resetDomain).not.toHaveBeenCalled();
+
+    // Closing the second tab disables ONLY cluster-b's scope.
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockClusterIds = ['cluster-a'];
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    const clusterADisablesAfterClose =
+      mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
+        (call) => call[1] === 'cluster-a|' && call[2] === false
+      );
+    expect(clusterADisablesAfterClose).toEqual([]);
     cleanup();
   });
 
@@ -547,8 +651,40 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespaces',
       'cluster-a|',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
+    cleanup();
+  });
+
+  it('exposes namespacesPermissionDenied for a permission-denied namespaces domain — and does not toast', () => {
+    namespaceDomainRef.current = {
+      status: 'error',
+      data: null,
+      error: 'permission denied for domain namespaces (core/namespaces)',
+      permissionDenied: true,
+    } as unknown as typeof namespaceDomainRef.current;
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(true);
+    // A designed, rendered state — not a toast (the sidebar shows the message).
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('keeps namespacesPermissionDenied false for transient errors (which still toast)', () => {
+    namespaceDomainRef.current = {
+      status: 'error',
+      data: null,
+      error: 'apiserver timeout',
+    } as unknown as typeof namespaceDomainRef.current;
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(false);
+    expect(errorHandlerMock.handle).toHaveBeenCalled();
     cleanup();
   });
 });

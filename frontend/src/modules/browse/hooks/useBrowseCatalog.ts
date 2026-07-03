@@ -521,29 +521,42 @@ export function useBrowseCatalog({
     ]
   );
 
-  const catalogLiveVersion = domain.sourceVersions?.catalog ?? domain.sourceVersion ?? '';
-  const lastCatalogLiveVersionRef = useRef<string>('');
+  // Doorbell values live in signalVersions, which payload applies never touch
+  // — so this only moves when the catalog doorbell rings. (Keying on the
+  // folded sourceVersion turned every content-changing fetch response into
+  // another "signal": an echo refetch per doorbell.)
+  const catalogLiveVersion = domain.signalVersions?.catalog ?? '';
+  // has-observed flag, not an empty-string sentinel: before the first doorbell
+  // the value IS empty, and a falsiness check would swallow the first ring.
+  const lastCatalogLiveVersionRef = useRef<{ observed: boolean; value: string }>({
+    observed: false,
+    value: '',
+  });
   useEffect(() => {
     const previous = lastCatalogLiveVersionRef.current;
-    lastCatalogLiveVersionRef.current = catalogLiveVersion;
+    lastCatalogLiveVersionRef.current = { observed: true, value: catalogLiveVersion };
     if (
       !enabled ||
       !catalogLiveVersion ||
-      !previous ||
-      previous === catalogLiveVersion ||
+      !previous.observed ||
+      previous.value === catalogLiveVersion ||
       !hasLoadedOnceRef.current
     ) {
       return;
     }
 
     const currentPageToken = currentPageTokenRef.current;
+    // These fetches are triggered BY the catalog doorbell: 'stream-signal' is
+    // the one non-manual reason the skip-while-stream-healthy gate never
+    // swallows. With 'background' the refetch was skipped for a loaded scope
+    // while the stream was healthy — the doorbell silently did nothing.
     if (currentPageToken) {
-      requestPage(currentPageToken, 'current', 'background');
+      requestPage(currentPageToken, 'current', 'stream-signal');
     } else {
-      void refreshCatalogScope('background');
+      void refreshCatalogScope('stream-signal');
     }
     if (!metadataUsesActiveScope) {
-      void refreshMetadataScope('background');
+      void refreshMetadataScope('stream-signal');
     }
   }, [
     catalogLiveVersion,

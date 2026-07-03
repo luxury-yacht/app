@@ -15,7 +15,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
+import type { ClusterNodeRow } from '@/core/refresh/types';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
@@ -35,20 +35,13 @@ import {
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
-import type {
-  ClusterNodeMetricEntry,
-  ClusterNodeMetricsSnapshotPayload,
-  ClusterNodeSnapshotPayload,
-  NodeMetricsInfo,
-} from '@/core/refresh/types';
+import type { ClusterNodeSnapshotPayload, NodeMetricsInfo } from '@/core/refresh/types';
 
 // Define props for NodesViewGrid component. The table is query-backed (sourced from
 // the typed query + replay cache); only `error` is consumed, for the empty-state text.
 interface NodesViewProps {
   error?: string | null;
 }
-
-const METRIC_NO_DATA = '-';
 
 const NODE_AGE_UNITS_IN_SECONDS: Record<string, number> = {
   y: 365 * 24 * 60 * 60,
@@ -91,19 +84,6 @@ const parseNodePodsUsed = (pods?: string | number | null): number => {
   const parsed = Number.parseFloat(used.trim());
   return Number.isFinite(parsed) ? parsed : 0;
 };
-
-const nodeMetricRowKey = (row: Pick<ClusterNodeRow, 'name'>): string =>
-  `node/${row.name ?? ''}`.toLowerCase();
-
-const mergeNodeMetric = (
-  row: ClusterNodeRow,
-  metric: ClusterNodeMetricEntry | undefined
-): ClusterNodeRow => ({
-  ...row,
-  cpuUsage: metric?.cpuUsage ?? METRIC_NO_DATA,
-  memoryUsage: metric?.memoryUsage ?? METRIC_NO_DATA,
-  podMetrics: metric?.podMetrics,
-});
 
 /*
  * GridTable component for cluster nodes
@@ -352,47 +332,36 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     [selectedClusterId]
   );
 
-  const metricOverlay = useMemo(
-    () => ({
-      domain: 'nodes-metrics' as const,
-      label: 'Cluster Nodes Metrics',
-      selectRows: (payload: unknown) => (payload as ClusterNodeMetricsSnapshotPayload).rows ?? [],
-      getBaseRowKey: nodeMetricRowKey,
-      getMetricRowKey: (row: unknown) => (row as ClusterNodeMetricEntry).rowKey,
-      mergeMetric: (row: ClusterNodeRow, metric: unknown) =>
-        mergeNodeMetric(row, metric as ClusterNodeMetricEntry | undefined),
-    }),
-    []
-  );
+  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
+    ClusterNodeSnapshotPayload,
+    ClusterNodeRow
+  >({
+    queryTableMode: 'Query Backed Dynamic',
+    clusterId: selectedClusterId,
+    domain: 'nodes',
+    label: 'Cluster Nodes',
+    selectRows: selectPayloadRows,
+    viewId: 'cluster-nodes',
+    persistenceData: [],
+    columns: tableColumns,
+    keyExtractor,
+    showKindDropdown: false,
+    // Restores the "Include metadata" search toggle: the default search is name/kind,
+    // and toggling metadata also matches labels/annotations. For this query-backed view
+    // the match runs server-side (the toggle sets `includeMetadata` in the query scope).
+    metadataSearch: {
+      getDefaultValues: (row) => [row.name, row.kind],
+      getMetadataMaps: (row) => [row.labels, row.annotations],
+    },
+    diagnosticsLabel: 'Cluster Nodes',
+    filterOptions: { isNamespaceScoped: false },
+  });
 
-  const { gridTableProps, favModal, source, metricPayload } =
-    useQueryBackedClusterResourceGridTable<ClusterNodeSnapshotPayload, ClusterNodeRow>({
-      queryTableMode: 'Query Backed Dynamic',
-      clusterId: selectedClusterId,
-      domain: 'nodes',
-      label: 'Cluster Nodes',
-      metricOverlay,
-      selectRows: selectPayloadRows,
-      viewId: 'cluster-nodes',
-      persistenceData: [],
-      columns: tableColumns,
-      keyExtractor,
-      showKindDropdown: false,
-      // Restores the "Include metadata" search toggle: the default search is name/kind,
-      // and toggling metadata also matches labels/annotations. For this query-backed view
-      // the match runs server-side (the toggle sets `includeMetadata` in the query scope).
-      metadataSearch: {
-        getDefaultValues: (row) => [row.name, row.kind],
-        getMetadataMaps: (row) => [row.labels, row.annotations],
-      },
-      diagnosticsLabel: 'Cluster Nodes',
-      filterOptions: { isNamespaceScoped: false },
-    });
-
-  const nodeMetricsPayload = metricPayload as ClusterNodeMetricsSnapshotPayload | null | undefined;
+  // The base query payload carries the poller freshness block for the usage
+  // joined onto the rows at serve.
   useEffect(() => {
-    setMetricsInfo(nodeMetricsPayload?.metrics ?? null);
-  }, [nodeMetricsPayload?.metrics]);
+    setMetricsInfo(queryPayload?.metrics ?? null);
+  }, [queryPayload?.metrics]);
 
   // The maintenance hook owns the cordon and drain modals; pass its
   // handlers through to the controller so right-clicked Node rows route

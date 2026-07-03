@@ -27,6 +27,13 @@ type registrationDeps struct {
 	cfg             Config                // Configuration settings
 	gate            *permissionGate       // Permission gate for access control
 	serverHost      string                // Hostname of the server
+	// noteNamespaceNotifier receives the namespaces change notifier created during
+	// registration, so the subsystem can wire its doorbell broadcast once the
+	// resource-stream manager exists. Nil in tests that don't exercise streaming.
+	noteNamespaceNotifier func(*snapshot.NamespaceChangeNotifier)
+	// noteObjectEventsNotifier is the object-events doorbell counterpart of
+	// noteNamespaceNotifier; same wiring lifecycle.
+	noteObjectEventsNotifier func(*snapshot.ObjectEventsChangeNotifier)
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -250,8 +257,30 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 	runtimeAccess := domainpermissions.NewRuntimeAccess()
 
 	return []domainRegistration{
-		directRegistration("namespaces", func() error {
-			return snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
+		// Fail fast on missing list permission: a restricted user gets an
+		// explicit permission-denied snapshot (the sidebar renders "You do not
+		// have permission to list namespaces.") instead of an empty list. No
+		// fallback by design — manual namespace entry is future work
+		// (docs/todo.md).
+		listWatchRegistration(listWatchDomainConfig{
+			name:          "namespaces",
+			issueResource: "core/namespaces",
+			logGroup:      "",
+			logResource:   "namespaces",
+			checks: []listWatchCheck{
+				{group: "", resource: "namespaces"},
+			},
+			registerInformer: func() error {
+				notifier, err := snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
+				if err != nil {
+					return err
+				}
+				if deps.noteNamespaceNotifier != nil {
+					deps.noteNamespaceNotifier(notifier)
+				}
+				return nil
+			},
+			deniedReason: "core/namespaces",
 		}),
 
 		listWatchRegistration(listWatchDomainConfig{
@@ -320,33 +349,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				return snapshot.RegisterNodeDomainList(deps.registry, deps.cfg.KubernetesClient, deps.metricsProvider)
 			},
 			fallbackLog:  "Registering nodes domain using list fallback due to missing informer permissions",
-			deniedReason: "core/nodes (and pods)",
-		}),
-
-		listWatchRegistration(listWatchDomainConfig{
-			name:          "nodes-metrics",
-			issueResource: "core/nodes,pods",
-			logGroup:      "",
-			logResource:   "nodes/pods",
-			checks: []listWatchCheck{
-				{group: "", resource: "nodes"},
-				{group: "", resource: "pods"},
-			},
-			registerInformer: func() error {
-				return snapshot.RegisterNodeMetricsDomain(
-					deps.registry,
-					deps.metricsProvider,
-					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
-					deps.ingestManager,
-				)
-			},
-			fallbackChecks: []listCheck{
-				{group: "", resource: "nodes"},
-			},
-			registerFallback: func() error {
-				return snapshot.RegisterNodeMetricsDomainList(deps.registry, deps.cfg.KubernetesClient, deps.metricsProvider)
-			},
-			fallbackLog:  "Registering nodes metrics domain using list fallback due to missing informer permissions",
 			deniedReason: "core/nodes (and pods)",
 		}),
 
@@ -428,27 +430,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			name: "namespace-workloads",
 			register: func(allowed domainpermissions.AllowedResources) error {
 				return snapshot.RegisterNamespaceWorkloadsDomain(
-					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
-					deps.metricsProvider,
-					deps.cfg.Logger,
-					snapshot.NamespaceWorkloadsPermissions{
-						IncludePods:         allowed.Allows("", "pods"),
-						IncludeDeployments:  allowed.Allows("apps", "deployments"),
-						IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
-						IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
-						IncludeJobs:         allowed.Allows("batch", "jobs"),
-						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
-					},
-					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
-					deps.ingestManager,
-				)
-			},
-		}),
-		accessListRegistration(runtimeAccess, listDomainConfig{
-			name: "namespace-workloads-metrics",
-			register: func(allowed domainpermissions.AllowedResources) error {
-				return snapshot.RegisterNamespaceWorkloadsMetricsDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
 					deps.metricsProvider,
@@ -567,15 +548,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			)
 		}),
 
-		directRegistration("pods-metrics", func() error {
-			return snapshot.RegisterPodMetricsDomain(
-				deps.registry,
-				deps.metricsProvider,
-				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
-				deps.ingestManager,
-			)
-		}),
-
 		directRegistration("object-details", func() error {
 			return snapshot.RegisterObjectDetailsDomain(
 				deps.registry,
@@ -592,7 +564,14 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterObjectHelmValuesDomain(deps.registry, helmProvider)
 		}), func() bool { return helmOK }),
 		directRegistration("object-events", func() error {
-			return snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
+			notifier, err := snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
+			if err != nil {
+				return err
+			}
+			if deps.noteObjectEventsNotifier != nil {
+				deps.noteObjectEventsNotifier(notifier)
+			}
+			return nil
 		}),
 		directRegistration("object-map", func() error {
 			return snapshot.RegisterObjectMapDomain(

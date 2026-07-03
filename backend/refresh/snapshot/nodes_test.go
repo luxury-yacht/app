@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -46,6 +45,42 @@ func (f fakeMetricsProvider) LatestPodUsage() map[string]metrics.PodUsage {
 
 func (f fakeMetricsProvider) Metadata() metrics.Metadata {
 	return f.metadata
+}
+
+func (f fakeMetricsProvider) Sample() metrics.Sample {
+	return metrics.Sample{
+		NodeUsage: f.LatestNodeUsage(),
+		PodUsage:  f.LatestPodUsage(),
+		Metadata:  f.Metadata(),
+	}
+}
+
+// A pod add/delete changes the served per-node aggregates (pod counts,
+// requests/limits), so it MUST advance the snapshot Version — the object
+// validator. Folding only the node store RV made those rebuilds answer 304
+// against the client's unchanged validator, silently keeping stale pod counts
+// until an unrelated node change or metric tick (observed live as 0-byte 304
+// responses that should have carried data).
+func TestNodeSnapshotVersionAdvancesOnPodStoreChanges(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-1", ResourceVersion: "42"},
+	}
+	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
+	ingest.resourceVersion = "100" // pod store RV
+	builder := newNodeBuilderForTest(ClusterMeta{}, ingest, node)
+
+	first, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	// A pod lands on the node: the pod store RV advances, the node RV does not.
+	bumped := ingest
+	bumped.resourceVersion = "150"
+	builder.ingest = bumped
+
+	second, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Greater(t, second.Version, first.Version,
+		"pod-driven aggregate changes must advance the nodes validator")
 }
 
 // newNodeBuilderForTest builds a NodeBuilder wired the production way: node OWN-rows are served
@@ -254,87 +289,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, uint64(42), snapshot.Version)
 }
 
-func TestNodeMetricsBuilderMetricRefreshDoesNotChangeSnapshotVersion(t *testing.T) {
-	now := time.Unix(1000, 0)
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "node-1",
-			ResourceVersion:   "42",
-			CreationTimestamp: metav1.NewTime(now.Add(-time.Hour)),
-		},
-	}
-	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
-	base := newNodeBuilderForTest(
-		ClusterMeta{},
-		ingest,
-		node,
-	)
-	provider := fakeMetricsProvider{
-		usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
-		metadata: metrics.Metadata{CollectedAt: now},
-	}
-	builder := &NodeMetricsBuilder{base: base, metrics: provider}
-
-	first, err := builder.Build(context.Background(), "")
-	require.NoError(t, err)
-	require.Equal(t, uint64(42), first.Version)
-	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
-	require.Equal(t, nodeMetricsDomainName, first.Domain)
-	require.Equal(t, "650m", first.Payload.(NodeMetricsSnapshot).Rows[0].CPUUsage)
-
-	provider = fakeMetricsProvider{
-		usage:    map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 700}},
-		metadata: metrics.Metadata{CollectedAt: now.Add(5 * time.Second)},
-	}
-	builder.metrics = provider
-
-	second, err := builder.Build(context.Background(), "")
-	require.NoError(t, err)
-	require.Equal(t, first.Version, second.Version)
-	require.Equal(t, strconv.FormatInt(now.Add(5*time.Second).UnixNano(), 10), second.SourceVersions["metric"])
-	require.Equal(t, "700m", second.Payload.(NodeMetricsSnapshot).Rows[0].CPUUsage)
-}
-
-func TestNodeMetricsBuilderSurfacesMetricMetadata(t *testing.T) {
-	collectedAt := time.Now().Add(-config.MetricsStaleThreshold - time.Second)
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "node-1",
-			ResourceVersion:   "42",
-			CreationTimestamp: metav1.NewTime(collectedAt.Add(-time.Hour)),
-		},
-	}
-	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
-	base := newNodeBuilderForTest(
-		ClusterMeta{},
-		ingest,
-		node,
-	)
-	provider := fakeMetricsProvider{
-		usage: map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
-		metadata: metrics.Metadata{
-			CollectedAt:         collectedAt,
-			LastError:           "metrics API forbidden",
-			ConsecutiveFailures: 2,
-			SuccessCount:        3,
-			FailureCount:        5,
-		},
-	}
-	builder := &NodeMetricsBuilder{base: base, metrics: provider}
-
-	snapshot, err := builder.Build(context.Background(), "")
-	require.NoError(t, err)
-
-	payload := snapshot.Payload.(NodeMetricsSnapshot)
-	require.True(t, payload.Metrics.Stale)
-	require.Equal(t, "metrics API forbidden", payload.Metrics.LastError)
-	require.Equal(t, 2, payload.Metrics.ConsecutiveFailures)
-	require.Equal(t, uint64(3), payload.Metrics.SuccessCount)
-	require.Equal(t, uint64(5), payload.Metrics.FailureCount)
-	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
-}
-
-func TestNodeMetricsListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
+func TestNodeListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	collectedAt := time.Now()
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -347,8 +302,8 @@ func TestNodeMetricsListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	client.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewForbidden(corev1.Resource("pods"), "", errors.New("list pods denied"))
 	})
-	builder := &NodeMetricsBuilder{
-		listClient: client,
+	builder := &NodeListBuilder{
+		client: client,
 		metrics: fakeMetricsProvider{
 			usage: map[string]metrics.NodeUsage{"node-1": {CPUUsageMilli: 650}},
 			metadata: metrics.Metadata{
@@ -361,7 +316,7 @@ func TestNodeMetricsListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	snapshot, err := builder.Build(context.Background(), "")
 	require.NoError(t, err)
 
-	payload := snapshot.Payload.(NodeMetricsSnapshot)
+	payload := snapshot.Payload.(NodeSnapshot)
 	require.Len(t, payload.Rows, 1)
 	require.Equal(t, "node-1", payload.Rows[0].Name)
 	require.Equal(t, "650m", payload.Rows[0].CPUUsage)
@@ -420,39 +375,6 @@ func TestNodeBuilderCapsLargeSnapshots(t *testing.T) {
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterNodesEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "nodes")
-}
-
-// TestNodeMetricsSortByMetricUsage pins that the node metrics table sorts by LIVE metric usage numerically
-// (the metrics overlaid at serve), not lexically by the formatted string. The cpu values are
-// chosen so a lexical sort ("1000m" < "125m" < "650m") differs from the numeric one
-// (1000 > 650 > 125); likewise memory ("1 GB" sorts lexically below "128 MB"). This is the
-// stage-2.7 regression: nodes metrics are honored in the query sort schema.
-func TestNodeMetricsSortByMetricUsage(t *testing.T) {
-	items := []NodeMetricRow{
-		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "alpha", CPUUsage: "1000m", MemoryUsage: "128 MB"}),
-		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "beta", CPUUsage: "650m", MemoryUsage: "1 GB"}),
-		nodeMetricRowFromSummary(ClusterMeta{}, NodeSummary{Name: "gamma", CPUUsage: "125m", MemoryUsage: "512 MB"}),
-	}
-
-	_, cpuQuery, err := parseTypedTableQueryScope("c1", "?sort=cpu&sortDirection=desc", nodeMetricsDomainName, "metrics-rev-1")
-	require.NoError(t, err)
-	cpuPage := applyTypedTableQueryViaStore(items, cpuQuery, nodeMetricTableQueryAdapter(), nodeMetricQuerypageSchema())
-	require.Equal(t, []string{"alpha", "beta", "gamma"}, nodeMetricRowNames(cpuPage.Rows),
-		"cpu sort must be numeric live usage (1000 > 650 > 125), not lexical")
-
-	_, memQuery, err := parseTypedTableQueryScope("c1", "?sort=memory&sortDirection=desc", nodeMetricsDomainName, "metrics-rev-1")
-	require.NoError(t, err)
-	memPage := applyTypedTableQueryViaStore(items, memQuery, nodeMetricTableQueryAdapter(), nodeMetricQuerypageSchema())
-	require.Equal(t, []string{"beta", "gamma", "alpha"}, nodeMetricRowNames(memPage.Rows),
-		"memory sort must be numeric live usage (1GB > 512MB > 128MB), not lexical")
-}
-
-func nodeMetricRowNames(rows []NodeMetricRow) []string {
-	names := make([]string, len(rows))
-	for i, r := range rows {
-		names[i] = r.Name
-	}
-	return names
 }
 
 // TestNodeMaintainedStoreSpillRestoreRoundTrip proves the nodes maintained store — the new

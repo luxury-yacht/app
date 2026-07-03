@@ -1,5 +1,10 @@
 package snapshot
 
+// A builder with NO metrics provider (nil) must serve the no-data marker and
+// stamp no metric source clock — the serve-time join degrades cleanly instead
+// of inventing zeros. (With a provider, the join contract lives in
+// metrics_join_test.go.)
+
 import (
 	"context"
 	"testing"
@@ -14,7 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-func TestBasePodSnapshotDoesNotReadMetricsProvider(t *testing.T) {
+func TestPodSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 	created := time.Date(2026, 6, 28, 10, 0, 0, 0, time.UTC)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -40,7 +45,7 @@ func TestBasePodSnapshotDoesNotReadMetricsProvider(t *testing.T) {
 	require.NotContains(t, snapshot.SourceVersions, "metric")
 }
 
-func TestBaseNodeSnapshotDoesNotReadMetricsProvider(t *testing.T) {
+func TestNodeSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 	created := time.Date(2026, 6, 28, 10, 0, 0, 0, time.UTC)
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,7 +70,7 @@ func TestBaseNodeSnapshotDoesNotReadMetricsProvider(t *testing.T) {
 	require.NotContains(t, snapshot.SourceVersions, "metric")
 }
 
-func TestBaseWorkloadSnapshotDoesNotReadMetricsProvider(t *testing.T) {
+func TestWorkloadSnapshotWithoutProviderServesNoDataAndNoMetricClock(t *testing.T) {
 	created := time.Date(2026, 6, 28, 10, 0, 0, 0, time.UTC)
 	replicas := int32(1)
 	deployment := &appsv1.Deployment{

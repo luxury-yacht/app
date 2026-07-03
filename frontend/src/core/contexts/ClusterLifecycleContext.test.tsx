@@ -146,6 +146,99 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.getClusterState('cluster-b')).toBe('ready');
   });
 
+  it('hydrated states reach eventBus consumers — the refresh layer must share the UI truth', async () => {
+    // Field failure class: the Wails relay can miss events (mount gaps), and
+    // hydration used to backfill ONLY the React map. eventBus consumers —
+    // clusterReadiness (which re-dispatches HELD fetches on serviceable
+    // edges), capability hooks, permissionStore — stayed split-brained
+    // forever: the UI showed "loading" while the refresh layer still thought
+    // the cluster was unserviceable (or unknown), and readiness wedged.
+    mockGetAllStates.mockResolvedValue({
+      'cluster-a': 'loading',
+    });
+    const received: Array<{ clusterId: string; state: string }> = [];
+    eventBus.on('cluster:lifecycle', (payload) => {
+      received.push({ clusterId: payload.clusterId, state: payload.state });
+    });
+
+    await renderProvider();
+
+    expect(received).toContainEqual({ clusterId: 'cluster-a', state: 'loading' });
+  });
+
+  it('hydration does not re-emit states the event relay already delivered', async () => {
+    // The relay is the primary source; hydration only backfills gaps. A
+    // cluster whose event already arrived must not get a duplicate synthetic
+    // emission (consumers tolerate duplicates, but the edge semantics of
+    // clusterReadiness are cleaner without them).
+    mockGetAllStates.mockResolvedValue({
+      'cluster-a': 'connecting',
+    });
+    const received: string[] = [];
+    eventBus.on('cluster:lifecycle', (payload) => {
+      received.push(`${payload.clusterId}:${payload.state}`);
+    });
+
+    // Deliver a LIVE event before hydration resolves.
+    let resolveHydration: (value: unknown) => void = () => {};
+    mockGetAllStates.mockReturnValue(new Promise((resolve) => (resolveHydration = resolve)));
+
+    await renderProvider();
+    await act(async () => {
+      listeners
+        .get('cluster:lifecycle')
+        ?.forEach((cb) =>
+          cb({ clusterId: 'cluster-a', state: 'loading', previousState: 'connected' })
+        );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      resolveHydration({ 'cluster-a': 'connecting' });
+      await Promise.resolve();
+    });
+
+    expect(received).toEqual(['cluster-a:loading']);
+    // Events win over the (older) hydrated value in the map too.
+    expect(stateRef.current?.getClusterState('cluster-a')).toBe('loading');
+  });
+
+  it('keeps getClusterState identity stable when a lifecycle event repeats an unchanged state', async () => {
+    // Consumers key derived scope lists on getClusterState identity; a new
+    // identity per redundant event re-runs their reconciliation effects on
+    // every heartbeat (observed live as periodic spinner/diagnostics flicker).
+    await renderProvider();
+
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'loading',
+        previousState: 'connected',
+      });
+    });
+    const firstIdentity = stateRef.current?.getClusterState;
+    expect(firstIdentity).toBeTypeOf('function');
+
+    // Same cluster, same state: a no-op event must not mint a new identity.
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'loading',
+        previousState: 'connected',
+      });
+    });
+    expect(stateRef.current?.getClusterState).toBe(firstIdentity);
+
+    // A REAL change still updates state (and may change identity).
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'ready',
+        previousState: 'loading',
+      });
+    });
+    expect(stateRef.current?.getClusterState('cluster-a')).toBe('ready');
+  });
+
   it('subscribes to cluster:lifecycle events and updates state', async () => {
     await renderProvider();
 

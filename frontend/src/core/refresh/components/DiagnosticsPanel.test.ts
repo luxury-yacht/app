@@ -579,8 +579,10 @@ describe('DiagnosticsPanel component', () => {
       rendered.container.querySelectorAll('.diagnostics-table tbody tr')
     ).find((row) => row.querySelector('td')?.textContent?.includes('Nodes'));
     // Sync Wait (no informer-sync-wait telemetry → em dash); Metrics shifted to 15.
+    // Nodes carries the joined-usage freshness block on its base payload now,
+    // so the Metrics column reflects it directly.
     expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('—');
-    expect(nodesRow?.querySelectorAll('td')[15]?.textContent?.trim()).toBe('—');
+    expect(nodesRow?.querySelectorAll('td')[15]?.textContent?.trim()).toBe('OK (2 polls)');
 
     const clusterIndex = markup.indexOf('Cluster Overview');
     const podsIndex = markup.indexOf('Pods');
@@ -590,14 +592,16 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
-  test('renders metric domain rows with freshness metadata', async () => {
+  test('renders joined metrics freshness on the base domain rows', async () => {
     seedBaseDomainStates();
     mockKubeconfigState.selectedClusterId = 'cluster-a';
     const now = Date.now();
     const namespaceScope = buildClusterScope('cluster-a', 'namespace:team-a');
     const clusterScope = buildClusterScope('cluster-a', '');
 
-    setScopedEntries('pods-metrics', [
+    // The metric refresh domains were deleted: the base payloads carry the
+    // poller freshness block alongside their rows.
+    setScopedEntries('pods', [
       [
         namespaceScope,
         {
@@ -616,7 +620,7 @@ describe('DiagnosticsPanel component', () => {
         },
       ],
     ]);
-    setScopedEntries('nodes-metrics', [
+    setScopedEntries('nodes', [
       [
         clusterScope,
         {
@@ -635,7 +639,7 @@ describe('DiagnosticsPanel component', () => {
         },
       ],
     ]);
-    setScopedEntries('namespace-workloads-metrics', [
+    setScopedEntries('namespace-workloads', [
       [
         namespaceScope,
         {
@@ -674,20 +678,23 @@ describe('DiagnosticsPanel component', () => {
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          label: 'Pod Metrics',
-          scope: 'cluster-a (active) - namespace:team-a',
-          metrics: 'OK (4 polls)',
-        }),
-        expect.objectContaining({
-          label: 'Node Metrics',
+          label: 'Nodes',
           scope: 'cluster-a (active)',
           metrics: 'Unavailable (2 fails)',
         }),
         expect.objectContaining({
-          label: 'Workload Metrics',
+          label: 'Workloads',
           scope: 'cluster-a (active) - namespace:team-a',
           metrics: 'Error (1 fails)',
           metricsTooltip: expect.stringContaining('Last error: workload metrics failed'),
+        }),
+        // pods rows point at the joined usage instead of rendering their own
+        // freshness column.
+        expect.objectContaining({
+          label: 'ObjPanel - Pods - team-a',
+          scope: 'cluster-a (active) - namespace:team-a',
+          metrics: 'N/A',
+          metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
         }),
       ])
     );

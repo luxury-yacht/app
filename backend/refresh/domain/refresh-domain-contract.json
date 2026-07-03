@@ -81,22 +81,6 @@
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
-    "nodes-metrics": {
-      "behaviorClass": "snapshot-table",
-      "scopeContract": {
-        "kind": "cluster",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/metric_snapshots.go:NodeMetricsBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
-        "acceptedEncodings": ["", "?limit=<n>&sort=<field>&continue=<token>"]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.NodeMetricsBuilder",
-      "cachePolicy": "snapshot-cache-bypass",
-      "streamSemantics": ["snapshot-replace"],
-      "coverageContract": "snapshot-table-payload",
-      "coverageStatus": "enforced"
-    },
     "cluster-config": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
@@ -207,22 +191,6 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
-      "coverageStatus": "enforced"
-    },
-    "namespace-workloads-metrics": {
-      "behaviorClass": "snapshot-table",
-      "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/metric_snapshots.go:NamespaceWorkloadsMetricsBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all", "namespace:<namespace>?limit=<n>&sort=<field>&continue=<token>"]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.NamespaceWorkloadsMetricsBuilder",
-      "cachePolicy": "snapshot-cache-bypass",
-      "streamSemantics": ["snapshot-replace"],
-      "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
     "namespace-autoscaling": {
@@ -383,22 +351,6 @@
       "cachePolicy": "snapshot-cache",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
-      "coverageStatus": "enforced"
-    },
-    "pods-metrics": {
-      "behaviorClass": "snapshot-table",
-      "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/snapshot/metric_snapshots.go:PodMetricsBuilder.Build",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all", "node:<node>", "workload:<namespace>:<group>:<version>:<kind>:<name>", "namespace:<namespace>?limit=<n>&sort=<field>&continue=<token>"]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.PodMetricsBuilder",
-      "cachePolicy": "snapshot-cache-bypass",
-      "streamSemantics": ["snapshot-replace"],
-      "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
     "object-details": {
@@ -728,11 +680,12 @@
     {
       "domain": "namespaces",
       "category": "system",
-      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
+      "sourceClocks": ["object"],
+      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "namespaces",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 },
         "priority": 0
       }
@@ -740,11 +693,12 @@
     {
       "domain": "cluster-overview",
       "category": "system",
+      "sourceClocks": ["metric"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "cluster-overview",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 },
         "priority": 3
       }
@@ -776,25 +730,12 @@
     {
       "domain": "nodes",
       "category": "cluster",
-      "sourceClocks": ["object"],
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "cluster-nodes",
         "orchestrator": "resource-stream",
         "diagnosticsStream": "resources",
-        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 },
-        "priority": 1
-      }
-    },
-    {
-      "domain": "nodes-metrics",
-      "category": "cluster",
-      "sourceClocks": ["metric"],
-      "backend": { "registration": "listWatch", "permission": "runtime", "resourceStream": false },
-      "frontend": {
-        "refresherName": "cluster-node-metrics",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 },
         "priority": 1
       }
@@ -874,25 +815,12 @@
     {
       "domain": "namespace-workloads",
       "category": "namespace",
-      "sourceClocks": ["object"],
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "workloads",
         "orchestrator": "resource-stream",
         "diagnosticsStream": "resources",
-        "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
-        "priority": 5
-      }
-    },
-    {
-      "domain": "namespace-workloads-metrics",
-      "category": "namespace",
-      "sourceClocks": ["metric"],
-      "backend": { "registration": "list", "permission": "runtime", "resourceStream": false },
-      "frontend": {
-        "refresherName": "workload-metrics",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
         "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
         "priority": 5
       }
@@ -1008,24 +936,12 @@
     {
       "domain": "pods",
       "category": "system",
-      "sourceClocks": ["object"],
+      "sourceClocks": ["object", "metric"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "unified-pods",
         "orchestrator": "resource-stream",
         "diagnosticsStream": "resources",
-        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 30 }
-      }
-    },
-    {
-      "domain": "pods-metrics",
-      "category": "system",
-      "sourceClocks": ["metric"],
-      "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
-      "frontend": {
-        "refresherName": "unified-pod-metrics",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
         "timing": { "interval": 5000, "cooldown": 1000, "timeout": 30 }
       }
     },
@@ -1076,11 +992,12 @@
     {
       "domain": "object-events",
       "category": "system",
+      "sourceClocks": ["event"],
       "backend": { "registration": "direct", "permission": "runtime", "resourceStream": false },
       "frontend": {
         "refresherName": "object-events",
-        "orchestrator": "snapshot",
-        "diagnosticsStream": null,
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 }
       }
     },

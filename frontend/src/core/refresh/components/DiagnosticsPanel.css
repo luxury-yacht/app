@@ -363,6 +363,12 @@
  */
 .diagnostics-table td.diagnostics-error,
 .diagnostics-table td.diagnostics-error-warning {
+  /* The floor matters as much as the cap: every other column is nowrap, so
+     table auto layout dumps ALL the horizontal squeeze into this one
+     wrap-enabled cell — without a min-width it collapses to one word per
+     line. The wrapper scrolls (overflow: auto), so the floor just widens the
+     table into the scroll. */
+  min-width: 240px;
   max-width: 240px;
   white-space: normal;
   overflow-wrap: anywhere;

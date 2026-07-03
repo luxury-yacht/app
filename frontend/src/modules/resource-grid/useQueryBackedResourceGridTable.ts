@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type {
-  GridTableFilterOptions,
-  GridTableFilterState,
-} from '@shared/components/tables/GridTable';
+import { doorbellSourceClocks } from '@/core/refresh/streaming/resourceStreamDomains';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -26,7 +24,6 @@ import { backendQuerySource } from './backendQuerySource';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
   useTypedResourceQuery,
-  type FetchTypedResourceRowsOptions,
   type TypedQueryPayload,
   type UseTypedResourceQueryResult,
 } from './useTypedResourceQuery';
@@ -44,107 +41,6 @@ import type { QueryBackedTableState } from './queryBackedTableState';
 const namespaceScopeKey = (namespace: string): string =>
   namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
 
-const EMPTY_QUERY_FILTERS: GridTableFilterState = {
-  search: '',
-  kinds: [],
-  namespaces: [],
-  caseSensitive: false,
-  includeMetadata: false,
-};
-
-const METRIC_SORT_FIELDS = new Set(['cpu', 'memory']);
-const METRIC_OVERLAY_FETCH_SORT: SortConfig = { key: 'name', direction: 'asc' };
-const METRIC_OVERLAY_ROW_KEY_BATCH_SIZE = 250;
-const METRIC_ROW_MISMATCH_MESSAGE = '[ResourceGridTable] Metric rows did not match standard rows';
-
-const uniqueRowKeys = (keys: Array<string | null | undefined>): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  keys.forEach((key) => {
-    const normalized = (key ?? '').trim();
-    if (!normalized || seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    result.push(normalized);
-  });
-  return result;
-};
-
-const rowKeysPredicateValue = (keys: string[]): string => uniqueRowKeys(keys).sort().join('|');
-
-const unmatchedMetricRowKeys = <TRow>(
-  standardRows: TRow[],
-  metricRows: unknown[],
-  getStandardRowKey: (row: TRow) => string,
-  getMetricRowKey: (row: unknown) => string
-): string[] => {
-  if (metricRows.length === 0) {
-    return [];
-  }
-  const standardRowKeys = new Set(uniqueRowKeys(standardRows.map(getStandardRowKey)));
-  return uniqueRowKeys(
-    metricRows.map(getMetricRowKey).filter((metricRowKey) => {
-      const normalized = (metricRowKey ?? '').trim();
-      return normalized && !standardRowKeys.has(normalized);
-    })
-  );
-};
-
-const logMetricRowMismatch = ({
-  baseDomain,
-  metricDomain,
-  label,
-  scope,
-  source,
-  rowKeys,
-}: {
-  baseDomain: RefreshDomain;
-  metricDomain: RefreshDomain;
-  label: string;
-  scope: string;
-  source: 'renderedRows' | 'fetchAllRows';
-  rowKeys: string[];
-}) => {
-  if (rowKeys.length === 0) {
-    return;
-  }
-  console.error(METRIC_ROW_MISMATCH_MESSAGE, {
-    baseDomain,
-    metricDomain,
-    label,
-    scope,
-    source,
-    rowKeys,
-  });
-};
-
-const fetchRowsByRowKeys = async <TRow>(
-  fetchAllRows: (options?: FetchTypedResourceRowsOptions) => Promise<TRow[]>,
-  rowKeys: string[]
-): Promise<TRow[]> => {
-  const keys = uniqueRowKeys(rowKeys).sort();
-  if (keys.length === 0) {
-    return [];
-  }
-  const rows: TRow[] = [];
-  for (let index = 0; index < keys.length; index += METRIC_OVERLAY_ROW_KEY_BATCH_SIZE) {
-    const batch = keys.slice(index, index + METRIC_OVERLAY_ROW_KEY_BATCH_SIZE);
-    const predicate = rowKeysPredicateValue(batch);
-    if (!predicate) {
-      continue;
-    }
-    rows.push(
-      ...(await fetchAllRows({
-        filters: EMPTY_QUERY_FILTERS,
-        sortConfig: METRIC_OVERLAY_FETCH_SORT,
-        predicates: { rowKeys: predicate },
-      }))
-    );
-  }
-  return rows;
-};
-
 // A view's persisted page size wins when it is a real option; otherwise the
 // fallback applies (the app-wide Default Page Size preference).
 export const typedQueryPageLimitOrDefault = (
@@ -152,19 +48,34 @@ export const typedQueryPageLimitOrDefault = (
   fallback: TablePageSize
 ): TablePageSize => (isTablePageSize(value) ? value : fallback);
 
-// The live-data identity the typed query watches to decide when to refetch. It
-// uses the opaque source token emitted by snapshots and doorbell signals, not
-// refresh timestamps or the legacy version/checksum tuple.
-export const liveDomainVersion = (state: {
-  sourceVersion?: string;
-  version?: number | string;
-  checksum?: string;
-  etag?: string;
-  streamRevision?: number;
-  lastUpdated?: number;
-  lastAutoRefresh?: number;
-  lastManualRefresh?: number;
-}): string => state.sourceVersion ?? state.etag ?? '';
+// The live-data identity the typed query watches to decide when to refetch.
+// For domains with declared doorbell clocks it keys on signalVersions — the
+// field ONLY the stream manager's doorbell path writes — never the folded
+// sourceVersion, which payload applies rewrite: any OTHER consumer fetching
+// the same base scope would flip the folded value and echo a pointless 304
+// refetch out of this table (observed live as 0-byte 304s trailing every
+// metric-tick 200 pair). Domains without doorbell clocks (plain snapshot
+// domains) keep the folded token.
+export const liveDomainVersion = (
+  domain: RefreshDomain,
+  state: {
+    sourceVersion?: string;
+    signalVersions?: Partial<Record<string, string>>;
+    version?: number | string;
+    checksum?: string;
+    etag?: string;
+    streamRevision?: number;
+    lastUpdated?: number;
+    lastAutoRefresh?: number;
+    lastManualRefresh?: number;
+  }
+): string => {
+  const clocks = doorbellSourceClocks(domain);
+  if (clocks.length === 0) {
+    return state.sourceVersion ?? state.etag ?? '';
+  }
+  return clocks.map((clock) => clock + ':' + (state.signalVersions?.[clock] ?? '')).join(' ');
+};
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
 // resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the
@@ -215,7 +126,6 @@ export interface QueryBackedNamespaceGridResult<
    * cluster) is read from here.
    */
   queryPayload: TPayload | null;
-  metricPayload?: unknown | null;
   /**
    * Normalized source state for the resource-inventory controller — the single
    * source of truth for the table's lifecycle. Views render
@@ -244,18 +154,6 @@ interface QueryBackedGridParamsCommon<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  metricOverlay?: QueryBackedMetricOverlay<TRow>;
-}
-
-export interface QueryBackedMetricOverlay<TRow extends ResourceGridTableRow> {
-  domain: RefreshDomain;
-  label?: string;
-  selectRows: (payload: TypedQueryPayload) => unknown[];
-  sortFields?: readonly string[];
-  getBaseRowKey: (row: TRow) => string;
-  getMetricRowKey: (row: unknown) => string;
-  mergeMetric: (row: TRow, metric: unknown | undefined) => TRow;
-  selectMetricPayload?: (payload: TypedQueryPayload | null) => unknown;
 }
 
 interface TypedQueryLifecycle<
@@ -270,7 +168,6 @@ interface TypedQueryLifecycle<
   effectiveFilterOptionOverrides?: Partial<GridTableFilterOptions>;
   onTableStateChange?: (next: QueryBackedTableState) => void;
   query: UseTypedResourceQueryResult<TRow, TPayload>;
-  metricPayload: unknown | null;
 }
 
 // The shared query lifecycle for both scopes: it owns table state, the scoped
@@ -291,7 +188,6 @@ function useTypedQueryLifecycle<
   selectRows,
   predicates,
   filterOptionOverrides,
-  metricOverlay,
   defaultSort,
   persistence,
   liveScope,
@@ -304,7 +200,6 @@ function useTypedQueryLifecycle<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  metricOverlay?: QueryBackedMetricOverlay<TRow>;
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
@@ -320,17 +215,8 @@ function useTypedQueryLifecycle<
     preserveState: true,
     fetchOnEnable: false,
   });
-  useScopedRefreshDomainLifecycle({
-    domain: metricOverlay?.domain ?? null,
-    scope: metricOverlay ? liveScope || null : null,
-    enabled: Boolean(metricOverlay),
-    preserveState: true,
-    fetchOnEnable: false,
-  });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
-  const metricLiveDomain = useRefreshScopedDomain(metricOverlay?.domain ?? domain, liveScope);
-  const liveDataVersion = liveDomainVersion(liveDomain);
-  const metricLiveDataVersion = liveDomainVersion(metricLiveDomain);
+  const liveDataVersion = liveDomainVersion(domain, liveDomain);
   const liveDomainInitialLoadPending = isLiveDomainInitialLoadPending(liveDomain);
   const hydratedRef = useRef(persistence.hydrated);
   hydratedRef.current = persistence.hydrated;
@@ -354,19 +240,11 @@ function useTypedQueryLifecycle<
   const queryEnabled =
     Boolean(clusterId) && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
 
-  const metricSortFields = useMemo(
-    () => new Set(metricOverlay?.sortFields ?? METRIC_SORT_FIELDS),
-    [metricOverlay?.sortFields]
-  );
-  const activeSortKey = tableState.sortConfig?.key?.toLowerCase() ?? '';
-  const isMetricSort = Boolean(metricOverlay && metricSortFields.has(activeSortKey));
-
-  const baseLiveDataVersion = isMetricSort
-    ? `${liveDataVersion}|${metricLiveDataVersion}`
-    : liveDataVersion;
-
-  const baseQuery = useTypedResourceQuery<TPayload, TRow>({
-    enabled: queryEnabled && !isMetricSort,
+  // One query serves every sort, including cpu/memory: the backend joins live
+  // usage onto the rows at serve and sorts by it, so there is no separate
+  // metric-domain query and no row-key hydration leg.
+  const query = useTypedResourceQuery<TPayload, TRow>({
+    enabled: queryEnabled,
     clusterId,
     domain,
     label,
@@ -375,278 +253,9 @@ function useTypedQueryLifecycle<
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
-    liveDataVersion: baseLiveDataVersion,
-    selectRows,
-  });
-
-  const metricQuery = useTypedResourceQuery<TypedQueryPayload, unknown>({
-    enabled: Boolean(metricOverlay) && queryEnabled && isMetricSort,
-    clusterId,
-    domain: metricOverlay?.domain ?? domain,
-    label: metricOverlay?.label ?? `${label} Metrics`,
-    baseScope,
-    filters: tableState.filters,
-    sortConfig: tableState.sortConfig,
-    pageLimit,
-    predicates,
-    liveDataVersion: `${liveDataVersion}|${metricLiveDataVersion}`,
-    selectRows: (payload) => (metricOverlay ? metricOverlay.selectRows(payload) : []),
-  });
-
-  const metricRowKeys = useMemo(
-    () =>
-      rowKeysPredicateValue(
-        metricQuery.rows.map((row) => metricOverlay?.getMetricRowKey(row) ?? '')
-      ),
-    [metricOverlay, metricQuery.rows]
-  );
-  const baseHydrationPredicates = useMemo(
-    () => (metricRowKeys ? { rowKeys: metricRowKeys } : undefined),
-    [metricRowKeys]
-  );
-  const baseHydrationQuery = useTypedResourceQuery<TPayload, TRow>({
-    enabled: queryEnabled && isMetricSort && Boolean(metricRowKeys),
-    clusterId,
-    domain,
-    label,
-    baseScope,
-    filters: EMPTY_QUERY_FILTERS,
-    sortConfig: { key: 'name', direction: 'asc' },
-    pageLimit,
-    predicates: baseHydrationPredicates,
     liveDataVersion,
     selectRows,
   });
-
-  const baseRowKeys = useMemo(
-    () =>
-      rowKeysPredicateValue(baseQuery.rows.map((row) => metricOverlay?.getBaseRowKey(row) ?? '')),
-    [baseQuery.rows, metricOverlay]
-  );
-  const metricOverlayPredicates = useMemo(
-    () => (baseRowKeys ? { rowKeys: baseRowKeys } : undefined),
-    [baseRowKeys]
-  );
-  const metricOverlayQuery = useTypedResourceQuery<TypedQueryPayload, unknown>({
-    enabled: Boolean(metricOverlay) && queryEnabled && !isMetricSort && Boolean(baseRowKeys),
-    clusterId,
-    domain: metricOverlay?.domain ?? domain,
-    label: metricOverlay?.label ?? `${label} Metrics`,
-    baseScope,
-    filters: EMPTY_QUERY_FILTERS,
-    sortConfig: { key: 'name', direction: 'asc' },
-    pageLimit,
-    predicates: metricOverlayPredicates,
-    liveDataVersion: metricLiveDataVersion,
-    selectRows: (payload) => (metricOverlay ? metricOverlay.selectRows(payload) : []),
-  });
-
-  const metricRows = isMetricSort ? metricQuery.rows : metricOverlayQuery.rows;
-  const metricRowsByKey = useMemo(() => {
-    const map = new Map<string, unknown>();
-    if (!metricOverlay) {
-      return map;
-    }
-    metricRows.forEach((row) => {
-      map.set(metricOverlay.getMetricRowKey(row), row);
-    });
-    return map;
-  }, [metricOverlay, metricRows]);
-
-  const baseRowsByKey = useMemo(() => {
-    const map = new Map<string, TRow>();
-    if (!metricOverlay) {
-      return map;
-    }
-    baseHydrationQuery.rows.forEach((row) => {
-      map.set(metricOverlay.getBaseRowKey(row), row);
-    });
-    return map;
-  }, [baseHydrationQuery.rows, metricOverlay]);
-
-  const metricMatchStandardRows = isMetricSort ? baseHydrationQuery.rows : baseQuery.rows;
-  const metricMatchLoaded = isMetricSort
-    ? metricQuery.loaded &&
-      (metricRows.length === 0 || (Boolean(baseHydrationPredicates) && baseHydrationQuery.loaded))
-    : baseQuery.loaded && metricOverlayQuery.loaded;
-  const visibleUnmatchedMetricRowKeys = useMemo(() => {
-    if (!metricOverlay || !metricMatchLoaded || metricRows.length === 0) {
-      return [];
-    }
-    return unmatchedMetricRowKeys(
-      metricMatchStandardRows,
-      metricRows,
-      metricOverlay.getBaseRowKey,
-      metricOverlay.getMetricRowKey
-    );
-  }, [metricMatchLoaded, metricMatchStandardRows, metricOverlay, metricRows]);
-
-  const metricMismatchLogSignatureRef = useRef('');
-  useEffect(() => {
-    if (!metricOverlay || visibleUnmatchedMetricRowKeys.length === 0) {
-      metricMismatchLogSignatureRef.current = '';
-      return;
-    }
-    const signature = `${domain}|${metricOverlay.domain}|${liveScope}|${visibleUnmatchedMetricRowKeys.join(
-      '|'
-    )}`;
-    if (metricMismatchLogSignatureRef.current === signature) {
-      return;
-    }
-    metricMismatchLogSignatureRef.current = signature;
-    logMetricRowMismatch({
-      baseDomain: domain,
-      metricDomain: metricOverlay.domain,
-      label,
-      scope: liveScope,
-      source: 'renderedRows',
-      rowKeys: visibleUnmatchedMetricRowKeys,
-    });
-  }, [domain, label, liveScope, metricOverlay, visibleUnmatchedMetricRowKeys]);
-
-  const mergedRows = useMemo(() => {
-    if (!metricOverlay) {
-      return baseQuery.rows;
-    }
-    if (isMetricSort) {
-      return metricRows.flatMap((metricRow) => {
-        const baseRow = baseRowsByKey.get(metricOverlay.getMetricRowKey(metricRow));
-        return baseRow ? [metricOverlay.mergeMetric(baseRow, metricRow)] : [];
-      });
-    }
-    return baseQuery.rows.map((row) =>
-      metricOverlay.mergeMetric(row, metricRowsByKey.get(metricOverlay.getBaseRowKey(row)))
-    );
-  }, [baseQuery.rows, baseRowsByKey, isMetricSort, metricOverlay, metricRows, metricRowsByKey]);
-
-  const fetchAllMergedRows = useCallback(async (): Promise<TRow[]> => {
-    if (!metricOverlay) {
-      return baseQuery.fetchAllRows();
-    }
-    if (!isMetricSort) {
-      const allBaseRows = await baseQuery.fetchAllRows();
-      const allMetricRows = await fetchRowsByRowKeys(
-        metricOverlayQuery.fetchAllRows,
-        allBaseRows.map((row) => metricOverlay.getBaseRowKey(row))
-      );
-      const metricsByKey = new Map<string, unknown>();
-      allMetricRows.forEach((metricRow) => {
-        metricsByKey.set(metricOverlay.getMetricRowKey(metricRow), metricRow);
-      });
-      logMetricRowMismatch({
-        baseDomain: domain,
-        metricDomain: metricOverlay.domain,
-        label,
-        scope: liveScope,
-        source: 'fetchAllRows',
-        rowKeys: unmatchedMetricRowKeys(
-          allBaseRows,
-          allMetricRows,
-          metricOverlay.getBaseRowKey,
-          metricOverlay.getMetricRowKey
-        ),
-      });
-      return allBaseRows.map((row) =>
-        metricOverlay.mergeMetric(row, metricsByKey.get(metricOverlay.getBaseRowKey(row)))
-      );
-    }
-
-    const allMetricRows = await metricQuery.fetchAllRows();
-    const allBaseRows = await fetchRowsByRowKeys(
-      baseHydrationQuery.fetchAllRows,
-      allMetricRows.map((metricRow) => metricOverlay.getMetricRowKey(metricRow))
-    );
-    const baseRowsByMetricKey = new Map<string, TRow>();
-    allBaseRows.forEach((row) => {
-      baseRowsByMetricKey.set(metricOverlay.getBaseRowKey(row), row);
-    });
-    logMetricRowMismatch({
-      baseDomain: domain,
-      metricDomain: metricOverlay.domain,
-      label,
-      scope: liveScope,
-      source: 'fetchAllRows',
-      rowKeys: unmatchedMetricRowKeys(
-        allBaseRows,
-        allMetricRows,
-        metricOverlay.getBaseRowKey,
-        metricOverlay.getMetricRowKey
-      ),
-    });
-    return allMetricRows.flatMap((metricRow) => {
-      const baseRow = baseRowsByMetricKey.get(metricOverlay.getMetricRowKey(metricRow));
-      return baseRow ? [metricOverlay.mergeMetric(baseRow, metricRow)] : [];
-    });
-  }, [
-    baseHydrationQuery.fetchAllRows,
-    baseQuery,
-    domain,
-    isMetricSort,
-    label,
-    liveScope,
-    metricOverlay,
-    metricOverlayQuery.fetchAllRows,
-    metricQuery,
-  ]);
-
-  const query: UseTypedResourceQueryResult<TRow, TPayload> = useMemo(() => {
-    if (!metricOverlay) {
-      return baseQuery;
-    }
-    if (!isMetricSort) {
-      return {
-        ...baseQuery,
-        rows: mergedRows,
-        fetchAllRows: fetchAllMergedRows,
-      };
-    }
-    const unhydratedMetricRowCount = Math.max(0, metricRows.length - mergedRows.length);
-    return {
-      ...baseQuery,
-      rows: mergedRows,
-      payload: baseHydrationQuery.payload ?? baseQuery.payload,
-      loading: metricQuery.loading || (metricQuery.rows.length > 0 && baseHydrationQuery.loading),
-      loaded: metricQuery.loaded && (metricQuery.rows.length === 0 || baseHydrationQuery.loaded),
-      error: metricQuery.error ?? baseHydrationQuery.error ?? baseQuery.error,
-      continueToken: metricQuery.continueToken,
-      hasPrevious: metricQuery.hasPrevious,
-      isRequestingMore: metricQuery.isRequestingMore || baseHydrationQuery.isRequestingMore,
-      loadMore: metricQuery.loadMore,
-      loadPrevious: metricQuery.loadPrevious,
-      pageIndex: metricQuery.pageIndex,
-      pageSize: metricQuery.pageSize,
-      totalCount: Math.max(0, metricQuery.totalCount - unhydratedMetricRowCount),
-      totalIsExact: metricQuery.totalIsExact,
-      filterOptions: metricQuery.filterOptions,
-      kindVocabulary: metricQuery.kindVocabulary,
-      dynamic: metricQuery.dynamic,
-      fetchAllRows: fetchAllMergedRows,
-    };
-  }, [
-    baseHydrationQuery.error,
-    baseHydrationQuery.isRequestingMore,
-    baseHydrationQuery.loaded,
-    baseHydrationQuery.loading,
-    baseHydrationQuery.payload,
-    baseQuery,
-    fetchAllMergedRows,
-    isMetricSort,
-    mergedRows,
-    metricOverlay,
-    metricQuery,
-    metricRows.length,
-  ]);
-
-  const metricPayload = useMemo(() => {
-    if (!metricOverlay) {
-      return null;
-    }
-    const payload = (isMetricSort ? metricQuery.payload : metricOverlayQuery.payload) ?? null;
-    if (!metricOverlay?.selectMetricPayload) {
-      return payload;
-    }
-    return metricOverlay.selectMetricPayload(payload);
-  }, [isMetricSort, metricOverlay, metricOverlayQuery.payload, metricQuery.payload]);
 
   const effectiveFilterOptionOverrides = useMemo(
     () => mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions),
@@ -670,7 +279,6 @@ function useTypedQueryLifecycle<
     effectiveFilterOptionOverrides,
     onTableStateChange: handlePublishedTableState,
     query,
-    metricPayload,
   };
 }
 
@@ -690,7 +298,6 @@ function useQueryBackedGridResult<
   loading,
   loaded,
   error,
-  metricPayload,
 }: {
   viewId: string;
   cacheKey: string;
@@ -701,7 +308,6 @@ function useQueryBackedGridResult<
   loading: boolean;
   loaded: boolean;
   error: string | null;
-  metricPayload?: unknown | null;
 }): QueryBackedNamespaceGridResult<TRow, TPayload> {
   // Full-result fetcher for the Copy/Export "all matching rows" scope: walks the query's pages.
   // Threaded onto gridTableProps so the GridTable filter bar wires the scope toggle + Copy +
@@ -744,7 +350,6 @@ function useQueryBackedGridResult<
     ...table,
     gridTableProps,
     queryPayload: query.payload,
-    metricPayload,
     // The typed query source feeds the one controller contract as the single source of truth
     // (no separate wrapper-level rows/loading/loaded/error). enabled is true:
     // query gating is already folded into loading/loaded by deriveQueryBackedData.
@@ -803,7 +408,6 @@ export function useQueryBackedNamespaceResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
-  metricOverlay,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   ...tableParams
@@ -844,7 +448,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     selectRows,
     predicates,
     filterOptionOverrides,
-    metricOverlay,
     defaultSort,
     persistence,
     liveScope,
@@ -875,7 +478,6 @@ export function useQueryBackedNamespaceResourceGridTable<
     loading: lifecycle.loading,
     loaded: lifecycle.loaded,
     error: lifecycle.error,
-    metricPayload: lifecycle.metricPayload,
   });
 }
 
@@ -911,7 +513,6 @@ export function useQueryBackedClusterResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
-  metricOverlay,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   ...tableParams
@@ -949,7 +550,6 @@ export function useQueryBackedClusterResourceGridTable<
     selectRows,
     predicates,
     filterOptionOverrides,
-    metricOverlay,
     defaultSort,
     persistence,
     liveScope,
@@ -978,6 +578,5 @@ export function useQueryBackedClusterResourceGridTable<
     loading: lifecycle.loading,
     loaded: lifecycle.loaded,
     error: lifecycle.error,
-    metricPayload: lifecycle.metricPayload,
   });
 }

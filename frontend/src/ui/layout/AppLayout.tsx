@@ -24,10 +24,9 @@ import ClusterTabs from '@ui/layout/ClusterTabs';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
 import type { ClusterViewType, NamespaceViewType } from '@ui/navigation/types';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
-import { ClusterResourcesProvider } from '@modules/cluster/contexts/ClusterResourcesContext';
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { NamespaceResourcesManager } from '@modules/namespace/components/NsResourcesManager';
+import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
 import { ALL_NAMESPACES_DISPLAY_NAME, isAllNamespaces } from '@modules/namespace/constants';
@@ -228,36 +227,28 @@ export const AppLayout: React.FC = () => {
                     </RouteErrorBoundary>
                   ) : (
                     <RouteErrorBoundary routeName="cluster">
-                      <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
-                        <ClusterResourcesManager
-                          activeTab={viewState.activeClusterTab}
-                          onTabChange={(tab: string) =>
-                            viewState.setActiveClusterView(tab as ClusterViewType)
-                          }
-                        />
-                      </ClusterResourcesProvider>
+                      <ClusterResourcesManager
+                        activeTab={viewState.activeClusterTab}
+                        onTabChange={(tab: string) =>
+                          viewState.setActiveClusterView(tab as ClusterViewType)
+                        }
+                      />
                     </RouteErrorBoundary>
                   )
                 ) : viewState.viewType === 'namespace' ? (
                   namespace.selectedNamespace ? (
                     isAllNamespaces(namespace.selectedNamespace) ? (
                       <RouteErrorBoundary routeName="namespace-all">
-                        <NamespaceResourcesProvider
-                          namespace={namespace.selectedNamespace}
-                          activeView={viewState.activeNamespaceTab}
-                        >
+                        <NamespaceResourcesProvider namespace={namespace.selectedNamespace}>
                           <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
                         </NamespaceResourcesProvider>
                       </RouteErrorBoundary>
                     ) : (
                       <RouteErrorBoundary routeName="namespace">
-                        <NamespaceResourcesProvider
-                          namespace={namespace.selectedNamespace}
-                          activeView={viewState.activeNamespaceTab}
-                        >
-                          <NamespaceResourcesManager
+                        <NamespaceResourcesProvider namespace={namespace.selectedNamespace}>
+                          <NamespaceResourcesViews
                             namespace={namespace.selectedNamespace}
-                            activeTab={viewState.activeNamespaceTab}
+                            activeTab={viewState.activeNamespaceTab || 'workloads'}
                             onTabChange={(tab: NamespaceViewType) =>
                               viewState.setActiveNamespaceTab(tab)
                             }

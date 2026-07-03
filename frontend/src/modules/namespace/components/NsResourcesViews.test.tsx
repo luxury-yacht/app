@@ -96,11 +96,10 @@ describe('NamespaceResourcesViews', () => {
     });
   };
 
-  it('renders the pods view with namespace data and passes object panel content', async () => {
+  it('renders the pods view with namespace data', async () => {
     await renderView({
       namespace: 'team-a',
       activeTab: 'pods',
-      objectPanel: <div data-testid="object-panel" />,
     });
 
     expect(podsViewMock).toHaveBeenCalledTimes(1);
@@ -110,7 +109,6 @@ describe('NamespaceResourcesViews', () => {
     expect(podsCall).toMatchObject({
       namespace: 'team-a',
     });
-    expect(container.querySelector('[data-testid="object-panel"]')).toBeTruthy();
   });
 
   const tabCases = [
@@ -222,11 +220,9 @@ describe('NamespaceResourcesViews', () => {
     await renderView({
       namespace: 'team-a',
       activeTab: 'custom',
-      objectPanel: <aside data-testid="panel" />,
     });
 
     expect(customViewMock).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-testid="panel"]')).toBeTruthy();
   });
 
   it('falls back to null when the tab is not recognised', async () => {

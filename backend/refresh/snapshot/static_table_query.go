@@ -436,14 +436,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		MetadataText: func(row NodeSummary) []string {
 			return metadataSearchText(row.Labels, row.Annotations)
 		},
-		Predicate: func(row NodeSummary, field, value string) bool {
-			switch strings.ToLower(strings.TrimSpace(field)) {
-			case "rowkeys":
-				return rowKeyPredicateMatches(value, clusterTableKey(nodespkg.Identity.Kind, row.Name))
-			default:
-				return true
-			}
-		},
+		Predicate: func(NodeSummary, string, string) bool { return true },
 		SortValue: func(row NodeSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
@@ -454,6 +447,10 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 				return row.Roles
 			case "version":
 				return row.Version
+			case "cpu", "cpuusage":
+				return row.CPUUsage
+			case "memory", "memoryusage":
+				return row.MemoryUsage
 			case "pods":
 				return row.Pods
 			case "restarts":
@@ -466,6 +463,10 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		},
 		NumericSort: func(row NodeSummary, field string) (float64, bool) {
 			switch strings.ToLower(field) {
+			case "cpu", "cpuusage":
+				return parseFormattedCPUToMilli(row.CPUUsage)
+			case "memory", "memoryusage":
+				return parseFormattedMemoryToBytes(row.MemoryUsage)
 			case "pods":
 				return nodePodsUsedSortValue(row.Pods)
 			case "restarts":

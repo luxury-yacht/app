@@ -143,7 +143,6 @@ describe('ClusterRefreshRuntime', () => {
     const key = runtime.setInFlight(request);
     runtime.setScopedDomainEnabled('cluster-config', 'cluster-a|', true);
     runtime.blockStreaming('cluster-config', 'cluster-a|');
-    runtime.recordMetricsRefresh('cluster-config', 'cluster-a|', 10);
     runtime.setStreamHealth('cluster-config', 'cluster-a|', {
       domain: 'cluster-config',
       scope: 'cluster-a|',
@@ -207,41 +206,51 @@ describe('ClusterRefreshRuntime', () => {
     expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
   });
 
-  it('uses normal snapshot fetches for stale metric intervals', async () => {
+  it('skips polling for covered pods scopes while the stream is healthy and snapshots when it is not', async () => {
+    // Metric cadence for pods/nodes/namespace-workloads is push-driven (the
+    // backend fans a metric doorbell over the resources stream), so a healthy
+    // stream with data means no client-side poll at all; the poll runs only as
+    // the stream-down fallback.
     const runtime = new ClusterRefreshRuntime('cluster-a');
     const scope = 'cluster-a|namespace:default';
     const startPromise = Promise.resolve(vi.fn());
     runtime.beginStreamingStart('pods', scope, startPromise);
     runtime.finishStreamingStart('pods', scope, await startPromise);
 
+    const base = {
+      domain: 'pods' as const,
+      scope,
+      isManual: false,
+      shouldStream: true,
+      hasData: true,
+    };
+    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: true })).toBe('skip');
+    expect(runtime.resolveStreamingFetchMode({ ...base, streamingHealthy: false })).toBe(
+      'snapshot'
+    );
+  });
+
+  it('never skips a stream-signal fetch — the doorbell IS the stream saying data changed', async () => {
+    // Found live: the namespaces doorbell was delivered and applied, but the
+    // refetch it triggered routed through the same gate that skips polls while
+    // the stream is healthy — swallowing the doorbell entirely (frozen list).
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+    const scope = 'cluster-a|';
+    const startPromise = Promise.resolve(vi.fn());
+    runtime.beginStreamingStart('namespaces', scope, startPromise);
+    runtime.finishStreamingStart('namespaces', scope, await startPromise);
+
     expect(
       runtime.resolveStreamingFetchMode({
-        domain: 'pods',
+        domain: 'namespaces' as const,
         scope,
         isManual: false,
         shouldStream: true,
-        metricsOnly: true,
         streamingHealthy: true,
-        metricsMinIntervalMs: 1000,
-        now: 2000,
         hasData: true,
+        streamSignal: true,
       })
     ).toBe('snapshot');
-
-    runtime.recordMetricsRefresh('pods', scope, 1500);
-    expect(
-      runtime.resolveStreamingFetchMode({
-        domain: 'pods',
-        scope,
-        isManual: false,
-        shouldStream: true,
-        metricsOnly: true,
-        streamingHealthy: true,
-        metricsMinIntervalMs: 1000,
-        now: 2000,
-        hasData: true,
-      })
-    ).toBe('skip');
   });
 
   it('fetches a snapshot for a no-data scope even when the stream is healthy, but skips once it has data', () => {
@@ -251,9 +260,7 @@ describe('ClusterRefreshRuntime', () => {
       scope: 'cluster-a|limit=50&kind=Widget&namespace=cluster',
       isManual: false,
       shouldStream: true,
-      metricsOnly: false,
       streamingHealthy: true,
-      metricsMinIntervalMs: 1000,
     };
     // A brand-new filter/page scope has no data yet — the notify-only stream cannot
     // deliver its first page, so it MUST fetch even though the stream is healthy.

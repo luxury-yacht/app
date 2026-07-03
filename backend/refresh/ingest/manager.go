@@ -713,8 +713,15 @@ func (m *IngestManager) entrySettled(e *entry) bool {
 	if e.degraded.Load() {
 		return true
 	}
-	if m.syncDeadlineExceeded() && e.degraded.CompareAndSwap(false, true) {
-		klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.desc.GVR())
+	if m.syncDeadlineExceeded() {
+		// The CAS only elects the one caller that logs; a caller that LOSES the
+		// race (a concurrent evaluation degraded the entry first) must still
+		// report settled — the entry IS degraded either way. Folding the CAS
+		// into the settled decision made a raced HasSynced return a false
+		// negative, which can block Manager.Start's readiness wait.
+		if e.degraded.CompareAndSwap(false, true) {
+			klog.Warningf("ingest store for %s did not sync within the deadline — marking degraded and excluding from readiness (LIST+WATCH retries continue in the background)", e.desc.GVR())
+		}
 		return true
 	}
 	return false

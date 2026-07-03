@@ -90,18 +90,19 @@ prop drilling through `DetailsTab`, or bespoke action modals.
 ## Resource Utilization
 
 Object Panel Resource Utilization reads live pod, workload, and node usage
-through `frontend/src/core/resource-metrics`. Pod panels lease `pods-metrics`,
-Deployment/DaemonSet/StatefulSet panels lease `namespace-workloads-metrics`, and
-Node panels lease `nodes-metrics`.
+through `frontend/src/core/resource-metrics`. Live usage is joined onto the
+base domains' rows at serve: Pod panels lease the `pods` namespace scope,
+Deployment/DaemonSet/StatefulSet panels lease `namespace-workloads`, and Node
+panels lease `nodes` (see `docs/architecture/resource-metrics.md`).
 
-Object-detail DTO utilization values are fallback-only while the metrics domain
+Object-detail DTO utilization values are fallback-only while the base domain
 loads, is unavailable, or is permission denied. ReplicaSet is the exception:
 keep it detail-backed until a separate ReplicaSet unification slice adds direct
 owner identity while preserving the existing resolved-owner behavior.
 
-Embedded Object Panel Pods tables use the same base-plus-metric overlay path as
-main Pods tables. Do not read live CPU/memory usage from base pod rows after the
-metric-domain path is available.
+Embedded Object Panel Pods tables use the same single base-domain query as main
+Pods tables; live CPU/memory usage arrives on the pod rows (joined at serve)
+and the freshness block rides the query payload's `metrics`.
 
 ## Checklist
 

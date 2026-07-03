@@ -24,6 +24,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -58,6 +59,11 @@ interface NamespaceContextType {
   namespaceLoading: boolean;
   namespaceRefreshing: boolean;
   namespaceReady: boolean;
+  // True when the backend refused the namespace list for lack of RBAC
+  // permission (the namespaces domain is permission-gated and fails fast).
+  // A designed, rendered state: the sidebar shows "You do not have permission
+  // to list namespaces." — no toast, no fallback inference.
+  namespacesPermissionDenied: boolean;
   setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
@@ -121,6 +127,14 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   }, [refreshAvailableClusterIds]);
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
+  // Doorbell refetch: the namespaces stream signal only bumps the scoped
+  // sourceVersion — the snapshot itself must be refetched. The shared hook
+  // covers every leased cluster scope so background cluster tabs stay fresh.
+  const namespaceSignalScopes = useMemo(
+    () => (namespaceScopes.length > 0 ? namespaceScopes : namespacesScope ? [namespacesScope] : []),
+    [namespaceScopes, namespacesScope]
+  );
+  useStreamSignalRefetch('namespaces', namespaceSignalScopes);
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<
@@ -131,6 +145,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const selectedNamespaceClusterId =
     selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
   const lastErrorRef = useRef<string | null>(null);
+  const namespaceScopesRef = useRef<string[]>([]);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   const requestedNamespaceScopesRef = useRef<Set<string>>(new Set());
 
@@ -305,6 +320,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return;
     }
 
+    // Diff-based reconciliation — NEVER a blanket disable/re-enable. This
+    // effect re-runs whenever the scope-set identity changes (any tab
+    // open/close, any cluster lifecycle event), and a disable->enable cycle on
+    // an unchanged scope resets its store: the active cluster's list blanked
+    // (spinner) and its Diagnostics row churned whenever ANY OTHER cluster's
+    // tab or lifecycle moved. One cluster's state must never disturb another's.
     const activeScopeSet = new Set(namespaceScopes);
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
@@ -313,9 +334,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       }
     });
 
+    // Idempotent for already-enabled scopes (the orchestrator early-returns on
+    // an unchanged flag); preserveState keeps any genuine re-enable a quiet
+    // repaint instead of a blank-and-spin.
     namespaceScopes.forEach((scope) => {
-      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled });
+      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled, preserveState: true });
     });
+    namespaceScopesRef.current = namespaceScopes;
 
     if (!enabled) {
       clearSelection();
@@ -337,9 +362,14 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         reason: 'startup',
       });
     });
+  }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);
 
-    return () => {
-      namespaceScopes.forEach((scope) => {
+  // Unmount-only teardown: release whatever scopes are currently held. Kept
+  // separate from the reconciliation effect above so re-runs never release
+  // still-active scopes.
+  useEffect(
+    () => () => {
+      namespaceScopesRef.current.forEach((scope) => {
         setRefreshDomainEnabled({
           domain: 'namespaces',
           scope,
@@ -347,8 +377,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
           preserveState: true,
         });
       });
-    };
-  }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);
+    },
+    []
+  );
 
   useEffect(() => {
     const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
@@ -475,8 +506,18 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
   }, [clearSelection, namespaceScopes, updateNamespaces]);
 
+  // Structural flag stamped by the orchestrator from the typed 403 (checked
+  // once per session; the scope is settled and background retries stop).
+  const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
+
   useEffect(() => {
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {
+      // Permission denial is a designed, rendered state (the sidebar shows the
+      // message) — not an error to toast.
+      if (namespacesPermissionDenied) {
+        lastErrorRef.current = namespaceDomain.error;
+        return;
+      }
       if (namespaceDomain.error !== lastErrorRef.current) {
         lastErrorRef.current = namespaceDomain.error;
         errorHandler.handle(
@@ -491,7 +532,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     } else {
       lastErrorRef.current = null;
     }
-  }, [namespaceDomain.status, namespaceDomain.error, selectedKubeconfig]);
+  }, [
+    namespaceDomain.status,
+    namespaceDomain.error,
+    namespacesPermissionDenied,
+    selectedKubeconfig,
+  ]);
 
   const contextValue = useMemo(
     () => ({
@@ -501,6 +547,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       namespaceLoading,
       namespaceRefreshing,
       namespaceReady,
+      namespacesPermissionDenied,
       setSelectedNamespace: handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
@@ -513,6 +560,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       namespaceLoading,
       namespaceRefreshing,
       namespaceReady,
+      namespacesPermissionDenied,
       handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,

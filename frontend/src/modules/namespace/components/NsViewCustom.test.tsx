@@ -288,8 +288,6 @@ describe('NsViewCustom', () => {
   const renderComponent = async (props: Partial<NsViewCustomProps> = {}) => {
     const mergedProps: NsViewCustomProps = {
       namespace: 'team-a',
-      loading: false,
-      loaded: false,
       showNamespaceColumn: false,
       ...props,
     };
@@ -311,7 +309,7 @@ describe('NsViewCustom', () => {
       browseCatalogResult([catalogItemFromResource(baseResource)])
     );
 
-    await renderComponent({ loaded: true, showNamespaceColumn: true });
+    await renderComponent({ showNamespaceColumn: true });
 
     expect(gridTableMock).toHaveBeenCalled();
 
@@ -360,7 +358,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      loaded: true,
       showNamespaceColumn: false,
     });
 
@@ -401,7 +398,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -432,7 +428,6 @@ describe('NsViewCustom', () => {
   it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -459,9 +454,7 @@ describe('NsViewCustom', () => {
       },
     });
 
-    await renderComponent({
-      loaded: true,
-    });
+    await renderComponent({});
 
     const gridProps = getLastGridProps();
     expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
@@ -482,7 +475,7 @@ describe('NsViewCustom', () => {
       },
     ]);
 
-    await renderComponent({ loaded: true });
+    await renderComponent();
 
     const gridProps = getLastGridProps();
     expect(gridProps?.data?.[0]).toEqual(
@@ -498,7 +491,6 @@ describe('NsViewCustom', () => {
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {
     await renderComponent({
       namespace: 'team-a',
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -506,7 +498,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -516,7 +507,6 @@ describe('NsViewCustom', () => {
   it('preserves the filters config across rerenders with unchanged inputs', async () => {
     await renderComponent({
       namespace: 'team-a',
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -524,7 +514,6 @@ describe('NsViewCustom', () => {
 
     await renderComponent({
       namespace: 'team-a',
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -561,7 +550,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ loaded: true, showNamespaceColumn: true });
+    await renderComponent({ showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -603,7 +592,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -658,7 +646,7 @@ describe('NsViewCustom', () => {
       annotations: {},
     };
 
-    await renderComponent({ loaded: true, showNamespaceColumn: true });
+    await renderComponent({ showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
@@ -705,7 +693,7 @@ describe('NsViewCustom', () => {
       version: undefined,
     };
 
-    await renderComponent({ loaded: true, showNamespaceColumn: true });
+    await renderComponent({ showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
@@ -741,7 +729,6 @@ describe('NsViewCustom', () => {
     };
 
     await renderComponent({
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -785,7 +772,6 @@ describe('NsViewCustom', () => {
     useShortNamesMock.mockReturnValue(true);
 
     await renderComponent({
-      loaded: true,
       showNamespaceColumn: true,
     });
 
@@ -825,7 +811,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ loaded: true });
+      await renderComponent();
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -851,7 +837,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ loaded: true });
+      await renderComponent();
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -889,7 +875,7 @@ describe('NsViewCustom', () => {
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
-      await renderComponent({ loaded: true });
+      await renderComponent();
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -908,7 +894,7 @@ describe('NsViewCustom', () => {
     });
 
     it('publishes only catalog-backed sortable keys', async () => {
-      await renderComponent({ loaded: true, showNamespaceColumn: true });
+      await renderComponent({ showNamespaceColumn: true });
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const sortableKeys = gridProps.columns
@@ -933,7 +919,7 @@ describe('NsViewCustom', () => {
         // crdName intentionally omitted
       };
 
-      await renderComponent({ loaded: true });
+      await renderComponent();
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
@@ -955,7 +941,7 @@ describe('NsViewCustom', () => {
         statusPresentation: 'warning',
       };
 
-      await renderComponent({ loaded: true });
+      await renderComponent();
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const statusCol = findColumn(gridProps, 'status');

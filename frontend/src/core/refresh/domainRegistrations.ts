@@ -19,27 +19,18 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     });
   };
 
-  const resourceStreamDomain = (
-    domain: RefreshDomain & ResourceStreamDomainName,
-    options?: { metricsOnly?: boolean }
-  ) => {
+  const resourceStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
     registerRefreshDomain(domain, {
       start: (scope) => resourceStreamManager.start(domain, scope),
       stop: (scope, opts) => resourceStreamManager.stop(domain, scope, opts?.reset ?? false),
       refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
-      metricsOnly: options?.metricsOnly,
-      pauseRefresherWhenStreaming: !options?.metricsOnly,
-    });
-  };
-
-  const doorbellStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
-    registerRefreshDomain(domain, {
-      start: (scope) => resourceStreamManager.start(domain, scope),
-      stop: (scope, options) => resourceStreamManager.stop(domain, scope, options?.reset ?? false),
-      refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
       pauseRefresherWhenStreaming: true,
     });
   };
+
+  // Doorbell domains (catalog/events) share the exact stream wiring; the alias
+  // keeps the domain-class distinction readable at the registration sites.
+  const doorbellStreamDomain = resourceStreamDomain;
 
   const registerContainerLogsDomain = () => {
     registerRefreshDomain('container-logs', {
@@ -58,26 +49,35 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     Metadata such as category, refresher name, timing, diagnostics stream, and
     priority lives in domainRegistry.ts so the refresh surfaces share one source.
   */
+  // The namespaces sidebar refetches on the backend's namespaces doorbell
+  // (namespace object changes + workload-presence flips); its 2s timing is now
+  // only the stream-down fallback.
+  doorbellStreamDomain('namespaces');
+  // The Object Panel Events tab refetches on the backend's per-object events
+  // doorbell; its 10s timing is now only the stream-down fallback.
+  doorbellStreamDomain('object-events');
+  // The overview's metric doorbell refetches on each successful collection;
+  // its polls STAY ON via the descriptor's pollingContinuesWhileStreaming
+  // (the doorbell may never ring on metrics-less clusters).
+  doorbellStreamDomain('cluster-overview');
   registerSnapshotDomains(
-    'namespaces',
-    'cluster-overview',
     'object-maintenance',
     'object-details',
-    'object-events',
     'object-map',
     'object-yaml',
     'object-helm-manifest',
     'object-helm-values'
   );
   registerContainerLogsDomain();
+  // pods/nodes/namespace-workloads join live usage at serve; their metric cadence
+  // is push-driven — the backend poller fans a metric doorbell over the stream
+  // after each collection, so no client-side polling is needed for it.
   resourceStreamDomain('pods');
-  registerSnapshotDomains('pods-metrics');
 
   doorbellStreamDomain('catalog');
   registerSnapshotDomains('catalog-diff');
   doorbellStreamDomain('cluster-events');
   resourceStreamDomain('nodes');
-  registerSnapshotDomains('nodes-metrics');
   resourceStreamDomain('cluster-rbac');
   resourceStreamDomain('cluster-storage');
   resourceStreamDomain('cluster-config');
@@ -86,7 +86,6 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
 
   doorbellStreamDomain('namespace-events');
   resourceStreamDomain('namespace-workloads');
-  registerSnapshotDomains('namespace-workloads-metrics');
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');
   resourceStreamDomain('namespace-rbac');

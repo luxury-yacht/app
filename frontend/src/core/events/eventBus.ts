@@ -31,7 +31,13 @@ type ResourceStreamDomain =
   | 'nodes';
 
 type DoorbellStreamDomain =
-  ResourceStreamDomain | 'catalog' | 'cluster-events' | 'namespace-events';
+  | ResourceStreamDomain
+  | 'catalog'
+  | 'cluster-events'
+  | 'namespace-events'
+  | 'namespaces'
+  | 'object-events'
+  | 'cluster-overview';
 
 type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 type ResourceStreamConnectionStatus = 'connected' | 'disconnected';
@@ -91,7 +97,6 @@ export interface AppEvents {
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
-  'settings:metrics-interval': number;
   'settings:kubernetes-client-qps': number;
   'settings:default-table-page-size': number;
   'settings:kubernetes-client-burst': number;

@@ -9,6 +9,11 @@ export interface MetricsAvailability {
   stale?: boolean;
   lastError?: string | null;
   collectedAt?: number;
+  // Staleness threshold (seconds) shipped by the serve-time-join payloads so
+  // the banner can flip client-side: the poller rings no doorbell on failure,
+  // so nothing refetches to refresh a server-computed stale flag. Absent on
+  // poll-refreshed payloads (cluster-overview), which keep server-stale-only.
+  staleAfterSeconds?: number;
   successCount?: number;
   failureCount?: number;
   consecutiveFailures?: number;
@@ -19,6 +24,24 @@ export interface MetricsBannerInfo {
   tooltip: string;
 }
 
+// metricsStaleDeadlineMs is the wall-clock instant (ms) the payload's sample
+// becomes stale, or null when the payload carries no client-evaluable
+// threshold. useMetricsBannerInfo schedules its one boundary re-render on it.
+export const metricsStaleDeadlineMs = (metrics?: MetricsAvailability | null): number | null => {
+  if (!metrics?.collectedAt || !metrics.staleAfterSeconds) {
+    return null;
+  }
+  return (metrics.collectedAt + metrics.staleAfterSeconds) * 1000;
+};
+
+const isStaleAt = (metrics: MetricsAvailability, nowMs: number): boolean => {
+  if (metrics.stale) {
+    return true;
+  }
+  const deadline = metricsStaleDeadlineMs(metrics);
+  return deadline !== null && nowMs >= deadline;
+};
+
 const PERMISSION_KEYWORDS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
 const NOT_FOUND_KEYWORDS = [
   'metrics api unavailable',
@@ -27,7 +50,8 @@ const NOT_FOUND_KEYWORDS = [
 ];
 
 export const getMetricsBannerInfo = (
-  metrics?: MetricsAvailability | null
+  metrics?: MetricsAvailability | null,
+  nowMs: number = Date.now()
 ): MetricsBannerInfo | null => {
   if (!metrics) {
     return null;
@@ -36,6 +60,22 @@ export const getMetricsBannerInfo = (
   const successCount = metrics.successCount ?? 0;
   const failureCount = metrics.failureCount ?? 0;
   const consecutiveFailures = metrics.consecutiveFailures ?? failureCount;
+
+  // Pristine first-collection window: the demand-driven poller has started
+  // (a metric-bearing view is open) but no collection has completed and none
+  // has failed. The cluster is healthy — we simply have not collected yet.
+  // Distinct from the stale/awaiting states so a blank utilization card next
+  // to a "Ready" status reads as collection-in-progress, not as a problem.
+  // collectedAt <= 0 counts as absent: older backends serialized Go's zero
+  // time as -62135596800 instead of omitting it.
+  const hasCollected = typeof metrics.collectedAt === 'number' && metrics.collectedAt > 0;
+  if (successCount === 0 && !hasCollected && failureCount === 0 && !metrics.lastError) {
+    return {
+      message: 'Collecting metrics…',
+      tooltip: 'Waiting for the first metrics collection from metrics-server',
+    };
+  }
+
   const awaitingInitialMetrics =
     successCount === 0 && !metrics.collectedAt && failureCount > 0 && consecutiveFailures < 5;
 
@@ -67,7 +107,7 @@ export const getMetricsBannerInfo = (
     };
   }
 
-  if (metrics.stale) {
+  if (isStaleAt(metrics, nowMs)) {
     return {
       message: 'Awaiting metrics data...',
       tooltip: 'Awaiting data from metrics-server',

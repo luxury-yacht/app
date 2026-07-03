@@ -651,9 +651,6 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.refreshBackgroundClustersEnabled !== next.refreshBackgroundClustersEnabled) {
     eventBus.emit('settings:refresh-background', next.refreshBackgroundClustersEnabled);
   }
-  if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
-    eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
-  }
   if (previous.kubernetesClientQPS !== next.kubernetesClientQPS) {
     eventBus.emit('settings:kubernetes-client-qps', next.kubernetesClientQPS);
   }
@@ -1078,10 +1075,6 @@ export const getAutoRefreshEnabled = (): boolean => {
 
 export const getBackgroundRefreshEnabled = (): boolean => {
   return preferenceCache.refreshBackgroundClustersEnabled;
-};
-
-export const getMetricsRefreshIntervalMs = (): number => {
-  return preferenceCache.metricsRefreshIntervalMs;
 };
 
 export const getKubernetesClientQPS = (): number => {

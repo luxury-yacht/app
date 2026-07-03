@@ -6,6 +6,7 @@
  * second list of domain behavior rules.
  */
 
+import { doorbellPollingContinues } from '@/core/refresh/streaming/resourceStreamDomains';
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 import {
   PERMISSION_FEATURES,
@@ -22,12 +23,6 @@ export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP, PRIORITY_DOMAINS } from '../..
 export const STALE_THRESHOLD_MS = 45_000;
 export const CLUSTER_SCOPE = '__cluster__';
 
-export const METRICS_ONLY_DOMAINS = new Set<RefreshDomain>(
-  refreshDomainDescriptors
-    .filter((descriptor) => descriptor.metricsInterval)
-    .map((descriptor) => descriptor.domain)
-);
-
 export const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(
   Object.entries(refreshDomainContract.domainInventory)
     .filter(([, entry]) => entry.cachePolicy === 'stream-only')
@@ -39,8 +34,11 @@ export const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>(
     .filter(
       (descriptor) =>
         descriptor.diagnosticsStream &&
-        !METRICS_ONLY_DOMAINS.has(descriptor.domain) &&
-        !STREAM_ONLY_DOMAINS.has(descriptor.domain)
+        !STREAM_ONLY_DOMAINS.has(descriptor.domain) &&
+        // Poll-augmented doorbell domains (cluster-overview) keep polling
+        // while streaming — their doorbell's signal source is not guaranteed
+        // to ever fire, so diagnostics must not report their polls as paused.
+        !doorbellPollingContinues(descriptor.domain)
     )
     .map((descriptor) => descriptor.domain)
 );

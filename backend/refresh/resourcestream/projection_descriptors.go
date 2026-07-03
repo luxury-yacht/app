@@ -71,14 +71,16 @@ func ProjectionDescriptors() map[string]ProjectionDescriptor {
 
 var projectionDescriptors = map[string]ProjectionDescriptor{
 	domainPods: {
-		Domain:               domainPods,
-		ScopeKind:            "pod",
-		SelectorShape:        "clusterId + namespace/name or namespace:*",
-		RowIdentity:          "clusterId + /v1 Pod namespace/name",
-		UpdateIdentity:       "ref (full ResourceRef)",
-		PrimaryResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
-		RelatedResources:     []ResourceDescriptor{fromIdentity(replicasetpkg.Identity)},
-		SourceClocks:         []Source{SourceObject},
+		Domain:           domainPods,
+		ScopeKind:        "pod",
+		SelectorShape:    "clusterId + namespace/name or namespace:*",
+		RowIdentity:      "clusterId + /v1 Pod namespace/name",
+		UpdateIdentity:   "ref (full ResourceRef)",
+		PrimaryResources: []ResourceDescriptor{fromIdentity(podspkg.Identity)},
+		RelatedResources: []ResourceDescriptor{fromIdentity(replicasetpkg.Identity)},
+		// The metric clock joins live usage onto served rows at serve (snapshot
+		// query path); stream row pushes stay object-clocked.
+		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "pods.BuildStreamSummary",
 		AffectedRowResolver:  "pod event -> pod row, workload row, node row",
 		StaleScopeResolver:   "stalePodScopes",
@@ -103,7 +105,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 			fromIdentity(replicasetpkg.Identity),
 			fromIdentity(hpapkg.IdentityV1),
 		},
-		SourceClocks:         []Source{SourceObject},
+		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot.BuildWorkloadSummary / snapshot.BuildStandalonePodWorkloadSummary",
 		AffectedRowResolver:  "workload, pod, HPA, ReplicaSet event resolvers",
 		StaleScopeResolver:   "ReplicaSet and pod stale owner/scope resolvers",
@@ -223,7 +225,7 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		UpdateIdentity:       "ref (full ResourceRef)",
 		PrimaryResources:     []ResourceDescriptor{fromIdentity(nodespkg.Identity)},
 		RelatedResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
-		SourceClocks:         []Source{SourceObject},
+		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot.BuildNodeSummary",
 		AffectedRowResolver:  "node and pod->node resolvers",
 		StaleScopeResolver:   "pod old/new node resolver",

@@ -60,6 +60,19 @@ type Provider interface {
 	LatestNodeUsage() map[string]NodeUsage
 	LatestPodUsage() map[string]PodUsage
 	Metadata() Metadata
+	Sample() Sample
+}
+
+// Sample is a mutually consistent view of one collection: the usage maps and
+// the metadata are read under one lock, so a consumer can never observe usage
+// from one collection paired with another collection's metadata — the serve-time
+// join stamps Metadata.CollectedAt as the snapshot's metric source clock, and a
+// torn pair would stamp a revision the joined rows don't contain. Consumers
+// that pair usage with metadata must use Sample, not the individual accessors.
+type Sample struct {
+	NodeUsage map[string]NodeUsage
+	PodUsage  map[string]PodUsage
+	Metadata  Metadata
 }
 
 func copyNodeUsage(source map[string]NodeUsage) map[string]NodeUsage {
@@ -80,6 +93,7 @@ func copyPodUsage(source map[string]PodUsage) map[string]PodUsage {
 
 // Poller periodically collects metrics from metrics-server.
 type Poller struct {
+	// interval is guarded by mu after construction (SetInterval can retime it).
 	interval     time.Duration
 	restConfig   *rest.Config
 	rateLimiter  flowcontrol.RateLimiter
@@ -101,9 +115,54 @@ type Poller struct {
 	lastError          string
 	successCount       uint64
 	failureCount       uint64
+	// ticker is the running loop's ticker (nil when not running); held under mu
+	// so SetInterval can retime a live loop.
+	ticker *time.Ticker
 
 	nodeLister func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error)
 	podLister  func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error)
+
+	// observerMu guards collectionObserver. The observer is notified after every
+	// SUCCESSFUL collection (the metric doorbell rides it); failures do not
+	// advance the metric revision, so they deliberately do not notify.
+	observerMu         sync.Mutex
+	collectionObserver func(Metadata)
+}
+
+// SetInterval retimes the poll cadence. It applies immediately to a running
+// loop (the live ticker is reset), so the user's metrics-interval preference
+// reaches the server-owned schedule without a subsystem rebuild.
+func (p *Poller) SetInterval(interval time.Duration) {
+	if interval <= 0 {
+		interval = config.RefreshMetricsInterval
+	}
+	p.mu.Lock()
+	p.interval = interval
+	ticker := p.ticker
+	p.mu.Unlock()
+	if ticker != nil {
+		ticker.Reset(interval)
+	}
+}
+
+// SetCollectionObserver registers a callback invoked with the fresh Metadata
+// after each successful collection. One observer; last write wins.
+func (p *Poller) SetCollectionObserver(observer func(Metadata)) {
+	p.observerMu.Lock()
+	p.collectionObserver = observer
+	p.observerMu.Unlock()
+}
+
+// notifyCollectionObserver invokes the registered observer (if any) with the
+// current metadata. Called outside p.mu so an observer can read the provider.
+func (p *Poller) notifyCollectionObserver() {
+	p.observerMu.Lock()
+	observer := p.collectionObserver
+	p.observerMu.Unlock()
+	if observer == nil {
+		return
+	}
+	observer(p.Metadata())
 }
 
 // NewPoller creates a Poller with optional pre-initialised metrics client.
@@ -146,6 +205,11 @@ func (p *Poller) LatestPodUsage() map[string]PodUsage {
 func (p *Poller) Metadata() Metadata {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+	return p.metadataLocked()
+}
+
+// metadataLocked assembles the status struct; callers hold p.mu.
+func (p *Poller) metadataLocked() Metadata {
 	return Metadata{
 		CollectedAt:         p.lastCollected,
 		ConsecutiveFailures: p.consecutiveFailure,
@@ -155,15 +219,38 @@ func (p *Poller) Metadata() Metadata {
 	}
 }
 
+// Sample returns the usage maps and metadata of one collection under a single
+// lock acquisition; refresh() publishes them atomically under the same lock.
+func (p *Poller) Sample() Sample {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return Sample{
+		NodeUsage: copyNodeUsage(p.nodeUsage),
+		PodUsage:  copyPodUsage(p.podUsage),
+		Metadata:  p.metadataLocked(),
+	}
+}
+
 // Start polls metrics until the context is cancelled.
 func (p *Poller) Start(ctx context.Context) error {
-	ticker := time.NewTicker(p.interval)
-	defer ticker.Stop()
+	p.mu.Lock()
+	interval := p.interval
+	ticker := time.NewTicker(interval)
+	p.ticker = ticker
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		if p.ticker == ticker {
+			p.ticker = nil
+		}
+		p.mu.Unlock()
+		ticker.Stop()
+	}()
 
 	p.recordActive(true)
 	defer p.recordActive(false)
 
-	log.Printf("[refresh:metrics] poller started, interval=%s", p.interval)
+	log.Printf("[refresh:metrics] poller started, interval=%s", interval)
 
 	if err := p.refresh(ctx); err != nil {
 		log.Printf("[refresh:metrics] initial refresh failed: %v", err)
@@ -263,6 +350,8 @@ func (p *Poller) refresh(ctx context.Context) error {
 	if p.telemetry != nil {
 		p.recordMetricsTelemetry(time.Since(start), now, nil, 0, true)
 	}
+
+	p.notifyCollectionObserver()
 
 	return nil
 }

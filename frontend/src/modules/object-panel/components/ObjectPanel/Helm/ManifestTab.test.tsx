@@ -230,7 +230,7 @@ describe('ManifestTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-manifest',
       'ns:helmrelease:demo',
-      { isManual: false }
+      { isManual: false, streamSignal: false }
     );
 
     await unmount();

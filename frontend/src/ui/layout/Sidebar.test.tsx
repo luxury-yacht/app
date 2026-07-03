@@ -22,22 +22,6 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOff: vi.fn(),
 }));
 
-const refreshMocks = vi.hoisted(() => ({
-  // Scoped domain states: Record<string, DomainState>
-  // The component iterates Object.values() looking for an entry with .data
-  catalogScopedStates: {} as Record<
-    string,
-    {
-      status: 'idle' | 'loading' | 'success' | 'error';
-      data: any;
-      stats: any;
-      error: any;
-      droppedAutoRefreshes: number;
-      scope: string | undefined;
-    }
-  >,
-}));
-
 const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
@@ -48,18 +32,6 @@ const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
-}));
-
-vi.mock('@core/refresh', () => ({
-  useRefreshScopedDomain: () => ({
-    status: 'idle',
-    data: null,
-    stats: null,
-    error: null,
-    droppedAutoRefreshes: 0,
-    scope: undefined,
-  }),
-  useRefreshScopedDomainStates: () => refreshMocks.catalogScopedStates,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -80,6 +52,7 @@ type NamespaceEntry = {
 };
 
 type NamespaceState = {
+  namespacesPermissionDenied: boolean;
   namespaces: NamespaceEntry[];
   namespaceLoading: boolean;
   selectedNamespace?: string;
@@ -88,6 +61,7 @@ type NamespaceState = {
 };
 
 const createNamespaceState = (): NamespaceState => ({
+  namespacesPermissionDenied: false,
   namespaces: [
     {
       name: 'default',
@@ -180,7 +154,6 @@ describe('Sidebar', () => {
     root = ReactDOM.createRoot(container);
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
-    refreshMocks.catalogScopedStates = {};
     autoRefreshLoadingState.suppressPassiveLoading = false;
     resetAppPreferencesCacheForTesting();
   });
@@ -195,6 +168,17 @@ describe('Sidebar', () => {
     container = null;
     root = null;
     vi.clearAllMocks();
+  });
+
+  it('shows the permission message instead of a namespace list when listing is denied', () => {
+    // Fail-fast design: no catalog inference, no empty list — the user is told
+    // exactly why the sidebar has no namespaces.
+    namespaceState.namespacesPermissionDenied = true;
+    namespaceState.namespaces = [];
+    renderSidebar();
+
+    expect(container!.textContent).toContain('You do not have permission to list namespaces.');
+    expect(container!.querySelector('[data-sidebar-target-kind="namespace-toggle"]')).toBeNull();
   });
 
   it('toggles the sidebar when the toolbar button is pressed', () => {
@@ -384,154 +368,6 @@ describe('Sidebar', () => {
     expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
     expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
-  });
-
-  it('filters catalog namespace groups to the active cluster', () => {
-    refreshMocks.catalogScopedStates = {
-      'test-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default'],
-            },
-            {
-              clusterId: 'cluster-b',
-              clusterName: 'Cluster B',
-              namespaces: ['other'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'test-scope',
-      },
-    };
-    renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
-    );
-    expect(otherClusterToggle).toBeNull();
-
-    act(() => {
-      namespaceToggle!.click();
-    });
-
-    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
-  });
-
-  it('aggregates catalog namespace groups across scoped states before filtering to the active cluster', () => {
-    refreshMocks.catalogScopedStates = {
-      'cluster-b-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: 'cluster-b',
-              clusterName: 'Cluster B',
-              namespaces: ['other'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'cluster-b-scope',
-      },
-      'cluster-a-scope': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'cluster-a-scope',
-      },
-    };
-
-    renderSidebar();
-
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-
-    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
-    );
-    expect(otherClusterToggle).toBeNull();
-  });
-
-  it('deduplicates repeated namespace groups and namespaces from multiple catalog scopes', () => {
-    refreshMocks.catalogScopedStates = {
-      'scope-a': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['default', 'fusionauth-prod-us-east-1'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'scope-a',
-      },
-      'scope-b': {
-        status: 'success',
-        data: {
-          namespaceGroups: [
-            {
-              clusterId: testClusterId,
-              clusterName: 'Cluster A',
-              namespaces: ['fusionauth-prod-us-east-1', 'default'],
-            },
-          ],
-        },
-        stats: null,
-        error: null,
-        droppedAutoRefreshes: 0,
-        scope: 'scope-b',
-      },
-    };
-
-    renderSidebar();
-
-    const defaultToggles = container!.querySelectorAll(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(defaultToggles).toHaveLength(1);
-
-    const fusionAuthToggles = container!.querySelectorAll(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'fusionauth-prod-us-east-1'
-      )}"]`
-    );
-    expect(fusionAuthToggles).toHaveLength(1);
   });
 
   it('collapses a namespace when clicked repeatedly', () => {

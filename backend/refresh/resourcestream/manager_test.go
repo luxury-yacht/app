@@ -170,6 +170,156 @@ func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	}
 }
 
+// TestManagerBroadcastsNamespacesDoorbell pins the namespaces doorbell: namespace
+// object changes and workload-presence flips fan ONE SourceObject doorbell to the
+// namespaces domain's subscribers, so the sidebar refetches on push instead of the
+// 2s poll.
+func TestManagerBroadcastsNamespacesDoorbell(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	sub, err := subscribeForTest(t, manager, domainNamespaces, "")
+	require.NoError(t, err)
+
+	manager.BroadcastNamespacesRefresh("ns-7", "namespace object changed")
+
+	update := requireNextUpdate(t, sub)
+	require.Equal(t, MessageTypeModified, update.Type)
+	require.Equal(t, domainNamespaces, update.Domain)
+	require.Equal(t, "", update.Scope)
+	require.Equal(t, SourceObject, update.Source)
+	require.Equal(t, SignalChanged, update.Signal)
+	require.Equal(t, "ns-7", update.Version)
+	require.Nil(t, update.Ref)
+}
+
+// The namespaces doorbell subscription must be accepted as a cluster-scope
+// selector, exactly like the catalog/cluster-events doorbells.
+func TestParseStreamSelectorAcceptsNamespacesClusterScope(t *testing.T) {
+	selector, err := ParseStreamSelector("c1", domainNamespaces, "")
+	require.NoError(t, err)
+	require.Equal(t, StreamScopeCluster, selector.ScopeKind)
+	require.Equal(t, "", selector.CanonicalScope())
+
+	_, err = ParseStreamSelector("c1", domainNamespaces, "namespace:default")
+	require.Error(t, err)
+}
+
+// The object-events doorbell fans a SourceEvent signal ONLY to the subscribed
+// scopes the flush's matcher selects — an event for one object must not ring
+// sibling panels' doorbells.
+func TestManagerBroadcastsObjectEventsDoorbellToMatchingScopes(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	matched, err := subscribeForTest(t, manager, domainObjectEvents, "team-a:/v1:Pod:web-1")
+	require.NoError(t, err)
+	other, err := subscribeForTest(t, manager, domainObjectEvents, "team-a:/v1:Pod:other")
+	require.NoError(t, err)
+
+	manager.BroadcastObjectEventsRefresh("oe-3", func(scope string) bool {
+		return scope == "team-a:/v1:Pod:web-1"
+	})
+
+	update := requireNextUpdate(t, matched)
+	require.Equal(t, MessageTypeModified, update.Type)
+	require.Equal(t, domainObjectEvents, update.Domain)
+	require.Equal(t, "team-a:/v1:Pod:web-1", update.Scope)
+	require.Equal(t, SourceEvent, update.Source)
+	require.Equal(t, SignalChanged, update.Signal)
+	require.Equal(t, "oe-3", update.Version)
+	require.Nil(t, update.Ref)
+
+	select {
+	case unexpected := <-other.Updates:
+		t.Fatalf("non-matching object scope must not receive the doorbell, got %+v", unexpected)
+	default:
+	}
+}
+
+// The object-events doorbell subscription is a per-object selector carrying
+// the same scope tail the snapshot domain parses (namespace:group/version:kind:name).
+func TestParseStreamSelectorAcceptsObjectEventsObjectScope(t *testing.T) {
+	selector, err := ParseStreamSelector("c1", domainObjectEvents, "team-a:/v1:Pod:web-1")
+	require.NoError(t, err)
+	require.Equal(t, StreamScopeObject, selector.ScopeKind)
+	require.Equal(t, "team-a:/v1:Pod:web-1", selector.CanonicalScope())
+
+	_, err = ParseStreamSelector("c1", domainObjectEvents, "")
+	require.Error(t, err)
+	_, err = ParseStreamSelector("c1", domainObjectEvents, "namespace:default")
+	require.Error(t, err)
+}
+
+// TestManagerBroadcastsMetricDoorbellToMetricClockDomains pins the metric doorbell:
+// a poller collection fans ONE SourceMetric doorbell to every subscribed scope of
+// every metric-clock domain (pods/nodes/namespace-workloads — the domains whose rows
+// join live usage at serve), and to nothing else. This is what lets the frontend
+// refetch on the poller's schedule with NO client-side polling.
+func TestManagerBroadcastsMetricDoorbellToMetricClockDomains(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	podsSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
+	require.NoError(t, err)
+	nodesSub, err := subscribeForTest(t, manager, domainNodes, "")
+	require.NoError(t, err)
+	workloadsSub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:prod")
+	require.NoError(t, err)
+	configSub, err := subscribeForTest(t, manager, domainNamespaceConfig, "namespace:default")
+	require.NoError(t, err)
+	// The cluster-overview snapshot joins live usage at serve too: its metric
+	// doorbell resolves the "Collecting metrics…" card within one collection
+	// instead of a full poll cycle. (Polls stay on for this domain — the
+	// metric doorbell only rings on SUCCESSFUL collections, so a metrics-less
+	// cluster would otherwise freeze the overview.)
+	overviewSub, err := subscribeForTest(t, manager, domainClusterOverview, "")
+	require.NoError(t, err)
+
+	manager.BroadcastMetricsRefresh("metrics-99")
+
+	for _, tc := range []struct {
+		name   string
+		sub    *Subscription
+		domain string
+		scope  string
+	}{
+		{name: "pods", sub: podsSub, domain: domainPods, scope: "namespace:default"},
+		{name: "nodes", sub: nodesSub, domain: domainNodes, scope: ""},
+		{name: "workloads", sub: workloadsSub, domain: domainWorkloads, scope: "namespace:prod"},
+		{name: "cluster-overview", sub: overviewSub, domain: domainClusterOverview, scope: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			update := requireNextUpdate(t, tc.sub)
+			require.Equal(t, MessageTypeModified, update.Type)
+			require.Equal(t, tc.domain, update.Domain)
+			require.Equal(t, tc.scope, update.Scope)
+			require.Equal(t, SourceMetric, update.Source)
+			require.Equal(t, SignalChanged, update.Signal)
+			require.Equal(t, "metrics-99", update.Version)
+			require.Nil(t, update.Ref)
+		})
+	}
+
+	select {
+	case update := <-configSub.Updates:
+		t.Fatalf("non-metric domain must not receive a metric doorbell, got %+v", update)
+	default:
+	}
+}
+
 // The namespace-config live notify is now driven by the generic ingest notify sink
 // (ConfigMap/Secret are owned-reflector ingest kinds), proven in ingest_notify_test.go.
 // The resource-stream handleConfigMap/handleSecret handlers carry only the Helm-release

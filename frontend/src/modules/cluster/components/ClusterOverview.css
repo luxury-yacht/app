@@ -208,6 +208,50 @@
   -webkit-user-select: none;
 }
 
+/* Header row for cards with an upper-right indicator (Resource Utilization's
+   metrics state). The row absorbs the h2's bottom margin so the card's
+   content sits at the same height whether or not the indicator is present. */
+.overview-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.overview-section-header h2 {
+  margin-bottom: 0;
+}
+
+/* Compact metrics-state indicator: small muted text with a status dot,
+   truncating long API errors (the title tooltip carries the full text). */
+.overview-section-header .metrics-warning-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 60%;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+/* Ellipsis must live on the text span: anonymous text in a flex container
+   cannot be ellipsized. Full text stays available via the title tooltip. */
+.overview-section-header .metrics-warning-banner__text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-section-header .metrics-warning-banner__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warning, #f59e0b);
+}
+
 .overview-section h3 {
   font-size: 0.8rem;
   font-weight: 500;

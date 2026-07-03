@@ -100,6 +100,7 @@ describe('dataAccess', () => {
     });
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
       isManual: true,
+      streamSignal: false,
     });
   });
 
@@ -115,6 +116,7 @@ describe('dataAccess', () => {
     });
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('cluster-overview', 'cluster:alpha', {
       isManual: false,
+      streamSignal: false,
     });
   });
 
@@ -147,6 +149,7 @@ describe('dataAccess', () => {
     );
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
       isManual: true,
+      streamSignal: false,
     });
     expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
     expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(

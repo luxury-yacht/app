@@ -27,6 +27,7 @@ import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -112,6 +113,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     scope: eventsScope,
     enabled: Boolean(isActive && objectData),
   });
+
+  // The per-object events doorbell only advances the scoped event clock; the
+  // poll that used to refresh this scope skips while the stream is healthy.
+  // Without this refetch-on-signal the tab freezes at its first load.
+  const eventSignalScopes = useMemo(
+    () => (isActive && eventsScope ? [eventsScope] : []),
+    [isActive, eventsScope]
+  );
+  useStreamSignalRefetch('object-events', eventSignalScopes);
 
   const fetchEvents = useCallback(
     async (reason: DataRequestReason = 'startup') => {
