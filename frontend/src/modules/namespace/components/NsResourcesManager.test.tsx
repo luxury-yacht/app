@@ -2,7 +2,9 @@
  * frontend/src/modules/namespace/components/NsResourcesManager.test.tsx
  *
  * Test suite for NsResourcesManager.
- * Covers key behaviors and edge cases for NsResourcesManager.
+ * The manager publishes the active tab to NsResourcesContext and renders the
+ * views — nothing else. Each tab's table owns its data via the query-backed
+ * grid, so there are no context resource handles to load or cancel.
  */
 
 import ReactDOM from 'react-dom/client';
@@ -11,66 +13,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { NamespaceResourcesManager } from '@modules/namespace/components/NsResourcesManager';
 
-type ResourceKey =
-  | 'pods'
-  | 'workloads'
-  | 'config'
-  | 'network'
-  | 'rbac'
-  | 'storage'
-  | 'autoscaling'
-  | 'quotas'
-  | 'custom'
-  | 'helm'
-  | 'events';
-
-const { setActiveResourceTypeMock, resourceStates, viewPropsRef, loadMocks, cancelMocks } =
-  vi.hoisted(() => {
-    const keys: ResourceKey[] = [
-      'pods',
-      'workloads',
-      'config',
-      'network',
-      'rbac',
-      'storage',
-      'autoscaling',
-      'quotas',
-      'custom',
-      'helm',
-      'events',
-    ];
-
-    const loadMap: Record<ResourceKey, ReturnType<typeof vi.fn>> = {} as any;
-    const cancelMap: Record<ResourceKey, ReturnType<typeof vi.fn>> = {} as any;
-    const states: Record<string, any> = {};
-
-    keys.forEach((key) => {
-      loadMap[key] = vi.fn().mockResolvedValue(undefined);
-      cancelMap[key] = vi.fn();
-      states[key] = {
-        data: [`${key}-row`],
-        loading: false,
-        error: null,
-        hasLoaded: key === 'pods', // only pods preloaded
-        load: loadMap[key],
-        cancel: cancelMap[key],
-      };
-    });
-
-    return {
-      setActiveResourceTypeMock: vi.fn(),
-      resourceStates: states,
-      viewPropsRef: { current: null as any },
-      loadMocks: loadMap,
-      cancelMocks: cancelMap,
-    };
-  });
+const { setActiveResourceTypeMock, viewPropsRef } = vi.hoisted(() => ({
+  setActiveResourceTypeMock: vi.fn(),
+  viewPropsRef: { current: null as any },
+}));
 
 vi.mock('@modules/namespace/contexts/NsResourcesContext', () => ({
   useNamespaceResources: () => ({
     setActiveResourceType: setActiveResourceTypeMock,
   }),
-  useNamespaceResource: (key: ResourceKey) => resourceStates[key],
 }));
 
 vi.mock('@modules/namespace/components/NsResourcesViews', () => ({
@@ -94,16 +45,7 @@ describe('NamespaceResourcesManager', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     setActiveResourceTypeMock.mockReset();
-    Object.values(loadMocks).forEach((mock) => mock.mockClear());
-    Object.values(cancelMocks).forEach((mock) => mock.mockClear());
     viewPropsRef.current = null;
-    Object.values(resourceStates).forEach((state: any) => {
-      state.hasLoaded = false;
-      state.loading = false;
-      state.error = null;
-      state.meta = undefined;
-    });
-    resourceStates.pods.hasLoaded = true;
   });
 
   afterEach(() => {
@@ -113,43 +55,30 @@ describe('NamespaceResourcesManager', () => {
     container.remove();
   });
 
-  const renderManager = async (activeTab: ResourceKey) => {
+  const renderManager = async (activeTab: string) => {
     await act(async () => {
-      root.render(<NamespaceResourcesManager namespace="team-a" activeTab={activeTab} />);
+      root.render(<NamespaceResourcesManager namespace="team-a" activeTab={activeTab as any} />);
       await Promise.resolve();
     });
   };
 
-  it('passes resource data to view component and triggers manual load for active tab', async () => {
+  it('publishes the active tab to the context and renders the views', async () => {
     await renderManager('network');
+
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('network');
-
-    expect(loadMocks.network).toHaveBeenCalledTimes(1);
-    expect(loadMocks.network).toHaveBeenCalledWith(true);
-
     const props = viewPropsRef.current;
     expect(props).toBeTruthy();
-    // The Kinds dropdown vocabulary is backend-owned (query capabilities); the
-    // manager forwards no kind lists.
-    expect(props.nsWorkloadsKinds).toBeUndefined();
+    expect(props.namespace).toBe('team-a');
+    expect(props.activeTab).toBe('network');
   });
 
-  it('cancels outstanding resource operations on unmount', async () => {
-    await renderManager('storage');
-    act(() => {
-      root.unmount();
+  it('defaults the rendered tab to workloads when none is provided', async () => {
+    await act(async () => {
+      root.render(<NamespaceResourcesManager namespace="team-a" />);
+      await Promise.resolve();
     });
-    expect(cancelMocks.storage).toHaveBeenCalledTimes(1);
-    expect(cancelMocks.pods).toHaveBeenCalledTimes(1);
-  });
 
-  it('does not reload when resource already loaded or errored', async () => {
-    resourceStates.rbac.hasLoaded = true;
-    resourceStates.storage.error = new Error('boom');
-    await renderManager('rbac');
-    await renderManager('storage');
-
-    expect(loadMocks.rbac).not.toHaveBeenCalled();
-    expect(loadMocks.storage).not.toHaveBeenCalled();
+    expect(viewPropsRef.current?.activeTab).toBe('workloads');
+    expect(setActiveResourceTypeMock).not.toHaveBeenCalled();
   });
 });

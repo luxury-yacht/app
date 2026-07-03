@@ -2,7 +2,10 @@
  * frontend/src/modules/namespace/components/AllNamespacesView.test.tsx
  *
  * Test suite for AllNamespacesView.
- * Covers key behaviors and edge cases for AllNamespacesView.
+ * Every tab is query-backed: the view renders the tab's table directly with
+ * the all-namespaces scope and reads NOTHING from NsResourcesContext (the
+ * old per-tab error banners rode a context data layer that fetched rows
+ * nobody rendered).
  */
 
 import ReactDOM from 'react-dom/client';
@@ -55,22 +58,7 @@ vi.mock('@modules/namespace/components/NsViewStorage', () => hoistedMocks.makeMo
 vi.mock('@modules/namespace/components/NsViewCustom', () => hoistedMocks.makeMock('custom-view'));
 vi.mock('@modules/namespace/components/NsViewHelm', () => hoistedMocks.makeMock('helm-view'));
 vi.mock('@modules/namespace/components/NsViewEvents', () => hoistedMocks.makeMock('events-view'));
-
-const namespaceResourcesMocks = vi.hoisted(() => {
-  return {
-    providerProps: [] as Array<Record<string, unknown>>,
-    useNamespaceResourceMock: vi.fn(),
-  };
-});
-
-vi.mock('@modules/namespace/contexts/NsResourcesContext', () => ({
-  NamespaceResourcesProvider: ({ children, ...props }: any) => {
-    namespaceResourcesMocks.providerProps.push(props);
-    return children;
-  },
-  useNamespaceResource: (resourceKey: string) =>
-    namespaceResourcesMocks.useNamespaceResourceMock(resourceKey),
-}));
+vi.mock('@modules/browse/components/BrowseView', () => hoistedMocks.makeMock('browse-view'));
 
 describe('AllNamespacesView', () => {
   let container: HTMLDivElement;
@@ -83,8 +71,6 @@ describe('AllNamespacesView', () => {
   beforeEach(() => {
     clientMocks.fetchSnapshotMock.mockReset();
     Object.values(viewRenderers).forEach((mock) => mock.mockReset());
-    namespaceResourcesMocks.providerProps.length = 0;
-    namespaceResourcesMocks.useNamespaceResourceMock.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -106,337 +92,56 @@ describe('AllNamespacesView', () => {
 
   const getLatestProps = (rendererKey: string) => {
     const mock = viewRenderers[rendererKey];
-    if (!mock) {
-      return undefined;
-    }
-    const calls = mock.mock.calls;
-    if (!calls.length) {
-      return undefined;
-    }
+    const calls = mock?.mock.calls ?? [];
     return calls[calls.length - 1]?.[0];
   };
 
-  const flush = async () => {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
+  const tableTabs: Array<[NamespaceViewType, string]> = [
+    ['pods', 'pods-view'],
+    ['workloads', 'workloads-view'],
+    ['config', 'config-view'],
+    ['autoscaling', 'autoscaling-view'],
+    ['network', 'network-view'],
+    ['quotas', 'quotas-view'],
+    ['rbac', 'rbac-view'],
+    ['storage', 'storage-view'],
+    ['helm', 'helm-view'],
+    ['events', 'events-view'],
+  ];
 
-  it('renders pods view without fetching a snapshot', async () => {
-    await renderView('pods');
-    await flush();
+  it.each(tableTabs)(
+    'renders the %s tab directly with the all-namespaces scope and no extra fetch',
+    async (tab, rendererKey) => {
+      await renderView(tab);
 
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+      expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+      const props = getLatestProps(rendererKey);
+      expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
+      expect(props.showNamespaceColumn).toBe(true);
+    }
+  );
 
-    const props = getLatestProps('pods-view');
-    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.metrics).toBeUndefined();
-    expect(props.showNamespaceColumn).toBe(true);
-  });
-
-  it('renders workloads view using namespace resources provider', async () => {
-    const workloadsData = [
-      {
-        kind: 'Deployment',
-        name: 'api',
-        namespace: 'team-a',
-        status: 'Running',
-        ready: '3/3',
-        cpuUsage: '100m',
-        memUsage: '200Mi',
-        age: '10m',
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'workloads') {
-        return {
-          data: workloadsData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('load failed'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('workloads');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('workloads');
-    expect(container.textContent).toContain('Failed to load workload resources: load failed');
-  });
-
-  it('renders helm view using namespace resources provider', async () => {
-    const helmData = [
-      {
-        name: 'chart-one',
-        namespace: 'system',
-        chart: 'demo-1.0.0',
-        appVersion: '1.2.3',
-        status: 'deployed',
-        revision: '5',
-        updated: '2024-05-01T10:00:00Z',
-        description: 'Upgrade complete',
-        notes: 'All good',
-        age: '2h',
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'helm') {
-        return {
-          data: helmData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('helm down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('helm');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('helm');
-    expect(container.textContent).toContain('Failed to load Helm releases: helm down');
-
-    const helmCalls = viewRenderers['helm-view'].mock.calls;
-    const props = helmCalls[helmCalls.length - 1][0];
-    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.showNamespaceColumn).toBe(true);
-  });
-
-  it('renders config view using namespace resources provider', async () => {
-    const configData = [
-      {
-        kind: 'ConfigMap',
-        name: 'settings',
-        namespace: 'team-a',
-        data: { key: 'value' },
-        age: '5m',
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockReturnValue({
-      data: configData,
-      loading: false,
-      hasLoaded: true,
-      error: null,
-    });
-
-    await renderView('config');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('config');
-    const calls = viewRenderers['config-view'].mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const props = calls[calls.length - 1][0];
-    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.showNamespaceColumn).toBe(true);
-  });
-
-  it('renders autoscaling view using namespace resources provider and shows errors', async () => {
-    const autoscalingData = [
-      {
-        kind: 'HorizontalPodAutoscaler',
-        name: 'api-hpa',
-        namespace: 'team-a',
-        scaleTargetRef: { kind: 'Deployment', name: 'api' },
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'autoscaling') {
-        return {
-          data: autoscalingData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('load failed'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('autoscaling');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('autoscaling');
-    expect(container.textContent).toContain('Failed to load autoscaling resources: load failed');
-
-    const props = getLatestProps('autoscaling-view');
-    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.showNamespaceColumn).toBe(true);
-  });
-
-  it('renders network view using namespace resources provider', async () => {
-    const networkData = [
-      { kind: 'Service', name: 'api', namespace: 'team-a', details: 'ClusterIP', age: '1h' },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'network') {
-        return {
-          data: networkData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('network down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('network');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('network');
-    expect(container.textContent).toContain('Failed to load network resources: network down');
-
-    const props = getLatestProps('network-view');
-    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-    expect(props.showNamespaceColumn).toBe(true);
-  });
-
-  it('renders quotas view using namespace resources provider', async () => {
-    const quotasData = [
-      { kind: 'ResourceQuota', name: 'compute', namespace: 'team-a', details: 'cpu=10', age: '6h' },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'quotas') {
-        return {
-          data: quotasData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('quotas down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('quotas');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('quotas');
-    expect(container.textContent).toContain('Failed to load quota resources: quotas down');
-  });
-
-  it('renders RBAC view using namespace resources provider', async () => {
-    const rbacData = [
-      {
-        kind: 'RoleBinding',
-        name: 'devs',
-        namespace: 'team-a',
-        details: 'binds to role dev',
-        age: '4h',
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'rbac') {
-        return {
-          data: rbacData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('rbac down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('rbac');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('rbac');
-    expect(container.textContent).toContain('Failed to load RBAC resources: rbac down');
-  });
-
-  it('renders storage view using namespace resources provider', async () => {
-    const storageData = [
-      {
-        kind: 'PersistentVolumeClaim',
-        name: 'data',
-        namespace: 'team-a',
-        status: 'Bound',
-        capacity: '10Gi',
-        storageClass: 'fast',
-        age: '1d',
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'storage') {
-        return {
-          data: storageData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('storage down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
-
-    await renderView('storage');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('storage');
-    expect(container.textContent).toContain('Failed to load storage resources: storage down');
-  });
-
-  it('renders custom view without subscribing to the namespace custom fanout', async () => {
+  it('renders the custom tab with its catalog-backed props', async () => {
     await renderView('custom');
-    await flush();
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).not.toHaveBeenCalledWith('custom');
-    expect(getLatestProps('custom-view')?.loading).toBe(false);
-    expect(getLatestProps('custom-view')?.loaded).toBe(false);
+    const props = getLatestProps('custom-view');
+    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
+    expect(props.showNamespaceColumn).toBe(true);
+    expect(props.loading).toBe(false);
+    expect(props.loaded).toBe(false);
   });
 
-  it('renders events view using namespace resources provider', async () => {
-    const eventsData = [
-      {
-        kind: 'Pod',
-        kindAlias: 'pod',
-        name: 'api',
-        namespace: 'default',
-        type: 'Warning',
-        source: 'kubelet',
-        reason: 'Failed',
-        object: 'api-123',
-        message: 'CrashLoop',
-        objectNamespace: 'default',
-        age: '1m',
-        ageTimestamp: 1700000000,
-      },
-    ];
-    namespaceResourcesMocks.useNamespaceResourceMock.mockImplementation((resourceKey: string) => {
-      if (resourceKey === 'events') {
-        return {
-          data: eventsData,
-          loading: false,
-          hasLoaded: true,
-          error: new Error('events down'),
-        };
-      }
-      return { data: [], loading: false, hasLoaded: false, error: null };
-    });
+  it('renders the browse tab with the all-namespaces scope', async () => {
+    await renderView('browse');
 
-    await renderView('events');
-    await flush();
-
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('events');
-    expect(container.textContent).toContain('Failed to load events: events down');
+    const props = getLatestProps('browse-view');
+    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
   });
 
-  it('renders placeholder message for unsupported views', async () => {
-    clientMocks.fetchSnapshotMock.mockResolvedValue({ snapshot: null });
-    await renderView('overview' as NamespaceViewType);
-    await flush();
+  it('shows the map placeholder for the all-namespaces scope', async () => {
+    await renderView('map');
 
-    expect(container.textContent).toContain(
-      'The overview view is not yet available for the "All" namespace.'
-    );
+    expect(container.textContent).toContain('Map is available for individual namespaces.');
   });
 });
