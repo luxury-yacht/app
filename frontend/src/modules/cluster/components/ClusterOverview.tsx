@@ -860,13 +860,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          <h2>Resource Utilization</h2>
-          {metricsBanner && !errorMessage && (
-            <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
-              <span className="metrics-warning-banner__dot" />
-              {metricsBanner.message}
-            </div>
-          )}
+          {/* Header row: the metrics indicator sits in the card's upper right
+              so its presence never shifts the utilization content below. */}
+          <div className="overview-section-header">
+            <h2>Resource Utilization</h2>
+            {metricsBanner && !errorMessage && (
+              <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
+                <span className="metrics-warning-banner__dot" />
+                <span className="metrics-warning-banner__text">{metricsBanner.message}</span>
+              </div>
+            )}
+          </div>
 
           <div className="resource-group">
             <div className="metric-header metric-header--usage">
