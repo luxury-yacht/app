@@ -128,8 +128,6 @@ describe('AllNamespacesView', () => {
     const props = getLatestProps('custom-view');
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
     expect(props.showNamespaceColumn).toBe(true);
-    expect(props.loading).toBe(false);
-    expect(props.loaded).toBe(false);
   });
 
   it('renders the browse tab with the all-namespaces scope', async () => {

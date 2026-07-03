@@ -41,7 +41,6 @@ interface ClusterResourcesViewsProps {
   onTabChange?: (tab: ClusterViewType) => void;
 
   // Object panel element to render
-  objectPanel?: React.ReactNode;
 }
 
 function ClusterResourcesViews({
@@ -56,7 +55,6 @@ function ClusterResourcesViews({
   storageError = null,
   activeTab: controlledActiveTab,
   onTabChange: _onTabChangeCallback,
-  objectPanel,
 }: ClusterResourcesViewsProps) {
   const activeTab = controlledActiveTab ?? null;
 
@@ -88,12 +86,7 @@ function ClusterResourcesViews({
     }
   };
 
-  return (
-    <div className="view-content">
-      {renderTabContent()}
-      {objectPanel}
-    </div>
-  );
+  return <div className="view-content">{renderTabContent()}</div>;
 }
 
 export default React.memo(ClusterResourcesViews);

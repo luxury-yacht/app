@@ -51,14 +51,7 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
       case 'storage':
         return <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'custom':
-        return (
-          <NsViewCustom
-            namespace={ALL_NAMESPACES_SCOPE}
-            loading={false}
-            loaded={false}
-            showNamespaceColumn
-          />
-        );
+        return <NsViewCustom namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'browse':
         return <BrowseView namespace={ALL_NAMESPACES_SCOPE} />;
       case 'map':

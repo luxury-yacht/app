@@ -40,26 +40,7 @@ interface NamespaceResourcesViewsProps {
   activeTab: NamespaceViewType;
   onTabChange?: (tab: NamespaceViewType) => void;
 
-  // Workloads kind filter options
-
-  // Config kind filter options
-
-  // Network kind filter options
-
-  // RBAC kind filter options
-
-  // Storage data
-
-  // Autoscaling kind filter options
-
-  // Quotas kind filter options
-
-  // Helm data
-
-  // Events data
-
   // Object panel element to render
-  objectPanel?: React.ReactNode;
 }
 
 /**
@@ -70,8 +51,6 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   namespace,
   activeTab,
   onTabChange: _onTabChange,
-
-  objectPanel,
 }) => {
   const renderTabContent = () => {
     switch (activeTab) {
@@ -210,12 +189,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
     }
   };
 
-  return (
-    <div className="view-content">
-      {renderTabContent()}
-      {objectPanel}
-    </div>
-  );
+  return <div className="view-content">{renderTabContent()}</div>;
 };
 
 export default React.memo(NamespaceResourcesViews);

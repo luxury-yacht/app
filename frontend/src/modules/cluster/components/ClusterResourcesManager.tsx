@@ -5,32 +5,51 @@
  * Handles permission checks and manual loading of resources.
  */
 
-import React, { useEffect } from 'react';
-import { useClusterResources } from '@modules/cluster/contexts/ClusterResourcesContext';
+import { useEffect } from 'react';
 import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesViews';
 import { ClusterViewType } from '@ui/navigation/types';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { refreshOrchestrator } from '@/core/refresh';
+import type { RefreshDomain } from '@/core/refresh/types';
+import { eventBus } from '@/core/events';
+
+// The managed cluster domains, reset together on kubeconfig switches so no
+// stale per-cluster rows survive into the next selection. (Catalog is
+// excluded — browse owns its own lifecycle.)
+const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>([
+  'nodes',
+  'cluster-rbac',
+  'cluster-storage',
+  'cluster-config',
+  'cluster-crds',
+  'cluster-events',
+]);
 
 interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
   onTabChange?: (tab: ClusterViewType) => void;
-  refreshSettings?: any;
-  objectPanel?: React.ReactNode;
-  autoRefreshEnabled?: boolean;
-  autoRefreshInterval?: number;
-  resourceIntervals?: Record<string, number>;
 }
 
 // ClusterResourcesManager component
-// Handles data fetching, error handling, and permission checks for cluster resources
-export function ClusterResourcesManager({
-  activeTab,
-  onTabChange,
-  objectPanel,
-}: ClusterResourceManagerProps) {
-  const { setActiveResourceType } = useClusterResources();
+// Supplies the per-view permission-denial messages and resets the managed
+// cluster domains when the kubeconfig changes. Each tab's table owns its own
+// data via the query-backed grid.
+export function ClusterResourcesManager({ activeTab, onTabChange }: ClusterResourceManagerProps) {
+  useEffect(() => {
+    const handleKubeconfigChanging = () => {
+      CLUSTER_DOMAIN_SET.forEach((domain) => {
+        // resetDomain already delegates to resetAllScopedDomainStates for scoped domains.
+        refreshOrchestrator.resetDomain(domain);
+      });
+    };
+
+    const unsubChanging = eventBus.on('kubeconfig:changing', handleKubeconfigChanging);
+    return () => {
+      unsubChanging();
+    };
+  }, []);
 
   const { selectedClusterId } = useKubeconfig();
   // Scope permission lookups to the active cluster to avoid cache collisions.
@@ -126,13 +145,6 @@ export function ClusterResourcesManager({
   const storageErrorMessage = permissionToMessage(storageListPermission) || null;
 
   // Keep ClusterResourcesContext informed about the active view for refresh scheduling
-  useEffect(() => {
-    if (!activeTab) {
-      return;
-    }
-
-    setActiveResourceType(activeTab);
-  }, [activeTab, setActiveResourceType]);
 
   return (
     <ClusterResourcesViews
@@ -150,7 +162,6 @@ export function ClusterResourcesManager({
       eventsError={eventsErrorMessage}
       rbacError={rbacErrorMessage}
       storageError={storageErrorMessage}
-      objectPanel={objectPanel}
     />
   );
 }

@@ -13,56 +13,12 @@ import { ClusterResourcesManager } from './ClusterResourcesManager';
 
 type ClusterKey = 'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
 
-const {
-  setActiveResourceTypeMock,
-  clusterResourceStates,
-  loadMocks,
-  cancelMocks,
-  viewPropsRef,
-  permissionState,
-} = vi.hoisted(() => {
-  const keys: ClusterKey[] = ['nodes', 'rbac', 'storage', 'config', 'crds', 'custom', 'events'];
-  const loadMap: Record<ClusterKey, ReturnType<typeof vi.fn>> = {} as any;
-  const cancelMap: Record<ClusterKey, ReturnType<typeof vi.fn>> = {} as any;
-  const states: Record<string, any> = {};
-
-  keys.forEach((key, index) => {
-    loadMap[key] = vi.fn().mockResolvedValue(undefined);
-    cancelMap[key] = vi.fn();
-    states[key] = {
-      data: index === 0 ? [`${key}-row`] : null,
-      loading: false,
-      error: null,
-      hasLoaded: key === 'nodes', // nodes preloaded
-      load: loadMap[key],
-      cancel: cancelMap[key],
-    };
-  });
-
-  return {
-    setActiveResourceTypeMock: vi.fn(),
-    clusterResourceStates: states,
-    loadMocks: loadMap,
-    cancelMocks: cancelMap,
-    viewPropsRef: { current: null as any },
-    permissionState: new Map<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
-    >(),
-  };
-});
-
-vi.mock('@modules/cluster/contexts/ClusterResourcesContext', () => ({
-  useClusterResources: () => ({
-    nodes: clusterResourceStates.nodes,
-    rbac: clusterResourceStates.rbac,
-    storage: clusterResourceStates.storage,
-    config: clusterResourceStates.config,
-    crds: clusterResourceStates.crds,
-    custom: clusterResourceStates.custom,
-    events: clusterResourceStates.events,
-    setActiveResourceType: setActiveResourceTypeMock,
-  }),
+const { viewPropsRef, permissionState } = vi.hoisted(() => ({
+  viewPropsRef: { current: null as any },
+  permissionState: new Map<
+    string,
+    { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
+  >(),
 }));
 
 vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
@@ -75,6 +31,14 @@ vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
+}));
+
+const orchestratorMocks = vi.hoisted(() => ({
+  resetDomain: vi.fn(),
+}));
+
+vi.mock('@/core/refresh', () => ({
+  refreshOrchestrator: orchestratorMocks,
 }));
 
 vi.mock('@/core/capabilities', () => ({
@@ -97,20 +61,9 @@ describe('ClusterResourcesManager', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
 
-    setActiveResourceTypeMock.mockReset();
-    Object.values(loadMocks).forEach((mock) => mock.mockClear());
-    Object.values(cancelMocks).forEach((mock) => mock.mockClear());
     viewPropsRef.current = null;
     permissionState.clear();
-
-    Object.entries(clusterResourceStates).forEach(([key, state], index) => {
-      (state as any).hasLoaded = index === 0;
-      (state as any).loading = false;
-      (state as any).error = null;
-      (state as any).data = index === 0 ? [`${key}-row`] : null;
-      (state as any).meta = undefined;
-      state.loading = false;
-    });
+    orchestratorMocks.resetDomain.mockClear();
   });
 
   afterEach(() => {
@@ -127,23 +80,45 @@ describe('ClusterResourcesManager', () => {
     });
   };
 
-  it('sets the active resource type and forwards per-view errors downstream', async () => {
-    await renderManager('storage');
+  it('resets every managed cluster domain when the kubeconfig starts changing', async () => {
+    // This teardown-hygiene effect lived in the (deleted) ClusterResourcesContext
+    // provider, which wrapped exactly this manager — same mount lifetime, so the
+    // manager is its new home.
+    const { eventBus } = await import('@/core/events');
+    orchestratorMocks.resetDomain.mockClear();
+    await renderManager('nodes');
 
-    expect(setActiveResourceTypeMock).toHaveBeenCalledWith('storage');
+    await act(async () => {
+      eventBus.emit('kubeconfig:changing', undefined as never);
+      await Promise.resolve();
+    });
 
-    const props = viewPropsRef.current;
-    // Query-backed views source their own rows and the Kinds dropdown vocabulary
-    // is backend-owned (query capabilities); the manager forwards only the
-    // per-view error — not live-snapshot rows/stats/loading/loaded or kind lists.
-    expect(props.configKinds).toBeUndefined();
-    expect(props.rbacKinds).toBeUndefined();
-    expect(props.nodes).toBeUndefined();
-    expect(props.storage).toBeUndefined();
-    expect(props.nodesStats).toBeUndefined();
-    expect(props.storageLoaded).toBeUndefined();
+    const resetDomains = orchestratorMocks.resetDomain.mock.calls.map((call) => call[0]).sort();
+    expect(resetDomains).toEqual([
+      'cluster-config',
+      'cluster-crds',
+      'cluster-events',
+      'cluster-rbac',
+      'cluster-storage',
+      'nodes',
+    ]);
   });
 
+  it('forwards per-view permission-derived errors downstream', async () => {
+    permissionState.set('Node:list', {
+      allowed: false,
+      pending: false,
+      reason: 'nodes denied',
+      entry: { status: 'ready' },
+    });
+
+    await renderManager('nodes');
+
+    const props = viewPropsRef.current;
+    expect(props).toBeTruthy();
+    expect(props.activeTab).toBe('nodes');
+    expect(props.nodesError).toBe('nodes denied');
+  });
   it('respects permission denials and avoids loading', async () => {
     permissionState.set('Event:list', {
       allowed: false,

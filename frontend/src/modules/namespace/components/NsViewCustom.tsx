@@ -40,8 +40,6 @@ export type CustomResourceData = CatalogBackedCustomResourceRow;
 
 interface CustomViewProps {
   namespace: string;
-  loading?: boolean;
-  loaded?: boolean;
   showNamespaceColumn?: boolean;
 }
 
@@ -49,7 +47,7 @@ interface CustomViewProps {
  * GridTable component for namespace custom resources (instances of CRDs)
  */
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
-  ({ namespace, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -286,8 +284,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const source = backendQuerySource<CustomResourceData>({
       enabled: true,
       rows,
-      loading: catalogLoading || (loading ?? false),
-      loaded: catalogLoaded || loaded,
+      loading: catalogLoading,
+      loaded: catalogLoaded,
       error: catalogError ?? null,
       // Per-view identity so a revisit replays the last page instead of a spinner.
       cacheKey: `namespace-custom|${selectedClusterId ?? ''}|${namespace}`,

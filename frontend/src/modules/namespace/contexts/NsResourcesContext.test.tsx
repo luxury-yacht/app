@@ -1,39 +1,29 @@
 /**
  * frontend/src/modules/namespace/contexts/NsResourcesContext.test.tsx
  *
- * Test suite for NsResourcesContext: active namespace/tab tracking, the
- * orchestrator context publication, and single-namespace permission priming.
- * The context deliberately holds NO domain leases and fetches NO data — the
- * query-backed tables own their rows (pinned below).
+ * Test suite for NsResourcesContext: the namespace-view effects wrapper.
+ * It publishes the selected namespace to the refresh orchestrator and primes
+ * single-namespace permission checks. It deliberately holds NO domain
+ * leases, fetches NO data, and exposes NO context value — the query-backed
+ * tables own their rows, and the active tab lives in ViewStateContext.
  */
-import React, { act } from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { NamespaceResourcesProvider, useNamespaceResources } from './NsResourcesContext';
+import { NamespaceResourcesProvider } from './NsResourcesContext';
 
-const { orchestrator, capabilityMocks, viewState, contextRef } = vi.hoisted(() => {
-  const orchestratorMock = {
+const { orchestrator, capabilityMocks, viewState } = vi.hoisted(() => ({
+  orchestrator: {
     updateContext: vi.fn(),
-    setDomainEnabled: vi.fn(),
-    resetDomain: vi.fn(),
-    resetScopedDomain: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
     acquireScopedDomainLease: vi.fn(),
     releaseScopedDomainLease: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-    isStreamingDomain: vi.fn().mockReturnValue(false),
-  };
-
-  return {
-    orchestrator: orchestratorMock,
-    capabilityMocks: { queryNamespacePermissions: vi.fn() },
-    viewState: { value: 'namespace' as string },
-    contextRef: {
-      current: null as ReturnType<typeof useNamespaceResources> | null,
-    },
-  };
-});
+  },
+  capabilityMocks: { queryNamespacePermissions: vi.fn() },
+  viewState: { value: 'namespace' as string },
+}));
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestrator,
@@ -61,12 +51,6 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({ selectedNamespaceClusterId: testClusterId }),
 }));
 
-const TestConsumer: React.FC = () => {
-  const context = useNamespaceResources();
-  contextRef.current = context;
-  return null;
-};
-
 describe('NamespaceResourcesProvider', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -80,7 +64,6 @@ describe('NamespaceResourcesProvider', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
 
-    contextRef.current = null;
     Object.values(orchestrator).forEach((value) => {
       if (typeof value === 'function') {
         value.mockClear();
@@ -97,38 +80,24 @@ describe('NamespaceResourcesProvider', () => {
     container.remove();
   });
 
-  const render = async (element: React.ReactElement) => {
+  const render = async (namespace?: string | null) => {
     await act(async () => {
-      root.render(element);
+      root.render(
+        <NamespaceResourcesProvider namespace={namespace}>
+          <div data-testid="child" />
+        </NamespaceResourcesProvider>
+      );
       await Promise.resolve();
     });
   };
 
-  it('throws when useNamespaceResources is called outside the provider', () => {
-    const OutsideConsumer = () => {
-      useNamespaceResources();
-      return null;
-    };
-
-    expect(() => {
-      act(() => {
-        root.render(<OutsideConsumer />);
-      });
-    }).toThrowError('useNamespaceResources must be used within NamespaceResourcesProvider');
-  });
-
   it('holds NO base-scope lease and issues NO fetch — the query-backed tables own their data', async () => {
     // Field evidence for the cut: two namespace-workloads fetches per metric
-    // tick — the table's typed-query page PLUS this context's base-scope
-    // copy, whose rows were rendered NOWHERE (full consumer audit: manager
-    // read bookkeeping fields only; AllNamespacesView read .error only;
-    // every tab view is query-backed and holds its own lifecycle lease).
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
+    // tick — the table's typed-query page PLUS this wrapper's base-scope
+    // copy, whose rows were rendered NOWHERE.
+    await render('team-a');
 
+    expect(container.querySelector('[data-testid="child"]')).toBeTruthy();
     expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalled();
     expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(orchestrator.setScopedDomainEnabled).not.toHaveBeenCalled();
@@ -142,39 +111,9 @@ describe('NamespaceResourcesProvider', () => {
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
   });
 
-  it('tracks the active resource type and exposes the setter', async () => {
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="config">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
-
-    expect(contextRef.current?.activeResourceType).toBe('config');
-
-    await act(async () => {
-      contextRef.current?.setActiveResourceType('storage');
-      await Promise.resolve();
-    });
-    expect(contextRef.current?.activeResourceType).toBe('storage');
-  });
-
-  it('defaults the active view to workloads when none is provided', async () => {
-    await render(
-      <NamespaceResourcesProvider namespace="team-a">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
-
-    expect(contextRef.current?.activeResourceType).toBe('workloads');
-  });
-
   it('clears the orchestrator namespace context outside the namespace view', async () => {
     viewState.value = 'cluster';
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
+    await render('team-a');
 
     expect(orchestrator.updateContext).toHaveBeenCalledWith({
       selectedNamespace: undefined,
@@ -183,29 +122,15 @@ describe('NamespaceResourcesProvider', () => {
   });
 
   it('does not prime permissions for the all-namespaces sentinel', async () => {
-    await render(
-      <NamespaceResourcesProvider namespace="namespace:all" activeView="workloads">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
+    await render('namespace:all');
 
     expect(capabilityMocks.queryNamespacePermissions).not.toHaveBeenCalled();
   });
 
   it('follows namespace prop changes', async () => {
-    await render(
-      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
-    expect(contextRef.current?.currentNamespace).toBe('team-a');
+    await render('team-a');
+    await render('team-b');
 
-    await render(
-      <NamespaceResourcesProvider namespace="team-b" activeView="workloads">
-        <TestConsumer />
-      </NamespaceResourcesProvider>
-    );
-    expect(contextRef.current?.currentNamespace).toBe('team-b');
     expect(orchestrator.updateContext).toHaveBeenCalledWith({
       selectedNamespace: 'team-b',
       selectedNamespaceClusterId: testClusterId,
