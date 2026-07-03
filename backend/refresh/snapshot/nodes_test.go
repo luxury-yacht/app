@@ -55,6 +55,34 @@ func (f fakeMetricsProvider) Sample() metrics.Sample {
 	}
 }
 
+// A pod add/delete changes the served per-node aggregates (pod counts,
+// requests/limits), so it MUST advance the snapshot Version — the object
+// validator. Folding only the node store RV made those rebuilds answer 304
+// against the client's unchanged validator, silently keeping stale pod counts
+// until an unrelated node change or metric tick (observed live as 0-byte 304
+// responses that should have carried data).
+func TestNodeSnapshotVersionAdvancesOnPodStoreChanges(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-1", ResourceVersion: "42"},
+	}
+	ingest := newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, "42", node)
+	ingest.resourceVersion = "100" // pod store RV
+	builder := newNodeBuilderForTest(ClusterMeta{}, ingest, node)
+
+	first, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	// A pod lands on the node: the pod store RV advances, the node RV does not.
+	bumped := ingest
+	bumped.resourceVersion = "150"
+	builder.ingest = bumped
+
+	second, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Greater(t, second.Version, first.Version,
+		"pod-driven aggregate changes must advance the nodes validator")
+}
+
 // newNodeBuilderForTest builds a NodeBuilder wired the production way: node OWN-rows are served
 // from a maintained store fed the SAME Table-half NodeSummary rows the node reflector projects
 // (via the store's Sink, mirroring pods_store_scope_test.go), while the ingest source still

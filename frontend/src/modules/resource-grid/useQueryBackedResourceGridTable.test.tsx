@@ -40,6 +40,7 @@ const {
       version?: number;
       sourceVersion?: string;
       sourceVersions?: Record<string, string>;
+      signalVersions?: Record<string, string>;
       streamRevision?: number;
       checksum?: string;
       lastUpdated?: number;
@@ -298,18 +299,22 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         fetchOnEnable: false,
       })
     );
+    // No doorbell has rung yet: the identity is the (empty) doorbell clocks.
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'nodes',
-        liveDataVersion: 'source:1',
+        liveDataVersion: 'object: metric:',
       })
     );
 
+    // Doorbell shape: signalVersions + the folded sourceVersion
+    // (bumpSourceVersionOnly writes both).
     liveDomainStateRef.current = {
       status: 'ready',
       data: {},
       version: 2,
-      sourceVersion: 'source:2',
+      sourceVersion: 'node-2',
+      signalVersions: { object: 'node-2' },
       checksum: 'fresh',
       lastUpdated: 22,
     };
@@ -321,7 +326,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'nodes',
-        liveDataVersion: 'source:2',
+        liveDataVersion: 'object:node-2 metric:',
       })
     );
   });
@@ -354,10 +359,11 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         fetchOnEnable: false,
       })
     );
+    // No doorbell has rung yet: the identity is the (empty) doorbell clocks.
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: 'source:1',
+        liveDataVersion: 'object: metric:',
       })
     );
 
@@ -365,7 +371,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       status: 'ready',
       data: {},
       version: 3,
-      sourceVersion: 'source:3',
+      sourceVersion: 'pods-3',
+      signalVersions: { object: 'pods-3' },
       checksum: '',
       lastUpdated: 33,
     };
@@ -377,7 +384,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: 'source:3',
+        liveDataVersion: 'object:pods-3 metric:',
       })
     );
   });
@@ -402,19 +409,20 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ domain: 'pods', liveDataVersion: 'source:1' })
+      expect.objectContaining({ domain: 'pods', liveDataVersion: 'object: metric:' })
     );
 
     // Mirror what resourceStreamManager.bumpSourceVersionOnly writes when the
     // backend metric doorbell arrives (version = the poller collection
-    // revision): the metric clock AND the folded sourceVersion advance. Data,
-    // object version, and checksum stay untouched — no object event happened.
+    // revision): the metric SIGNAL clock AND the folded sourceVersion advance.
+    // Data, object version, and checksum stay untouched — no object event
+    // happened.
     const doorbellRevision = '1719964800000000000';
     liveDomainStateRef.current = {
       ...liveDomainStateRef.current,
       status: 'ready',
       sourceVersion: doorbellRevision,
-      sourceVersions: { metric: doorbellRevision },
+      signalVersions: { metric: doorbellRevision },
       streamRevision: 1,
       lastUpdated: 12,
     };
@@ -423,11 +431,62 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       root.render(<Probe />);
     });
 
-    // The refetch identity keys on the folded sourceVersion, so the metric
-    // tick alone — no object change — must produce a new liveDataVersion.
+    // The refetch identity keys on the doorbell clocks, so the metric tick
+    // alone — no object change — must produce a new liveDataVersion.
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ domain: 'pods', liveDataVersion: doorbellRevision })
+      expect.objectContaining({
+        domain: 'pods',
+        liveDataVersion: 'object: metric:' + doorbellRevision,
+      })
     );
+  });
+
+  it('apply-driven folded sourceVersion churn must NOT change the refetch identity (no echo)', () => {
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    // Doorbell shape: signalVersions + folded sourceVersion (what
+    // bumpSourceVersionOnly writes).
+    liveDomainStateRef.current = {
+      ...liveDomainStateRef.current,
+      sourceVersion: 'node-doorbell-1',
+      signalVersions: { object: 'node-doorbell-1' },
+    };
+    act(() => {
+      root.render(<Probe />);
+    });
+    const callsAfterMount = useTypedResourceQueryMock.mock.calls.length;
+    const identityAtMount = useTypedResourceQueryMock.mock.calls[callsAfterMount - 1][0]
+      .liveDataVersion as string;
+
+    // ANOTHER consumer's fetch of the same base scope lands: the apply
+    // rewrites the folded sourceVersion (and payload sourceVersions) but never
+    // touches signalVersions. Keying the table on the folded value made this
+    // look like a new signal — a 304 echo fetch per sibling fetch, per cycle
+    // (observed live in the Web Inspector as 0-byte 304s after each 200 pair).
+    liveDomainStateRef.current = {
+      ...liveDomainStateRef.current,
+      sourceVersion: 'validator-from-sibling-apply',
+      sourceVersions: { object: 'watermark-7', metric: '1719964800000000000' },
+      lastUpdated: 99,
+    };
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    const calls = useTypedResourceQueryMock.mock.calls;
+    const lastCall = calls[calls.length - 1]?.[0];
+    expect(lastCall.liveDataVersion).toBe(identityAtMount);
   });
 
   it('seeds cluster query state from the configured default sort before persistence publishes', () => {
@@ -629,7 +688,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'cluster-config',
-        liveDataVersion: 'source:ready',
+        // The gate opened; no doorbell has rung, so the identity is the
+        // (empty) object clock.
+        liveDataVersion: 'object:',
       })
     );
   });

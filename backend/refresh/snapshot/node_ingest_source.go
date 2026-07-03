@@ -60,14 +60,29 @@ func nodeOverviewFactsFromIngest(source nodeIngestSource) []nodeOverviewFact {
 	return out
 }
 
-// nodeIngestVersion returns the node store's latest list/watch resourceVersion as the uint64
-// watermark a snapshot domain folds into its version (in place of the per-node RV it can no
-// longer read). A nil source or an unparseable RV yields 0.
-func nodeIngestVersion(source nodeIngestSource) uint64 {
+// nodeDomainIngestVersion is the NODES SNAPSHOT's version watermark: the max of
+// the node and pod store list/watch RVs (in place of the per-object RVs the cut
+// kinds can no longer read). Node rows join per-node POD aggregates at serve
+// (pod counts, requests/limits), so a pod add/delete changes served content and
+// must advance the validator — folding only the node RV made those rebuilds
+// answer 304 against the client's unchanged validator, silently keeping stale
+// pod counts (mirrors the workloads domain's two-store watermark).
+func nodeDomainIngestVersion(source nodeDomainIngestSource) uint64 {
+	nodeVersion := ingestStoreVersion(source, NodeGVR)
+	podVersion := ingestStoreVersion(source, PodGVR)
+	if podVersion > nodeVersion {
+		return podVersion
+	}
+	return nodeVersion
+}
+
+// ingestStoreVersion parses one store's latest list/watch resourceVersion as a
+// uint64 watermark. A nil source or an unparseable RV yields 0.
+func ingestStoreVersion(source nodeIngestSource, gvr schema.GroupVersionResource) uint64 {
 	if source == nil {
 		return 0
 	}
-	rv := source.StoreResourceVersion(NodeGVR)
+	rv := source.StoreResourceVersion(gvr)
 	if rv == "" {
 		return 0
 	}

@@ -163,7 +163,10 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		ctx,
 		scope,
 		b.ownRows(),
-		nodeIngestVersion(b.ingest),
+		// Two-store watermark (node + pod RVs): the rows join pod aggregates,
+		// so pod changes must advance the validator or refetches 304 with
+		// stale pod counts.
+		nodeDomainIngestVersion(b.ingest),
 		podAggregatesFromIngest(b.ingest),
 		nodeUsage,
 		podUsage,
@@ -232,15 +235,22 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	// The list fallback projects its typed pods to the same PodAggregate rows the
 	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
 	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
+	// Pod RVs fold into the version watermark for the same reason the ingest path
+	// folds the pod store RV: pod changes alter served aggregates and must
+	// advance the validator.
 	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	var podsVersion uint64
 	for _, pod := range pods {
 		if pod == nil {
 			continue
 		}
 		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+		if v := parsePodResourceVersion(pod); v > podsVersion {
+			podsVersion = v
+		}
 	}
 	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
-	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, nodeUsage, podUsage, metadata)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, podsVersion, nodeUsage, podUsage, metadata)
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -255,13 +265,18 @@ func buildNodeSnapshotFromUsage(
 	scope string,
 	nodes []*corev1.Node,
 	podAggregates []streamrows.PodAggregate,
+	// podsVersion is the max RV of the pods the aggregates were projected from;
+	// it floors the version watermark so pod-driven aggregate changes advance
+	// the validator (0 when the caller has no pod versions, e.g. the
+	// single-node stream projection, which never reads the snapshot version).
+	podsVersion uint64,
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
 	metricsMetadata metrics.Metadata,
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	items := make([]NodeSummary, 0, len(nodes))
-	var version uint64
+	version := podsVersion
 
 	podsByNode := podAggregatesByNode(podAggregates)
 

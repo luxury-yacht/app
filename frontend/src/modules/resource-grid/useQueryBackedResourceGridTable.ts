@@ -3,6 +3,7 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { doorbellSourceClocks } from '@/core/refresh/streaming/resourceStreamDomains';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
@@ -47,19 +48,34 @@ export const typedQueryPageLimitOrDefault = (
   fallback: TablePageSize
 ): TablePageSize => (isTablePageSize(value) ? value : fallback);
 
-// The live-data identity the typed query watches to decide when to refetch. It
-// uses the opaque source token emitted by snapshots and doorbell signals, not
-// refresh timestamps or the legacy version/checksum tuple.
-export const liveDomainVersion = (state: {
-  sourceVersion?: string;
-  version?: number | string;
-  checksum?: string;
-  etag?: string;
-  streamRevision?: number;
-  lastUpdated?: number;
-  lastAutoRefresh?: number;
-  lastManualRefresh?: number;
-}): string => state.sourceVersion ?? state.etag ?? '';
+// The live-data identity the typed query watches to decide when to refetch.
+// For domains with declared doorbell clocks it keys on signalVersions — the
+// field ONLY the stream manager's doorbell path writes — never the folded
+// sourceVersion, which payload applies rewrite: any OTHER consumer fetching
+// the same base scope would flip the folded value and echo a pointless 304
+// refetch out of this table (observed live as 0-byte 304s trailing every
+// metric-tick 200 pair). Domains without doorbell clocks (plain snapshot
+// domains) keep the folded token.
+export const liveDomainVersion = (
+  domain: RefreshDomain,
+  state: {
+    sourceVersion?: string;
+    signalVersions?: Partial<Record<string, string>>;
+    version?: number | string;
+    checksum?: string;
+    etag?: string;
+    streamRevision?: number;
+    lastUpdated?: number;
+    lastAutoRefresh?: number;
+    lastManualRefresh?: number;
+  }
+): string => {
+  const clocks = doorbellSourceClocks(domain);
+  if (clocks.length === 0) {
+    return state.sourceVersion ?? state.etag ?? '';
+  }
+  return clocks.map((clock) => clock + ':' + (state.signalVersions?.[clock] ?? '')).join(' ');
+};
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
 // resource grid. Sourced ONLY from the typed query — never the live snapshot, which is the
@@ -200,7 +216,7 @@ function useTypedQueryLifecycle<
     fetchOnEnable: false,
   });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);
-  const liveDataVersion = liveDomainVersion(liveDomain);
+  const liveDataVersion = liveDomainVersion(domain, liveDomain);
   const liveDomainInitialLoadPending = isLiveDomainInitialLoadPending(liveDomain);
   const hydratedRef = useRef(persistence.hydrated);
   hydratedRef.current = persistence.hydrated;

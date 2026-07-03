@@ -1,5 +1,6 @@
+- Go through all views. Check logs, domains, and the network tab. Make sure there are no unexpected logs, domain states, or network calls.
+
 - Delete namespace does not remove it from browse view
-- double calls to pod metrics (see Network tab)
 
 - Build a plugin architecture
   - AI

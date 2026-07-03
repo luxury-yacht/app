@@ -79,6 +79,7 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 		"",
 		[]*corev1.Node{node},
 		aggregates,
+		0,
 		nodeMetrics,
 		podMetrics,
 		metrics.Metadata{},
