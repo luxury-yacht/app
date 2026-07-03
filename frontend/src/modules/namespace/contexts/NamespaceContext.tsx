@@ -506,11 +506,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
   }, [clearSelection, namespaceScopes, updateNamespaces]);
 
-  // The backend's permission-denied message is our own deterministic contract
-  // string (refresh.PermissionDeniedError via the 403 status payload).
-  const namespacesPermissionDenied =
-    namespaceDomain.status === 'error' &&
-    Boolean(namespaceDomain.error?.toLowerCase().startsWith('permission denied'));
+  // Structural flag stamped by the orchestrator from the typed 403 (checked
+  // once per session; the scope is settled and background retries stop).
+  const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
 
   useEffect(() => {
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {

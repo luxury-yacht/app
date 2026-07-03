@@ -8,6 +8,7 @@
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
+  isSnapshotPermissionDenied,
   invalidateRefreshBaseURL,
   setMetricsActive,
   type Snapshot,
@@ -1116,6 +1117,15 @@ class RefreshOrchestrator {
     }
 
     const previousState = getScopedDomainState(domain, normalizedScope);
+    // A permission-denied scope is SETTLED: the backend refused it with a
+    // typed 403 and permission changes are not expected mid-session (recovery
+    // is an app restart). Background retries here caused a request every ~2s
+    // (the no-data fetch clause) and flicked the state through 'loading' —
+    // observed live as a spinner flashing over the permission message. Manual
+    // refresh remains a deliberate re-ask.
+    if (!options.isManual && previousState.permissionDenied) {
+      return;
+    }
     const nextStatus = previousState.data ? 'updating' : 'loading';
 
     setScopedDomainState(domain, normalizedScope, (prev) => ({
@@ -1201,6 +1211,20 @@ class RefreshOrchestrator {
       }
 
       const message = error instanceof Error ? error.message : String(error);
+      if (isSnapshotPermissionDenied(error)) {
+        // Handled BEFORE the startup grace-window suppression: a typed 403 is
+        // a real answer, not a transient network blip — swallowing it would
+        // leave the scope unmarked and the retry loop running.
+        setScopedDomainState(domain, normalizedScope, (prev) => ({
+          ...prev,
+          status: 'error',
+          error: message,
+          permissionDenied: true,
+          isManual: options.isManual,
+        }));
+        this.notifyRefreshError(domain, normalizedScope, message);
+        return;
+      }
       if (this.errorNotifier.shouldSuppressNetworkError(message)) {
         setScopedDomainState(domain, normalizedScope, (prev) => ({
           ...prev,
@@ -1273,6 +1297,7 @@ class RefreshOrchestrator {
         lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
         error: null,
+        permissionDenied: false,
         isManual,
         scope: resolvedScope,
       }));

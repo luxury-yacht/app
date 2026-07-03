@@ -27,6 +27,11 @@ export interface DomainSnapshotState<TPayload> {
   // an object clock into every snapshot, so sourceVersions churn on every
   // fetch and CANNOT be a signal key — that was the echo-refetch bug).
   signalVersions?: Partial<Record<RefreshSourceClock, string>>;
+  // The backend refused this scope for lack of RBAC permission (typed 403).
+  // TERMINAL for the session: background refetches skip the scope entirely
+  // (permission is checked once; recovery is an app restart). Cleared only by
+  // a successful fetch or a scoped-state reset.
+  permissionDenied?: boolean;
   checksum?: string;
   etag?: string;
   // Retained for stream diagnostics/backward-compatible tests only. Query-backed

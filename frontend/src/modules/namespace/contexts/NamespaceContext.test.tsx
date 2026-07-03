@@ -661,6 +661,7 @@ describe('NamespaceProvider selection behaviour', () => {
       status: 'error',
       data: null,
       error: 'permission denied for domain namespaces (core/namespaces)',
+      permissionDenied: true,
     } as unknown as typeof namespaceDomainRef.current;
     const { cleanup } = renderWithProvider();
     act(() => {

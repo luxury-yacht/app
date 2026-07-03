@@ -190,11 +190,14 @@ describe('fetchSnapshot', () => {
     });
 
     (globalThis as any).fetch = fetchMock;
-    const { fetchSnapshot } = await import('./client');
+    const { fetchSnapshot, SnapshotPermissionDeniedError } = await import('./client');
 
-    await expect(fetchSnapshot('nodes')).rejects.toThrow(
-      'permission denied for domain nodes (core/nodes)'
-    );
+    // Typed, not just a message: the orchestrator marks the scope
+    // permissionDenied structurally so it can stop background retries
+    // (permission is checked ONCE per session — restart to recover).
+    const error = await fetchSnapshot('nodes').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SnapshotPermissionDeniedError);
+    expect((error as Error).message).toBe('permission denied for domain nodes (core/nodes)');
   });
 
   test('falls back to status text when error body cannot be parsed', async () => {

@@ -63,6 +63,9 @@ vi.mock('./client', () => ({
   ensureRefreshBaseURL: clientMocks.ensureRefreshBaseURLMock,
   invalidateRefreshBaseURL: clientMocks.invalidateRefreshBaseURLMock,
   setMetricsActive: clientMocks.setMetricsActiveMock,
+  // Mirrors the real structural guard (marker property, not instanceof).
+  isSnapshotPermissionDenied: (error: unknown) =>
+    error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true,
 }));
 
 const containerLogsStreamMocks = vi.hoisted(() => ({
@@ -353,6 +356,49 @@ describe('refreshOrchestrator', () => {
 
     clusterReadiness.resetForTests();
     resetAllScopedDomainStates('cluster-config');
+  });
+
+  it('a permission-denied scope is settled: background refetches are skipped and the state never re-enters loading', async () => {
+    clusterReadiness.resetForTests();
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', 'cluster');
+    resetAllScopedDomainStates('cluster-config');
+    setRuntimeScopeEnabled('cluster-config', scope, true);
+    eventBus.emit('cluster:lifecycle', {
+      clusterId: 'cluster-a',
+      state: 'loading',
+      previousState: 'connected',
+    });
+    clientMocks.fetchSnapshotMock.mockClear();
+
+    // First (and only) permission check: the backend fails fast with a typed
+    // 403. Permission is extremely unlikely to change mid-session, so this is
+    // checked ONCE — recovery is an app restart.
+    const denied = new Error('permission denied for domain namespaces (core/namespaces)');
+    (denied as any).permissionDenied = true;
+    clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    // The orchestrator stores cluster-config under the cluster BASE scope.
+    const storedScope = buildClusterScope('cluster-a', '');
+    await vi.waitFor(() => {
+      const deniedState = getScopedDomainState('cluster-config', storedScope);
+      expect(deniedState.status).toBe('error');
+      expect(deniedState.permissionDenied).toBe(true);
+    });
+
+    // Background retries (the 2s fallback poll observed live as
+    // failureCount 73->78/10s + a loading/error spinner flicker) must be
+    // SKIPPED entirely: no request, no loading transition.
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(getScopedDomainState('cluster-config', storedScope).status).toBe('error');
+
+    // A manual refresh is a deliberate user action: it may re-ask.
+    clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: true });
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
   it('a stream-signal fetch latches a trailing refetch behind an in-flight fetch — never dropped, never aborting', async () => {
