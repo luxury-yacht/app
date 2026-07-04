@@ -761,6 +761,21 @@ class RefreshOrchestrator {
         }
 
         runtime.finishStreamingStart(domain, scope, cleanup ?? noopStreamingCleanup);
+        // Initial reconciliation: a freshly-subscribed scope has no snapshot
+        // yet and the stream only signals CHANGES, so a quiet (or denied)
+        // domain would sit in 'initialising' until the first fallback poll
+        // tick — observed live as 5–10s first-paint stalls on every first
+        // visit to a streaming view. Fetch once now; streamSignal bypasses
+        // the healthy-stream skip, performFetch dedupes in-flight, and a
+        // denied domain gets its typed-403 stamp immediately.
+        if (!getScopedDomainState(domain, scope).data) {
+          void this.performFetch(domain, scope, {
+            isManual: false,
+            streamSignal: true,
+          }).catch(() => {
+            // Failures land in the scoped state via performFetch's own path.
+          });
+        }
       })
       .catch((error) => {
         runtime.failStreamingStart(domain, scope);
