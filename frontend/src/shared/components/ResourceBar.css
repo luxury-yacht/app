@@ -203,6 +203,15 @@
   z-index: 1;
 }
 
+/* Usage past the limit position: striped overlay on the usage fill whose
+   left edge marks the limit. */
+.resource-bar-overlimit {
+  position: absolute;
+  height: 100%;
+  background: var(--resourcebar-overlimit-fill);
+  z-index: 2;
+}
+
 /* Resource markers */
 .resource-bar-marker {
   position: absolute;

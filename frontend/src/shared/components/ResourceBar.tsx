@@ -391,6 +391,20 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
               />
             )}
 
+            {/* Over-limit area (usage past the limit position): striped
+                overlay whose left edge marks the limit — a line marker on a
+                critical fill is the same red and disappears. */}
+            {currentLimit > 0 && currentUsage > currentLimit && usagePercent > limitPercent && (
+              <div
+                className="resource-bar-overlimit"
+                style={{
+                  left: `${limitPercent}%`,
+                  width: `${usagePercent - limitPercent}%`,
+                }}
+                title={`Limit: ${tooltipLimit}`}
+              />
+            )}
+
             {/* Request marker - show in default variant, and in compact for pods (no allocatable) */}
             {currentRequest > 0 &&
               (variant === 'default' || (variant === 'compact' && !currentAllocatable)) && (
