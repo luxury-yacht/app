@@ -176,6 +176,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     ]
   );
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
+  // Disclosure for the Resource Utilization legend; collapsed by default so
+  // the card stays compact.
+  const [legendExpanded, setLegendExpanded] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -1005,6 +1008,48 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             memoryWorkloadUsageTotal,
             memoryWorkloadUsageItems
           )}
+
+          <div className="utilization-legend">
+            <button
+              type="button"
+              className="utilization-legend__toggle"
+              aria-expanded={legendExpanded}
+              onClick={() => setLegendExpanded((expanded) => !expanded)}
+              data-testid="utilization-legend-toggle"
+            >
+              <span
+                className={`utilization-legend__chevron${
+                  legendExpanded ? ' utilization-legend__chevron--open' : ''
+                }`}
+                aria-hidden="true"
+              />
+              Legend
+            </button>
+            {legendExpanded && (
+              <div className="utilization-legend__items" data-testid="utilization-legend">
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage" />
+                  <span>Current usage (color changes 🟢 🟡 🔴 as pressure rises)</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--reserved" />
+                  <span>Requested but currently unused</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--overlimit" />
+                  <span>Usage above total limits</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--request-marker" />
+                  <span>Total requests marker</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--limit-marker" />
+                  <span>Total limits marker</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="overview-section nodes-summary">

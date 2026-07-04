@@ -643,6 +643,100 @@
   align-items: center;
 }
 
+/* Collapsible legend explaining the utilization bar vocabulary. Swatches
+   reuse the ResourceBar theme variables so they can never drift from the
+   bar's actual rendering. */
+.utilization-legend {
+  margin-top: 0.75rem;
+}
+
+.utilization-legend__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.utilization-legend__toggle:hover {
+  color: var(--color-text);
+}
+
+.utilization-legend__chevron {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+
+.utilization-legend__chevron--open {
+  transform: rotate(90deg);
+}
+
+.utilization-legend__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+.utilization-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.utilization-legend__swatch {
+  flex: none;
+  width: 26px;
+  height: 10px;
+  border-radius: 2px;
+  background-color: var(--resourcebar-track-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.utilization-legend__swatch--usage {
+  background: var(--resourcebar-usage-normal);
+}
+
+.utilization-legend__swatch--reserved {
+  background: var(--resourcebar-reserved-fill);
+}
+
+.utilization-legend__swatch--overlimit {
+  background: var(--resourcebar-overlimit-fill), var(--resourcebar-usage-critical);
+}
+
+.utilization-legend__swatch--request-marker::after,
+.utilization-legend__swatch--limit-marker::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+}
+
+.utilization-legend__swatch--request-marker::after {
+  background-color: var(--resourcebar-marker-request);
+  box-shadow: var(--resourcebar-marker-request-shadow);
+}
+
+.utilization-legend__swatch--limit-marker::after {
+  background-color: var(--resourcebar-marker-limit);
+  box-shadow: var(--resourcebar-marker-limit-shadow);
+}
+
 .cluster-overview-error {
   display: flex;
   flex-direction: column;

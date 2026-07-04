@@ -1001,6 +1001,46 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('20.0%');
   });
 
+  it('explains the utilization bar vocabulary in a collapsible legend', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 1,
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="utilization-legend-toggle"]'
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-testid="utilization-legend"]')).toBeNull();
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    const legend = container.querySelector('[data-testid="utilization-legend"]');
+    expect(legend).not.toBeNull();
+    // The striping introduced for over-limit usage must be named — it is the
+    // one visual with no other in-UI explanation.
+    expect(legend?.textContent).toContain('limits');
+    expect(legend?.textContent).toContain('Total requests marker');
+
+    act(() => {
+      toggle?.click();
+    });
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-testid="utilization-legend"]')).toBeNull();
+  });
+
   it('shows no permission warnings when every source is readable', async () => {
     const { container, rerender, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
