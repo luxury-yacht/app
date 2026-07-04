@@ -1033,21 +1033,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <div className="utilization-legend__items" data-testid="utilization-legend">
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--usage-normal" />
-                  <span>Usage below {USAGE_HIGH_THRESHOLD_PERCENT}% of capacity</span>
+                  <span>Usage below {USAGE_HIGH_THRESHOLD_PERCENT}%</span>
                 </div>
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--usage-high" />
                   <span>
-                    Usage at {USAGE_HIGH_THRESHOLD_PERCENT}–{USAGE_CRITICAL_THRESHOLD_PERCENT}% of
-                    capacity
+                    Usage at {USAGE_HIGH_THRESHOLD_PERCENT}–{USAGE_CRITICAL_THRESHOLD_PERCENT}%
                   </span>
                 </div>
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--usage-critical" />
-                  <span>Usage above {USAGE_CRITICAL_THRESHOLD_PERCENT}% of capacity</span>
+                  <span>Usage above {USAGE_CRITICAL_THRESHOLD_PERCENT}%</span>
                 </div>
                 <div className="utilization-legend__footnote">
-                  Usage thresholds derived from requests/limits when node capacity is unavailable.
+                  Thresholds derived from requests/limits when node capacity is unavailable.
                 </div>
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--reserved" />
