@@ -135,6 +135,14 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   if (currentAllocatable > 0) {
     // Node resources - scale to allocatable capacity
     maxScale = currentAllocatable;
+  } else if (currentLimit > 0 && currentRequest > currentLimit) {
+    // Requests exceed limits: cluster-overview aggregates without node
+    // access (and pods where only some containers declare limits) can sum
+    // requests past the limits total. Scaling to limits would clamp the
+    // request marker — and possibly the usage fill — to the bar's right
+    // edge, hiding them. Widen the scale so usage, request, and limit all
+    // stay visible (same headroom idiom as the no-limit branch below).
+    maxScale = Math.max(currentUsage, currentRequest * 1.2);
   } else if (currentLimit > 0) {
     // Pod resources - scale to limit
     maxScale = currentLimit;

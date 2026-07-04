@@ -137,6 +137,30 @@ describe('ResourceBar', () => {
     cleanup();
   });
 
+  it('keeps request and limit markers visible when aggregate requests exceed limits (no allocatable)', async () => {
+    // Cluster-overview aggregates without node access: across pods, total
+    // requests can exceed total limits (per-container request<=limit only
+    // holds when both are set). Scaling to limits pinned every marker at the
+    // clamped right edge (left: 100%) — invisible on the track border.
+    const { container, cleanup } = await renderBar({
+      type: 'memory',
+      usage: '671.0 Mi',
+      request: '590.0 Mi',
+      limit: '490.0 Mi',
+      showTooltip: false,
+    });
+
+    const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
+    expect(markers).toHaveLength(2);
+    for (const marker of Array.from(markers)) {
+      const position = parseFloat(marker.style.left);
+      expect(position).toBeGreaterThan(0);
+      expect(position).toBeLessThan(100);
+    }
+
+    cleanup();
+  });
+
   it('toggles tooltip in compact mode and handles overcommit tracking', async () => {
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0);
