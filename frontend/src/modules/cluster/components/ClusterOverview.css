@@ -645,9 +645,12 @@
 
 /* Collapsible legend explaining the utilization bar vocabulary. Swatches
    reuse the ResourceBar theme variables so they can never drift from the
-   bar's actual rendering. */
+   bar's actual rendering. Divider matches the card's other sub-sections
+   (.pod-status / .node-health) so the row reads as part of the card. */
 .utilization-legend {
-  margin-top: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .utilization-legend__toggle {
