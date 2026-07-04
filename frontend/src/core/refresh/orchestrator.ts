@@ -756,9 +756,10 @@ class RefreshOrchestrator {
             }
           }
           if (enabledNow) {
-            // A stop cancelled this start mid-flight, but the scope was
-            // re-enabled before it resolved (the mount-time lease flap on
-            // every first view visit). The re-enable's own start attempt
+            // LOAD-BEARING — docs/architecture/refresh-system.md,
+            // "Streaming Start Lifecycle". A stop cancelled this start
+            // mid-flight, but the scope was re-enabled before it resolved
+            // (the mount-time lease flap on every first view visit). The re-enable's own start attempt
             // early-returned on THIS pending start, so dying here would
             // orphan the scope in 'initialising' until the fallback poller's
             // first tick (observed live: 5-10s first-paint stalls; forever
@@ -817,9 +818,11 @@ class RefreshOrchestrator {
     if (pending) {
       pending
         .then((cleanup) => {
-          // The start's own continuation (attached first) already handled a
-          // cancelled arrival — teardown, or an adopted restart when the
-          // scope was re-enabled — and cleared the cancel flag. Acting here
+          // LOAD-BEARING — docs/architecture/refresh-system.md, "Streaming
+          // Start Lifecycle": teardown has exactly one owner. The start's
+          // own continuation (attached first) already handled a cancelled
+          // arrival — teardown, or an adopted restart when the scope was
+          // re-enabled — and cleared the cancel flag. Acting here
           // too would release the manager subscription twice. The flag still
           // being set means this stop still owns the teardown.
           if (!runtime.isStreamingCancelled(domain, scope)) {

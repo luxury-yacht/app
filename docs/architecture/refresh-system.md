@@ -106,6 +106,72 @@ Keep common lifecycle plumbing shared where behavior matches. Do not collapse
 domain-specific identity, merge, cache, or recovery semantics into a generic
 handler.
 
+## Streaming Start Lifecycle (LOAD-BEARING — do not regress)
+
+This contract fixed the single largest perceived-performance defect the app
+ever had (2026-07-04): for months, EVERY first visit to a streaming view
+stalled 5–10 seconds (or loaded never, for scopes without an active fallback
+poller). The backend was innocent the whole time — it answered in ~1ms. The
+stall was a silent race in the frontend start pipeline. If first-visit
+latency ever regresses toward one fallback-poll interval, start here.
+
+### The race this contract closes
+
+View mount produces a lease flap: the scope is enabled, briefly disabled,
+and re-enabled within milliseconds. Without this contract that killed the
+scope's stream start:
+
+1. Enable begins `streaming.start` (in-flight promise).
+2. The transient disable calls `cancelStreamingStart`, flagging the
+   in-flight start.
+3. The immediate re-enable's own start attempt early-returns
+   ("already starting") because the doomed start is still pending.
+4. The doomed start resolves, sees the stale cancel flag, and dies silently.
+   Nothing owns the scope; nothing paints until the fallback poller's first
+   tick — and never for domains without an active poller.
+
+Log signature of a recurrence: a scope stuck in `initialising` with
+first-paint latency ≈ its poller interval, and no snapshot fetch between
+view open and the first tick.
+
+### The rules (all enforced by `orchestrator.streamingFlap.test.ts`)
+
+1. **Obsolete cancellation → adopt-restart.** A start that arrives cancelled
+   while its scope is ENABLED again must not die: clean up the doomed start
+   and immediately run `startStreamingScope` afresh. The stream manager's
+   `ensure` cancels the linger-scheduled unsubscribe
+   (`resourceStreamSubscriptions.ts` `ensureForCluster` →
+   `cancelPendingUnsubscribe`), so the subscription survives the handoff.
+2. **Teardown has exactly one owner.** Both the start's own continuation and
+   `stopStreamingScope`'s deferred block observe a cancelled start; the
+   cancel flag is the ownership token. The start continuation clears it in
+   every handled path; the stop's deferred block acts only if the flag is
+   still set. Running cleanup twice double-releases the manager
+   subscription's refcount.
+3. **A freshly started scope with no data fetches once, immediately.**
+   Streams signal CHANGES only — a quiet (or permission-denied) domain never
+   delivers a first frame. The `startStreamingScope` success path fires an
+   initial reconciliation fetch (`streamSignal: true`, deduped in-flight)
+   so the scope leaves `initialising` now, not at the first poll tick.
+4. **A typed 403 is a settled answer at every layer** (see
+   `docs/architecture/namespace-scope.md`, "Fail-fast contract"): the query
+   hook settles without warm-up retries, tables render "Insufficient
+   permissions", and stream permission frames block resync instead of
+   looping.
+
+### Guarding tests
+
+- `frontend/src/core/refresh/orchestrator.streamingFlap.test.ts` — the
+  flap race end to end at the real orchestrator seam (public
+  `registerDomain` + `setScopedDomainEnabled` with a controllable fake
+  streaming domain). Extend this harness for future orchestrator races.
+- `frontend/src/modules/resource-grid/queryBackedLeafFirstLoad.test.tsx`
+  ("settles a permission-denied domain…") — fail-fast at the view seam.
+
+Known follow-up: the mount-time lease flap itself (enable→disable→re-enable)
+still happens and is wasted work; the pipeline is robust to it. Tracing its
+source is tracked in `docs/plans/namespace-scope.md` follow-ups.
+
 ## Normalized Resource Query Provider Contract
 
 Snapshot domains that back a resource inventory table expose one normalized query
