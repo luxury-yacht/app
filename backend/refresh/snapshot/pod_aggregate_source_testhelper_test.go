@@ -30,6 +30,10 @@ type fakePodAggregateSource struct {
 	nodeBundles []ingest.Bundle
 	nodeSynced  bool
 	nodeRV      string
+	// permissionSkipped marks GVRs whose reflector the ingest permission filter
+	// skipped at Start (identity cannot list+watch), so a test can drive the
+	// cluster-overview permission-unavailable marking.
+	permissionSkipped map[schema.GroupVersionResource]bool
 }
 
 func (s fakePodAggregateSource) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
@@ -93,6 +97,22 @@ func (s fakePodAggregateSource) HasSyncedFor(gvr schema.GroupVersionResource) bo
 
 func (s fakePodAggregateSource) withPodSynced(synced bool) fakePodAggregateSource {
 	s.podSynced = &synced
+	return s
+}
+
+// PermissionSkippedFor mirrors the ingest manager's permission-skip visibility (default
+// false), so a test can drive the cluster-overview permission-unavailable marking.
+func (s fakePodAggregateSource) PermissionSkippedFor(gvr schema.GroupVersionResource) bool {
+	return s.permissionSkipped[gvr]
+}
+
+// withPermissionSkipped returns a copy of the source reporting gvr's reflector as
+// permission-skipped at Start.
+func (s fakePodAggregateSource) withPermissionSkipped(gvr schema.GroupVersionResource) fakePodAggregateSource {
+	if s.permissionSkipped == nil {
+		s.permissionSkipped = map[schema.GroupVersionResource]bool{}
+	}
+	s.permissionSkipped[gvr] = true
 	return s
 }
 

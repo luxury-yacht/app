@@ -357,21 +357,28 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 		"no fallback: denial must serve the permission-denied domain, not a degraded list")
 	require.Equal(t, "core/namespaces", namespaces.listWatch.deniedReason)
 
+	// Cluster overview degrades per resource (issue #244): the informer path is
+	// gated only on namespaces (the one informer the builder still owns — nodes,
+	// pods, and workload counts come from permission-skip-safe ingest stores),
+	// and the list fallback registers when ANY primary resource is listable, so
+	// an identity without node access still gets a partial overview.
 	overview := byDomain["cluster-overview"]
 	require.Nil(t, overview.direct)
 	require.Nil(t, overview.list)
 	require.NotNil(t, overview.listWatch, "cluster-overview must keep listWatch registration with list fallback")
 	require.Equal(t, []listWatchCheck{
-		{group: "", resource: "nodes"},
-		{group: "", resource: "pods"},
 		{group: "", resource: "namespaces"},
 	}, overview.listWatch.checks)
 	require.Equal(t, []listCheck{
 		{group: "", resource: "nodes"},
+		{group: "", resource: "pods"},
+		{group: "", resource: "namespaces"},
 	}, overview.listWatch.fallbackChecks)
+	require.True(t, overview.listWatch.fallbackAllowAny,
+		"any listable primary resource must be enough for the list fallback")
 	require.NotNil(t, overview.listWatch.registerInformer)
 	require.NotNil(t, overview.listWatch.registerFallback)
-	require.Equal(t, "cluster overview requires nodes", overview.listWatch.deniedReason)
+	require.Equal(t, "cluster overview requires nodes, pods, or namespaces", overview.listWatch.deniedReason)
 }
 
 func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {

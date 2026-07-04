@@ -34,6 +34,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
@@ -53,6 +54,11 @@ type clusterOverviewIngestSource interface {
 	// Rows returns the whole per-object bundle for a GVR in one consistent store read; the
 	// overview reads the node store's Aggregate halves (nodeOverviewFact) through it.
 	Rows(gvr schema.GroupVersionResource) []interface{}
+	// PermissionSkippedFor reports whether the gvr's reflector was permission-skipped at
+	// Start (the identity cannot list+watch the kind). The overview marks such a source
+	// permission-unavailable: its store settles empty, and the runtime list SSAR alone
+	// misses the list-without-watch identity.
+	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
 }
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
@@ -159,6 +165,13 @@ type ClusterOverviewPayload struct {
 	WorkloadResourceUsage WorkloadResourceUsage `json:"workloadResourceUsage"`
 
 	RecentEvents []RecentEvent `json:"recentEvents"`
+
+	// UnavailableResources lists the overview's primary sources (canonical
+	// group/resource keys — core/nodes, core/pods, core/namespaces) the current
+	// identity cannot list, so the frontend renders the affected cards as
+	// permission-gated instead of zero-valued (issue #244). Empty/omitted means
+	// every source was readable.
+	UnavailableResources []string `json:"unavailableResources,omitempty"`
 }
 
 type WorkloadResourceUsage struct {
@@ -282,6 +295,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		statefulSetCount int
 		daemonSetCount   int
 		cronJobCount     int
+		nodesForbidden   bool
 		podsForbidden    bool
 		namespacesDenied bool
 		mu               sync.Mutex
@@ -290,13 +304,23 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 	tasks := []func(context.Context) error{
 		func(ctx context.Context) error {
 			resp, err := b.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-			if err != nil {
+			switch {
+			case err == nil:
+				mu.Lock()
+				nodes = parallel.CopyToPointers(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				// Issue #244: a namespaces- or pods-only identity still gets a
+				// partial overview; the denied source is marked in the payload.
+				klog.V(2).Info("cluster-overview fallback: node list forbidden; proceeding without node summary")
+				mu.Lock()
+				nodesForbidden = true
+				mu.Unlock()
+				return nil
+			default:
 				return err
 			}
-			mu.Lock()
-			nodes = parallel.CopyToPointers(resp.Items)
-			mu.Unlock()
-			return nil
 		},
 		func(ctx context.Context) error {
 			resp, err := b.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
@@ -475,13 +499,31 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		return nil, err
 	}
 	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
-		totalDeployments:  deploymentCount,
-		totalStatefulSets: statefulSetCount,
-		totalDaemonSets:   daemonSetCount,
-		totalCronJobs:     cronJobCount,
-		recentEvents:      recentEvents,
+		totalDeployments:     deploymentCount,
+		totalStatefulSets:    statefulSetCount,
+		totalDaemonSets:      daemonSetCount,
+		totalCronJobs:        cronJobCount,
+		recentEvents:         recentEvents,
+		unavailableResources: clusterOverviewUnavailable(!nodesForbidden, !podsForbidden, !namespacesDenied),
 	})
 	return snapshot, nil
+}
+
+// clusterOverviewUnavailable returns the canonical group/resource keys of the
+// overview's primary sources denied for this build, the payload's
+// UnavailableResources contract.
+func clusterOverviewUnavailable(nodesAllowed, podsAllowed, namespacesAllowed bool) []string {
+	var out []string
+	if !nodesAllowed {
+		out = append(out, permissions.ResourceKey("", "nodes"))
+	}
+	if !podsAllowed {
+		out = append(out, permissions.ResourceKey("", "pods"))
+	}
+	if !namespacesAllowed {
+		out = append(out, permissions.ResourceKey("", "namespaces"))
+	}
+	return out
 }
 
 // Build assembles the cluster overview payload from cached resources and metrics.
@@ -925,11 +967,12 @@ func podMetricKey(namespace, name string) string {
 }
 
 type clusterOverviewExtras struct {
-	totalDeployments  int
-	totalStatefulSets int
-	totalDaemonSets   int
-	totalCronJobs     int
-	recentEvents      []RecentEvent
+	totalDeployments     int
+	totalStatefulSets    int
+	totalDaemonSets      int
+	totalCronJobs        int
+	recentEvents         []RecentEvent
+	unavailableResources []string
 }
 
 func applyClusterOverviewExtras(snapshot *refresh.Snapshot, extras clusterOverviewExtras) {
@@ -945,6 +988,7 @@ func applyClusterOverviewExtras(snapshot *refresh.Snapshot, extras clusterOvervi
 	payload.Overview.TotalDaemonSets = extras.totalDaemonSets
 	payload.Overview.TotalCronJobs = extras.totalCronJobs
 	payload.Overview.RecentEvents = extras.recentEvents
+	payload.Overview.UnavailableResources = extras.unavailableResources
 	snapshot.Payload = payload
 }
 
@@ -956,6 +1000,20 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	if err := b.waitForInformerSync(ctx); err != nil {
 		return nil, err
 	}
+
+	// Per-source runtime permission gates (issue #244): a denied primary source
+	// is dropped from the build and marked in the payload instead of failing
+	// the whole domain. The serve path injects the per-resource decisions into
+	// ctx (service.go ensurePermissions); absent decisions default to allowed.
+	// A permission-skipped ingest store (identity has list but not watch — the
+	// runtime list SSAR passes while the reflector never launches) counts as
+	// unavailable too, so its permanently empty store is not read as an empty
+	// cluster.
+	nodesAllowed := runtimeResourceAllowed(ctx, clusterOverviewDomainName, "", "nodes") &&
+		!(b.ingest != nil && b.ingest.PermissionSkippedFor(NodeGVR))
+	podsAllowed := runtimeResourceAllowed(ctx, clusterOverviewDomainName, "", "pods") &&
+		!(b.ingest != nil && b.ingest.PermissionSkippedFor(PodGVR))
+	namespacesAllowed := runtimeResourceAllowed(ctx, clusterOverviewDomainName, "", "namespaces")
 
 	type listResult[T any] struct {
 		items []*T
@@ -970,6 +1028,9 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 
 	tasks := []func(context.Context) error{
 		func(context.Context) error {
+			if b.namespaceLister == nil || !namespacesAllowed {
+				return nil
+			}
 			list, err := b.namespaceLister.List(labels.Everything())
 			namespaceRes.items = list
 			namespaceRes.err = err
@@ -1018,24 +1079,30 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	// Nodes are cut to the ingest path: the per-node overview facts come from the projected
 	// node store, gated on the store having synced (the ingest equivalent of the prior node
 	// informer HasSynced gate, so an unsynced store contributes no nodes rather than a partial
-	// count). Pods likewise come from the ingest store: the projected PodAggregate rows plus
-	// the store's latest RV as the pod version watermark.
+	// count; a permission-skipped store settles empty). Pods likewise come from the ingest
+	// store: the projected PodAggregate rows plus the store's latest RV as the pod version
+	// watermark. A runtime-denied source is dropped even when its store still holds rows.
 	var nodeFacts []nodeOverviewFact
-	if b.ingest != nil && b.ingest.HasSyncedFor(NodeGVR) {
+	if nodesAllowed && b.ingest != nil && b.ingest.HasSyncedFor(NodeGVR) {
 		nodeFacts = nodeOverviewFactsFromIngest(b.ingest)
 	}
-	podAggregates := podAggregatesFromIngest(b.ingest)
-	podVersion := podIngestVersion(b.ingest)
+	var podAggregates []streamrows.PodAggregate
+	var podVersion uint64
+	if podsAllowed {
+		podAggregates = podAggregatesFromIngest(b.ingest)
+		podVersion = podIngestVersion(b.ingest)
+	}
 	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeFacts, podAggregates, podVersion, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
 	if err != nil {
 		return nil, err
 	}
 	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
-		totalDeployments:  deploymentCount,
-		totalStatefulSets: statefulSetCount,
-		totalDaemonSets:   daemonSetCount,
-		totalCronJobs:     cronJobCount,
-		recentEvents:      recentEvents,
+		totalDeployments:     deploymentCount,
+		totalStatefulSets:    statefulSetCount,
+		totalDaemonSets:      daemonSetCount,
+		totalCronJobs:        cronJobCount,
+		recentEvents:         recentEvents,
+		unavailableResources: clusterOverviewUnavailable(nodesAllowed, podsAllowed, namespacesAllowed),
 	})
 	return snapshot, nil
 }

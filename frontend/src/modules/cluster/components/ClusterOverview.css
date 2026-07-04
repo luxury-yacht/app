@@ -223,9 +223,11 @@
   margin-bottom: 0;
 }
 
-/* Compact metrics-state indicator: small muted text with a status dot,
-   truncating long API errors (the title tooltip carries the full text). */
-.overview-section-header .metrics-warning-banner {
+/* Compact header indicators (metrics state, permission gaps): small muted
+   text with a status dot, truncating long messages (the title tooltip
+   carries the full text). */
+.overview-section-header .metrics-warning-banner,
+.overview-section-header .overview-permission-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -623,6 +625,22 @@
   justify-content: center;
   align-items: center;
   padding: 2rem 0;
+}
+
+/* Permission-gated data (issue #244): each affected card explains its own
+   gap in place — a compact header chip for derived values (capacity,
+   requests/limits) and a note where counts would render. */
+.overview-permission-note {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+/* The chip's ⓘ tooltip trigger: keep the icon vertically centered in the
+   chip's flex row instead of sitting on the text baseline. */
+.overview-permission-chip .tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
 }
 
 .cluster-overview-error {

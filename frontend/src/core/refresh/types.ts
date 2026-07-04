@@ -300,6 +300,11 @@ export interface ClusterOverviewPayload {
   notReadyNodes: number;
   cordonedNodes: number;
   recentEvents: RecentEventEntry[];
+  // Canonical group/resource keys (core/nodes, core/pods, core/namespaces) the
+  // current identity cannot list; the affected cards render as
+  // permission-gated instead of zero-valued. Absent when all sources are
+  // readable.
+  unavailableResources?: string[];
 }
 
 export interface RecentEventEntry {

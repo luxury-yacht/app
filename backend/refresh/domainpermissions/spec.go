@@ -419,9 +419,18 @@ var policySpecs = []policySpec{
 		Stream:  []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
-		Domain:  "cluster-overview",
-		Mode:    ModeAll,
-		Runtime: []Resource{fromIdentity(nodes.Identity)},
+		// ModeAny: the overview stays useful for identities without node access
+		// (issue #244 — the standard view role has pods+namespaces but no nodes).
+		// The builder marks the denied sources in the payload instead of the
+		// domain failing outright.
+		Domain: "cluster-overview",
+		Mode:   ModeAny,
+		Reason: "cluster overview requires nodes, pods, or namespaces",
+		Runtime: []Resource{
+			fromIdentity(nodes.Identity),
+			fromIdentity(pods.Identity),
+			fromIdentity(namespaces.Identity),
+		},
 	},
 	{
 		Domain:  "cluster-rbac",

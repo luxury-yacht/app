@@ -283,14 +283,20 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "core/namespaces",
 		}),
 
+		// Cluster overview degrades per resource (issue #244): the informer path
+		// needs only the namespaces informer — nodes, pods, and the workload
+		// counts come from ingest stores that are permission-skipped when the
+		// identity cannot read them, and the builder marks those sources
+		// unavailable in the payload. Identities without namespaces watch fall
+		// back to the polling list builder when ANY primary resource is
+		// listable, so a nodes-only or pods-only identity still gets a partial
+		// overview instead of a permission-denied placeholder.
 		listWatchRegistration(listWatchDomainConfig{
 			name:          "cluster-overview",
-			issueResource: "core/nodes,pods,namespaces",
+			issueResource: "core/namespaces",
 			logGroup:      "",
 			logResource:   "nodes/namespaces",
 			checks: []listWatchCheck{
-				{group: "", resource: "nodes"},
-				{group: "", resource: "pods"},
 				{group: "", resource: "namespaces"},
 			},
 			registerInformer: func() error {
@@ -305,7 +311,10 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 			fallbackChecks: []listCheck{
 				{group: "", resource: "nodes"},
+				{group: "", resource: "pods"},
+				{group: "", resource: "namespaces"},
 			},
+			fallbackAllowAny: true,
 			registerFallback: func() error {
 				return snapshot.RegisterClusterOverviewDomainList(
 					deps.registry,
@@ -315,7 +324,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				)
 			},
 			fallbackLog:  "Registering cluster overview domain using list fallback due to missing informer permissions",
-			deniedReason: "cluster overview requires nodes",
+			deniedReason: "cluster overview requires nodes, pods, or namespaces",
 		}),
 
 		withSkipUnless(directRegistration("catalog", func() error {
