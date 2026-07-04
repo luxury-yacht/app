@@ -1033,6 +1033,13 @@ describe('ClusterOverview', () => {
     // one visual with no other in-UI explanation.
     expect(legend?.textContent).toContain('limits');
     expect(legend?.textContent).toContain('Total requests marker');
+    // One row per usage color, stating the capacity percentage where the
+    // color changes (single-sourced with the bar's threshold logic).
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-normal')).toHaveLength(1);
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-high')).toHaveLength(1);
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-critical')).toHaveLength(1);
+    expect(legend?.textContent).toContain('81');
+    expect(legend?.textContent).toContain('95');
 
     act(() => {
       toggle?.click();

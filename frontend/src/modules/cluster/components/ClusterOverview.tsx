@@ -7,6 +7,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import {
+  USAGE_CRITICAL_THRESHOLD_PERCENT,
+  USAGE_HIGH_THRESHOLD_PERCENT,
+} from '@shared/components/resourceBarThresholds';
 import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
@@ -1028,8 +1032,22 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             {legendExpanded && (
               <div className="utilization-legend__items" data-testid="utilization-legend">
                 <div className="utilization-legend__item">
-                  <span className="utilization-legend__swatch utilization-legend__swatch--usage" />
-                  <span>Current usage (color changes 🟢 🟡 🔴 as pressure rises)</span>
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-normal" />
+                  <span>Usage below {USAGE_HIGH_THRESHOLD_PERCENT}% of capacity</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-high" />
+                  <span>
+                    Usage at {USAGE_HIGH_THRESHOLD_PERCENT}–{USAGE_CRITICAL_THRESHOLD_PERCENT}% of
+                    capacity
+                  </span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-critical" />
+                  <span>Usage above {USAGE_CRITICAL_THRESHOLD_PERCENT}% of capacity</span>
+                </div>
+                <div className="utilization-legend__footnote">
+                  Usage thresholds derived from requests/limits when node capacity is unavailable.
                 </div>
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--reserved" />

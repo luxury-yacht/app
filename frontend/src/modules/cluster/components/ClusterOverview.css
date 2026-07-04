@@ -708,8 +708,22 @@
   overflow: hidden;
 }
 
-.utilization-legend__swatch--usage {
+.utilization-legend__swatch--usage-normal {
   background: var(--resourcebar-usage-normal);
+}
+
+.utilization-legend__swatch--usage-high {
+  background: var(--resourcebar-usage-warning);
+}
+
+.utilization-legend__swatch--usage-critical {
+  background: var(--resourcebar-usage-critical);
+}
+
+.utilization-legend__footnote {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-small);
+  margin-bottom: 0.5rem;
 }
 
 .utilization-legend__swatch--reserved {

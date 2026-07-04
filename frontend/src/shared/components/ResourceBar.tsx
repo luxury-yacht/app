@@ -7,6 +7,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Tooltip from './Tooltip';
+import {
+  USAGE_CRITICAL_THRESHOLD_PERCENT,
+  USAGE_HIGH_THRESHOLD_PERCENT,
+} from './resourceBarThresholds';
 import './ResourceBar.css';
 
 interface ResourceBarProps {
@@ -164,9 +168,9 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
 
   if (currentAllocatable > 0) {
     // For nodes: use usage vs allocatable
-    if (usageVsAllocatable >= 95) {
+    if (usageVsAllocatable >= USAGE_CRITICAL_THRESHOLD_PERCENT) {
       statusClass = 'critical';
-    } else if (usageVsAllocatable >= 81) {
+    } else if (usageVsAllocatable >= USAGE_HIGH_THRESHOLD_PERCENT) {
       statusClass = 'warning';
     } else {
       statusClass = 'normal';
