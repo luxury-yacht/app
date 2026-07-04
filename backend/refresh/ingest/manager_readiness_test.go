@@ -78,7 +78,7 @@ func TestIngestManagerSkipsDeniedKindsAtStart(t *testing.T) {
 		t.Fatal("need at least two entries to exercise deny-one/allow-one")
 	}
 	// Deny exactly one kind; allow everything else.
-	mgr.SetPermissionFilter(func(group, resource string) bool {
+	mgr.SetPermissionFilter(func(group, resource, _ string) bool {
 		return !(group == deniedGVR.Group && resource == deniedGVR.Resource)
 	})
 	mgr.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
@@ -115,7 +115,7 @@ func TestIngestManagerPermissionSkippedFor(t *testing.T) {
 	if deniedGVR.Resource == "" || allowedGVR.Resource == "" {
 		t.Fatal("need at least two entries to exercise deny-one/allow-one")
 	}
-	mgr.SetPermissionFilter(func(group, resource string) bool {
+	mgr.SetPermissionFilter(func(group, resource, _ string) bool {
 		return !(group == deniedGVR.Group && resource == deniedGVR.Resource)
 	})
 	mgr.now = func() time.Time { return time.Unix(1_700_000_000, 0) }

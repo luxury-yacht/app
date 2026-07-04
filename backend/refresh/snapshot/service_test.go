@@ -840,7 +840,7 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	}
 
 	// Deny all resources in the namespace-config domain (configmaps + secrets).
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		return false, nil
 	})
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
@@ -871,7 +871,7 @@ func TestServiceBuildBlocksNamespacesWithoutListPermission(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		if group == "" && resource == "namespaces" && verb == "list" {
 			return false, nil
 		}
@@ -908,7 +908,7 @@ func TestServiceBuildAllowsPartialPermissions(t *testing.T) {
 	}
 
 	// Deny configmaps but allow secrets.
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		if resource == "configmaps" && verb == "list" {
 			return false, nil
 		}
@@ -949,7 +949,7 @@ func TestServiceBuildKeysCacheByRuntimeAllowedResources(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		return resource == "configmaps" || resource == "secrets", nil
 	})
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
@@ -963,7 +963,7 @@ func TestServiceBuildKeysCacheByRuntimeAllowedResources(t *testing.T) {
 		t.Fatalf("expected first build to allow both resources, got %#v", firstPayload)
 	}
 
-	service.permissionChecker = permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	service.permissionChecker = permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		return resource == "secrets", nil
 	})
 	second, err := service.Build(context.Background(), namespaceConfigDomainName, "cluster-a|namespace:default")
@@ -987,7 +987,7 @@ func TestServiceBuildSkipsEnsureForPermissionDeniedDomain(t *testing.T) {
 	}
 
 	reviewCalled := false
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		reviewCalled = true
 		return false, nil
 	})
@@ -1027,7 +1027,7 @@ func TestServiceBuildAllowsWhenPermissionsSucceed(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		return true, nil
 	})
 	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)

@@ -24,8 +24,10 @@ type ListWatchChecker interface {
 	CanListWatch(group, resource string) bool
 }
 
-// AccessReviewFunc issues a SelfSubjectAccessReview for the specified resource verb.
-type AccessReviewFunc func(ctx context.Context, group, resource, verb string) (bool, error)
+// AccessReviewFunc issues a SelfSubjectAccessReview for the specified resource
+// verb. namespace scopes the review to one namespace; empty means
+// cluster-wide (exactly the pre-scope behavior).
+type AccessReviewFunc func(ctx context.Context, group, resource, verb, namespace string) (bool, error)
 
 // DecisionSource describes how a permission decision was obtained.
 type DecisionSource string
@@ -62,6 +64,11 @@ type Checker struct {
 	mu      sync.RWMutex
 	cache   map[string]cacheEntry
 	sfGroup singleflight.Group // deduplicates concurrent SSAR calls for the same key
+
+	// scope + scopeApplies configure the cluster's namespace scope
+	// (docs/plans/namespace-scope.md); see SetScope.
+	scope        []string
+	scopeApplies func(group, resource string) bool
 }
 
 // NewChecker constructs a permission checker backed by the Kubernetes client.
@@ -70,7 +77,7 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 		ttl = config.PermissionCacheTTL
 	}
 
-	review := func(ctx context.Context, group, resource, verb string) (bool, error) {
+	review := func(ctx context.Context, group, resource, verb, namespace string) (bool, error) {
 		if client == nil {
 			return false, fmt.Errorf("kubernetes client not initialized")
 		}
@@ -86,9 +93,10 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 			req := &authorizationv1.SelfSubjectAccessReview{
 				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
 					ResourceAttributes: &authorizationv1.ResourceAttributes{
-						Group:    group,
-						Resource: resource,
-						Verb:     verb,
+						Group:     group,
+						Resource:  resource,
+						Verb:      verb,
+						Namespace: namespace,
 					},
 				},
 			}
@@ -129,7 +137,7 @@ func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessRevi
 		ttl = config.PermissionCacheTTL
 	}
 	if review == nil {
-		review = func(context.Context, string, string, string) (bool, error) {
+		review = func(context.Context, string, string, string, string) (bool, error) {
 			return false, fmt.Errorf("permission review function not configured")
 		}
 	}
@@ -143,12 +151,106 @@ func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessRevi
 	}
 }
 
+// SetScope configures the cluster's namespace scope
+// (docs/plans/namespace-scope.md). scopeApplies reports whether a resource's
+// DATA PATH is namespace-scoped in this build — Can fans out over the scope
+// only for those resources; every other resource keeps cluster-wide checks so
+// a domain can never register against a cluster-wide source it cannot read.
+// Call before the checker is shared across goroutines (subsystem build time).
+func (c *Checker) SetScope(namespaces []string, scopeApplies func(group, resource string) bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.scope = append([]string(nil), namespaces...)
+	c.scopeApplies = scopeApplies
+	c.mu.Unlock()
+}
+
+// scopeFor returns the namespaces Can must fan out over for the resource:
+// nil for a single cluster-wide check.
+func (c *Checker) scopeFor(group, resource string) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if len(c.scope) == 0 || c.scopeApplies == nil || !c.scopeApplies(group, resource) {
+		return nil
+	}
+	return c.scope
+}
+
 // Can checks a resource verb and caches the decision per cluster selection.
+// Under a namespace scope, resources whose data path is scoped are allowed
+// when ANY configured namespace allows the verb; the per-namespace results
+// are cached individually so per-namespace consumers reuse them.
 func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decision, error) {
 	if c == nil {
 		return Decision{}, fmt.Errorf("permission checker not initialized")
 	}
-	key, err := c.cacheKey(group, resource, verb)
+	scope := c.scopeFor(group, resource)
+	if len(scope) == 0 {
+		return c.canInNamespace(ctx, group, resource, verb, "")
+	}
+
+	type outcome struct {
+		decision Decision
+		err      error
+	}
+	outcomes := make([]outcome, len(scope))
+	var wg sync.WaitGroup
+	for i, namespace := range scope {
+		wg.Add(1)
+		go func(i int, namespace string) {
+			defer wg.Done()
+			decision, err := c.canInNamespace(ctx, group, resource, verb, namespace)
+			outcomes[i] = outcome{decision: decision, err: err}
+		}(i, namespace)
+	}
+	wg.Wait()
+
+	var firstErr error
+	denied := Decision{}
+	deniedSeen := false
+	for _, o := range outcomes {
+		if o.err != nil {
+			if firstErr == nil {
+				firstErr = o.err
+			}
+			continue
+		}
+		if o.decision.Allowed {
+			return o.decision, nil
+		}
+		denied = o.decision
+		deniedSeen = true
+	}
+	if deniedSeen {
+		return denied, nil
+	}
+	return Decision{}, firstErr
+}
+
+// CanInNamespace checks a resource verb in one namespace (empty =
+// cluster-wide), bypassing the scope fan-out. Per-namespace surfaces use it
+// directly; results share Can's cache.
+func (c *Checker) CanInNamespace(ctx context.Context, group, resource, verb, namespace string) (Decision, error) {
+	if c == nil {
+		return Decision{}, fmt.Errorf("permission checker not initialized")
+	}
+	return c.canInNamespace(ctx, group, resource, verb, namespace)
+}
+
+// CanClusterWide checks a resource verb cluster-wide regardless of any
+// configured scope. For callers whose DATA SOURCE is cluster-wide (e.g. the
+// helm-storage informer factory) — their gate must match their source.
+func (c *Checker) CanClusterWide(ctx context.Context, group, resource, verb string) (Decision, error) {
+	if c == nil {
+		return Decision{}, fmt.Errorf("permission checker not initialized")
+	}
+	return c.canInNamespace(ctx, group, resource, verb, "")
+}
+
+func (c *Checker) canInNamespace(ctx context.Context, group, resource, verb, namespace string) (Decision, error) {
+	key, err := c.cacheKey(group, resource, verb, namespace)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -167,7 +269,7 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 	// Stale-while-revalidate: if the entry is expired but within the grace window,
 	// return the stale value immediately and trigger a background refresh.
 	if ok && c.staleGrace > 0 && !now.After(entry.expiresAt.Add(c.staleGrace)) {
-		c.triggerBackgroundRefresh(ctx, key, group, resource, verb)
+		c.triggerBackgroundRefresh(ctx, key, group, resource, verb, namespace)
 		return Decision{
 			Allowed:   entry.allowed,
 			Source:    DecisionSourceStale,
@@ -182,7 +284,7 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 		err     error
 	}
 	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
-		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb), strings.TrimSpace(namespace))
 		return sfResult{allowed: allowed, err: err}, nil
 	})
 	result := val.(sfResult)
@@ -212,7 +314,7 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 
 // triggerBackgroundRefresh fires an async SSAR call (deduplicated via singleflight)
 // to refresh an expired cache entry without blocking the caller.
-func (c *Checker) triggerBackgroundRefresh(ctx context.Context, key, group, resource, verb string) {
+func (c *Checker) triggerBackgroundRefresh(ctx context.Context, key, group, resource, verb, namespace string) {
 	// Use a detached context so the background call outlives the request.
 	bgCtx := context.Background()
 	if _, hasDeadline := ctx.Deadline(); hasDeadline {
@@ -221,21 +323,21 @@ func (c *Checker) triggerBackgroundRefresh(ctx context.Context, key, group, reso
 		// cancel is invoked after the goroutine completes.
 		go func() {
 			defer cancel()
-			c.doBackgroundRefresh(bgCtx, key, group, resource, verb)
+			c.doBackgroundRefresh(bgCtx, key, group, resource, verb, namespace)
 		}()
 		return
 	}
-	go c.doBackgroundRefresh(bgCtx, key, group, resource, verb)
+	go c.doBackgroundRefresh(bgCtx, key, group, resource, verb, namespace)
 }
 
 // doBackgroundRefresh executes the SSAR call and stores the result via singleflight.
-func (c *Checker) doBackgroundRefresh(ctx context.Context, key, group, resource, verb string) {
+func (c *Checker) doBackgroundRefresh(ctx context.Context, key, group, resource, verb, namespace string) {
 	type sfResult struct {
 		allowed bool
 		err     error
 	}
 	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
-		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb), strings.TrimSpace(namespace))
 		return sfResult{allowed: allowed, err: err}, nil
 	})
 	result := val.(sfResult)
@@ -244,14 +346,19 @@ func (c *Checker) doBackgroundRefresh(ctx context.Context, key, group, resource,
 	}
 }
 
-func (c *Checker) cacheKey(group, resource, verb string) (string, error) {
+func (c *Checker) cacheKey(group, resource, verb, namespace string) (string, error) {
 	resource = strings.TrimSpace(resource)
 	verb = strings.TrimSpace(verb)
 	group = strings.TrimSpace(group)
+	namespace = strings.TrimSpace(namespace)
 	if resource == "" || verb == "" {
 		return "", fmt.Errorf("permission key requires resource and verb")
 	}
 	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+	if namespace != "" {
+		// Cluster-wide checks keep the pre-scope key shape.
+		key = fmt.Sprintf("%s|ns=%s", key, namespace)
+	}
 	if c.clusterID == "" {
 		return key, nil
 	}

@@ -158,12 +158,15 @@ func (s *subscription) markResyncing() bool {
 }
 
 type customResourceInformer struct {
-	gvr      schema.GroupVersionResource
-	kind     string
-	domain   string
-	informer cache.SharedIndexInformer
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	gvr    schema.GroupVersionResource
+	kind   string
+	domain string
+	// informers are the CRD's dynamic informers: one cluster-wide (or one
+	// per configured scope namespace for a namespaced CRD under a namespace
+	// scope, docs/plans/namespace-scope.md). All share stopCh.
+	informers []cache.SharedIndexInformer
+	stopCh    chan struct{}
+	stopOnce  sync.Once
 }
 
 func (c *customResourceInformer) stop() {
@@ -205,6 +208,11 @@ type Manager struct {
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
 
+	// allowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md); namespaced custom-resource informers
+	// fan out over it instead of watching cluster-wide.
+	allowedNamespaces []string
+
 	customInformerMu sync.Mutex
 	customInformers  map[string]*customResourceInformer
 	// stopped is set once Stop() runs. It is terminal: a torn-down manager is
@@ -237,21 +245,23 @@ func NewManager(
 	meta snapshot.ClusterMeta,
 	dynamicClient dynamic.Interface,
 	ingestManager *ingest.IngestManager,
+	allowedNamespaces ...string,
 ) *Manager {
 	if logger == nil {
 		logger = applog.Noop
 	}
 	mgr := &Manager{
-		clusterMeta:     meta,
-		metrics:         provider,
-		logger:          logger,
-		telemetry:       recorder,
-		permissions:     factory,
-		dynamicClient:   dynamicClient,
-		customInformers: make(map[string]*customResourceInformer),
-		subscribers:     make(map[string]map[string]map[uint64]*subscription),
-		buffers:         make(map[string]*updateBuffer),
-		sequences:       make(map[string]uint64),
+		clusterMeta:       meta,
+		metrics:           provider,
+		logger:            logger,
+		telemetry:         recorder,
+		permissions:       factory,
+		dynamicClient:     dynamicClient,
+		allowedNamespaces: append([]string(nil), allowedNamespaces...),
+		customInformers:   make(map[string]*customResourceInformer),
+		subscribers:       make(map[string]map[string]map[uint64]*subscription),
+		buffers:           make(map[string]*updateBuffer),
+		sequences:         make(map[string]uint64),
 	}
 	if ingestManager != nil {
 		mgr.podIngest = ingestManager
@@ -500,32 +510,43 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 		delete(m.customInformers, crd.Name)
 	}
 
-	// Use a dynamic informer per CRD to stream custom resource updates.
-	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
-		m.dynamicClient,
-		gvr,
-		namespace,
-		0,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		nil,
-	)
-	informer := dynamicInformer.Informer()
-	info := &customResourceInformer{
-		gvr:      gvr,
-		kind:     kind,
-		domain:   customDomain,
-		informer: informer,
-		stopCh:   make(chan struct{}),
+	// One dynamic informer per CRD streams custom resource updates. Under a
+	// namespace scope a namespaced CRD fans out one informer per configured
+	// namespace (the scoped identity typically cannot watch cluster-wide);
+	// the unscoped path is the same loop with a single all-namespaces entry.
+	namespaces := []string{namespace}
+	if customDomain == domainNamespaceCustom && len(m.allowedNamespaces) > 0 {
+		namespaces = append([]string(nil), m.allowedNamespaces...)
 	}
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { m.handleCustomResource(obj, MessageTypeAdded, info) },
-		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResource(newObj, MessageTypeModified, info) },
-		DeleteFunc: func(obj interface{}) { m.handleCustomResource(obj, MessageTypeDeleted, info) },
-	})
+	info := &customResourceInformer{
+		gvr:    gvr,
+		kind:   kind,
+		domain: customDomain,
+		stopCh: make(chan struct{}),
+	}
+	for _, ns := range namespaces {
+		dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
+			m.dynamicClient,
+			gvr,
+			ns,
+			0,
+			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+			nil,
+		)
+		informer := dynamicInformer.Informer()
+		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { m.handleCustomResource(obj, MessageTypeAdded, info) },
+			UpdateFunc: func(_, newObj interface{}) { m.handleCustomResource(newObj, MessageTypeModified, info) },
+			DeleteFunc: func(obj interface{}) { m.handleCustomResource(obj, MessageTypeDeleted, info) },
+		})
+		info.informers = append(info.informers, informer)
+	}
 	m.customInformers[crd.Name] = info
 	m.customInformerMu.Unlock()
 
-	go informer.Run(info.stopCh)
+	for _, informer := range info.informers {
+		go informer.Run(info.stopCh)
+	}
 }
 
 func (m *Manager) removeCustomInformer(crdName string) {

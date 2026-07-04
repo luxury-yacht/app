@@ -179,7 +179,15 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 	anyAllowed := false
 	allAllowed := true
 	for _, req := range policy.Runtime {
-		decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
+		var decision permissions.Decision
+		var err error
+		if req.ClusterWide {
+			// The requirement gates a cluster-wide data source; its check
+			// must match that source and bypass any namespace scope.
+			decision, err = checker.CanClusterWide(ctx, req.Group, req.Resource, req.Verb)
+		} else {
+			decision, err = checker.Can(ctx, req.Group, req.Resource, req.Verb)
+		}
 		if err != nil {
 			return nil, false, err
 		}

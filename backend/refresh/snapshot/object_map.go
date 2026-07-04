@@ -137,6 +137,9 @@ type objectMapBuilder struct {
 	// ingest supplies projected object-map nodes for ingest-owned (cut) kinds. nil
 	// when no kind in the build is ingest-owned (e.g. a unit test with no cut kinds).
 	ingest objectMapIngestSource
+	// allowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md) for the live-LIST collectors.
+	allowedNamespaces []string
 }
 
 // objectMapTypedSource carries everything collectTyped needs for one build: the
@@ -195,7 +198,11 @@ type objectMapRecord struct {
 }
 
 type objectMapIndex struct {
-	meta       ClusterMeta
+	meta ClusterMeta
+	// scope is the cluster's namespace scope (docs/plans/namespace-scope.md):
+	// the live-LIST collectors (gateway kinds, HPA) fan out over it instead
+	// of listing cluster-wide. Empty means cluster-wide.
+	scope      []string
 	records    map[string]*objectMapRecord
 	byUID      map[string]*objectMapRecord
 	byIdent    map[string]*objectMapRecord
@@ -235,6 +242,7 @@ func RegisterObjectMapDomain(
 	gatewayPresence objectMapGatewayPresence,
 	catalogService func() *objectcatalog.Service,
 	ingestSource objectMapIngestSource,
+	allowedNamespaces []string,
 ) error {
 	if client == nil {
 		return fmt.Errorf("kubernetes client is required for object map domain")
@@ -243,13 +251,14 @@ func RegisterObjectMapDomain(
 		return fmt.Errorf("shared informer factory is required for object map domain")
 	}
 	builder := &objectMapBuilder{
-		client:          client,
-		gatewayClient:   gatewayClient,
-		gatewayPresence: gatewayPresence,
-		catalogService:  catalogService,
-		shared:          shared,
-		permissions:     permissions,
-		ingest:          ingestSource,
+		client:            client,
+		gatewayClient:     gatewayClient,
+		gatewayPresence:   gatewayPresence,
+		catalogService:    catalogService,
+		shared:            shared,
+		permissions:       permissions,
+		ingest:            ingestSource,
+		allowedNamespaces: append([]string(nil), allowedNamespaces...),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectMapDomain,
@@ -351,9 +360,10 @@ func parseBoundedInt(raw string, fallback, minValue, maxValue int) int {
 	return parsed
 }
 
-func newObjectMapIndex(meta ClusterMeta) *objectMapIndex {
+func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapIndex {
 	return &objectMapIndex{
 		meta:    meta,
+		scope:   append([]string(nil), allowedNamespaces...),
 		records: make(map[string]*objectMapRecord),
 		byUID:   make(map[string]*objectMapRecord),
 		byIdent: make(map[string]*objectMapRecord),
@@ -481,7 +491,16 @@ func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatew
 		if !gatewayKindPresent(presence, collector.Identity.Kind) {
 			continue
 		}
-		items, err := collector.List(ctx, client)
+		var items []metav1.Object
+		var err error
+		for _, namespace := range idx.listNamespaces(collector.Identity.Namespaced) {
+			listed, listErr := collector.List(ctx, client, namespace)
+			if listErr != nil {
+				err = listErr
+				break
+			}
+			items = append(items, listed...)
+		}
 		if idx.skipListError(collector.Identity.Resource, err) {
 			if idx.hasListError() {
 				return
@@ -501,6 +520,17 @@ func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatew
 	}
 }
 
+// listNamespaces returns the namespaces a live-LIST collector runs in: the
+// configured scope for a namespaced kind under a namespace scope, otherwise
+// the single cluster-wide "" — the unscoped degenerate of the same loop. A
+// per-namespace Forbidden is swallowed by skipListError exactly as before.
+func (idx *objectMapIndex) listNamespaces(namespaced bool) []string {
+	if !namespaced || len(idx.scope) == 0 {
+		return []string{""}
+	}
+	return idx.scope
+}
+
 func gatewayKindPresent(presence objectMapGatewayPresence, kind string) bool {
 	return presence == nil || presence.Has(kind)
 }
@@ -513,13 +543,25 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	if client == nil {
 		return
 	}
-	list, err := client.AutoscalingV2().HorizontalPodAutoscalers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	var items []autoscalingv2.HorizontalPodAutoscaler
+	var err error
+	for _, namespace := range idx.listNamespaces(true) {
+		if namespace == "" {
+			namespace = metav1.NamespaceAll
+		}
+		list, listErr := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(ctx, metav1.ListOptions{})
+		if listErr != nil {
+			err = listErr
+			break
+		}
+		items = append(items, list.Items...)
+	}
 	if idx.skipListError("horizontalpodautoscalers", err) {
 		return
 	}
 	idx.hpaListed = true
-	for i := range list.Items {
-		hpa := list.Items[i]
+	for i := range items {
+		hpa := items[i]
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
 			obj:               &hpa,

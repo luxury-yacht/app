@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manages a local Kind cluster with namespace-scoped view access.
+# Manages a local Kind cluster with namespace-scoped management access.
 # Usage: ./restricted.sh start | stop
 
 set -euo pipefail
@@ -23,10 +23,17 @@ KIND_CONTEXT="kind-${CLUSTER_NAME}"
 ADMIN_CONTEXT="restricted-cluster-admin"
 RESTRICTED_CONTEXT="restricted-cluster"
 
-RESTRICTED_NAMESPACE="luxury-yacht-restricted"
-RESTRICTED_SERVICE_ACCOUNT="restricted-viewer"
-RESTRICTED_USER="restricted-viewer"
-RESTRICTED_ROLE_BINDING="restricted-viewer-view"
+IDENTITY_NAMESPACE="luxury-yacht-restricted"
+RESTRICTED_SERVICE_ACCOUNT="restricted-manager"
+RESTRICTED_USER="restricted-manager"
+RESTRICTED_ROLE_BINDING="restricted-manager-edit"
+MANAGED_NAMESPACE_PREFIX="test-"
+VERIFY_TEST_NAMESPACE="test-managed"
+STATIC_MANAGED_NAMESPACES=("kube-system")
+
+LEGACY_RESTRICTED_NAMESPACE="luxury-yacht-restricted"
+LEGACY_SERVICE_ACCOUNT="restricted-viewer"
+LEGACY_ROLE_BINDING="restricted-viewer-view"
 LEGACY_CLUSTER_ROLE_BINDING="restricted-viewer-view"
 
 cluster_exists() {
@@ -68,12 +75,36 @@ ensure_admin_context() {
 install_restricted_rbac() {
   echo "Installing restricted RBAC..."
 
-  admin_kctl create namespace "${RESTRICTED_NAMESPACE}" --dry-run=client -o yaml | admin_kctl apply -f -
-  admin_kctl -n "${RESTRICTED_NAMESPACE}" create serviceaccount "${RESTRICTED_SERVICE_ACCOUNT}" --dry-run=client -o yaml | admin_kctl apply -f -
+  admin_kctl create namespace "${IDENTITY_NAMESPACE}" --dry-run=client -o yaml | admin_kctl apply -f -
+  admin_kctl create namespace "${VERIFY_TEST_NAMESPACE}" --dry-run=client -o yaml | admin_kctl apply -f -
+  admin_kctl -n "${IDENTITY_NAMESPACE}" create serviceaccount "${RESTRICTED_SERVICE_ACCOUNT}" --dry-run=client -o yaml | admin_kctl apply -f -
   admin_kctl delete clusterrolebinding "${LEGACY_CLUSTER_ROLE_BINDING}" --ignore-not-found
-  admin_kctl -n "${RESTRICTED_NAMESPACE}" create rolebinding "${RESTRICTED_ROLE_BINDING}" \
-    --clusterrole=view \
-    --serviceaccount="${RESTRICTED_NAMESPACE}:${RESTRICTED_SERVICE_ACCOUNT}" \
+  admin_kctl -n "${LEGACY_RESTRICTED_NAMESPACE}" delete rolebinding "${LEGACY_ROLE_BINDING}" --ignore-not-found
+  admin_kctl -n "${LEGACY_RESTRICTED_NAMESPACE}" delete serviceaccount "${LEGACY_SERVICE_ACCOUNT}" --ignore-not-found
+
+  while IFS= read -r namespace; do
+    [[ -n "${namespace}" ]] || continue
+    bind_restricted_namespace "${namespace}"
+  done < <(managed_namespaces)
+}
+
+managed_namespaces() {
+  printf '%s\n' "${STATIC_MANAGED_NAMESPACES[@]}"
+  admin_kctl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+    | while IFS= read -r namespace; do
+        if [[ "${namespace}" == "${MANAGED_NAMESPACE_PREFIX}"* ]]; then
+          printf '%s\n' "${namespace}"
+        fi
+      done \
+    | sort -u
+}
+
+bind_restricted_namespace() {
+  local namespace="$1"
+
+  admin_kctl -n "${namespace}" create rolebinding "${RESTRICTED_ROLE_BINDING}" \
+    --clusterrole=edit \
+    --serviceaccount="${IDENTITY_NAMESPACE}:${RESTRICTED_SERVICE_ACCOUNT}" \
     --dry-run=client \
     -o yaml | admin_kctl apply -f -
 }
@@ -82,7 +113,7 @@ write_restricted_kubeconfig() {
   local token
 
   echo "Writing restricted kubeconfig..."
-  token="$(admin_kctl -n "${RESTRICTED_NAMESPACE}" create token "${RESTRICTED_SERVICE_ACCOUNT}" --duration=8760h)"
+  token="$(admin_kctl -n "${IDENTITY_NAMESPACE}" create token "${RESTRICTED_SERVICE_ACCOUNT}" --duration=8760h)"
 
   cp "${ADMIN_KUBECONFIG}" "${RESTRICTED_KUBECONFIG}"
   kubectl config set-credentials "${RESTRICTED_USER}" \
@@ -111,8 +142,18 @@ verify_restricted_access() {
     exit 1
   fi
 
-  if ! restricted_kctl auth can-i list pods -n "${RESTRICTED_NAMESPACE}" --quiet; then
-    echo "Error: restricted user cannot list pods in ${RESTRICTED_NAMESPACE}; expected view access." >&2
+  if ! restricted_kctl auth can-i create deployments.apps -n kube-system --quiet; then
+    echo "Error: restricted user cannot create deployments in kube-system; expected edit access." >&2
+    exit 1
+  fi
+
+  if ! restricted_kctl auth can-i create deployments.apps -n "${VERIFY_TEST_NAMESPACE}" --quiet; then
+    echo "Error: restricted user cannot create deployments in ${VERIFY_TEST_NAMESPACE}; expected edit access." >&2
+    exit 1
+  fi
+
+  if restricted_kctl auth can-i create deployments.apps -n default --quiet; then
+    echo "Error: restricted user can create deployments in default; expected denial." >&2
     exit 1
   fi
 }
@@ -144,7 +185,8 @@ start_cluster() {
   echo ""
   echo "Restricted cluster ready."
   echo "  admin:      ${ADMIN_KUBECONFIG} (context: ${ADMIN_CONTEXT})"
-  echo "  restricted: ${RESTRICTED_KUBECONFIG} (context: ${RESTRICTED_CONTEXT}, namespace RoleBinding: view)"
+  echo "  restricted: ${RESTRICTED_KUBECONFIG} (context: ${RESTRICTED_CONTEXT}, namespace RoleBinding: edit)"
+  echo "  managed:    kube-system and current ${MANAGED_NAMESPACE_PREFIX}* namespaces"
 }
 
 stop_cluster() {

@@ -72,19 +72,15 @@ type ObjectMapProjector func(obj metav1.Object) interface{}
 // entry is one ingested kind: the reflector that drives intake and the store
 // that holds its projected rows.
 type entry struct {
-	desc      streamspec.Descriptor
-	store     *ProjectingStore
-	reflector *ProjectingReflector
+	desc  streamspec.Descriptor
+	store *ProjectingStore
 
-	// lw is the reflector's ListerWatcher, retained so the stage-3 resume path can issue a
-	// delta WATCH from a persisted resourceVersion through the same source the reflector uses.
-	lw cache.ListerWatcher
-
-	// resumeRV, when set (SetResumeResourceVersion / RestoreStores, before Start), makes Start
-	// attempt a delta resume from this resourceVersion before the reflector's full sync — the
-	// cold-start "resume from persisted RV" path. Empty (the default) launches the reflector
-	// directly, unchanged. It is only set once the store was restored full from disk.
-	resumeRV string
+	// parts are the kind's reflectors: one per configured scope namespace for
+	// a namespaced kind under a namespace scope (docs/plans/namespace-scope.md),
+	// or a single cluster-wide "" part otherwise — the unscoped path is the
+	// same code with a one-element list. All parts feed the ONE shared store
+	// through per-namespace partition views.
+	parts []*ingestPart
 
 	// example is the empty typed object for this kind, retained so registerGobTypes can
 	// project it through the store's projection to discover (and gob.Register) the concrete
@@ -109,13 +105,6 @@ type entry struct {
 	// background, so the store still delivers data if it later syncs.
 	degraded atomic.Bool
 
-	// skipped latches true when Start declines to launch this kind's reflector because
-	// the permission filter reports the identity cannot list/watch it. A skipped kind is
-	// settled immediately (excluded from readiness, empty store) rather than 403-retrying
-	// for the whole sync deadline — mirroring the factory's permission-skip
-	// (informer/factory.go CanListWatch gate).
-	skipped atomic.Bool
-
 	// onDemand marks a reflector added lazily AFTER Start for a dynamic (CRD-backed) kind
 	// the catalog promoted on demand (RegisterDynamicCatalogReflector). On-demand entries
 	// are EXCLUDED from the whole-manager HasSynced gate — they are added once the cluster
@@ -124,11 +113,48 @@ type entry struct {
 	// sync so the catalog can serve-when-synced-else-LIST.
 	onDemand atomic.Bool
 
-	// cancel stops just this entry's reflector. It is set only for on-demand reflectors,
+	// cancel stops just this entry's reflectors. It is set only for on-demand reflectors,
 	// which launch on a context derived from the manager's run context so StopReflectorFor
 	// can tear one down without stopping the rest. Descriptor reflectors run directly on
 	// the run context and leave this nil.
 	cancel context.CancelFunc
+}
+
+// ingestPart is one reflector of an entry: the cluster-wide "" part, or one
+// configured namespace's part under a namespace scope. Each part writes the
+// shared store through its own partition view, so its relists fully define
+// only its own partition.
+type ingestPart struct {
+	namespace string
+	lw        cache.ListerWatcher
+	reflector *ProjectingReflector
+	view      *StorePartitionView
+
+	// resumeRV, when set (RestoreStores, before Start), makes Start attempt a
+	// delta resume of THIS part's watch from the persisted resourceVersion
+	// before the reflector's full sync. Empty launches the reflector directly.
+	resumeRV string
+
+	// skipped latches true when Start declines to launch this part because the
+	// permission filter reports the identity cannot list/watch the kind in the
+	// part's namespace. A skipped part is excluded from the store's expected
+	// partitions, so one denied namespace never blanks or blocks the others.
+	skipped atomic.Bool
+}
+
+// allPartsSkipped reports whether every part of the entry was
+// permission-skipped — the per-kind "permanently empty for this identity"
+// state PermissionSkippedFor exposes.
+func (e *entry) allPartsSkipped() bool {
+	if len(e.parts) == 0 {
+		return false
+	}
+	for _, part := range e.parts {
+		if !part.skipped.Load() {
+			return false
+		}
+	}
+	return true
 }
 
 // IngestManager owns one ProjectingStore + ProjectingReflector per built-in
@@ -164,12 +190,20 @@ type IngestManager struct {
 	startedAtMu  sync.Mutex
 	startedAt    time.Time
 
-	// permissionFilter, when set, reports whether the identity may list+watch a kind.
-	// Start skips (does not launch) the reflector for any kind it returns false for, so
-	// a denied cut kind is excluded from readiness immediately rather than 403-retrying
+	// permissionFilter, when set, reports whether the identity may list+watch a kind
+	// in the given namespace ("" = cluster-wide). Start skips (does not launch) any
+	// part it returns false for, so a denied kind — or a single denied namespace of a
+	// scoped kind — is excluded from readiness immediately rather than 403-retrying
 	// for the whole sync deadline. nil leaves every reflector enabled (the default for
 	// tests and any caller that does not gate on permissions).
-	permissionFilter func(group, resource string) bool
+	permissionFilter func(group, resource, namespace string) bool
+
+	// scope is the cluster's configured namespace scope
+	// (docs/plans/namespace-scope.md); empty means cluster-wide reflectors.
+	scope []string
+	// namespacedGVR reports which registry kinds are namespaced, so only those
+	// fan out over the scope; cluster-scoped kinds always keep one "" part.
+	namespacedGVR map[schema.GroupVersionResource]bool
 }
 
 // NewIngestManager builds an IngestManager for the cluster identified by meta,
@@ -183,20 +217,37 @@ func NewIngestManager(
 	kube kubernetes.Interface,
 	apiext apiextensionsclientset.Interface,
 	gateway gatewayversioned.Interface,
+	allowedNamespaces ...string,
 ) *IngestManager {
+	namespaced := make(map[schema.GroupVersionResource]bool)
+	for _, d := range kindregistry.All {
+		namespaced[d.Identity.GVR()] = d.Identity.Namespaced
+	}
 	m := &IngestManager{
-		meta:         meta,
-		kube:         kube,
-		apiext:       apiext,
-		gateway:      gateway,
-		entries:      make(map[schema.GroupVersionResource]*entry),
-		syncDeadline: config.RefreshInformerSyncDeadline,
-		now:          time.Now,
+		meta:          meta,
+		kube:          kube,
+		apiext:        apiext,
+		gateway:       gateway,
+		entries:       make(map[schema.GroupVersionResource]*entry),
+		syncDeadline:  config.RefreshInformerSyncDeadline,
+		now:           time.Now,
+		scope:         append([]string(nil), allowedNamespaces...),
+		namespacedGVR: namespaced,
 	}
 	for _, desc := range kindregistry.StreamDescriptors() {
 		m.addDescriptor(desc)
 	}
 	return m
+}
+
+// partitionNamespaces returns the namespaces gvr's reflectors run in: the
+// configured scope for a namespaced kind under a namespace scope, otherwise
+// the single cluster-wide "" — the unscoped degenerate of the same loop.
+func (m *IngestManager) partitionNamespaces(gvr schema.GroupVersionResource) []string {
+	if len(m.scope) == 0 || !m.namespacedGVR[gvr] {
+		return []string{""}
+	}
+	return append([]string(nil), m.scope...)
 }
 
 // addDescriptor builds the reflector + projecting store for one streamed kind.
@@ -223,20 +274,34 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 	m.installReflector(e, gvr, gvk, restClient, example)
 }
 
-// installReflector wires the ListWatch + reflector for an already-built entry whose
-// store is set, then registers the entry under gvr. It is the shared tail of both the
-// generic descriptor path (addDescriptor) and the bespoke-projector path
-// (RegisterReflector), so the ListWatch/WatchList wiring lives in exactly one place.
+// installReflector wires the per-namespace ListWatches + reflectors for an
+// already-built entry whose store is set, then registers the entry under gvr.
+// It is the shared tail of both the generic descriptor path (addDescriptor)
+// and the bespoke-projector path (RegisterReflector), so the ListWatch/
+// WatchList wiring lives in exactly one place. Unscoped (or cluster-scoped
+// kinds) build a single cluster-wide part; a namespace scope fans one part
+// per configured namespace, each writing its own store partition.
 func (m *IngestManager) installReflector(e *entry, gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, restClient rest.Interface, example apiruntime.Object) {
-	lw := cache.NewListWatchFromClient(restClient, gvr.Resource, metav1.NamespaceAll, fields.Everything())
-	// ToListWatcherWithWatchListSemantics lets the reflector use WatchList when the
-	// client advertises support and fall back to LIST+WATCH otherwise — exactly as
-	// the generated informers do. The client argument is the typed group client so
-	// its WatchList capability is detected.
-	wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
-	e.lw = wrapped
 	e.example = example
-	e.reflector = NewProjectingReflector(gvk.String(), wrapped, example, e.store, resyncDisabled)
+	for _, namespace := range m.partitionNamespaces(gvr) {
+		lw := cache.NewListWatchFromClient(restClient, gvr.Resource, namespace, fields.Everything())
+		// ToListWatcherWithWatchListSemantics lets the reflector use WatchList when the
+		// client advertises support and fall back to LIST+WATCH otherwise — exactly as
+		// the generated informers do. The client argument is the typed group client so
+		// its WatchList capability is detected.
+		wrapped := cache.ToListWatcherWithWatchListSemantics(lw, restClient)
+		name := gvk.String()
+		if namespace != "" {
+			name += " ns=" + namespace
+		}
+		view := e.store.PartitionView(namespace)
+		e.parts = append(e.parts, &ingestPart{
+			namespace: namespace,
+			lw:        wrapped,
+			reflector: NewProjectingReflector(name, wrapped, example, view, resyncDisabled),
+			view:      view,
+		})
+	}
 	m.entries[gvr] = e
 }
 
@@ -285,7 +350,7 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 // (it is registered after Start) and is EXCLUDED from the whole-manager readiness gate
 // (see entry.onDemand). It returns false when no dynamic client is set, the manager is not
 // started, or an entry for gvr already exists.
-func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project CatalogProjector) bool {
+func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project CatalogProjector, namespaced bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.dynamic == nil || m.runCtx == nil {
@@ -298,11 +363,33 @@ func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionR
 	e.onDemand.Store(true)
 	example := &unstructuredv1.Unstructured{}
 	example.SetGroupVersionKind(gvk)
-	e.reflector = NewProjectingReflector(gvk.String(), dynamicListWatch(m.dynamic, gvr), example, e.store, resyncDisabled)
+	// A CRD-backed kind is not in the built-in registry, so its scope
+	// fan-out is decided by the caller-supplied namespaced flag.
+	namespaces := []string{""}
+	if namespaced && len(m.scope) > 0 {
+		namespaces = append([]string(nil), m.scope...)
+	}
+	for _, namespace := range namespaces {
+		name := gvk.String()
+		if namespace != "" {
+			name += " ns=" + namespace
+		}
+		view := e.store.PartitionView(namespace)
+		lw := dynamicListWatch(m.dynamic, gvr, namespace)
+		e.parts = append(e.parts, &ingestPart{
+			namespace: namespace,
+			lw:        lw,
+			reflector: NewProjectingReflector(name, lw, example, view, resyncDisabled),
+			view:      view,
+		})
+	}
+	e.store.SetExpectedPartitions(namespaces)
 	m.entries[gvr] = e
 	ctx, cancel := context.WithCancel(m.runCtx)
 	e.cancel = cancel
-	go e.reflector.Run(ctx)
+	for _, part := range e.parts {
+		go part.reflector.Run(ctx)
+	}
 	return true
 }
 
@@ -322,14 +409,18 @@ func (m *IngestManager) StopReflectorFor(gvr schema.GroupVersionResource) {
 	}
 }
 
-// dynamicListWatch builds a ListerWatcher over the dynamic client for gvr across all
-// namespaces — the on-demand dynamic-CRD equivalent of the typed ListWatch
-// NewListWatchFromClient builds in installReflector. The reflector decodes results as
-// *unstructured.Unstructured, which the catalog projection consumes as a metav1.Object.
-// context.Background mirrors NewListWatchFromClient: the reflector stops the returned
-// watch.Interface on ctx-cancel, so the watch is wound down without a per-call context.
-func dynamicListWatch(client dynamic.Interface, gvr schema.GroupVersionResource) cache.ListerWatcher {
-	resource := client.Resource(gvr).Namespace(metav1.NamespaceAll)
+// dynamicListWatch builds a ListerWatcher over the dynamic client for gvr in
+// namespace ("" = all namespaces) — the on-demand dynamic-CRD equivalent of the
+// typed ListWatch NewListWatchFromClient builds in installReflector. The
+// reflector decodes results as *unstructured.Unstructured, which the catalog
+// projection consumes as a metav1.Object. context.Background mirrors
+// NewListWatchFromClient: the reflector stops the returned watch.Interface on
+// ctx-cancel, so the watch is wound down without a per-call context.
+func dynamicListWatch(client dynamic.Interface, gvr schema.GroupVersionResource, namespace string) cache.ListerWatcher {
+	if namespace == "" {
+		namespace = metav1.NamespaceAll
+	}
+	resource := client.Resource(gvr).Namespace(namespace)
 	return &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (apiruntime.Object, error) {
 			return resource.List(context.Background(), options)
@@ -458,9 +549,9 @@ func exampleObjectFor(gvk schema.GroupVersionKind) (apiruntime.Object, bool) {
 }
 
 // SetPermissionFilter installs the predicate Start uses to decide whether to launch
-// each kind's reflector. It must be called before Start. A nil filter (the default)
-// launches every reflector. See permissionFilter.
-func (m *IngestManager) SetPermissionFilter(fn func(group, resource string) bool) {
+// each part's reflector (namespace "" = cluster-wide). It must be called before
+// Start. A nil filter (the default) launches every reflector. See permissionFilter.
+func (m *IngestManager) SetPermissionFilter(fn func(group, resource, namespace string) bool) {
 	m.mu.Lock()
 	m.permissionFilter = fn
 	m.mu.Unlock()
@@ -509,19 +600,38 @@ func (m *IngestManager) Start(ctx context.Context) {
 
 	for _, le := range entries {
 		le := le
-		// Permission-skip: a kind the identity cannot list/watch never launches a
-		// reflector (which would only 403-retry); it is settled-as-skipped so it does
-		// not block readiness and its store stays empty (the domain serves degraded for
-		// that kind), mirroring the factory excluding a denied informer.
-		if filter != nil && !filter(le.gvr.Group, le.gvr.Resource) {
-			le.e.skipped.Store(true)
-			klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", le.gvr)
-			continue
+		// Permission-skip per part: a kind (or a single scoped namespace of a
+		// kind) the identity cannot list/watch never launches its reflector
+		// (which would only 403-retry); it is excluded from the store's
+		// expected partitions so it does not block readiness — one denied
+		// namespace never blanks or blocks the others, mirroring the factory
+		// excluding a denied informer.
+		launched := make([]string, 0, len(le.e.parts))
+		for _, part := range le.e.parts {
+			if filter != nil && !filter(le.gvr.Group, le.gvr.Resource, part.namespace) {
+				part.skipped.Store(true)
+				if part.namespace == "" {
+					klog.V(2).Infof("ingest: skipping %s — identity cannot list/watch it (logged once)", le.gvr)
+				} else {
+					klog.V(2).Infof("ingest: skipping %s in %q — identity cannot list/watch it there (logged once)", le.gvr, part.namespace)
+				}
+				continue
+			}
+			launched = append(launched, part.namespace)
 		}
-		e := le.e
-		// Resume from a persisted resourceVersion when one was set (the store was restored
-		// full from disk); otherwise — the default — this is exactly e.reflector.Run.
-		go runWithResume(runCtx, e.lw, e.store, e.resumeRV, func() { e.reflector.Run(runCtx) })
+		// Expected partitions must be declared BEFORE any reflector of the
+		// entry runs, so the store's sync gate counts exactly the launched set.
+		le.e.store.SetExpectedPartitions(launched)
+		for _, part := range le.e.parts {
+			if part.skipped.Load() {
+				continue
+			}
+			part := part
+			// Resume from a persisted resourceVersion when one was set (the store was
+			// restored full from disk); otherwise — the default — this is exactly
+			// part.reflector.Run.
+			go runWithResume(runCtx, part.lw, part.view, part.resumeRV, func() { part.reflector.Run(runCtx) })
+		}
 	}
 
 	// One log line when the initial syncs settle, naming the slowest kinds — the
@@ -544,8 +654,15 @@ func (m *IngestManager) SetResumeResourceVersion(gvr schema.GroupVersionResource
 	if !ok {
 		return false
 	}
-	e.resumeRV = rv
-	return true
+	// The legacy single-RV resume applies to the cluster-wide part; scoped
+	// parts resume from their per-partition RVs (RestoreStores).
+	for _, part := range e.parts {
+		if part.namespace == "" {
+			part.resumeRV = rv
+			return true
+		}
+	}
+	return false
 }
 
 // registerGobTypes gob-registers the concrete Bundle-half types every entry projects, by
@@ -639,9 +756,19 @@ func (m *IngestManager) RestoreStores(dir string) {
 		if e.onDemand.Load() {
 			continue
 		}
-		rv, err := e.store.RestoreBundles(filepath.Join(dir, ingestSpillFileName(gvr)))
-		if err == nil && rv != "" {
-			e.resumeRV = rv
+		rv, partitionRVs, err := e.store.RestoreBundles(filepath.Join(dir, ingestSpillFileName(gvr)))
+		if err != nil {
+			continue
+		}
+		for _, part := range e.parts {
+			if part.namespace == "" {
+				// Legacy cluster-wide resume: the store-level RV.
+				part.resumeRV = rv
+				continue
+			}
+			// A scoped part resumes only from ITS namespace's persisted RV; a
+			// missing entry (scope changed since the spill) means full sync.
+			part.resumeRV = partitionRVs[part.namespace]
 		}
 	}
 }
@@ -702,7 +829,7 @@ func (m *IngestManager) HasSynced() bool {
 // LIST+WATCH in the background, so HasSynced still reflects a later real sync — the
 // degrade only stops it BLOCKING the initial gate.
 func (m *IngestManager) entrySettled(e *entry) bool {
-	if e.skipped.Load() {
+	if e.allPartsSkipped() {
 		// Permission-skipped: reflector never launched, store stays empty; settled so it
 		// does not block readiness (the domain serves degraded for this kind).
 		return true
@@ -975,7 +1102,7 @@ func (m *IngestManager) PermissionSkippedFor(gvr schema.GroupVersionResource) bo
 	if !ok {
 		return false
 	}
-	return e.skipped.Load()
+	return e.allPartsSkipped()
 }
 
 // resyncDisabled documents that ingest reflectors run with no periodic resync:

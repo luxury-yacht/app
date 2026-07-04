@@ -194,6 +194,9 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		Now:         time.Now,
 		ClusterID:   target.meta.ID,
 		ClusterName: target.meta.Name,
+		// The cluster's namespace scope (docs/plans/namespace-scope.md):
+		// namespaced collection fans out per configured namespace.
+		AllowedNamespaces: a.allowedNamespacesForCluster(target.meta.ID),
 		// The catalog waits for informer caches INSIDE sync, between the RBAC
 		// preflight and the collect, so discovery + preflight overlap the factory's
 		// initial sync instead of running after it (see Dependencies.WaitForCaches).
@@ -382,6 +385,13 @@ func (a *App) catalogNamespaceGroups() []snapshot.CatalogNamespaceGroup {
 			continue
 		}
 		namespaces := entry.service.Namespaces()
+		// A scoped cluster's namespace list is synthesized from the
+		// configured scope (docs/plans/namespace-scope.md) so Browse agrees
+		// with the sidebar even before anything is catalogued.
+		if scope := a.allowedNamespacesForCluster(entry.meta.ID); len(scope) > 0 {
+			namespaces = append([]string(nil), scope...)
+			sort.Strings(namespaces)
+		}
 		if len(namespaces) == 0 {
 			continue
 		}

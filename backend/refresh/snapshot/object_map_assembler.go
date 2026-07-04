@@ -15,7 +15,7 @@ type objectMapAssembler struct {
 
 func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMapAssembler, error) {
 	meta := ClusterMetaFromContext(ctx)
-	index := newObjectMapIndex(meta)
+	index := newObjectMapIndex(meta, b.allowedNamespaces)
 	index.addCatalog(b.catalog())
 	index.collectTyped(objectMapTypedSource{
 		ctx:         ctx,

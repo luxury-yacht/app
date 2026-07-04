@@ -399,7 +399,7 @@ func (s *Service) sync(ctx context.Context) error {
 				return nil
 			}
 
-			summaries, err := s.collectResource(taskCtx, index, desc, nil, agg)
+			summaries, err := s.collectResource(taskCtx, index, desc, s.scopeNamespaces(), agg)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return err

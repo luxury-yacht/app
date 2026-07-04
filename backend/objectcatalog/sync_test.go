@@ -445,7 +445,7 @@ func (b *blockingIngestSource) AddCatalogSink(schema.GroupVersionResource, inges
 	<-b.release
 	return false
 }
-func (b *blockingIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
+func (b *blockingIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
 func (b *blockingIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}

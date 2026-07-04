@@ -18,9 +18,11 @@ import {
   ClusterOverviewIcon,
   ClusterResourcesIcon,
   CategoryIcon,
+  CloseIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
 } from '@shared/components/icons/SharedIcons';
+import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -78,6 +80,10 @@ function Sidebar() {
   } = useNamespace();
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId } = useKubeconfig();
+  // The active cluster's "accessible namespaces" scope
+  // (docs/plans/namespace-scope.md): the namespaces section doubles as its
+  // inline editor when a scope is set or the cluster-wide list is denied.
+  const namespaceScope = useNamespaceScope(selectedClusterId || undefined);
   const dimInactiveNamespaces = useDimInactiveNamespaces();
   const exclusiveNamespaces = useExclusiveNamespaces();
   // The namespaces domain is the ONLY membership source. It is
@@ -411,11 +417,17 @@ function Sidebar() {
               <h3>Namespaces</h3>
               {namespacesPermissionDenied ? (
                 // Fail fast: the namespaces domain is permission-gated
-                // backend-side; there is no fallback inference (manual
-                // namespace entry is future work, docs/todo.md).
-                <div className="sidebar-empty-message">
-                  You do not have permission to list namespaces.
-                </div>
+                // backend-side; there is no fallback inference. The inline
+                // scope editor below is the way in for a restricted identity
+                // (docs/plans/namespace-scope.md): added names become the
+                // cluster's "accessible namespaces" scope.
+                <>
+                  <div className="sidebar-empty-message">
+                    You do not have permission to list namespaces. Add the namespaces you can
+                    access:
+                  </div>
+                  <NamespaceScopeAddRow state={namespaceScope} />
+                </>
               ) : showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
               ) : showNamespacePausedMessage ? (
@@ -472,6 +484,23 @@ function Sidebar() {
                             <NamespaceIcon width={14} height={14} />
                           )}
                           <span>{namespace.name}</span>
+                          {namespaceScope.scope.includes(namespace.name) &&
+                          scope !== ALL_NAMESPACES_SCOPE ? (
+                            <button
+                              type="button"
+                              className="namespace-scope-remove"
+                              title={`Remove "${namespace.name}" from accessible namespaces`}
+                              disabled={namespaceScope.saving}
+                              onClick={(event) => {
+                                // The row click expands/navigates; removal is
+                                // its own action.
+                                event.stopPropagation();
+                                namespaceScope.removeNamespace(namespace.name);
+                              }}
+                            >
+                              <CloseIcon width={12} height={12} />
+                            </button>
+                          ) : null}
                         </div>
                         {isExpanded && (
                           <div className="sidebar-views">
@@ -515,6 +544,11 @@ function Sidebar() {
                       </div>
                     );
                   })}
+                  {namespaceScope.scope.length > 0 ? (
+                    // A scoped cluster's list is user-curated: the same
+                    // add affordance that created it stays available.
+                    <NamespaceScopeAddRow state={namespaceScope} />
+                  ) : null}
                 </div>
               )}
             </div>

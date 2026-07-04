@@ -55,7 +55,7 @@ func (f *fakeDynamicIngestSource) registered(gvr schema.GroupVersionResource) bo
 	return ok
 }
 
-func (f *fakeDynamicIngestSource) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, _ schema.GroupVersionKind, project ingest.CatalogProjector) bool {
+func (f *fakeDynamicIngestSource) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, _ schema.GroupVersionKind, project ingest.CatalogProjector, _ bool) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.projects[gvr]; ok {

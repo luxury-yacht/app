@@ -46,6 +46,12 @@ type domainRegistration struct {
 	direct             func() error           // Direct registration function
 	skipIf             func() bool            // Function to determine if registration should be skipped
 	require            func() error           // Function to determine if registration is required
+	// skipRuntimePolicy exempts the registration from the domain runtime
+	// permission policy. Set ONLY when the domain's data source needs no
+	// cluster permission for this configuration (the scoped namespaces
+	// domain serves synthesized names) — the permission gate must always
+	// match the data source's actual scope.
+	skipRuntimePolicy bool
 }
 
 // domainMeta captures shared metadata for gated registrations that cannot use
@@ -82,7 +88,7 @@ func runDomainRegistrations(ctx context.Context, gate *permissionGate, checker *
 			}
 		}
 
-		if checker != nil {
+		if checker != nil && !registration.skipRuntimePolicy {
 			decision, err := access.Check(ctx, registration.name, checker)
 			if err == nil && !decision.Allowed {
 				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, decision.DeniedReason); regErr != nil {
@@ -257,31 +263,16 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 	runtimeAccess := domainpermissions.NewRuntimeAccess()
 
 	return []domainRegistration{
-		// Fail fast on missing list permission: a restricted user gets an
-		// explicit permission-denied snapshot (the sidebar renders "You do not
-		// have permission to list namespaces.") instead of an empty list. No
-		// fallback by design — manual namespace entry is future work
-		// (docs/todo.md).
-		listWatchRegistration(listWatchDomainConfig{
-			name:          "namespaces",
-			issueResource: "core/namespaces",
-			logGroup:      "",
-			logResource:   "namespaces",
-			checks: []listWatchCheck{
-				{group: "", resource: "namespaces"},
-			},
-			registerInformer: func() error {
-				notifier, err := snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.ingestManager)
-				if err != nil {
-					return err
-				}
-				if deps.noteNamespaceNotifier != nil {
-					deps.noteNamespaceNotifier(notifier)
-				}
-				return nil
-			},
-			deniedReason: "core/namespaces",
-		}),
+		// Unscoped: fail fast on missing list permission — a restricted user
+		// gets an explicit permission-denied snapshot (the sidebar renders
+		// "You do not have permission to list namespaces." plus the scope
+		// editor) instead of an empty list. Scoped
+		// (cfg.AllowedNamespaces non-empty, docs/plans/namespace-scope.md):
+		// rows are synthesized from the configured names, so the domain
+		// needs no cluster permission at all — it registers directly, with
+		// the runtime policy exempted to match its permissionless data
+		// source.
+		namespacesRegistration(deps),
 
 		// Cluster overview degrades per resource (issue #244): the informer path
 		// needs only the namespaces informer — nodes, pods, and the workload
@@ -484,6 +475,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.informerFactory.APIExtensionsInformerFactory(),
 					deps.cfg.DynamicClient,
 					deps.cfg.Logger,
+					deps.cfg.AllowedNamespaces,
 				)
 			},
 		}), requireAvailable("dynamic client must be provided for namespace custom resources", func() bool {
@@ -592,6 +584,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.cfg.GatewayAPIPresence,
 				deps.cfg.ObjectCatalogService,
 				deps.ingestManager,
+				deps.cfg.AllowedNamespaces,
 			)
 		}),
 		directRegistration("object-maintenance", func() error {
@@ -681,6 +674,47 @@ func listChecksFromRegistrationPlan(plan domainpermissions.RegistrationAccessPla
 		checks = append(checks, listCheck{group: req.Group, resource: req.Resource})
 	}
 	return checks
+}
+
+// namespacesRegistration builds the namespaces-domain registration entry.
+// Scoped clusters (allowedNamespaces set) register directly and exempt the
+// runtime policy: the rows are synthesized from configuration, so requiring
+// the cluster-wide namespaces LIST would deny exactly the restricted user
+// the scope exists for. Unscoped clusters keep the fail-fast list+watch gate.
+func namespacesRegistration(deps registrationDeps) domainRegistration {
+	registerScopedOrUnscoped := func() error {
+		notifier, err := snapshot.RegisterNamespaceDomain(
+			deps.registry,
+			deps.informerFactory.SharedInformerFactory(),
+			deps.ingestManager,
+			deps.cfg.AllowedNamespaces,
+		)
+		if err != nil {
+			return err
+		}
+		if deps.noteNamespaceNotifier != nil {
+			deps.noteNamespaceNotifier(notifier)
+		}
+		return nil
+	}
+	if len(deps.cfg.AllowedNamespaces) > 0 {
+		return domainRegistration{
+			name:              "namespaces",
+			direct:            registerScopedOrUnscoped,
+			skipRuntimePolicy: true,
+		}
+	}
+	return listWatchRegistration(listWatchDomainConfig{
+		name:          "namespaces",
+		issueResource: "core/namespaces",
+		logGroup:      "",
+		logResource:   "namespaces",
+		checks: []listWatchCheck{
+			{group: "", resource: "namespaces"},
+		},
+		registerInformer: registerScopedOrUnscoped,
+		deniedReason:     "core/namespaces",
+	})
 }
 
 func listWatchRegistration(cfg listWatchDomainConfig) domainRegistration {

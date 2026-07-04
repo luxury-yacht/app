@@ -36,7 +36,7 @@ func brokenInformer(err error) cache.SharedIndexInformer {
 
 func newStartedFactory(t *testing.T) *Factory {
 	t.Helper()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	return New(fake.NewClientset(), nil, time.Minute, checker)
@@ -193,7 +193,7 @@ func TestResourcesSettledFalseAfterShutdown(t *testing.T) {
 // projector resolves owners through it), so this asserts the cut is precise.
 func TestNewFactoryDoesNotRegisterPodInformer(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
@@ -220,7 +220,7 @@ func TestNewFactoryDoesNotRegisterPodInformer(t *testing.T) {
 // it and the pod stream re-broadcasts pods on RS changes).
 func TestNewFactoryDoesNotRegisterWorkloadInformers(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
@@ -251,7 +251,7 @@ func TestNewFactoryDoesNotRegisterWorkloadInformers(t *testing.T) {
 // catalog, object-map, and notify all come from the ingest reflectors instead.
 func TestNewFactoryDoesNotRegisterNetworkInformers(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
@@ -282,7 +282,7 @@ func TestNewFactoryDoesNotRegisterNetworkInformers(t *testing.T) {
 // no consumer reads and the projection drops.
 func TestNewFactoryDoesNotRegisterNodeInformer(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
@@ -301,7 +301,7 @@ func TestNewFactoryDoesNotRegisterNodeInformer(t *testing.T) {
 
 func TestCanListResourceCachesResults(t *testing.T) {
 	var sarCalls atomic.Int32
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		sarCalls.Add(1)
 		return true, nil
 	})
@@ -334,7 +334,7 @@ func TestCanListResourceCachesResults(t *testing.T) {
 
 func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
 	var sarCalls atomic.Int32
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		sarCalls.Add(1)
 		return true, nil
 	})
@@ -361,7 +361,7 @@ func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
 
 func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	// Deny everything via the Checker.
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return false, nil
 	})
 
@@ -417,7 +417,7 @@ func TestIsTerminalWatchError(t *testing.T) {
 
 func TestNewFactoryRegistersHelmStorageNotFullConfigInformers(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	factory := New(client, nil, time.Minute, checker)
@@ -466,7 +466,7 @@ func TestNewFactoryRegistersHelmStorageNotFullConfigInformers(t *testing.T) {
 // never opens a watch — and reports synced so the helm builder serves empty.
 func TestHelmStorageSourceSkipsDeniedKinds(t *testing.T) {
 	client := fake.NewClientset()
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, resource, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, resource, _, _ string) (bool, error) {
 		return resource != "secrets", nil
 	})
 	factory := New(client, nil, time.Minute, checker)

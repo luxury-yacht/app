@@ -163,41 +163,56 @@ Each phase is independently shippable and TDD'd; red/green per slice.
   during implementation: the permission checker is created inside every
   subsystem build (`backend/refresh/system/manager.go:131`), so the rebuild
   resets the SSAR cache with no extra work.
-- [ ] **Phase 2 — Namespace list.** Scoped `namespaces`-domain registration
-  serving the configured names; feed the same synthesized list into the
-  catalog namespace-groups payload (Browse); inline sidebar editor (add +
-  hover-delete, Favorites-dropdown pattern) replacing the permission-denied
-  message. User-visible win: restricted users get namespace navigation.
-  Individual views still show their permission-denied states until
-  Phases 3–4.
-  **Define workload-presence behavior for this intermediate state
-  explicitly:** ingest is still wholly permission-denied, so with
-  `DimInactiveNamespaces` on, the tracker must not dim every synthesized
-  namespace (same all-dimmed failure mode as the 2026-06-27 tracker bug —
-  treat "ingest has no data at all" as "presence unknown, don't dim").
-- [ ] **Phase 3 — Permission dimension.** Namespace-scoped checks in the
-  checker + cache + permission gate; scoped clusters evaluate domain
-  policies per configured namespace (register if any namespace allows;
-  surface per-namespace denials). Resolve open decision 4 (SSRR vs SSAR)
-  first; either way checks for the configured namespaces run concurrently —
-  N namespaces × ~40 kinds × 2-3 verbs of serial SSARs would land on the
-  already-measured slow startup path.
-- [ ] **Phase 4 — Data paths.** Ingest reflector fan-out with
-  partition-safe stores (per-(GVR, namespace) entries preferred — see
-  table); all three scoped shared-informer factories (typed, Helm storage,
-  Gateway API) incl. the Helm include-or-exclude decision; resource stream
-  scope + namespace-custom all-namespaces fan-out; catalog collect scope;
-  metrics-poller pod-metrics fan-out; object-map direct-LIST fan-out
-  (gateway kinds + HPA). This is the heavy phase; the store semantics need
-  their own design pass first, and the sub-surfaces here are independently
-  landable slices in roughly this order (ingest → factories → stream →
-  catalog → metrics → object map).
-- [ ] **Phase 5 — Polish.** Per-namespace degrade surfaces (one forbidden
-  namespace dims only itself), namespace row enrichment (per-namespace GET
-  where permitted), verify the degrade-only surfaces 403 gracefully
-  (ClusterRole details, cluster-scoped object events), editor soft warning
-  for large scope lists, docs (`docs/architecture/` updates), release
-  notes.
+- [x] ✅ **Phase 2 — Namespace list** (shipped 2026-07-04). Scoped
+  `namespaces`-domain registration serves the configured names (synthesized
+  rows, no informer, runtime policy exempted); Browse's namespace groups
+  serve the same list; inline sidebar editor (add + hover-delete) shipped in
+  `NamespaceScopeEditor.tsx` + `Sidebar.tsx`. Workload presence: "ingest
+  tracks no workload kind" reports `workloadsUnknown`, so scoped rows are
+  never dimmed as authoritatively empty (unscoped behavior unchanged).
+- [x] ✅ **Phase 3 — Permission dimension** (shipped 2026-07-04).
+  Namespace in the SSAR attributes + cache key; `Can` fans out concurrently
+  (any-namespace-allows) — but ONLY for resources whose data path is scoped
+  (`scopedResourcePredicate`: namespaced && ingest-owned). Cluster-wide
+  sources (events/HPA/RS/gateway/helm) keep cluster-wide checks via
+  `CanClusterWide` / `ResourceRequirement.ClusterWide`, so no domain can
+  register against a source it cannot read (no silent-empty). SSAR chosen
+  per decision 4; SSRR stays a measured future optimization.
+- [x] ✅ **Phase 4 — Data paths** (shipped 2026-07-04, EXCEPT the
+  factory-backed kinds — see follow-up below). Design pass outcome: ONE
+  store per GVR with per-namespace reflector partition views
+  (`ingest/partition.go`) — partition Replace fully defines only its own
+  namespace and fans per-row sink events, never the bulk kind-wide Replace,
+  which structurally prevents the maintained-store wipe class while keeping
+  every serve/sink/readiness surface unchanged. Per-namespace permission
+  skip (one denied namespace skips one reflector), per-partition spill/
+  resume RVs. Also shipped: catalog collect scope with per-namespace
+  Forbidden skip; resource-stream per-CRD informers fan out per namespace;
+  namespace-custom all-namespaces fan-out; metrics-poller pod fan-out with
+  partial-failure merge; object-map gateway/HPA LIST fan-out.
+- [x] ✅ **Phase 5 — Polish** (shipped 2026-07-04, except row enrichment).
+  One forbidden namespace degrades only itself on every scoped surface;
+  editor soft warning above 20 namespaces; architecture doc
+  `docs/architecture/namespace-scope.md`; release-note fragment.
+
+### Remaining follow-ups (not blocking #243)
+
+- [ ] **Scope the factory-backed kinds** (the deliberate Phase 4 leftover):
+  events, replicasets, HPA v1 (typed factory), the 8 gateway kinds (gateway
+  factory), helm secrets/configmaps (helm-storage factory). Requires N
+  per-namespace client-go factories + multiplexed listers/handlers at each
+  consumer (~10 sites mapped this session). Until then these domains show
+  an HONEST permission-denied state for scoped identities (never silent
+  empty), enforced by the source-scope rule. Flipping a source to scoped =
+  scope its informers AND add its resources to `scopedResourcePredicate`
+  AND remove its ClusterWide overrides.
+- [ ] **Namespace row enrichment** (per-namespace GET where permitted) —
+  name-only rows shipped per decision 3.
+- [ ] **Verify degrade-only surfaces against the restricted test cluster**
+  (ClusterRole details RoleBindings list, cluster-scoped object events) —
+  needs the new 2-namespace RoleBindings SA from the test-setup note.
+- [ ] **SSRR optimization** if scoped-connect SSAR fan-out measures slow
+  (decision 4 note: reuse `backend/capabilities` machinery).
 
 ## Decisions (resolved 2026-07-04)
 

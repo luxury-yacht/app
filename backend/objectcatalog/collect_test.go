@@ -8,11 +8,13 @@ package objectcatalog
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,7 +121,7 @@ func (f *fakeCatalogIngestSource) AddCatalogSink(schema.GroupVersionResource, in
 
 // The dynamic-CRD path is not exercised by the static-cut-kind tests below, so these
 // satisfy the IngestSource interface as no-ops.
-func (f *fakeCatalogIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
+func (f *fakeCatalogIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
 
@@ -563,5 +565,62 @@ func TestBuildSummaryClusterScope(t *testing.T) {
 	}
 	if summary.CreationTimestamp != "2023-01-02T03:04:05Z" {
 		t.Fatalf("unexpected creation timestamp %s", summary.CreationTimestamp)
+	}
+}
+
+// Scoped clusters (docs/plans/namespace-scope.md): one forbidden namespace
+// must not blank the other configured namespaces' results — the Lens dual-path
+// pitfall (b) this plan explicitly avoids.
+func TestListResourceSkipsForbiddenNamespaceTargets(t *testing.T) {
+	scheme := runtime.NewScheme()
+	cfgGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	listKinds := map[schema.GroupVersionResource]string{
+		{Group: "apps", Version: "v1", Resource: "deployments"}: "DeploymentList",
+	}
+
+	objA := &unstructured.Unstructured{}
+	objA.SetGroupVersionKind(cfgGVK)
+	objA.SetNamespace("alpha")
+	objA.SetName("sample-a")
+
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objA)
+	dyn.PrependReactor("list", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetNamespace() == "beta" {
+			return true, nil, k8serrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "", errors.New("denied"))
+		}
+		return false, nil, nil
+	})
+
+	svc := NewService(Dependencies{Common: common.Dependencies{KubernetesClient: kubernetesfake.NewClientset(), DynamicClient: dyn}}, &Options{PageSize: 10})
+
+	desc := resourceDescriptor{
+		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		Namespaced: true,
+		Kind:       "Deployment",
+		Group:      "apps",
+		Version:    "v1",
+		Resource:   "deployments",
+		Scope:      ScopeNamespace,
+	}
+
+	items, err := svc.listResource(context.Background(), 0, desc, []string{"alpha", "beta"}, nil)
+	if err != nil {
+		t.Fatalf("a forbidden namespace must be skipped, not fail the kind: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "sample-a" {
+		t.Fatalf("expected only alpha's item, got %#v", items)
+	}
+}
+
+func TestServiceScopeNamespacesComeFromDependencies(t *testing.T) {
+	svc := NewService(Dependencies{AllowedNamespaces: []string{"prod", "dev"}, Common: common.Dependencies{}}, nil)
+	got := svc.scopeNamespaces()
+	if len(got) != 2 || got[0] != "prod" || got[1] != "dev" {
+		t.Fatalf("scopeNamespaces = %#v, want configured scope", got)
+	}
+
+	unscoped := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+	if ns := unscoped.scopeNamespaces(); ns != nil {
+		t.Fatalf("unscoped service must report nil scope, got %#v", ns)
 	}
 }

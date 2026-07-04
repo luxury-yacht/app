@@ -21,6 +21,8 @@
 package informer
 
 import (
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
@@ -126,16 +128,19 @@ func (f *Factory) newHelmStorageSource() *HelmStorageSource {
 }
 
 // canListWatchHelmStorage reports whether the identity may list AND watch the
-// resource — the precondition for creating a filtered informer over it. It reuses
-// the Factory's permission checks so the helm-storage gate matches every other
-// informer's gate.
+// resource CLUSTER-WIDE — the precondition for creating a filtered informer
+// over it. The helm-storage factory LISTs/WATCHes across all namespaces, so
+// its gate deliberately bypasses any configured namespace scope
+// (docs/plans/namespace-scope.md): a per-namespace grant must not create an
+// informer whose cluster-wide watch would only 403.
 func (f *Factory) canListWatchHelmStorage(group, resource string) bool {
-	listAllowed, listErr := f.CanListResource(group, resource)
-	if listErr != nil || !listAllowed {
+	ctx := context.Background()
+	listDecision, listErr := f.runtimePermissions.CanClusterWide(ctx, group, resource, "list")
+	if listErr != nil || !listDecision.Allowed {
 		return false
 	}
-	watchAllowed, watchErr := f.CanWatchResource(group, resource)
-	if watchErr != nil || !watchAllowed {
+	watchDecision, watchErr := f.runtimePermissions.CanClusterWide(ctx, group, resource, "watch")
+	if watchErr != nil || !watchDecision.Allowed {
 		return false
 	}
 	return true

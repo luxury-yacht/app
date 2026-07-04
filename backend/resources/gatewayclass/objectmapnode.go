@@ -14,7 +14,7 @@ import (
 // LIST via the Gateway client) and projects each object into a graph node.
 var ObjectMapNode = objectmapnode.GatewayCollector{
 	Identity: Identity,
-	List: func(ctx context.Context, client gatewayversioned.Interface) ([]metav1.Object, error) {
+	List: func(ctx context.Context, client gatewayversioned.Interface, _ string) ([]metav1.Object, error) {
 		list, err := client.GatewayV1().GatewayClasses().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err

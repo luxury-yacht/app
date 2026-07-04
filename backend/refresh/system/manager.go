@@ -28,6 +28,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -72,9 +73,9 @@ type Config struct {
 	ClusterID                  string                                   // stable identifier for cluster-scoped keys
 	ClusterName                string                                   // display name for cluster in payloads
 	// AllowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md). Empty means cluster-wide. Carried for
-	// subsystem construction; enforcement in the data/permission paths lands
-	// in later plan phases.
+	// (docs/plans/namespace-scope.md). Empty means cluster-wide. Enforced by
+	// the permission checker's scope fan-out, the scoped namespaces domain,
+	// and the ingest manager's per-namespace reflectors.
 	AllowedNamespaces []string
 }
 
@@ -130,10 +131,32 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 		nil
 }
 
+// scopedResourcePredicate reports which resources' permission checks fan out
+// over a configured namespace scope (docs/plans/namespace-scope.md): exactly
+// the namespaced, ingest-owned kinds, because only their data path runs
+// per-namespace. A check's scope must match its data source's scope — scoping
+// the check for a cluster-wide source (events, HPA, replicasets, gateway,
+// helm storage) would register domains that then serve silently-empty data.
+func scopedResourcePredicate() func(group, resource string) bool {
+	scoped := make(map[string]struct{})
+	for _, d := range kindregistry.IngestOwnedDescriptors() {
+		if d.Identity.Namespaced {
+			scoped[d.Identity.Group+"/"+d.Identity.Resource] = struct{}{}
+		}
+	}
+	return func(group, resource string) bool {
+		_, ok := scoped[group+"/"+resource]
+		return ok
+	}
+}
+
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
+	if len(cfg.AllowedNamespaces) > 0 {
+		runtimePerms.SetScope(cfg.AllowedNamespaces, scopedResourcePredicate())
+	}
 	// Decide once per process whether WatchList is usable, BEFORE the first
 	// informer factory issues a watch (client-go reads the WatchListClient gate
 	// lazily and caches it). If a bookmark-stripping proxy is in front of the
@@ -152,6 +175,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		cfg.KubernetesClient,
 		cfg.APIExtensionsClient,
 		cfg.GatewayClient,
+		cfg.AllowedNamespaces...,
 	)
 	// Dynamic client for the on-demand dynamic (CRD-backed) reflectors the catalog promotes
 	// at runtime (objectcatalog maybePromote → RegisterDynamicCatalogReflector). Set before
@@ -186,8 +210,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// a true failure, so a transient permission blip never wrongly excludes a kind with
 	// no retry. Permission preflight below primes the same checker before Start, and
 	// cache misses still run the normal SubjectAccessReview path.
-	ingestManager.SetPermissionFilter(ingestPermissionFilter(
-		informerFactory.CanListResource, informerFactory.CanWatchResource))
+	ingestManager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
 
 	informerHub := newIngestInformerHub(informerFactory, ingestManager)
 
@@ -246,6 +269,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsErrs...)
 	if len(metricsErrs) == 0 && metricsAllowed {
 		poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, telemetryRecorder)
+		poller.SetAllowedNamespaces(cfg.AllowedNamespaces)
 		idleTimeout := cfg.MetricsInterval * 3
 		demandPoller := metrics.NewDemandPoller(poller, poller, idleTimeout)
 		metricsPoller = demandPoller
@@ -504,12 +528,16 @@ func eventSignalObserver(resourceManager *resourcestream.Manager) func(scope str
 // sync-deadline degrade is the backstop, so a transient permission blip never wrongly
 // excludes a kind with no retry. canList/canWatch are the factory's CanListResource/
 // CanWatchResource.
-func ingestPermissionFilter(canList, canWatch func(group, resource string) (bool, error)) func(group, resource string) bool {
-	return func(group, resource string) bool {
-		if allowed, err := canList(group, resource); err == nil && !allowed {
+func ingestPermissionFilter(checker *permissions.Checker) func(group, resource, namespace string) bool {
+	return func(group, resource, namespace string) bool {
+		ctx := context.Background()
+		// namespace "" is the cluster-wide part — exactly the pre-scope check.
+		// A scoped part asks about ITS namespace only, so one denied namespace
+		// skips one reflector, never the kind's siblings.
+		if decision, err := checker.CanInNamespace(ctx, group, resource, "list", namespace); err == nil && !decision.Allowed {
 			return false
 		}
-		if allowed, err := canWatch(group, resource); err == nil && !allowed {
+		if decision, err := checker.CanInNamespace(ctx, group, resource, "watch", namespace); err == nil && !decision.Allowed {
 			return false
 		}
 		return true

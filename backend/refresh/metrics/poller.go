@@ -121,6 +121,14 @@ type Poller struct {
 
 	nodeLister func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error)
 	podLister  func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error)
+	// podNamespaceLister lists one namespace's pod metrics ("" = cluster-wide);
+	// podLister fans it over the configured scope (injectable in tests).
+	podNamespaceLister func(context.Context, *metricsclient.Clientset, string) (*metricsv1beta1.PodMetricsList, error)
+	// allowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md): non-empty makes the pod-metrics list
+	// run per configured namespace, with one failing namespace skipped
+	// instead of blanking the others. Node metrics stay cluster-scoped.
+	allowedNamespaces []string
 
 	// observerMu guards collectionObserver. The observer is notified after every
 	// SUCCESSFUL collection (the metric doorbell rides it); failures do not
@@ -183,8 +191,51 @@ func NewPoller(client *metricsclient.Clientset, restConfig *rest.Config, interva
 		telemetry:    recorder,
 	}
 	p.nodeLister = p.listNodeMetricsWithRetry
-	p.podLister = p.listPodMetricsWithRetry
+	p.podNamespaceLister = p.listPodMetricsInNamespaceWithRetry
+	p.podLister = p.listPodMetricsScoped
 	return p
+}
+
+// SetAllowedNamespaces configures the cluster's namespace scope
+// (docs/plans/namespace-scope.md). Call before Start.
+func (p *Poller) SetAllowedNamespaces(namespaces []string) {
+	if p == nil {
+		return
+	}
+	p.allowedNamespaces = append([]string(nil), namespaces...)
+}
+
+// listPodMetricsScoped fans the pod-metrics list over the configured scope
+// (one per-namespace list each), merging the successes: a namespace the
+// identity cannot read is logged and skipped, never blanking the others. The
+// unscoped path is the same loop with a single cluster-wide "" entry. It
+// fails only when EVERY namespace fails, so the poller's failure accounting
+// still fires when nothing at all is readable.
+func (p *Poller) listPodMetricsScoped(ctx context.Context, client *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	namespaces := []string{""}
+	if len(p.allowedNamespaces) > 0 {
+		namespaces = p.allowedNamespaces
+	}
+	merged := &metricsv1beta1.PodMetricsList{}
+	var firstErr error
+	succeeded := false
+	for _, namespace := range namespaces {
+		resp, err := p.podNamespaceLister(ctx, client, namespace)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		succeeded = true
+		if resp != nil {
+			merged.Items = append(merged.Items, resp.Items...)
+		}
+	}
+	if !succeeded {
+		return nil, firstErr
+	}
+	return merged, nil
 }
 
 // LatestNodeUsage returns a copy of the most recent node usage map.
@@ -397,7 +448,7 @@ func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client *metricscl
 	}
 }
 
-func (p *Poller) listPodMetricsWithRetry(ctx context.Context, client *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
 	var attempt int
 	backoff := config.MetricsInitialBackoff
 
@@ -406,7 +457,7 @@ func (p *Poller) listPodMetricsWithRetry(ctx context.Context, client *metricscli
 			return nil, ctx.Err()
 		}
 
-		resp, err := client.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
+		resp, err := client.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			return resp, nil
 		}

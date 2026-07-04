@@ -69,7 +69,7 @@ func TestSpillRestoreBundlesRoundTrip(t *testing.T) {
 	require.NoError(t, orig.SpillBundles(path))
 
 	restored := bundleProjectingStore(false)
-	rv, err := restored.RestoreBundles(path)
+	rv, _, err := restored.RestoreBundles(path)
 	require.NoError(t, err)
 	require.Equal(t, "12", rv, "RestoreBundles returns the persisted RV for the resume")
 	require.Equal(t, "12", restored.LastStoreSyncResourceVersion())
@@ -99,7 +99,7 @@ func TestSpillRestoreBundlesRetainsTableHalf(t *testing.T) {
 	require.NoError(t, orig.SpillBundles(path))
 
 	restored := bundleProjectingStore(true)
-	_, err := restored.RestoreBundles(path)
+	_, _, err := restored.RestoreBundles(path)
 	require.NoError(t, err)
 
 	got := map[string]int{}
@@ -114,7 +114,7 @@ func TestSpillRestoreBundlesRetainsTableHalf(t *testing.T) {
 // file — the caller treats the error as "skip → full sync".
 func TestRestoreBundlesMissingFileErrors(t *testing.T) {
 	store := bundleProjectingStore(false)
-	_, err := store.RestoreBundles(filepath.Join(t.TempDir(), "does-not-exist.bundles"))
+	_, _, err := store.RestoreBundles(filepath.Join(t.TempDir(), "does-not-exist.bundles"))
 	require.Error(t, err)
 	require.False(t, store.HasSynced(), "a failed restore leaves the store unsynced (it will full-sync)")
 }
@@ -140,10 +140,11 @@ func TestSpillRestoreStoresSetsResumeRV(t *testing.T) {
 
 	storeB := bundleProjectingStore(false)
 	dstEntry := &entry{store: storeB, example: resumeCM("ex", "0")}
+	dstEntry.parts = []*ingestPart{{namespace: "", view: storeB.PartitionView("")}}
 	dst := &IngestManager{entries: map[schema.GroupVersionResource]*entry{cmGVR(): dstEntry}}
 	dst.RestoreStores(dir)
 
-	require.Equal(t, "11", dstEntry.resumeRV, "restore sets resumeRV from the persisted store RV")
+	require.Equal(t, "11", dstEntry.parts[0].resumeRV, "restore sets resumeRV from the persisted store RV")
 	require.Equal(t, 2, len(storeB.List()), "restore repopulates the store full")
 	require.True(t, storeB.HasSynced())
 }
@@ -153,10 +154,11 @@ func TestSpillRestoreStoresSetsResumeRV(t *testing.T) {
 func TestRestoreStoresNoFileLeavesResumeUnset(t *testing.T) {
 	store := bundleProjectingStore(false)
 	e := &entry{store: store, example: resumeCM("ex", "0")}
+	e.parts = []*ingestPart{{namespace: "", view: store.PartitionView("")}}
 	dst := &IngestManager{entries: map[schema.GroupVersionResource]*entry{cmGVR(): e}}
 
 	dst.RestoreStores(t.TempDir()) // empty dir — no spill file
 
-	require.Equal(t, "", e.resumeRV, "no spill file → resumeRV stays empty → full sync")
+	require.Equal(t, "", e.parts[0].resumeRV, "no spill file → resumeRV stays empty → full sync")
 	require.False(t, store.HasSynced())
 }

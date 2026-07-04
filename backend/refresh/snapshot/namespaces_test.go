@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -352,4 +353,86 @@ func TestNamespaceBuilderWorkloadSyncReadinessChangesSourceVersion(t *testing.T)
 	if notReady == ready {
 		t.Fatalf("workload sync readiness did not change the workloads source version (%q)", ready)
 	}
+}
+
+// --- Scoped ("accessible namespaces") mode, docs/plans/namespace-scope.md ---
+
+func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
+	// Pre-Phase-4 restricted cluster: no lister (cluster-wide list denied), no
+	// ingest data at all. Rows come from the configured scope; workload
+	// presence is genuinely unknown, so nothing may render as
+	// authoritatively-empty (dimmed).
+	builder := &NamespaceBuilder{scope: []string{"prod", "dev"}}
+
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "prod-cluster"})
+	snap, err := builder.Build(ctx, "")
+	require.NoError(t, err)
+
+	payload, ok := snap.Payload.(NamespaceSnapshot)
+	require.True(t, ok)
+	require.True(t, payload.WorkloadsReady, "scoped snapshot must satisfy the lifecycle Ready gate")
+	require.Len(t, payload.Namespaces, 2)
+	require.Equal(t, "dev", payload.Namespaces[0].Name)
+	require.Equal(t, "prod", payload.Namespaces[1].Name)
+
+	for _, ns := range payload.Namespaces {
+		require.False(t, ns.HasWorkloads)
+		require.True(t, ns.WorkloadsUnknown, "no tracked workload kind: presence must be unknown, not authoritatively empty")
+		require.Equal(t, "Namespace", ns.Ref.Kind)
+		require.Equal(t, "namespaces", ns.Ref.Resource)
+		require.Equal(t, ns.Name, ns.Ref.Name)
+		require.Equal(t, "cluster-a", ns.Ref.ClusterID)
+	}
+}
+
+func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testing.T) {
+	// Post-Phase-4 scoped cluster: ingest tracks workload kinds and has rows
+	// for one configured namespace. Presence becomes known for every row.
+	tracker := newNamespaceWorkloadTracker()
+	tracker.synced.Store(true)
+
+	builder := &NamespaceBuilder{
+		scope:   []string{"prod", "dev"},
+		ingest:  fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "prod", 1),
+		tracker: tracker,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 2)
+
+	byName := map[string]NamespaceSummary{}
+	for _, ns := range payload.Namespaces {
+		byName[ns.Name] = ns
+	}
+	require.True(t, byName["prod"].HasWorkloads)
+	require.False(t, byName["prod"].WorkloadsUnknown)
+	require.False(t, byName["dev"].HasWorkloads)
+	require.False(t, byName["dev"].WorkloadsUnknown, "tracked ingest makes absence authoritative")
+}
+
+func TestNamespaceBuilderScopedViewScopeFiltersToConfiguredNames(t *testing.T) {
+	builder := &NamespaceBuilder{scope: []string{"prod", "dev"}}
+
+	snap, err := builder.Build(context.Background(), "cluster-a|prod")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 1)
+	require.Equal(t, "prod", payload.Namespaces[0].Name)
+
+	snap, err = builder.Build(context.Background(), "cluster-a|not-configured")
+	require.NoError(t, err)
+	payload = snap.Payload.(NamespaceSnapshot)
+	require.Empty(t, payload.Namespaces)
+}
+
+func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T) {
+	// A scoped identity typically cannot list/watch namespaces cluster-wide;
+	// the scoped registration must never instantiate the namespaces informer.
+	// Passing a nil factory proves it: any touch would panic.
+	reg := domain.New()
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"})
+	require.NoError(t, err)
+	require.NotNil(t, notifier)
 }

@@ -149,6 +149,25 @@ func (s *Service) listResource(ctx context.Context, index int, desc resourceDesc
 	return s.listResourceSequential(ctx, index, namespaceable, desc, targets, agg)
 }
 
+// scopeNamespaces returns the cluster's configured namespace scope for
+// collection (docs/plans/namespace-scope.md); nil means cluster-wide.
+func (s *Service) scopeNamespaces() []string {
+	if s == nil {
+		return nil
+	}
+	return s.deps.AllowedNamespaces
+}
+
+// skipForbiddenNamespaceTarget reports whether a per-target list error is a
+// Forbidden for one REAL namespace target — in which case that namespace is
+// skipped instead of blanking the kind's other namespaces (a scoped identity
+// may legitimately hold grants in only a subset of the configured scope).
+// Cluster-wide targets keep propagating Forbidden so permission denial still
+// surfaces where the whole kind is unreadable.
+func skipForbiddenNamespaceTarget(target string, err error) bool {
+	return target != "" && target != metav1.NamespaceAll && apierrors.IsForbidden(err)
+}
+
 func (s *Service) listResourceSequential(ctx context.Context, index int, namespaceable dynamic.NamespaceableResourceInterface, desc resourceDescriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
 	results := make([]Summary, 0)
 	for _, target := range targets {
@@ -160,6 +179,9 @@ func (s *Service) listResourceSequential(ctx context.Context, index int, namespa
 		resourceInterface := resourceInterfaceForTarget(namespaceable, desc.Namespaced, target)
 		items, err := s.listNamespaceItems(ctx, index, desc, resourceInterface, agg)
 		if err != nil {
+			if skipForbiddenNamespaceTarget(target, err) {
+				continue
+			}
 			return nil, err
 		}
 		if len(items) > 0 {
@@ -177,6 +199,9 @@ func (s *Service) listResourceNamespacedParallel(ctx context.Context, index int,
 		resourceInterface := resourceInterfaceForTarget(namespaceable, true, target)
 		items, err := s.listNamespaceItems(taskCtx, index, desc, resourceInterface, agg)
 		if err != nil {
+			if skipForbiddenNamespaceTarget(target, err) {
+				return nil
+			}
 			return err
 		}
 		if len(items) == 0 {
@@ -301,7 +326,7 @@ func (s *Service) maybePromote(desc resourceDescriptor, itemCount int) {
 	}
 	gvk := schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind}
 	project := func(obj metav1.Object) interface{} { return s.buildSummary(desc, obj) }
-	if !source.RegisterDynamicCatalogReflector(gvr, gvk, project) {
+	if !source.RegisterDynamicCatalogReflector(gvr, gvk, project, desc.Namespaced) {
 		return
 	}
 	source.AddCatalogSink(gvr, ingestCatalogSink{service: s, gvr: gvr})

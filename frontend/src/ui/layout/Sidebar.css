@@ -297,3 +297,60 @@ body.sidebar-resizing * {
     col-resize !important;
   user-select: none !important;
 }
+
+/* Inline "accessible namespaces" scope editor (docs/plans/namespace-scope.md).
+   Hover-reveal delete follows the favorites-dropdown pattern. */
+.namespace-scope-remove {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0 0.15rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.sidebar-item:hover .namespace-scope-remove {
+  display: inline-flex;
+}
+
+.namespace-scope-remove:hover {
+  color: var(--color-danger);
+}
+
+.namespace-scope-add {
+  color: var(--color-text-secondary);
+}
+
+.namespace-scope-add:hover {
+  color: var(--color-text);
+}
+
+.namespace-scope-input {
+  width: calc(100% - 1rem);
+  margin: 0.15rem 0.5rem;
+  padding: 0.1rem 0.3rem;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+}
+
+.namespace-scope-error,
+.namespace-scope-warning {
+  padding: 0.15rem 0.5rem;
+  font-size: var(--font-size-small);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.namespace-scope-error {
+  color: var(--color-danger);
+}
+
+.namespace-scope-warning {
+  color: var(--color-text-secondary);
+}

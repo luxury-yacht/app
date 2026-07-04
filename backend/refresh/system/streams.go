@@ -55,6 +55,7 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.clusterMeta,
 		deps.cfg.DynamicClient,
 		deps.ingestManager,
+		deps.cfg.AllowedNamespaces...,
 	)
 	resourceHandler, err := resourcestream.NewHandler(resourceManager, logger, deps.telemetry, deps.clusterMeta)
 	if err != nil {
