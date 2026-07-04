@@ -6,6 +6,8 @@
 
 ### Changed
 
+- Streaming views paint immediately on first visit: a mount-time race silently killed the stream start (leaving views loading until a 5-10s fallback poll, or indefinitely), and newly started streams now fetch their initial snapshot instead of waiting for the first poll tick.
+
 - Views backed by a domain the identity cannot read now settle immediately into an "Insufficient permissions" state instead of an endless loading spinner, and stop retrying (both the table query and its stream stop asking until permissions or the namespace scope change).
 
 - Clusters where the user lacks permission to list namespaces now fail fast. The sidebar shows "You do not have permission to list namespaces."

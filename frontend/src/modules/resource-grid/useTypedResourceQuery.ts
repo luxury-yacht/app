@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import type {
   GridTableFilterState,
   GridTableFilterOptions,
@@ -336,8 +335,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setLoading(true);
     setError(null);
 
-    // [DEBUG-qtime] temporary latency instrumentation — remove after diagnosis.
-    logAppLogsInfo(`[DEBUG-qtime] ${domain} query fetch attempt=${warmupAttempt} scope=${scope}`);
     void (async () => {
       try {
         const result = await requestRefreshDomainState({
@@ -351,9 +348,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         if (cancelled || queryIdentityRef.current !== identityAtRequest) {
           return;
         }
-        logAppLogsInfo(
-          `[DEBUG-qtime] ${domain} query result status=${result.status} hasPayload=${Boolean(result.data?.data)} denied=${Boolean(result.data?.permissionDenied)}`
-        );
         if (result.status !== 'executed') {
           // A blocked refresh (cluster still connecting, auto-refresh paused) is a
           // warm-up condition, not a failure: stay not-loaded so the table keeps its
@@ -483,9 +477,6 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           cleanup: true,
           preserveState: false,
         });
-        logAppLogsInfo(
-          `[DEBUG-qtime] ${domain} query result status=${result.status} hasPayload=${Boolean(result.data?.data)} denied=${Boolean(result.data?.permissionDenied)}`
-        );
         if (result.status !== 'executed') {
           throw new Error(`${exportLabel} export failed: page ${page + 1} request was blocked`);
         }

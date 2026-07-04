@@ -744,10 +744,8 @@ class RefreshOrchestrator {
 
     startPromise
       .then((cleanup) => {
-        if (
-          !this.isScopedDomainEnabledInternal(domain, scope) ||
-          runtime.isStreamingCancelled(domain, scope)
-        ) {
+        const enabledNow = this.isScopedDomainEnabledInternal(domain, scope);
+        if (!enabledNow || runtime.isStreamingCancelled(domain, scope)) {
           runtime.failStreamingStart(domain, scope);
           runtime.clearStreamingCancelled(domain, scope);
           if (typeof cleanup === 'function') {
@@ -756,6 +754,18 @@ class RefreshOrchestrator {
             } catch (error) {
               console.error(`Failed to clean up streaming domain ${domain}::${scope}`, error);
             }
+          }
+          if (enabledNow) {
+            // A stop cancelled this start mid-flight, but the scope was
+            // re-enabled before it resolved (the mount-time lease flap on
+            // every first view visit). The re-enable's own start attempt
+            // early-returned on THIS pending start, so dying here would
+            // orphan the scope in 'initialising' until the fallback poller's
+            // first tick (observed live: 5-10s first-paint stalls; forever
+            // without an active poller). The cancellation is obsolete —
+            // restart cleanly; the stream manager re-ensures the
+            // linger-stopped subscription.
+            this.startStreamingScope(domain, scope, streaming);
           }
           return;
         }
@@ -807,6 +817,16 @@ class RefreshOrchestrator {
     if (pending) {
       pending
         .then((cleanup) => {
+          // The start's own continuation (attached first) already handled a
+          // cancelled arrival — teardown, or an adopted restart when the
+          // scope was re-enabled — and cleared the cancel flag. Acting here
+          // too would release the manager subscription twice. The flag still
+          // being set means this stop still owns the teardown.
+          if (!runtime.isStreamingCancelled(domain, scope)) {
+            return;
+          }
+          runtime.failStreamingStart(domain, scope);
+          runtime.clearStreamingCancelled(domain, scope);
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -815,7 +835,7 @@ class RefreshOrchestrator {
             }
           }
         })
-        .finally(() => {
+        .catch(() => {
           runtime.failStreamingStart(domain, scope);
           runtime.clearStreamingCancelled(domain, scope);
         });

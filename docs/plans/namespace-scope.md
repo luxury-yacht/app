@@ -195,7 +195,13 @@ Each phase is independently shippable and TDD'd; red/green per slice.
   editor soft warning above 20 namespaces; architecture doc
   `docs/architecture/namespace-scope.md`; release-note fragment.
 
-### Remaining follow-ups (not blocking #243)
+### Remaining follow-ups
+
+- Trace WHY the scoped-domain lease flaps on every view mount
+  (enable→disable→re-enable within ~10ms; observed via [DEBUG-qtime]
+  2026-07-04). The streaming-start pipeline is now robust to it
+  (adopt-restart, `orchestrator.streamingFlap.test.ts`), but the flap itself
+  is wasted work and churns scoped state. (not blocking #243)
 
 - [ ] **Scope the factory-backed kinds** (the deliberate Phase 4 leftover):
   events, replicasets, HPA v1 (typed factory), the 8 gateway kinds (gateway
