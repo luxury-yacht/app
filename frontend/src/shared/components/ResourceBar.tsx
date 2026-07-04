@@ -401,7 +401,6 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
                   left: `${limitPercent}%`,
                   width: `${usagePercent - limitPercent}%`,
                 }}
-                title={`Limit: ${tooltipLimit}`}
               />
             )}
 
