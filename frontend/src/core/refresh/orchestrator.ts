@@ -22,6 +22,7 @@ import {
   getScopedDomainState,
   markPendingRequest,
   resetAllScopedDomainStates,
+  resetPermissionDeniedScopedDomainStates,
   resetScopedDomainState,
   setScopedDomainState,
 } from './store';
@@ -110,9 +111,14 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
     eventBus.on('settings:auto-refresh', this.handleAutoRefreshChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
+    eventBus.on(
+      'refresh:resource-stream-permission-denied',
+      this.handleResourceStreamPermissionDenied
+    );
     eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
     eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
     eventBus.on('cluster:auth:recovered', this.handleClusterAuthRecovered);
+    eventBus.on('cluster:scope-changed', this.handleClusterScopeChanged);
     clusterReadiness.onBecameServiceable((clusterId) =>
       this.handleClusterBecameServiceable(clusterId)
     );
@@ -738,10 +744,8 @@ class RefreshOrchestrator {
 
     startPromise
       .then((cleanup) => {
-        if (
-          !this.isScopedDomainEnabledInternal(domain, scope) ||
-          runtime.isStreamingCancelled(domain, scope)
-        ) {
+        const enabledNow = this.isScopedDomainEnabledInternal(domain, scope);
+        if (!enabledNow || runtime.isStreamingCancelled(domain, scope)) {
           runtime.failStreamingStart(domain, scope);
           runtime.clearStreamingCancelled(domain, scope);
           if (typeof cleanup === 'function') {
@@ -751,10 +755,38 @@ class RefreshOrchestrator {
               console.error(`Failed to clean up streaming domain ${domain}::${scope}`, error);
             }
           }
+          if (enabledNow) {
+            // LOAD-BEARING — docs/architecture/refresh-system.md,
+            // "Streaming Start Lifecycle". A stop cancelled this start
+            // mid-flight, but the scope was re-enabled before it resolved
+            // (the mount-time lease flap on every first view visit). The re-enable's own start attempt
+            // early-returned on THIS pending start, so dying here would
+            // orphan the scope in 'initialising' until the fallback poller's
+            // first tick (observed live: 5-10s first-paint stalls; forever
+            // without an active poller). The cancellation is obsolete —
+            // restart cleanly; the stream manager re-ensures the
+            // linger-stopped subscription.
+            this.startStreamingScope(domain, scope, streaming);
+          }
           return;
         }
 
         runtime.finishStreamingStart(domain, scope, cleanup ?? noopStreamingCleanup);
+        // Initial reconciliation: a freshly-subscribed scope has no snapshot
+        // yet and the stream only signals CHANGES, so a quiet (or denied)
+        // domain would sit in 'initialising' until the first fallback poll
+        // tick — observed live as 5–10s first-paint stalls on every first
+        // visit to a streaming view. Fetch once now; streamSignal bypasses
+        // the healthy-stream skip, performFetch dedupes in-flight, and a
+        // denied domain gets its typed-403 stamp immediately.
+        if (!streaming.snapshotless && !getScopedDomainState(domain, scope).data) {
+          void this.performFetch(domain, scope, {
+            isManual: false,
+            streamSignal: true,
+          }).catch(() => {
+            // Failures land in the scoped state via performFetch's own path.
+          });
+        }
       })
       .catch((error) => {
         runtime.failStreamingStart(domain, scope);
@@ -786,6 +818,18 @@ class RefreshOrchestrator {
     if (pending) {
       pending
         .then((cleanup) => {
+          // LOAD-BEARING — docs/architecture/refresh-system.md, "Streaming
+          // Start Lifecycle": teardown has exactly one owner. The start's
+          // own continuation (attached first) already handled a cancelled
+          // arrival — teardown, or an adopted restart when the scope was
+          // re-enabled — and cleared the cancel flag. Acting here
+          // too would release the manager subscription twice. The flag still
+          // being set means this stop still owns the teardown.
+          if (!runtime.isStreamingCancelled(domain, scope)) {
+            return;
+          }
+          runtime.failStreamingStart(domain, scope);
+          runtime.clearStreamingCancelled(domain, scope);
           if (typeof cleanup === 'function') {
             try {
               cleanup();
@@ -794,7 +838,7 @@ class RefreshOrchestrator {
             }
           }
         })
-        .finally(() => {
+        .catch(() => {
           runtime.failStreamingStart(domain, scope);
           runtime.clearStreamingCancelled(domain, scope);
         });
@@ -1129,8 +1173,10 @@ class RefreshOrchestrator {
 
     const previousState = getScopedDomainState(domain, normalizedScope);
     // A permission-denied scope is SETTLED: the backend refused it with a
-    // typed 403 and permission changes are not expected mid-session (recovery
-    // is an app restart). Background retries here caused a request every ~2s
+    // typed 403 and permission changes are not expected mid-session (the
+    // exceptions — a namespace-scope rebuild, and manual refresh below —
+    // clear the latch explicitly; see handleClusterScopeChanged). Background
+    // retries here caused a request every ~2s
     // (the no-data fetch clause) and flicked the state through 'loading' —
     // observed live as a spinner flashing over the permission message. Manual
     // refresh remains a deliberate re-ask.
@@ -1371,6 +1417,37 @@ class RefreshOrchestrator {
     }
   }
 
+  private handleResourceStreamPermissionDenied = (
+    payload: AppEvents['refresh:resource-stream-permission-denied']
+  ): void => {
+    const scope = payload.scope.trim();
+    if (!scope) {
+      return;
+    }
+    // A settled denial: block the scope's streaming (cleared on scope change
+    // or auth recovery) so it does not resync-loop against a 403 forever.
+    const domain = payload.domain as RefreshDomain;
+    const runtime = this.getRuntimeForScope(domain, scope);
+    if (!runtime.blockStreaming(domain, scope)) {
+      return;
+    }
+    const config = this.configs.get(domain);
+    if (config?.streaming) {
+      this.stopStreamingScope(domain, scope, config.streaming, false);
+    }
+    logWarning(
+      `[refresh] stream permission denied — streaming blocked domain=${domain} scope=${scope} reason=${payload.reason}`,
+      { clusterId: parseClusterScope(scope).clusterId }
+    );
+    // Settle the scope's snapshot state NOW: the fetch gets the same typed
+    // 403 instantly and stamps permissionDenied, so anything gated on this
+    // scope's initial load (the typed-query tables) resolves immediately
+    // instead of waiting out stream teardown timing.
+    void this.performFetch(domain, scope, { isManual: true }).catch(() => {
+      // The stamp lands via the fetch's own error path; nothing to add here.
+    });
+  };
+
   private handleResourceStreamDrift = (
     payload: AppEvents['refresh:resource-stream-drift']
   ): void => {
@@ -1445,6 +1522,30 @@ class RefreshOrchestrator {
     // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
     // loop (30 attempts with backoff) naturally waits for the backend refresh
     // subsystem to reinitialise after auth recovery.
+    this.handleStreamingScopeChanges();
+  };
+
+  private handleClusterScopeChanged = (payload: { clusterId: string }) => {
+    // The cluster's namespace scope changed and the backend finished tearing
+    // down + rebuilding its refresh subsystem (docs/plans/namespace-scope.md):
+    // every stream to that subsystem is dead and every cached snapshot is
+    // pre-rebuild. Resume exactly as auth recovery does (minus the pause
+    // bookkeeping — auth never went invalid).
+    logInfo('[refresh] namespace scope changed — restarting streams', {
+      clusterId: payload.clusterId,
+    });
+    // Permission-denied scopes are settled for the session — EXCEPT across a
+    // scope rebuild, which is a real permission epoch change: domains denied
+    // cluster-wide may now be served per-namespace. Clear the latches so the
+    // affected scopes re-ask (they hold no data, so nothing blanks).
+    resetPermissionDeniedScopedDomainStates();
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    // Suppress transient errors while the rebuilt subsystem starts serving.
+    this.errorNotifier.suppressNetworkErrors(6000);
+    this.clearAllBlockedStreaming();
+    this.clearAllStreamHealth();
+    this.errorNotifier.clearAll();
     this.handleStreamingScopeChanges();
   };
 

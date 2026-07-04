@@ -915,7 +915,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               >
                 <span className="metrics-warning-banner__dot" />
                 <span className="metrics-warning-banner__text">
-                  Requests and limits unavailable (no pod access)
+                  Requests and limits unavailable
                 </span>
                 <Tooltip
                   content="Pod requests and limits data is unavailable. Only current usage is shown. Your account is missing required Pod permissions: list, watch."

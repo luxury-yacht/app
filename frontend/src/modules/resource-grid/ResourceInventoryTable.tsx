@@ -15,6 +15,7 @@
  * behavior of its own.
  */
 import type React from 'react';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import {
@@ -72,11 +73,14 @@ export default function ResourceInventoryTable<T>({
 
   // A genuinely errored empty table must not read as the generic "No data
   // available"; the error detail itself is reported through the refresh error
-  // toasts, never an in-table banner.
+  // toasts, never an in-table banner. Permission-classified errors are the
+  // exception: they are a designed, settled state (a typed 403 from a domain
+  // the identity cannot read — e.g. under a namespace scope), so they render
+  // the shared "Insufficient permissions" message in place.
   const emptyMessageForState = render.isEmpty
     ? emptyMessage
     : render.error
-      ? 'Unable to load data'
+      ? resolveEmptyStateMessage(render.error, 'Unable to load data')
       : undefined;
 
   return (

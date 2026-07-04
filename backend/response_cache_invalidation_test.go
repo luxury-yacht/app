@@ -112,7 +112,7 @@ func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T)
 	// Build the production helm-storage source from a fake client and register the
 	// Helm cache eviction on it, proving the cut-config path (no shared configmap/
 	// secret informer) still evicts the Helm cache on a release secret change.
-	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _ string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
 		return true, nil
 	})
 	client := cgofake.NewClientset()

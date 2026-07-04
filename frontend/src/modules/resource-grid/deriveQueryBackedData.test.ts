@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveQueryBackedData,
+  isLiveDomainInitialLoadPending,
   typedQueryPageLimitOrDefault,
 } from './useQueryBackedResourceGridTable';
 
@@ -108,5 +109,23 @@ describe('typedQueryPageLimitOrDefault', () => {
     expect(typedQueryPageLimitOrDefault(null, 100)).toBe(100);
     expect(typedQueryPageLimitOrDefault(undefined, 100)).toBe(100);
     expect(typedQueryPageLimitOrDefault(333, 100)).toBe(100);
+  });
+});
+
+describe('isLiveDomainInitialLoadPending', () => {
+  it('treats a permission-denied live scope as settled, never pending', () => {
+    // The live-observed 7s spinner: a denied domain's live scope sits in
+    // 'initialising' with no data while its (blocked) stream machinery winds
+    // down — the typed query must not be gated on it.
+    expect(
+      isLiveDomainInitialLoadPending({
+        status: 'initialising',
+        data: undefined,
+        permissionDenied: true,
+      })
+    ).toBe(false);
+    expect(isLiveDomainInitialLoadPending({ status: 'initialising', data: undefined })).toBe(true);
+    expect(isLiveDomainInitialLoadPending({ status: 'loading', data: undefined })).toBe(true);
+    expect(isLiveDomainInitialLoadPending({ status: 'ready', data: { rows: [] } })).toBe(false);
   });
 });

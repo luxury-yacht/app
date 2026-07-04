@@ -34,6 +34,7 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
 
   const registerContainerLogsDomain = () => {
     registerRefreshDomain('container-logs', {
+      snapshotless: true,
       start: (scope) => containerLogsStreamManager.startStream(scope),
       stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
       refreshOnce: (scope) => containerLogsStreamManager.refreshOnce(scope),

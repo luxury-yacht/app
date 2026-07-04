@@ -28,7 +28,7 @@ func (r replayIngestSource) AddCatalogSink(gvr schema.GroupVersionResource, sink
 	}
 	return true
 }
-func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector) bool {
+func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionResource, schema.GroupVersionKind, ingest.CatalogProjector, bool) bool {
 	return false
 }
 func (r replayIngestSource) StopReflectorFor(schema.GroupVersionResource)  {}

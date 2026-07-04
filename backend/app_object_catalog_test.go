@@ -539,3 +539,32 @@ func setCatalogServiceItems(
 	}
 	reflect.NewAt(value.Type(), unsafe.Pointer(value.UnsafeAddr())).Elem().Set(reflect.ValueOf(copyItems))
 }
+
+func TestCatalogNamespaceGroupsServesConfiguredScope(t *testing.T) {
+	// Scoped cluster (docs/plans/namespace-scope.md): Browse's namespace
+	// list is synthesized from the configured scope — it must not depend on
+	// the catalog having discovered objects (a restricted identity may have
+	// nothing catalogued yet), and it must agree with the sidebar.
+	setTestConfigEnv(t)
+	app := NewApp()
+	_, err := app.SetClusterAllowedNamespaces("cluster-a", []string{"prod", "dev"})
+	if err != nil {
+		t.Fatalf("set scope: %v", err)
+	}
+
+	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+		"cluster-a": {
+			service: objectcatalog.NewService(objectcatalog.Dependencies{}, nil),
+			meta:    ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
+		},
+	}
+
+	groups := app.catalogNamespaceGroups()
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 namespace group, got %d", len(groups))
+	}
+	got := groups[0].Namespaces
+	if len(got) != 2 || got[0] != "dev" || got[1] != "prod" {
+		t.Fatalf("expected sorted configured scope [dev prod], got %#v", got)
+	}
+}

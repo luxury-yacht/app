@@ -297,3 +297,80 @@ body.sidebar-resizing * {
     col-resize !important;
   user-select: none !important;
 }
+
+/* Inline "accessible namespaces" scope editor (docs/plans/namespace-scope.md).
+   Hover-reveal delete follows the favorites-dropdown pattern. */
+.namespace-scope-remove {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0 0.15rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.sidebar-item:hover .namespace-scope-remove {
+  display: inline-flex;
+}
+
+.namespace-scope-remove:hover {
+  color: var(--color-danger);
+}
+
+.namespace-scope-add {
+  color: var(--color-text-secondary);
+}
+
+.namespace-scope-add:hover {
+  color: var(--color-text);
+}
+
+.namespace-scope-input {
+  width: calc(100% - 1rem);
+  margin: 0.15rem 0.5rem;
+  padding: 0.1rem 0.3rem;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+}
+
+.namespace-scope-error,
+.namespace-scope-warning {
+  padding: 0.15rem 0.5rem;
+  font-size: var(--font-size-small);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.namespace-scope-error {
+  color: var(--color-danger);
+}
+
+.namespace-scope-warning {
+  color: var(--color-text-secondary);
+}
+
+/* Flags a configured scope namespace the identity cannot reach
+   (not-found / no-access) — targeted glyph, tooltip carries the detail. */
+.namespace-scope-flag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.25rem;
+  color: var(--color-warning, #b58900);
+}
+
+/* Inaccessible scope entries cannot expand: no pointer affordance, muted
+   text; the hover delete (and flag tooltip) remain the row's only actions. */
+.sidebar-item.scope-inaccessible {
+  cursor: default;
+  color: var(--color-text-secondary);
+}
+
+.sidebar-item.scope-inaccessible:hover {
+  color: var(--color-text-secondary);
+}

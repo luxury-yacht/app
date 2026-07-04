@@ -39,7 +39,7 @@ const (
 // readiness). A 410/expired at watch-start, a closed watch, or a watch Error event returns
 // resumeNeedsFullSync WITHOUT having relied on the baseline being current; ctx cancellation
 // returns resumeContextDone.
-func resumeFromResourceVersion(ctx context.Context, lw cache.ListerWatcher, store *ProjectingStore, startRV string) resumeOutcome {
+func resumeFromResourceVersion(ctx context.Context, lw cache.ListerWatcher, store resumeTarget, startRV string) resumeOutcome {
 	w, err := cache.ToListerWatcherWithContext(lw).WatchWithContext(ctx, metav1.ListOptions{
 		ResourceVersion:     startRV,
 		AllowWatchBookmarks: true,
@@ -89,7 +89,17 @@ func resumeFromResourceVersion(ctx context.Context, lw cache.ListerWatcher, stor
 // watch), it falls back to fullSync — the reflector's full LIST+WATCH, which also reconciles
 // anything a stale baseline still held (stage 4). With resumeRV == "" this is exactly the
 // reflector's normal launch, so the default (no persisted RV yet) path is unchanged.
-func runWithResume(ctx context.Context, lw cache.ListerWatcher, store *ProjectingStore, resumeRV string, fullSync func()) {
+// resumeTarget is the store surface the resume path writes: the classic
+// *ProjectingStore, or one namespace's StorePartitionView under a scope —
+// MarkSynced/Bookmark then apply to that partition only.
+type resumeTarget interface {
+	Add(obj interface{}) error
+	Delete(obj interface{}) error
+	Bookmark(rv string)
+	MarkSynced()
+}
+
+func runWithResume(ctx context.Context, lw cache.ListerWatcher, store resumeTarget, resumeRV string, fullSync func()) {
 	if resumeRV != "" && lw != nil {
 		if resumeFromResourceVersion(ctx, lw, store, resumeRV) == resumeContextDone {
 			return

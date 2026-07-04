@@ -403,3 +403,50 @@ func TestDisabledPollerMetadata(t *testing.T) {
 	custom := NewDisabledPoller(nil, "cluster has no metrics API")
 	require.Equal(t, "cluster has no metrics API", custom.Metadata().LastError)
 }
+
+// Scoped clusters (docs/plans/namespace-scope.md): pod metrics are listed per
+// configured namespace — a scoped identity cannot list metrics cluster-wide —
+// and one failing namespace must not blank the others' usage.
+func TestScopedPollerListsPodMetricsPerNamespace(t *testing.T) {
+	poller := NewPoller(nil, nil, time.Hour, nil)
+	poller.SetAllowedNamespaces([]string{"prod", "dev"})
+
+	var listed []string
+	poller.podNamespaceLister = func(_ context.Context, _ *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
+		listed = append(listed, namespace)
+		if namespace == "dev" {
+			return nil, errors.New("forbidden")
+		}
+		return &metricsv1beta1.PodMetricsList{Items: []metricsv1beta1.PodMetrics{{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "pod-a"},
+		}}}, nil
+	}
+
+	resp, err := poller.podLister(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("one failing namespace must not fail the scoped pod-metrics list: %v", err)
+	}
+	if len(listed) != 2 || listed[0] != "prod" || listed[1] != "dev" {
+		t.Fatalf("expected per-namespace lists over the scope, got %v", listed)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].Namespace != "prod" {
+		t.Fatalf("expected the successful namespace's items, got %#v", resp.Items)
+	}
+}
+
+func TestUnscopedPollerKeepsClusterWidePodList(t *testing.T) {
+	poller := NewPoller(nil, nil, time.Hour, nil)
+
+	var namespaces []string
+	poller.podNamespaceLister = func(_ context.Context, _ *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
+		namespaces = append(namespaces, namespace)
+		return &metricsv1beta1.PodMetricsList{}, nil
+	}
+
+	if _, err := poller.podLister(context.Background(), nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(namespaces) != 1 || namespaces[0] != "" {
+		t.Fatalf("unscoped poller must issue exactly one cluster-wide list, got %v", namespaces)
+	}
+}

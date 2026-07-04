@@ -18,7 +18,7 @@ import (
 
 func TestCheckerUsesCacheUntilExpiry(t *testing.T) {
 	callCount := 0
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		callCount++
 		return true, nil
 	})
@@ -45,7 +45,7 @@ func TestCheckerUsesCacheUntilExpiry(t *testing.T) {
 
 func TestCheckerFallsBackOnTransientError(t *testing.T) {
 	callCount := 0
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		callCount++
 		if callCount == 1 {
 			return true, nil
@@ -68,7 +68,7 @@ func TestCheckerFallsBackOnTransientError(t *testing.T) {
 }
 
 func TestCheckerReturnsErrorWithoutCacheOnTransient(t *testing.T) {
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return false, context.DeadlineExceeded
 	})
 
@@ -98,13 +98,17 @@ func TestCheckerRetriesTransientAuthorizationError(t *testing.T) {
 }
 
 func TestCheckerCacheKeyIncludesClusterID(t *testing.T) {
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
 
-	key, err := checker.cacheKey("", "pods", "list")
+	key, err := checker.cacheKey("", "pods", "list", "")
 	require.NoError(t, err)
 	require.Equal(t, "cluster-a|/pods/list", key)
+
+	key, err = checker.cacheKey("", "pods", "list", "prod")
+	require.NoError(t, err)
+	require.Equal(t, "cluster-a|/pods/list|ns=prod", key)
 }
 
 func TestCheckerDeduplicatesConcurrentCalls(t *testing.T) {
@@ -113,7 +117,7 @@ func TestCheckerDeduplicatesConcurrentCalls(t *testing.T) {
 	// Use a barrier to ensure all goroutines call Can() concurrently.
 	ready := make(chan struct{})
 
-	checker := NewCheckerWithReview("cluster-b", time.Minute, func(ctx context.Context, group, resource, verb string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-b", time.Minute, func(ctx context.Context, group, resource, verb, _ string) (bool, error) {
 		atomic.AddInt64(&reviewCalls, 1)
 		// Small delay to widen the singleflight window.
 		time.Sleep(50 * time.Millisecond)
@@ -148,7 +152,7 @@ func TestCheckerDeduplicatesConcurrentCalls(t *testing.T) {
 
 func TestCheckerStaleWhileRevalidate(t *testing.T) {
 	var callCount int64
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		atomic.AddInt64(&callCount, 1)
 		return true, nil
 	})
@@ -181,7 +185,7 @@ func TestCheckerStaleWhileRevalidate(t *testing.T) {
 
 func TestCheckerStaleGracePeriodExpired(t *testing.T) {
 	callCount := 0
-	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		callCount++
 		return true, nil
 	})
@@ -205,14 +209,14 @@ func TestCheckerStaleGracePeriodExpired(t *testing.T) {
 
 func TestCheckerCanListWatch(t *testing.T) {
 	t.Run("both allowed", func(t *testing.T) {
-		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb string) (bool, error) {
+		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
 			return true, nil
 		})
 		require.True(t, checker.CanListWatch("", "pods"))
 	})
 
 	t.Run("list denied", func(t *testing.T) {
-		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb string) (bool, error) {
+		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
 			if verb == "list" {
 				return false, nil
 			}
@@ -222,7 +226,7 @@ func TestCheckerCanListWatch(t *testing.T) {
 	})
 
 	t.Run("watch denied", func(t *testing.T) {
-		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb string) (bool, error) {
+		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
 			if verb == "watch" {
 				return false, nil
 			}
@@ -232,7 +236,7 @@ func TestCheckerCanListWatch(t *testing.T) {
 	})
 
 	t.Run("list error", func(t *testing.T) {
-		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb string) (bool, error) {
+		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
 			if verb == "list" {
 				return false, fmt.Errorf("connection refused")
 			}
@@ -245,4 +249,114 @@ func TestCheckerCanListWatch(t *testing.T) {
 		var checker *Checker
 		require.False(t, checker.CanListWatch("", "pods"))
 	})
+}
+
+// --- Namespace scope (docs/plans/namespace-scope.md) ---
+
+func scopeAppliesToPods(group, resource string) bool {
+	return group == "" && resource == "pods"
+}
+
+func TestCheckerScopedAllowsWhenAnyNamespaceAllows(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]bool{}
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, namespace string) (bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen[namespace] = true
+		return namespace == "dev", nil
+	})
+	checker.SetScope([]string{"prod", "dev"}, scopeAppliesToPods)
+
+	decision, err := checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	mu.Lock()
+	defer mu.Unlock()
+	require.True(t, seen["prod"] && seen["dev"], "both scope namespaces must be checked (and cached), got %v", seen)
+	require.False(t, seen[""], "no cluster-wide SSAR for a scoped resource")
+}
+
+func TestCheckerScopedDeniesWhenAllNamespacesDeny(t *testing.T) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, _ string) (bool, error) {
+		return false, nil
+	})
+	checker.SetScope([]string{"prod", "dev"}, scopeAppliesToPods)
+
+	decision, err := checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.False(t, decision.Allowed)
+}
+
+func TestCheckerScopeOnlyAppliesToPredicateResources(t *testing.T) {
+	var namespaces []string
+	var mu sync.Mutex
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, namespace string) (bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		namespaces = append(namespaces, namespace)
+		return true, nil
+	})
+	checker.SetScope([]string{"prod"}, scopeAppliesToPods)
+
+	// events is not covered by the predicate: its data source is
+	// cluster-wide, so the check must stay cluster-wide.
+	_, err := checker.Can(context.Background(), "", "events", "list")
+	require.NoError(t, err)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{""}, namespaces)
+}
+
+func TestCheckerCanClusterWideBypassesScope(t *testing.T) {
+	var namespaces []string
+	var mu sync.Mutex
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, namespace string) (bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		namespaces = append(namespaces, namespace)
+		return true, nil
+	})
+	checker.SetScope([]string{"prod"}, scopeAppliesToPods)
+
+	decision, err := checker.CanClusterWide(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{""}, namespaces)
+}
+
+func TestCheckerCanInNamespaceCachesPerNamespace(t *testing.T) {
+	callCount := 0
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, _ string) (bool, error) {
+		callCount++
+		return true, nil
+	})
+	now := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+	checker.now = func() time.Time { return now }
+
+	_, err := checker.CanInNamespace(context.Background(), "", "pods", "list", "prod")
+	require.NoError(t, err)
+	_, err = checker.CanInNamespace(context.Background(), "", "pods", "list", "dev")
+	require.NoError(t, err)
+	require.Equal(t, 2, callCount, "distinct namespaces are distinct cache entries")
+
+	_, err = checker.CanInNamespace(context.Background(), "", "pods", "list", "prod")
+	require.NoError(t, err)
+	require.Equal(t, 2, callCount, "repeat per-namespace check must hit the cache")
+}
+
+func TestCheckerScopedFanOutUsesSuccessesDespitePartialErrors(t *testing.T) {
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _ string, namespace string) (bool, error) {
+		if namespace == "prod" {
+			return false, context.DeadlineExceeded
+		}
+		return true, nil
+	})
+	checker.SetScope([]string{"prod", "dev"}, scopeAppliesToPods)
+
+	decision, err := checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.True(t, decision.Allowed, "one namespace erroring must not mask another namespace's allow")
 }

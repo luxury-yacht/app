@@ -36,7 +36,10 @@ type Collector struct {
 type GatewayCollector struct {
 	Identity resourcekind.Identity
 	// List returns the kind's objects via a live LIST through the Gateway-API client.
-	List func(ctx context.Context, client gatewayversioned.Interface) ([]metav1.Object, error)
+	// List lists the kind in one namespace ("" = all namespaces; ignored by
+	// cluster-scoped kinds). Under a namespace scope the object map calls it
+	// once per configured namespace (docs/plans/namespace-scope.md).
+	List func(ctx context.Context, client gatewayversioned.Interface, namespace string) ([]metav1.Object, error)
 	// Status projects an object into its graph-node status.
 	Status func(clusterID string, obj metav1.Object) *objectmap.Status
 }

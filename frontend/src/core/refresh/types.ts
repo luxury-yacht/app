@@ -136,6 +136,12 @@ export interface NamespaceSummary extends ClusterMeta {
   creationTimestamp: number;
   hasWorkloads?: boolean;
   workloadsUnknown?: boolean;
+  /**
+   * Flags a configured scope entry the identity cannot reach
+   * (docs/plans/namespace-scope.md): "not-found" is definitive; "no-access"
+   * may mean missing or denied. Absent for reachable/unscoped rows.
+   */
+  scopeStatus?: 'not-found' | 'no-access';
 }
 
 export interface NamespaceSnapshotPayload extends ClusterMeta {

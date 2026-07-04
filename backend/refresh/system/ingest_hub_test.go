@@ -82,7 +82,7 @@ func TestIngestInformerHubGlobalReadinessTracksFactoryOnly(t *testing.T) {
 }
 
 func newTestInformerFactory() *informer.Factory {
-	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
 	return informer.New(kubernetesfake.NewClientset(), nil, time.Hour, checker)

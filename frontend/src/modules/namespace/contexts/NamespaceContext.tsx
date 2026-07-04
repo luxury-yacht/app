@@ -46,6 +46,7 @@ export interface NamespaceListItem {
   hasWorkloads: boolean;
   workloadsUnknown: boolean;
   resourceVersion: string;
+  scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
   // Multi-cluster identity — required for stable row keys and scoped operations.
   clusterId?: string;
@@ -222,6 +223,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,
         resourceVersion: ns.resourceVersion,
+        scopeStatus: ns.scopeStatus,
         clusterId: ns.clusterId,
         clusterName: ns.clusterName,
       } satisfies NamespaceListItem;
@@ -495,16 +497,42 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       });
     };
 
+    // A namespace-scope rebuild finished (docs/plans/namespace-scope.md): the
+    // namespaces domain now serves the new scope. Derive the scope from the
+    // EVENT's clusterId — the local scope memo can be empty or stale at this
+    // moment (the cluster cycled through teardown) — and re-ask on a short
+    // schedule so convergence never depends on one fetch racing the rebuilt
+    // subsystem's HTTP wiring.
+    const scopeRefetchTimers: number[] = [];
+    const handleClusterScopeChanged = (payload: { clusterId: string }) => {
+      const scope = payload.clusterId ? buildClusterScope(payload.clusterId, '') : namespacesScope;
+      if (!scope) {
+        return;
+      }
+      setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled: true });
+      requestedNamespaceScopesRef.current.add(scope);
+      [0, 2000, 6000].forEach((delay) => {
+        scopeRefetchTimers.push(
+          window.setTimeout(() => {
+            void requestRefreshDomain({ domain: 'namespaces', scope, reason: 'user' });
+          }, delay)
+        );
+      });
+    };
+
     const unsubReset = eventBus.on('view:reset', handleResetViews);
     const unsubChanging = eventBus.on('kubeconfig:changing', handleKubeconfigChanging);
     const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
+    const unsubScopeChanged = eventBus.on('cluster:scope-changed', handleClusterScopeChanged);
 
     return () => {
       unsubReset();
       unsubChanging();
       unsubChanged();
+      unsubScopeChanged();
+      scopeRefetchTimers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [clearSelection, namespaceScopes, updateNamespaces]);
+  }, [clearSelection, namespaceScopes, namespacesScope, updateNamespaces]);
 
   // Structural flag stamped by the orchestrator from the typed 403 (checked
   // once per session; the scope is settled and background retries stop).

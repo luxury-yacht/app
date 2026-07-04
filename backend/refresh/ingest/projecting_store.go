@@ -31,6 +31,11 @@ import (
 type spilledBundles struct {
 	Rows map[string]Bundle
 	RV   string
+	// PartitionRVs are the per-namespace resource versions of a scoped
+	// store's partitions (docs/plans/namespace-scope.md), so each scoped
+	// reflector resumes from ITS namespace's persisted RV. Empty for
+	// unscoped spills; gob ignores it when absent from old files.
+	PartitionRVs map[string]string
 }
 
 // ProjectFunc maps a Kubernetes object to its projected row (any type). It is
@@ -149,6 +154,14 @@ type ProjectingStore struct {
 	// projectErrLogged ensures a recurring projection failure is logged once,
 	// matching the repo rule that recurring identical errors log exactly once.
 	projectErrLogged bool
+
+	// expectedPartitions/syncedPartitions/partitionRVs support the
+	// namespace-partitioned scoped ingest path (partition.go,
+	// docs/plans/namespace-scope.md). Unset for the classic single-reflector
+	// store — every field's zero value preserves pre-scope behavior.
+	expectedPartitions []string
+	syncedPartitions   map[string]struct{}
+	partitionRVs       map[string]string
 
 	// retainTable keeps the Bundle's Table half in the STORED row when true; when false
 	// (the default) the Table half is dropped from the stored bundle after it has been
@@ -819,6 +832,12 @@ func (s *ProjectingStore) HasSynced() bool {
 func (s *ProjectingStore) SpillBundles(path string) error {
 	s.mu.RLock()
 	snap := spilledBundles{Rows: make(map[string]Bundle, len(s.rows)), RV: s.rv}
+	if len(s.partitionRVs) > 0 {
+		snap.PartitionRVs = make(map[string]string, len(s.partitionRVs))
+		for ns, rv := range s.partitionRVs {
+			snap.PartitionRVs[ns] = rv
+		}
+	}
 	for key, row := range s.rows {
 		if b, ok := row.(Bundle); ok {
 			snap.Rows[key] = b
@@ -854,15 +873,15 @@ func (s *ProjectingStore) SpillBundles(path string) error {
 // fine, but a sink consumer that needs the FULL baseline and has no independent restore must
 // seed itself from the store's rows once it observes sync — see NamespaceWorkloadTracker,
 // which would otherwise miss every restored workload and wrongly dim active namespaces.
-func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
+func (s *ProjectingStore) RestoreBundles(path string) (string, map[string]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("ingest: restore open %q: %w", path, err)
+		return "", nil, fmt.Errorf("ingest: restore open %q: %w", path, err)
 	}
 	defer f.Close()
 	var snap spilledBundles
 	if err := gob.NewDecoder(bufio.NewReader(f)).Decode(&snap); err != nil {
-		return "", fmt.Errorf("ingest: restore decode %q: %w", path, err)
+		return "", nil, fmt.Errorf("ingest: restore decode %q: %w", path, err)
 	}
 
 	s.mu.Lock()
@@ -872,9 +891,15 @@ func (s *ProjectingStore) RestoreBundles(path string) (string, error) {
 	}
 	s.rebuildIndexesLocked()
 	s.rv = snap.RV
+	if len(snap.PartitionRVs) > 0 {
+		s.partitionRVs = make(map[string]string, len(snap.PartitionRVs))
+		for ns, rv := range snap.PartitionRVs {
+			s.partitionRVs[ns] = rv
+		}
+	}
 	s.markSyncedLocked()
 	s.mu.Unlock()
-	return snap.RV, nil
+	return snap.RV, snap.PartitionRVs, nil
 }
 
 // MarkSynced flips the store's synced flag without a Replace, for the stage-3 resume path:

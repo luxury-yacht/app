@@ -361,6 +361,17 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         }
         const payload = result.data?.data as TPayload | null | undefined;
         if (!payload) {
+          if (result.data?.permissionDenied) {
+            // The backend refused this domain with a typed 403 — a SETTLED
+            // answer, not a warm-up: retrying cannot succeed until RBAC or
+            // the namespace scope changes (which rebuilds the subsystem and
+            // resets this state). Settle so the table renders the permission
+            // state instead of an endless first-load spinner.
+            revertFailedNavigation();
+            setError(result.data.error ?? 'Insufficient permissions');
+            setLoaded(true);
+            return;
+          }
           // Executed but the scoped state carries no payload yet (backend caches
           // still syncing) — same warm-up treatment as a blocked request.
           revertFailedNavigation();

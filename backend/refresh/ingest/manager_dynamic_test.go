@@ -89,9 +89,9 @@ func TestRegisterDynamicCatalogReflectorServesCatalogRows(t *testing.T) {
 	project := func(o metav1.Object) interface{} {
 		return dynCatRow{Namespace: o.GetNamespace(), Name: o.GetName()}
 	}
-	require.True(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project),
+	require.True(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project, true),
 		"first registration of a dynamic reflector should succeed")
-	require.False(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project),
+	require.False(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project, true),
 		"re-registering the same gvr should be a no-op")
 
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, 2*time.Second, 10*time.Millisecond,
@@ -150,7 +150,7 @@ func TestStopReflectorForEvicts(t *testing.T) {
 
 	m := newStartedDynamicManager(ctx, dyn)
 	project := func(o metav1.Object) interface{} { return dynCatRow{Namespace: o.GetNamespace(), Name: o.GetName()} }
-	require.True(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project))
+	require.True(t, m.RegisterDynamicCatalogReflector(gvr, gvk, project, true))
 	require.Eventually(t, func() bool { return m.HasSyncedFor(gvr) }, 2*time.Second, 10*time.Millisecond)
 
 	m.StopReflectorFor(gvr)

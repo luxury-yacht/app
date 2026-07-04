@@ -134,6 +134,12 @@ type Dependencies struct {
 	// discovery + preflight (pure API calls) overlap the factory's initial sync
 	// instead of running after it. nil skips the wait (tests, no factory).
 	WaitForCaches func(ctx context.Context) error
+	// AllowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md): when non-empty, collection of
+	// namespaced kinds runs per configured namespace instead of
+	// cluster-wide, and a namespace the identity cannot list is skipped
+	// without blanking the others. Empty means cluster-wide (today).
+	AllowedNamespaces []string
 }
 
 // IngestSource supplies the object-catalog Summaries for ingest-owned (cut) kinds,
@@ -150,7 +156,7 @@ type IngestSource interface {
 	// (CRD-backed) kind, projecting each object to its catalog Summary via project. The
 	// catalog calls it when a CR kind crosses its promotion threshold (maybePromote),
 	// consolidating the former catalog-owned dynamic informer onto the ingest path.
-	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector) bool
+	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector, namespaced bool) bool
 	// StopReflectorFor stops and evicts the on-demand reflector for gvr, the teardown half
 	// of the dynamic path (stopDynamicReflectors).
 	StopReflectorFor(gvr schema.GroupVersionResource)

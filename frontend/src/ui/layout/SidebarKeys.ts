@@ -269,6 +269,13 @@ export const useSidebarKeyboardControls = ({
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
         return false;
       }
+      // Native text editing owns the keys while an input inside the sidebar
+      // has focus (the inline namespace-scope editor): claiming Enter/arrows
+      // here would both break editing and beep — the framework prevents the
+      // default on a key the input needed. Mirrors the Tab branch's guard.
+      if (isInputElement(resolveEventElement(event.target))) {
+        return false;
+      }
 
       const items = getFocusableItems();
       if (items.length === 0) {

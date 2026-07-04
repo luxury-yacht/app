@@ -54,6 +54,12 @@ export interface AppEvents {
   'cluster:auth:failed': { clusterId: string };
   'cluster:auth:recovered': { clusterId: string };
 
+  // A cluster's namespace scope changed and its refresh subsystem finished
+  // rebuilding (docs/plans/namespace-scope.md) — bridged from the Wails
+  // cluster:scope:changed event by KubeconfigContext. Streams must restart
+  // and the cluster's domains refetch.
+  'cluster:scope-changed': { clusterId: string };
+
   // View events
   'view:reset': void;
   'view:toggle-diagnostics': void;
@@ -71,6 +77,13 @@ export interface AppEvents {
   'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
   'refresh:complete': { name: string; isManual: boolean; success: boolean; error?: unknown };
+  /** A stream scope got a permission-denied error frame: streaming for it is
+   *  blocked (settled) until scope change / auth recovery clears the block. */
+  'refresh:resource-stream-permission-denied': {
+    domain: DoorbellStreamDomain;
+    scope: string;
+    reason: string;
+  };
   'refresh:resource-stream-drift': {
     domain: ResourceStreamDomain;
     scope: string;

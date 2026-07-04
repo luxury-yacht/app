@@ -16,7 +16,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
-	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return false, nil
 	})
 	app.refreshSubsystems[selectionKey] = &system.Subsystem{RuntimePerms: checker}
@@ -39,7 +39,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
-	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string) (bool, error) {
+	checker := permissions.NewCheckerWithReview(selectionKey, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
 	app.refreshSubsystems[selectionKey] = &system.Subsystem{RuntimePerms: checker}

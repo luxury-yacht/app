@@ -73,6 +73,17 @@ func (r *Registry) IsPermissionDenied(name string) bool {
 	return cfg.PermissionDenied
 }
 
+// IsRuntimePolicyExempt reports whether a domain was registered with its
+// runtime permission policy exempted (its data source needs no cluster
+// permission in this configuration).
+func (r *Registry) IsRuntimePolicyExempt(name string) bool {
+	cfg, ok := r.Get(name)
+	if !ok {
+		return false
+	}
+	return cfg.RuntimePolicyExempt
+}
+
 // Build invokes the domain-specific builder.
 func (r *Registry) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 	cfg, ok := r.Get(domain)

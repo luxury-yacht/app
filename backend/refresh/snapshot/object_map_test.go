@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1420,4 +1421,52 @@ func stringPtr(value string) *string {
 func objectNamePtr(value string) *gatewayv1.ObjectName {
 	name := gatewayv1.ObjectName(value)
 	return &name
+}
+
+// Scoped clusters (docs/plans/namespace-scope.md): the object map's live-LIST
+// collectors run once per configured namespace and never cluster-wide — the
+// scoped identity could not perform that LIST. The fake clientset does not
+// enforce server-side namespace filtering, so the assertion is on the
+// namespaces REQUESTED (the contract this code owns).
+func TestObjectMapScopedGatewayCollectionListsOnlyScopeNamespaces(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+
+	var mu sync.Mutex
+	requested := map[string]map[string]bool{}
+	gatewayClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		mu.Lock()
+		resource := action.GetResource().Resource
+		if requested[resource] == nil {
+			requested[resource] = map[string]bool{}
+		}
+		requested[resource][action.GetNamespace()] = true
+		mu.Unlock()
+		return false, nil, nil
+	})
+
+	builder := newObjectMapTestBuilder(t, client)
+	builder.gatewayClient = gatewayClient
+	builder.allowedNamespaces = []string{"default", "team-b"}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+	if _, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100"); err != nil {
+		t.Fatalf("scoped build failed: %v", err)
+	}
+
+	for _, resource := range []string{"gateways", "httproutes", "tlsroutes", "grpcroutes"} {
+		got := requested[resource]
+		if got == nil {
+			t.Fatalf("no list recorded for %s", resource)
+		}
+		if got[""] {
+			t.Fatalf("%s was listed cluster-wide under a namespace scope: %v", resource, got)
+		}
+		if !got["default"] || !got["team-b"] {
+			t.Fatalf("%s must be listed in every scope namespace, got %v", resource, got)
+		}
+	}
+	// Cluster-scoped gateway kinds keep their single cluster-wide list.
+	if got := requested["gatewayclasses"]; got == nil || !got[""] || len(got) != 1 {
+		t.Fatalf("gatewayclasses must keep one cluster-wide list, got %v", got)
+	}
 }

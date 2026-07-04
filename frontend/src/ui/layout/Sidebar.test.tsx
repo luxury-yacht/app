@@ -170,15 +170,65 @@ describe('Sidebar', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the permission message instead of a namespace list when listing is denied', () => {
+  it('shows the permission message and the scope editor when listing is denied', () => {
     // Fail-fast design: no catalog inference, no empty list — the user is told
-    // exactly why the sidebar has no namespaces.
+    // exactly why the sidebar has no namespaces, and the inline scope editor
+    // (docs/plans/namespace-scope.md) is the way in for a restricted identity.
     namespaceState.namespacesPermissionDenied = true;
     namespaceState.namespaces = [];
     renderSidebar();
 
-    expect(container!.textContent).toContain('You do not have permission to list namespaces.');
+    expect(container!.textContent).toContain('Insufficient permission to list namespaces.');
+    expect(container!.textContent).toContain('Add namespace');
     expect(container!.querySelector('[data-sidebar-target-kind="namespace-toggle"]')).toBeNull();
+  });
+
+  it('does not expand inaccessible scope namespaces', () => {
+    // A scope entry flagged not-found/no-access has no views to offer: the
+    // row must not expand on click, must be excluded from keyboard
+    // navigation, and must carry the warning flag.
+    namespaceState.namespaces = [
+      {
+        name: 'ghost',
+        scope: 'ghost',
+        resourceVersion: '',
+        hasWorkloads: false,
+        workloadsUnknown: true,
+        scopeStatus: 'not-found',
+        details: '',
+      },
+      {
+        name: 'default',
+        scope: 'default',
+        resourceVersion: '1',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        details: '',
+      },
+    ] as NamespaceEntry[];
+    renderSidebar();
+
+    const rows = Array.from(
+      container!.querySelectorAll<HTMLElement>('[data-sidebar-target-kind="namespace-toggle"]')
+    );
+    const ghostRow = rows.find((row) => row.textContent?.includes('ghost'));
+    const defaultRow = rows.find((row) => row.textContent?.includes('default'));
+    expect(ghostRow).toBeDefined();
+    expect(defaultRow).toBeDefined();
+
+    expect(ghostRow!.getAttribute('data-sidebar-focusable')).toBeNull();
+    expect(ghostRow!.querySelector('.namespace-scope-flag')).not.toBeNull();
+    expect(defaultRow!.getAttribute('data-sidebar-focusable')).toBe('true');
+
+    act(() => {
+      ghostRow!.click();
+    });
+    expect(container!.querySelector('.namespaces-section .sidebar-views')).toBeNull();
+
+    act(() => {
+      defaultRow!.click();
+    });
+    expect(container!.querySelector('.namespaces-section .sidebar-views')).not.toBeNull();
   });
 
   it('toggles the sidebar when the toolbar button is pressed', () => {

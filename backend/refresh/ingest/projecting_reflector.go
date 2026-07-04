@@ -15,7 +15,7 @@ import (
 // landing in a typed indexer.
 type ProjectingReflector struct {
 	reflector *cache.Reflector
-	store     *ProjectingStore
+	store     cache.Store
 }
 
 // NewProjectingReflector wraps cache.NewNamedReflector over lw, feeding the
@@ -23,7 +23,9 @@ type ProjectingReflector struct {
 // &corev1.ConfigMap{}); resync is the relist period (0 disables periodic
 // resync). It stays thin: no event handling or projection lives here — the
 // store performs the projection on every Add/Update/Replace the reflector makes.
-func NewProjectingReflector(name string, lw cache.ListerWatcher, exampleObject apiruntime.Object, store *ProjectingStore, resync time.Duration) *ProjectingReflector {
+// store is the cache.Store the reflector feeds: a ProjectingStore, or one
+// namespace's StorePartitionView under a namespace scope.
+func NewProjectingReflector(name string, lw cache.ListerWatcher, exampleObject apiruntime.Object, store cache.Store, resync time.Duration) *ProjectingReflector {
 	return &ProjectingReflector{
 		reflector: cache.NewNamedReflector(name, lw, exampleObject, store, resync),
 		store:     store,
@@ -37,8 +39,8 @@ func (r *ProjectingReflector) Run(ctx context.Context) {
 	r.reflector.Run(ctx.Done())
 }
 
-// Store returns the ProjectingStore the reflector feeds. Consumers read the
+// Store returns the cache.Store the reflector feeds. Consumers read the
 // projected rows from it; they never see the source objects.
-func (r *ProjectingReflector) Store() *ProjectingStore {
+func (r *ProjectingReflector) Store() cache.Store {
 	return r.store
 }

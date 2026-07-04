@@ -17,7 +17,7 @@ import {
   logAppLogsInfo,
   type AppLogsClusterMeta,
 } from '@/core/logging/appLogsClient';
-import { resolvePermissionDeniedMessage } from '../permissionErrors';
+import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   domainSupportsSourceClock,
   isResourceStreamSourceClock,
@@ -425,6 +425,20 @@ export class ResourceStreamManager {
           return;
         case SIGNAL_TYPES.error:
           this.recordSubscriptionError(subscription, errorMessage || 'stream error');
+          // A permission-denied frame is a SETTLED answer: resyncing cannot
+          // succeed until RBAC or the namespace scope changes. Hand the scope
+          // to the orchestrator's streaming block (cleared on scope change /
+          // auth recovery) instead of the endless resync loop. Health keeps
+          // reporting "unhealthy (permissions)" for diagnostics.
+          if (isPermissionDeniedStatus(update.errorDetails)) {
+            this.updateHealthForSubscription(subscription);
+            eventBus.emit('refresh:resource-stream-permission-denied', {
+              domain: subscription.domain,
+              scope: subscription.storeScope,
+              reason: errorMessage || 'permission denied',
+            });
+            return;
+          }
           void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
           this.updateHealthForSubscription(subscription);
           return;

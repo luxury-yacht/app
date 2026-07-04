@@ -2,13 +2,20 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -352,4 +359,175 @@ func TestNamespaceBuilderWorkloadSyncReadinessChangesSourceVersion(t *testing.T)
 	if notReady == ready {
 		t.Fatalf("workload sync readiness did not change the workloads source version (%q)", ready)
 	}
+}
+
+// --- Scoped ("accessible namespaces") mode, docs/plans/namespace-scope.md ---
+
+func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
+	// Pre-Phase-4 restricted cluster: no lister (cluster-wide list denied), no
+	// ingest data at all. Rows come from the configured scope; workload
+	// presence is genuinely unknown, so nothing may render as
+	// authoritatively-empty (dimmed).
+	builder := &NamespaceBuilder{scope: []string{"prod", "dev"}}
+
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "prod-cluster"})
+	snap, err := builder.Build(ctx, "")
+	require.NoError(t, err)
+
+	payload, ok := snap.Payload.(NamespaceSnapshot)
+	require.True(t, ok)
+	require.True(t, payload.WorkloadsReady, "scoped snapshot must satisfy the lifecycle Ready gate")
+	require.Len(t, payload.Namespaces, 2)
+	require.Equal(t, "dev", payload.Namespaces[0].Name)
+	require.Equal(t, "prod", payload.Namespaces[1].Name)
+
+	for _, ns := range payload.Namespaces {
+		require.False(t, ns.HasWorkloads)
+		require.True(t, ns.WorkloadsUnknown, "no tracked workload kind: presence must be unknown, not authoritatively empty")
+		require.Equal(t, "Namespace", ns.Ref.Kind)
+		require.Equal(t, "namespaces", ns.Ref.Resource)
+		require.Equal(t, ns.Name, ns.Ref.Name)
+		require.Equal(t, "cluster-a", ns.Ref.ClusterID)
+	}
+}
+
+func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testing.T) {
+	// Post-Phase-4 scoped cluster: ingest tracks workload kinds and has rows
+	// for one configured namespace. Presence becomes known for every row.
+	tracker := newNamespaceWorkloadTracker()
+	tracker.synced.Store(true)
+
+	builder := &NamespaceBuilder{
+		scope:   []string{"prod", "dev"},
+		ingest:  fakePodAggregateSource{}.withWorkloadCatalog(DeploymentGVR, "prod", 1),
+		tracker: tracker,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 2)
+
+	byName := map[string]NamespaceSummary{}
+	for _, ns := range payload.Namespaces {
+		byName[ns.Name] = ns
+	}
+	require.True(t, byName["prod"].HasWorkloads)
+	require.False(t, byName["prod"].WorkloadsUnknown)
+	require.False(t, byName["dev"].HasWorkloads)
+	require.False(t, byName["dev"].WorkloadsUnknown, "tracked ingest makes absence authoritative")
+}
+
+func TestNamespaceBuilderScopedViewScopeFiltersToConfiguredNames(t *testing.T) {
+	builder := &NamespaceBuilder{scope: []string{"prod", "dev"}}
+
+	snap, err := builder.Build(context.Background(), "cluster-a|prod")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 1)
+	require.Equal(t, "prod", payload.Namespaces[0].Name)
+
+	snap, err = builder.Build(context.Background(), "cluster-a|not-configured")
+	require.NoError(t, err)
+	payload = snap.Payload.(NamespaceSnapshot)
+	require.Empty(t, payload.Namespaces)
+}
+
+func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T) {
+	// A scoped identity typically cannot list/watch namespaces cluster-wide;
+	// the scoped registration must never instantiate the namespaces informer.
+	// Passing a nil factory proves it: any touch would panic.
+	reg := domain.New()
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, notifier)
+}
+
+// Scoped rows are enriched by a per-namespace GET probe
+// (docs/plans/namespace-scope.md, Phase 5): a real namespace serves its full
+// row; a 404 flags "not-found" (definitive — the GET was permitted); a 403
+// flags "no-access" (a restricted identity cannot distinguish absence from
+// denial, so the label stays honest).
+func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
+	created := time.Unix(1700000000, 0).UTC()
+	realNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "prod",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(created),
+		},
+		Status: corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+	client := k8sfake.NewClientset(realNs)
+	client.PrependReactor("get", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		if action.(clienttesting.GetAction).GetName() == "locked" {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "locked", errors.New("denied"))
+		}
+		return false, nil, nil
+	})
+
+	builder := &NamespaceBuilder{
+		scope:  []string{"prod", "ghost", "locked"},
+		client: client,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 3)
+
+	byName := map[string]NamespaceSummary{}
+	for _, ns := range payload.Namespaces {
+		byName[ns.Name] = ns
+	}
+
+	prod := byName["prod"]
+	require.Empty(t, prod.ScopeStatus, "an existing accessible namespace carries no flag")
+	require.Equal(t, "Active", prod.Phase, "probe enriches the row from the real object")
+	require.Equal(t, "42", prod.ResourceVersion)
+	require.Equal(t, created.Unix(), prod.CreationUnix)
+
+	require.Equal(t, "not-found", byName["ghost"].ScopeStatus,
+		"a permitted GET returning 404 is definitive")
+	require.Equal(t, "no-access", byName["locked"].ScopeStatus,
+		"403 is honest: may not exist or may be denied")
+}
+
+func TestNamespaceBuilderScopedProbeCacheAndValidator(t *testing.T) {
+	gets := 0
+	client := k8sfake.NewClientset()
+	client.PrependReactor("get", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		gets++
+		return false, nil, nil
+	})
+
+	now := time.Unix(1700000000, 0)
+	builder := &NamespaceBuilder{
+		scope:  []string{"ghost"},
+		client: client,
+		now:    func() time.Time { return now },
+	}
+
+	snapA, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 1, gets)
+	_, err = builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 1, gets, "within the TTL the probe result is cached")
+
+	// The namespace is created; past the TTL the probe re-asks and the
+	// snapshot's cache validator must change (the row content changed with
+	// no namespace-RV clock to carry it).
+	require.NoError(t, client.Tracker().Add(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "ghost", ResourceVersion: "7"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}))
+	now = now.Add(time.Hour)
+
+	snapB, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 2, gets, "past the TTL the probe re-asks")
+	require.Empty(t, snapB.Payload.(NamespaceSnapshot).Namespaces[0].ScopeStatus)
+	require.NotEqual(t, snapA.SourceVersions["scope-probe"], snapB.SourceVersions["scope-probe"],
+		"probe transitions must change the cache validator or the client keeps the stale flag")
 }

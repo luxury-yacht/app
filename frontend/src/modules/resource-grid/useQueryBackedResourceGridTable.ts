@@ -113,8 +113,19 @@ export function deriveQueryBackedData<TRow>({
   };
 }
 
-const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
-  !state.data && (state.status === 'loading' || state.status === 'initialising');
+// A permission-denied live scope is SETTLED, not pending: gating the typed
+// query on it would hold the table in its loading state for as long as the
+// (blocked) stream machinery takes to move — observed live as a 7s spinner
+// before "Insufficient permissions". The query issues its own fetch and gets
+// the same typed 403 immediately.
+export const isLiveDomainInitialLoadPending = (state: {
+  status?: string;
+  data?: unknown;
+  permissionDenied?: boolean;
+}): boolean =>
+  !state.data &&
+  !state.permissionDenied &&
+  (state.status === 'loading' || state.status === 'initialising');
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,

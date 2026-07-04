@@ -10,6 +10,7 @@ import (
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextensionslisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -34,6 +35,10 @@ type NamespaceCustomBuilder struct {
 	dynamic   dynamic.Interface
 	crdLister apiextensionslisters.CustomResourceDefinitionLister
 	logger    containerlogsstream.Logger
+	// scope is the cluster's namespace scope (docs/plans/namespace-scope.md):
+	// the all-namespaces view fans the per-CRD LIST over these namespaces
+	// instead of one cluster-wide LIST. Empty means cluster-wide (today).
+	scope []string
 }
 
 // NamespaceCustomSnapshot is returned to clients.
@@ -62,6 +67,7 @@ func RegisterNamespaceCustomDomain(
 	apiextFactory apiextensionsinformers.SharedInformerFactory,
 	dynamicClient dynamic.Interface,
 	logger containerlogsstream.Logger,
+	allowedNamespaces []string,
 ) error {
 	if apiextFactory == nil {
 		return fmt.Errorf("apiextensions informer factory is nil")
@@ -74,6 +80,7 @@ func RegisterNamespaceCustomDomain(
 		dynamic:   dynamicClient,
 		crdLister: apiextFactory.Apiextensions().V1().CustomResourceDefinitions().Lister(),
 		logger:    logger,
+		scope:     append([]string(nil), allowedNamespaces...),
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -162,15 +169,35 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 				Resource: crdCopy.Spec.Names.Plural,
 			}
 
-			listNamespace := parsedScope.Namespace
+			// The all-namespaces view under a scope fans out over the
+			// configured namespaces; the unscoped path is the same loop with
+			// a single all-namespaces target.
+			listTargets := []string{parsedScope.Namespace}
 			if parsedScope.AllNamespaces {
-				listNamespace = metav1.NamespaceAll
-			}
-			resourceList, err := b.dynamic.Resource(gvr).Namespace(listNamespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				if shouldSkipError(err) {
-					return nil
+				listTargets = []string{metav1.NamespaceAll}
+				if len(b.scope) > 0 {
+					listTargets = b.scope
 				}
+			}
+			var listed []unstructured.Unstructured
+			var listErr error
+			for _, listNamespace := range listTargets {
+				resourceList, err := b.dynamic.Resource(gvr).Namespace(listNamespace).List(ctx, metav1.ListOptions{})
+				if err != nil {
+					// Per-target skip: one forbidden/absent namespace must not
+					// blank the others.
+					if shouldSkipError(err) {
+						continue
+					}
+					listErr = err
+					break
+				}
+				if resourceList != nil {
+					listed = append(listed, resourceList.Items...)
+				}
+			}
+			resourceList := &unstructured.UnstructuredList{Items: listed}
+			if err := listErr; err != nil {
 				applog.Warn(b.logger, fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), logsources.Refresh)
 				mu.Lock()
 				warning := fmt.Sprintf("Failed to list %s: %v", gvr.String(), err)
