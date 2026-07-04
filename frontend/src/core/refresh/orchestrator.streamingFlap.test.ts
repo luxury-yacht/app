@@ -148,6 +148,37 @@ describe('streaming start under the mount-time lease flap', () => {
     expect(fetchedScopes).toContain(SCOPE);
   });
 
+  it('never snapshot-fetches a snapshotless (stream-only) domain on start', async () => {
+    // container-logs regression: the domain has no snapshot endpoint (its
+    // data flows through its own stream manager), so the initial
+    // reconciliation fetch must skip it — the backend answers such fetches
+    // with "unknown domain", surfaced to the user as an error toast.
+    refreshOrchestrator.registerDomain({
+      domain: DOMAIN,
+      refresherName: 'test-flap-refresher',
+      category: 'namespace',
+      streaming: {
+        snapshotless: true,
+        start: (scope: string) => {
+          startCalls.push(scope);
+          return new Promise<() => void>((resolve) => {
+            resolvers.push(resolve);
+          });
+        },
+        stop: (scope: string) => {
+          stopCalls.push(scope);
+        },
+      },
+    } as never);
+
+    refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
+    await flush();
+    expect(startCalls).toHaveLength(1);
+    resolvers[0](() => {});
+    await flush();
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
   it('tears a cancelled start down exactly once when the scope stays disabled', async () => {
     refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
     await flush();

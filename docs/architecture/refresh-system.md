@@ -153,6 +153,10 @@ view open and the first tick.
    delivers a first frame. The `startStreamingScope` success path fires an
    initial reconciliation fetch (`streamSignal: true`, deduped in-flight)
    so the scope leaves `initialising` now, not at the first poll tick.
+   EXCEPTION: registrations with `snapshotless: true` (container-logs) have
+   no snapshot endpoint — their data flows only through their own stream —
+   and are never snapshot-fetched; the backend answers such fetches
+   "unknown domain".
 4. **A typed 403 is a settled answer at every layer** (see
    `docs/architecture/namespace-scope.md`, "Fail-fast contract"): the query
    hook settles without warm-up retries, tables render "Insufficient
