@@ -157,9 +157,16 @@ export function NamespaceScopeAddRow({ state }: NamespaceScopeAddRowProps) {
             setValue(event.target.value);
           }}
           onKeyDown={(event) => {
+            // The editor owns its keys (docs/frontend/keyboard.md): stop
+            // propagation so sidebar/global shortcuts never see them, and
+            // prevent the default on the keys we consume — an unconsumed
+            // Enter reaching the native layer beeps on macOS.
+            event.stopPropagation();
             if (event.key === 'Enter') {
+              event.preventDefault();
               commit();
             } else if (event.key === 'Escape') {
+              event.preventDefault();
               setValue('');
               setEditing(false);
               state.clearError();

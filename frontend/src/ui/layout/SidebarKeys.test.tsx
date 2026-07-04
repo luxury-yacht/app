@@ -248,6 +248,48 @@ describe('useSidebarKeyboardControls', () => {
     vi.clearAllMocks();
   });
 
+  it('leaves keys to a focused input inside the sidebar', async () => {
+    // The inline namespace-scope editor lives inside the sidebar: while it
+    // has focus the navigation scope must not claim Enter/arrows — a claimed
+    // Enter gets its default prevented and macOS beeps for the key the
+    // input needed (docs/frontend/keyboard.md: preserve native editing).
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const sidebarRoot = container.querySelector<HTMLElement>(
+      '[data-sidebar-target-kind="overview"]'
+    )!.parentElement!;
+    const input = document.createElement('input');
+    sidebarRoot.appendChild(input);
+    input.focus();
+
+    const enter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(enter);
+      await Promise.resolve();
+    });
+    expect(enter.defaultPrevented).toBe(false);
+
+    const arrow = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(arrow);
+      await Promise.resolve();
+    });
+    expect(arrow.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(input);
+
+    input.remove();
+    cleanup();
+  });
+
   it('marks active/preview items', () => {
     const { ref, container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
