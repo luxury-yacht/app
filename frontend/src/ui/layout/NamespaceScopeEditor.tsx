@@ -67,6 +67,9 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
   const apply = useCallback(
     async (next: string[]) => {
       if (!clusterId) {
+        // Never swallow an edit: without a cluster id the save cannot be
+        // attributed, and a silent no-op looks like the bug it masks.
+        setError('No active cluster selected — cannot save the namespace scope.');
         return;
       }
       setSaving(true);

@@ -25,6 +25,7 @@ import {
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { eventBus, useEventBus } from '@/core/events';
+import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import {
   getClusterTabOrder,
@@ -587,6 +588,24 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       }
     };
   }, [loadKubeconfigs]);
+
+  // Bridge the backend's namespace-scope rebuild completion to the internal
+  // event bus (docs/plans/namespace-scope.md): the orchestrator restarts the
+  // cluster's streams and NamespaceContext refetches the namespaces list.
+  useEffect(() => {
+    const cancel = EventsOn('cluster:scope:changed', (payload?: { clusterId?: string }) => {
+      logAppLogsInfo(
+        `namespace-scope: cluster:scope:changed received for "${payload?.clusterId ?? ''}"`
+      );
+      eventBus.emit('cluster:scope-changed', { clusterId: payload?.clusterId ?? '' });
+    });
+
+    return () => {
+      if (typeof cancel === 'function') {
+        cancel();
+      }
+    };
+  }, []);
 
   // Run GridTable persistence GC when kubeconfigs change or selection changes
   useEffect(() => {

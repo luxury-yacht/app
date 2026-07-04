@@ -22,6 +22,7 @@ import {
   getScopedDomainState,
   markPendingRequest,
   resetAllScopedDomainStates,
+  resetPermissionDeniedScopedDomainStates,
   resetScopedDomainState,
   setScopedDomainState,
 } from './store';
@@ -113,6 +114,7 @@ class RefreshOrchestrator {
     eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
     eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
     eventBus.on('cluster:auth:recovered', this.handleClusterAuthRecovered);
+    eventBus.on('cluster:scope-changed', this.handleClusterScopeChanged);
     clusterReadiness.onBecameServiceable((clusterId) =>
       this.handleClusterBecameServiceable(clusterId)
     );
@@ -1129,8 +1131,10 @@ class RefreshOrchestrator {
 
     const previousState = getScopedDomainState(domain, normalizedScope);
     // A permission-denied scope is SETTLED: the backend refused it with a
-    // typed 403 and permission changes are not expected mid-session (recovery
-    // is an app restart). Background retries here caused a request every ~2s
+    // typed 403 and permission changes are not expected mid-session (the
+    // exceptions — a namespace-scope rebuild, and manual refresh below —
+    // clear the latch explicitly; see handleClusterScopeChanged). Background
+    // retries here caused a request every ~2s
     // (the no-data fetch clause) and flicked the state through 'loading' —
     // observed live as a spinner flashing over the permission message. Manual
     // refresh remains a deliberate re-ask.
@@ -1445,6 +1449,30 @@ class RefreshOrchestrator {
     // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
     // loop (30 attempts with backoff) naturally waits for the backend refresh
     // subsystem to reinitialise after auth recovery.
+    this.handleStreamingScopeChanges();
+  };
+
+  private handleClusterScopeChanged = (payload: { clusterId: string }) => {
+    // The cluster's namespace scope changed and the backend finished tearing
+    // down + rebuilding its refresh subsystem (docs/plans/namespace-scope.md):
+    // every stream to that subsystem is dead and every cached snapshot is
+    // pre-rebuild. Resume exactly as auth recovery does (minus the pause
+    // bookkeeping — auth never went invalid).
+    logInfo('[refresh] namespace scope changed — restarting streams', {
+      clusterId: payload.clusterId,
+    });
+    // Permission-denied scopes are settled for the session — EXCEPT across a
+    // scope rebuild, which is a real permission epoch change: domains denied
+    // cluster-wide may now be served per-namespace. Clear the latches so the
+    // affected scopes re-ask (they hold no data, so nothing blanks).
+    resetPermissionDeniedScopedDomainStates();
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    // Suppress transient errors while the rebuilt subsystem starts serving.
+    this.errorNotifier.suppressNetworkErrors(6000);
+    this.clearAllBlockedStreaming();
+    this.clearAllStreamHealth();
+    this.errorNotifier.clearAll();
     this.handleStreamingScopeChanges();
   };
 

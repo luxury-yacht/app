@@ -335,6 +335,13 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 	if s.registry != nil && s.registry.IsPermissionDenied(domainName) {
 		return ctx, "", nil
 	}
+	// A runtime-policy-exempt domain's data source needs no cluster
+	// permission in this configuration (the scoped namespaces domain serves
+	// synthesized names) — the serve-time gate must match the source exactly
+	// as the registration-time gate does (docs/plans/namespace-scope.md).
+	if s.registry != nil && s.registry.IsRuntimePolicyExempt(domainName) {
+		return ctx, "", nil
+	}
 	start := time.Now()
 	decision, err := s.runtimeAccess.Check(ctx, domainName, s.permissionChecker)
 	permissionCacheKey := domainpermissions.AllowedResourcesFingerprint(decision.AllowedResources)

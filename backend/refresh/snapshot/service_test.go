@@ -1039,3 +1039,38 @@ func TestServiceBuildAllowsWhenPermissionsSucceed(t *testing.T) {
 		t.Fatalf("expected snapshot builder to run when permissions allow")
 	}
 }
+
+// The scoped namespaces domain (docs/plans/namespace-scope.md) serves
+// synthesized rows and needs NO cluster permission — the per-request policy
+// gate must honor the registration's exemption. This is the live-observed
+// failure: the scoped domain was registered and serving, but every fetch got
+// a fresh 403 from ensurePermissions, so the sidebar never left the
+// permission-denied state.
+func TestServiceBuildServesRuntimePolicyExemptDomainForDeniedIdentity(t *testing.T) {
+	reg := domain.New()
+	called := false
+	if err := reg.Register(refresh.DomainConfig{
+		Name:                "namespaces",
+		RuntimePolicyExempt: true,
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			called = true
+			return &refresh.Snapshot{Domain: "namespaces", Scope: scope}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	// The restricted persona: every cluster-wide ask denied.
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(context.Context, string, string, string, string) (bool, error) {
+		return false, nil
+	})
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), checker)
+
+	snap, err := service.Build(context.Background(), "namespaces", "cluster-a|")
+	if err != nil {
+		t.Fatalf("exempt domain must serve despite a fully denied identity: %v", err)
+	}
+	if snap == nil || !called {
+		t.Fatalf("expected the builder to run (called=%v, snap=%v)", called, snap)
+	}
+}

@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -153,4 +154,33 @@ func TestAllowedNamespacesForClusterReadsPersistedScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"prod", "dev"}, app.allowedNamespacesForCluster("kc:ctx"))
 	require.Empty(t, app.allowedNamespacesForCluster("kc:other"))
+}
+
+func TestScopeRebuildQueueCoalescesUntilStarted(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	require.True(t, app.tryQueueScopeRebuild("kc:ctx"))
+	require.False(t, app.tryQueueScopeRebuild("kc:ctx"),
+		"edits while a rebuild is queued coalesce into it (it reads the latest persisted scope)")
+	require.True(t, app.tryQueueScopeRebuild("kc:other"), "the queue is per cluster")
+
+	app.markScopeRebuildStarted("kc:ctx")
+	require.True(t, app.tryQueueScopeRebuild("kc:ctx"),
+		"an edit after the rebuild started needs a fresh rebuild")
+}
+
+func TestPerformClusterScopeRebuildEmitsScopeChangedEvent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	var events []string
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		events = append(events, name)
+	}
+
+	// No live subsystem/clients: teardown and rebuild are warn-level no-ops,
+	// but the frontend must still hear that the scope epoch changed.
+	app.performClusterScopeRebuild("kc:ctx")
+
+	require.Equal(t, []string{"cluster:scope:changed"}, events,
+		"the frontend restarts streams and refetches on this event")
 }

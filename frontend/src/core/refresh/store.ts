@@ -291,6 +291,31 @@ export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): 
   notify();
 };
 
+/**
+ * Drops every scoped domain state latched permission-denied, so those scopes
+ * re-ask on their next (non-manual) refresh. Permission-denied is normally
+ * settled for the session, but a namespace-scope rebuild
+ * (docs/plans/namespace-scope.md) is a real permission epoch change: domains
+ * denied cluster-wide may now be served per-namespace. Denied scopes hold no
+ * data, so dropping them never blanks a rendered view; every other scope
+ * state is untouched.
+ */
+export const resetPermissionDeniedScopedDomainStates = (): void => {
+  const denied: Array<{ domain: RefreshDomain; scope: string }> = [];
+  for (const [domain, scopes] of Object.entries(state.scopedDomains)) {
+    for (const [scope, snapshot] of Object.entries(
+      scopes as Record<string, DomainSnapshotState<unknown>>
+    )) {
+      if (snapshot.permissionDenied) {
+        denied.push({ domain: domain as RefreshDomain, scope });
+      }
+    }
+  }
+  for (const entry of denied) {
+    resetScopedDomainState(entry.domain, entry.scope);
+  }
+};
+
 export const markPendingRequest = (delta: number): void => {
   state.pendingRequests = Math.max(0, state.pendingRequests + delta);
   notify();

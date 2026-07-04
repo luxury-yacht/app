@@ -54,6 +54,12 @@ export interface AppEvents {
   'cluster:auth:failed': { clusterId: string };
   'cluster:auth:recovered': { clusterId: string };
 
+  // A cluster's namespace scope changed and its refresh subsystem finished
+  // rebuilding (docs/plans/namespace-scope.md) — bridged from the Wails
+  // cluster:scope:changed event by KubeconfigContext. Streams must restart
+  // and the cluster's domains refetch.
+  'cluster:scope-changed': { clusterId: string };
+
   // View events
   'view:reset': void;
   'view:toggle-diagnostics': void;

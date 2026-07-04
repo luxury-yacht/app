@@ -40,7 +40,12 @@ checker, so the SSAR cache resets with it
 - **Namespaces domain**: scoped clusters synthesize name-only rows from the
   configured list — no namespaces informer, no cluster permission, runtime
   policy exempted (`RegisterNamespaceDomain`,
-  `backend/refresh/snapshot/namespaces.go`). Workload presence still comes
+  `backend/refresh/snapshot/namespaces.go`). NOTE: every domain has TWO
+  permission gates — registration-time (the gate/policy table) and
+  serve-time (`ensurePermissions` re-runs the runtime policy on every
+  snapshot request, `backend/refresh/snapshot/service.go`). An exemption
+  must cover both: `DomainConfig.RuntimePolicyExempt` is the single
+  declaration the serve-time gate honors. Workload presence still comes
   from ingest; when NOTHING is tracked (pre-data or fully denied), rows
   report `workloadsUnknown` so the sidebar never dims them as
   authoritatively empty. Browse's namespace groups serve the same list
@@ -54,7 +59,11 @@ checker, so the SSAR cache resets with it
   others; spill/restore keeps per-partition RVs for delta resume.
 - **Object catalog**: collection fans out per namespace
   (`Dependencies.AllowedNamespaces`), and one Forbidden namespace target is
-  skipped, never failing the kind (`backend/objectcatalog/collect.go`).
+  skipped, never failing the kind (`backend/objectcatalog/collect.go`). The
+  catalog's RBAC preflight asks the same way: namespaced descriptors are
+  evaluated per scope namespace (any-of) instead of one cluster-wide ask
+  that a scoped identity always fails (`backend/objectcatalog/sync.go`,
+  `preflightNamespaces`).
 - **Resource stream**: per-CRD dynamic informers fan out per namespace for
   namespaced CRDs; the namespace-custom all-namespaces view lists per scope
   namespace with per-target Forbidden skip.
@@ -67,6 +76,21 @@ checker, so the SSAR cache resets with it
   per-row hover delete (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`).
   The editing affordances are also the only "scope active" indicator by
   design. Validation is syntactic (DNS-1123); the backend re-validates.
+
+## Scope-change convergence (the `cluster:scope:changed` event)
+
+A scope edit persists first, then rebuilds the cluster's subsystem through
+the coordinated selection-mutation path (rapid edits coalesce: a queued
+rebuild absorbs later edits; one that already started queues a fresh one).
+The frontend must NOT refetch on save — the rebuild takes seconds and an
+immediate fetch caches the stale pre-rebuild snapshot. Instead the backend
+emits `cluster:scope:changed` after the rebuild
+(`performClusterScopeRebuild`, `backend/app_cluster_settings.go`); the
+orchestrator then clears every permission-denied scope latch (a scope
+rebuild is the one in-session permission epoch change —
+`resetPermissionDeniedScopedDomainStates`, otherwise denied scopes never
+re-ask by design), restarts streaming, and NamespaceContext refetches the
+namespaces domain.
 
 ## Deliberately cluster-wide (follow-up: scope the factory-backed kinds)
 

@@ -136,6 +136,10 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          "namespaces",
 		BuildSnapshot: builder.Build,
+		// Scoped rows are synthesized from configuration: no cluster
+		// permission is needed, so BOTH permission gates (registration-time
+		// and the snapshot service's per-request check) must stand down.
+		RuntimePolicyExempt: len(builder.scope) > 0,
 	}); err != nil {
 		return nil, err
 	}

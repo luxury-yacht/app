@@ -16,6 +16,7 @@ import {
   markPendingRequest,
   resetAllScopedDomainStates,
   resetDomainState,
+  resetPermissionDeniedScopedDomainStates,
   resetScopedDomainState,
   setDomainState,
   setScopedDomainState,
@@ -168,5 +169,32 @@ describe('refresh store helpers', () => {
 
     markPendingRequest(-5);
     expect(getRefreshState().pendingRequests).toBe(0);
+  });
+});
+
+describe('resetPermissionDeniedScopedDomainStates', () => {
+  afterEach(() => {
+    resetAllScopedDomainStates('namespace-config');
+    resetAllScopedDomainStates('namespaces');
+  });
+
+  it('drops only permission-denied scope states so they re-ask after a scope change', () => {
+    setScopedDomainState('namespaces', 'cluster-a|', (prev) => ({
+      ...prev,
+      status: 'error',
+      permissionDenied: true,
+    }));
+    setScopedDomainState('namespace-config', 'cluster-a|namespace:prod', (prev) => ({
+      ...prev,
+      status: 'ready',
+    }));
+
+    resetPermissionDeniedScopedDomainStates();
+
+    expect(getScopedDomainState('namespaces', 'cluster-a|').permissionDenied).not.toBe(true);
+    expect(getScopedDomainState('namespaces', 'cluster-a|').status).not.toBe('error');
+    expect(getScopedDomainState('namespace-config', 'cluster-a|namespace:prod').status).toBe(
+      'ready'
+    );
   });
 });

@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -95,12 +96,15 @@ func (a *App) allowedNamespacesForCluster(clusterID string) []string {
 	return namespaces
 }
 
-// requestClusterScopeRebuild tears down and rebuilds one cluster's refresh
-// subsystem so a changed namespace scope takes effect — the same pattern the
-// kubeconfig-change watcher uses. The rebuild recreates the permission
-// checker, so the SSAR cache resets with it. A cluster that is not currently
-// connected has nothing to rebuild; its persisted scope applies on the next
-// connect.
+// requestClusterScopeRebuild rebuilds one cluster's refresh subsystem so a
+// changed namespace scope takes effect. It runs through the coordinated
+// selection-mutation + per-cluster operation path (the same routing auth
+// recovery uses), and rapid successive edits coalesce: while a rebuild is
+// QUEUED, further requests are dropped — the queued rebuild reads the latest
+// persisted scope; once it STARTS, the next edit queues a fresh one. The
+// rebuild recreates the permission checker, so the SSAR cache resets with
+// it. A cluster that is not currently connected has nothing to rebuild; its
+// persisted scope applies on the next connect.
 func (a *App) requestClusterScopeRebuild(clusterID string) {
 	if a.requestClusterScopeRebuildFn != nil {
 		a.requestClusterScopeRebuildFn(clusterID)
@@ -109,10 +113,46 @@ func (a *App) requestClusterScopeRebuild(clusterID string) {
 	if a.clusterClientsForID(clusterID) == nil {
 		return
 	}
-	go func() {
-		a.teardownClusterSubsystem(clusterID)
-		a.rebuildClusterSubsystem(clusterID)
-	}()
+	if !a.tryQueueScopeRebuild(clusterID) {
+		return
+	}
+	a.runSelectionMutationAsync(fmt.Sprintf("cluster-scope-rebuild:%s", clusterID), func(_ *selectionMutation) error {
+		return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+			// From here on this rebuild may already be reading the previous
+			// scope, so a new edit must queue a fresh rebuild.
+			a.markScopeRebuildStarted(clusterID)
+			if err := opCtx.Err(); err != nil {
+				return err
+			}
+			a.performClusterScopeRebuild(clusterID)
+			return opCtx.Err()
+		})
+	})
+}
+
+// tryQueueScopeRebuild reports whether the caller should enqueue a scope
+// rebuild for the cluster: false while one is already queued (the pending
+// rebuild will read the caller's just-persisted scope anyway).
+func (a *App) tryQueueScopeRebuild(clusterID string) bool {
+	_, alreadyQueued := a.scopeRebuildQueued.LoadOrStore(clusterID, struct{}{})
+	return !alreadyQueued
+}
+
+// markScopeRebuildStarted releases the cluster's queued slot at rebuild
+// start, so edits landing mid-rebuild queue a fresh one.
+func (a *App) markScopeRebuildStarted(clusterID string) {
+	a.scopeRebuildQueued.Delete(clusterID)
+}
+
+// performClusterScopeRebuild tears down and rebuilds the cluster's subsystem
+// (the kubeconfig-change pattern), then emits cluster:scope:changed so the
+// frontend restarts the cluster's streams and refetches its domains — without
+// this event the sidebar would keep serving the pre-rebuild snapshot (the
+// namespaces list would never show a newly added scope entry).
+func (a *App) performClusterScopeRebuild(clusterID string) {
+	a.teardownClusterSubsystem(clusterID)
+	a.rebuildClusterSubsystem(clusterID)
+	a.emitEvent("cluster:scope:changed", map[string]any{"clusterId": clusterID})
 }
 
 // normalizeAllowedNamespaces trims entries, drops empties, dedupes while

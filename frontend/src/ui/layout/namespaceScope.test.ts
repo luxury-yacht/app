@@ -78,18 +78,21 @@ describe('loadNamespaceScope', () => {
 });
 
 describe('saveNamespaceScope', () => {
-  it('persists and then requests a namespaces refresh for the cluster', async () => {
+  it('persists and returns the normalized scope WITHOUT an immediate refetch', async () => {
+    // The refetch must NOT fire here: the backend tears down and rebuilds the
+    // cluster's subsystem for seconds after the save, so an immediate fetch
+    // races the rebuild and caches the stale pre-rebuild snapshot. The
+    // frontend converges on the backend's cluster:scope:changed event
+    // instead (orchestrator + NamespaceContext listeners).
     setMock.mockResolvedValue(['prod', 'dev']);
 
     const result = await saveNamespaceScope('kc:ctx', ['prod', 'dev']);
     expect(result).toEqual(['prod', 'dev']);
     expect(setMock).toHaveBeenCalledWith('kc:ctx', ['prod', 'dev']);
-    expect(refreshMock).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'namespaces', reason: 'user' })
-    );
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it('propagates backend validation errors without refreshing', async () => {
+  it('propagates backend validation errors', async () => {
     setMock.mockRejectedValue(new Error('invalid namespace name "Bad!"'));
 
     await expect(saveNamespaceScope('kc:ctx', ['Bad!'])).rejects.toThrow('invalid namespace');

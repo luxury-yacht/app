@@ -11,8 +11,7 @@ import {
   getClusterAllowedNamespaces,
   setClusterAllowedNamespaces,
 } from '@/core/settings/clusterAllowedNamespaces';
-import { requestRefreshDomain } from '@/core/data-access';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { logAppLogsError, logAppLogsInfo } from '@/core/logging/appLogsClient';
 
 /**
  * Above this many namespaces the editor shows a soft performance note:
@@ -56,17 +55,21 @@ export async function loadNamespaceScope(clusterId: string): Promise<string[]> {
 }
 
 /**
- * Persists the scope (the backend validates, rewrites settings.json, and
- * rebuilds the cluster's refresh subsystem), then requests a namespaces
- * refresh so the sidebar converges promptly — the doorbell after the rebuild
- * covers any remaining staleness.
+ * Persists the scope. The backend validates, rewrites settings.json, and
+ * tears down + rebuilds the cluster's refresh subsystem (seconds); when the
+ * rebuild finishes it emits `cluster:scope:changed`, which the orchestrator
+ * and NamespaceContext handle by restarting streams and refetching — an
+ * immediate refetch here would race the rebuild and cache the stale
+ * pre-rebuild snapshot.
  */
 export async function saveNamespaceScope(clusterId: string, next: string[]): Promise<string[]> {
-  const normalized = await setClusterAllowedNamespaces(clusterId, next);
-  void requestRefreshDomain({
-    domain: 'namespaces',
-    scope: buildClusterScope(clusterId, ''),
-    reason: 'user',
-  });
-  return normalized;
+  logAppLogsInfo(`namespace-scope: saving [${next.join(', ')}] for cluster "${clusterId}"`);
+  try {
+    const normalized = await setClusterAllowedNamespaces(clusterId, next);
+    logAppLogsInfo(`namespace-scope: saved [${normalized.join(', ')}] for cluster "${clusterId}"`);
+    return normalized;
+  } catch (error) {
+    logAppLogsError(`namespace-scope: save failed for cluster "${clusterId}": ${String(error)}`);
+    throw error;
+  }
 }

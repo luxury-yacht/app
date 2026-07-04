@@ -38,6 +38,12 @@ type DomainConfig struct {
 	BuildSnapshot    func(ctx context.Context, scope string) (*Snapshot, error)
 	ManualRefresh    func(ctx context.Context, scope string) (*ManualRefreshResult, error)
 	PermissionDenied bool // Set when domain is registered as a permission-denied placeholder.
+	// RuntimePolicyExempt marks a domain whose data source needs no cluster
+	// permission in this configuration (the scoped namespaces domain serves
+	// synthesized names, docs/plans/namespace-scope.md). The snapshot
+	// service's per-request policy gate skips exempt domains, exactly as the
+	// registration-time gate does — the gate must match the source.
+	RuntimePolicyExempt bool
 }
 
 // InformerHub exposes informer lifecycle hooks used by the refresh manager.

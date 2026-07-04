@@ -21,37 +21,70 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
-// evaluateDescriptor checks if the given descriptor is allowed by the capabilities service.
+// preflightNamespaces returns the namespaces a descriptor's RBAC preflight
+// asks about: the configured scope for a namespaced kind under a namespace
+// scope (docs/plans/namespace-scope.md), otherwise the single cluster-wide
+// "" ask. The check's scope must match the collection's scope — a scoped
+// identity is typically denied cluster-wide but allowed per namespace, and a
+// cluster-wide-only preflight would skip collection for every kind.
+func (s *Service) preflightNamespaces(desc resourceDescriptor) []string {
+	scope := s.scopeNamespaces()
+	if !desc.Namespaced || len(scope) == 0 {
+		return []string{""}
+	}
+	return scope
+}
+
+// evaluateDescriptor checks if the given descriptor is allowed by the
+// capabilities service: allowed in ANY of its preflight namespaces.
 func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc resourceDescriptor) (bool, error) {
 	if svc == nil {
 		return true, nil
 	}
-	reviews := []capabilities.ReviewAttributes{
-		{
-			ID: desc.GVR.String(),
+	targets := s.preflightNamespaces(desc)
+	reviews := make([]capabilities.ReviewAttributes, 0, len(targets))
+	for _, namespace := range targets {
+		reviews = append(reviews, capabilities.ReviewAttributes{
+			ID: desc.GVR.String() + "|" + namespace,
 			Attributes: &authorizationv1.ResourceAttributes{
-				Group:    desc.Group,
-				Version:  desc.Version,
-				Resource: desc.Resource,
-				Verb:     "list",
+				Group:     desc.Group,
+				Version:   desc.Version,
+				Resource:  desc.Resource,
+				Verb:      "list",
+				Namespace: namespace,
 			},
-		},
+		})
 	}
 	results, err := svc.Evaluate(ctx, reviews)
 	if err != nil {
 		return false, err
 	}
-	if len(results) == 0 {
+	var firstErr error
+	answered := false
+	for _, res := range results {
+		switch {
+		case res.Error != "":
+			if firstErr == nil {
+				firstErr = errors.New(res.Error)
+			}
+		case res.EvaluationError != "":
+			if firstErr == nil {
+				firstErr = errors.New(res.EvaluationError)
+			}
+		default:
+			answered = true
+			if res.Allowed {
+				return true, nil
+			}
+		}
+	}
+	if !answered {
+		if firstErr != nil {
+			return false, firstErr
+		}
 		return false, nil
 	}
-	res := results[0]
-	if res.Error != "" {
-		return false, errors.New(res.Error)
-	}
-	if res.EvaluationError != "" {
-		return false, errors.New(res.EvaluationError)
-	}
-	return res.Allowed, nil
+	return false, nil
 }
 
 // evaluateDescriptorsBatch checks if the given descriptors are allowed by the capabilities service.
@@ -68,19 +101,26 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 		return allowed, nil, nil
 	}
 
+	// One check per (descriptor × preflight namespace): a namespaced kind
+	// under a scope is allowed when ANY configured namespace allows it; a
+	// per-namespace error is ignored when another namespace gave a definitive
+	// answer, so one broken namespace never blanks the kind.
 	checks := make([]capabilities.ReviewAttributes, 0, len(descriptors))
 	indexes := make([]int, 0, len(descriptors))
 	for idx, desc := range descriptors {
-		checks = append(checks, capabilities.ReviewAttributes{
-			ID: desc.GVR.String(),
-			Attributes: &authorizationv1.ResourceAttributes{
-				Group:    desc.Group,
-				Version:  desc.Version,
-				Resource: desc.Resource,
-				Verb:     "list",
-			},
-		})
-		indexes = append(indexes, idx)
+		for _, namespace := range s.preflightNamespaces(desc) {
+			checks = append(checks, capabilities.ReviewAttributes{
+				ID: desc.GVR.String() + "|" + namespace,
+				Attributes: &authorizationv1.ResourceAttributes{
+					Group:     desc.Group,
+					Version:   desc.Version,
+					Resource:  desc.Resource,
+					Verb:      "list",
+					Namespace: namespace,
+				},
+			})
+			indexes = append(indexes, idx)
+		}
 	}
 
 	results, err := svc.Evaluate(ctx, checks)
@@ -89,6 +129,7 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 	}
 
 	errorsByIndex := make(map[int]error)
+	answered := make(map[int]bool, len(descriptors))
 	for i, res := range results {
 		if i >= len(indexes) {
 			break
@@ -96,12 +137,23 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 		idx := indexes[i]
 		switch {
 		case res.Error != "":
-			errorsByIndex[idx] = errors.New(res.Error)
+			if _, ok := errorsByIndex[idx]; !ok {
+				errorsByIndex[idx] = errors.New(res.Error)
+			}
 		case res.EvaluationError != "":
-			errorsByIndex[idx] = errors.New(res.EvaluationError)
+			if _, ok := errorsByIndex[idx]; !ok {
+				errorsByIndex[idx] = errors.New(res.EvaluationError)
+			}
 		default:
-			allowed[idx] = res.Allowed
+			answered[idx] = true
+			if res.Allowed {
+				allowed[idx] = true
+			}
 		}
+	}
+	// A definitive per-namespace answer outranks a sibling namespace's error.
+	for idx := range answered {
+		delete(errorsByIndex, idx)
 	}
 
 	allowedCount := 0

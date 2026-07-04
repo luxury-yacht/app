@@ -605,3 +605,67 @@ func TestFailedInitialSyncRetriesWhileReactiveRegistrationBlocks(t *testing.T) {
 	}
 	t.Fatalf("no failed-sync retry fired while reactive registration was blocked (sync attempts: %d)", rec.count())
 }
+
+// The user-observed failure (docs/plans/namespace-scope.md): a RoleBindings-only
+// identity gets "catalog RBAC preflight: allowed=0 denied=57" because every
+// preflight check is cluster-scoped, so collection is skipped for every kind
+// and Browse stays empty even though the identity can list in its namespaces.
+// Namespaced kinds must be evaluated per configured scope namespace (any-of);
+// cluster-scoped kinds keep the cluster-wide ask.
+func TestCatalogPreflightEvaluatesNamespacedKindsPerScopeNamespace(t *testing.T) {
+	client := kubernetesfake.NewClientset()
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		review := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		result := review.DeepCopy()
+		// Allowed ONLY inside namespace "prod" — cluster-wide asks denied.
+		result.Status.Allowed = review.Spec.ResourceAttributes.Namespace == "prod"
+		return true, result, nil
+	})
+
+	factory := func() *capabilities.Service {
+		return capabilities.NewService(capabilities.Dependencies{
+			Common: common.Dependencies{
+				KubernetesClient: client,
+				EnsureClient:     func(string) error { return nil },
+			},
+		})
+	}
+
+	svc := NewService(Dependencies{
+		Common: common.Dependencies{
+			KubernetesClient: client,
+			EnsureClient:     func(string) error { return nil },
+		},
+		CapabilityFactory: factory,
+		AllowedNamespaces: []string{"prod", "dev"},
+	}, nil)
+	capSvc := factory()
+
+	deployDesc := resourceDescriptor{
+		Resource: "deployments", Group: "apps", Version: "v1", Namespaced: true,
+		GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+	}
+	nodesDesc := resourceDescriptor{
+		Resource: "nodes", Version: "v1", Namespaced: false,
+		GVR: schema.GroupVersionResource{Version: "v1", Resource: "nodes"},
+	}
+
+	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []resourceDescriptor{deployDesc, nodesDesc})
+	if err != nil || len(batchErrors) != 0 {
+		t.Fatalf("batch evaluation failed: err=%v batchErrors=%+v", err, batchErrors)
+	}
+	if !batchAllowed[0] {
+		t.Fatal("namespaced kind allowed in one scope namespace must pass the preflight")
+	}
+	if batchAllowed[1] {
+		t.Fatal("cluster-scoped kind keeps the cluster-wide ask and stays denied")
+	}
+
+	single, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !single {
+		t.Fatal("single-descriptor preflight must also fan out over the scope")
+	}
+}
