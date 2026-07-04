@@ -71,6 +71,11 @@ type Config struct {
 	ContainerLogsTargetLimiter *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
 	ClusterID                  string                                   // stable identifier for cluster-scoped keys
 	ClusterName                string                                   // display name for cluster in payloads
+	// AllowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md). Empty means cluster-wide. Carried for
+	// subsystem construction; enforcement in the data/permission paths lands
+	// in later plan phases.
+	AllowedNamespaces []string
 }
 
 // Subsystem bundles the refresh manager and supporting services.

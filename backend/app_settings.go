@@ -66,11 +66,22 @@ const (
 
 // settingsFile captures the persisted application settings stored in settings.json.
 type settingsFile struct {
-	SchemaVersion int                 `json:"schemaVersion"`
-	UpdatedAt     time.Time           `json:"updatedAt"`
-	Preferences   settingsPreferences `json:"preferences"`
-	Kubeconfig    settingsKubeconfig  `json:"kubeconfig"`
-	UI            settingsUI          `json:"ui"`
+	SchemaVersion int                               `json:"schemaVersion"`
+	UpdatedAt     time.Time                         `json:"updatedAt"`
+	Preferences   settingsPreferences               `json:"preferences"`
+	Kubeconfig    settingsKubeconfig                `json:"kubeconfig"`
+	UI            settingsUI                        `json:"ui"`
+	Clusters      map[string]settingsClusterSection `json:"clusters,omitempty"`
+}
+
+// settingsClusterSection captures per-cluster persisted settings, keyed by
+// clusterId (kubeconfigName:context — the same identity favorites and cluster
+// tabs use).
+type settingsClusterSection struct {
+	// AllowedNamespaces is the cluster's namespace scope
+	// (docs/plans/namespace-scope.md). Empty means no scope: every namespaced
+	// data path runs cluster-wide.
+	AllowedNamespaces []string `json:"allowedNamespaces,omitempty"`
 }
 
 // settingsPreferences captures user-configurable preferences.

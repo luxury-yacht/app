@@ -155,11 +155,14 @@ discovered, for both the restricted and the perf-scope persona.
 
 Each phase is independently shippable and TDD'd; red/green per slice.
 
-- [ ] **Phase 1 — Plumbing.** Per-cluster settings storage + Wails RPC +
+- [x] ✅ **Phase 1 — Plumbing** (shipped 2026-07-04, `mage qc:prerelease`
+  green). Per-cluster settings storage + Wails RPC +
   frontend settings access for `allowedNamespaces`; thread the scope through
   `system.Config` into subsystem construction (carried but not yet
-  enforced); rebuild-on-change for the affected cluster only. Confirm the
-  rebuild path recreates the permission checker (SSAR cache reset).
+  enforced); rebuild-on-change for the affected cluster only. ✅ Confirmed
+  during implementation: the permission checker is created inside every
+  subsystem build (`backend/refresh/system/manager.go:131`), so the rebuild
+  resets the SSAR cache with no extra work.
 - [ ] **Phase 2 — Namespace list.** Scoped `namespaces`-domain registration
   serving the configured names; feed the same synthesized list into the
   catalog namespace-groups payload (Browse); inline sidebar editor (add +
@@ -212,7 +215,11 @@ Each phase is independently shippable and TDD'd; red/green per slice.
    optimization only: adopt it later if the fan-out shows up on the startup
    path of the restricted test cluster, and then only with a per-check SSAR
    fallback (SSRR may return incomplete rules on webhook-authorizer
-   clusters).
+   clusters). Note for that future pass: the capabilities subsystem already
+   runs SSRR with a configurable fetch concurrency
+   (`backend/capabilities/rules.go`, `SetPermissionSSRRFetchConcurrency` in
+   `backend/app_settings.go`) — reuse that machinery rather than adding a
+   second SSRR path.
 5. **Editor validation: syntactic only** (DNS-1123 label) at entry time;
    per-namespace access states on rows come from Phase 3's scoped checks,
    not edit-time probes.

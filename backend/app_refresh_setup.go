@@ -226,6 +226,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
 		ClusterID:                  clusterMeta.ID,
 		ClusterName:                clusterMeta.Name,
+		AllowedNamespaces:          a.allowedNamespacesForCluster(clusterMeta.ID),
 	}
 
 	cfg.ObjectCatalogService = func() *objectcatalog.Service {
