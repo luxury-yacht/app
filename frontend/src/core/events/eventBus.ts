@@ -77,6 +77,13 @@ export interface AppEvents {
   'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
   'refresh:complete': { name: string; isManual: boolean; success: boolean; error?: unknown };
+  /** A stream scope got a permission-denied error frame: streaming for it is
+   *  blocked (settled) until scope change / auth recovery clears the block. */
+  'refresh:resource-stream-permission-denied': {
+    domain: DoorbellStreamDomain;
+    scope: string;
+    reason: string;
+  };
   'refresh:resource-stream-drift': {
     domain: ResourceStreamDomain;
     scope: string;

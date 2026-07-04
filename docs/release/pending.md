@@ -6,6 +6,8 @@
 
 ### Changed
 
+- Views backed by a domain the identity cannot read now settle immediately into an "Insufficient permissions" state instead of an endless loading spinner, and stop retrying (both the table query and its stream stop asking until permissions or the namespace scope change).
+
 - Clusters where the user lacks permission to list namespaces now fail fast. The sidebar shows "You do not have permission to list namespaces."
 - The Cluster Overview no longer requires node permissions ([#244](https://github.com/luxury-yacht/app/issues/244)). Identities without node access (such as the standard `view` role) now see pods, namespaces, workloads, and events instead of the page failing with "permission denied". Each affected card explains its own gap in place: the Nodes card notes the missing node permission, and Resource Utilization indicates when cluster capacity or pod requests/limits are unavailable.
 - Resource bars now render the portion of usage that exceeds the declared limits as a striped overlay, so the limit position stays visible even when the bar is fully red.

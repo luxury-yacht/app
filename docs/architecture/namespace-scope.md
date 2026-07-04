@@ -98,6 +98,17 @@ rebuild is the one in-session permission epoch change —
 re-ask by design), restarts streaming, and NamespaceContext refetches the
 namespaces domain.
 
+## Fail-fast contract for denied domains
+
+A typed 403 is a SETTLED answer everywhere it can surface: the orchestrator
+stamps `permissionDenied` and stops background refetches; the typed query
+hook reads the stamp, settles without warm-up retries, and the shared table
+rendering shows "Insufficient permissions" (`resolveEmptyStateMessage`)
+instead of a spinner or generic failure; a stream permission error frame
+blocks that scope's streaming (`refresh:resource-stream-permission-denied` →
+`blockStreaming`) instead of resync-looping. All three latches release on a
+namespace-scope change or auth recovery.
+
 ## Deliberately cluster-wide (follow-up: scope the factory-backed kinds)
 
 The typed shared-informer factory's namespaced informers (events,

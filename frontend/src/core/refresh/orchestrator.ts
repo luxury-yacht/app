@@ -111,6 +111,10 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
     eventBus.on('settings:auto-refresh', this.handleAutoRefreshChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
+    eventBus.on(
+      'refresh:resource-stream-permission-denied',
+      this.handleResourceStreamPermissionDenied
+    );
     eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
     eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
     eventBus.on('cluster:auth:recovered', this.handleClusterAuthRecovered);
@@ -1374,6 +1378,37 @@ class RefreshOrchestrator {
       this.teardownInFlight(runtime, key, details);
     }
   }
+
+  private handleResourceStreamPermissionDenied = (
+    payload: AppEvents['refresh:resource-stream-permission-denied']
+  ): void => {
+    const scope = payload.scope.trim();
+    if (!scope) {
+      return;
+    }
+    // A settled denial: block the scope's streaming (cleared on scope change
+    // or auth recovery) so it does not resync-loop against a 403 forever.
+    const domain = payload.domain as RefreshDomain;
+    const runtime = this.getRuntimeForScope(domain, scope);
+    if (!runtime.blockStreaming(domain, scope)) {
+      return;
+    }
+    const config = this.configs.get(domain);
+    if (config?.streaming) {
+      this.stopStreamingScope(domain, scope, config.streaming, false);
+    }
+    logWarning(
+      `[refresh] stream permission denied — streaming blocked domain=${domain} scope=${scope} reason=${payload.reason}`,
+      { clusterId: parseClusterScope(scope).clusterId }
+    );
+    // Settle the scope's snapshot state NOW: the fetch gets the same typed
+    // 403 instantly and stamps permissionDenied, so anything gated on this
+    // scope's initial load (the typed-query tables) resolves immediately
+    // instead of waiting out stream teardown timing.
+    void this.performFetch(domain, scope, { isManual: true }).catch(() => {
+      // The stamp lands via the fetch's own error path; nothing to add here.
+    });
+  };
 
   private handleResourceStreamDrift = (
     payload: AppEvents['refresh:resource-stream-drift']

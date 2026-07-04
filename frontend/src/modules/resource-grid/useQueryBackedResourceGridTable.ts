@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
@@ -113,8 +114,19 @@ export function deriveQueryBackedData<TRow>({
   };
 }
 
-const isLiveDomainInitialLoadPending = (state: { status?: string; data?: unknown }): boolean =>
-  !state.data && (state.status === 'loading' || state.status === 'initialising');
+// A permission-denied live scope is SETTLED, not pending: gating the typed
+// query on it would hold the table in its loading state for as long as the
+// (blocked) stream machinery takes to move — observed live as a 7s spinner
+// before "Insufficient permissions". The query issues its own fetch and gets
+// the same typed 403 immediately.
+export const isLiveDomainInitialLoadPending = (state: {
+  status?: string;
+  data?: unknown;
+  permissionDenied?: boolean;
+}): boolean =>
+  !state.data &&
+  !state.permissionDenied &&
+  (state.status === 'loading' || state.status === 'initialising');
 
 export interface QueryBackedNamespaceGridResult<
   T extends ResourceGridTableRow,
@@ -239,6 +251,13 @@ function useTypedQueryLifecycle<
   // (empty + loading) state until a cluster and persistence are ready.
   const queryEnabled =
     Boolean(clusterId) && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
+  // [DEBUG-qtime] temporary latency instrumentation — remove after diagnosis.
+  const debugGateRef = useRef<string>('');
+  const debugGate = `${queryEnabled}|cluster=${Boolean(clusterId)}|stateReady=${tableStateReady}|hydrated=${persistence.hydrated}|livePending=${liveDomainInitialLoadPending}|liveStatus=${liveDomain.status}|liveDenied=${Boolean(liveDomain.permissionDenied)}`;
+  if (debugGateRef.current !== debugGate) {
+    debugGateRef.current = debugGate;
+    logAppLogsInfo(`[DEBUG-qtime] ${domain} queryEnabled=${debugGate}`);
+  }
 
   // One query serves every sort, including cpu/memory: the backend joins live
   // usage onto the rows at serve and sorts by it, so there is no separate

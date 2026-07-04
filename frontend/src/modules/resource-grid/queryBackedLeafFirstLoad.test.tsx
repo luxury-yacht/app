@@ -546,6 +546,49 @@ describe('query-backed leaf first load', () => {
     });
   });
 
+  it('settles a permission-denied domain without warm-up retries and shows the permission state', async () => {
+    // The live failure this pins (restricted identity, docs/plans/namespace-scope.md):
+    // the backend registers namespace-autoscaling permission-denied and every
+    // snapshot fetch 403s with a typed body. The orchestrator stamps
+    // permissionDenied on the query scope's state — the typed query must READ
+    // that stamp and settle (fail fast), never re-arm the 1s warm-up loop that
+    // rendered as an endless first-load spinner.
+    vi.useFakeTimers();
+    try {
+      requestRefreshDomainStateMock.mockResolvedValue({
+        status: 'executed',
+        data: {
+          status: 'error',
+          error:
+            'permission denied for domain namespace-autoscaling (autoscaling/horizontalpodautoscalers)',
+          permissionDenied: true,
+          data: undefined,
+        },
+      });
+      await act(async () => {
+        root.render(
+          <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />
+        );
+        await Promise.resolve();
+      });
+      await flushQueryEffects();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      await flushQueryEffects();
+
+      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+      // GridTable is stubbed in this harness; the rendered message is its
+      // emptyMessage prop (GridTable's own contract displays it when empty).
+      expect(gridTablePropsRef.current).not.toBeNull();
+      expect(gridTablePropsRef.current.emptyMessage).toBe('Insufficient permissions');
+      expect(gridTablePropsRef.current.data).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses the typed query result on first load for namespace autoscaling', async () => {
     await expectQueryFirstLoad({
       element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,

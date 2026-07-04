@@ -283,10 +283,11 @@ describe('ClusterViewCustom', () => {
       await Promise.resolve();
     });
 
-    // No in-table banner exists; an errored empty table reads "Unable to load
-    // data" instead of the generic empty message.
+    // No in-table banner exists. A permission-classified catalog error reads
+    // as the designed permission state; non-permission errors keep the
+    // "Unable to load data" treatment (covered by the inventory-table tests).
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(gridTablePropsRef.current?.emptyMessage).toBe('Unable to load data');
+    expect(gridTablePropsRef.current?.emptyMessage).toBe('Insufficient permissions');
   });
 
   it('passes the unfiltered total through to the filter options', async () => {
