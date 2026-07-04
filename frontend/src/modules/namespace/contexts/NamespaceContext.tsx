@@ -46,6 +46,7 @@ export interface NamespaceListItem {
   hasWorkloads: boolean;
   workloadsUnknown: boolean;
   resourceVersion: string;
+  scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
   // Multi-cluster identity — required for stable row keys and scoped operations.
   clusterId?: string;
@@ -222,6 +223,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,
         resourceVersion: ns.resourceVersion,
+        scopeStatus: ns.scopeStatus,
         clusterId: ns.clusterId,
         clusterName: ns.clusterName,
       } satisfies NamespaceListItem;

@@ -1,5 +1,6 @@
 ### Added
 
+- Accessible-namespace entries that don't resolve are flagged in the sidebar: a warning glyph marks a namespace that was not found (or that the identity cannot access), with the detail in its tooltip.
 - Per-cluster "accessible namespaces" ([#243](https://github.com/luxury-yacht/app/issues/243)): identities without permission to list namespaces cluster-wide can now add the namespaces they can access directly in the sidebar (with a hover delete on each added row). When a scope is set, tables, Browse, streams, metrics, and the object map all operate per-namespace — one namespace the identity cannot read degrades only itself. Views whose data source still reads cluster-wide (Events, Autoscaling, Helm, Gateway API) show their permission-denied state for scoped identities rather than empty data. The scope also works as a noise/performance filter on large clusters for users with full access.
 - The Cluster Overview's Resource Utilization card now shows "Collecting metrics…" while the first metrics collection is in flight.
 

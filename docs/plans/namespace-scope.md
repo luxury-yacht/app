@@ -206,8 +206,12 @@ Each phase is independently shippable and TDD'd; red/green per slice.
   empty), enforced by the source-scope rule. Flipping a source to scoped =
   scope its informers AND add its resources to `scopedResourcePredicate`
   AND remove its ClusterWide overrides.
-- [ ] **Namespace row enrichment** (per-namespace GET where permitted) —
-  name-only rows shipped per decision 3.
+- [x] ✅ **Namespace row enrichment** (shipped 2026-07-04): scoped rows are
+  enriched by a TTL-cached per-namespace GET probe; entries the identity
+  cannot reach are flagged — "not-found" when a permitted GET returns 404
+  (definitive), "no-access" on 403 (honest: a restricted identity cannot
+  distinguish a missing namespace from a denied one). Flag transitions ride
+  their own snapshot source clock ("scope-probe").
 - [ ] **Verify degrade-only surfaces against the restricted test cluster**
   (ClusterRole details RoleBindings list, cluster-scoped object events) —
   needs the new 2-namespace RoleBindings SA from the test-setup note.

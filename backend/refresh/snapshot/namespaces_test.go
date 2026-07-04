@@ -2,12 +2,18 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -432,7 +438,96 @@ func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T
 	// the scoped registration must never instantiate the namespaces informer.
 	// Passing a nil factory proves it: any touch would panic.
 	reg := domain.New()
-	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"})
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
+}
+
+// Scoped rows are enriched by a per-namespace GET probe
+// (docs/plans/namespace-scope.md, Phase 5): a real namespace serves its full
+// row; a 404 flags "not-found" (definitive — the GET was permitted); a 403
+// flags "no-access" (a restricted identity cannot distinguish absence from
+// denial, so the label stays honest).
+func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
+	created := time.Unix(1700000000, 0).UTC()
+	realNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "prod",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(created),
+		},
+		Status: corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+	client := k8sfake.NewClientset(realNs)
+	client.PrependReactor("get", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		if action.(clienttesting.GetAction).GetName() == "locked" {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "locked", errors.New("denied"))
+		}
+		return false, nil, nil
+	})
+
+	builder := &NamespaceBuilder{
+		scope:  []string{"prod", "ghost", "locked"},
+		client: client,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 3)
+
+	byName := map[string]NamespaceSummary{}
+	for _, ns := range payload.Namespaces {
+		byName[ns.Name] = ns
+	}
+
+	prod := byName["prod"]
+	require.Empty(t, prod.ScopeStatus, "an existing accessible namespace carries no flag")
+	require.Equal(t, "Active", prod.Phase, "probe enriches the row from the real object")
+	require.Equal(t, "42", prod.ResourceVersion)
+	require.Equal(t, created.Unix(), prod.CreationUnix)
+
+	require.Equal(t, "not-found", byName["ghost"].ScopeStatus,
+		"a permitted GET returning 404 is definitive")
+	require.Equal(t, "no-access", byName["locked"].ScopeStatus,
+		"403 is honest: may not exist or may be denied")
+}
+
+func TestNamespaceBuilderScopedProbeCacheAndValidator(t *testing.T) {
+	gets := 0
+	client := k8sfake.NewClientset()
+	client.PrependReactor("get", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		gets++
+		return false, nil, nil
+	})
+
+	now := time.Unix(1700000000, 0)
+	builder := &NamespaceBuilder{
+		scope:  []string{"ghost"},
+		client: client,
+		now:    func() time.Time { return now },
+	}
+
+	snapA, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 1, gets)
+	_, err = builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 1, gets, "within the TTL the probe result is cached")
+
+	// The namespace is created; past the TTL the probe re-asks and the
+	// snapshot's cache validator must change (the row content changed with
+	// no namespace-RV clock to carry it).
+	require.NoError(t, client.Tracker().Add(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "ghost", ResourceVersion: "7"},
+		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}))
+	now = now.Add(time.Hour)
+
+	snapB, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, 2, gets, "past the TTL the probe re-asks")
+	require.Empty(t, snapB.Payload.(NamespaceSnapshot).Namespaces[0].ScopeStatus)
+	require.NotEqual(t, snapA.SourceVersions["scope-probe"], snapB.SourceVersions["scope-probe"],
+		"probe transitions must change the cache validator or the client keeps the stale flag")
 }

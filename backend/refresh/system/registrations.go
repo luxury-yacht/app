@@ -688,6 +688,7 @@ func namespacesRegistration(deps registrationDeps) domainRegistration {
 			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
 			deps.cfg.AllowedNamespaces,
+			deps.cfg.KubernetesClient,
 		)
 		if err != nil {
 			return err

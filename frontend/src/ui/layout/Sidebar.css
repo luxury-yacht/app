@@ -354,3 +354,23 @@ body.sidebar-resizing * {
 .namespace-scope-warning {
   color: var(--color-text-secondary);
 }
+
+/* Flags a configured scope namespace the identity cannot reach
+   (not-found / no-access) — targeted glyph, tooltip carries the detail. */
+.namespace-scope-flag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.25rem;
+  color: var(--color-warning, #b58900);
+}
+
+/* Inaccessible scope entries cannot expand: no pointer affordance, muted
+   text; the hover delete (and flag tooltip) remain the row's only actions. */
+.sidebar-item.scope-inaccessible {
+  cursor: default;
+  color: var(--color-text-secondary);
+}
+
+.sidebar-item.scope-inaccessible:hover {
+  color: var(--color-text-secondary);
+}

@@ -19,6 +19,7 @@ import {
   ClusterResourcesIcon,
   CategoryIcon,
   CloseIcon,
+  WarningOutlineIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
 } from '@shared/components/icons/SharedIcons';
@@ -423,8 +424,8 @@ function Sidebar() {
                 // cluster's "accessible namespaces" scope.
                 <>
                   <div className="sidebar-empty-message">
-                    You do not have permission to list namespaces. Add the namespaces you can
-                    access:
+                    Insufficient permission to list namespaces. You may manually add the namespaces
+                    you are allowed to access:
                   </div>
                   <NamespaceScopeAddRow state={namespaceScope} />
                 </>
@@ -437,7 +438,11 @@ function Sidebar() {
                   {namespaces.map((namespace) => {
                     const scope = namespace.scope ?? namespace.name;
                     const namespaceKey = toNamespaceKey(selectedClusterId ?? '', scope);
-                    const isExpanded = expandedNamespaceKeys.has(namespaceKey);
+                    // An inaccessible scope entry (not-found / no-access) has
+                    // no views to offer: it cannot expand, is skipped by
+                    // keyboard navigation, and only supports hover-delete.
+                    const inaccessible = Boolean(namespace.scopeStatus);
+                    const isExpanded = !inaccessible && expandedNamespaceKeys.has(namespaceKey);
                     const namespaceViews =
                       scope === ALL_NAMESPACES_SCOPE
                         ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
@@ -450,6 +455,7 @@ function Sidebar() {
                           className={buildSidebarItemClassName(
                             [
                               'sidebar-item',
+                              inaccessible ? 'scope-inaccessible' : '',
                               // Only a CONFIRMED absence of workloads changes the
                               // presentation; while workload presence is still
                               // unknown (ingest stores settling after connect) the
@@ -470,9 +476,12 @@ function Sidebar() {
                             if (!keyboardActivationRef.current) {
                               clearKeyboardPreview();
                             }
+                            if (inaccessible) {
+                              return;
+                            }
                             handleNamespaceSelect(scope, selectedClusterId || undefined);
                           }}
-                          data-sidebar-focusable="true"
+                          data-sidebar-focusable={inaccessible ? undefined : 'true'}
                           data-sidebar-target-kind="namespace-toggle"
                           data-sidebar-target-namespace={namespaceKey}
                           title={namespace.details || undefined}
@@ -484,6 +493,18 @@ function Sidebar() {
                             <NamespaceIcon width={14} height={14} />
                           )}
                           <span>{namespace.name}</span>
+                          {namespace.scopeStatus ? (
+                            <span
+                              className="namespace-scope-flag"
+                              title={
+                                namespace.scopeStatus === 'not-found'
+                                  ? 'Namespace not found on the cluster.'
+                                  : 'Insufficient permissions to access this namespace (or it does not exist).'
+                              }
+                            >
+                              <WarningOutlineIcon width={12} height={12} />
+                            </span>
+                          ) : null}
                           {namespaceScope.scope.includes(namespace.name) &&
                           scope !== ALL_NAMESPACES_SCOPE ? (
                             <button

@@ -76,6 +76,12 @@ checker, so the SSAR cache resets with it
   per-row hover delete (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`).
   The editing affordances are also the only "scope active" indicator by
   design. Validation is syntactic (DNS-1123); the backend re-validates.
+  Scoped rows are enriched by a TTL-cached per-namespace GET probe
+  (`probeScopedNamespace`): reachable namespaces serve their real
+  phase/status; unreachable entries carry `scopeStatus` — "not-found"
+  (permitted GET returned 404, definitive) or "no-access" (403 — may not
+  exist; a restricted identity cannot distinguish). Probe transitions
+  publish the "scope-probe" source clock so flag changes are delivered.
 
 ## Scope-change convergence (the `cluster:scope:changed` event)
 
