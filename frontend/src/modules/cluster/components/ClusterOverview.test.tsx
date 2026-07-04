@@ -884,6 +884,197 @@ describe('ClusterOverview', () => {
     );
   });
 
+  it('renders the nodes card as permission-gated when nodes are unavailable', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'Unmanaged',
+        cpuUsage: '400m',
+        cpuLimits: '1000m',
+        memoryUsage: '2Gi',
+        memoryLimits: '8Gi',
+        totalPods: 42,
+        totalNamespaces: 6,
+        unavailableResources: ['core/nodes'],
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    // The Nodes card explains the gap instead of rendering misleading zeros.
+    // "list, watch" are the actual RBAC verbs the app needs for node data —
+    // never "view", which is a ClusterRole name, not a permission.
+    expect(
+      container.querySelector('[data-testid="cluster-nodes-permission-note"]')?.textContent
+    ).toContain('Node permissions: list, watch');
+    expect(container.querySelector('[data-testid="cluster-nodes-total"]')).toBeNull();
+    expect(statValueFor(container, 'total')).toBe('');
+
+    // Capacity-derived values have no denominator without nodes: the usage
+    // summaries drop the "of <allocatable>" part and the percentages dash out
+    // (calculateResourceMetrics would silently rescale them against limits).
+    expect(container.textContent).toContain('400m used');
+    expect(container.textContent).toContain('2.0Gi used');
+    expect(
+      Array.from(container.querySelectorAll('.metric-header__percent')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['—', '—']);
+
+    // The warning lives in the affected card: the Resource Utilization header
+    // carries a capacity chip (no page-level banner).
+    expect(container.querySelector('[data-testid="overview-permission-banner"]')).toBeNull();
+    const capacityChip = container.querySelector(
+      '[data-testid="utilization-capacity-permission-chip"]'
+    );
+    expect(capacityChip?.textContent).toContain('Capacity unavailable');
+    // The explanation is a visible ⓘ-triggered tooltip, not an invisible
+    // title attribute.
+    expect(capacityChip?.getAttribute('title')).toBeNull();
+    expect(capacityChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
+      'Node permissions: list, watch'
+    );
+
+    // Pod and namespace data still render, with no pods/namespaces warnings.
+    expect(statValueFor(container, 'pods')).toBe('42');
+    expect(statValueFor(container, 'namespaces')).toBe('6');
+    expect(
+      container.querySelector('[data-testid="utilization-requests-permission-chip"]')
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="workloads-pods-permission-note"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="workloads-namespaces-permission-note"]')
+    ).toBeNull();
+  });
+
+  it('warns inside the affected cards when pods and namespaces are hidden, keeping the nodes card', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'Unmanaged',
+        totalNodes: 2,
+        readyNodes: 2,
+        cpuUsage: '400m',
+        cpuAllocatable: '2000m',
+        unavailableResources: ['core/pods', 'core/namespaces'],
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    // Requests/limits derive from pods: the Resource Utilization header says so.
+    const requestsChip = container.querySelector(
+      '[data-testid="utilization-requests-permission-chip"]'
+    );
+    expect(requestsChip?.textContent).toContain('Requests and limits unavailable');
+    expect(requestsChip?.getAttribute('title')).toBeNull();
+    expect(requestsChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
+      'Pod permissions: list, watch'
+    );
+    expect(requestsChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
+      'Only current usage is shown'
+    );
+
+    // The Workloads card explains its hidden counts in place.
+    expect(
+      container.querySelector('[data-testid="workloads-pods-permission-note"]')?.textContent
+    ).toContain('Pod permissions: list, watch');
+    expect(
+      container.querySelector('[data-testid="workloads-namespaces-permission-note"]')?.textContent
+    ).toContain('Namespace permission: list');
+
+    // Nodes remain fully rendered, including capacity-derived percentages.
+    expect(container.querySelector('[data-testid="cluster-nodes-permission-note"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="utilization-capacity-permission-chip"]')
+    ).toBeNull();
+    expect(statValueFor(container, 'total')).toBe('2');
+    expect(container.textContent).toContain('400m of 2 cores');
+    expect(container.textContent).toContain('20.0%');
+  });
+
+  it('explains the utilization bar vocabulary in a collapsible legend', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 1,
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="utilization-legend-toggle"]'
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-testid="utilization-legend"]')).toBeNull();
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    const legend = container.querySelector('[data-testid="utilization-legend"]');
+    expect(legend).not.toBeNull();
+    // The striping introduced for over-limit usage must be named — it is the
+    // one visual with no other in-UI explanation.
+    expect(legend?.textContent).toContain('limits');
+    expect(legend?.textContent).toContain('Total requests marker');
+    // One row per usage color, stating the capacity percentage where the
+    // color changes (single-sourced with the bar's threshold logic).
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-normal')).toHaveLength(1);
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-high')).toHaveLength(1);
+    expect(legend?.querySelectorAll('.utilization-legend__swatch--usage-critical')).toHaveLength(1);
+    expect(legend?.textContent).toContain('81');
+    expect(legend?.textContent).toContain('95');
+
+    act(() => {
+      toggle?.click();
+    });
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-testid="utilization-legend"]')).toBeNull();
+  });
+
+  it('shows no permission warnings when every source is readable', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 1,
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    expect(container.querySelector('[data-testid="cluster-nodes-permission-note"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="utilization-capacity-permission-chip"]')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="utilization-requests-permission-chip"]')
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="workloads-pods-permission-note"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="workloads-namespaces-permission-note"]')
+    ).toBeNull();
+  });
+
   it('keeps cluster-overview disabled before data services start and suppresses the transient unavailable error', async () => {
     mockLifecycleState = 'connecting';
     domainStateRef.current = createDomainState('error', {

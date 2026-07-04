@@ -1,7 +1,6 @@
 - Need a restricted-permissions pass to make the app behave better when the user is missing important permissions.
   - Allow the user to manually add namespaces if they don't have list namespaces permissions
   - Fail fast instead of attempting loads (ex: Nodes shows loading spinner that will never work)
-  - What can we do with Cluster Overview when permissions are limited?
 
 - Build a plugin architecture
   - AI

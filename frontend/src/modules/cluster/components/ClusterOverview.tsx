@@ -7,6 +7,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import {
+  USAGE_CRITICAL_THRESHOLD_PERCENT,
+  USAGE_HIGH_THRESHOLD_PERCENT,
+} from '@shared/components/resourceBarThresholds';
 import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
@@ -176,6 +180,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     ]
   );
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
+  // Disclosure for the Resource Utilization legend; collapsed by default so
+  // the card stays compact.
+  const [legendExpanded, setLegendExpanded] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -503,7 +510,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         aria-disabled={!clickable}
         data-testid={`cluster-pod-status-${item.key}`}
       >
-        <span className="pod-status-card__count">{showSkeleton ? DASH : item.value}</span>
+        <span className="pod-status-card__count">
+          {showSkeleton || podsUnavailable ? DASH : item.value}
+        </span>
         <span className="pod-status-card__label" title={item.label}>
           {item.label}
         </span>
@@ -587,6 +596,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     (sum, item) => sum + item.value,
     0
   );
+  // Sources the backend could not read for this identity (issue #244): each
+  // affected card explains its own gap in place instead of rendering zeros.
+  const unavailableResources = displayOverview.unavailableResources ?? [];
+  const nodesUnavailable = unavailableResources.includes('core/nodes');
+  const podsUnavailable = unavailableResources.includes('core/pods');
+  const namespacesUnavailable = unavailableResources.includes('core/namespaces');
+
   const overviewResourceMetrics = clusterOverviewResourceMetrics(displayOverview, metricsInfo);
   const memoryResourceMetrics = calculateResourceMetrics(
     overviewResourceMetrics.memory ?? {},
@@ -605,12 +621,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   };
   const formatResourceTooltipValue = (value: number, type: 'cpu' | 'memory') =>
     type === 'cpu' ? formatCpuTooltipValue(value) : formatMemoryValue(value);
-  const cpuUsageSummary = `${formatCpuValue(cpuResourceMetrics.usage)} of ${formatCpuValue(
-    cpuResourceMetrics.allocatable
-  )} cores`;
-  const memoryUsageSummary = `${formatMemoryValue(memoryResourceMetrics.usage)} of ${formatMemoryValue(
-    memoryResourceMetrics.allocatable
-  )}`;
+  // Without node access the cluster's allocatable capacity is unknown, so the
+  // summaries drop the "of <allocatable>" denominator and the utilization
+  // percentages dash out below (calculateResourceMetrics would otherwise
+  // silently rescale them against limits).
+  const cpuUsageSummary = nodesUnavailable
+    ? `${formatCpuValue(cpuResourceMetrics.usage)} used`
+    : `${formatCpuValue(cpuResourceMetrics.usage)} of ${formatCpuValue(
+        cpuResourceMetrics.allocatable
+      )} cores`;
+  const memoryUsageSummary = nodesUnavailable
+    ? `${formatMemoryValue(memoryResourceMetrics.usage)} used`
+    : `${formatMemoryValue(memoryResourceMetrics.usage)} of ${formatMemoryValue(
+        memoryResourceMetrics.allocatable
+      )}`;
 
   const renderResourceUtilizationTooltip = (
     type: 'cpu' | 'memory',
@@ -643,7 +667,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             {formatResourceTooltipValue(row.value, type)}
           </span>
           <span className={percentClassName('resource-utilization-tooltip__percent', row.percent)}>
-            {formatPercent(row.percent)}
+            {nodesUnavailable ? DASH : formatPercent(row.percent)}
           </span>
         </React.Fragment>
       ))}
@@ -860,14 +884,43 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          {/* Header row: the metrics indicator sits in the card's upper right
-              so its presence never shifts the utilization content below. */}
+          {/* Header row: the metrics/permission indicators sit in the card's
+              upper right so their presence never shifts the utilization
+              content below. */}
           <div className="overview-section-header">
             <h2>Resource Utilization</h2>
             {metricsBanner && !errorMessage && (
               <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
                 <span className="metrics-warning-banner__dot" />
                 <span className="metrics-warning-banner__text">{metricsBanner.message}</span>
+              </div>
+            )}
+            {nodesUnavailable && !showSkeleton && (
+              <div
+                className="overview-permission-chip"
+                data-testid="utilization-capacity-permission-chip"
+              >
+                <span className="metrics-warning-banner__dot" />
+                <span className="metrics-warning-banner__text">Capacity unavailable</span>
+                <Tooltip
+                  content="Cluster capacity data is unavailable. Your account is missing required Node permissions: list, watch."
+                  maxWidth={320}
+                />
+              </div>
+            )}
+            {podsUnavailable && !showSkeleton && (
+              <div
+                className="overview-permission-chip"
+                data-testid="utilization-requests-permission-chip"
+              >
+                <span className="metrics-warning-banner__dot" />
+                <span className="metrics-warning-banner__text">
+                  Requests and limits unavailable (no pod access)
+                </span>
+                <Tooltip
+                  content="Pod requests and limits data is unavailable. Only current usage is shown. Your account is missing required Pod permissions: list, watch."
+                  maxWidth={320}
+                />
               </div>
             )}
           </div>
@@ -886,7 +939,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   cpuResourceMetrics.usagePercent
                 )}
               >
-                {showSkeleton ? DASH : formatPercent(cpuResourceMetrics.usagePercent)}
+                {showSkeleton || nodesUnavailable
+                  ? DASH
+                  : formatPercent(cpuResourceMetrics.usagePercent)}
               </div>
             </div>
             <Tooltip
@@ -927,7 +982,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   memoryResourceMetrics.usagePercent
                 )}
               >
-                {showSkeleton ? DASH : formatPercent(memoryResourceMetrics.usagePercent)}
+                {showSkeleton || nodesUnavailable
+                  ? DASH
+                  : formatPercent(memoryResourceMetrics.usagePercent)}
               </div>
             </div>
             <Tooltip
@@ -955,106 +1012,185 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             memoryWorkloadUsageTotal,
             memoryWorkloadUsageItems
           )}
+
+          <div className="utilization-legend">
+            <button
+              type="button"
+              className="utilization-legend__toggle"
+              aria-expanded={legendExpanded}
+              onClick={() => setLegendExpanded((expanded) => !expanded)}
+              data-testid="utilization-legend-toggle"
+            >
+              <span
+                className={`utilization-legend__chevron${
+                  legendExpanded ? ' utilization-legend__chevron--open' : ''
+                }`}
+                aria-hidden="true"
+              />
+              Legend
+            </button>
+            {legendExpanded && (
+              <div className="utilization-legend__items" data-testid="utilization-legend">
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-normal" />
+                  <span>Usage below {USAGE_HIGH_THRESHOLD_PERCENT}%</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-high" />
+                  <span>
+                    Usage at {USAGE_HIGH_THRESHOLD_PERCENT}–{USAGE_CRITICAL_THRESHOLD_PERCENT}%
+                  </span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--usage-critical" />
+                  <span>Usage above {USAGE_CRITICAL_THRESHOLD_PERCENT}%</span>
+                </div>
+                <div className="utilization-legend__footnote">
+                  Thresholds derived from requests/limits when node capacity is unavailable.
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--reserved" />
+                  <span>Requested but currently unused</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--overlimit" />
+                  <span>Usage above total limits</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--request-marker" />
+                  <span>Total requests marker</span>
+                </div>
+                <div className="utilization-legend__item">
+                  <span className="utilization-legend__swatch utilization-legend__swatch--limit-marker" />
+                  <span>Total limits marker</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="overview-section nodes-summary">
           <h2>Nodes</h2>
-          <div className="metric-stats">
-            <div className="metric-stat" data-testid="cluster-nodes-total">
-              <span className="metric-stat__count">
-                {showSkeleton ? DASH : displayOverview.totalNodes}
-              </span>
-              <span className="metric-stat__label">total</span>
+          {nodesUnavailable && !showSkeleton ? (
+            <div className="overview-permission-note" data-testid="cluster-nodes-permission-note">
+              Node details are hidden. Your account has insufficient access (requires Node
+              permissions: list, watch).
             </div>
-            {displayOverview.clusterType === 'EKS' && (
-              <>
-                <div className="metric-stat" data-testid="cluster-nodes-ec2">
+          ) : (
+            <>
+              <div className="metric-stats">
+                <div className="metric-stat" data-testid="cluster-nodes-total">
                   <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.ec2Nodes}
+                    {showSkeleton ? DASH : displayOverview.totalNodes}
                   </span>
-                  <span className="metric-stat__label">ec2</span>
+                  <span className="metric-stat__label">total</span>
                 </div>
-                <div className="metric-stat" data-testid="cluster-nodes-fargate">
-                  <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.fargateNodes}
-                  </span>
-                  <span className="metric-stat__label">fargate</span>
-                </div>
-              </>
-            )}
-            {displayOverview.clusterType === 'AKS' && (
-              <>
-                <div className="metric-stat" data-testid="cluster-nodes-vm">
-                  <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.vmNodes}
-                  </span>
-                  <span className="metric-stat__label">vm</span>
-                </div>
-                <div className="metric-stat" data-testid="cluster-nodes-virtual">
-                  <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.virtualNodes}
-                  </span>
-                  <span className="metric-stat__label">virtual</span>
-                </div>
-              </>
-            )}
-          </div>
+                {displayOverview.clusterType === 'EKS' && (
+                  <>
+                    <div className="metric-stat" data-testid="cluster-nodes-ec2">
+                      <span className="metric-stat__count">
+                        {showSkeleton ? DASH : displayOverview.ec2Nodes}
+                      </span>
+                      <span className="metric-stat__label">ec2</span>
+                    </div>
+                    <div className="metric-stat" data-testid="cluster-nodes-fargate">
+                      <span className="metric-stat__count">
+                        {showSkeleton ? DASH : displayOverview.fargateNodes}
+                      </span>
+                      <span className="metric-stat__label">fargate</span>
+                    </div>
+                  </>
+                )}
+                {displayOverview.clusterType === 'AKS' && (
+                  <>
+                    <div className="metric-stat" data-testid="cluster-nodes-vm">
+                      <span className="metric-stat__count">
+                        {showSkeleton ? DASH : displayOverview.vmNodes}
+                      </span>
+                      <span className="metric-stat__label">vm</span>
+                    </div>
+                    <div className="metric-stat" data-testid="cluster-nodes-virtual">
+                      <span className="metric-stat__count">
+                        {showSkeleton ? DASH : displayOverview.virtualNodes}
+                      </span>
+                      <span className="metric-stat__label">virtual</span>
+                    </div>
+                  </>
+                )}
+              </div>
 
-          <div className="node-health">
-            <div className="metric-header">
-              <h3>Node Health</h3>
-              <div className="metric-legend__total">
-                <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : displayOverview.totalNodes}
-                </span>
-                <span className="metric-legend__total-label"> total</span>
+              <div className="node-health">
+                <div className="metric-header">
+                  <h3>Node Health</h3>
+                  <div className="metric-legend__total">
+                    <span className="metric-legend__total-value">
+                      {showSkeleton ? DASH : displayOverview.totalNodes}
+                    </span>
+                    <span className="metric-legend__total-label"> total</span>
+                  </div>
+                </div>
+                <div className="stacked-bar" role="presentation" aria-hidden="true">
+                  {!showSkeleton &&
+                    nodeHealthPhaseItems.map((item) => {
+                      const width = nodeHealthPct(item.value);
+                      if (width <= 0) {
+                        return null;
+                      }
+                      return (
+                        <div
+                          key={item.key}
+                          className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
+                          style={{ width: `${width}%` }}
+                        />
+                      );
+                    })}
+                </div>
+                <div className="metric-legend">
+                  <div className="metric-legend__items">
+                    {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
+                  </div>
+                  <div className="metric-legend__items metric-legend__items--restarted">
+                    {renderNodeHealthLegendItem(nodeCordonedItem)}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="stacked-bar" role="presentation" aria-hidden="true">
-              {!showSkeleton &&
-                nodeHealthPhaseItems.map((item) => {
-                  const width = nodeHealthPct(item.value);
-                  if (width <= 0) {
-                    return null;
-                  }
-                  return (
-                    <div
-                      key={item.key}
-                      className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
-                      style={{ width: `${width}%` }}
-                    />
-                  );
-                })}
-            </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
-              </div>
-              <div className="metric-legend__items metric-legend__items--restarted">
-                {renderNodeHealthLegendItem(nodeCordonedItem)}
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         <div className="overview-section workloads-summary">
           <h2>Workloads</h2>
+          {podsUnavailable && !showSkeleton && (
+            <div className="overview-permission-note" data-testid="workloads-pods-permission-note">
+              Pod and container counts are hidden. Your account has insufficient access (requires
+              Pod permissions: list, watch).
+            </div>
+          )}
+          {namespacesUnavailable && !showSkeleton && (
+            <div
+              className="overview-permission-note"
+              data-testid="workloads-namespaces-permission-note"
+            >
+              The namespace count is hidden. Your account has insufficient access (requires
+              Namespace permission: list).
+            </div>
+          )}
           <div className="metric-stats">
             <div className="metric-stat" data-testid="cluster-workloads-namespaces">
               <span className="metric-stat__count">
-                {showSkeleton ? DASH : displayOverview.totalNamespaces}
+                {showSkeleton || namespacesUnavailable ? DASH : displayOverview.totalNamespaces}
               </span>
               <span className="metric-stat__label">namespaces</span>
             </div>
             <div className="metric-stat" data-testid="cluster-workloads-pods">
               <span className="metric-stat__count">
-                {showSkeleton ? DASH : displayOverview.totalPods}
+                {showSkeleton || podsUnavailable ? DASH : displayOverview.totalPods}
               </span>
               <span className="metric-stat__label">pods</span>
             </div>
             <div className="metric-stat" data-testid="cluster-workloads-containers">
               <span className="metric-stat__count">
-                {showSkeleton ? DASH : displayOverview.totalContainers}
+                {showSkeleton || podsUnavailable ? DASH : displayOverview.totalContainers}
               </span>
               <span className="metric-stat__label">containers</span>
             </div>
@@ -1114,7 +1250,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   <h3>Pod Status</h3>
                   <div className="metric-legend__total">
                     <span className="metric-legend__total-value">
-                      {showSkeleton ? DASH : displayOverview.totalPods}
+                      {showSkeleton || podsUnavailable ? DASH : displayOverview.totalPods}
                     </span>
                     <span className="metric-legend__total-label"> total</span>
                   </div>

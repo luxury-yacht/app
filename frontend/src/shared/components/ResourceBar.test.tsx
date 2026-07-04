@@ -137,6 +137,67 @@ describe('ResourceBar', () => {
     cleanup();
   });
 
+  it('stripes the over-limit region when usage exceeds the limit', async () => {
+    // The limit line marker is the same red as the critical fill, so when
+    // usage covers it the striped overlay's left edge marks the limit
+    // instead. 671Mi usage vs 490Mi limit on a 708Mi scale (request*1.2).
+    const { container, cleanup } = await renderBar({
+      type: 'memory',
+      usage: '671.0 Mi',
+      request: '590.0 Mi',
+      limit: '490.0 Mi',
+      showTooltip: false,
+    });
+
+    const overlimit = container.querySelector<HTMLElement>('.resource-bar-overlimit');
+    expect(overlimit).not.toBeNull();
+    const left = parseFloat(overlimit?.style.left ?? '');
+    const width = parseFloat(overlimit?.style.width ?? '');
+    expect(left).toBeCloseTo((490 / 708) * 100, 0);
+    expect(left + width).toBeCloseTo((671 / 708) * 100, 0);
+    expect(overlimit?.getAttribute('title')).toBeNull();
+
+    cleanup();
+  });
+
+  it('renders no over-limit stripes while usage stays within the limit', async () => {
+    const { container, cleanup } = await renderBar({
+      type: 'memory',
+      usage: '100.0 Mi',
+      request: '200.0 Mi',
+      limit: '400.0 Mi',
+      showTooltip: false,
+    });
+
+    expect(container.querySelector('.resource-bar-overlimit')).toBeNull();
+
+    cleanup();
+  });
+
+  it('keeps request and limit markers visible when aggregate requests exceed limits (no allocatable)', async () => {
+    // Cluster-overview aggregates without node access: across pods, total
+    // requests can exceed total limits (per-container request<=limit only
+    // holds when both are set). Scaling to limits pinned every marker at the
+    // clamped right edge (left: 100%) — invisible on the track border.
+    const { container, cleanup } = await renderBar({
+      type: 'memory',
+      usage: '671.0 Mi',
+      request: '590.0 Mi',
+      limit: '490.0 Mi',
+      showTooltip: false,
+    });
+
+    const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
+    expect(markers).toHaveLength(2);
+    for (const marker of Array.from(markers)) {
+      const position = parseFloat(marker.style.left);
+      expect(position).toBeGreaterThan(0);
+      expect(position).toBeLessThan(100);
+    }
+
+    cleanup();
+  });
+
   it('toggles tooltip in compact mode and handles overcommit tracking', async () => {
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0);

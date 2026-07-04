@@ -20,6 +20,7 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -639,6 +640,150 @@ func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *test
 	require.Equal(t, "pod-uid-1", event.InvolvedObject.Ref.UID)
 }
 
+// An identity without node access (issue #244) still gets an overview: the
+// informer path drops the node contribution and records the denied source so
+// the frontend can mark the affected cards instead of rendering zeros.
+func TestClusterOverviewBuilderMarksRuntimeDeniedNodes(t *testing.T) {
+	now := time.Now()
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-a", ResourceVersion: "5"},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1000m"),
+				corev1.ResourceMemory: resource.MustParse("4Gi"),
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", ResourceVersion: "9"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default", ResourceVersion: "2"}}
+
+	builder := &ClusterOverviewBuilder{
+		ingest:          newFakePodAggregateSource(nil, pod).withNodes(ClusterMeta{}, "", node),
+		namespaceLister: testsupport.NewNamespaceLister(t, namespace),
+		metrics:         fakeClusterMetrics{},
+		cachedVersion:   "v1.28.1",
+		versionFetched:  now,
+	}
+
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterOverviewDomainName, domainpermissions.AllowedResources{
+		"core/nodes":      false,
+		"core/pods":       true,
+		"core/namespaces": true,
+	})
+	snapshot, err := builder.Build(ctx, "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Zero(t, payload.Overview.TotalNodes, "denied nodes must not be counted")
+	require.Equal(t, "0", payload.Overview.CPUAllocatable, "allocatable derives from nodes")
+	require.Equal(t, 1, payload.Overview.TotalPods)
+	require.Equal(t, 1, payload.Overview.TotalNamespaces)
+	require.Equal(t, []string{"core/nodes"}, payload.Overview.UnavailableResources)
+}
+
+// Runtime-denied pods and namespaces degrade the same way on the informer path.
+func TestClusterOverviewBuilderMarksRuntimeDeniedPodsAndNamespaces(t *testing.T) {
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a", ResourceVersion: "5"}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", ResourceVersion: "9"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default", ResourceVersion: "2"}}
+
+	builder := &ClusterOverviewBuilder{
+		ingest:          newFakePodAggregateSource(nil, pod).withNodes(ClusterMeta{}, "", node),
+		namespaceLister: testsupport.NewNamespaceLister(t, namespace),
+		metrics:         fakeClusterMetrics{},
+	}
+
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterOverviewDomainName, domainpermissions.AllowedResources{
+		"core/nodes":      true,
+		"core/pods":       false,
+		"core/namespaces": false,
+	})
+	snapshot, err := builder.Build(ctx, "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, 1, payload.Overview.TotalNodes)
+	require.Zero(t, payload.Overview.TotalPods)
+	require.Zero(t, payload.Overview.TotalNamespaces)
+	require.ElementsMatch(t, []string{"core/pods", "core/namespaces"}, payload.Overview.UnavailableResources)
+}
+
+// A kind whose ingest reflector was permission-skipped must be marked
+// unavailable even when the runtime list SSAR passes (an identity with list
+// but not watch): its store is settled but permanently empty for this
+// identity, and silent zeros would misread as an empty cluster.
+func TestClusterOverviewBuilderMarksPermissionSkippedIngestKinds(t *testing.T) {
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default", ResourceVersion: "2"}}
+
+	builder := &ClusterOverviewBuilder{
+		ingest: newFakePodAggregateSource(nil).
+			withPermissionSkipped(NodeGVR).
+			withPermissionSkipped(PodGVR),
+		namespaceLister: testsupport.NewNamespaceLister(t, namespace),
+		metrics:         fakeClusterMetrics{},
+	}
+
+	ctx := domainpermissions.WithAllowedResources(context.Background(), clusterOverviewDomainName, domainpermissions.AllowedResources{
+		"core/nodes":      true,
+		"core/pods":       true,
+		"core/namespaces": true,
+	})
+	snapshot, err := builder.Build(ctx, "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Zero(t, payload.Overview.TotalNodes)
+	require.Zero(t, payload.Overview.TotalPods)
+	require.Equal(t, 1, payload.Overview.TotalNamespaces)
+	require.ElementsMatch(t, []string{"core/nodes", "core/pods"}, payload.Overview.UnavailableResources)
+}
+
+// The list fallback tolerates a forbidden nodes LIST (issue #244): a
+// namespaces- or pods-only identity gets a partial overview with the denied
+// source marked, instead of the whole domain failing.
+func TestClusterOverviewListBuilderToleratesForbiddenNodesAndMarksUnavailable(t *testing.T) {
+	client := kubefake.NewSimpleClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+	)
+	client.PrependReactor("list", "nodes", func(cgotesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Group: "", Resource: "nodes"},
+			"nodes",
+			errors.New("forbidden"),
+		)
+	})
+
+	builder := &ClusterOverviewListBuilder{
+		client:     client,
+		metrics:    fakeClusterMetrics{},
+		versionFn:  func(context.Context) string { return "v1.30.0" },
+		serverHost: "https://cluster.example.com",
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a|")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Zero(t, payload.Overview.TotalNodes)
+	require.Equal(t, 1, payload.Overview.TotalPods)
+	require.Equal(t, 1, payload.Overview.TotalNamespaces)
+	require.Equal(t, []string{"core/nodes"}, payload.Overview.UnavailableResources)
+}
+
 func TestClusterOverviewListBuilderKeepsRequiredFallbackPartialWhenPodsAndNamespacesForbidden(t *testing.T) {
 	client := kubefake.NewSimpleClientset(
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}},
@@ -676,6 +821,7 @@ func TestClusterOverviewListBuilderKeepsRequiredFallbackPartialWhenPodsAndNamesp
 	require.Equal(t, 1, payload.Overview.TotalNodes)
 	require.Zero(t, payload.Overview.TotalPods)
 	require.Zero(t, payload.Overview.TotalNamespaces)
+	require.ElementsMatch(t, []string{"core/pods", "core/namespaces"}, payload.Overview.UnavailableResources)
 }
 
 func TestClusterOverviewListBuilderIgnoresForbiddenOptionalResources(t *testing.T) {

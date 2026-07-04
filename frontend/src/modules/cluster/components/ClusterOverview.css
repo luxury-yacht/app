@@ -223,9 +223,11 @@
   margin-bottom: 0;
 }
 
-/* Compact metrics-state indicator: small muted text with a status dot,
-   truncating long API errors (the title tooltip carries the full text). */
-.overview-section-header .metrics-warning-banner {
+/* Compact header indicators (metrics state, permission gaps): small muted
+   text with a status dot, truncating long messages (the title tooltip
+   carries the full text). */
+.overview-section-header .metrics-warning-banner,
+.overview-section-header .overview-permission-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -623,6 +625,138 @@
   justify-content: center;
   align-items: center;
   padding: 2rem 0;
+}
+
+/* Permission-gated data (issue #244): each affected card explains its own
+   gap in place — a compact header chip for derived values (capacity,
+   requests/limits) and a note where counts would render. */
+.overview-permission-note {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+/* The chip's ⓘ tooltip trigger: keep the icon vertically centered in the
+   chip's flex row instead of sitting on the text baseline. */
+.overview-permission-chip .tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Collapsible legend explaining the utilization bar vocabulary. Swatches
+   reuse the ResourceBar theme variables so they can never drift from the
+   bar's actual rendering. Divider matches the card's other sub-sections
+   (.pod-status / .node-health) so the row reads as part of the card. */
+.utilization-legend {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Toggle text matches the CPU/MEMORY group headers (.metric-header h3 in
+   ResourceBar.css) so the legend reads as a peer section. */
+.utilization-legend__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.utilization-legend__toggle:hover {
+  color: var(--color-text);
+}
+
+.utilization-legend__chevron {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+
+.utilization-legend__chevron--open {
+  transform: rotate(90deg);
+}
+
+.utilization-legend__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+
+.utilization-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.utilization-legend__swatch {
+  flex: none;
+  width: 26px;
+  height: 10px;
+  border-radius: 2px;
+  background-color: var(--resourcebar-track-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.utilization-legend__swatch--usage-normal {
+  background: var(--resourcebar-usage-normal);
+}
+
+.utilization-legend__swatch--usage-high {
+  background: var(--resourcebar-usage-warning);
+}
+
+.utilization-legend__swatch--usage-critical {
+  background: var(--resourcebar-usage-critical);
+}
+
+.utilization-legend__footnote {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-small);
+  margin-bottom: 0.5rem;
+}
+
+.utilization-legend__swatch--reserved {
+  background: var(--resourcebar-reserved-fill);
+}
+
+.utilization-legend__swatch--overlimit {
+  background: var(--resourcebar-overlimit-fill), var(--resourcebar-usage-critical);
+}
+
+.utilization-legend__swatch--request-marker::after,
+.utilization-legend__swatch--limit-marker::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+}
+
+.utilization-legend__swatch--request-marker::after {
+  background-color: var(--resourcebar-marker-request);
+  box-shadow: var(--resourcebar-marker-request-shadow);
+}
+
+.utilization-legend__swatch--limit-marker::after {
+  background-color: var(--resourcebar-marker-limit);
+  box-shadow: var(--resourcebar-marker-limit-shadow);
 }
 
 .cluster-overview-error {

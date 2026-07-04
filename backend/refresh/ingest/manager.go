@@ -962,6 +962,22 @@ func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 	return m.entrySettled(e)
 }
 
+// PermissionSkippedFor reports whether gvr's reflector was permission-skipped at Start —
+// the identity cannot list+watch the kind, so its store is settled but PERMANENTLY empty
+// for this identity (until a rebuild re-evaluates permissions). Consumers use this to
+// mark the kind's data as permission-unavailable instead of rendering silent zeros; it is
+// deliberately distinct from deadline-degrade, which is a liveness state, not a
+// permission state. False for untracked GVRs and before Start.
+func (m *IngestManager) PermissionSkippedFor(gvr schema.GroupVersionResource) bool {
+	m.mu.Lock()
+	e, ok := m.entries[gvr]
+	m.mu.Unlock()
+	if !ok {
+		return false
+	}
+	return e.skipped.Load()
+}
+
 // resyncDisabled documents that ingest reflectors run with no periodic resync:
 // the store is always current, and a relist only happens on watch expiry/error.
 // It exists so the 0 passed to NewProjectingReflector reads as a deliberate

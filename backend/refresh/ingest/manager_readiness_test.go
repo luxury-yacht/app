@@ -96,6 +96,51 @@ func TestIngestManagerSkipsDeniedKindsAtStart(t *testing.T) {
 	}
 }
 
+// TestIngestManagerPermissionSkippedFor pins the skip-visibility contract: a consumer
+// (the cluster-overview builder) must be able to distinguish a permission-skipped store
+// (the identity cannot list+watch the kind, so its data is absent for permission
+// reasons) from a merely unsynced or degraded one, so it can mark the source as
+// permission-unavailable instead of rendering silent zeros.
+func TestIngestManagerPermissionSkippedFor(t *testing.T) {
+	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	var deniedGVR, allowedGVR schema.GroupVersionResource
+	for g := range mgr.entries {
+		if deniedGVR.Resource == "" {
+			deniedGVR = g
+			continue
+		}
+		allowedGVR = g
+		break
+	}
+	if deniedGVR.Resource == "" || allowedGVR.Resource == "" {
+		t.Fatal("need at least two entries to exercise deny-one/allow-one")
+	}
+	mgr.SetPermissionFilter(func(group, resource string) bool {
+		return !(group == deniedGVR.Group && resource == deniedGVR.Resource)
+	})
+	mgr.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr.syncDeadline = time.Hour
+
+	if mgr.PermissionSkippedFor(deniedGVR) {
+		t.Fatalf("no kind may report skipped before Start")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+
+	if !mgr.PermissionSkippedFor(deniedGVR) {
+		t.Fatalf("denied kind %s must report permission-skipped after Start", deniedGVR)
+	}
+	if mgr.PermissionSkippedFor(allowedGVR) {
+		t.Fatalf("allowed kind %s must not report permission-skipped", allowedGVR)
+	}
+	unknown := schema.GroupVersionResource{Group: "nope.example.com", Version: "v1", Resource: "nopes"}
+	if mgr.PermissionSkippedFor(unknown) {
+		t.Fatal("untracked gvr must not report permission-skipped")
+	}
+}
+
 // TestIngestManagerHasSyncedForDegradesAfterDeadline pins the same contract on the
 // per-GVR readiness path (ingest_hub.go ingestKeySettled -> HasSyncedFor), which each
 // cut domain's ResourcesSettled gate uses to decide it can serve.

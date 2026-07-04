@@ -418,6 +418,15 @@
   --resourcebar-marker-request-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
   --resourcebar-marker-limit: #dc2626;
   --resourcebar-marker-limit-shadow: 0 0 3px rgba(220, 38, 38, 0.4);
+  /* Over-limit region (usage past the limit position): dark diagonal stripes
+     over the critical fill; the stripe boundary marks the limit. */
+  --resourcebar-overlimit-fill: repeating-linear-gradient(
+    -45deg,
+    rgba(0, 0, 0, 0.22),
+    rgba(0, 0, 0, 0.22) 4px,
+    rgba(0, 0, 0, 0) 4px,
+    rgba(0, 0, 0, 0) 8px
+  );
   --resourcebar-empty-bg: var(--color-base-100);
   --resourcebar-status-stale: #f59e0b;
   --resourcebar-status-error: #ef4444;

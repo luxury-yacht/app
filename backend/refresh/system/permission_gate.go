@@ -53,6 +53,10 @@ type listWatchDomainConfig struct {
 	checks           []listWatchCheck
 	registerInformer func() error
 	fallbackChecks   []listCheck
+	// fallbackAllowAny lets the list fallback register when ANY fallback check
+	// passes (each resource qualifies on its own), instead of requiring all of
+	// them. Used by ModeAny domains whose builder degrades per resource.
+	fallbackAllowAny bool
 	registerFallback func() error
 	fallbackLog      string
 	deniedReason     string
@@ -225,15 +229,7 @@ func (g *permissionGate) registerListWatchDomain(cfg listWatchDomainConfig) erro
 
 	if cfg.registerFallback != nil && len(cfg.fallbackChecks) > 0 {
 		fallbackResults := g.runListChecks(cfg.fallbackChecks)
-		fallbackErrs := g.listErrors(fallbackResults)
-		fallbackWatchErr := false
-		for _, fallbackCheck := range cfg.fallbackChecks {
-			if err := g.listWatchErrFor(results, fallbackCheck.group, fallbackCheck.resource); err != nil {
-				fallbackWatchErr = true
-				break
-			}
-		}
-		if len(fallbackErrs) == 0 && !fallbackWatchErr && g.allListAllowed(fallbackResults) {
+		if g.fallbackEligible(cfg, results, fallbackResults) {
 			if cfg.fallbackLog != "" {
 				klog.V(2).Info(cfg.fallbackLog)
 			}
@@ -243,4 +239,36 @@ func (g *permissionGate) registerListWatchDomain(cfg listWatchDomainConfig) erro
 
 	g.logSkip(cfg.name, cfg.logGroup, cfg.logResource)
 	return snapshot.RegisterPermissionDeniedDomain(g.registry, cfg.name, cfg.deniedReason)
+}
+
+// fallbackEligible decides whether a domain's list fallback may register.
+// Default (all-of): every fallback resource must be list-allowed with no SSAR
+// errors on the fallback checks or on the same resources' main list+watch
+// checks. fallbackAllowAny (ModeAny domains whose builder degrades per
+// resource): one resource qualifies on its own — its list SSAR succeeded and
+// allowed, and its own main check (when present) did not error — regardless of
+// the other resources' denials or errors.
+func (g *permissionGate) fallbackEligible(cfg listWatchDomainConfig, results []listWatchCheckResult, fallbackResults []listCheckResult) bool {
+	if cfg.fallbackAllowAny {
+		for _, result := range fallbackResults {
+			if result.err != nil || !result.allowed {
+				continue
+			}
+			if g.listWatchErrFor(results, result.check.group, result.check.resource) != nil {
+				continue
+			}
+			return true
+		}
+		return false
+	}
+
+	if len(g.listErrors(fallbackResults)) != 0 {
+		return false
+	}
+	for _, fallbackCheck := range cfg.fallbackChecks {
+		if err := g.listWatchErrFor(results, fallbackCheck.group, fallbackCheck.resource); err != nil {
+			return false
+		}
+	}
+	return g.allListAllowed(fallbackResults)
 }
