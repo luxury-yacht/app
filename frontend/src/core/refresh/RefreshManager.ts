@@ -33,11 +33,11 @@ export interface RefreshContext {
   // All open/connected cluster IDs; backgroundRefreshEnabled controls whether inactive tabs do work.
   allConnectedClusterIds?: string[];
   backgroundRefreshEnabled?: boolean;
+  // Object panels register their own per-panel refreshers (named by the panel's
+  // full identity — see getObjectDetailsRefresherName) and refresh themselves;
+  // the context only tracks whether any panel is open.
   objectPanel: {
     isOpen: boolean;
-    objectKind?: string;
-    objectName?: string;
-    objectNamespace?: string;
   };
 }
 
@@ -557,43 +557,7 @@ class RefreshManager {
       targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
-    if (this.didObjectPanelTargetChange(previous, current)) {
-      this.getObjectPanelRefresherTargets(current).forEach((name) => targets.add(name));
-    }
-
     return Array.from(targets);
-  }
-
-  private didObjectPanelTargetChange(previous: RefreshContext, current: RefreshContext): boolean {
-    const prevPanel = previous.objectPanel;
-    const nextPanel = current.objectPanel;
-
-    if (!prevPanel.isOpen && !nextPanel.isOpen) {
-      return false;
-    }
-
-    if (prevPanel.isOpen !== nextPanel.isOpen) {
-      return true;
-    }
-
-    if (!nextPanel.isOpen) {
-      return false;
-    }
-
-    return (
-      prevPanel.objectKind !== nextPanel.objectKind ||
-      prevPanel.objectName !== nextPanel.objectName ||
-      prevPanel.objectNamespace !== nextPanel.objectNamespace
-    );
-  }
-
-  private getObjectPanelRefresherTargets(context: RefreshContext): RefresherName[] {
-    if (!context.objectPanel.isOpen || !context.objectPanel.objectKind) {
-      return [];
-    }
-
-    const kind = context.objectPanel.objectKind.toLowerCase();
-    return [`object-${kind}` as RefresherName, `object-${kind}-events` as RefresherName];
   }
 
   private getRefresherTargetsForContext(context: RefreshContext): RefresherName[] {
@@ -616,8 +580,6 @@ class RefreshManager {
     if (context.currentView === 'overview') {
       targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
-
-    this.getObjectPanelRefresherTargets(context).forEach((name) => targets.add(name));
 
     return Array.from(targets);
   }

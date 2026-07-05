@@ -44,10 +44,12 @@ func (m *Manager) registerNodeStreams(factory *informer.Factory, ingestManager *
 // informers are never instantiated, so their signal-only signal comes from the ingest
 // reflector's Catalog-half Sink (registerWorkloadIngestNotify) instead of a shared-informer
 // event handler — identical to the pod path. ReplicaSet is NOT cut: its typed informer stays
-// registered, and its event handler keeps re-broadcasting affected pods, because the pod
-// projector + cluster-overview resolve pod owners through the RS lister. When no ingest
-// manager is wired (a unit test), the workload streams have no live signal; tests drive
-// handleWorkload / the HPA paths directly with a wired typed lister.
+// registered because the pod projector + cluster-overview resolve pod owners through the RS
+// lister, and its event handler heals stored pod bundles whose owner was projected before
+// the RS informer synced (healPodsForReplicaSet — the owned pod reflector starts before this
+// factory, so first-connect pods can land with an unresolved ReplicaSet owner). When no
+// ingest manager is wired (a unit test), the workload streams have no live signal; tests
+// drive handleWorkload / the HPA paths directly with a wired typed lister.
 func (m *Manager) registerWorkloadStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
 	shared := factory.SharedInformerFactory()
 	if shared == nil {

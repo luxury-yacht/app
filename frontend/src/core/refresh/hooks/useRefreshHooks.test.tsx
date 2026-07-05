@@ -128,9 +128,6 @@ describe('useRefreshContext', () => {
       selectedNamespace: 'test',
       objectPanel: {
         isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'pod-1',
-        objectNamespace: 'test',
       },
     };
 

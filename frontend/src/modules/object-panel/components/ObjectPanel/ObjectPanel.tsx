@@ -147,6 +147,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     detailScope,
     objectKind,
     objectData,
+    panelId,
     isOpen: isOpen && isActiveTab,
     resourceDeleted,
   });

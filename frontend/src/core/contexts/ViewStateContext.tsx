@@ -285,9 +285,6 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       activeClusterView: activeClusterTab ?? undefined,
       objectPanel: {
         isOpen: showObjectPanel,
-        objectKind: undefined,
-        objectName: undefined,
-        objectNamespace: undefined,
       },
     });
   }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel]);

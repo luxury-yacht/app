@@ -24,6 +24,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
@@ -1089,7 +1090,6 @@ func TestManagerWorkloadEventBroadcastsNotifyOnly(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:           applog.Noop,
-		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1127,7 +1127,6 @@ func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:           applog.Noop,
-		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1164,7 +1163,6 @@ func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:           applog.Noop,
-		podLister:        testsupport.NewPodLister(t),
 		deploymentLister: testsupport.NewDeploymentLister(t, oldDeployment, newDeployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1197,7 +1195,6 @@ func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      applog.Noop,
-		podLister:   testsupport.NewPodLister(t, newPod),
 		nodeLister:  testsupport.NewNodeLister(t, nodeA, nodeB),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1283,10 +1280,47 @@ func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
 	require.True(t, seenServices["new-svc"])
 }
 
-func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
-	pod := &corev1.Pod{
+// podIngestStoreAdapter adapts a raw ProjectingStore to the manager's
+// podBundleSource seam, standing in for the production IngestManager (whose
+// methods delegate to the same store calls).
+type podIngestStoreAdapter struct {
+	store *ingest.ProjectingStore
+}
+
+func (a podIngestStoreAdapter) Rows(schema.GroupVersionResource) []interface{} {
+	return a.store.List()
+}
+
+func (a podIngestStoreAdapter) RewriteBundlesByIndex(
+	_ schema.GroupVersionResource,
+	indexName string,
+	values []string,
+	rewrite func(ingest.Bundle) (ingest.Bundle, bool),
+) []ingest.Bundle {
+	return a.store.RewriteBundlesByIndex(indexName, values, rewrite)
+}
+
+// newRacedPodIngestStore projects pod through the REAL pod ingest projector with
+// an EMPTY ReplicaSet lister — the connect-race state whose rows carry the
+// unresolved ReplicaSet owner — and returns the store wired the production way
+// (retained Table half + the manager's pod notify bundle sink).
+func newRacedPodIngestStore(t *testing.T, manager *Manager, pod *corev1.Pod) *ingest.ProjectingStore {
+	t.Helper()
+	project := snapshot.NewPodIngestProjector(
+		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		testsupport.NewReplicaSetLister(t),
+	)
+	store := ingest.NewProjectingStore(project)
+	store.SetRetainTable(true)
+	require.NoError(t, store.Add(pod))
+	store.AddBundleSink(podNotifyBundleSink{manager: manager})
+	return store
+}
+
+func racedOwnerPod() *corev1.Pod {
+	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
+			Name:            "web-12345-abcde",
 			Namespace:       "default",
 			UID:             "pod-uid",
 			ResourceVersion: "7",
@@ -1294,58 +1328,136 @@ func TestManagerReplicaSetUpdateRefreshesOldAndNewPodOwnerScopes(t *testing.T) {
 				Kind:       "ReplicaSet",
 				Name:       "web-12345",
 				Controller: ptrBool(true),
+				APIVersion: "apps/v1",
 			}},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	oldRS := &appsv1.ReplicaSet{
+}
+
+// TestManagerReplicaSetAddHealsRacedPodOwnerRows is the regression test for the
+// empty Deployment Pods tab: a pod projected BEFORE its ReplicaSet was observed
+// keeps OwnerKind=ReplicaSet, so the Deployment workload scope neither serves nor
+// signals it. When the RS informer delivers the ReplicaSet, the manager must heal
+// the stored bundle (store + maintained-store sink) and signal both the new
+// Deployment scope (Modified) and the stale ReplicaSet fallback scope (Deleted).
+func TestManagerReplicaSetAddHealsRacedPodOwnerRows(t *testing.T) {
+	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "web-12345",
 			Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{{
 				Kind:       "Deployment",
-				Name:       "web-old",
+				Name:       "web",
 				Controller: ptrBool(true),
+				APIVersion: "apps/v1",
 			}},
 		},
 	}
-	newRS := oldRS.DeepCopy()
-	newRS.OwnerReferences = []metav1.OwnerReference{{
-		Kind:       "Deployment",
-		Name:       "web-new",
-		Controller: ptrBool(true),
-	}}
-
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      applog.Noop,
-		podLister:   podListerWith(pod),
-		rsLister:    replicaSetListerWith(newRS),
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
 	}
-	oldSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web-old")
+	store := newRacedPodIngestStore(t, manager, racedOwnerPod())
+	manager.podIngest = podIngestStoreAdapter{store: store}
+
+	deploymentSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web")
 	require.NoError(t, err)
-	newSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web-new")
+	staleSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:ReplicaSet:web-12345")
 	require.NoError(t, err)
 	namespaceSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
-	manager.handleReplicaSetEvent(oldRS, newRS, MessageTypeModified)
+	manager.handleReplicaSetEvent(nil, rs, MessageTypeAdded)
 
-	oldUpdate := requireNextUpdate(t, oldSub)
-	require.Equal(t, MessageTypeDeleted, oldUpdate.Type)
-	require.Equal(t, "pod-1", oldUpdate.Ref.Name)
+	// The stored bundle is healed: serve-side filters now match the Deployment scope.
+	rows := store.List()
+	require.Len(t, rows, 1)
+	healedRow := rows[0].(ingest.Bundle).Table.(snapshot.PodSummary)
+	require.Equal(t, "Deployment", healedRow.OwnerKind)
+	require.Equal(t, "web", healedRow.OwnerName)
 
-	// pods is query-backed: a ReplicaSet owner change still re-notifies the affected
-	// pod on the old/new/namespace scopes (reactive wiring), but carries no row —
-	// the query-backed table refetches and rebuilds the owner columns.
-	newUpdate := requireNextUpdate(t, newSub)
-	require.Equal(t, MessageTypeModified, newUpdate.Type)
-	require.Equal(t, "pod-1", newUpdate.Ref.Name)
+	// Doorbell: the Deployment-scoped window learns its pods changed...
+	deploymentUpdate := requireNextUpdate(t, deploymentSub)
+	require.Equal(t, MessageTypeModified, deploymentUpdate.Type)
+	require.Equal(t, "web-12345-abcde", deploymentUpdate.Ref.Name)
 
+	// ...the stale ReplicaSet fallback scope learns the rows left it...
+	staleUpdate := requireNextUpdate(t, staleSub)
+	require.Equal(t, MessageTypeDeleted, staleUpdate.Type)
+	require.Equal(t, "web-12345-abcde", staleUpdate.Ref.Name)
+
+	// ...and the namespace scope sees the row change like any pod update.
 	namespaceUpdate := requireNextUpdate(t, namespaceSub)
 	require.Equal(t, MessageTypeModified, namespaceUpdate.Type)
-	require.Equal(t, "pod-1", namespaceUpdate.Ref.Name)
+	require.Equal(t, "web-12345-abcde", namespaceUpdate.Ref.Name)
+}
+
+// TestManagerReplicaSetModifiedHealsRacedPodOwnerRows covers the Modified branch:
+// an RS observed without its Deployment owner (or raced the same way) whose owner
+// reference is present on the update heals the raced rows identically.
+func TestManagerReplicaSetModifiedHealsRacedPodOwnerRows(t *testing.T) {
+	oldRS := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-12345", Namespace: "default"},
+	}
+	newRS := oldRS.DeepCopy()
+	newRS.OwnerReferences = []metav1.OwnerReference{{
+		Kind:       "Deployment",
+		Name:       "web",
+		Controller: ptrBool(true),
+		APIVersion: "apps/v1",
+	}}
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+	store := newRacedPodIngestStore(t, manager, racedOwnerPod())
+	manager.podIngest = podIngestStoreAdapter{store: store}
+
+	deploymentSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web")
+	require.NoError(t, err)
+
+	manager.handleReplicaSetEvent(oldRS, newRS, MessageTypeModified)
+
+	rows := store.List()
+	require.Len(t, rows, 1)
+	require.Equal(t, "Deployment", rows[0].(ingest.Bundle).Table.(snapshot.PodSummary).OwnerKind)
+
+	deploymentUpdate := requireNextUpdate(t, deploymentSub)
+	require.Equal(t, MessageTypeModified, deploymentUpdate.Type)
+	require.Equal(t, "web-12345-abcde", deploymentUpdate.Ref.Name)
+}
+
+// TestManagerReplicaSetAddWithoutDeploymentOwnerDoesNotHeal: a standalone RS's
+// pods correctly keep the ReplicaSet owner — the fallback scope IS their steady
+// state, so the heal must decline and emit nothing.
+func TestManagerReplicaSetAddWithoutDeploymentOwnerDoesNotHeal(t *testing.T) {
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-12345", Namespace: "default"},
+	}
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+	store := newRacedPodIngestStore(t, manager, racedOwnerPod())
+	manager.podIngest = podIngestStoreAdapter{store: store}
+
+	rsSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:ReplicaSet:web-12345")
+	require.NoError(t, err)
+
+	manager.handleReplicaSetEvent(nil, rs, MessageTypeAdded)
+
+	rows := store.List()
+	require.Len(t, rows, 1)
+	require.Equal(t, "ReplicaSet", rows[0].(ingest.Bundle).Table.(snapshot.PodSummary).OwnerKind)
+	select {
+	case update := <-rsSub.Updates:
+		t.Fatalf("unexpected update on the ReplicaSet scope: %+v", update)
+	default:
+	}
 }
 
 func TestManagerBackpressureTriggersReset(t *testing.T) {
@@ -1419,7 +1531,6 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:           applog.Noop,
-		podLister:        podListerWith(pod),
 		deploymentLister: deploymentListerWith(deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1469,7 +1580,6 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 	manager := &Manager{
 		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:           applog.Noop,
-		podLister:        podListerWith(pod),
 		deploymentLister: deploymentListerWith(deployment),
 		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
@@ -1554,7 +1664,6 @@ func TestManagerNodeUpdateFromPod(t *testing.T) {
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	manager.podLister = podListerWith(pod)
 
 	// Ensure pod changes refresh node summaries via the pod-based handler.
 	manager.handlePod(pod, MessageTypeModified)
@@ -1569,16 +1678,6 @@ func TestManagerNodeUpdateFromPod(t *testing.T) {
 	default:
 		t.Fatal("expected node update to be delivered")
 	}
-}
-
-func podListerWith(pods ...*corev1.Pod) corelisters.PodLister {
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
-	})
-	for _, pod := range pods {
-		_ = indexer.Add(pod)
-	}
-	return corelisters.NewPodLister(indexer)
 }
 
 func nodeListerWith(nodes ...*corev1.Node) corelisters.NodeLister {
@@ -1597,16 +1696,6 @@ func deploymentListerWith(items ...*appsv1.Deployment) appslisters.DeploymentLis
 		_ = indexer.Add(item)
 	}
 	return appslisters.NewDeploymentLister(indexer)
-}
-
-func replicaSetListerWith(items ...*appsv1.ReplicaSet) appslisters.ReplicaSetLister {
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
-	})
-	for _, item := range items {
-		_ = indexer.Add(item)
-	}
-	return appslisters.NewReplicaSetLister(indexer)
 }
 
 func customResourceDefinition(

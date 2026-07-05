@@ -628,6 +628,71 @@ func (s *ProjectingStore) RowsByIndex(indexName string, values []string) []inter
 	return out
 }
 
+// RewriteBundlesByIndex applies an out-of-band correction to stored Bundles — a
+// consumer-side fix for a projection whose input dependency arrived AFTER the
+// object was projected (the pod owner heal: a pod projected before its
+// ReplicaSet was observed). For every stored Bundle reachable through indexName/
+// values where rewrite returns (newBundle, true), the store delivers the FULL new
+// bundle to every sink exactly like a reflector Update, replaces the stored copy
+// (honoring retainTable), and moves its secondary-index entries. Bundles the
+// rewrite declines are untouched. It returns the new bundles so the caller can
+// emit any extra signals (e.g. stale-scope deletes) for what changed.
+//
+// The rewrite func receives the STORED bundle: on a retainTable store it carries
+// the Table half; elsewhere the Table half is nil, so a Table-dependent rewrite
+// is only meaningful for retainTable kinds (pods). Sinks run under the store's
+// write lock — the same rule as every mutation path — so rewrite and sinks must
+// not call back into this store.
+func (s *ProjectingStore) RewriteBundlesByIndex(
+	indexName string,
+	values []string,
+	rewrite func(Bundle) (Bundle, bool),
+) []Bundle {
+	if indexName == "" || len(values) == 0 || rewrite == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byValue := s.indexes[indexName]
+	if len(byValue) == 0 {
+		return nil
+	}
+	keySet := make(map[string]struct{})
+	for _, value := range values {
+		for key := range byValue[value] {
+			keySet[key] = struct{}{}
+		}
+	}
+	if len(keySet) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	rewritten := make([]Bundle, 0, len(keys))
+	for _, key := range keys {
+		stored, ok := s.rows[key].(Bundle)
+		if !ok {
+			continue
+		}
+		next, changed := rewrite(stored)
+		if !changed {
+			continue
+		}
+		if s.hasSinks() {
+			s.emitUpsert(next)
+		}
+		s.removeIndexesForKey(key, stored)
+		nextStored := s.storedValue(next)
+		s.rows[key] = nextStored
+		s.addIndexesForKey(key, nextStored)
+		rewritten = append(rewritten, next)
+	}
+	return rewritten
+}
+
 // ListKeys returns a snapshot slice of the keys currently associated with a
 // projected row.
 func (s *ProjectingStore) ListKeys() []string {

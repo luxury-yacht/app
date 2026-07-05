@@ -3,7 +3,10 @@
  */
 
 import type { ResourceCapability } from './types';
-import type { ObjectDetailsRefresherName } from '@/core/refresh/refresherTypes';
+import type {
+  ObjectDetailsRefresherName,
+  ObjectEventsRefresherName,
+} from '@/core/refresh/refresherTypes';
 
 export const CLUSTER_SCOPE = '__cluster__';
 export const INACTIVE_SCOPE = '__inactive__';
@@ -63,13 +66,32 @@ export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   helmrelease: { delete: true },
 };
 
+// Object-panel refresher names are scoped to the PANEL, not just the kind: the
+// dockable multi-panel model mounts one ObjectPanel per open object, and a
+// kind-only name made simultaneously-open same-kind panels register the same
+// refresher — the second registration replaced the first and either panel's
+// unmount unregistered the survivor's refresher and subscribers, silently
+// freezing its auto-refresh. panelId is the canonical full object identity
+// (objectPanelId: clusterId + group/version/kind + namespace + name), so the
+// name also carries the clusterId the object-reference rules require.
 export const getObjectDetailsRefresherName = (
-  kind?: string | null
+  kind?: string | null,
+  panelId?: string | null
 ): ObjectDetailsRefresherName | null => {
-  if (!kind) {
+  if (!kind || !panelId) {
     return null;
   }
-  return `object-${kind.toLowerCase()}` as ObjectDetailsRefresherName;
+  return `object-${kind.toLowerCase()}:${panelId}` as ObjectDetailsRefresherName;
+};
+
+export const getObjectEventsRefresherName = (
+  kind?: string | null,
+  panelId?: string | null
+): ObjectEventsRefresherName | null => {
+  if (!kind || !panelId) {
+    return null;
+  }
+  return `object-${kind.toLowerCase()}:${panelId}-events` as ObjectEventsRefresherName;
 };
 
 export const TABS = {

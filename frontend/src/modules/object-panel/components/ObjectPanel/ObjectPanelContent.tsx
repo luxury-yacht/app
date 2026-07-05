@@ -237,6 +237,7 @@ export function ObjectPanelContent({
             objectData={objectData}
             isActive={isPanelOpen && activeTab === 'events'}
             eventsScope={eventsScope}
+            panelId={panelId}
           />
         </ErrorBoundary>
       )}

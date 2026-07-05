@@ -1042,6 +1042,26 @@ func (m *IngestManager) RowsByIndex(gvr schema.GroupVersionResource, indexName s
 	return store.RowsByIndex(indexName, values)
 }
 
+// RewriteBundlesByIndex applies rewrite to gvr's stored bundles reachable through
+// indexName/values — the out-of-band projection correction path (the pod owner
+// heal; see ProjectingStore.RewriteBundlesByIndex) — and returns the new bundles,
+// or nil when the manager has no entry for gvr. The store call runs outside the
+// manager lock (StoreFor resolves the entry under the leaf mutex): the rewrite's
+// sink delivery may legally call back into the manager, exactly like a reflector
+// mutation — see AddSink for the leaf-lock rule.
+func (m *IngestManager) RewriteBundlesByIndex(
+	gvr schema.GroupVersionResource,
+	indexName string,
+	values []string,
+	rewrite func(Bundle) (Bundle, bool),
+) []Bundle {
+	store := m.StoreFor(gvr)
+	if store == nil {
+		return nil
+	}
+	return store.RewriteBundlesByIndex(indexName, values, rewrite)
+}
+
 // StoreResourceVersion returns the latest list/watch resourceVersion gvr's store has
 // observed (from its relist or a watch bookmark), or "" when the manager has no entry
 // for gvr. It is the ingest equivalent of the highest object resourceVersion a typed

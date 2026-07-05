@@ -22,6 +22,12 @@ interface UseObjectPanelRefreshArgs {
   detailScope: string | null;
   objectKind: string | null;
   objectData: PanelObjectData | null;
+  /**
+   * The panel's canonical identity (objectPanelId). Scopes the refresher name
+   * to THIS panel so simultaneously-open same-kind panels register distinct
+   * refreshers instead of clobbering each other's registration/subscribers.
+   */
+  panelId: string | null;
   isOpen: boolean;
   resourceDeleted: boolean;
 }
@@ -43,6 +49,7 @@ export const useObjectPanelRefresh = ({
   detailScope,
   objectKind,
   objectData,
+  panelId,
   isOpen,
   resourceDeleted,
 }: UseObjectPanelRefreshArgs): ObjectPanelRefreshResult => {
@@ -103,8 +110,8 @@ export const useObjectPanelRefresh = ({
   });
 
   const detailRefresherName = useMemo(
-    () => getObjectDetailsRefresherName(objectKind),
-    [objectKind]
+    () => getObjectDetailsRefresherName(objectKind, panelId),
+    [objectKind, panelId]
   );
 
   useEffect(() => {

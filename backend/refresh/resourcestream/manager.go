@@ -56,7 +56,6 @@ import (
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
 	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
-	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
@@ -188,13 +187,12 @@ type Manager struct {
 
 	dynamicClient dynamic.Interface
 
-	// podLister, the workload listers (deployment/stateful/daemon/job/cronJob), and nodeLister
+	// The workload listers (deployment/stateful/daemon/job/cronJob) and nodeLister
 	// are wired only by unit tests that drive the typed handlePod*/handleWorkload/handleNode/
-	// RS/HPA paths directly. Production reads pods, the workload kinds, AND nodes from the
+	// HPA paths directly. Production reads pods, the workload kinds, AND nodes from the
 	// ingest store (all cut), so those typed informers are never instantiated; podIngest /
 	// workloadIngest / nodeIngest are the production sources (lookupWorkloadRef / lookupNodeRef
 	// prefer a wired lister for tests, else ingest).
-	podLister        corelisters.PodLister
 	podIngest        podBundleSource
 	workloadIngest   workloadBundleSource
 	nodeIngest       nodeBundleSource
@@ -1361,18 +1359,6 @@ func parseWorkloadOwnerKey(key string) (namespace, kind, name string, ok bool) {
 		return "", "", "", false
 	}
 	return namespace, kind, name, true
-}
-
-func podOwnedByReplicaSet(pod *corev1.Pod, rs *appsv1.ReplicaSet) bool {
-	if pod == nil || rs == nil || pod.Namespace != rs.Namespace || rs.Name == "" {
-		return false
-	}
-	for _, owner := range pod.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == replicasetpkg.Identity.Kind && owner.Name == rs.Name {
-			return true
-		}
-	}
-	return false
 }
 
 func replicaSetStaleWorkloadScopes(oldRS *appsv1.ReplicaSet, newRS *appsv1.ReplicaSet) []string {

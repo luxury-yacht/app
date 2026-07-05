@@ -236,20 +236,11 @@ class RefreshOrchestrator {
 
   updateContext(context: Partial<RefreshContext>): void {
     const previousContext = this.context;
-    // Normalize object-panel kinds so case-only changes don't thrash refresh targets.
-    const normalizedContext: Partial<RefreshContext> = { ...context };
-    if (context.objectPanel) {
-      const normalizedPanel = { ...context.objectPanel };
-      if (typeof normalizedPanel.objectKind === 'string') {
-        normalizedPanel.objectKind = normalizedPanel.objectKind.toLowerCase();
-      }
-      normalizedContext.objectPanel = normalizedPanel;
-    }
-    this.context = { ...this.context, ...normalizedContext };
-    refreshManager.updateContext(normalizedContext);
+    this.context = { ...this.context, ...context };
+    refreshManager.updateContext(context);
 
-    if (Object.prototype.hasOwnProperty.call(normalizedContext, 'allConnectedClusterIds')) {
-      this.pruneRemovedClusterRuntimes(normalizedContext.allConnectedClusterIds ?? []);
+    if (Object.prototype.hasOwnProperty.call(context, 'allConnectedClusterIds')) {
+      this.pruneRemovedClusterRuntimes(context.allConnectedClusterIds ?? []);
     }
 
     const wasNamespaceActive = this.isNamespaceContextActive(previousContext);

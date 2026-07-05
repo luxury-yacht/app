@@ -397,13 +397,16 @@ describe('ObjectPanel tab availability', () => {
     });
 
     const detailScope = buildClusterScope(defaultClusterId, 'team-a:/v1:pod:api');
+    // Refresher names are panel-scoped (kind + panelId) so simultaneously-open
+    // same-kind panels register distinct refreshers.
+    const refresherName = `object-pod:${buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api')}`;
 
     expect(mockRefreshManager.register).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'object-pod', interval: 2000 })
+      expect.objectContaining({ name: refresherName, interval: 2000 })
     );
     expect(mockUseRefreshWatcher).toHaveBeenCalledWith(
       expect.objectContaining({
-        refresherName: 'object-pod',
+        refresherName,
         enabled: true,
       })
     );
@@ -423,7 +426,7 @@ describe('ObjectPanel tab availability', () => {
       ctx.root.unmount();
     });
 
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith('object-pod');
+    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(refresherName);
     // Tier 1 responsiveness: unmount disables refreshing but preserves
     // the cached snapshot so a remount (cluster switch round-trip)
     // renders instantly. Eviction now lives in

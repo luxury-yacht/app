@@ -244,23 +244,13 @@ describe('refreshOrchestrator', () => {
     });
   };
 
-  it('normalizes object panel kind casing before updating refresh context', () => {
+  it('passes object panel context through to the refresh manager', () => {
     refreshOrchestrator.updateContext({
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'demo',
-        objectNamespace: 'default',
-      },
+      objectPanel: { isOpen: true },
     });
 
     expect(refreshManagerMocks.updateContextMock).toHaveBeenCalledWith({
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'pod',
-        objectName: 'demo',
-        objectNamespace: 'default',
-      },
+      objectPanel: { isOpen: true },
     });
   });
 

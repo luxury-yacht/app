@@ -30,10 +30,16 @@ var podGVR = schema.GroupVersionResource{Group: podres.Identity.Group, Version: 
 
 // podBundleSource supplies the cut pod kind's projected bundles for the manager's
 // by-key lookups (the HPA->standalone-pod workload signal needs a specific pod's UID/RV
-// + namespace/name, which the projected bundle carries). *ingest.IngestManager satisfies
-// it.
+// + namespace/name, which the projected bundle carries) and the owner-heal rewrite
+// (healPodsForReplicaSet). *ingest.IngestManager satisfies it.
 type podBundleSource interface {
 	Rows(gvr schema.GroupVersionResource) []interface{}
+	RewriteBundlesByIndex(
+		gvr schema.GroupVersionResource,
+		indexName string,
+		values []string,
+		rewrite func(ingest.Bundle) (ingest.Bundle, bool),
+	) []ingest.Bundle
 }
 
 // lookupPodBundle returns the projected bundle for the pod namespace/name, or false when
@@ -56,6 +62,37 @@ func (m *Manager) lookupPodBundle(namespace, name string) (snapshot.PodSummary, 
 		return summary, catalog, true
 	}
 	return snapshot.PodSummary{}, objectcatalog.Summary{}, false
+}
+
+// broadcastHealedPodStaleScopes signals a healed pod (healPodsForReplicaSet) as
+// DELETED on the workload scopes its row just left — the ReplicaSet fallback
+// scope its unresolved owner had it filed under — so any window subscribed there
+// refetches. The Ref is built from the bundle's halves exactly like
+// broadcastBundle; the Modified signal on the NEW scopes is emitted by the
+// bundle sink during the rewrite itself.
+func (m *Manager) broadcastHealedPodStaleScopes(bundle ingest.Bundle, staleScopes []string) {
+	summary, ok := bundle.Table.(snapshot.PodSummary)
+	if !ok {
+		return
+	}
+	catalog, ok := bundle.Catalog.(objectcatalog.Summary)
+	if !ok {
+		return
+	}
+	ref := resourcemodel.NewResourceRef(
+		m.clusterMeta.ClusterID,
+		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
+		summary.Namespace, summary.Name, catalog.UID,
+	)
+	update := Update{
+		Type:            MessageTypeDeleted,
+		Domain:          domainPods,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: catalog.ResourceVersion,
+		Ref:             &ref,
+	}
+	m.broadcast(domainPods, staleScopes, update)
 }
 
 // podNotifyBundleSink adapts the pod live-stream notify to an ingest whole-Bundle sink.

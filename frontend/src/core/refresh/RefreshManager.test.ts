@@ -19,8 +19,6 @@ type UnsafeRefreshManager = {
   startRefresher: (name: RefresherName) => void;
   refreshSingle: (name: RefresherName, isManual: boolean) => Promise<void>;
   getManualRefreshTargets: (previous: RefreshContext, current: RefreshContext) => RefresherName[];
-  didObjectPanelTargetChange: (previous: RefreshContext, current: RefreshContext) => boolean;
-  getObjectPanelRefresherTargets: (context: RefreshContext) => RefresherName[];
   getRefresherTargetsForContext: (context: RefreshContext) => RefresherName[];
   abortRefresher: (name: RefresherName) => void;
   pauseRefresher: (name: RefresherName, instance: unknown) => void;
@@ -437,7 +435,10 @@ describe('RefreshManager global controls', () => {
     expect(refreshManager.getState(CANCEL_NAME)?.status).toBe('cooldown');
   });
 
-  it('triggers manual refreshes for context-driven targets including object panels', async () => {
+  it('triggers manual refreshes for context-driven targets but never object panels', async () => {
+    // Object panels register per-panel refreshers (named by full panel
+    // identity) and refresh themselves; context-driven manual refresh must
+    // not reach into them.
     vi.useFakeTimers();
     const nsSubscriber = vi.fn();
     const objectSubscriber = vi.fn();
@@ -480,21 +481,16 @@ describe('RefreshManager global controls', () => {
       selectedNamespace: 'team-a',
       objectPanel: {
         isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'api',
-        objectNamespace: 'team-a',
       },
     });
 
     await Promise.resolve();
 
     expect(nsSubscriber).toHaveBeenCalledTimes(1);
-    expect(objectSubscriber).toHaveBeenCalledTimes(1);
-    expect(objectEventsSubscriber).toHaveBeenCalledTimes(1);
+    expect(objectSubscriber).not.toHaveBeenCalled();
+    expect(objectEventsSubscriber).not.toHaveBeenCalled();
 
     expect(refreshManager.getState(NAMESPACE_WORKLOADS)?.status).toBe('cooldown');
-    expect(refreshManager.getState(OBJECT_MAIN)?.status).toBe('cooldown');
-    expect(refreshManager.getState(OBJECT_EVENTS)?.status).toBe('cooldown');
   });
 
   it('deduplicates manual refresh targets when triggering multiple refreshes', async () => {
@@ -1020,31 +1016,22 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual(['cluster-config']);
   });
 
-  it('adds object panel refreshers when the panel target changes', () => {
+  it('produces no manual targets for object panel open/close changes', () => {
+    // Panels self-refresh via their per-panel refreshers; the context cannot
+    // name them (it carries no panel identity), so panel changes contribute
+    // nothing here.
     const previous: RefreshContext = {
       currentView: 'namespace',
       activeNamespaceView: 'workloads',
       selectedNamespace: 'team-a',
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'api',
-        objectNamespace: 'team-a',
-      },
+      objectPanel: { isOpen: false },
     };
     const current: RefreshContext = {
       ...previous,
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Deployment',
-        objectName: 'web',
-        objectNamespace: 'team-a',
-      },
+      objectPanel: { isOpen: true },
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
-
-    expect(manualTargets.sort()).toEqual(['object-deployment', 'object-deployment-events'].sort());
+    expect(unsafeRefreshManager.getManualRefreshTargets(previous, current)).toEqual([]);
   });
 
   it('filters namespace aborts when switching views with object panel changes', async () => {
@@ -1057,12 +1044,7 @@ describe('RefreshManager guard paths and helpers', () => {
       currentView: 'namespace',
       activeNamespaceView: 'workloads',
       selectedNamespace: 'team-a',
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'api',
-        objectNamespace: 'team-a',
-      },
+      objectPanel: { isOpen: true },
     });
 
     abortSpy.mockClear();
@@ -1071,18 +1053,11 @@ describe('RefreshManager guard paths and helpers', () => {
     refreshManager.updateContext({
       currentView: 'cluster',
       activeClusterView: 'events',
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Deployment',
-        objectName: 'web',
-        objectNamespace: 'team-a',
-      },
+      objectPanel: { isOpen: true },
     });
 
     expect(abortSpy).not.toHaveBeenCalled();
-    expect(manualSpy).toHaveBeenCalledWith(
-      expect.arrayContaining(['cluster-events', 'object-deployment', 'object-deployment-events'])
-    );
+    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining(['cluster-events']));
 
     manualSpy.mockRestore();
     abortSpy.mockRestore();
@@ -1095,149 +1070,18 @@ describe('RefreshManager guard paths and helpers', () => {
     });
   });
 
-  it('tracks object panel target changes across open and closed states', () => {
-    const base: RefreshContext = {
-      currentView: 'namespace',
-      activeNamespaceView: 'network',
-      selectedNamespace: 'team-a',
-      objectPanel: {
-        isOpen: false,
-        objectKind: undefined,
-        objectName: undefined,
-        objectNamespace: undefined,
-      },
-    };
-
-    expect(
-      unsafeRefreshManager.didObjectPanelTargetChange(base, {
-        ...base,
-        objectPanel: { ...base.objectPanel, isOpen: false },
-      })
-    ).toBe(false);
-
-    expect(
-      unsafeRefreshManager.didObjectPanelTargetChange(base, {
-        ...base,
-        objectPanel: {
-          isOpen: true,
-          objectKind: 'Pod',
-          objectName: 'api',
-          objectNamespace: 'team-a',
-        },
-      })
-    ).toBe(true);
-
-    expect(
-      unsafeRefreshManager.didObjectPanelTargetChange(
-        {
-          ...base,
-          objectPanel: {
-            isOpen: true,
-            objectKind: 'Pod',
-            objectName: 'api',
-            objectNamespace: 'team-a',
-          },
-        },
-        {
-          ...base,
-          objectPanel: {
-            isOpen: true,
-            objectKind: 'Pod',
-            objectName: 'api',
-            objectNamespace: 'team-b',
-          },
-        }
-      )
-    ).toBe(true);
-
-    expect(
-      unsafeRefreshManager.didObjectPanelTargetChange(
-        {
-          ...base,
-          objectPanel: {
-            isOpen: true,
-            objectKind: 'Pod',
-            objectName: 'api',
-            objectNamespace: 'team-a',
-          },
-        },
-        {
-          ...base,
-          objectPanel: {
-            isOpen: false,
-            objectKind: undefined,
-            objectName: undefined,
-            objectNamespace: undefined,
-          },
-        }
-      )
-    ).toBe(true);
-
-    expect(
-      unsafeRefreshManager.didObjectPanelTargetChange(
-        {
-          ...base,
-          objectPanel: {
-            isOpen: false,
-            objectKind: 'Service',
-            objectName: 'svc',
-            objectNamespace: 'team-a',
-          },
-        },
-        {
-          ...base,
-          objectPanel: {
-            isOpen: false,
-            objectKind: 'Service',
-            objectName: 'svc',
-            objectNamespace: 'team-a',
-          },
-        }
-      )
-    ).toBe(false);
-  });
-
-  it('derives object panel refresher targets only when the panel is open with a kind', () => {
-    const closed: RefreshContext = {
-      currentView: 'namespace',
-      activeNamespaceView: 'config',
-      selectedNamespace: 'team-a',
-      objectPanel: { isOpen: false },
-    };
-    const open: RefreshContext = {
-      ...closed,
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'api',
-        objectNamespace: 'team-a',
-      },
-    };
-
-    expect(unsafeRefreshManager.getObjectPanelRefresherTargets(closed)).toEqual([]);
-    expect(unsafeRefreshManager.getObjectPanelRefresherTargets(open)).toEqual([
-      'object-pod',
-      'object-pod-events',
-    ]);
-  });
-
-  it('collects refresher targets across namespace, cluster, overview, and object panel contexts', () => {
+  it('collects refresher targets across namespace, cluster, and overview contexts', () => {
+    // An open object panel contributes nothing: panels self-refresh via their
+    // per-panel refreshers, which the context cannot name.
     const context: RefreshContext = {
       currentView: 'namespace',
       activeNamespaceView: 'workloads',
       activeClusterView: undefined,
       selectedNamespace: 'team-a',
-      objectPanel: {
-        isOpen: true,
-        objectKind: 'Pod',
-        objectName: 'api',
-        objectNamespace: 'team-a',
-      },
+      objectPanel: { isOpen: true },
     };
     const namespaceTargets = unsafeRefreshManager.getRefresherTargetsForContext(context);
-    expect(namespaceTargets.sort()).toEqual(
-      ['workloads', 'object-pod', 'object-pod-events'].sort()
-    );
+    expect(namespaceTargets).toEqual(['workloads']);
 
     const clusterContext: RefreshContext = {
       ...context,
@@ -1245,9 +1089,9 @@ describe('RefreshManager guard paths and helpers', () => {
       activeNamespaceView: undefined,
       activeClusterView: 'events',
     };
-    expect(unsafeRefreshManager.getRefresherTargetsForContext(clusterContext).sort()).toEqual(
-      ['cluster-events', 'object-pod', 'object-pod-events'].sort()
-    );
+    expect(unsafeRefreshManager.getRefresherTargetsForContext(clusterContext)).toEqual([
+      'cluster-events',
+    ]);
 
     const overviewContext: RefreshContext = {
       ...context,
@@ -1255,9 +1099,9 @@ describe('RefreshManager guard paths and helpers', () => {
       activeNamespaceView: undefined,
       activeClusterView: undefined,
     };
-    expect(unsafeRefreshManager.getRefresherTargetsForContext(overviewContext).sort()).toEqual(
-      ['cluster-overview', 'object-pod', 'object-pod-events'].sort()
-    );
+    expect(unsafeRefreshManager.getRefresherTargetsForContext(overviewContext)).toEqual([
+      'cluster-overview',
+    ]);
   });
 
   it('returns null for unknown refresher intervals', () => {

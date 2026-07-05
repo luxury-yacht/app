@@ -29,7 +29,6 @@ import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
-import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
@@ -44,7 +43,7 @@ import {
 } from '@shared/events/eventGridModel';
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
-import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
+import { CLUSTER_SCOPE, INACTIVE_SCOPE, getObjectEventsRefresherName } from '../constants';
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
 import './EventsTab.css';
 
@@ -56,6 +55,10 @@ interface EventsTabProps {
   // ObjectPanelContent (which handles full-cleanup on panel close)
   // cannot drift apart on the same scope key.
   eventsScope: string | null;
+  // The panel's canonical identity (objectPanelId), scoping the events
+  // refresher name to THIS panel so simultaneously-open same-kind panels
+  // register distinct refreshers (see getObjectEventsRefresherName).
+  panelId: string | null;
 }
 
 function normalizeEventSource(source: ObjectEventSummary['source'] | undefined): string {
@@ -97,7 +100,7 @@ interface EventDisplay {
   clusterName?: string;
 }
 
-const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope }) => {
+const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope, panelId }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
@@ -150,11 +153,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [fetchEvents, isActive, objectData, eventsScope]);
 
   const eventsRefresherName = useMemo(
-    () =>
-      objectData?.kind
-        ? (`object-${objectData.kind.toLowerCase()}-events` as ObjectEventsRefresherName)
-        : null,
-    [objectData?.kind]
+    () => getObjectEventsRefresherName(objectData?.kind, panelId),
+    [objectData?.kind, panelId]
   );
 
   useEffect(() => {
