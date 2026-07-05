@@ -11,6 +11,7 @@ import Tooltip from '@shared/components/Tooltip';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { backend } from '@wailsjs/go/models';
+import { toPlainReleaseNotes } from './releaseNotesText';
 import './UpdateStatus.css';
 
 interface UpdateInfo {
@@ -98,7 +99,7 @@ const UpdateStatus: React.FC = () => {
 
   const newDate = formatPublished(updateInfo.publishedAt);
   const currentDate = formatPublished(updateInfo.currentPublishedAt);
-  const notes = updateInfo.releaseNotes?.trim();
+  const notes = toPlainReleaseNotes(updateInfo.releaseNotes ?? '');
   const notesUrl = `${RELEASE_NOTES_TAG_BASE}${encodeURIComponent(updateInfo.latestVersion)}`;
   const openNotes = () => BrowserOpenURL(notesUrl);
   const renderVersion = (version: string, date: string | null) => (

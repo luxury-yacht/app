@@ -102,6 +102,8 @@ describe('UpdateStatus', () => {
     expect(tooltip?.textContent).toContain('(2026-06-20)');
     const notes = container.querySelector('[data-testid="update-status-notes"]');
     expect(notes?.textContent).toContain('Fixed metrics permission notice');
+    // The markdown stripper is applied: bullets render as • (not raw "- ").
+    expect(notes?.textContent).toContain('•');
 
     // Clicking the chip opens the release/downloads page.
     act(() => {
