@@ -440,7 +440,7 @@ var policySpecs = []policySpec{
 		// domain failing outright.
 		Domain: "cluster-overview",
 		Mode:   ModeAny,
-		Reason: "cluster overview requires nodes, pods, or namespaces",
+		Reason: "Cluster Overview requires list and watch on nodes, pods, and namespaces",
 		Runtime: []Resource{
 			fromIdentity(nodes.Identity),
 			fromIdentity(pods.Identity),

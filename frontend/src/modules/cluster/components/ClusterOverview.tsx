@@ -629,7 +629,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       });
       nodesRestrictions.push({
         key: 'nodes',
-        headline: 'Node details hidden',
+        headline: 'Node details unavailable',
         detail:
           'Your account has insufficient access to node data. Requires Node permissions: list, watch.',
         testId: 'cluster-nodes-permission-note',
@@ -644,7 +644,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       });
       workloadsRestrictions.push({
         key: 'pods',
-        headline: 'Pod and container counts hidden',
+        headline: 'Pod and container counts unavailable',
         detail:
           'Your account has insufficient access to pod data. Requires Pod permissions: list, watch.',
         testId: 'workloads-pods-permission-note',
@@ -653,7 +653,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     if (namespacesUnavailable) {
       workloadsRestrictions.push({
         key: 'namespaces',
-        headline: 'Namespace count hidden',
+        headline: 'Namespace count unavailable',
         detail:
           'Your account has insufficient access to namespaces. Requires Namespace permission: list.',
         testId: 'workloads-namespaces-permission-note',
@@ -876,7 +876,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         className={`metric-legend__dot metric-legend__dot--${item.variant}`}
         aria-hidden="true"
       />
-      <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
+      <span className="metric-legend__count">
+        {showSkeleton || nodesUnavailable ? DASH : item.value}
+      </span>
       <span className="metric-legend__label">{item.label}</span>
     </div>
   );
@@ -1119,88 +1121,83 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section nodes-summary">
           <h2>Nodes</h2>
-          {nodesRestrictions.length > 0 ? (
-            <ClusterOverviewRestrictionNotice restrictions={nodesRestrictions} />
-          ) : (
-            <>
-              <div className="metric-stats">
-                <div className="metric-stat" data-testid="cluster-nodes-total">
+          <ClusterOverviewRestrictionNotice restrictions={nodesRestrictions} />
+          <div className="metric-stats">
+            <div className="metric-stat" data-testid="cluster-nodes-total">
+              <span className="metric-stat__count">
+                {showSkeleton || nodesUnavailable ? DASH : displayOverview.totalNodes}
+              </span>
+              <span className="metric-stat__label">total</span>
+            </div>
+            {displayOverview.clusterType === 'EKS' && (
+              <>
+                <div className="metric-stat" data-testid="cluster-nodes-ec2">
                   <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.totalNodes}
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.ec2Nodes}
                   </span>
-                  <span className="metric-stat__label">total</span>
+                  <span className="metric-stat__label">ec2</span>
                 </div>
-                {displayOverview.clusterType === 'EKS' && (
-                  <>
-                    <div className="metric-stat" data-testid="cluster-nodes-ec2">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.ec2Nodes}
-                      </span>
-                      <span className="metric-stat__label">ec2</span>
-                    </div>
-                    <div className="metric-stat" data-testid="cluster-nodes-fargate">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.fargateNodes}
-                      </span>
-                      <span className="metric-stat__label">fargate</span>
-                    </div>
-                  </>
-                )}
-                {displayOverview.clusterType === 'AKS' && (
-                  <>
-                    <div className="metric-stat" data-testid="cluster-nodes-vm">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.vmNodes}
-                      </span>
-                      <span className="metric-stat__label">vm</span>
-                    </div>
-                    <div className="metric-stat" data-testid="cluster-nodes-virtual">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.virtualNodes}
-                      </span>
-                      <span className="metric-stat__label">virtual</span>
-                    </div>
-                  </>
-                )}
-              </div>
+                <div className="metric-stat" data-testid="cluster-nodes-fargate">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.fargateNodes}
+                  </span>
+                  <span className="metric-stat__label">fargate</span>
+                </div>
+              </>
+            )}
+            {displayOverview.clusterType === 'AKS' && (
+              <>
+                <div className="metric-stat" data-testid="cluster-nodes-vm">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.vmNodes}
+                  </span>
+                  <span className="metric-stat__label">vm</span>
+                </div>
+                <div className="metric-stat" data-testid="cluster-nodes-virtual">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.virtualNodes}
+                  </span>
+                  <span className="metric-stat__label">virtual</span>
+                </div>
+              </>
+            )}
+          </div>
 
-              <div className="node-health">
-                <div className="metric-header">
-                  <h3>Node Health</h3>
-                  <div className="metric-legend__total">
-                    <span className="metric-legend__total-value">
-                      {showSkeleton ? DASH : displayOverview.totalNodes}
-                    </span>
-                    <span className="metric-legend__total-label"> total</span>
-                  </div>
-                </div>
-                <div className="stacked-bar" role="presentation" aria-hidden="true">
-                  {!showSkeleton &&
-                    nodeHealthPhaseItems.map((item) => {
-                      const width = nodeHealthPct(item.value);
-                      if (width <= 0) {
-                        return null;
-                      }
-                      return (
-                        <div
-                          key={item.key}
-                          className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
-                          style={{ width: `${width}%` }}
-                        />
-                      );
-                    })}
-                </div>
-                <div className="metric-legend">
-                  <div className="metric-legend__items">
-                    {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
-                  </div>
-                  <div className="metric-legend__items metric-legend__items--restarted">
-                    {renderNodeHealthLegendItem(nodeCordonedItem)}
-                  </div>
-                </div>
+          <div className="node-health">
+            <div className="metric-header">
+              <h3>Node Health</h3>
+              <div className="metric-legend__total">
+                <span className="metric-legend__total-value">
+                  {showSkeleton || nodesUnavailable ? DASH : displayOverview.totalNodes}
+                </span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
-            </>
-          )}
+            </div>
+            <div className="stacked-bar" role="presentation" aria-hidden="true">
+              {!showSkeleton &&
+                nodeHealthPhaseItems.map((item) => {
+                  const width = nodeHealthPct(item.value);
+                  if (width <= 0) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={item.key}
+                      className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
+                      style={{ width: `${width}%` }}
+                    />
+                  );
+                })}
+            </div>
+            <div className="metric-legend">
+              <div className="metric-legend__items">
+                {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
+              </div>
+              <div className="metric-legend__items metric-legend__items--restarted">
+                {renderNodeHealthLegendItem(nodeCordonedItem)}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="overview-section workloads-summary">
