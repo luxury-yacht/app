@@ -82,6 +82,7 @@ Applies to React/TypeScript code under `frontend/`.
 - All form labels for inputs must have the exact same spacing unless told otherwise.
 - Favor reusing shared styles in `frontend/styles` (the `@styles` alias); otherwise keep CSS close to the source (for example `ContextMenu.tsx` → `ContextMenu.css`).
 - Always tokenize sizes/colors with shared tokens in `frontend/styles/tokens`; colors must support Light and Dark themes.
+- Reuse an existing theme variable whenever one fits, instead of computing colors inline (no ad-hoc `color-mix`/hex) or defining a new one. Semantic theme vars (for example `--color-warning-bg`, `--color-warning-border`) live in `frontend/styles/appearance-modes/{light,dark}.css` and already track Light/Dark. Only add a new token when no existing var fits, and define it in both appearance modes.
 
 ## Project Structure & Module Organization
 

@@ -64,6 +64,9 @@ import {
   clusterOverviewResourceMetrics,
   clusterWorkloadUsageValue,
 } from '@/core/resource-metrics';
+import ClusterOverviewRestrictionNotice, {
+  type OverviewRestriction,
+} from './ClusterOverviewRestrictionNotice';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -603,6 +606,56 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const podsUnavailable = unavailableResources.includes('core/pods');
   const namespacesUnavailable = unavailableResources.includes('core/namespaces');
 
+  // Standardized access-restriction notices: each affected card renders the
+  // same callout (ClusterOverviewRestrictionNotice) so the reasons read
+  // consistently and never truncate. Gated on !showSkeleton so restrictions
+  // never flash while the first snapshot is still loading.
+  const utilizationRestrictions: OverviewRestriction[] = [];
+  const nodesRestrictions: OverviewRestriction[] = [];
+  const workloadsRestrictions: OverviewRestriction[] = [];
+  if (!showSkeleton) {
+    if (nodesUnavailable) {
+      utilizationRestrictions.push({
+        key: 'capacity',
+        headline: 'Capacity unavailable',
+        detail:
+          'Cluster capacity is unavailable, so utilization is measured against requests and limits. Requires Node permissions: list, watch.',
+        testId: 'utilization-capacity-permission-chip',
+      });
+      nodesRestrictions.push({
+        key: 'nodes',
+        headline: 'Node details hidden',
+        detail:
+          'Your account has insufficient access to node data. Requires Node permissions: list, watch.',
+        testId: 'cluster-nodes-permission-note',
+      });
+    }
+    if (podsUnavailable) {
+      utilizationRestrictions.push({
+        key: 'requests-limits',
+        headline: 'Requests and limits unavailable',
+        detail: 'Only current usage is shown. Requires Pod permissions: list, watch.',
+        testId: 'utilization-requests-permission-chip',
+      });
+      workloadsRestrictions.push({
+        key: 'pods',
+        headline: 'Pod and container counts hidden',
+        detail:
+          'Your account has insufficient access to pod data. Requires Pod permissions: list, watch.',
+        testId: 'workloads-pods-permission-note',
+      });
+    }
+    if (namespacesUnavailable) {
+      workloadsRestrictions.push({
+        key: 'namespaces',
+        headline: 'Namespace count hidden',
+        detail:
+          'Your account has insufficient access to namespaces. Requires Namespace permission: list.',
+        testId: 'workloads-namespaces-permission-note',
+      });
+    }
+  }
+
   const overviewResourceMetrics = clusterOverviewResourceMetrics(displayOverview, metricsInfo);
   const memoryResourceMetrics = calculateResourceMetrics(
     overviewResourceMetrics.memory ?? {},
@@ -874,17 +927,24 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       {errorMessage && (
         <div className="cluster-overview-loading-inline">
-          <div className="cluster-overview-error">
-            <div className="error-detail">Failed to load Cluster Overview data: {errorMessage}</div>
-          </div>
+          <ClusterOverviewRestrictionNotice
+            restrictions={[
+              {
+                key: 'load-error',
+                headline: 'Failed to load Cluster Overview data',
+                detail: errorMessage,
+              },
+            ]}
+          />
         </div>
       )}
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          {/* Header row: the metrics/permission indicators sit in the card's
-              upper right so their presence never shifts the utilization
-              content below. */}
+          {/* Header row: the transient metrics-collection indicator sits in the
+              card's upper right so its presence never shifts the utilization
+              content below. Access restrictions render in the standardized
+              notice beneath the header instead. */}
           <div className="overview-section-header">
             <h2>Resource Utilization</h2>
             {metricsBanner && !errorMessage && (
@@ -893,35 +953,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metrics-warning-banner__text">{metricsBanner.message}</span>
               </div>
             )}
-            {nodesUnavailable && !showSkeleton && (
-              <div
-                className="overview-permission-chip"
-                data-testid="utilization-capacity-permission-chip"
-              >
-                <span className="metrics-warning-banner__dot" />
-                <span className="metrics-warning-banner__text">Capacity unavailable</span>
-                <Tooltip
-                  content="Cluster capacity data is unavailable. Your account is missing required Node permissions: list, watch."
-                  maxWidth={320}
-                />
-              </div>
-            )}
-            {podsUnavailable && !showSkeleton && (
-              <div
-                className="overview-permission-chip"
-                data-testid="utilization-requests-permission-chip"
-              >
-                <span className="metrics-warning-banner__dot" />
-                <span className="metrics-warning-banner__text">
-                  Requests and limits unavailable
-                </span>
-                <Tooltip
-                  content="Pod requests and limits data is unavailable. Only current usage is shown. Your account is missing required Pod permissions: list, watch."
-                  maxWidth={320}
-                />
-              </div>
-            )}
           </div>
+
+          <ClusterOverviewRestrictionNotice restrictions={utilizationRestrictions} />
 
           <div className="resource-group">
             <div className="metric-header metric-header--usage">
@@ -1069,11 +1103,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section nodes-summary">
           <h2>Nodes</h2>
-          {nodesUnavailable && !showSkeleton ? (
-            <div className="overview-permission-note" data-testid="cluster-nodes-permission-note">
-              Node details are hidden. Your account has insufficient access (requires Node
-              permissions: list, watch).
-            </div>
+          {nodesRestrictions.length > 0 ? (
+            <ClusterOverviewRestrictionNotice restrictions={nodesRestrictions} />
           ) : (
             <>
               <div className="metric-stats">
@@ -1158,21 +1189,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section workloads-summary">
           <h2>Workloads</h2>
-          {podsUnavailable && !showSkeleton && (
-            <div className="overview-permission-note" data-testid="workloads-pods-permission-note">
-              Pod and container counts are hidden. Your account has insufficient access (requires
-              Pod permissions: list, watch).
-            </div>
-          )}
-          {namespacesUnavailable && !showSkeleton && (
-            <div
-              className="overview-permission-note"
-              data-testid="workloads-namespaces-permission-note"
-            >
-              The namespace count is hidden. Your account has insufficient access (requires
-              Namespace permission: list).
-            </div>
-          )}
+          <ClusterOverviewRestrictionNotice restrictions={workloadsRestrictions} />
           <div className="metric-stats">
             <div className="metric-stat" data-testid="cluster-workloads-namespaces">
               <span className="metric-stat__count">
