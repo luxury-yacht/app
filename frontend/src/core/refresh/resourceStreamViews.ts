@@ -1,5 +1,6 @@
 import type { RefreshContext } from './RefreshManager';
 import type { RefreshDomain } from './types';
+import { stripClusterScope } from './clusterScope';
 
 export type ResourceStreamRefreshDomain =
   | 'pods'
@@ -42,15 +43,31 @@ export const isResourceStreamDomain = (
   domain: RefreshDomain
 ): domain is ResourceStreamRefreshDomain => RESOURCE_STREAM_DOMAINS.has(domain);
 
+// A pods scope shaped `workload:...` or `node:...` is an object-panel Pods-tab
+// window: those scopes exist only while a panel's Pods tab actively leases them
+// (the lease drops when the tab deactivates), and the panel is visible over ANY
+// main view. The per-view gate below exists to keep the BIG namespace-shaped
+// table scopes from streaming while nobody is looking at them; applying it to
+// panel windows froze the embedded Pods tab — no doorbells, so its query-backed
+// table never refetched and its metrics meta aged into the staleness banner.
+const isPanelPodsScope = (scope?: string): boolean => {
+  const base = stripClusterScope(scope);
+  return base.startsWith('workload:') || base.startsWith('node:');
+};
+
 export const isResourceStreamViewActive = (
   domain: RefreshDomain,
-  context: RefreshContext
+  context: RefreshContext,
+  scope?: string
 ): boolean => {
   if (!isResourceStreamDomain(domain)) {
     return true;
   }
 
   if (domain === 'pods') {
+    if (isPanelPodsScope(scope)) {
+      return true;
+    }
     return context.currentView === 'namespace' && context.activeNamespaceView === 'pods';
   }
 

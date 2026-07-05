@@ -1,5 +1,3 @@
-- Embedded pods do not show -- "insufficient permissions for Metrics API". Should show pods w/o metrics
-
 - Build a plugin architecture
   - AI
     - Conversational support to perform functions of the app

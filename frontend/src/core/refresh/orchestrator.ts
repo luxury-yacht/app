@@ -666,7 +666,7 @@ class RefreshOrchestrator {
     if (!isResourceStreamDomain(domain)) {
       return true;
     }
-    if (!isResourceStreamViewActive(domain, this.context)) {
+    if (!isResourceStreamViewActive(domain, this.context, trimmed)) {
       return false;
     }
     const parsed = parseClusterScopeList(trimmed);

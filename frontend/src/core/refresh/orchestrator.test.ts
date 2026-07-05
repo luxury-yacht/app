@@ -1947,6 +1947,68 @@ describe('refreshOrchestrator', () => {
     expect(refreshManagerMocks.enableMock).not.toHaveBeenCalledWith(CLUSTER_REFRESHERS.browse);
   });
 
+  it('streams a workload-scoped pods window regardless of the active main view', async () => {
+    // The object panel's Pods tab leases a workload-scoped pods window while
+    // ANY main view is active. Gating its stream on the namespace pods view
+    // froze the tab: no doorbells -> the typed query never refetches -> rows
+    // stale + the metrics meta ages into "Awaiting metrics data...".
+    registerStreamingPodsDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'nodes',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScope('cluster-a', 'workload:team-a:apps:v1:Deployment:web');
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
+  it('streams a node-scoped pods window regardless of the active main view', async () => {
+    registerStreamingPodsDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'workloads',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScope('cluster-a', 'node:node-1');
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
+  it('keeps the view gate for namespace-shaped pods scopes', async () => {
+    registerStreamingPodsDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'nodes',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScope('cluster-a', 'namespace:team-a');
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await Promise.resolve();
+
+    // Not looking at the namespace pods view: the big namespace scope stays polled-only.
+    expect(resourceStreamMocks.start).not.toHaveBeenCalledWith(scope);
+
+    // Switching to the namespace pods view starts it.
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+    });
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
   it('does not start passive streaming while auto-refresh is disabled', async () => {
     registerStreamingClusterConfigDomain();
     refreshOrchestrator.updateContext({
