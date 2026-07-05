@@ -17,7 +17,6 @@ import {
   formatCpuValue,
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -39,9 +38,7 @@ import {
   emitPodsUnhealthySignal,
   type PodsFilterMode,
 } from '@modules/namespace/components/podsFilterSignals';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
@@ -189,7 +186,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const metricsInfo = useMemo(() => {
     const metricsByCluster = overviewDomain.data?.metricsByCluster;
     if (metricsByCluster) {
@@ -277,46 +273,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setIsSwitching(true);
     }
   }, [hydratedClusterId, selectedClusterId, selectedOverview]);
-
-  useEffect(() => {
-    let isActive = true;
-    requestAppState({
-      resource: 'app-info',
-      read: () => readAppInfo(),
-    })
-      .then((info) => {
-        if (!isActive) {
-          return;
-        }
-        const withUpdate = info as AppInfoWithUpdate;
-        setUpdateInfo(withUpdate.update ?? null);
-      })
-      .catch(() => {
-        // Silent fallback if update metadata cannot be fetched.
-      });
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-    const handleUpdate = (...args: unknown[]) => {
-      const payload = args[0] as UpdateInfo | undefined;
-      if (!payload) {
-        return;
-      }
-      // Event payload is the latest update metadata from the backend.
-      setUpdateInfo(payload);
-    };
-    runtime.EventsOn('app-update', handleUpdate);
-    return () => {
-      runtime.EventsOff?.('app-update', handleUpdate);
-    };
-  }, []);
 
   const isHydratedForCluster = isHydrated && hydratedClusterId === selectedClusterId;
   const displayOverview = isHydratedForCluster ? overviewData : EMPTY_OVERVIEW;
@@ -883,34 +839,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     </div>
   );
 
-  const showUpdateBanner = Boolean(updateInfo?.isUpdateAvailable && updateInfo?.releaseUrl);
   // Before the initial snapshot arrives we don't have real values yet —
   // render a dash placeholder instead of zeros so the UI reads as "loading"
   // without surfacing misleading "0" values.
   const DASH = '—';
-  const handleUpdateClick = useCallback(() => {
-    if (!updateInfo?.releaseUrl) {
-      return;
-    }
-    // Open the update release page when the notice is activated.
-    BrowserOpenURL(updateInfo.releaseUrl);
-  }, [updateInfo]);
 
   return (
     <div className="cluster-overview selectable">
-      {showUpdateBanner && (
-        <div className="overview-update-banner-wrap">
-          <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
-            <div className="overview-update-text">
-              <span className="overview-update-meta">
-                {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
-                Click here to go to the downloads page.
-              </span>
-            </div>
-          </button>
-        </div>
-      )}
-
       <div className="overview-top">
         <div className="overview-top__info">
           <h1 className="overview-top__title">{contextLabel}</h1>
@@ -1351,21 +1286,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       </div>
     </div>
   );
-};
-
-type UpdateInfo = {
-  currentVersion: string;
-  latestVersion: string;
-  releaseUrl: string;
-  releaseName?: string;
-  publishedAt?: string;
-  checkedAt?: string;
-  isUpdateAvailable: boolean;
-  error?: string;
-};
-
-type AppInfoWithUpdate = backend.AppInfo & {
-  update?: UpdateInfo | null;
 };
 
 export default ClusterOverview;

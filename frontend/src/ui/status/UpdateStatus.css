@@ -1,0 +1,98 @@
+/* UpdateStatus — clickable "update available" info chip in the app header.
+   Reuses the shared info-chip palette (--badge-blue-*) so it reads as the same
+   info style as StatusChip variant="info", but renders as a button (clickable,
+   opens the release page) with a hover Tooltip carrying the version details. */
+.update-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2px 8px;
+  border-radius: var(--border-radius-round);
+  /* Matches StatusChip variant="info" for a consistent info-chip outline. */
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-badge);
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: filter 0.15s ease;
+}
+
+.update-chip:hover {
+  filter: brightness(1.08);
+}
+
+.update-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Tooltip body: a compact version/release detail block. */
+.update-status__tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+/* New / Current rows: a 2-col grid so the labels and version+date values line
+   up in their own columns. */
+.update-status__tooltip-rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.6rem;
+  row-gap: 0.2rem;
+}
+
+.update-status__tooltip-label {
+  color: var(--color-text-secondary);
+}
+
+.update-status__tooltip-date {
+  color: var(--color-text-secondary);
+}
+
+.update-status__tooltip-divider {
+  height: 1px;
+  margin: 0.15rem 0;
+  background: var(--color-border);
+}
+
+/* Release-notes body: the full notes, never truncated. Height is capped so a
+   long release scrolls within the (interactive) tooltip instead of running off
+   the viewport; all content stays reachable. */
+.update-status__tooltip-notes {
+  white-space: pre-wrap;
+  max-height: 50vh;
+  overflow-y: auto;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.update-status__tooltip-link {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.update-status__tooltip-link:hover {
+  text-decoration: underline;
+}
+
+.update-status__tooltip-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

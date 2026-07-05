@@ -399,8 +399,10 @@ export namespace backend {
 	    releaseUrl: string;
 	    releaseName?: string;
 	    publishedAt?: string;
+	    currentPublishedAt?: string;
 	    checkedAt?: string;
 	    isUpdateAvailable: boolean;
+	    releaseNotes?: string;
 	    error?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -414,8 +416,10 @@ export namespace backend {
 	        this.releaseUrl = source["releaseUrl"];
 	        this.releaseName = source["releaseName"];
 	        this.publishedAt = source["publishedAt"];
+	        this.currentPublishedAt = source["currentPublishedAt"];
 	        this.checkedAt = source["checkedAt"];
 	        this.isUpdateAvailable = source["isUpdateAvailable"];
+	        this.releaseNotes = source["releaseNotes"];
 	        this.error = source["error"];
 	    }
 	}

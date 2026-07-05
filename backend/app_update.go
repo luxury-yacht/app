@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,26 +20,34 @@ import (
 )
 
 const (
-	updateRepoReleaseURL = "https://api.github.com/repos/luxury-yacht/app/releases/latest"
+	updateRepoAPIBase    = "https://api.github.com/repos/luxury-yacht/app"
+	updateRepoReleaseURL = updateRepoAPIBase + "/releases/latest"
 	updateDownloadsURL   = "https://luxury-yacht.app/#downloads"
 	updateUserAgent      = "LuxuryYachtUpdateCheck/1.0"
 )
 
 type UpdateInfo struct {
-	CurrentVersion    string `json:"currentVersion"`
-	LatestVersion     string `json:"latestVersion"`
-	ReleaseURL        string `json:"releaseUrl"`
-	ReleaseName       string `json:"releaseName,omitempty"`
-	PublishedAt       string `json:"publishedAt,omitempty"`
-	CheckedAt         string `json:"checkedAt,omitempty"`
-	IsUpdateAvailable bool   `json:"isUpdateAvailable"`
-	Error             string `json:"error,omitempty"`
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	ReleaseURL     string `json:"releaseUrl"`
+	ReleaseName    string `json:"releaseName,omitempty"`
+	PublishedAt    string `json:"publishedAt,omitempty"`
+	// CurrentPublishedAt is the release date of the currently-installed version,
+	// fetched separately by tag (the latest-release response only covers New).
+	CurrentPublishedAt string `json:"currentPublishedAt,omitempty"`
+	CheckedAt          string `json:"checkedAt,omitempty"`
+	IsUpdateAvailable  bool   `json:"isUpdateAvailable"`
+	// ReleaseNotes is the raw release body (markdown) shown as a preview in the
+	// update chip's tooltip; the full rendered notes live at the release tag page.
+	ReleaseNotes string `json:"releaseNotes,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 type githubRelease struct {
 	TagName     string `json:"tag_name"`
 	Name        string `json:"name"`
 	PublishedAt string `json:"published_at"`
+	Body        string `json:"body"`
 }
 
 func (a *App) startUpdateCheck() {
@@ -63,30 +72,79 @@ func (a *App) runUpdateCheck(currentVersion string) {
 		return
 	}
 
+	checkedAt := time.Now().Format(time.RFC3339)
 	release, err := fetchLatestRelease()
-	info := &UpdateInfo{
-		CurrentVersion: currentVersion,
-		CheckedAt:      time.Now().Format(time.RFC3339),
-	}
 	if err != nil {
-		info.Error = err.Error()
-		a.storeUpdateInfo(info)
+		a.storeUpdateInfo(&UpdateInfo{
+			CurrentVersion: currentVersion,
+			CheckedAt:      checkedAt,
+			Error:          err.Error(),
+		})
 		return
 	}
 
-	info.LatestVersion = release.TagName
-	info.ReleaseURL = updateDownloadsURL
-	info.ReleaseName = release.Name
-	info.PublishedAt = release.PublishedAt
+	info := buildReleaseUpdateInfo(currentVersion, checkedAt, release)
+	// The tooltip shows the current version's release date next to the new one.
+	// That date lives in a separate release resource, so fetch it by tag — but
+	// only when an update is available (the only time the tooltip shows), and
+	// never let its absence fail the whole check.
+	if info.IsUpdateAvailable {
+		if currentTag := releaseTagForVersion(currentVersion, release.TagName); currentTag != "" {
+			currentRelease, tagErr := fetchReleaseByTag(currentTag)
+			if tagErr != nil {
+				a.logger.Warn(
+					fmt.Sprintf("update check: could not fetch current release %q: %v", currentTag, tagErr),
+					logsources.UpdateCheck,
+				)
+			} else {
+				info.CurrentPublishedAt = currentRelease.PublishedAt
+			}
+		}
+	}
+	a.storeUpdateInfo(info)
+}
+
+// releaseTagForVersion derives the GitHub tag for a version, matching the prefix
+// convention of a reference tag (the latest release's tag). The build Version
+// format is not guaranteed, so the reference tag is the source of truth: a
+// "v"-prefixed repo yields "vX.Y.Z", a bare repo yields "X.Y.Z". Empty when the
+// version has no usable digits.
+func releaseTagForVersion(version, referenceTag string) string {
+	normalized := strings.TrimSpace(version)
+	normalized = strings.TrimPrefix(normalized, "v")
+	normalized = strings.TrimPrefix(normalized, "V")
+	if normalized == "" {
+		return ""
+	}
+	ref := strings.TrimSpace(referenceTag)
+	if strings.HasPrefix(ref, "v") || strings.HasPrefix(ref, "V") {
+		return "v" + normalized
+	}
+	return normalized
+}
+
+// buildReleaseUpdateInfo maps a fetched GitHub release onto the UpdateInfo the
+// frontend consumes, including the release notes body. Kept pure (no network,
+// no App) so the mapping — especially the release-notes wiring and the
+// update-available comparison — is unit-testable.
+func buildReleaseUpdateInfo(currentVersion, checkedAt string, release *githubRelease) *UpdateInfo {
+	info := &UpdateInfo{
+		CurrentVersion: currentVersion,
+		CheckedAt:      checkedAt,
+		LatestVersion:  release.TagName,
+		ReleaseURL:     updateDownloadsURL,
+		ReleaseName:    release.Name,
+		PublishedAt:    release.PublishedAt,
+		ReleaseNotes:   release.Body,
+	}
 
 	compare, compareErr := compareVersions(currentVersion, release.TagName)
 	if compareErr != nil {
 		info.Error = compareErr.Error()
-		a.storeUpdateInfo(info)
-		return
+		return info
 	}
 	info.IsUpdateAvailable = compare < 0
-	a.storeUpdateInfo(info)
+	return info
 }
 
 func (a *App) storeUpdateInfo(info *UpdateInfo) {
@@ -117,8 +175,17 @@ func (a *App) getUpdateInfo() *UpdateInfo {
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
+	return fetchRelease(updateRepoReleaseURL)
+}
+
+// fetchReleaseByTag fetches a specific release by its git tag.
+func fetchReleaseByTag(tag string) (*githubRelease, error) {
+	return fetchRelease(updateRepoAPIBase + "/releases/tags/" + url.PathEscape(tag))
+}
+
+func fetchRelease(releaseURL string) (*githubRelease, error) {
 	client := &http.Client{Timeout: config.AppUpdateRequestTimeout}
-	req, err := http.NewRequest(http.MethodGet, updateRepoReleaseURL, nil)
+	req, err := http.NewRequest(http.MethodGet, releaseURL, nil)
 	if err != nil {
 		return nil, err
 	}

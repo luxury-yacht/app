@@ -271,13 +271,6 @@ describe('ClusterOverview', () => {
       secondsUntilRetry: 0,
       errorClass: '' as const,
     };
-    getAppInfoMock.mockResolvedValue({
-      version: '1.0.0',
-      buildTime: 'dev',
-      gitCommit: 'dev',
-      isBeta: false,
-      update: { isUpdateAvailable: false },
-    });
     canResolveEventObjectReferenceMock.mockReturnValue(false);
     resolveEventObjectReferenceMock.mockReset();
     cleanupRoot = null;
@@ -673,32 +666,6 @@ describe('ClusterOverview', () => {
     expect(
       container.querySelector('[data-testid="cluster-workload-usage-memory-job"]')?.textContent
     ).toContain('256.0 Mi');
-  });
-
-  it('renders an update banner when a newer release is available', async () => {
-    getAppInfoMock.mockResolvedValue({
-      version: '1.0.0',
-      buildTime: 'dev',
-      gitCommit: 'dev',
-      isBeta: false,
-      update: {
-        isUpdateAvailable: true,
-        latestVersion: '1.2.0',
-        releaseUrl: 'https://github.com/luxury-yacht/app/releases/latest',
-      },
-    });
-
-    const { container, cleanup } = renderClusterOverview();
-    cleanupRoot = cleanup;
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const banner = container.querySelector('.overview-update-banner');
-    expect(banner).not.toBeNull();
-    expect(banner?.textContent).toMatch(/update available/i);
-    expect(banner?.textContent).toContain('1.2.0');
   });
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
