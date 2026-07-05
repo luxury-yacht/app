@@ -78,6 +78,21 @@ the completed `v2` rewrite plan.
   response-cache). Cross-kind-join domains (pods, workloads, network, nodes) use a
   bespoke `RegisterReflector` + **serve-time re-aggregation** (metrics overlay, pod
   aggregates, HPA, Service↔EndpointSlice) — these joins stay at serve by design.
+- **Cross-kind projection inputs must declare a late-arrival story.** A projection may
+  read its OWN object freely; any input read from another kind's cache at projection
+  time is a race against that kind's sync, and owned reflectors never resync — a value
+  baked from an unsynced cache is wrong forever (the empty-Deployment-Pods-tab bug,
+  2026-07-05). Exactly two sanctioned shapes:
+  1. **Don't bake — re-join at serve** (Service↔EndpointSlice endpoint counts, pod
+     aggregates, metrics overlay): correct by construction; right for volatile joins.
+  2. **Bake + heal on the input kind's events** (the pod ReplicaSet→Deployment owner:
+     `snapshot/pod_owner_heal.go` applied via `ingest.ProjectingStore.RewriteBundlesByIndex`
+     from the RS informer handler): right for immutable joins that serve filters and
+     doorbell scope routing need pre-resolved. A heal MUST be pinned by an equivalence
+     test — healed bundle byte-equal to a fresh synced-cache projection
+     (`pod_owner_heal_test.go`) — so the heal and the projector cannot drift.
+  The tell in review: a `New*IngestProjector` signature growing another kind's
+  lister/store without one of these shapes.
 - **Kept-as-typed-informer (documented):** ReplicaSet (pod-owner resolution), CRDs (CR
   discovery), events, gateway-API ×8, HPA, namespaces — each justified in `factory.go`.
 

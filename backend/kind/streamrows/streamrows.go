@@ -390,12 +390,22 @@ type PodSummary struct {
 	OwnerName            string `json:"ownerName"`
 	PortForwardAvailable bool   `json:"portForwardAvailable"`
 	OwnerAPIVersion      string `json:"ownerApiVersion,omitempty"`
-	CPURequest           string `json:"cpuRequest"`
-	CPULimit             string `json:"cpuLimit"`
-	CPUUsage             string `json:"cpuUsage"`
-	MemRequest           string `json:"memRequest"`
-	MemLimit             string `json:"memLimit"`
-	MemUsage             string `json:"memUsage"`
+	// DirectOwner* is the pod's direct controlling ownerRef as written on the
+	// pod, BEFORE the ReplicaSet->Deployment collapse Owner* applies. For a
+	// Deployment's pod Owner* is the Deployment and DirectOwner* the ReplicaSet;
+	// for every other pod the two are equal. Workload-scoped serving and
+	// doorbell routing match BOTH, so a ReplicaSet-scoped Pods window sees the
+	// pods the collapse removes from the Owner* fields. Own-object data — no
+	// cross-kind input, so it needs no heal (see docs/architecture/data-layer.md).
+	DirectOwnerKind       string `json:"directOwnerKind,omitempty"`
+	DirectOwnerName       string `json:"directOwnerName,omitempty"`
+	DirectOwnerAPIVersion string `json:"directOwnerApiVersion,omitempty"`
+	CPURequest            string `json:"cpuRequest"`
+	CPULimit              string `json:"cpuLimit"`
+	CPUUsage              string `json:"cpuUsage"`
+	MemRequest            string `json:"memRequest"`
+	MemLimit              string `json:"memLimit"`
+	MemUsage              string `json:"memUsage"`
 }
 
 // WorkloadSummary is a Deployment/StatefulSet/DaemonSet/Job/CronJob/Pod row

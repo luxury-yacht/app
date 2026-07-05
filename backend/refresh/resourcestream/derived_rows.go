@@ -91,17 +91,12 @@ func (m *Manager) handlePodEvent(oldObj interface{}, newObj interface{}, updateT
 
 func (m *Manager) handleReplicaSetEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
 	switch updateType {
-	case MessageTypeAdded:
-		newRS := replicaSetFromObject(newObj)
-		m.healPodsForReplicaSet(newRS, replicaSetStaleWorkloadScopes(nil, newRS))
+	case MessageTypeAdded, MessageTypeModified:
+		m.healPodsForReplicaSet(replicaSetFromObject(newObj))
 	case MessageTypeDeleted:
 		// Nothing to heal: a deleted RS cascades to its pods, whose own delete
 		// events clean every scope; an orphaned pod's owner-ref removal arrives
 		// as a pod update and re-projects its row.
-	case MessageTypeModified:
-		oldRS := replicaSetFromObject(oldObj)
-		newRS := replicaSetFromObject(newObj)
-		m.healPodsForReplicaSet(newRS, replicaSetStaleWorkloadScopes(oldRS, newRS))
 	}
 }
 
@@ -109,14 +104,14 @@ func (m *Manager) handleReplicaSetEvent(oldObj interface{}, newObj interface{}, 
 // Deployment owner could not be resolved when they were projected. The pod
 // projector reads the shared factory's RS lister, but the owned pod reflector
 // starts BEFORE the factory (ingest_hub.go), so pods projected in that window
-// carry OwnerKind=ReplicaSet — the Deployment's workload-scoped pods query then
-// serves nothing and its doorbell never rings, and owned reflectors never resync
-// to repair it. Healing on the RS informer's events closes the race: the rewrite
-// fans through the store's sinks like a reflector update (maintained store +
-// live-notify signal on the NEW Deployment scope), and each healed pod is
-// additionally signalled as Deleted on the stale fallback scopes so any window
-// subscribed there refetches.
-func (m *Manager) healPodsForReplicaSet(rs *appsv1.ReplicaSet, staleScopes []string) {
+// carry the unresolved ReplicaSet as their collapsed owner — the Deployment's
+// workload-scoped pods query then serves nothing and its doorbell never rings,
+// and owned reflectors never resync to repair it. Healing on the RS informer's
+// events closes the race: the rewrite fans through the store's sinks like a
+// reflector update, and the pod notify sink signals every scope the healed row
+// belongs to — namespace, node, the NEW Deployment scope, and the ReplicaSet
+// scope, which the row still occupies through its direct owner.
+func (m *Manager) healPodsForReplicaSet(rs *appsv1.ReplicaSet) {
 	if rs == nil || m.podIngest == nil {
 		return
 	}
@@ -125,7 +120,7 @@ func (m *Manager) healPodsForReplicaSet(rs *appsv1.ReplicaSet, staleScopes []str
 		// A standalone RS's pods correctly keep the ReplicaSet owner.
 		return
 	}
-	healed := m.podIngest.RewriteBundlesByIndex(
+	m.podIngest.RewriteBundlesByIndex(
 		podGVR,
 		snapshot.PodOwnerKeyIndexName,
 		snapshot.PodOwnerHealIndexValues(rs.Namespace, rs.Name, deployment),
@@ -133,12 +128,6 @@ func (m *Manager) healPodsForReplicaSet(rs *appsv1.ReplicaSet, staleScopes []str
 			return snapshot.HealPodBundleReplicaSetOwner(bundle, rs.Namespace, rs.Name, deployment)
 		},
 	)
-	if len(staleScopes) == 0 {
-		return
-	}
-	for _, bundle := range healed {
-		m.broadcastHealedPodStaleScopes(bundle, staleScopes)
-	}
 }
 
 // broadcastNodeNotification emits a row-less node change notification on the

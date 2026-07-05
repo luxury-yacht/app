@@ -79,6 +79,10 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 	scopes := []string{
 		"node:node-1",
 		"workload:prod:apps:v1:Deployment:orders",
+		// The ReplicaSet panel's Pods tab scope: the list path matches the pod's
+		// DIRECT controlling owner; the store path must match it identically even
+		// though the row's collapsed owner is the Deployment.
+		"workload:prod:apps:v1:ReplicaSet:orders-7d9c8b6f5",
 		"namespace:prod",
 	}
 	for _, scope := range scopes {

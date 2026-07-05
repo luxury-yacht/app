@@ -451,21 +451,31 @@ func filterPodRows(rows []PodSummary, keep func(PodSummary) bool) []PodSummary {
 }
 
 // podRowMatchesWorkload reports whether a stored pod row belongs to the workload
-// scope, reading the row's RESOLVED controlling owner (OwnerKind/OwnerName/
-// OwnerAPIVersion — already collapsed ReplicaSet->Deployment by BuildStreamSummary).
-// This matches matchesWorkload's result: matchesWorkload either matches the pod's
-// direct controlling owner against the scope or resolves an RS owner to its Deployment
-// and matches that — exactly the resolution resolvePodOwner baked into the row.
+// scope, mirroring matchesWorkload exactly: the scope matches the row's DIRECT
+// controlling owner (DirectOwner* — the ownerRef as written on the pod, which is
+// what a ReplicaSet-scoped Pods window names) or its COLLAPSED owner (Owner* —
+// ReplicaSet resolved to its Deployment by BuildStreamSummary, which is what a
+// Deployment-scoped window names). Matching only the collapsed owner left every
+// ReplicaSet-scoped window empty: the collapse erases the RS identity.
 func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
-	gv, err := schema.ParseGroupVersion(row.OwnerAPIVersion)
+	if row.Namespace != scope.namespace {
+		return false
+	}
+	return ownerTripleMatchesScope(row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName, scope) ||
+		ownerTripleMatchesScope(row.OwnerAPIVersion, row.OwnerKind, row.OwnerName, scope)
+}
+
+// ownerTripleMatchesScope compares one stored owner identity against the scope's
+// full group/version/kind/name (the row-side twin of ownerMatchesWorkloadScope).
+func ownerTripleMatchesScope(apiVersion, kind, name string, scope workloadScope) bool {
+	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
 		return false
 	}
 	return gv.Group == scope.group &&
 		gv.Version == scope.version &&
-		row.Namespace == scope.namespace &&
-		row.OwnerKind == scope.kind &&
-		row.OwnerName == scope.name
+		kind == scope.kind &&
+		name == scope.name
 }
 
 // metricSampleValid reports whether a metrics sample may be overlaid onto an object

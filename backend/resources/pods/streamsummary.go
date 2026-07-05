@@ -44,52 +44,68 @@ func BuildStreamSummaryFromRSMap(meta streamrows.ClusterMeta, pod *corev1.Pod, c
 func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string) streamrows.PodSummary {
 	model := BuildResourceModel(meta.ClusterID, pod)
 	podFacts := BuildFacts(pod)
-	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
+	owner := resolvePodOwner(pod, rsMap)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	return streamrows.PodSummary{
-		ClusterMeta:          meta,
-		Name:                 pod.Name,
-		Namespace:            pod.Namespace,
-		Node:                 pod.Spec.NodeName,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Ready:                fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
-		Restarts:             podFacts.RestartCount,
-		Age:                  streamrows.FormatAge(pod.CreationTimestamp.Time),
-		AgeTimestamp:         streamrows.CreationMillis(pod),
-		OwnerKind:            ownerKind,
-		OwnerName:            ownerName,
-		PortForwardAvailable: common.HasForwardableContainerPorts(pod.Spec.Containers),
-		OwnerAPIVersion:      ownerAPIVersion,
-		CPURequest:           streamrows.FormatCPUMilli(cpuReq),
-		CPULimit:             streamrows.FormatCPUMilli(cpuLim),
-		CPUUsage:             streamrows.FormatCPUMilli(cpuUsageMilli),
-		MemRequest:           streamrows.FormatMemoryBytes(memReq),
-		MemLimit:             streamrows.FormatMemoryBytes(memLim),
-		MemUsage:             streamrows.FormatMemoryBytes(memUsageBytes),
+		ClusterMeta:           meta,
+		Name:                  pod.Name,
+		Namespace:             pod.Namespace,
+		Node:                  pod.Spec.NodeName,
+		Status:                model.Status.Label,
+		StatusState:           model.Status.State,
+		StatusPresentation:    model.Status.Presentation,
+		StatusReason:          model.Status.Reason,
+		Ready:                 fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
+		Restarts:              podFacts.RestartCount,
+		Age:                   streamrows.FormatAge(pod.CreationTimestamp.Time),
+		AgeTimestamp:          streamrows.CreationMillis(pod),
+		OwnerKind:             owner.kind,
+		OwnerName:             owner.name,
+		PortForwardAvailable:  common.HasForwardableContainerPorts(pod.Spec.Containers),
+		OwnerAPIVersion:       owner.apiVersion,
+		DirectOwnerKind:       owner.directKind,
+		DirectOwnerName:       owner.directName,
+		DirectOwnerAPIVersion: owner.directAPIVersion,
+		CPURequest:            streamrows.FormatCPUMilli(cpuReq),
+		CPULimit:              streamrows.FormatCPUMilli(cpuLim),
+		CPUUsage:              streamrows.FormatCPUMilli(cpuUsageMilli),
+		MemRequest:            streamrows.FormatMemoryBytes(memReq),
+		MemLimit:              streamrows.FormatMemoryBytes(memLim),
+		MemUsage:              streamrows.FormatMemoryBytes(memUsageBytes),
 	}
 }
 
-func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string, string) {
+// podOwner carries both owner identities a pod row stores: the direct
+// controlling ownerRef as written on the pod, and the collapsed owner with a
+// ReplicaSet resolved to its Deployment (equal to direct for every other kind).
+type podOwner struct {
+	kind, name, apiVersion                   string
+	directKind, directName, directAPIVersion string
+}
+
+func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) podOwner {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {
 			continue
 		}
-		kind := owner.Kind
-		name := owner.Name
-		apiVersion := owner.APIVersion
+		resolved := podOwner{
+			kind:             owner.Kind,
+			name:             owner.Name,
+			apiVersion:       owner.APIVersion,
+			directKind:       owner.Kind,
+			directName:       owner.Name,
+			directAPIVersion: owner.APIVersion,
+		}
 		if owner.Kind == "ReplicaSet" {
 			if deployment, ok := rsMap[owner.Name]; ok {
-				kind = "Deployment"
-				name = deployment
-				apiVersion = "apps/v1"
+				resolved.kind = "Deployment"
+				resolved.name = deployment
+				resolved.apiVersion = "apps/v1"
 			}
 		}
-		return kind, name, apiVersion
+		return resolved
 	}
-	return "None", "None", ""
+	return podOwner{kind: "None", name: "None"}
 }
 
 func computeResourceTotals(pod *corev1.Pod) (cpuReq, cpuLim, memReq, memLim int64) {

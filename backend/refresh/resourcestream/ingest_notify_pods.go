@@ -64,37 +64,6 @@ func (m *Manager) lookupPodBundle(namespace, name string) (snapshot.PodSummary, 
 	return snapshot.PodSummary{}, objectcatalog.Summary{}, false
 }
 
-// broadcastHealedPodStaleScopes signals a healed pod (healPodsForReplicaSet) as
-// DELETED on the workload scopes its row just left — the ReplicaSet fallback
-// scope its unresolved owner had it filed under — so any window subscribed there
-// refetches. The Ref is built from the bundle's halves exactly like
-// broadcastBundle; the Modified signal on the NEW scopes is emitted by the
-// bundle sink during the rewrite itself.
-func (m *Manager) broadcastHealedPodStaleScopes(bundle ingest.Bundle, staleScopes []string) {
-	summary, ok := bundle.Table.(snapshot.PodSummary)
-	if !ok {
-		return
-	}
-	catalog, ok := bundle.Catalog.(objectcatalog.Summary)
-	if !ok {
-		return
-	}
-	ref := resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		summary.Namespace, summary.Name, catalog.UID,
-	)
-	update := Update{
-		Type:            MessageTypeDeleted,
-		Domain:          domainPods,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: catalog.ResourceVersion,
-		Ref:             &ref,
-	}
-	m.broadcast(domainPods, staleScopes, update)
-}
-
 // podNotifyBundleSink adapts the pod live-stream notify to an ingest whole-Bundle sink.
 // Each UpsertBundle fires a MODIFIED signal (the pod's row may have changed) and each
 // DeleteBundle a DELETED signal — the same Add/Update/Delete -> broadcast mapping the

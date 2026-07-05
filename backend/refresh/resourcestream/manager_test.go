@@ -1364,29 +1364,33 @@ func TestManagerReplicaSetAddHealsRacedPodOwnerRows(t *testing.T) {
 
 	deploymentSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web")
 	require.NoError(t, err)
-	staleSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:ReplicaSet:web-12345")
+	rsSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:ReplicaSet:web-12345")
 	require.NoError(t, err)
 	namespaceSub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
 	require.NoError(t, err)
 
 	manager.handleReplicaSetEvent(nil, rs, MessageTypeAdded)
 
-	// The stored bundle is healed: serve-side filters now match the Deployment scope.
+	// The stored bundle is healed: the collapsed owner now names the Deployment
+	// while the direct owner keeps the ReplicaSet, so BOTH workload scopes serve it.
 	rows := store.List()
 	require.Len(t, rows, 1)
 	healedRow := rows[0].(ingest.Bundle).Table.(snapshot.PodSummary)
 	require.Equal(t, "Deployment", healedRow.OwnerKind)
 	require.Equal(t, "web", healedRow.OwnerName)
+	require.Equal(t, "ReplicaSet", healedRow.DirectOwnerKind)
+	require.Equal(t, "web-12345", healedRow.DirectOwnerName)
 
 	// Doorbell: the Deployment-scoped window learns its pods changed...
 	deploymentUpdate := requireNextUpdate(t, deploymentSub)
 	require.Equal(t, MessageTypeModified, deploymentUpdate.Type)
 	require.Equal(t, "web-12345-abcde", deploymentUpdate.Ref.Name)
 
-	// ...the stale ReplicaSet fallback scope learns the rows left it...
-	staleUpdate := requireNextUpdate(t, staleSub)
-	require.Equal(t, MessageTypeDeleted, staleUpdate.Type)
-	require.Equal(t, "web-12345-abcde", staleUpdate.Ref.Name)
+	// ...the ReplicaSet-scoped window too — the healed row still belongs to it
+	// through its direct owner...
+	rsUpdate := requireNextUpdate(t, rsSub)
+	require.Equal(t, MessageTypeModified, rsUpdate.Type)
+	require.Equal(t, "web-12345-abcde", rsUpdate.Ref.Name)
 
 	// ...and the namespace scope sees the row change like any pod update.
 	namespaceUpdate := requireNextUpdate(t, namespaceSub)
@@ -1428,6 +1432,55 @@ func TestManagerReplicaSetModifiedHealsRacedPodOwnerRows(t *testing.T) {
 	deploymentUpdate := requireNextUpdate(t, deploymentSub)
 	require.Equal(t, MessageTypeModified, deploymentUpdate.Type)
 	require.Equal(t, "web-12345-abcde", deploymentUpdate.Ref.Name)
+}
+
+// TestManagerPodSignalReachesDirectOwnerScope: a deployment-owned pod's change
+// signal must ring BOTH workload windows — the Deployment scope (collapsed
+// owner) and the ReplicaSet scope (direct owner). The RS panel's Pods tab
+// subscribes to the latter; deriving scopes only from the collapsed owner left
+// it without doorbells.
+func TestManagerPodSignalReachesDirectOwnerScope(t *testing.T) {
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-12345",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "Deployment",
+				Name:       "web",
+				Controller: ptrBool(true),
+				APIVersion: "apps/v1",
+			}},
+		},
+	}
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+	// Resolved projection (RS known at projection time) delivered through the
+	// production notify sink.
+	project := snapshot.NewPodIngestProjector(
+		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		testsupport.NewReplicaSetLister(t, rs),
+	)
+	store := ingest.NewProjectingStore(project)
+	store.SetRetainTable(true)
+	store.AddBundleSink(podNotifyBundleSink{manager: manager})
+
+	deploymentSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:Deployment:web")
+	require.NoError(t, err)
+	rsSub, err := subscribeForTest(t, manager, domainPods, "workload:default:apps:v1:ReplicaSet:web-12345")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Add(racedOwnerPod()))
+
+	deploymentUpdate := requireNextUpdate(t, deploymentSub)
+	require.Equal(t, MessageTypeModified, deploymentUpdate.Type)
+	require.Equal(t, "web-12345-abcde", deploymentUpdate.Ref.Name)
+
+	rsUpdate := requireNextUpdate(t, rsSub)
+	require.Equal(t, MessageTypeModified, rsUpdate.Type)
+	require.Equal(t, "web-12345-abcde", rsUpdate.Ref.Name)
 }
 
 // TestManagerReplicaSetAddWithoutDeploymentOwnerDoesNotHeal: a standalone RS's
