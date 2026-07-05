@@ -315,7 +315,9 @@ describe('ClusterOverview', () => {
     );
     expect(statValueFor(container, 'total')).toBe('—');
     expect(statValueFor(container, 'namespaces')).toBe('—');
-    expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();
+    expect(
+      container.querySelector('.cluster-overview .cluster-overview-loading-inline') ?? null
+    ).toBeNull();
   });
 
   it('hydrates with overview data once the domain resolves', async () => {
@@ -707,7 +709,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('Failed to load cluster overview');
+    expect(container.textContent).toContain('Failed to load Cluster Overview data');
     expect(container.textContent).toContain('forbidden');
     expect(statValueFor(container, 'total')).toBe('0');
     expect(container.textContent).not.toContain('Loading cluster overview...');
@@ -905,14 +907,15 @@ describe('ClusterOverview', () => {
     rerender();
     await flushEffects();
 
-    // The Nodes card explains the gap instead of rendering misleading zeros.
-    // "list, watch" are the actual RBAC verbs the app needs for node data —
-    // never "view", which is a ClusterRole name, not a permission.
+    // The Nodes card shows the restriction notice above its graph and dashes out
+    // the node counts (the graph is never hidden). "list, watch" are the actual
+    // RBAC verbs the app needs for node data — never "view", which is a
+    // ClusterRole name, not a permission.
     expect(
       container.querySelector('[data-testid="cluster-nodes-permission-note"]')?.textContent
     ).toContain('Node permissions: list, watch');
-    expect(container.querySelector('[data-testid="cluster-nodes-total"]')).toBeNull();
-    expect(statValueFor(container, 'total')).toBe('');
+    expect(container.querySelector('[data-testid="cluster-nodes-total"]')).not.toBeNull();
+    expect(statValueFor(container, 'total')).toBe('—');
 
     // Capacity-derived values have no denominator without nodes: the usage
     // summaries drop the "of <allocatable>" part and the percentages dash out
@@ -925,19 +928,17 @@ describe('ClusterOverview', () => {
       )
     ).toEqual(['—', '—']);
 
-    // The warning lives in the affected card: the Resource Utilization header
-    // carries a capacity chip (no page-level banner).
+    // The warning lives in the affected card: the Resource Utilization card
+    // carries a capacity notice (no page-level banner).
     expect(container.querySelector('[data-testid="overview-permission-banner"]')).toBeNull();
     const capacityChip = container.querySelector(
       '[data-testid="utilization-capacity-permission-chip"]'
     );
     expect(capacityChip?.textContent).toContain('Capacity unavailable');
-    // The explanation is a visible ⓘ-triggered tooltip, not an invisible
-    // title attribute.
+    // The explanation is visible inline text in the standardized notice, not an
+    // invisible title attribute or a hover-only tooltip.
     expect(capacityChip?.getAttribute('title')).toBeNull();
-    expect(capacityChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
-      'Node permissions: list, watch'
-    );
+    expect(capacityChip?.textContent).toContain('Node permissions: list, watch');
 
     // Pod and namespace data still render, with no pods/namespaces warnings.
     expect(statValueFor(container, 'pods')).toBe('42');
@@ -976,12 +977,8 @@ describe('ClusterOverview', () => {
     );
     expect(requestsChip?.textContent).toContain('Requests and limits unavailable');
     expect(requestsChip?.getAttribute('title')).toBeNull();
-    expect(requestsChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
-      'Pod permissions: list, watch'
-    );
-    expect(requestsChip?.querySelector('[data-testid="tooltip-content"]')?.textContent).toContain(
-      'Only current usage is shown'
-    );
+    expect(requestsChip?.textContent).toContain('Pod permissions: list, watch');
+    expect(requestsChip?.textContent).toContain('Only current usage is shown');
 
     // The Workloads card explains its hidden counts in place.
     expect(
@@ -999,6 +996,46 @@ describe('ClusterOverview', () => {
     expect(statValueFor(container, 'total')).toBe('2');
     expect(container.textContent).toContain('400m of 2 cores');
     expect(container.textContent).toContain('20.0%');
+  });
+
+  it('surfaces disabled metrics as an in-card notice and suppresses the transient pill', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = {
+      status: 'ready',
+      data: {
+        overview: {
+          ...EMPTY_OVERVIEW_DATA,
+          clusterType: 'Unmanaged',
+          totalNodes: 2,
+          readyNodes: 2,
+        },
+        // A DisabledPoller ships disabled:true with the terminal reason.
+        metrics: {
+          disabled: true,
+          lastError: 'Insufficient permissions for Metrics API',
+          stale: true,
+          successCount: 0,
+          failureCount: 0,
+        },
+      } as any,
+      error: null,
+    };
+
+    rerender();
+    await flushEffects();
+
+    // The permanent state reads as the standardized in-card restriction notice…
+    const metricsNote = container.querySelector(
+      '[data-testid="utilization-metrics-permission-note"]'
+    );
+    expect(metricsNote?.textContent).toContain('Metrics unavailable');
+    expect(metricsNote?.textContent).toContain('Insufficient permissions for Metrics API');
+
+    // …not the transient "Collecting metrics…" header pill (which is suppressed).
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
+    expect(container.textContent).not.toContain('Collecting metrics');
   });
 
   it('explains the utilization bar vocabulary in a collapsible legend', async () => {
@@ -1094,7 +1131,7 @@ describe('ClusterOverview', () => {
       { preserveState: true }
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(container.textContent).not.toContain('Failed to load cluster overview');
+    expect(container.textContent).not.toContain('Failed to load Cluster Overview data');
     expect(statValueFor(container, 'total')).toBe('—');
   });
 });

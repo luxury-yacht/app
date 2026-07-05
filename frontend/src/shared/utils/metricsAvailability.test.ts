@@ -39,6 +39,27 @@ describe('getMetricsBannerInfo', () => {
     expect(bannerWithZeroTime?.message).toBe('Collecting metrics…');
   });
 
+  it('surfaces the terminal reason for a disabled poller instead of "Collecting metrics"', () => {
+    // Regression: a DisabledPoller (no metrics permission, or metrics-server
+    // absent) reports successCount 0 / no failures / zero collectedAt — the same
+    // counters as the pristine window — but carries a permanent reason in
+    // lastError. Without the disabled flag it was mistaken for "collecting" and
+    // the app silently stuck there forever. The flag must short-circuit to the
+    // reason verbatim — this uses a reason the keyword branches do NOT special-
+    // case, so the assertion fails unless the disabled branch handles it.
+    const banner = getMetricsBannerInfo({
+      disabled: true,
+      lastError: 'Metrics API not found (metrics-server)',
+      successCount: 0,
+      failureCount: 0,
+      consecutiveFailures: 0,
+    });
+    expect(banner).toEqual({
+      message: 'Metrics API not found (metrics-server)',
+      tooltip: 'Metrics API not found (metrics-server)',
+    });
+  });
+
   it('returns awaiting message during initial transient failures', () => {
     const banner = getMetricsBannerInfo({
       lastError: 'metrics API unavailable (pods.metrics.k8s.io)',

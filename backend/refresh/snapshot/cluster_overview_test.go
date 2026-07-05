@@ -1037,3 +1037,32 @@ func TestClusterOverviewSurfacesRepeatedMetricsErrors(t *testing.T) {
 	require.Equal(t, uint64(5), payload.Metrics.FailureCount)
 	require.Equal(t, uint64(0), payload.Metrics.SuccessCount)
 }
+
+func TestClusterOverviewSurfacesDisabledMetricsReason(t *testing.T) {
+	// A DisabledPoller (metrics API forbidden, or metrics-server absent) reports
+	// the SAME counters as the pristine pre-first-poll window: SuccessCount 0, no
+	// failures, zero CollectedAt. Those trip the grace period, which would clear
+	// its LastError and strand the UI on "Collecting metrics…" forever. The
+	// Disabled flag must exempt it so the permanent reason reaches the payload.
+	builder := &ClusterOverviewBuilder{
+		ingest:          newFakePodAggregateSource(nil).withNodes(ClusterMeta{}, ""),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		metrics: fakeClusterMetrics{
+			meta: metrics.Metadata{
+				Disabled:            true,
+				LastError:           "Insufficient permissions for Metrics API",
+				FailureCount:        0,
+				ConsecutiveFailures: 0,
+				SuccessCount:        0,
+			},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, "Insufficient permissions for Metrics API", payload.Metrics.LastError)
+	require.True(t, payload.Metrics.Disabled)
+}
