@@ -606,6 +606,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const podsUnavailable = unavailableResources.includes('core/pods');
   const namespacesUnavailable = unavailableResources.includes('core/namespaces');
 
+  // Metrics are permanently unavailable (metrics API forbidden, or metrics-server
+  // absent) rather than merely still collecting. This is a restriction, so it
+  // renders as an in-card notice below and suppresses the transient metrics pill.
+  const metricsDisabled = !!metricsInfo?.disabled;
+
   // Standardized access-restriction notices: each affected card renders the
   // same callout (ClusterOverviewRestrictionNotice) so the reasons read
   // consistently and never truncate. Gated on !showSkeleton so restrictions
@@ -652,6 +657,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         detail:
           'Your account has insufficient access to namespaces. Requires Namespace permission: list.',
         testId: 'workloads-namespaces-permission-note',
+      });
+    }
+    if (metricsDisabled) {
+      const metricsReason = metricsInfo?.lastError?.trim();
+      utilizationRestrictions.push({
+        key: 'metrics',
+        headline: 'Metrics unavailable',
+        detail: metricsReason
+          ? `Live CPU and memory usage cannot be shown. ${metricsReason}`
+          : 'Live CPU and memory usage cannot be shown.',
+        testId: 'utilization-metrics-permission-note',
       });
     }
   }
@@ -947,7 +963,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               notice beneath the header instead. */}
           <div className="overview-section-header">
             <h2>Resource Utilization</h2>
-            {metricsBanner && !errorMessage && (
+            {metricsBanner && !errorMessage && !metricsDisabled && (
               <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
                 <span className="metrics-warning-banner__dot" />
                 <span className="metrics-warning-banner__text">{metricsBanner.message}</span>

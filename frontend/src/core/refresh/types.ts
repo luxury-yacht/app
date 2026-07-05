@@ -252,6 +252,9 @@ export interface ClusterOverviewMetrics {
   consecutiveFailures?: number;
   successCount: number;
   failureCount: number;
+  // Terminal "metrics unavailable" state (metrics API forbidden, or
+  // metrics-server absent); lastError then carries the permanent reason.
+  disabled?: boolean;
 }
 
 export interface WorkloadTypeResourceUsage {

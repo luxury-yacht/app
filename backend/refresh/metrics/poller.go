@@ -47,6 +47,12 @@ type Metadata struct {
 	LastError           string
 	SuccessCount        uint64
 	FailureCount        uint64
+	// Disabled marks a terminal "metrics will never be collected" state (metrics
+	// API forbidden, or metrics-server absent) as distinct from a real poller
+	// whose first collection has simply not completed yet. LastError then holds a
+	// permanent, UI-ready reason that must not be treated as a transient
+	// pre-first-poll error.
+	Disabled bool
 }
 
 var (
