@@ -19,7 +19,7 @@ import {
   ClusterResourcesIcon,
   CategoryIcon,
   CloseIcon,
-  WarningOutlineIcon,
+  WarningIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
 } from '@shared/components/icons/SharedIcons';
@@ -502,7 +502,7 @@ function Sidebar() {
                                   : 'Insufficient permissions to access this namespace (or it does not exist).'
                               }
                             >
-                              <WarningOutlineIcon width={12} height={12} />
+                              <WarningIcon width={16} height={16} />
                             </span>
                           ) : null}
                           {namespaceScope.scope.includes(namespace.name) &&

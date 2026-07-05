@@ -7,7 +7,7 @@
  * read consistently, draw attention, and never truncate.
  */
 import React from 'react';
-import { WarningOutlineIcon } from '@shared/components/icons/SharedIcons';
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 
 export interface OverviewRestriction {
   /** Stable key for list rendering. */
@@ -44,12 +44,7 @@ const ClusterOverviewRestrictionNotice: React.FC<ClusterOverviewRestrictionNotic
           className="overview-restriction__item"
           data-testid={restriction.testId}
         >
-          <WarningOutlineIcon
-            width={15}
-            height={15}
-            className="overview-restriction__icon"
-            ariaHidden
-          />
+          <WarningIcon width={16} height={16} className="overview-restriction__icon" ariaHidden />
           <span className="overview-restriction__headline">{restriction.headline}</span>
           <span className="overview-restriction__detail">{restriction.detail}</span>
         </div>
