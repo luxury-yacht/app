@@ -763,10 +763,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text-secondary);
   text-align: center;
-  max-width: 420px;
+  border: 1px solid var(--metrics-banner-border);
+  border-radius: var(--border-radius-lg);
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  background: var(--metrics-banner-bg);
 }
 
 .cluster-overview-error .error-icon {
@@ -774,9 +776,8 @@
 }
 
 .cluster-overview-error .error-detail {
-  font-size: 0.85rem;
-  color: var(--color-error);
-  margin-top: 0.5rem;
+  font-size: var(--font-size-normal);
+  /* color: var(--color-error); */
 }
 
 .cluster-overview-loading-inline {

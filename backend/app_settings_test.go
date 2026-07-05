@@ -29,7 +29,40 @@ func setTestConfigEnv(t *testing.T) {
 	baseDir := t.TempDir()
 	t.Setenv("HOME", baseDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(baseDir, ".cache"))
 	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
+}
+
+func TestClearAppStateRemovesCacheDir(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+
+	// The app cache dir lives under the user cache dir (redirected into a temp
+	// dir by setTestConfigEnv). Seed the subdirs the three cache subsystems use
+	// so we can prove Factory Reset removes cached data, not just config files.
+	cacheBase, err := os.UserCacheDir()
+	require.NoError(t, err)
+	cacheDir := filepath.Join(cacheBase, "luxury-yacht")
+	for _, sub := range []string{"discovery", "spill", "diagnostics"} {
+		dir := filepath.Join(cacheDir, sub)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "cached"), []byte("x"), 0o644))
+	}
+
+	// A sibling under the user cache dir must be left untouched — Factory Reset
+	// only clears this app's cache subtree.
+	sibling := filepath.Join(cacheBase, "other-app")
+	require.NoError(t, os.MkdirAll(sibling, 0o755))
+
+	require.NoError(t, app.ClearAppState())
+
+	_, statErr := os.Stat(cacheDir)
+	require.Truef(t, os.IsNotExist(statErr),
+		"expected app cache dir %q to be removed, stat err=%v", cacheDir, statErr)
+
+	_, siblingErr := os.Stat(sibling)
+	require.NoError(t, siblingErr, "unrelated sibling cache dir must be preserved")
 }
 
 func TestAppLoadWindowSettingsDefaultWhenMissing(t *testing.T) {

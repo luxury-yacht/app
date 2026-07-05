@@ -512,6 +512,19 @@ func (a *App) getSettingsFilePath() (string, error) {
 	return filepath.Join(configDir, "settings.json"), nil
 }
 
+// cacheDirPath returns the app's cache directory (<UserCacheDir>/luxury-yacht):
+// the single home for transient on-disk caches (API discovery, maintained-store
+// spill, diagnostic dumps). It is the cache-tier sibling of the config dir and
+// the one place that defines the cache base, so Factory Reset can clear the
+// whole subtree in one call.
+func (a *App) cacheDirPath() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("could not find cache directory: %w", err)
+	}
+	return filepath.Join(cacheDir, "luxury-yacht"), nil
+}
+
 // loadSettingsFile reads settings.json or returns defaults when missing.
 func (a *App) loadSettingsFile() (*settingsFile, error) {
 	configFile, err := a.getSettingsFilePath()
@@ -847,6 +860,20 @@ func (a *App) ClearAppState() error {
 		persistenceFile, err := a.getPersistenceFilePath()
 		if err == nil {
 			if err := removeFileIfExists(persistenceFile); err != nil {
+				errs = append(errs, err)
+			}
+		} else {
+			errs = append(errs, err)
+		}
+
+		// Clear the transient cache subtree (discovery, spill, diagnostics) so a
+		// Factory Reset restores true fresh-install state, not just deleted config
+		// files. clearKubeconfigSelection above already tore down the refresh
+		// subsystem and disconnected every cluster, so no cache writer is active
+		// here; RemoveAll is a no-op when the tree is already absent.
+		cacheDir, err := a.cacheDirPath()
+		if err == nil {
+			if err := os.RemoveAll(cacheDir); err != nil {
 				errs = append(errs, err)
 			}
 		} else {

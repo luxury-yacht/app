@@ -875,9 +875,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       {errorMessage && (
         <div className="cluster-overview-loading-inline">
           <div className="cluster-overview-error">
-            <span className="error-icon">⚠️</span>
-            <div>Failed to load cluster overview</div>
-            <div className="error-detail">{errorMessage}</div>
+            <div className="error-detail">Failed to load Cluster Overview data: {errorMessage}</div>
           </div>
         </div>
       )}
