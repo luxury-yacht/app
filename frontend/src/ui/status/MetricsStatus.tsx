@@ -24,6 +24,11 @@ const MetricsStatus: React.FC = () => {
     // No banner info means metrics are healthy.
     if (!bannerInfo) return 'healthy';
 
+    // Metrics permanently unavailable (no permission / metrics-server absent) is
+    // a restriction, not an app fault — show amber (degraded), matching the
+    // in-card restriction notices, not alarming red.
+    if (metricsInfo.disabled) return 'degraded';
+
     // Has an error — distinguish degraded (stale/intermittent) vs unhealthy (unavailable).
     if (metricsInfo.lastError) return 'unhealthy';
 

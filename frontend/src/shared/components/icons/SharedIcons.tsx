@@ -600,9 +600,10 @@ export const WarningTriangleIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const WarningOutlineIcon: React.FC<IconProps> = ({
+export const WarningIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
+  fill = 'currentColor',
   className,
   ariaHidden,
 }) => (
@@ -611,15 +612,11 @@ export const WarningOutlineIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
+    fill={fill}
     className={className}
     aria-hidden={ariaHidden}
   >
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
+    <path d="M9.138 3.707c1.228-2.276 4.494-2.276 5.721 0l6.743 12.502c1.168 2.165-.4 4.792-2.86 4.793H5.255c-2.46 0-4.028-2.628-2.86-4.793zm4.4.712c-.66-1.225-2.419-1.225-3.08 0L3.715 16.921a1.75 1.75 0 0 0 1.54 2.581h13.487a1.75 1.75 0 0 0 1.54-2.581zM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2m0-7.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 12 7.5" />
   </svg>
 );
 

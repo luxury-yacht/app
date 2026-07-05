@@ -17,7 +17,6 @@ import {
   formatCpuValue,
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -39,9 +38,7 @@ import {
   emitPodsUnhealthySignal,
   type PodsFilterMode,
 } from '@modules/namespace/components/podsFilterSignals';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
@@ -64,6 +61,9 @@ import {
   clusterOverviewResourceMetrics,
   clusterWorkloadUsageValue,
 } from '@/core/resource-metrics';
+import ClusterOverviewRestrictionNotice, {
+  type OverviewRestriction,
+} from './ClusterOverviewRestrictionNotice';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -186,7 +186,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const metricsInfo = useMemo(() => {
     const metricsByCluster = overviewDomain.data?.metricsByCluster;
     if (metricsByCluster) {
@@ -274,46 +273,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setIsSwitching(true);
     }
   }, [hydratedClusterId, selectedClusterId, selectedOverview]);
-
-  useEffect(() => {
-    let isActive = true;
-    requestAppState({
-      resource: 'app-info',
-      read: () => readAppInfo(),
-    })
-      .then((info) => {
-        if (!isActive) {
-          return;
-        }
-        const withUpdate = info as AppInfoWithUpdate;
-        setUpdateInfo(withUpdate.update ?? null);
-      })
-      .catch(() => {
-        // Silent fallback if update metadata cannot be fetched.
-      });
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-    const handleUpdate = (...args: unknown[]) => {
-      const payload = args[0] as UpdateInfo | undefined;
-      if (!payload) {
-        return;
-      }
-      // Event payload is the latest update metadata from the backend.
-      setUpdateInfo(payload);
-    };
-    runtime.EventsOn('app-update', handleUpdate);
-    return () => {
-      runtime.EventsOff?.('app-update', handleUpdate);
-    };
-  }, []);
 
   const isHydratedForCluster = isHydrated && hydratedClusterId === selectedClusterId;
   const displayOverview = isHydratedForCluster ? overviewData : EMPTY_OVERVIEW;
@@ -603,6 +562,72 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const podsUnavailable = unavailableResources.includes('core/pods');
   const namespacesUnavailable = unavailableResources.includes('core/namespaces');
 
+  // Metrics are permanently unavailable (metrics API forbidden, or metrics-server
+  // absent) rather than merely still collecting. This is a restriction, so it
+  // renders as an in-card notice below and suppresses the transient metrics pill.
+  const metricsDisabled = !!metricsInfo?.disabled;
+
+  // Standardized access-restriction notices: each affected card renders the
+  // same callout (ClusterOverviewRestrictionNotice) so the reasons read
+  // consistently and never truncate. Gated on !showSkeleton so restrictions
+  // never flash while the first snapshot is still loading.
+  const utilizationRestrictions: OverviewRestriction[] = [];
+  const nodesRestrictions: OverviewRestriction[] = [];
+  const workloadsRestrictions: OverviewRestriction[] = [];
+  if (!showSkeleton) {
+    if (nodesUnavailable) {
+      utilizationRestrictions.push({
+        key: 'capacity',
+        headline: 'Capacity unavailable',
+        detail:
+          'Cluster capacity is unavailable, so utilization is measured against requests and limits. Requires Node permissions: list, watch.',
+        testId: 'utilization-capacity-permission-chip',
+      });
+      nodesRestrictions.push({
+        key: 'nodes',
+        headline: 'Node details unavailable',
+        detail:
+          'Your account has insufficient access to node data. Requires Node permissions: list, watch.',
+        testId: 'cluster-nodes-permission-note',
+      });
+    }
+    if (podsUnavailable) {
+      utilizationRestrictions.push({
+        key: 'requests-limits',
+        headline: 'Requests and limits unavailable',
+        detail: 'Only current usage is shown. Requires Pod permissions: list, watch.',
+        testId: 'utilization-requests-permission-chip',
+      });
+      workloadsRestrictions.push({
+        key: 'pods',
+        headline: 'Pod and container counts unavailable',
+        detail:
+          'Your account has insufficient access to pod data. Requires Pod permissions: list, watch.',
+        testId: 'workloads-pods-permission-note',
+      });
+    }
+    if (namespacesUnavailable) {
+      workloadsRestrictions.push({
+        key: 'namespaces',
+        headline: 'Namespace count unavailable',
+        detail:
+          'Your account has insufficient access to namespaces. Requires Namespace permission: list.',
+        testId: 'workloads-namespaces-permission-note',
+      });
+    }
+    if (metricsDisabled) {
+      const metricsReason = metricsInfo?.lastError?.trim();
+      utilizationRestrictions.push({
+        key: 'metrics',
+        headline: 'Metrics unavailable',
+        detail: metricsReason
+          ? `Live CPU and memory usage cannot be shown. ${metricsReason}`
+          : 'Live CPU and memory usage cannot be shown.',
+        testId: 'utilization-metrics-permission-note',
+      });
+    }
+  }
+
   const overviewResourceMetrics = clusterOverviewResourceMetrics(displayOverview, metricsInfo);
   const memoryResourceMetrics = calculateResourceMetrics(
     overviewResourceMetrics.memory ?? {},
@@ -807,39 +832,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         className={`metric-legend__dot metric-legend__dot--${item.variant}`}
         aria-hidden="true"
       />
-      <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
+      <span className="metric-legend__count">
+        {showSkeleton || nodesUnavailable ? DASH : item.value}
+      </span>
       <span className="metric-legend__label">{item.label}</span>
     </div>
   );
 
-  const showUpdateBanner = Boolean(updateInfo?.isUpdateAvailable && updateInfo?.releaseUrl);
   // Before the initial snapshot arrives we don't have real values yet —
   // render a dash placeholder instead of zeros so the UI reads as "loading"
   // without surfacing misleading "0" values.
   const DASH = '—';
-  const handleUpdateClick = useCallback(() => {
-    if (!updateInfo?.releaseUrl) {
-      return;
-    }
-    // Open the update release page when the notice is activated.
-    BrowserOpenURL(updateInfo.releaseUrl);
-  }, [updateInfo]);
 
   return (
     <div className="cluster-overview selectable">
-      {showUpdateBanner && (
-        <div className="overview-update-banner-wrap">
-          <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
-            <div className="overview-update-text">
-              <span className="overview-update-meta">
-                {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
-                Click here to go to the downloads page.
-              </span>
-            </div>
-          </button>
-        </div>
-      )}
-
       <div className="overview-top">
         <div className="overview-top__info">
           <h1 className="overview-top__title">{contextLabel}</h1>
@@ -874,56 +880,35 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       {errorMessage && (
         <div className="cluster-overview-loading-inline">
-          <div className="cluster-overview-error">
-            <span className="error-icon">⚠️</span>
-            <div>Failed to load cluster overview</div>
-            <div className="error-detail">{errorMessage}</div>
-          </div>
+          <ClusterOverviewRestrictionNotice
+            restrictions={[
+              {
+                key: 'load-error',
+                headline: 'Failed to load Cluster Overview data',
+                detail: errorMessage,
+              },
+            ]}
+          />
         </div>
       )}
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          {/* Header row: the metrics/permission indicators sit in the card's
-              upper right so their presence never shifts the utilization
-              content below. */}
+          {/* Header row: the transient metrics-collection indicator sits in the
+              card's upper right so its presence never shifts the utilization
+              content below. Access restrictions render in the standardized
+              notice beneath the header instead. */}
           <div className="overview-section-header">
             <h2>Resource Utilization</h2>
-            {metricsBanner && !errorMessage && (
+            {metricsBanner && !errorMessage && !metricsDisabled && (
               <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
                 <span className="metrics-warning-banner__dot" />
                 <span className="metrics-warning-banner__text">{metricsBanner.message}</span>
               </div>
             )}
-            {nodesUnavailable && !showSkeleton && (
-              <div
-                className="overview-permission-chip"
-                data-testid="utilization-capacity-permission-chip"
-              >
-                <span className="metrics-warning-banner__dot" />
-                <span className="metrics-warning-banner__text">Capacity unavailable</span>
-                <Tooltip
-                  content="Cluster capacity data is unavailable. Your account is missing required Node permissions: list, watch."
-                  maxWidth={320}
-                />
-              </div>
-            )}
-            {podsUnavailable && !showSkeleton && (
-              <div
-                className="overview-permission-chip"
-                data-testid="utilization-requests-permission-chip"
-              >
-                <span className="metrics-warning-banner__dot" />
-                <span className="metrics-warning-banner__text">
-                  Requests and limits unavailable
-                </span>
-                <Tooltip
-                  content="Pod requests and limits data is unavailable. Only current usage is shown. Your account is missing required Pod permissions: list, watch."
-                  maxWidth={320}
-                />
-              </div>
-            )}
           </div>
+
+          <ClusterOverviewRestrictionNotice restrictions={utilizationRestrictions} />
 
           <div className="resource-group">
             <div className="metric-header metric-header--usage">
@@ -1071,110 +1056,88 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section nodes-summary">
           <h2>Nodes</h2>
-          {nodesUnavailable && !showSkeleton ? (
-            <div className="overview-permission-note" data-testid="cluster-nodes-permission-note">
-              Node details are hidden. Your account has insufficient access (requires Node
-              permissions: list, watch).
+          <ClusterOverviewRestrictionNotice restrictions={nodesRestrictions} />
+          <div className="metric-stats">
+            <div className="metric-stat" data-testid="cluster-nodes-total">
+              <span className="metric-stat__count">
+                {showSkeleton || nodesUnavailable ? DASH : displayOverview.totalNodes}
+              </span>
+              <span className="metric-stat__label">total</span>
             </div>
-          ) : (
-            <>
-              <div className="metric-stats">
-                <div className="metric-stat" data-testid="cluster-nodes-total">
+            {displayOverview.clusterType === 'EKS' && (
+              <>
+                <div className="metric-stat" data-testid="cluster-nodes-ec2">
                   <span className="metric-stat__count">
-                    {showSkeleton ? DASH : displayOverview.totalNodes}
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.ec2Nodes}
                   </span>
-                  <span className="metric-stat__label">total</span>
+                  <span className="metric-stat__label">ec2</span>
                 </div>
-                {displayOverview.clusterType === 'EKS' && (
-                  <>
-                    <div className="metric-stat" data-testid="cluster-nodes-ec2">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.ec2Nodes}
-                      </span>
-                      <span className="metric-stat__label">ec2</span>
-                    </div>
-                    <div className="metric-stat" data-testid="cluster-nodes-fargate">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.fargateNodes}
-                      </span>
-                      <span className="metric-stat__label">fargate</span>
-                    </div>
-                  </>
-                )}
-                {displayOverview.clusterType === 'AKS' && (
-                  <>
-                    <div className="metric-stat" data-testid="cluster-nodes-vm">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.vmNodes}
-                      </span>
-                      <span className="metric-stat__label">vm</span>
-                    </div>
-                    <div className="metric-stat" data-testid="cluster-nodes-virtual">
-                      <span className="metric-stat__count">
-                        {showSkeleton ? DASH : displayOverview.virtualNodes}
-                      </span>
-                      <span className="metric-stat__label">virtual</span>
-                    </div>
-                  </>
-                )}
-              </div>
+                <div className="metric-stat" data-testid="cluster-nodes-fargate">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.fargateNodes}
+                  </span>
+                  <span className="metric-stat__label">fargate</span>
+                </div>
+              </>
+            )}
+            {displayOverview.clusterType === 'AKS' && (
+              <>
+                <div className="metric-stat" data-testid="cluster-nodes-vm">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.vmNodes}
+                  </span>
+                  <span className="metric-stat__label">vm</span>
+                </div>
+                <div className="metric-stat" data-testid="cluster-nodes-virtual">
+                  <span className="metric-stat__count">
+                    {showSkeleton || nodesUnavailable ? DASH : displayOverview.virtualNodes}
+                  </span>
+                  <span className="metric-stat__label">virtual</span>
+                </div>
+              </>
+            )}
+          </div>
 
-              <div className="node-health">
-                <div className="metric-header">
-                  <h3>Node Health</h3>
-                  <div className="metric-legend__total">
-                    <span className="metric-legend__total-value">
-                      {showSkeleton ? DASH : displayOverview.totalNodes}
-                    </span>
-                    <span className="metric-legend__total-label"> total</span>
-                  </div>
-                </div>
-                <div className="stacked-bar" role="presentation" aria-hidden="true">
-                  {!showSkeleton &&
-                    nodeHealthPhaseItems.map((item) => {
-                      const width = nodeHealthPct(item.value);
-                      if (width <= 0) {
-                        return null;
-                      }
-                      return (
-                        <div
-                          key={item.key}
-                          className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
-                          style={{ width: `${width}%` }}
-                        />
-                      );
-                    })}
-                </div>
-                <div className="metric-legend">
-                  <div className="metric-legend__items">
-                    {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
-                  </div>
-                  <div className="metric-legend__items metric-legend__items--restarted">
-                    {renderNodeHealthLegendItem(nodeCordonedItem)}
-                  </div>
-                </div>
+          <div className="node-health">
+            <div className="metric-header">
+              <h3>Node Health</h3>
+              <div className="metric-legend__total">
+                <span className="metric-legend__total-value">
+                  {showSkeleton || nodesUnavailable ? DASH : displayOverview.totalNodes}
+                </span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
-            </>
-          )}
+            </div>
+            <div className="stacked-bar" role="presentation" aria-hidden="true">
+              {!showSkeleton &&
+                nodeHealthPhaseItems.map((item) => {
+                  const width = nodeHealthPct(item.value);
+                  if (width <= 0) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={item.key}
+                      className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
+                      style={{ width: `${width}%` }}
+                    />
+                  );
+                })}
+            </div>
+            <div className="metric-legend">
+              <div className="metric-legend__items">
+                {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
+              </div>
+              <div className="metric-legend__items metric-legend__items--restarted">
+                {renderNodeHealthLegendItem(nodeCordonedItem)}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="overview-section workloads-summary">
           <h2>Workloads</h2>
-          {podsUnavailable && !showSkeleton && (
-            <div className="overview-permission-note" data-testid="workloads-pods-permission-note">
-              Pod and container counts are hidden. Your account has insufficient access (requires
-              Pod permissions: list, watch).
-            </div>
-          )}
-          {namespacesUnavailable && !showSkeleton && (
-            <div
-              className="overview-permission-note"
-              data-testid="workloads-namespaces-permission-note"
-            >
-              The namespace count is hidden. Your account has insufficient access (requires
-              Namespace permission: list).
-            </div>
-          )}
+          <ClusterOverviewRestrictionNotice restrictions={workloadsRestrictions} />
           <div className="metric-stats">
             <div className="metric-stat" data-testid="cluster-workloads-namespaces">
               <span className="metric-stat__count">
@@ -1323,21 +1286,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       </div>
     </div>
   );
-};
-
-type UpdateInfo = {
-  currentVersion: string;
-  latestVersion: string;
-  releaseUrl: string;
-  releaseName?: string;
-  publishedAt?: string;
-  checkedAt?: string;
-  isUpdateAvailable: boolean;
-  error?: string;
-};
-
-type AppInfoWithUpdate = backend.AppInfo & {
-  update?: UpdateInfo | null;
 };
 
 export default ClusterOverview;

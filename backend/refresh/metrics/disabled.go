@@ -59,5 +59,6 @@ func (p *DisabledPoller) Metadata() Metadata {
 		LastError:           message,
 		SuccessCount:        0,
 		FailureCount:        0,
+		Disabled:            true,
 	}
 }

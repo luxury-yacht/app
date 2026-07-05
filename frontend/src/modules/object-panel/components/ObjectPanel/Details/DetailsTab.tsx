@@ -8,7 +8,7 @@ import Utilization from '@modules/object-panel/components/ObjectPanel/Details/De
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
 import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
 import DataSection from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabData';
-import { WarningOutlineIcon } from '@shared/components/icons/SharedIcons';
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import './DetailsTab.css';
 import './DetailsTabData.css';
 
@@ -55,7 +55,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
       {/* Deleted Resource Warning */}
       {resourceDeleted && (
         <div className="resource-deleted-warning">
-          <WarningOutlineIcon />
+          <WarningIcon />
           <span>
             {deletedResourceName || 'Resource'} no longer exists. Please select another resource.
           </span>

@@ -399,9 +399,13 @@ func TestDisabledPollerMetadata(t *testing.T) {
 	require.Equal(t, "metrics polling disabled", meta.LastError)
 	require.Zero(t, meta.FailureCount)
 	require.Zero(t, meta.SuccessCount)
+	// Disabled marks this as a terminal state (not a pre-first-poll window) so the
+	// serve-time grace period never clears LastError.
+	require.True(t, meta.Disabled)
 
 	custom := NewDisabledPoller(nil, "cluster has no metrics API")
 	require.Equal(t, "cluster has no metrics API", custom.Metadata().LastError)
+	require.True(t, custom.Metadata().Disabled)
 }
 
 // Scoped clusters (docs/plans/namespace-scope.md): pod metrics are listed per

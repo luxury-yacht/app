@@ -9,6 +9,10 @@ export interface MetricsAvailability {
   stale?: boolean;
   lastError?: string | null;
   collectedAt?: number;
+  // Terminal "metrics unavailable" state (metrics API forbidden, or
+  // metrics-server absent). When set, lastError holds a permanent, UI-ready
+  // reason that must never be treated as a transient pre-first-poll error.
+  disabled?: boolean;
   // Staleness threshold (seconds) shipped by the serve-time-join payloads so
   // the banner can flip client-side: the poller rings no doorbell on failure,
   // so nothing refetches to refresh a server-computed stale flag. Absent on
@@ -55,6 +59,18 @@ export const getMetricsBannerInfo = (
 ): MetricsBannerInfo | null => {
   if (!metrics) {
     return null;
+  }
+
+  // A permanently disabled poller (metrics API forbidden, or metrics-server
+  // absent) carries a terminal, UI-ready reason in lastError. Surface it
+  // directly — this is not a transient "collecting" state and must never fall
+  // through to the pristine/awaiting branches below.
+  if (metrics.disabled) {
+    const reason = metrics.lastError?.trim();
+    return {
+      message: reason || 'Metrics unavailable',
+      tooltip: reason || 'Metrics collection is unavailable for this cluster.',
+    };
   }
 
   const successCount = metrics.successCount ?? 0;

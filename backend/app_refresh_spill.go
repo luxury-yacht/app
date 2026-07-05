@@ -26,11 +26,11 @@ func (a *App) spillRootDir() (string, error) {
 	if a.spillRoot != "" {
 		return a.spillRoot, nil
 	}
-	cacheDir, err := os.UserCacheDir()
+	base, err := a.cacheDirPath()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cacheDir, "luxury-yacht", "spill"), nil
+	return filepath.Join(base, "spill"), nil
 }
 
 // clusterSpillDir is the per-cluster spill directory. The clusterID is hashed so an

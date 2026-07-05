@@ -114,6 +114,9 @@ type ClusterOverviewMetrics struct {
 	ConsecutiveFailures int    `json:"consecutiveFailures,omitempty"`
 	SuccessCount        uint64 `json:"successCount"`
 	FailureCount        uint64 `json:"failureCount"`
+	// Disabled marks a terminal "metrics unavailable" state (forbidden, or
+	// metrics-server absent); LastError then carries the permanent reason.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // ClusterOverviewPayload mirrors the data needed by the frontend overview cards.
@@ -605,8 +608,11 @@ func buildClusterOverviewSnapshot(
 		meta := provider.Metadata()
 		lastError := meta.LastError
 
-		// Grace period: avoid surfacing a metrics error before any successful poll has completed.
-		if meta.SuccessCount == 0 && meta.CollectedAt.IsZero() && meta.ConsecutiveFailures < 5 {
+		// Grace period: avoid surfacing a metrics error before any successful poll
+		// has completed. A disabled poller is exempt — its LastError is a permanent
+		// reason (forbidden / metrics-server absent), not a transient pre-first-poll
+		// error, so clearing it would strand the UI on "Collecting metrics…".
+		if !meta.Disabled && meta.SuccessCount == 0 && meta.CollectedAt.IsZero() && meta.ConsecutiveFailures < 5 {
 			lastError = ""
 		}
 
@@ -621,6 +627,7 @@ func buildClusterOverviewSnapshot(
 			ConsecutiveFailures: meta.ConsecutiveFailures,
 			SuccessCount:        meta.SuccessCount,
 			FailureCount:        meta.FailureCount,
+			Disabled:            meta.Disabled,
 		}
 		// Zero time must serve as 0/omitted — Unix() of Go's zero time is
 		// -62135596800, which reads as a PRESENT timestamp downstream and
