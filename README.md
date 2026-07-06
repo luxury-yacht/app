@@ -77,7 +77,7 @@ If your distro isn't on this (admittedly short) list, you'll have to search your
 ### Prerequisites
 
 - Go 1.26
-- Node 25
+- Node 26
 - [Wails](https://wails.io/)
 - [Mage](https://magefile.org/)
 - [Staticcheck](https://staticcheck.dev/)
@@ -89,7 +89,7 @@ Luxury Yacht is built with [Wails](https://wails.io/), a framework for building 
 To install Wails:
 
 ```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 ```
 
 Once Wails is installed, run `wails doctor` to see what other dependencies you'll need to install.
