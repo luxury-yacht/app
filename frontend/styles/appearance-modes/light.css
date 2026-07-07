@@ -169,22 +169,38 @@
   --toast-card-bg: #ffffff;
   --toast-card-border: rgba(0, 0, 0, 0.06);
   --toast-card-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
-  --toast-card-header-text: #ffffff;
-  --toast-card-header-bg: #ef4444;
   --toast-card-details-bg: var(--color-base-50);
   --toast-text-primary: var(--color-base-800);
   --toast-text-secondary: var(--color-base-600);
-  --toast-dismiss-text: #ffffff;
-  --toast-dismiss-bg: #ef4444;
-  --toast-dismiss-hover-bg: #dc2626;
   --toast-dismiss-border: rgba(0, 0, 0, 0.08);
-  --toast-count-bg: rgba(239, 68, 68, 0.9);
-  --toast-count-text: #ffffff;
   --toast-progress-track-bg: rgba(0, 0, 0, 0.06);
-  --toast-progress-fill-bg: #ef4444;
   --toast-progress-height: 3px;
   --toast-auto-dismiss-short: 5000ms;
   --toast-auto-dismiss-long: 10000ms;
+
+  /* Per-severity accent palette. The header, dismiss control, count badge, and
+     progress bar all read the single `--toast-accent`/`--toast-accent-on`/
+     `--toast-accent-hover` trio, which the notification's severity class
+     re-points (ErrorNotificationSystem.css). Error is the default. */
+  --toast-accent-error: #ef4444;
+  --toast-accent-on-error: #ffffff;
+  --toast-accent-hover-error: #dc2626;
+  --toast-accent-critical: #b91c1c;
+  --toast-accent-on-critical: #ffffff;
+  --toast-accent-hover-critical: #991b1b;
+  --toast-accent-warning: #f59e0b;
+  --toast-accent-on-warning: #3d2c00;
+  --toast-accent-hover-warning: #d97706;
+  --toast-accent-info: #475569;
+  --toast-accent-on-info: #ffffff;
+  --toast-accent-hover-info: #334155;
+
+  /* Default accent (used before a severity class applies) = error. The toast
+     header/dismiss/count/progress read --toast-accent/-on/-hover directly, so
+     the severity class's override on the card resolves at those elements. */
+  --toast-accent: var(--toast-accent-error);
+  --toast-accent-on: var(--toast-accent-on-error);
+  --toast-accent-hover: var(--toast-accent-hover-error);
 
   /* Terminal ANSI palette (iTerm2 default) */
   --terminal-ansi-black: #14191e;

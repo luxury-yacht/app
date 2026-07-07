@@ -171,26 +171,38 @@
   /* Shadows - deeper for dark mode */
   --shadow-interactive-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
 
-  /* Toast/notification surface */
+  /* Toast/notification surface. The accent-derived tokens (header/dismiss/
+     count/progress) inherit the `var(--toast-accent)` indirection from :root;
+     here we override only the dark palette values and the non-accent surface
+     tokens. See ErrorNotificationSystem.css for the severity → accent mapping. */
   --toast-card-bg: var(--color-base-800);
   --toast-card-border: rgba(255, 255, 255, 0.06);
   --toast-card-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
-  --toast-card-header-text: #ffffff;
-  --toast-card-header-bg: #dc2626;
   --toast-card-details-bg: var(--color-base-800);
   --toast-text-primary: var(--color-base-100);
   --toast-text-secondary: var(--color-base-400);
-  --toast-dismiss-text: #ffffff;
-  --toast-dismiss-bg: #dc2626;
-  --toast-dismiss-hover-bg: #ef4444;
   --toast-dismiss-border: rgba(255, 255, 255, 0.08);
-  --toast-count-bg: rgba(239, 68, 68, 0.9);
-  --toast-count-text: #ffffff;
   --toast-progress-track-bg: rgba(255, 255, 255, 0.06);
-  --toast-progress-fill-bg: #dc2626;
   --toast-progress-height: 3px;
   --toast-auto-dismiss-short: 5000ms;
   --toast-auto-dismiss-long: 10000ms;
+
+  --toast-accent-error: #dc2626;
+  --toast-accent-on-error: #ffffff;
+  --toast-accent-hover-error: #ef4444;
+  --toast-accent-critical: #991b1b;
+  --toast-accent-on-critical: #ffffff;
+  --toast-accent-hover-critical: #b91c1c;
+  --toast-accent-warning: #f59e0b;
+  --toast-accent-on-warning: #3d2c00;
+  --toast-accent-hover-warning: #d97706;
+  --toast-accent-info: #475569;
+  --toast-accent-on-info: #e5e7eb;
+  --toast-accent-hover-info: #334155;
+
+  --toast-accent: var(--toast-accent-error);
+  --toast-accent-on: var(--toast-accent-on-error);
+  --toast-accent-hover: var(--toast-accent-hover-error);
 
   /* Terminal ANSI palette (iTerm2 default) */
   --terminal-ansi-black: #14191e;

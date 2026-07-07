@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { errorHandler } from '@utils/errorHandler';
+import { errorHandler, ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
+import { useErrorContext } from '@contexts/ErrorContext';
 
 // Component that throws an error during render
 const ThrowOnRender: React.FC<{ error: Error }> = ({ error }) => {
@@ -53,11 +54,33 @@ interface TestErrorBoundaryProps {
 const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false }) => {
   const [errorType, setErrorType] = useState<string | null>(null);
   const [showAsyncError, setShowAsyncError] = useState(false);
+  const { addError } = useErrorContext();
 
   const handleReset = () => {
     setErrorType(null);
     setShowAsyncError(false);
   };
+
+  // Fire a real notification at an explicit severity so the per-severity toast
+  // styling (error=red, critical=deeper red, warning=amber, info=neutral) can
+  // be checked in both themes. Goes through the same addError path the toast
+  // renderer reads, so it exercises the actual styling.
+  const fireSeverityToast = (severity: ErrorSeverity, label: string) =>
+    addError({
+      message: `${label} notification (styling test)`,
+      category: ErrorCategory.UNKNOWN,
+      severity,
+      timestamp: new Date(),
+      retryable: false,
+      userMessage: `This is a ${label.toLowerCase()} notification — a styling test for the "${severity}" severity.`,
+    });
+
+  const severityTests: Array<{ severity: ErrorSeverity; label: string; bg: string; fg: string }> = [
+    { severity: ErrorSeverity.INFO, label: 'Info', bg: '#475569', fg: '#ffffff' },
+    { severity: ErrorSeverity.WARNING, label: 'Warning', bg: '#f59e0b', fg: '#3d2c00' },
+    { severity: ErrorSeverity.ERROR, label: 'Error', bg: '#ef4444', fg: '#ffffff' },
+    { severity: ErrorSeverity.CRITICAL, label: 'Critical', bg: '#b91c1c', fg: '#ffffff' },
+  ];
 
   // Render different error scenarios based on state
   if (errorType === 'sync') {
@@ -264,6 +287,30 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         >
           ⚠️ Promise Rejection
         </button>
+
+        <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '10px' }}>
+          Notification Styling (severity):
+        </div>
+
+        {severityTests.map(({ severity, label, bg, fg }) => (
+          <button
+            key={severity}
+            onClick={() => fireSeverityToast(severity, label)}
+            style={{
+              padding: '4px 8px',
+              background: bg,
+              color: fg,
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 'bold',
+            }}
+            title={`Show a ${label} toast — checks the "${severity}" severity color`}
+          >
+            🔔 {label} Toast
+          </button>
+        ))}
 
         {errorType && (
           <button

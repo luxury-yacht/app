@@ -60,6 +60,36 @@
   display: none;
 }
 
+/* Severity accent: the card's header, dismiss control, count badge, and
+   progress bar all read `--toast-accent`/`--toast-accent-on`/
+   `--toast-accent-hover`. Each severity re-points that trio to its theme-aware
+   palette (defined per theme in appearance-modes/*.css), so the colors are
+   correct in both light and dark. Error is the theme default, restated here
+   for symmetry. */
+.error-notification-error {
+  --toast-accent: var(--toast-accent-error);
+  --toast-accent-on: var(--toast-accent-on-error);
+  --toast-accent-hover: var(--toast-accent-hover-error);
+}
+
+.error-notification-critical {
+  --toast-accent: var(--toast-accent-critical);
+  --toast-accent-on: var(--toast-accent-on-critical);
+  --toast-accent-hover: var(--toast-accent-hover-critical);
+}
+
+.error-notification-warning {
+  --toast-accent: var(--toast-accent-warning);
+  --toast-accent-on: var(--toast-accent-on-warning);
+  --toast-accent-hover: var(--toast-accent-hover-warning);
+}
+
+.error-notification-info {
+  --toast-accent: var(--toast-accent-info);
+  --toast-accent-on: var(--toast-accent-on-info);
+  --toast-accent-hover: var(--toast-accent-hover-info);
+}
+
 /* ==========================================================================
    Auto-dismiss Progress
    ========================================================================== */
@@ -78,7 +108,7 @@
 .error-notification-progress-bar {
   display: block;
   height: 100%;
-  background: var(--toast-progress-fill-bg);
+  background: var(--toast-accent);
   transform-origin: right;
   animation: toast-dismiss-progress var(--toast-auto-dismiss-short) linear forwards;
 }
@@ -132,7 +162,9 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--toast-card-header-bg);
+  /* Read --toast-accent DIRECTLY (not a :root-precomputed token) so the
+     severity class's override on the card resolves here. */
+  background: var(--toast-accent);
   border-bottom: 1px solid var(--toast-card-border);
 }
 
@@ -142,12 +174,13 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: var(--toast-card-header-text);
+  color: var(--toast-accent-on);
 }
 
 .error-notification-count {
-  color: var(--toast-count-text);
-  background: var(--toast-count-bg);
+  /* Inverted so the stacked count stays legible on the accent header. */
+  color: var(--toast-accent);
+  background: var(--toast-accent-on);
   font-size: 14px;
   font-weight: bold;
   border-radius: 50%;
@@ -165,8 +198,8 @@
 
 .error-notification-copy,
 .error-notification-dismiss {
-  color: var(--toast-dismiss-text);
-  background: var(--toast-dismiss-bg);
+  color: var(--toast-accent-on);
+  background: var(--toast-accent);
   border: 1px solid var(--toast-dismiss-border);
   cursor: pointer;
   font-size: 18px;
@@ -184,8 +217,8 @@
 
 .error-notification-copy:hover,
 .error-notification-dismiss:hover {
-  background: var(--toast-dismiss-hover-bg);
-  color: var(--toast-dismiss-text);
+  background: var(--toast-accent-hover);
+  color: var(--toast-accent-on);
 }
 
 .error-notification-copy--copied,
@@ -195,7 +228,7 @@
 
 .error-notification-copy--error,
 .error-notification-copy--error:hover {
-  color: var(--color-error, var(--toast-dismiss-text));
+  color: var(--color-error, var(--toast-accent-on));
 }
 
 /* ==========================================================================
@@ -331,8 +364,10 @@
 }
 
 .dismiss-all-btn {
-  color: var(--toast-dismiss-text);
-  background: var(--toast-dismiss-bg);
+  /* Global control (dismisses every toast), so it sits outside any severity
+     card — `--toast-accent` here resolves to the theme default (error red). */
+  color: var(--toast-accent-on);
+  background: var(--toast-accent);
   border: 1px solid var(--toast-dismiss-border);
   padding: 8px 16px;
   border-radius: 6px;
@@ -345,8 +380,8 @@
 }
 
 .dismiss-all-btn:hover {
-  color: var(--toast-dismiss-text);
-  background: var(--toast-dismiss-hover-bg);
+  color: var(--toast-accent-on);
+  background: var(--toast-accent-hover);
   border-color: var(--toast-dismiss-border);
 }
 
