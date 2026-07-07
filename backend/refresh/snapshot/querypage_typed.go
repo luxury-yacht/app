@@ -60,14 +60,14 @@ func lowerTrimAll(in []string) []string {
 }
 
 // typedQuerySignature pins a cursor to its query shape so a cursor issued for one
-// filter/sort/predicate set can never mispage a different one (it is rejected →
-// CursorInvalid). It folds every request field that changes the matched set —
-// namespaces, kinds, search, and predicates — into a stable string, sorting each
-// list so map/slice ordering can never perturb the signature. The leading
-// sort/dir/limit and the trailing search segment are written byte-identically to
-// the original filter-map form, so a cursor minted before predicates were folded
-// in (no namespaces/kinds/predicates present) still validates unchanged.
-func typedQuerySignature(sortField string, dir querypage.Direction, limit int, request ResourceQueryRequest) string {
+// query can never mispage a different one (it is rejected → CursorInvalid). It
+// folds EVERY field that changes the matched set — base scope, namespaces, kinds,
+// search, includeMetadata, and predicates — into a stable string, sorting each
+// list so map/slice ordering can never perturb the signature. This is the same
+// matched-set identity perBuildCacheKey uses. The base-scope and metadata
+// segments are last, so a scope/metadata change invalidates in-flight cursors
+// (CursorInvalid → page-1 restart); tokens are ephemeral, so that is acceptable.
+func typedQuerySignature(sortField string, dir querypage.Direction, limit int, baseScope string, request ResourceQueryRequest) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s|%s|%d|", sortField, dir, limit)
 	// Mirror the historical sorted-key filter map: emit "kind=" before "namespace="
@@ -92,6 +92,16 @@ func typedQuerySignature(sortField string, dir querypage.Direction, limit int, r
 	}
 	b.WriteString("search=")
 	b.WriteString(strings.ToLower(strings.TrimSpace(request.Search)))
+	// Base scope becomes the namespace filter in maintained queries, and
+	// includeMetadata changes what search matches (labels/annotations) — both
+	// change the matched set, so both must pin the cursor (perBuildCacheKey folds
+	// them for the same reason). Written trailing so an all-defaults query keeps a
+	// stable, order-independent tail.
+	b.WriteString(";basescope=")
+	b.WriteString(strings.TrimSpace(baseScope))
+	if request.IncludeMetadata {
+		b.WriteString(";metadata=1")
+	}
 	return b.String()
 }
 
@@ -263,7 +273,7 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		dir = querypage.Descending
 	}
 	limit := query.Request.Limit
-	sig := typedQuerySignature(sortField, dir, limit, query.Request)
+	sig := typedQuerySignature(sortField, dir, limit, query.BaseScope, query.Request)
 
 	// Cursor decode/validate is owned by the engine: an invalid token restarts at
 	// page 1 and surfaces on page.CursorInvalid — no caller pre-validation.
@@ -483,7 +493,7 @@ func resolveMaintainedDirect[T any](
 		dir = querypage.Descending
 	}
 	limit := query.Request.Limit
-	sig := typedQuerySignature(sortField, dir, limit, query.Request)
+	sig := typedQuerySignature(sortField, dir, limit, query.BaseScope, query.Request)
 	searchLower := strings.ToLower(strings.TrimSpace(query.Request.Search))
 
 	// The page query honors the request's full visible scope (available ∩ user kinds,
