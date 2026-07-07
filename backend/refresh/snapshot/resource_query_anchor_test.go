@@ -162,3 +162,44 @@ func TestResourceQueryEnvelopeCarriesAnchorAndRankZero(t *testing.T) {
 		t.Fatalf("uncomputed rank/anchor leaked into the wire: %s", raw)
 	}
 }
+
+// StartRank (numbered page jumps) parses from the same scope channel and is
+// mutually exclusive with both continue and anchor.
+func TestResourceQueryRequestParsesAndValidatesStartRank(t *testing.T) {
+	values := url.Values{}
+	values.Set("startRank", "40")
+	request := resourceQueryRequestFromValues("c", "pods", values, ResourceQueryRequest{})
+	if request.StartRank == nil || *request.StartRank != 40 {
+		t.Fatalf("startRank = %v, want 40", request.StartRank)
+	}
+	if err := request.validate(); err != nil {
+		t.Fatalf("valid startRank rejected: %v", err)
+	}
+
+	// Absent param → nil.
+	plain := resourceQueryRequestFromValues("c", "pods", url.Values{}, ResourceQueryRequest{})
+	if plain.StartRank != nil {
+		t.Fatalf("absent startRank = %v, want nil", plain.StartRank)
+	}
+
+	// startRank + continue → error.
+	request.Continue = "tok"
+	if err := request.validate(); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("startRank+continue error = %v", err)
+	}
+	request.Continue = ""
+
+	// startRank + anchor → error.
+	request.Anchor = &ResourceQueryAnchor{ClusterID: "c", Version: "v1", Kind: "Pod", Name: "x"}
+	if err := request.validate(); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("startRank+anchor error = %v", err)
+	}
+	request.Anchor = nil
+
+	// Negative → error.
+	negative := -1
+	request.StartRank = &negative
+	if err := request.validate(); err == nil {
+		t.Fatal("negative startRank accepted")
+	}
+}

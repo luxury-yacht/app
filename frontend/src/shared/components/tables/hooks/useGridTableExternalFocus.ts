@@ -41,6 +41,16 @@ export function setPendingFocusRequest(request: GridTableFocusRequest | null): v
 }
 
 /**
+ * Read-only view of the pending focus request. A query-backed table uses it
+ * to turn a request that cannot match its loaded page into a backend anchor
+ * jump; the buffer itself is still consumed only by the normal match path,
+ * so the eventual landing highlights and scrolls the row as usual.
+ */
+export function peekPendingFocusRequest(): GridTableFocusRequest | null {
+  return pendingFocusRequest;
+}
+
+/**
  * Finds the matching row index and focuses it, scrolling it into view.
  * Handles virtualized tables where the target row may not be in the DOM.
  * Returns true if a match was found.

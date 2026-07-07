@@ -61,9 +61,15 @@ type ResourceQueryRequest struct {
 	Continue        string                   `json:"continue,omitempty"`
 	// Anchor asks for the page CONTAINING this object under the request's
 	// sort+filters instead of a cursor-addressed page. Mutually exclusive with
-	// Continue (validateAnchor); the response mints ordinary keyset cursors, so
-	// pagination after a jump is indistinguishable from arriving by clicking.
+	// Continue and StartRank (validate); the response mints ordinary keyset
+	// cursors, so pagination after a jump is indistinguishable from arriving by
+	// clicking.
 	Anchor *ResourceQueryAnchor `json:"anchor,omitempty"`
+	// StartRank asks for the page starting at this 0-based rank among matching
+	// rows — the bounded offset contract behind numbered page jumps (offered by
+	// the UI only while totals are exact). Mutually exclusive with Continue and
+	// Anchor; the engine clamps past-the-end starts to the last aligned page.
+	StartRank *int `json:"startRank,omitempty"`
 }
 
 // ResourceQueryAnchor is the full object reference of an anchor jump target.
@@ -91,6 +97,21 @@ type ResourceQueryAnchorResult struct {
 	Found  bool   `json:"found"`
 	Rank   int    `json:"rank"`
 	Reason string `json:"reason,omitempty"`
+}
+
+// validate enforces the request's page-address contract: continue, anchor,
+// and startRank are three mutually exclusive ways to address a page, and each
+// carries its own field rules.
+func (r ResourceQueryRequest) validate() error {
+	if r.StartRank != nil {
+		if r.Continue != "" || r.Anchor != nil {
+			return fmt.Errorf("resource query: startRank, anchor, and continue are mutually exclusive")
+		}
+		if *r.StartRank < 0 {
+			return fmt.Errorf("resource query: startRank must be non-negative")
+		}
+	}
+	return r.validateAnchor()
 }
 
 // validateAnchor enforces the anchor contract: a full object reference
@@ -291,6 +312,11 @@ func resourceQueryRequestFromValues(clusterID, table string, values url.Values, 
 	}
 	request.Predicates = resourceQueryPredicateMapToList(predicates)
 	request.Anchor = resourceQueryAnchorFromValues(values)
+	if raw := strings.TrimSpace(values.Get("startRank")); raw != "" {
+		if rank, err := strconv.Atoi(raw); err == nil {
+			request.StartRank = &rank
+		}
+	}
 	return request
 }
 

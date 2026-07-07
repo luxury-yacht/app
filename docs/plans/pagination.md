@@ -427,11 +427,35 @@ updates ride the phase that changes the behavior they describe.
   drift annotation (never the scope-folded `sourceVersion` token; see
   Export-walk consistency guard) — with a churning-domain test; keyboard
   parity; quiet-refetch behavior unchanged (no dim/spinner/focus loss).
-- [ ] **P8 — Anchor UI.** "Show in list" actions (verify each entry point's
-  ref completeness); row highlight + scroll; missing-anchor inline notice;
-  rank-seeded page number. Visual verification with enough rows to trigger
-  virtualization.
-- [ ] **P9 — Position honesty + numbered jumps.** `PageStartRank` (`*int` —
+- [x] ✅ **P8 — Anchor UI** (2026-07-06, one deviation + one manual step noted).
+  Implemented as an upgrade of the EXISTING `gridtable:focus-request`
+  machinery (alt-click navigation from object panel/related rows/object map
+  already emits it with the full ref, and its buffer+match path already does
+  highlight + virtualization-aware scroll): the focus request now retains
+  group/version/uid (builtin GVK backfilled), and a query-backed table whose
+  loaded page cannot match a pending request fires `anchorTo` once per
+  request — the landing page then contains the row and the normal match takes
+  over. Requests without a version (synthetic kinds) degrade to today's
+  current-page-only behavior. DEVIATION: the missing-anchor notice ships via
+  the app's notification channel (`errorHandler`, same as the export-drift
+  warning) rather than a new inline GridTable banner — no banner surface
+  exists and inventing one for a single feature failed the
+  smallest-complete-change bar; `anchorResult` is exposed on the hook for a
+  future inline slot. MANUAL STEP REMAINING: the visual pass under
+  virtualization (jump to a deep row on a cluster with enough rows) — the
+  scroll path is pre-existing code, but this phase's visual verification has
+  NOT been run.
+- [x] ✅ **P9 — Position honesty + numbered jumps** (2026-07-06). The
+  benchmark gate FIRED: an O(rank) count on plain cursor serves costs the
+  QueryAround class (33.16 ms deep at 250k vs the 17.67 ms budget), so
+  `PageStartRank` stays anchor/offset-only, documented in `large-data.md` —
+  cursor-page footers keep client arithmetic between jumps. `startRank`
+  shipped end-to-end (contract + both typed paths + catalog + browse scope
+  round-trip incl. `normalizeCatalogScope` param preservation); numbered
+  page-jump input lives in the ONE shared footer control
+  (`QueryPaginationControls`), self-gated on `totalIsExact`, wired for typed
+  tables (`jumpToPage`) and Browse (`onJumpToPage`); jump landings adopt the
+  `self` cursor for page-stable refetches. `PageStartRank` (`*int` —
   rank 0 vs absent must survive `omitempty`) on every response behind its
   benchmark gate (adds an O(rank) walk to deep unfiltered serves — if the
   benchmark regresses budgets, keep it anchor/offset-only and document);

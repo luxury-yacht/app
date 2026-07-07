@@ -137,3 +137,26 @@
     min-width: 6.5rem;
   }
 }
+
+.query-pagination-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 0.25rem);
+  white-space: nowrap;
+}
+
+.query-pagination-page-jump-input {
+  width: 3.25rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid var(--color-border, #444);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg-primary, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm, 0.875rem);
+  text-align: center;
+}
+
+.query-pagination-page-jump-input:focus {
+  outline: 1px solid var(--color-accent, #4a9eda);
+  outline-offset: 0;
+}

@@ -19,6 +19,7 @@ const pagination = (overrides: Partial<BrowseCatalogPagination> = {}): BrowseCat
   isRequestingMore: false,
   onRequestMore: vi.fn(),
   onRequestPrevious: vi.fn(),
+  onJumpToPage: vi.fn(),
   ...overrides,
 });
 
@@ -61,7 +62,10 @@ describe('CatalogPaginationFooter', () => {
 
     expect(container.textContent).toContain('Rows per page');
     expect(container.textContent).toContain('101-175 of 175');
-    expect(container.textContent).not.toContain('Page');
+    // Exact totals unlock the numbered page jump (P9); it shows the true
+    // page count.
+    expect(container.textContent).toContain('of 2');
+    expect(container.querySelector('.query-pagination-page-jump-input')).not.toBeNull();
   });
 
   it('does not invent total pages for approximate totals', () => {
@@ -82,7 +86,9 @@ describe('CatalogPaginationFooter', () => {
     });
 
     expect(container.textContent).toContain('101-200 of 10,000+');
-    expect(container.textContent).not.toContain('Page');
+    // Approximate totals keep first/prev/next only — no numbered jump, no
+    // invented page count (large-data.md contract).
+    expect(container.querySelector('.query-pagination-page-jump-input')).toBeNull();
   });
 
   it('dispatches previous, next, and page-size changes from one control group', () => {

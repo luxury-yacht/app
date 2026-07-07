@@ -1,5 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { errorHandler } from '@utils/errorHandler';
+import {
+  matchesGridTableFocusRequest,
+  type GridTableFocusRequest,
+} from '@shared/components/tables/hooks/gridTableFocusRequest';
+import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -281,6 +287,15 @@ function useTypedQueryLifecycle<
     queryError: query.error,
   });
 
+  useAnchorOnUnmatchedFocusRequest({
+    clusterId,
+    domain,
+    loaded,
+    rows: data,
+    anchorTo: query.anchorTo,
+    anchorResult: query.anchorResult,
+  });
+
   return {
     data,
     loading,
@@ -291,6 +306,93 @@ function useTypedQueryLifecycle<
     onTableStateChange: handlePublishedTableState,
     query,
   };
+}
+
+// Field-based matching only for the anchor decision: the request's rowKey
+// branch needs the view's real keyExtractor, which the focus machinery inside
+// GridTable owns. A false negative here just fires a redundant jump onto the
+// same page; a false positive leaves today's behavior.
+const anchorDecisionKeyExtractor = () => '';
+
+// "Show in list" upgrade (plan P8): the existing gridtable:focus-request
+// machinery highlights and scrolls a row only when it is on the LOADED page.
+// When a pending request targets this table's cluster but matches no loaded
+// row, turn it into a backend anchor jump — the landing page then contains
+// the row and the normal buffer match takes over. A missing anchor
+// (filtered/not-found) is reported through the app's notification channel.
+function useAnchorOnUnmatchedFocusRequest<TRow>({
+  clusterId,
+  domain,
+  loaded,
+  rows,
+  anchorTo,
+  anchorResult,
+}: {
+  clusterId?: string | null;
+  domain: RefreshDomain;
+  loaded: boolean;
+  rows: TRow[];
+  anchorTo: UseTypedResourceQueryResult<TRow>['anchorTo'];
+  anchorResult: UseTypedResourceQueryResult<TRow>['anchorResult'];
+}): void {
+  const anchoredRequestRef = useRef<GridTableFocusRequest | null>(null);
+
+  useEffect(() => {
+    if (!clusterId || !loaded) {
+      return;
+    }
+    const request = peekPendingFocusRequest();
+    if (!request || request.clusterId !== clusterId) {
+      return;
+    }
+    // One jump per request (buffer identity): a not-found landing must not
+    // re-fire forever.
+    if (anchoredRequestRef.current === request) {
+      return;
+    }
+    // A backend anchor needs a full reference; version missing (no builtin
+    // backfill either) degrades to the current-page-only behavior.
+    if (!request.version) {
+      return;
+    }
+    const probe = { ...request, rowKey: undefined };
+    const onPage = rows.some((row, index) =>
+      matchesGridTableFocusRequest(row, index, anchorDecisionKeyExtractor, probe)
+    );
+    if (onPage) {
+      return;
+    }
+    anchoredRequestRef.current = request;
+    anchorTo({
+      clusterId: request.clusterId,
+      group: request.group ?? '',
+      version: request.version,
+      kind: request.kind,
+      namespace: request.namespace,
+      name: request.name,
+      uid: request.uid,
+    });
+  }, [anchorTo, clusterId, loaded, rows]);
+
+  useEffect(() => {
+    if (!anchorResult || anchorResult.found) {
+      return;
+    }
+    const request = anchoredRequestRef.current;
+    const target = request
+      ? `${request.kind} ${request.namespace ? `${request.namespace}/` : ''}${request.name}`
+      : 'The requested object';
+    // Loud, inline-adjacent truth (degraded states must be visible): the jump
+    // landed on page 1 because the object is not in this view.
+    errorHandler.handle(
+      new Error(
+        anchorResult.reason === 'filtered'
+          ? `${target} is not shown: the current filters exclude it`
+          : `${target} was not found — it may have been deleted`
+      ),
+      { source: 'resource-grid-anchor', domain }
+    );
+  }, [anchorResult, domain]);
 }
 
 // Builds the shared result for both scopes: the pagination footer (query scope
@@ -352,6 +454,9 @@ function useQueryBackedGridResult<
             persistence.setPageSize(value);
           }
         },
+        // Numbered jumps ride the bounded startRank contract; the control
+        // renders only while the total is exact.
+        onPageJump: query.jumpToPage,
       }),
     };
     return { ...base, fetchAllRows, exportFilename: viewId };

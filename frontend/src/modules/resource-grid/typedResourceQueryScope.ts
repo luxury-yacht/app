@@ -47,6 +47,11 @@ export interface TypedResourceQueryDescriptor {
    * validates; the builder drops the continue token when an anchor is set).
    */
   anchor?: ResourceQueryAnchor | null;
+  /**
+   * Numbered page jump: serve the page starting at this 0-based rank.
+   * Mutually exclusive with continueToken and anchor.
+   */
+  startRank?: number | null;
 }
 
 export interface TypedResourceQueryLifecycleDescriptor extends TypedResourceQueryDescriptor {
@@ -137,8 +142,8 @@ export function buildTypedResourceQueryScope(
     }
   }
   if (descriptor.anchor) {
-    // Anchor and continue are mutually exclusive on the wire; the anchor wins
-    // (it IS the page address for this request).
+    // The three page addresses (anchor, startRank, continue) are mutually
+    // exclusive on the wire; the most intentful one present wins.
     const anchor = descriptor.anchor;
     params.set('anchor.clusterId', anchor.clusterId);
     if (anchor.group) {
@@ -153,6 +158,8 @@ export function buildTypedResourceQueryScope(
     if (anchor.uid) {
       params.set('anchor.uid', anchor.uid);
     }
+  } else if (typeof descriptor.startRank === 'number' && descriptor.startRank >= 0) {
+    params.set('startRank', String(descriptor.startRank));
   } else if (descriptor.continueToken) {
     params.set('continue', descriptor.continueToken);
   }

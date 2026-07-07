@@ -325,7 +325,11 @@ func (s *Service) queryViaEngineWithStore(
 	var page querypage.Page[Summary]
 	var err error
 	var anchorOutcome *querypage.AnchorOutcome
-	if opts.Anchor != nil {
+	if opts.StartRank != nil && opts.Anchor == nil {
+		// Numbered page jump: the engine clamps past-the-end starts to the last
+		// aligned page and reports the served rank on PageStartRank.
+		page, err = store.QueryAt(engineQuery, *opts.StartRank)
+	} else if opts.Anchor != nil {
 		// Resolve the anchor to the engine's row key via the summary snapshot.
 		// The engine store holds ALL published summaries (filters apply at query
 		// time), so once the key resolves, the engine's found/filtered outcome is

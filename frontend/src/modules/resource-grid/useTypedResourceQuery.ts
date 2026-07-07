@@ -85,6 +85,11 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   anchorTo: (anchor: ResourceQueryAnchor) => void;
   /** How the last anchored request resolved (found+rank / filtered / not-found). */
   anchorResult: ResourceQueryAnchorResult | null;
+  /**
+   * Numbered page jump (1-based). Serves via the bounded startRank contract;
+   * no-ops while totals are approximate (the UI hides the control then too).
+   */
+  jumpToPage: (page: number) => void;
 }
 
 // Each export page requests the backend's max page size to minimise round-trips.
@@ -154,6 +159,10 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const [anchorResult, setAnchorResult] = useState<ResourceQueryAnchorResult | null>(null);
   const anchorIntentRef = useRef(anchorIntent);
   anchorIntentRef.current = anchorIntent;
+  // One-shot numbered-jump intent (0-based start rank). Unlike the anchor it
+  // does NOT survive soft resets — page N under a different sort is a
+  // different page. The landing adopts the self cursor exactly like anchors.
+  const [startRankIntent, setStartRankIntent] = useState<number | null>(null);
   const [pageIndex, setPageIndex] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
@@ -279,6 +288,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setContinueToken(null);
     setPreviousToken(null);
     pendingNavigationRef.current = null;
+    setStartRankIntent(null);
     if (anchorIntentRef.current) {
       setAnchorArmed(true);
     } else {
@@ -298,10 +308,12 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       predicates,
       continueToken: requestTokenForScope,
       anchor: anchorArmed ? anchorIntent : null,
+      startRank: anchorArmed ? null : startRankIntent,
     });
   }, [
     anchorArmed,
     anchorIntent,
+    startRankIntent,
     baseScope,
     clusterId,
     enabled,
@@ -331,10 +343,17 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setDynamic(payload.dynamic ?? null);
     if (typeof payload.pageStartRank === 'number') {
       // Serve-time position honesty: the backend counted this page's exact
-      // start rank (anchored/offset landings). Client arithmetic stays only
-      // for plain cursor pages until P9.
+      // start rank (anchored/offset landings); plain cursor pages keep the
+      // client arithmetic below (the O(rank) count per cursor serve failed
+      // the plan's benchmark gate — see large-data.md).
       setPageIndex(Math.floor(payload.pageStartRank / pageLimitRef.current) + 1);
       pendingNavigationRef.current = null;
+      if (!payload.anchor) {
+        // A numbered-jump landing: consume the one-shot intent and adopt the
+        // self cursor (same page-stability mechanics as anchored landings).
+        setStartRankIntent(null);
+        setRequestToken(payload.self || null);
+      }
     } else {
       const pendingNavigation = pendingNavigationRef.current;
       if (pendingNavigation) {
@@ -449,6 +468,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           setRequestToken(null);
           setContinueToken(null);
           setPreviousToken(null);
+          setStartRankIntent(null);
           pendingNavigationRef.current = null;
           if (anchorIntentRef.current) {
             // The page identity died under a held jump intent — retry the
@@ -502,6 +522,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     // Manual pagination deliberately leaves the jump context behind.
     setAnchorIntent(null);
     setAnchorResult(null);
+    setStartRankIntent(null);
     pendingNavigationRef.current = { direction: 'next', revertToken: requestToken };
     setRequestToken(continueToken);
   }, [continueToken, isRequestingMore, requestToken]);
@@ -513,6 +534,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setIsRequestingMore(true);
     setAnchorIntent(null);
     setAnchorResult(null);
+    setStartRankIntent(null);
     pendingNavigationRef.current = { direction: 'previous', revertToken: requestToken };
     setRequestToken(previousToken);
   }, [isRequestingMore, previousToken, requestToken]);
@@ -521,11 +543,32 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setAnchorIntent(anchor);
     setAnchorArmed(true);
     setAnchorResult(null);
+    setStartRankIntent(null);
     setRequestToken(null);
     setContinueToken(null);
     setPreviousToken(null);
     pendingNavigationRef.current = null;
   }, []);
+
+  const jumpToPage = useCallback(
+    (page: number) => {
+      // Numbered jumps are exact-total territory (approximate totals keep
+      // first/prev/next only, per large-data.md).
+      if (!totalIsExact || isRequestingMore) {
+        return;
+      }
+      const target = Math.max(1, Math.floor(page));
+      setStartRankIntent((target - 1) * pageLimitRef.current);
+      setAnchorIntent(null);
+      setAnchorArmed(false);
+      setAnchorResult(null);
+      setRequestToken(null);
+      setContinueToken(null);
+      setPreviousToken(null);
+      pendingNavigationRef.current = null;
+    },
+    [isRequestingMore, totalIsExact]
+  );
 
   const fetchAllRows = useCallback(
     async (options: FetchTypedResourceRowsOptions = {}): Promise<TRow[]> => {
@@ -608,6 +651,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     loadPrevious,
     anchorTo,
     anchorResult,
+    jumpToPage,
     pageIndex,
     pageSize: pageLimit,
     totalCount,

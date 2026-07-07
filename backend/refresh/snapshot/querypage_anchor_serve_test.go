@@ -297,3 +297,67 @@ func TestClusterAdapterAnchorKeyMatchesKey(t *testing.T) {
 		}
 	}
 }
+
+// StartRank serves the exact offset page with serve-time rank and self cursor
+// on both engine paths — the numbered-jump serve.
+func TestPerBuildStartRankServesOffsetPage(t *testing.T) {
+	items := configItems(95)
+	start := 40
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c", Table: "namespace-config",
+			SortField: "name", SortDirection: "asc", Limit: 20,
+			StartRank: &start,
+		},
+	}
+	page := applyTypedTableQueryViaStore(items, query, configTableQueryAdapter(), configQuerypageSchema())
+	if page.PageStartRank == nil || *page.PageStartRank != 40 {
+		t.Fatalf("pageStartRank = %v, want 40", page.PageStartRank)
+	}
+	if len(page.Rows) != 20 || page.Rows[0].Name != "cfg-040" {
+		t.Fatalf("offset window = %d rows starting %q", len(page.Rows), page.Rows[0].Name)
+	}
+	if page.Previous == "" || page.Continue == "" || page.Self == "" {
+		t.Fatalf("offset landing cursors: prev=%q cont=%q self=%q", page.Previous, page.Continue, page.Self)
+	}
+	if page.Anchor != nil {
+		t.Fatal("offset page must not carry an anchor result")
+	}
+}
+
+func TestMaintainedDirectStartRankServesOffsetPage(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c", ClusterName: "cluster"}
+	hpaDesc := autoscalingDescriptor(t, "horizontalpodautoscalers")
+	maintained := newTypedMaintainedStore(meta, autoscalingQuerypageSchema(), autoscalingTableQueryAdapter())
+	for i := 0; i < 45; i++ {
+		maintained.ingest(hpaDesc, hpaObj("default", fmt.Sprintf("hpa-%03d", i), fmt.Sprintf("%d", i+1), "api", 4))
+	}
+	start := 30
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c", Table: "namespace-autoscaling",
+			SortField: "name", SortDirection: "asc", Limit: 10,
+			StartRank: &start,
+		},
+	}
+	resolved := resolveMaintainedDirect(
+		maintained.store, query, map[string]bool{"HorizontalPodAutoscaler": true}, "",
+		autoscalingTableQueryAdapter(), autoscalingQuerypageSchema(),
+		ResourceQueryCapabilities{}, 100, "items",
+		func(r AutoscalingSummary) string { return r.Kind },
+		func() []AutoscalingSummary { return nil },
+		nil,
+	)
+	env := resolved.Envelope
+	if env.PageStartRank == nil || *env.PageStartRank != 30 {
+		t.Fatalf("maintained pageStartRank = %v, want 30", env.PageStartRank)
+	}
+	if len(resolved.Rows) != 10 || resolved.Rows[0].Name != "hpa-030" {
+		t.Fatalf("maintained offset window = %d rows starting %q", len(resolved.Rows), resolved.Rows[0].Name)
+	}
+	if env.Self == "" {
+		t.Fatal("maintained offset landing minted no self cursor")
+	}
+}

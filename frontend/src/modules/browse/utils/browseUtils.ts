@@ -155,6 +155,8 @@ export interface BuildCatalogScopeParams {
   sort?: string;
   sortDirection?: string;
   continueToken?: string | null;
+  /** Numbered page jump: 0-based start rank; mutually exclusive with continueToken. */
+  startRank?: number | null;
   customOnly?: boolean;
 }
 
@@ -203,6 +205,8 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   const continueToken = params.continueToken?.trim();
   if (continueToken) {
     query.set('continue', continueToken);
+  } else if (typeof params.startRank === 'number' && params.startRank >= 0) {
+    query.set('startRank', String(params.startRank));
   }
 
   return query.toString();
@@ -247,6 +251,13 @@ export const normalizeCatalogScope = (
     const sort = params.get('sort') ?? undefined;
     const sortDirection = params.get('sortDirection') ?? undefined;
     const continueToken = params.get('continue');
+    // startRank must survive normalization or numbered jumps silently break
+    // (this function rebuilds the scope from the params it knows about).
+    const startRankRaw = params.get('startRank');
+    const startRank =
+      startRankRaw !== null && Number.isFinite(Number(startRankRaw))
+        ? Number(startRankRaw)
+        : undefined;
     const customOnly = params.get('customOnly') === 'true';
     const kinds = params.getAll('kind');
     // Use pinned namespaces if provided, otherwise use namespaces from the scope.
@@ -260,6 +271,7 @@ export const normalizeCatalogScope = (
       sort,
       sortDirection,
       continueToken,
+      startRank,
       customOnly,
     });
     if (prefix) {

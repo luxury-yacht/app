@@ -99,6 +99,7 @@ type browseQueryOptions struct {
 	Continue   string
 	CustomOnly bool
 	Anchor     *ResourceQueryAnchor
+	StartRank  *int
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -369,7 +370,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	// The scope's cluster id is the request cluster: the anchor's same-cluster
 	// rule must be checked against it, not a placeholder.
 	request := resourceQueryRequestFromValues(clusterID, "browse", values, ResourceQueryRequest{})
-	if err := request.validateAnchor(); err != nil {
+	if err := request.validate(); err != nil {
 		return browseQueryOptions{}, err
 	}
 	opts := browseQueryOptions{
@@ -382,6 +383,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		Limit:      request.Limit,
 		CustomOnly: values.Get("customOnly") == "true",
 		Anchor:     request.Anchor,
+		StartRank:  request.StartRank,
 	}
 	return opts, nil
 }
@@ -409,6 +411,7 @@ func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 			UID:       a.UID,
 		}
 	}
+	opts.StartRank = o.StartRank
 	return opts
 }
 

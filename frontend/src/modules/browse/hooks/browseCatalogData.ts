@@ -137,7 +137,8 @@ export const buildBrowseCatalogPageScope = (
     BrowseCatalogPlanInput,
     'clusterId' | 'filters' | 'sort' | 'pageLimit' | 'pinnedNamespaces'
   > & { customOnly?: boolean },
-  continueToken: string
+  continueToken: string,
+  startRank?: number
 ): string => {
   const pageScope = buildCatalogScope({
     limit: input.pageLimit,
@@ -147,6 +148,7 @@ export const buildBrowseCatalogPageScope = (
     sort: catalogSortScope(input.sort).sort,
     sortDirection: catalogSortScope(input.sort).sortDirection,
     continueToken,
+    startRank,
     customOnly: input.customOnly ?? false,
   });
   return (

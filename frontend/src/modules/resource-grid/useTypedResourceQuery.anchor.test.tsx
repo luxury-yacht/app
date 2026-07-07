@@ -50,8 +50,11 @@ const anchorRef = {
   name: 'web-47',
 };
 
-const lastScope = (): string =>
-  (requestRefreshDomainStateMock.mock.calls.at(-1)?.[0] as { scope: string }).scope;
+const scopeOfCallFromEnd = (offset: number): string => {
+  const calls = requestRefreshDomainStateMock.mock.calls;
+  return (calls[calls.length - offset]?.[0] as { scope: string }).scope;
+};
+const lastScope = (): string => scopeOfCallFromEnd(1);
 
 describe('useTypedResourceQuery anchor lifecycle', () => {
   let container: HTMLDivElement;
@@ -148,9 +151,7 @@ describe('useTypedResourceQuery anchor lifecycle', () => {
     expect(result?.rows?.[1]?.name).toBe('web-47');
 
     // The anchored fetch itself carried anchor params and no continue token.
-    const anchoredScope = (
-      requestRefreshDomainStateMock.mock.calls.at(-2)?.[0] as { scope: string }
-    ).scope;
+    const anchoredScope = scopeOfCallFromEnd(2);
     expect(anchoredScope).toContain('anchor.name=web-47');
     expect(anchoredScope).toContain('anchor.clusterId=cluster-a');
     expect(anchoredScope).not.toContain('continue=');

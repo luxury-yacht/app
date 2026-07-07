@@ -19,6 +19,11 @@ describe('buildGridTableFocusRequest', () => {
       namespace: 'apps',
       clusterId: 'cluster-a',
       rowKey: 'cluster-a|apps/v1/Deployment/apps/api',
+      // Full-reference fields ride along so an unmatched request can become a
+      // backend anchor jump (P8).
+      group: 'apps',
+      version: 'v1',
+      uid: undefined,
     });
   });
 
@@ -36,6 +41,11 @@ describe('buildGridTableFocusRequest', () => {
       namespace: 'apps',
       clusterId: 'cluster-a',
       rowKey: undefined,
+      // No builtin GVK backfill for synthetic kinds: version stays absent, so
+      // the anchor upgrade degrades to current-page-only matching.
+      group: undefined,
+      version: undefined,
+      uid: undefined,
     });
   });
 });

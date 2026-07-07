@@ -23,6 +23,11 @@ interface QueryPaginationControlsProps {
   onPrevious: () => void;
   onNext: () => void;
   onPageSizeChange: (value: number) => void;
+  /**
+   * Numbered page jump (1-based). Rendered only while the total is exact —
+   * approximate totals keep first/prev/next only (large-data.md contract).
+   */
+  onPageJump?: (page: number) => void;
 }
 
 const formatCount = (value: number): string => Math.max(0, value).toLocaleString();
@@ -58,6 +63,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   onPrevious,
   onNext,
   onPageSizeChange,
+  onPageJump,
 }) => {
   const pageOptions = useMemo<DropdownOption[]>(
     () =>
@@ -81,6 +87,11 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
       ? `${formatCount(rangeStart)}-${formatCount(rangeEnd)}`
       : '0';
   const totalLabel = totalIsExact ? formatCount(totalCount) : `${formatCount(totalCount)}+`;
+  const totalPages =
+    totalIsExact && pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 0;
+  // Numbered jumps need an exact page count; approximate totals keep
+  // first/prev/next only (large-data.md contract).
+  const showPageJump = Boolean(onPageJump) && totalIsExact && totalPages > 1;
 
   return (
     <div className="query-pagination-controls" aria-label="Table pagination">
@@ -108,6 +119,31 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
         />
       </div>
       <div className="query-pagination-status" aria-live="polite">
+        {showPageJump ? (
+          <span className="query-pagination-page-jump">
+            Page
+            <input
+              key={pageIndex}
+              type="number"
+              className="query-pagination-page-jump-input"
+              defaultValue={pageIndex}
+              min={1}
+              max={totalPages}
+              disabled={loading}
+              aria-label={`Go to page (1 to ${totalPages})`}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') {
+                  return;
+                }
+                const value = Number((event.target as HTMLInputElement).value);
+                if (Number.isFinite(value) && value >= 1) {
+                  onPageJump?.(Math.min(Math.floor(value), totalPages));
+                }
+              }}
+            />
+            of {formatCount(totalPages)}
+          </span>
+        ) : null}
         <span className="query-pagination-range">
           {rangeLabel} of {totalLabel}
         </span>

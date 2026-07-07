@@ -109,6 +109,8 @@ export interface BrowseCatalogPagination {
   isRequestingMore: boolean;
   onRequestMore: () => void;
   onRequestPrevious: () => void;
+  /** Numbered page jump (1-based); no-ops while totals are approximate. */
+  onJumpToPage: (page: number) => void;
 }
 
 /**
@@ -422,11 +424,15 @@ export function useBrowseCatalog({
 
   const requestPage = useCallback(
     (
-      token: string | null,
-      direction: 'next' | 'previous' | 'current',
+      // A page address: a keyset token (next/previous/current) or a 0-based
+      // startRank (numbered 'jump' — served by the bounded offset contract).
+      address: { token?: string | null; startRank?: number },
+      direction: 'next' | 'previous' | 'current' | 'jump',
       reason: DataRequestReason = 'user'
     ) => {
-      if (!token || isRequestingMore) {
+      const token = address.token ?? null;
+      const hasStartRank = typeof address.startRank === 'number';
+      if ((!token && !hasStartRank) || isRequestingMore) {
         return;
       }
       setIsRequestingMore(true);
@@ -441,7 +447,8 @@ export function useBrowseCatalog({
           pinnedNamespaces,
           customOnly,
         },
-        token
+        token ?? '',
+        address.startRank
       );
       const baseScopeAtRequest = catalogScopeRef.current;
       void (async () => {
@@ -484,14 +491,26 @@ export function useBrowseCatalog({
           setTotalCount(next.totalCount);
           setUnfilteredTotal(next.unfilteredTotal);
           setTotalIsExact(next.totalIsExact);
-          const nextPageIndex =
-            direction === 'next'
-              ? pageIndexRef.current + 1
-              : direction === 'previous'
-                ? Math.max(1, pageIndexRef.current - 1)
-                : pageIndexRef.current;
+          let nextPageIndex: number;
+          if (direction === 'jump') {
+            // Serve-time position honesty: the landing carries its exact rank,
+            // and the self cursor becomes the current page's token so live
+            // refetches reproduce THIS page.
+            nextPageIndex =
+              typeof payload.pageStartRank === 'number'
+                ? Math.floor(payload.pageStartRank / pageLimit) + 1
+                : 1;
+            currentPageTokenRef.current = payload.self || null;
+          } else {
+            nextPageIndex =
+              direction === 'next'
+                ? pageIndexRef.current + 1
+                : direction === 'previous'
+                  ? Math.max(1, pageIndexRef.current - 1)
+                  : pageIndexRef.current;
+            currentPageTokenRef.current = nextPageIndex > 1 ? token : null;
+          }
           pageIndexRef.current = nextPageIndex;
-          currentPageTokenRef.current = nextPageIndex > 1 ? token : null;
           setPageIndex(nextPageIndex);
           if (!hasLoadedOnceRef.current) {
             hasLoadedOnceRef.current = true;
@@ -552,7 +571,7 @@ export function useBrowseCatalog({
     // swallows. With 'background' the refetch was skipped for a loaded scope
     // while the stream was healthy — the doorbell silently did nothing.
     if (currentPageToken) {
-      requestPage(currentPageToken, 'current', 'stream-signal');
+      requestPage({ token: currentPageToken }, 'current', 'stream-signal');
     } else {
       void refreshCatalogScope('stream-signal');
     }
@@ -569,17 +588,31 @@ export function useBrowseCatalog({
   ]);
 
   const handleLoadMore = useCallback(() => {
-    requestPage(continueToken, 'next');
+    requestPage({ token: continueToken }, 'next');
   }, [continueToken, requestPage]);
 
   const handleLoadPrevious = useCallback(() => {
-    requestPage(previousToken, 'previous');
+    requestPage({ token: previousToken }, 'previous');
   }, [previousToken, requestPage]);
+
+  const handleJumpToPage = useCallback(
+    (page: number) => {
+      // Numbered jumps are exact-total territory (approximate totals keep
+      // first/prev/next only, per large-data.md); the footer control also
+      // hides itself, this guard covers keyboard/programmatic calls.
+      if (!totalIsExact) {
+        return;
+      }
+      const target = Math.max(1, Math.floor(page));
+      requestPage({ startRank: (target - 1) * pageLimit }, 'jump');
+    },
+    [pageLimit, requestPage, totalIsExact]
+  );
 
   const refreshCurrentQuery = useCallback(() => {
     const currentPageToken = currentPageTokenRef.current;
     if (currentPageToken) {
-      requestPage(currentPageToken, 'current');
+      requestPage({ token: currentPageToken }, 'current');
       return;
     }
     void refreshCatalogScope('user');
@@ -724,11 +757,13 @@ export function useBrowseCatalog({
       isRequestingMore,
       onRequestMore: handleLoadMore,
       onRequestPrevious: handleLoadPrevious,
+      onJumpToPage: handleJumpToPage,
     }),
     [
       continueToken,
       handleLoadMore,
       handleLoadPrevious,
+      handleJumpToPage,
       isRequestingMore,
       pageIndex,
       pageLimit,

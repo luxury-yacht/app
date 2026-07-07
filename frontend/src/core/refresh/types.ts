@@ -521,6 +521,8 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   items: CatalogItem[];
   continue?: string;
   previous?: string;
+  /** Token addressing THIS page (counted serves) — page-stable refetch after a jump. */
+  self?: string;
   cursorInvalid?: boolean;
   /** Present iff the request carried an anchor. */
   anchor?: ResourceQueryAnchorResult;
@@ -620,6 +622,8 @@ export interface ResourceQueryEnvelopeFields {
   queryIdentity?: string;
   continue?: string;
   previous?: string;
+  /** Token addressing THIS page (counted serves) — page-stable refetch after a jump. */
+  self?: string;
   cursorInvalid?: boolean;
   /** Present iff the request carried an anchor. */
   anchor?: ResourceQueryAnchorResult;

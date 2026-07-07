@@ -208,6 +208,10 @@ type QueryOptions struct {
 	// cursor-addressed page (mutually exclusive with Continue — the snapshot
 	// layer validates before calling). See QueryAnchor.
 	Anchor *QueryAnchor
+	// StartRank asks for the page starting at this 0-based rank among matching
+	// rows (numbered page jumps); the engine clamps past-the-end starts.
+	// Mutually exclusive with Continue and Anchor (snapshot layer validates).
+	StartRank *int
 }
 
 // QueryAnchor identifies an anchored query's jump target. The catalog resolves

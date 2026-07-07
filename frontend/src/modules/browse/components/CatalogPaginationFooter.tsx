@@ -49,6 +49,7 @@ const CatalogPaginationFooter: React.FC<CatalogPaginationFooterProps> = ({
     onPrevious={pagination.onRequestPrevious}
     onNext={pagination.onRequestMore}
     onPageSizeChange={(value) => pagination.setPageLimit(value as TablePageSize)}
+    onPageJump={pagination.onJumpToPage}
   />
 );
 

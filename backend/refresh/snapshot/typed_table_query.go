@@ -101,7 +101,7 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 	if query.Request.Limit > maxTypedTableQueryLimit {
 		query.Request.Limit = maxTypedTableQueryLimit
 	}
-	if err := query.Request.validateAnchor(); err != nil {
+	if err := query.Request.validate(); err != nil {
 		return base, query, fmt.Errorf("%s query scope: %w", table, err)
 	}
 	return base, query, nil

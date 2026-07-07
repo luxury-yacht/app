@@ -278,8 +278,9 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	}
 	var page querypage.Page[T]
 	var anchorResult *ResourceQueryAnchorResult
-	if anchor := query.Request.Anchor; anchor != nil {
-		key := typedAnchorKey(adapter, anchor)
+	switch {
+	case query.Request.Anchor != nil:
+		key := typedAnchorKey(adapter, query.Request.Anchor)
 		var outcome querypage.AnchorOutcome
 		page, outcome, _ = store.QueryAround(engineQuery, key)
 		// This store holds ONLY matched rows, so an anchor the engine cannot find
@@ -294,7 +295,11 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 			}
 		}
 		anchorResult = anchorResultFromOutcome(outcome)
-	} else {
+	case query.Request.StartRank != nil:
+		// Numbered page jump: the engine clamps past-the-end starts to the last
+		// aligned page and reports the served rank on PageStartRank.
+		page, _ = store.QueryAt(engineQuery, *query.Request.StartRank)
+	default:
 		engineQuery.Cursor = query.Request.Continue
 		page, _ = store.Query(engineQuery)
 	}
@@ -500,13 +505,16 @@ func resolveMaintainedDirect[T any](
 	}
 	var page querypage.Page[T]
 	var anchorResult *ResourceQueryAnchorResult
-	if anchor := query.Request.Anchor; anchor != nil {
+	switch {
+	case query.Request.Anchor != nil:
 		// This store holds ALL rows (scope applied via engine filters), so the
 		// engine's own found/filtered/not-found outcome is authoritative.
 		var outcome querypage.AnchorOutcome
-		page, outcome, _ = store.QueryAround(engineQuery, typedAnchorKey(adapter, anchor))
+		page, outcome, _ = store.QueryAround(engineQuery, typedAnchorKey(adapter, query.Request.Anchor))
 		anchorResult = anchorResultFromOutcome(outcome)
-	} else {
+	case query.Request.StartRank != nil:
+		page, _ = store.QueryAt(engineQuery, *query.Request.StartRank)
+	default:
 		engineQuery.Cursor = query.Request.Continue
 		page, _ = store.Query(engineQuery)
 	}
