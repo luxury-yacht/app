@@ -1233,3 +1233,140 @@ describe('useBrowseCatalog', () => {
     }
   });
 });
+
+describe('doorbell refetch quietness on a paged catalog', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+  let result: UseBrowseCatalogResult | null;
+
+  beforeAll(() => {
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+  });
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    result = null;
+    vi.clearAllMocks();
+    mocks.refreshFns.clear();
+    defaultTablePageSizeMock.mockReturnValue(2);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  const Harness: React.FC = () => {
+    const [pageLimit, setPageLimit] = React.useState(2 as const);
+    result = useBrowseCatalog({
+      enabled: true,
+      clusterId: 'cluster-1',
+      filters: { search: '', kinds: [], namespaces: [] },
+      pinnedNamespaces: defaultPinnedNamespaces,
+      clusterScopedOnly: false,
+      customOnly: false,
+      pageLimit,
+      onPageLimitChange: setPageLimit as never,
+    } as never);
+    return null;
+  };
+
+  // A doorbell-driven current-page refetch is a QUIET refetch: it must not
+  // flip the user-facing busy flag (which disables prev/next and spins the
+  // footer). On a churning cluster doorbells ring continuously — a busy flag
+  // per ring means a permanently dead footer (the reported bug).
+  it('keeps isRequestingMore false during doorbell-driven current-page refetches', async () => {
+    const baseScope = 'cluster-1|limit=2&namespace=default';
+    const metadataScope = 'cluster-1|limit=1&namespace=default';
+    const pageOne = [makeItem({ uid: 'a', name: 'a' }), makeItem({ uid: 'b', name: 'b' })];
+    let baseState = {
+      status: 'ready',
+      data: makePayload({
+        items: pageOne,
+        total: 4,
+        batchSize: 2,
+        continue: 'tok-2',
+        isFinal: false,
+      }),
+      scope: baseScope,
+      sourceVersion: 'catalog:1',
+      signalVersions: { catalog: 'catalog:1' },
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 4, batchSize: 0 }),
+      scope: metadataScope,
+      sourceVersion: 'catalog:1',
+    };
+    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) return baseState;
+      if (scope === metadataScope) return metadataState;
+      return { status: 'idle', data: null, scope };
+    });
+
+    const pageTwo = makePayload({
+      items: [makeItem({ uid: 'c', name: 'c' }), makeItem({ uid: 'd', name: 'd' })],
+      total: 4,
+      batchSize: 2,
+      previous: 'tok-1-prev',
+      isFinal: false,
+    });
+
+    // User navigation: resolves page 2; the busy flag is EXPECTED while a
+    // user-initiated fetch is in flight.
+    let resolveUserFetch: (value: unknown) => void = () => {};
+    mocks.requestRefreshDomainState.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveUserFetch = resolve))
+    );
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+    expect(result?.items.map((item) => item.name)).toEqual(['a', 'b']);
+
+    await act(async () => {
+      result?.pagination.onRequestMore();
+      await Promise.resolve();
+    });
+    expect(result?.pagination.isRequestingMore).toBe(true);
+
+    await act(async () => {
+      resolveUserFetch({ status: 'executed', data: { status: 'ready', data: pageTwo } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.items.map((item) => item.name)).toEqual(['c', 'd']);
+    expect(result?.pagination.isRequestingMore).toBe(false);
+
+    // Doorbell ring: hold the quiet current-page refetch in flight and assert
+    // the busy flag stays FALSE the whole time.
+    let resolveQuietFetch: (value: unknown) => void = () => {};
+    mocks.requestRefreshDomainState.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveQuietFetch = resolve))
+    );
+    baseState = {
+      ...baseState,
+      sourceVersion: 'catalog:2',
+      signalVersions: { catalog: 'catalog:2' },
+    };
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomainState).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'stream-signal' })
+    );
+    expect(result?.pagination.isRequestingMore).toBe(false);
+
+    await act(async () => {
+      resolveQuietFetch({ status: 'executed', data: { status: 'ready', data: pageTwo } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result?.pagination.isRequestingMore).toBe(false);
+    expect(result?.items.map((item) => item.name)).toEqual(['c', 'd']);
+  });
+});

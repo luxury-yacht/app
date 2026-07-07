@@ -225,6 +225,14 @@ export function useBrowseCatalog({
   const pageIndexRef = useRef(1);
   const currentPageTokenRef = useRef<string | null>(null);
   pageIndexRef.current = pageIndex;
+  // Page-request coordination (see requestPage): a SYNC in-flight gate (state
+  // is async and can double-fire), a user-only gate (quiet doorbell refetches
+  // must not block user clicks), and a sequence so a user request supersedes
+  // an in-flight quiet refetch — the superseded response neither applies nor
+  // clears its successor's flags.
+  const pageRequestInFlightRef = useRef(false);
+  const userPageRequestInFlightRef = useRef(false);
+  const pageRequestSeqRef = useRef(0);
 
   useEffect(() => {
     const nextSearch = filters.search ?? '';
@@ -432,10 +440,26 @@ export function useBrowseCatalog({
     ) => {
       const token = address.token ?? null;
       const hasStartRank = typeof address.startRank === 'number';
-      if ((!token && !hasStartRank) || isRequestingMore) {
+      if (!token && !hasStartRank) {
         return;
       }
-      setIsRequestingMore(true);
+      // Doorbell-driven current-page refetches are QUIET: they must not flip
+      // the user-facing busy flag (which disables prev/next and spins the
+      // footer) — on a churning cluster doorbells ring continuously, and a
+      // busy window per ring means a permanently dead footer. Quiet requests
+      // coalesce (skip while ANY page request is in flight); user requests
+      // wait only on other USER requests and SUPERSEDE an in-flight quiet
+      // refetch via the sequence guard below.
+      const quiet = reason === 'stream-signal';
+      if (quiet ? pageRequestInFlightRef.current : userPageRequestInFlightRef.current) {
+        return;
+      }
+      const seq = ++pageRequestSeqRef.current;
+      pageRequestInFlightRef.current = true;
+      if (!quiet) {
+        userPageRequestInFlightRef.current = true;
+        setIsRequestingMore(true);
+      }
 
       const normalizedScope = buildBrowseCatalogPageScope(
         plan,
@@ -458,7 +482,11 @@ export function useBrowseCatalog({
             scope: normalizedScope,
             reason,
           });
-          if (result.status !== 'executed' || catalogScopeRef.current !== baseScopeAtRequest) {
+          if (
+            pageRequestSeqRef.current !== seq ||
+            result.status !== 'executed' ||
+            catalogScopeRef.current !== baseScopeAtRequest
+          ) {
             return;
           }
 
@@ -522,14 +550,18 @@ export function useBrowseCatalog({
             setPageError(error instanceof Error ? error.message : String(error));
           }
         } finally {
-          if (catalogScopeRef.current === baseScopeAtRequest) {
-            setIsRequestingMore(false);
+          // A superseded request must not clear its successor's gates.
+          if (pageRequestSeqRef.current === seq) {
+            pageRequestInFlightRef.current = false;
+            if (!quiet) {
+              userPageRequestInFlightRef.current = false;
+              setIsRequestingMore(false);
+            }
           }
         }
       })();
     },
     [
-      isRequestingMore,
       pageLimit,
       queryFilters,
       sort,
