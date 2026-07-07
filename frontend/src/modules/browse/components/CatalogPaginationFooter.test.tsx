@@ -62,9 +62,9 @@ describe('CatalogPaginationFooter', () => {
 
     expect(container.textContent).toContain('Rows per page');
     expect(container.textContent).toContain('101-175 of 175');
-    // Exact totals unlock the numbered page jump (P9); it shows the true
-    // page count.
-    expect(container.textContent).toContain('of 2');
+    // Exact totals unlock the numbered page jump (P9), shown between the arrows
+    // as [page] / total.
+    expect(container.textContent).toContain('/ 2');
     expect(container.querySelector('.query-pagination-page-jump-input')).not.toBeNull();
   });
 

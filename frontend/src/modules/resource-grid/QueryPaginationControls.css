@@ -138,25 +138,48 @@
   }
 }
 
+/* The editable page number sits BETWEEN the prev/next arrows — one navigation
+   cluster: ◀ [1]/5 ▶ — so the status text carries the single range fact. */
 .query-pagination-page-jump {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-1, 0.25rem);
+  margin: 0 var(--space-1, 0.25rem);
   white-space: nowrap;
+  font-size: var(--font-size-sm, 0.875rem);
 }
 
 .query-pagination-page-jump-input {
-  width: 3.25rem;
-  padding: 0.1rem 0.25rem;
+  width: 2rem;
+  height: 1.5rem;
+  padding: 0 0.25rem;
   border: 1px solid var(--color-border, #444);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--color-bg-primary, transparent);
-  color: var(--color-text-primary);
+  border-radius: 6px;
+  background: var(--color-bg, transparent);
+  color: var(--color-text);
   font-size: var(--font-size-sm, 0.875rem);
   text-align: center;
+  /* The arrows communicate stepping; the number field is for typing a page. */
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
-.query-pagination-page-jump-input:focus {
-  outline: 1px solid var(--color-accent, #4a9eda);
-  outline-offset: 0;
+.query-pagination-page-jump-input::-webkit-outer-spin-button,
+.query-pagination-page-jump-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.query-pagination-page-jump-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.query-pagination-page-jump-input:disabled {
+  opacity: 0.55;
+}
+
+.query-pagination-page-jump-total {
+  color: var(--color-text-secondary);
 }

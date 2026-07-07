@@ -119,31 +119,6 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
         />
       </div>
       <div className="query-pagination-status" aria-live="polite">
-        {showPageJump ? (
-          <span className="query-pagination-page-jump">
-            Page
-            <input
-              key={pageIndex}
-              type="number"
-              className="query-pagination-page-jump-input"
-              defaultValue={pageIndex}
-              min={1}
-              max={totalPages}
-              disabled={loading}
-              aria-label={`Go to page (1 to ${totalPages})`}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') {
-                  return;
-                }
-                const value = Number((event.target as HTMLInputElement).value);
-                if (Number.isFinite(value) && value >= 1) {
-                  onPageJump?.(Math.min(Math.floor(value), totalPages));
-                }
-              }}
-            />
-            of {formatCount(totalPages)}
-          </span>
-        ) : null}
         <span className="query-pagination-range">
           {rangeLabel} of {totalLabel}
         </span>
@@ -153,6 +128,9 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           aria-hidden={loading ? undefined : true}
         />
       </div>
+      {/* One navigation cluster: ◀ [page]/total ▶. The editable page number
+          lives between the arrows because it IS navigation — keeping it out of
+          the status text leaves exactly one "X of Y" fact on the footer. */}
       <div className="query-pagination-buttons">
         <button
           type="button"
@@ -164,6 +142,31 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
         >
           <PaginationArrowIcon direction="previous" />
         </button>
+        {showPageJump ? (
+          <span className="query-pagination-page-jump">
+            <input
+              key={pageIndex}
+              type="number"
+              className="query-pagination-page-jump-input"
+              defaultValue={pageIndex}
+              min={1}
+              max={totalPages}
+              disabled={loading}
+              aria-label={`Page ${pageIndex} of ${totalPages} — edit to jump`}
+              title={`Go to page (1 to ${formatCount(totalPages)})`}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') {
+                  return;
+                }
+                const value = Number((event.target as HTMLInputElement).value);
+                if (Number.isFinite(value) && value >= 1) {
+                  onPageJump?.(Math.min(Math.floor(value), totalPages));
+                }
+              }}
+            />
+            <span className="query-pagination-page-jump-total">/ {formatCount(totalPages)}</span>
+          </span>
+        ) : null}
         <button
           type="button"
           className="query-pagination-button"
