@@ -99,4 +99,73 @@ describe('QueryPaginationControls', () => {
     expect(onNext).not.toHaveBeenCalled();
     expect(container.querySelector('[aria-label="Page request in progress"]')).not.toBeNull();
   });
+
+  const renderWithJump = (onPageJump: (page: number) => void) => {
+    act(() => {
+      root.render(
+        <QueryPaginationControls
+          idPrefix="typed"
+          pageIndex={2}
+          pageSize={250}
+          visibleItemCount={250}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={1068}
+          totalIsExact={true}
+          hasPrevious={true}
+          hasNext={true}
+          loading={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+          onPageJump={onPageJump}
+        />
+      );
+    });
+    return container.querySelector<HTMLInputElement>('.query-pagination-page-jump-input')!;
+  };
+
+  it('commits a page jump on blur (tab-out), clamped, same as Enter', () => {
+    const onPageJump = vi.fn();
+    const input = renderWithJump(onPageJump);
+
+    // Blur with an edited, in-range value jumps (blur() drives React's onBlur
+    // via the delegated focusout).
+    act(() => {
+      input.focus();
+      input.value = '4';
+      input.blur();
+    });
+    expect(onPageJump).toHaveBeenCalledWith(4);
+
+    // Blur with an out-of-range value clamps to the last page (1068/250 = 5).
+    onPageJump.mockClear();
+    act(() => {
+      input.focus();
+      input.value = '99';
+      input.blur();
+    });
+    expect(onPageJump).toHaveBeenCalledWith(5);
+  });
+
+  it('does not jump when the field is unchanged or empty on blur, and restores the display', () => {
+    const onPageJump = vi.fn();
+    const input = renderWithJump(onPageJump);
+
+    // Tabbing through the untouched field (value equals the current page) is a no-op.
+    act(() => {
+      input.focus();
+      input.blur();
+    });
+    expect(onPageJump).not.toHaveBeenCalled();
+    expect(input.value).toBe('2');
+
+    // Clearing then blurring does not jump and restores the current page.
+    act(() => {
+      input.focus();
+      input.value = '';
+      input.blur();
+    });
+    expect(onPageJump).not.toHaveBeenCalled();
+    expect(input.value).toBe('2');
+  });
 });

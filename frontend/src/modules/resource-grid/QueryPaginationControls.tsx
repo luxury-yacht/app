@@ -93,6 +93,21 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   // first/prev/next only (large-data.md contract).
   const showPageJump = Boolean(onPageJump) && totalIsExact && totalPages > 1;
 
+  // Commit the page-jump field: parse, clamp to [1, totalPages], and jump only
+  // when the target differs from the current page. Both Enter and blur (tab-out)
+  // call this, so they can't drift. On an empty/invalid/same-page value it
+  // restores the field to the current page rather than leaving a stale number.
+  const commitPageJump = (input: HTMLInputElement) => {
+    const value = Number(input.value);
+    const target =
+      Number.isFinite(value) && value >= 1 ? Math.min(Math.floor(value), totalPages) : null;
+    if (target === null || target === pageIndex) {
+      input.value = String(pageIndex);
+      return;
+    }
+    onPageJump?.(target);
+  };
+
   return (
     <div className="query-pagination-controls" aria-label="Table pagination">
       <div className="query-pagination-page-size">
@@ -155,14 +170,11 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
               aria-label={`Page ${pageIndex} of ${totalPages} — edit to jump`}
               title={`Go to page (1 to ${formatCount(totalPages)})`}
               onKeyDown={(event) => {
-                if (event.key !== 'Enter') {
-                  return;
-                }
-                const value = Number((event.target as HTMLInputElement).value);
-                if (Number.isFinite(value) && value >= 1) {
-                  onPageJump?.(Math.min(Math.floor(value), totalPages));
+                if (event.key === 'Enter') {
+                  commitPageJump(event.currentTarget);
                 }
               }}
+              onBlur={(event) => commitPageJump(event.currentTarget)}
             />
             <span className="query-pagination-page-jump-total">/ {formatCount(totalPages)}</span>
           </span>
