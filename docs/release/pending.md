@@ -1,14 +1,13 @@
 ### Added
 
-- Numbered page jumps in query-backed tables and Browse: a "Page N of M" input appears in the pagination footer whenever the total is exact, and jump landings show their exact serve-time position.
+- Pagination controls now allow you to manully enter and jump straight to a specific page number.
 
 ### Changed
 
-- Backward paging in query-backed tables now uses backend-minted previous-page cursors, so it works from any landing (including jumps) and matches Browse.
-- Copy/Export "all matching rows" now detects when the cluster's data changes mid-export: it retries once, then delivers the export with a visible warning instead of failing outright.
-- Page turns on large tables are much faster while the data is quiet (the backend reuses the page index across requests instead of rebuilding it per page).
+- Improved performance when paging through large tables.
+- When you copy or export "all matching rows" and the cluster changes while the rows are being gathered, the app now warns you that the results mix before-and-after data, instead of quietly returning an inconsistent set.
 
 ### Fixed
 
-- On busy clusters, paging past page 1 no longer leaves the pagination spinner running forever with the prev/next buttons disabled — background live refreshes of the current page are now quiet and no longer show as user-blocking activity.
-- Jump-to-object: navigating to an object from another view (object panel links, related rows, object map) now lands on the page containing it — under the table's current sort and filters — instead of only working when the object happened to be on the loaded page. If the object is filtered out or gone, the table says so and shows the first page.
+- When you jump to an object from elsewhere in the app — a link in its details, a related object, or the resource map — the list now scrolls to and highlights that object even when it's on a later page. If the object has been filtered out or deleted, the list tells you and returns to the first page.
+- Alt/option-clicking a namespace in Object Panel Details now takes you to that object in its list and selects the namespace in the sidebar.
