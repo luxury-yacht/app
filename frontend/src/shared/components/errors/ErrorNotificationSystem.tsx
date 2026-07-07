@@ -82,7 +82,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
     >
       <div className="error-notification-header">
         {isTop && stackSize > 1 && <span className="error-notification-count">{stackSize}</span>}
-        <span className="error-notification-category">{error.category}</span>
+        <span className="error-notification-category">{error.title ?? error.category}</span>
         {error.autoDismiss && (
           <span className="error-notification-auto-dismiss" title="Will auto-dismiss">
             ⏱️

@@ -137,4 +137,25 @@ describe('ErrorHandler', () => {
     expect(handler.getHistory()).toHaveLength(0);
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it('warn() emits a WARNING advisory with a title, verbatim message, and auto-dismiss', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+
+    const details = handler.warn('Some rows changed during export.', {
+      title: 'Export',
+      context: { source: 'resource-export' },
+    });
+
+    expect(details.severity).toBe(ErrorSeverity.WARNING);
+    expect(details.title).toBe('Export');
+    // The message is shown verbatim (not replaced by a canned category message).
+    expect(details.userMessage).toBe('Some rows changed during export.');
+    expect(details.autoDismiss).toBe(true);
+    expect(details.retryable).toBe(false);
+
+    // Goes through the same history + listener path as handle().
+    expect(handler.getHistory()).toContainEqual(details);
+    expect(listener).toHaveBeenCalledWith(details);
+  });
 });

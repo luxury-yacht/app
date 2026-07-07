@@ -69,6 +69,8 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
     addError({
       message: `${label} notification (styling test)`,
       category: ErrorCategory.UNKNOWN,
+      // A clean header title in place of the raw category label.
+      title: label,
       severity,
       timestamp: new Date(),
       retryable: false,

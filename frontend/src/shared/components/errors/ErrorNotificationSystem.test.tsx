@@ -115,3 +115,37 @@ describe('ErrorNotificationSystem copy button', () => {
     );
   });
 });
+
+describe('ErrorNotificationSystem header label', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    errorsRef.current = [];
+  });
+
+  const headerLabel = () =>
+    container.querySelector('.error-notification-category')?.textContent ?? null;
+
+  it('shows the category when no title is set', () => {
+    errorsRef.current = [makeError({ category: ErrorCategory.NETWORK })];
+    act(() => root.render(<ErrorNotificationSystem />));
+    expect(headerLabel()).toBe(ErrorCategory.NETWORK);
+  });
+
+  it('shows the title in place of the category when one is provided', () => {
+    errorsRef.current = [makeError({ category: ErrorCategory.UNKNOWN, title: 'Export' })];
+    act(() => root.render(<ErrorNotificationSystem />));
+    expect(headerLabel()).toBe('Export');
+  });
+});

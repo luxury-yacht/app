@@ -167,4 +167,46 @@ describe('ErrorContext', () => {
       expect(countAfter).toBe(1);
     });
   });
+
+  describe('per-notification auto-dismiss override', () => {
+    it('auto-dismisses a warning that opts in, though warnings do not auto-dismiss by default', async () => {
+      // Default provider: autoDismissWarning is false.
+      await renderProvider();
+
+      act(() => {
+        stateRef.current?.addError(
+          makeError({
+            severity: ErrorSeverity.WARNING,
+            autoDismiss: true,
+            autoDismissTimeout: 4000,
+          })
+        );
+      });
+      expect(stateRef.current?.errors).toHaveLength(1);
+
+      // Before its timeout it is still shown.
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(stateRef.current?.errors.filter((e) => !e.dismissed)).toHaveLength(1);
+
+      // After the timeout (+ the 300ms dismiss animation) it is gone.
+      act(() => {
+        vi.advanceTimersByTime(1000 + 300);
+      });
+      expect(stateRef.current?.errors).toHaveLength(0);
+    });
+
+    it('leaves a warning without the opt-in persistent (global default unchanged)', async () => {
+      await renderProvider();
+
+      act(() => {
+        stateRef.current?.addError(makeError({ severity: ErrorSeverity.WARNING }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+      expect(stateRef.current?.errors).toHaveLength(1);
+    });
+  });
 });

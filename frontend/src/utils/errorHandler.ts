@@ -40,6 +40,15 @@ export interface ErrorDetails {
   userMessage?: string;
   technicalMessage?: string;
   suggestions?: string[];
+  /** Header label shown instead of the category (for titled advisories). */
+  title?: string;
+  /**
+   * Explicit auto-dismiss request. When set, it overrides the severity-based
+   * default in the notification provider — so a single advisory can
+   * auto-dismiss without changing global severity behavior.
+   */
+  autoDismiss?: boolean;
+  autoDismissTimeout?: number;
 }
 
 export interface ErrorHandlerOptions {
@@ -377,6 +386,43 @@ class ErrorHandler {
       default:
         return 'color: #F44336; font-weight: bold;';
     }
+  }
+
+  /**
+   * Surface a user-facing WARNING advisory — something the user should know
+   * about that is NOT a failure (e.g. an export whose rows span a data change).
+   * Distinct from handle(): the severity is WARNING (styled amber, not red),
+   * the message is shown verbatim, an optional `title` replaces the category
+   * label, and it auto-dismisses by default. Runs the same
+   * history/logging/notification path as handle().
+   */
+  public warn(
+    message: string,
+    options?: {
+      title?: string;
+      autoDismiss?: boolean;
+      autoDismissTimeout?: number;
+      context?: Record<string, unknown>;
+    }
+  ): ErrorDetails {
+    const details: ErrorDetails = {
+      message,
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      title: options?.title,
+      context: options?.context,
+      timestamp: new Date(),
+      retryable: false,
+      userMessage: message,
+      technicalMessage: message,
+      autoDismiss: options?.autoDismiss ?? true,
+      autoDismissTimeout: options?.autoDismissTimeout,
+    };
+
+    this.logError(details);
+    this.addToHistory(details);
+    this.notifyListeners(details);
+    return details;
   }
 
   /**

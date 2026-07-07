@@ -72,11 +72,20 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     (error: ErrorDetails) => {
       const id = `error-${++errorIdCounter.current}`;
 
-      // Determine auto-dismiss settings
+      // Determine auto-dismiss settings. An explicit per-notification request
+      // (error.autoDismiss) wins over the severity-based defaults, so a single
+      // advisory can auto-dismiss without flipping the global severity flags.
       let autoDismiss = false;
       let autoDismissTimeout = 0;
 
-      if (error.severity === ErrorSeverity.INFO && autoDismissInfo) {
+      if (error.autoDismiss !== undefined) {
+        autoDismiss = error.autoDismiss;
+        autoDismissTimeout =
+          error.autoDismissTimeout ??
+          (error.severity === ErrorSeverity.INFO
+            ? autoDismissInfoTimeout
+            : autoDismissWarningTimeout);
+      } else if (error.severity === ErrorSeverity.INFO && autoDismissInfo) {
         autoDismiss = true;
         autoDismissTimeout = autoDismissInfoTimeout;
       } else if (error.severity === ErrorSeverity.WARNING && autoDismissWarning) {

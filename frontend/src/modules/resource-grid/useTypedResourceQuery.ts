@@ -625,12 +625,11 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       if (walk.dataChangedDuringWalk) {
         // Loud, not fatal: deliver the export but say what happened — the rows
         // reflect a mix of before/after states (near-certain on churning
-        // domains, where a hard failure would make export unusable).
-        errorHandler.handle(
-          new Error(
-            `${exportLabel}: data changed during export — rows reflect a mix of before/after states`
-          ),
-          { source: 'resource-export', domain }
+        // domains, where a hard failure would make export unusable). A WARNING
+        // advisory (amber, auto-dismissing), not an error.
+        errorHandler.warn(
+          'Some rows changed while the export was being gathered, so the result reflects a mix of before and after states.',
+          { title: 'Export', context: { source: 'resource-export', domain } }
         );
       }
       return walk.items;
