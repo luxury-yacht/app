@@ -172,8 +172,12 @@ Validated/decided during the rewrite; reasons in git history + the memory record
   (pages are small), **gorilla→coder/websocket** (gorilla is maintained again).
 - **A single per-cluster LSN clock** as a from-scratch rewrite (Phase 2 dropped) and
   **SSAR→SSRR** for the remaining callers (legitimately not SSRR-expressible).
-- **Order-statistics Rank/At index** and a **`metricsRevision` metric index** — only the
-  unbuilt delta layer / profiled metric-sorted views would need them.
+- **Order-statistics Rank/At index** and a **`metricsRevision` metric index**. The
+  anchor-jump / numbered-page feature that needs a per-row rank uses a counted
+  `QueryAround`/`QueryAt` walk instead — measured within the page-serve budget class for a
+  one-shot jump (`large-data.md` "Current Browse Budget"), so order statistics stay parked
+  behind a measured regression. The metric index would still only serve the unbuilt delta
+  layer / profiled metric-sorted views.
 
 ## Provenance
 

@@ -127,6 +127,18 @@ first drift restarts the walk once; a second drift DELIVERS the export with a
 user-visible "data changed during export" notification. Failed/blocked/empty
 pages still reject outright.
 
+Anchor identity resolves to an engine row key in the **serve layer**, never the
+engine (engine row keys are adapter-owned and name-shaped, not Kubernetes UIDs):
+typed tables map `(kind, namespace, name)` through the adapter's `AnchorKey`,
+built from the same helpers as the adapter's row `Key` — **a new typed kind must
+supply an `AnchorKey` or its rows cannot be anchor-jumped to**; the catalog looks
+the `Summary` up by `(gvr, namespace, name)` and cross-checks the object UID
+(mismatch = recreated object = `not-found`). Frontend anchor intent is
+navigation state, never persisted table state (favorites must not replay jumps):
+a held jump re-fires (it does **not** bounce to page 1) on a sort/filter/page-size
+change, is cleared by manual pagination, and is retried with the anchor — not
+reset to page 1 — when a cursor is rejected mid-jump.
+
 ## Table Modes
 
 `Local Complete` tables may run local search, filtering, sorting, facets, CSV,

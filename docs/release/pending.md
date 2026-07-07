@@ -10,5 +10,5 @@
 
 ### Fixed
 
-- When you jump to an object from elsewhere in the app — a link in its details, a related object, or the resource map — the list now scrolls to and highlights that object even when it's on a later page. If the object has been filtered out or deleted, the list tells you and returns to the first page.
+- When you jump to an object, the list now scrolls to and highlights that object even if it's on a different page. If the object has been filtered out or deleted, the list tells you and returns to the first page.
 - Alt/option-clicking a namespace in Object Panel Details now takes you to that object in its list and selects the namespace in the sidebar.

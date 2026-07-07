@@ -8,8 +8,9 @@ import (
 )
 
 // The bespoke sort→filter→slice typed-table executor, demoted to the TEST
-// ORACLE it always effectively was (plan docs/plans/pagination.md P5): the
-// querypage engine is the one production executor, and the parity gates in
+// ORACLE it always effectively was (docs/architecture/data-layer.md invariant
+// #1 — one query engine, one cursor codec): the querypage engine is the one
+// production executor, and the parity gates in
 // querypage_*_test.go compare it byte-identically against this
 // straightforward recompute. Production reached this code only through a
 // !query.Enabled guard that was itself unreachable (every caller pre-checks

@@ -112,7 +112,8 @@ func typedQueryPredicateSignatureParts(predicates []ResourceQueryPredicate) []st
 }
 
 // perBuildStoreCache is the single-slot per-(cluster, domain) reuse of the
-// per-Build engine store (plan docs/plans/pagination.md F6/P6): page turns and
+// per-Build engine store (docs/architecture/large-data.md "Current Browse
+// Budget"): page turns and
 // sort changes reuse the matched-set store instead of paying an O(N log N)
 // matcher+store+index rebuild per request. The slot is keyed by the matched-set
 // identity plus the caller's version token and the metric revision — see

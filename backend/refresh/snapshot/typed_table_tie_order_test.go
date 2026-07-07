@@ -6,7 +6,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
-// TestTiedSortValuesOrderByHumanKey pins F10 (docs/plans/pagination.md): rows
+// TestTiedSortValuesOrderByHumanKey pins the keyset tie-break contract
+// (docs/architecture/data-layer.md "Store & query engine"): rows
 // whose sort values collide order by the name-shaped adapter key — kind, then
 // namespace, then name, lowercased — never by an arbitrary identifier such as
 // the Kubernetes object UID. Sorting by name with identical names across kinds
