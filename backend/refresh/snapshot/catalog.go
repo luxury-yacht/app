@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
 const (
@@ -36,24 +37,32 @@ type CatalogConfig struct {
 // controller can treat it as a conformant provider.
 type CatalogSnapshot struct {
 	ClusterMeta
-	Provider        ResourceQueryProvider     `json:"provider"`
-	Completeness    ResourceQueryCompleteness `json:"completeness,omitempty"`
-	Capabilities    ResourceQueryCapabilities `json:"capabilities"`
-	Items           []objectcatalog.Summary   `json:"items"`
-	Continue        string                    `json:"continue,omitempty"`
-	Previous        string                    `json:"previous,omitempty"`
-	CursorInvalid   bool                      `json:"cursorInvalid,omitempty"`
-	Total           int                       `json:"total"`
-	UnfilteredTotal int                       `json:"unfilteredTotal"`
-	TotalIsExact    bool                      `json:"totalIsExact"`
-	ResourceCount   int                       `json:"resourceCount"`
-	Kinds           []objectcatalog.KindInfo  `json:"kinds,omitempty"`
-	Namespaces      []string                  `json:"namespaces,omitempty"`
-	FacetsExact     bool                      `json:"facetsExact"`
-	Issues          []ResourceQueryIssue      `json:"issues,omitempty"`
-	HasNext         bool                      `json:"hasNext"`
-	HasPrevious     bool                      `json:"hasPrevious"`
-	NamespaceGroups []CatalogNamespaceGroup   `json:"namespaceGroups,omitempty"`
+	Provider     ResourceQueryProvider     `json:"provider"`
+	Completeness ResourceQueryCompleteness `json:"completeness,omitempty"`
+	Capabilities ResourceQueryCapabilities `json:"capabilities"`
+	Items        []objectcatalog.Summary   `json:"items"`
+	Continue     string                    `json:"continue,omitempty"`
+	Previous     string                    `json:"previous,omitempty"`
+	// Self addresses the served page itself (counted serves; see the envelope's
+	// twin field) — page-stable refetch after an anchored landing.
+	Self          string `json:"self,omitempty"`
+	CursorInvalid bool   `json:"cursorInvalid,omitempty"`
+	// Anchor is present iff the request carried one; PageStartRank is the
+	// serve-time rank of the page's first row (pointer: rank 0 must survive
+	// omitempty). Same contract as ResourceQueryEnvelope.
+	Anchor          *ResourceQueryAnchorResult `json:"anchor,omitempty"`
+	PageStartRank   *int                       `json:"pageStartRank,omitempty"`
+	Total           int                        `json:"total"`
+	UnfilteredTotal int                        `json:"unfilteredTotal"`
+	TotalIsExact    bool                       `json:"totalIsExact"`
+	ResourceCount   int                        `json:"resourceCount"`
+	Kinds           []objectcatalog.KindInfo   `json:"kinds,omitempty"`
+	Namespaces      []string                   `json:"namespaces,omitempty"`
+	FacetsExact     bool                       `json:"facetsExact"`
+	Issues          []ResourceQueryIssue       `json:"issues,omitempty"`
+	HasNext         bool                       `json:"hasNext"`
+	HasPrevious     bool                       `json:"hasPrevious"`
+	NamespaceGroups []CatalogNamespaceGroup    `json:"namespaceGroups,omitempty"`
 	// Batch fields below are diagnostics / streaming-progress only — NOT page
 	// metadata. Pagination is the keyset Continue/Previous/HasNext/HasPrevious
 	// above; the resource-inventory controller must not treat these as page state
@@ -89,6 +98,7 @@ type browseQueryOptions struct {
 	Limit      int
 	Continue   string
 	CustomOnly bool
+	Anchor     *ResourceQueryAnchor
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -213,7 +223,10 @@ func buildCatalogSnapshot(
 		Items:           cloneSummaries(result.Items),
 		Continue:        result.ContinueToken,
 		Previous:        result.PreviousToken,
+		Self:            result.SelfToken,
 		CursorInvalid:   result.CursorInvalid,
+		Anchor:          catalogAnchorResult(result.AnchorOutcome),
+		PageStartRank:   pageStartRankPtr(result.PageStartRank),
 		Total:           result.TotalItems,
 		UnfilteredTotal: result.UnfilteredTotal,
 		TotalIsExact:    result.TotalIsExact,
@@ -293,6 +306,16 @@ func keysetCatalogBatchIndex(hasPrevious bool) int {
 	return 0
 }
 
+// catalogAnchorResult maps the catalog engine's anchor outcome onto the wire
+// contract (nil when the request carried no anchor), reusing the typed path's
+// found/filtered/not-found mapping.
+func catalogAnchorResult(outcome *querypage.AnchorOutcome) *ResourceQueryAnchorResult {
+	if outcome == nil {
+		return nil
+	}
+	return anchorResultFromOutcome(*outcome)
+}
+
 func buildCatalogNamespaceGroups(
 	svc *objectcatalog.Service,
 	meta ClusterMeta,
@@ -335,7 +358,7 @@ func max(a, b int) int {
 }
 
 func parseBrowseScope(scope string) (browseQueryOptions, error) {
-	_, trimmed := refresh.SplitClusterScope(scope)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	if trimmed == "" {
 		return browseQueryOptions{}, nil
 	}
@@ -343,7 +366,12 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	if err != nil {
 		return browseQueryOptions{}, err
 	}
-	request := resourceQueryRequestFromValues("", "browse", values, ResourceQueryRequest{})
+	// The scope's cluster id is the request cluster: the anchor's same-cluster
+	// rule must be checked against it, not a placeholder.
+	request := resourceQueryRequestFromValues(clusterID, "browse", values, ResourceQueryRequest{})
+	if err := request.validateAnchor(); err != nil {
+		return browseQueryOptions{}, err
+	}
 	opts := browseQueryOptions{
 		Kinds:      request.Kinds,
 		Namespaces: request.Namespaces,
@@ -353,12 +381,13 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		Continue:   request.Continue,
 		Limit:      request.Limit,
 		CustomOnly: values.Get("customOnly") == "true",
+		Anchor:     request.Anchor,
 	}
 	return opts, nil
 }
 
 func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
-	return objectcatalog.QueryOptions{
+	opts := objectcatalog.QueryOptions{
 		Kinds:         o.Kinds,
 		Namespaces:    o.Namespaces,
 		Search:        o.Search,
@@ -368,6 +397,19 @@ func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 		Continue:      o.Continue,
 		CustomOnly:    o.CustomOnly,
 	}
+	if a := o.Anchor; a != nil {
+		// ClusterID stays behind: parseBrowseScope already enforced the
+		// same-cluster rule, and the catalog service is per-cluster.
+		opts.Anchor = &objectcatalog.QueryAnchor{
+			Group:     a.Group,
+			Version:   a.Version,
+			Kind:      a.Kind,
+			Namespace: a.Namespace,
+			Name:      a.Name,
+			UID:       a.UID,
+		}
+	}
+	return opts
 }
 
 func cloneSummaries(items []objectcatalog.Summary) []objectcatalog.Summary {

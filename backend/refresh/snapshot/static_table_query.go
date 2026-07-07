@@ -64,6 +64,7 @@ func nodePodsUsedSortValue(pods string) (float64, bool) {
 func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 	return typedTableQueryAdapter[ConfigSummary]{
 		Key:       func(row ConfigSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row ConfigSummary) string { return row.Namespace },
 		Kind:      func(row ConfigSummary) string { return row.Kind },
 		SearchText: func(row ConfigSummary) []string {
@@ -99,6 +100,7 @@ func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 	return typedTableQueryAdapter[NetworkSummary]{
 		Key:       func(row NetworkSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row NetworkSummary) string { return row.Namespace },
 		Kind:      func(row NetworkSummary) string { return row.Kind },
 		SearchText: func(row NetworkSummary) []string {
@@ -131,6 +133,7 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 	return typedTableQueryAdapter[StorageSummary]{
 		Key:       func(row StorageSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row StorageSummary) string { return row.Namespace },
 		Kind:      func(row StorageSummary) string { return row.Kind },
 		SearchText: func(row StorageSummary) []string {
@@ -167,6 +170,7 @@ func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 	return typedTableQueryAdapter[AutoscalingSummary]{
 		Key:       func(row AutoscalingSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row AutoscalingSummary) string { return row.Namespace },
 		Kind:      func(row AutoscalingSummary) string { return row.Kind },
 		SearchText: func(row AutoscalingSummary) []string {
@@ -213,6 +217,7 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 	return typedTableQueryAdapter[QuotaSummary]{
 		Key:       func(row QuotaSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row QuotaSummary) string { return row.Namespace },
 		Kind:      func(row QuotaSummary) string { return row.Kind },
 		SearchText: func(row QuotaSummary) []string {
@@ -245,6 +250,7 @@ func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 func rbacTableQueryAdapter() typedTableQueryAdapter[RBACSummary] {
 	return typedTableQueryAdapter[RBACSummary]{
 		Key:       func(row RBACSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row RBACSummary) string { return row.Namespace },
 		Kind:      func(row RBACSummary) string { return row.Kind },
 		SearchText: func(row RBACSummary) []string {
@@ -279,6 +285,7 @@ func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 		Key: func(row NamespaceHelmSummary) string {
 			return namespacedTableKey("HelmRelease", row.Namespace, row.Name)
 		},
+		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("HelmRelease", namespace, name) },
 		Namespace: func(row NamespaceHelmSummary) string { return row.Namespace },
 		Kind:      func(NamespaceHelmSummary) string { return "HelmRelease" },
 		SearchText: func(row NamespaceHelmSummary) []string {
@@ -322,6 +329,7 @@ func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 	return typedTableQueryAdapter[EventSummary]{
 		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Namespace, row.Name) },
+		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
 		Namespace: func(row EventSummary) string { return row.Namespace },
 		Kind:      func(row EventSummary) string { return row.Kind },
 		SearchText: func(row EventSummary) []string {
@@ -369,6 +377,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	return typedTableQueryAdapter[ClusterEventEntry]{
 		Key:       func(row ClusterEventEntry) string { return clusterTableKey("Event", row.Name) },
+		AnchorKey: func(_, _, name string) string { return clusterTableKey("Event", name) },
 		Namespace: func(ClusterEventEntry) string { return "" },
 		Kind:      func(row ClusterEventEntry) string { return row.Kind },
 		SearchText: func(row ClusterEventEntry) []string {
@@ -428,6 +437,7 @@ func metadataSearchText(maps ...map[string]string) []string {
 func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 	return typedTableQueryAdapter[NodeSummary]{
 		Key:       func(row NodeSummary) string { return clusterTableKey(nodespkg.Identity.Kind, row.Name) },
+		AnchorKey: func(_, _, name string) string { return clusterTableKey(nodespkg.Identity.Kind, name) },
 		Namespace: func(NodeSummary) string { return "" },
 		Kind:      func(NodeSummary) string { return nodespkg.Identity.Kind },
 		SearchText: func(row NodeSummary) []string {
@@ -485,6 +495,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry] {
 	return typedTableQueryAdapter[ClusterConfigEntry]{
 		Key:       func(row ClusterConfigEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterConfigEntry) string { return "" },
 		Kind:      func(row ClusterConfigEntry) string { return row.Kind },
 		SearchText: func(row ClusterConfigEntry) []string {
@@ -515,6 +526,7 @@ func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry]
 func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntry] {
 	return typedTableQueryAdapter[ClusterStorageEntry]{
 		Key:       func(row ClusterStorageEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterStorageEntry) string { return "" },
 		Kind:      func(row ClusterStorageEntry) string { return row.Kind },
 		SearchText: func(row ClusterStorageEntry) []string {
@@ -553,6 +565,7 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 	return typedTableQueryAdapter[ClusterRBACEntry]{
 		Key:       func(row ClusterRBACEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterRBACEntry) string { return "" },
 		Kind:      func(row ClusterRBACEntry) string { return row.Kind },
 		SearchText: func(row ClusterRBACEntry) []string {
@@ -583,6 +596,7 @@ func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 	return typedTableQueryAdapter[ClusterCRDEntry]{
 		Key:       func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Name) },
+		AnchorKey: func(_, _, name string) string { return clusterTableKey("CustomResourceDefinition", name) },
 		Namespace: func(ClusterCRDEntry) string { return "" },
 		Kind:      func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
 		SearchText: func(row ClusterCRDEntry) []string {

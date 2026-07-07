@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -203,6 +204,25 @@ type QueryOptions struct {
 	Limit         int      // maximum number of items to return
 	Continue      string   // token for continuing a paginated query
 	CustomOnly    bool     // restricts results to non-built-in discovered resources
+	// Anchor asks for the page CONTAINING this object instead of a
+	// cursor-addressed page (mutually exclusive with Continue — the snapshot
+	// layer validates before calling). See QueryAnchor.
+	Anchor *QueryAnchor
+}
+
+// QueryAnchor identifies an anchored query's jump target. The catalog resolves
+// it to a summary by exact group/version/namespace/name and case-insensitive
+// kind; UID, when set, is an identity cross-check — a mismatch means the
+// object was deleted and recreated, reported as not-found. (Catalog-local
+// mirror of the snapshot wire contract's anchor; objectcatalog cannot import
+// the snapshot package.)
+type QueryAnchor struct {
+	Group     string
+	Version   string
+	Kind      string
+	Namespace string
+	Name      string
+	UID       string
 }
 
 // KindInfo captures metadata about a resource kind for filtering.
@@ -216,6 +236,7 @@ type QueryResult struct {
 	Items         []Summary // items returned by the query
 	ContinueToken string    // token for continuing a paginated query
 	PreviousToken string    // token for fetching the previous page
+	SelfToken     string    // token addressing THIS page (counted serves only; page-stable refetch)
 	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
 	TotalItems    int       // total number of items matching the query
 	// UnfilteredTotal is the in-scope item count before the query's filters (the "of M" in
@@ -226,6 +247,13 @@ type QueryResult struct {
 	Kinds           []KindInfo // resource kinds included in the query
 	Namespaces      []string   // namespaces included in the query
 	FacetsExact     bool       // indicates Kinds and Namespaces describe the matching universe exactly
+	// AnchorOutcome reports how an anchored query resolved (nil when the query
+	// carried no anchor); the snapshot layer maps it onto the wire contract's
+	// found/filtered/not-found result.
+	AnchorOutcome *querypage.AnchorOutcome
+	// PageStartRank is the 0-based rank of the served page's first row among
+	// matching rows; -1 when not computed (cursor-addressed pages).
+	PageStartRank int
 }
 
 // PartialSyncError reports that a sync completed with partial failures.

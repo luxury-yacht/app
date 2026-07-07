@@ -1,8 +1,6 @@
 package snapshot
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
@@ -26,9 +24,21 @@ type typedTableQuery struct {
 }
 
 type typedTableQueryPage[T any] struct {
-	Rows          []T
-	Continue      string
+	Rows     []T
+	Continue string
+	// Previous is the backend prev-page cursor, populated on EVERY engine-served
+	// response (F5) — the client keeps no token stack.
+	Previous string
+	// Self addresses the served page itself (counted serves only) — the token a
+	// live refetch uses to stay page-stable after an anchored/offset landing.
+	Self          string
 	CursorInvalid bool
+	// Anchor is present iff the request carried an anchor (jump-to-object).
+	Anchor *ResourceQueryAnchorResult
+	// PageStartRank is the 0-based rank of the page's first matching row; nil
+	// when the serve did not pay the counted walk (plain cursor pages). Pointer
+	// so rank 0 stays distinguishable from absent on the wire.
+	PageStartRank *int
 	Total         int
 	// UnfilteredTotal is the count of items in scope before the query's filters
 	// (search/kinds/namespaces/predicates). It is the "of M" in the table's
@@ -45,22 +55,15 @@ type typedTableQueryPage[T any] struct {
 	SortField string
 }
 
-type typedTableQueryCursor struct {
-	ClusterID       string `json:"clusterId"`
-	Table           string `json:"table"`
-	Signature       string `json:"signature"`
-	SortField       string `json:"sortField"`
-	SortDirection   string `json:"sortDirection"`
-	Limit           int    `json:"limit"`
-	LastValue       string `json:"lastValue"`
-	LastKey         string `json:"lastKey"`
-	DynamicRevision string `json:"dynamicRevision,omitempty"`
-}
-
 type typedTableQueryAdapter[T any] struct {
-	Key        func(T) string
-	Namespace  func(T) string
-	Kind       func(T) string
+	Key       func(T) string
+	Namespace func(T) string
+	Kind      func(T) string
+	// AnchorKey builds the SAME row key as Key from an anchor's object identity
+	// (kind, namespace, name) — the anchor→row resolution contract, pinned by
+	// TestAdapterAnchorKeyMatchesKey. nil means the family cannot resolve
+	// anchors (anchored requests report not-found).
+	AnchorKey  func(kind, namespace, name string) string
 	SearchText func(T) []string
 	// MetadataText, when set, supplies extra searchable strings (e.g. labels and
 	// annotations) that are matched only when the request sets IncludeMetadata.
@@ -98,6 +101,9 @@ func parseTypedTableQueryScope(clusterID, scope, table string, dynamicRevision s
 	if query.Request.Limit > maxTypedTableQueryLimit {
 		query.Request.Limit = maxTypedTableQueryLimit
 	}
+	if err := query.Request.validateAnchor(); err != nil {
+		return base, query, fmt.Errorf("%s query scope: %w", table, err)
+	}
 	return base, query, nil
 }
 
@@ -120,7 +126,11 @@ func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabi
 		Provider:        ResourceQueryProviderTypedResource,
 		Table:           table,
 		Continue:        page.Continue,
+		Previous:        page.Previous,
+		Self:            page.Self,
 		CursorInvalid:   page.CursorInvalid,
+		Anchor:          page.Anchor,
+		PageStartRank:   page.PageStartRank,
 		Total:           page.Total,
 		UnfilteredTotal: page.UnfilteredTotal,
 		TotalIsExact:    page.TotalIsExact,
@@ -252,198 +262,6 @@ func (m typedTableQueryMatcher[T]) Matches(item T) bool {
 		}
 	}
 	return true
-}
-
-// typedTableSortedItem decorates a row with its comparable sort value and row
-// key, computed ONCE per row. Page order and the keyset cursor boundary both
-// derive from this same (value, key) pair — see typedTableSortedItemLess.
-type typedTableSortedItem[T any] struct {
-	item  T
-	value string
-	key   string
-}
-
-func decorateTypedTableItem[T any](item T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableSortedItem[T] {
-	return typedTableSortedItem[T]{
-		item:  item,
-		value: typedTableComparableSortValue(item, query.Request.SortField, adapter),
-		key:   adapter.Key(item),
-	}
-}
-
-// typedTableSortedItemLess is the ONE total order for typed-table pages: the
-// comparable sort value, tie-broken by the stable row key. Driving the page
-// sort, the bounded insert, and the cursor boundary from this single function
-// is what guarantees a cursor can never skip or duplicate a row — the order
-// pages are laid out in is, by construction, the order the boundary walks.
-// Row keys are unique, so the order is strict (no equal elements).
-func typedTableSortedItemLess[T any](a, b typedTableSortedItem[T], desc bool) bool {
-	if a.value != b.value {
-		if desc {
-			return a.value > b.value
-		}
-		return a.value < b.value
-	}
-	return a.key < b.key
-}
-
-// typedTableSortedItemAfterCursor reports whether the decorated row sorts
-// strictly after the cursor position in the page walk order.
-func typedTableSortedItemAfterCursor[T any](candidate typedTableSortedItem[T], cursor typedTableQueryCursor, desc bool) bool {
-	if desc {
-		return candidate.value < cursor.LastValue ||
-			(candidate.value == cursor.LastValue && candidate.key > cursor.LastKey)
-	}
-	return candidate.value > cursor.LastValue ||
-		(candidate.value == cursor.LastValue && candidate.key > cursor.LastKey)
-}
-
-func typedTableCursorFor[T any](last typedTableSortedItem[T], query typedTableQuery) string {
-	return encodeTypedTableQueryCursor(typedTableQueryCursor{
-		ClusterID:       query.Request.ClusterID,
-		Table:           query.Request.Table,
-		Signature:       query.signature(),
-		SortField:       query.Request.SortField,
-		SortDirection:   query.Request.SortDirection,
-		Limit:           query.Request.Limit,
-		LastValue:       last.value,
-		LastKey:         last.key,
-		DynamicRevision: query.DynamicRevision,
-	})
-}
-
-func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryPage[T] {
-	if !query.Enabled {
-		return typedTableQueryPage[T]{
-			Rows:            items,
-			Total:           len(items),
-			UnfilteredTotal: len(items),
-			TotalIsExact:    true,
-			FacetsExact:     true,
-			Namespaces:      collectTypedTableFacet(items, adapter.Namespace),
-			Kinds:           collectTypedTableFacet(items, adapter.Kind),
-			Dynamic:         query.dynamicRef(),
-		}
-	}
-
-	desc := query.Request.SortDirection == "desc"
-	matcher := newTypedTableQueryMatcher(query, adapter)
-	filtered := make([]typedTableSortedItem[T], 0, len(items))
-	namespaceFacets := map[string]string{}
-	kindFacets := map[string]string{}
-	for _, item := range items {
-		if !matcher.Matches(item) {
-			continue
-		}
-		addTypedTableFacetValue(namespaceFacets, adapter.Namespace(item))
-		addTypedTableFacetValue(kindFacets, adapter.Kind(item))
-		filtered = append(filtered, decorateTypedTableItem(item, query, adapter))
-	}
-
-	// Row keys are unique → strict order → an unstable sort is equivalent.
-	sort.Slice(filtered, func(i, j int) bool {
-		return typedTableSortedItemLess(filtered[i], filtered[j], desc)
-	})
-	total := len(filtered)
-
-	start := 0
-	cursorInvalid := false
-	if query.Request.Continue != "" {
-		if cursor, ok := decodeTypedTableQueryCursor(query.Request.Continue); ok && cursor.matches(query) {
-			// The slice is sorted in walk order, so "after cursor" is monotone
-			// and the boundary is a binary search.
-			start = sort.Search(len(filtered), func(i int) bool {
-				return typedTableSortedItemAfterCursor(filtered[i], cursor, desc)
-			})
-		} else {
-			cursorInvalid = true
-		}
-	}
-
-	end := min(start+query.Request.Limit, len(filtered))
-	pageRows := make([]T, 0, end-start)
-	for _, candidate := range filtered[start:end] {
-		pageRows = append(pageRows, candidate.item)
-	}
-	continueToken := ""
-	if end < len(filtered) && len(pageRows) > 0 {
-		continueToken = typedTableCursorFor(filtered[end-1], query)
-	}
-
-	return typedTableQueryPage[T]{
-		Rows:            pageRows,
-		Continue:        continueToken,
-		CursorInvalid:   cursorInvalid,
-		Total:           total,
-		UnfilteredTotal: len(items),
-		TotalIsExact:    true,
-		FacetsExact:     true,
-		Namespaces:      typedTableFacetMapValues(namespaceFacets),
-		Kinds:           typedTableFacetMapValues(kindFacets),
-		Dynamic:         query.dynamicRef(),
-		SortField:       query.Request.SortField,
-	}
-}
-
-func (c typedTableQueryCursor) matches(query typedTableQuery) bool {
-	// DynamicRevision is deliberately NOT compared. Metric-backed sorts
-	// (cpu/memory) carry a metrics revision that advances every few seconds; the
-	// cursor is a value-based keyset (LastValue holds the comparable sort value,
-	// not an offset), so it keeps paging forward correctly across a metrics tick.
-	// Invalidating on every revision change would reset a metric-sorted table to
-	// page 1 constantly and make it impossible to page. See
-	// TestTypedTableQueryContinuesCursorWhenDynamicRevisionChanges.
-	return c.ClusterID == query.Request.ClusterID &&
-		c.Table == query.Request.Table &&
-		c.Signature == query.signature() &&
-		c.SortField == query.Request.SortField &&
-		c.SortDirection == query.Request.SortDirection &&
-		c.Limit == query.Request.Limit
-}
-
-func (q typedTableQuery) signature() string {
-	payload := struct {
-		ClusterID     string                   `json:"clusterId"`
-		Table         string                   `json:"table"`
-		BaseScope     string                   `json:"baseScope"`
-		Search        string                   `json:"search,omitempty"`
-		Namespaces    []string                 `json:"namespaces,omitempty"`
-		Kinds         []string                 `json:"kinds,omitempty"`
-		Predicates    []ResourceQueryPredicate `json:"predicates,omitempty"`
-		SortField     string                   `json:"sortField"`
-		SortDirection string                   `json:"sortDirection"`
-	}{
-		ClusterID:     q.Request.ClusterID,
-		Table:         q.Request.Table,
-		BaseScope:     q.BaseScope,
-		Search:        q.Request.Search,
-		Namespaces:    q.Request.Namespaces,
-		Kinds:         q.Request.Kinds,
-		Predicates:    q.Request.Predicates,
-		SortField:     q.Request.SortField,
-		SortDirection: q.Request.SortDirection,
-	}
-	raw, _ := json.Marshal(payload)
-	return base64.RawURLEncoding.EncodeToString(raw)
-}
-
-func encodeTypedTableQueryCursor(cursor typedTableQueryCursor) string {
-	raw, _ := json.Marshal(cursor)
-	return base64.RawURLEncoding.EncodeToString(raw)
-}
-
-func decodeTypedTableQueryCursor(value string) (typedTableQueryCursor, bool) {
-	// Trim like the catalog cursor codec does, so a token padded in transport
-	// decodes identically through both.
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(value))
-	if err != nil {
-		return typedTableQueryCursor{}, false
-	}
-	var cursor typedTableQueryCursor
-	if err := json.Unmarshal(raw, &cursor); err != nil {
-		return typedTableQueryCursor{}, false
-	}
-	return cursor, true
 }
 
 func (q typedTableQuery) dynamicRef() *ResourceQueryDynamicRef {

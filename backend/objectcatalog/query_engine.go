@@ -308,22 +308,12 @@ func (s *Service) queryViaEngineWithStore(
 
 	filters := s.catalogEngineFilters(rows, opts)
 
-	// CursorInvalid: a non-empty continue token that fails to decode or pin to this
-	// exact query shape is rejected, and the engine restarts at page 1 (NextCursor/
-	// PrevCursor are recomputed from the first page). The engine's own Query also resets
-	// a mismatched cursor, so the page is correct regardless; this flag only tells the
-	// frontend to reset.
-	cursorInvalid := false
-	cursorToken := opts.Continue
-	if cursorToken != "" {
-		if cur, err := querypage.Decode(cursorToken); err != nil ||
-			cur.Validate(s.clusterID, signature, sortKey, direction, limit) != nil {
-			cursorInvalid = true
-			cursorToken = ""
-		}
-	}
-
-	page, err := store.Query(querypage.Query{
+	// Cursor decode/validate and the backward dead-end rule are owned by the engine
+	// (querypage.Store.Query): an invalid token restarts at page 1 (NextCursor/
+	// PrevCursor recomputed from the first page), a backward cursor whose
+	// predecessors were all deleted returns the empty dead-end page, and both
+	// surface on page.CursorInvalid — that flag only tells the frontend to reset.
+	engineQuery := querypage.Query{
 		ClusterID: s.clusterID,
 		Signature: signature,
 		Sort:      sortKey,
@@ -331,21 +321,31 @@ func (s *Service) queryViaEngineWithStore(
 		Limit:     limit,
 		Search:    opts.Search,
 		Filters:   filters,
-		Cursor:    cursorToken,
-	})
-	if err != nil {
-		// A decode/validate failure is already handled above (the token was cleared),
-		// so a first-page query cannot fail here; return an empty page defensively.
-		page = querypage.Page[Summary]{}
 	}
-
-	// A valid backward cursor that yields no rows means every predecessor was deleted
-	// since the token was issued — an un-navigable dead end. Flag it as cursorInvalid so
-	// the client resets to page 1.
-	if !cursorInvalid && cursorToken != "" && len(page.Rows) == 0 {
-		if cur, decodeErr := querypage.Decode(cursorToken); decodeErr == nil && cur.Backward {
-			cursorInvalid = true
+	var page querypage.Page[Summary]
+	var err error
+	var anchorOutcome *querypage.AnchorOutcome
+	if opts.Anchor != nil {
+		// Resolve the anchor to the engine's row key via the summary snapshot.
+		// The engine store holds ALL published summaries (filters apply at query
+		// time), so once the key resolves, the engine's found/filtered outcome is
+		// authoritative; an unresolved key (absent, or UID identity mismatch)
+		// walks the engine's not-found path — first page + reason.
+		key := ""
+		if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
+			key = catalogEngineUID(summary)
 		}
+		var outcome querypage.AnchorOutcome
+		page, outcome, err = store.QueryAround(engineQuery, key)
+		anchorOutcome = &outcome
+	} else {
+		engineQuery.Cursor = opts.Continue
+		page, err = store.Query(engineQuery)
+	}
+	if err != nil {
+		// The only remaining engine error is an unknown sort key; sortKey is
+		// normalized above, so this is defensive.
+		page = querypage.Page[Summary]{PageStartRank: -1}
 	}
 
 	unfilteredTotal, unfilteredExact := s.catalogEngineUnfilteredTotal(store, opts, page.Total)
@@ -357,7 +357,8 @@ func (s *Service) queryViaEngineWithStore(
 		Items:           page.Rows,
 		ContinueToken:   page.NextCursor,
 		PreviousToken:   page.PrevCursor,
-		CursorInvalid:   cursorInvalid,
+		SelfToken:       page.SelfCursor,
+		CursorInvalid:   page.CursorInvalid,
 		TotalItems:      page.Total,
 		UnfilteredTotal: unfilteredTotal,
 		TotalIsExact:    metadataExact && unfilteredExact,
@@ -365,7 +366,34 @@ func (s *Service) queryViaEngineWithStore(
 		Kinds:           kinds,
 		Namespaces:      namespaces,
 		FacetsExact:     metadataExact,
+		AnchorOutcome:   anchorOutcome,
+		PageStartRank:   page.PageStartRank,
 	}
+}
+
+// findAnchorSummary resolves an anchor reference to its published summary by
+// exact group/version/namespace/name and case-insensitive kind (mirroring the
+// typed path's lowercased row keys). When the anchor carries a UID and the
+// resolved summary's differs, the object was deleted and recreated under the
+// same identity — the anchor no longer exists, so resolution fails and the
+// engine reports not-found.
+func findAnchorSummary(rows []Summary, anchor *QueryAnchor) (Summary, bool) {
+	for _, s := range rows {
+		if s.Namespace != anchor.Namespace || s.Name != anchor.Name {
+			continue
+		}
+		if s.Group != anchor.Group || s.Version != anchor.Version {
+			continue
+		}
+		if !strings.EqualFold(s.Kind, anchor.Kind) {
+			continue
+		}
+		if anchor.UID != "" && s.UID != anchor.UID {
+			return Summary{}, false
+		}
+		return s, true
+	}
+	return Summary{}, false
 }
 
 // catalogEngineFilters builds the querypage facet filters for a query: the kind

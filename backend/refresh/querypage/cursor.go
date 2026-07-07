@@ -1,15 +1,16 @@
-// Package querypage defines the unified Query → Page contract for the v2 store.
+// Package querypage is the one production Query → Page engine for the v2
+// store: every typed-table and catalog serve path executes here (maintained
+// stores queried in place, per-Build stores, and the catalog engine store),
+// and this file's value-keyed Cursor is the ONE cursor codec on the wire.
 //
-// Its first piece is one value-keyed cursor that replaces the two existing codecs:
-// the typed-table cursor in backend/refresh/snapshot/typed_table_query.go and the
-// catalog cursor in backend/objectcatalog/query.go. Grounded: both are already
-// value-keyed keysets — the typed cursor on (LastValue, LastKey); the catalog cursor
-// on the object ref + Created — so a single cursor carrying the ordered sort-key
-// components plus a UID tiebreak subsumes both.
-//
-// This package is ADDITIVE: it introduces the contract without touching either live
-// query path. Wiring the two executors (and the frontend continueToken format) onto
-// it is a separate, later step.
+// The historical bespoke typed-table executor and its legacy cursor codec now
+// live only as the byte-identity test oracle
+// (backend/refresh/snapshot/typed_table_query_oracle_test.go); the per-domain
+// parity gates compare this engine against that brute recompute. Cursor
+// degrade semantics (undecodable/mismatched tokens, backward dead ends) are
+// owned by Store.Query and surface on Page.CursorInvalid so executors cannot
+// diverge; anchored jumps and offset pages are served by Store.QueryAround /
+// Store.QueryAt on the same contract.
 package querypage
 
 import (
@@ -42,20 +43,17 @@ type Cursor struct {
 	Direction Direction `json:"d"`
 	Limit     int       `json:"l"`
 
-	// Position holds the sort-key component value(s) of the boundary row this cursor
-	// pins, in sort order. UID is the final, always-unique tiebreak. Together they are
-	// the keyset seek position. Empty Position + empty UID = first page.
-	Position []string `json:"p,omitempty"`
-	UID      string   `json:"u,omitempty"`
+	// Position holds the single comparable sort value of the boundary row this
+	// cursor pins (the store's one-comparable-per-row invariant). UID is the final,
+	// always-unique tiebreak. Together they are the keyset seek position. Empty
+	// Position + empty UID = first page.
+	Position string `json:"p,omitempty"`
+	UID      string `json:"u,omitempty"`
 
 	// Backward marks a prev-page cursor: the engine walks the sort order DOWNWARD from
 	// Position (collecting the rows immediately before it) instead of upward. It is a
 	// navigation property, not part of the query shape, so Validate ignores it.
 	Backward bool `json:"b,omitempty"`
-
-	// Revision is the store LSN the page was read at — a staleness/consistency guard
-	// the executor may use to detect that the underlying data moved under the cursor.
-	Revision string `json:"r,omitempty"`
 }
 
 // FirstPage builds the start cursor for a query (no position yet).
@@ -71,7 +69,7 @@ func FirstPage(clusterID, signature, sort string, direction Direction, limit int
 
 // IsFirstPage reports whether the cursor is at the start position (no keyset yet).
 func (c Cursor) IsFirstPage() bool {
-	return len(c.Position) == 0 && c.UID == ""
+	return c.Position == "" && c.UID == ""
 }
 
 // Encode renders the cursor as an opaque base64(json) token. An empty token is

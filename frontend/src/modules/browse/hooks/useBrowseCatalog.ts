@@ -14,6 +14,7 @@ import {
 } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
+import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
@@ -657,7 +658,7 @@ export function useBrowseCatalog({
     // catalog query for the current filters/sort; the shared walk owns the
     // loop, page guard, and failure semantics (failed/empty pages REJECT).
     const exportPageLimit = 10000;
-    const collected = await walkQueryCursorPages<CatalogItem>('Catalog', async (cursor, page) => {
+    const walk = await walkQueryCursorPages<CatalogItem>('Catalog', async (cursor, page) => {
       const scope = buildBrowseCatalogPageScope(
         plan,
         {
@@ -679,9 +680,23 @@ export function useBrowseCatalog({
         throw new Error(`Catalog export failed: page ${page + 1} returned no data`);
       }
       const applied = applyCatalogPage(emptyBrowseCatalogCollection(), payload);
-      return { items: applied.items, continueToken: applied.continueToken || null };
+      // The RAW per-source clock, never the scope-folded token (differs per
+      // export page by construction) — see the walk's drift guard.
+      const sourceVersion =
+        (result.data as { sourceVersions?: Partial<Record<string, string>> } | undefined)
+          ?.sourceVersions?.object ?? null;
+      return { items: applied.items, continueToken: applied.continueToken || null, sourceVersion };
     });
-    return filterBrowseCatalogItems(collected, clusterScopedOnly);
+    if (walk.dataChangedDuringWalk) {
+      // Loud, not fatal (plan P7/F2): deliver the export but say what happened.
+      errorHandler.handle(
+        new Error(
+          'Catalog: data changed during export — rows reflect a mix of before/after states'
+        ),
+        { source: 'resource-export', domain: 'catalog' }
+      );
+    }
+    return filterBrowseCatalogItems(walk.items, clusterScopedOnly);
   }, [
     clusterId,
     clusterScopedOnly,

@@ -1,6 +1,9 @@
 package querypage
 
-import "testing"
+import (
+	"encoding/base64"
+	"testing"
+)
 
 func TestCursorRoundTrip(t *testing.T) {
 	c := Cursor{
@@ -9,9 +12,8 @@ func TestCursorRoundTrip(t *testing.T) {
 		Sort:      "cpu",
 		Direction: Descending,
 		Limit:     250,
-		Position:  []string{"1500"},
+		Position:  "1500",
 		UID:       "uid-42",
-		Revision:  "9001",
 	}
 	token := c.Encode()
 	if token == "" {
@@ -21,13 +23,8 @@ func TestCursorRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.ClusterID != c.ClusterID || got.Signature != c.Signature || got.Sort != c.Sort ||
-		got.Direction != c.Direction || got.Limit != c.Limit || got.UID != c.UID ||
-		got.Revision != c.Revision {
+	if got != c {
 		t.Fatalf("round-trip mismatch:\n got  %+v\n want %+v", got, c)
-	}
-	if len(got.Position) != 1 || got.Position[0] != "1500" {
-		t.Fatalf("position lost in round-trip: got %v", got.Position)
 	}
 }
 
@@ -53,13 +50,13 @@ func TestFirstPageEncodesEmpty(t *testing.T) {
 func TestSubsumesTypedCursor(t *testing.T) {
 	c := Cursor{
 		ClusterID: "cluster-a", Signature: "typedsig", Sort: "cpu", Direction: Descending,
-		Limit: 250, Position: []string{"1500"}, UID: "uid-7",
+		Limit: 250, Position: "1500", UID: "uid-7",
 	}
 	got, err := Decode(c.Encode())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Position) != 1 || got.Position[0] != "1500" || got.UID != "uid-7" {
+	if got.Position != "1500" || got.UID != "uid-7" {
 		t.Fatalf("typed keyset not preserved: %+v", got)
 	}
 }
@@ -69,13 +66,13 @@ func TestSubsumesTypedCursor(t *testing.T) {
 func TestSubsumesCatalogCursor(t *testing.T) {
 	c := Cursor{
 		ClusterID: "cluster-a", Signature: "catsig", Sort: "name", Direction: Ascending,
-		Limit: 100, Position: []string{"web-frontend"}, UID: "uid-abc",
+		Limit: 100, Position: "web-frontend", UID: "uid-abc",
 	}
 	got, err := Decode(c.Encode())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Position) != 1 || got.Position[0] != "web-frontend" || got.UID != "uid-abc" {
+	if got.Position != "web-frontend" || got.UID != "uid-abc" {
 		t.Fatalf("catalog keyset not preserved: %+v", got)
 	}
 }
@@ -83,7 +80,7 @@ func TestSubsumesCatalogCursor(t *testing.T) {
 func TestValidateRejectsMismatch(t *testing.T) {
 	c := Cursor{
 		ClusterID: "cluster-a", Signature: "sig", Sort: "cpu", Direction: Descending,
-		Limit: 250, Position: []string{"1"}, UID: "u1",
+		Limit: 250, Position: "1", UID: "u1",
 	}
 	if err := c.Validate("cluster-a", "sig", "cpu", Descending, 250); err != nil {
 		t.Fatalf("matching cursor was rejected: %v", err)
@@ -113,6 +110,19 @@ func TestValidateFirstPageAlwaysValid(t *testing.T) {
 	c := FirstPage("cluster-a", "sig", "cpu", Descending, 250)
 	if err := c.Validate("cluster-z", "different", "name", Ascending, 1); err != nil {
 		t.Fatalf("a first-page cursor should always validate, got %v", err)
+	}
+}
+
+// TestDecodeRejectsLegacyArrayPosition pins the Position shape: the unified
+// cursor carries exactly ONE comparable value per row ("p" is a JSON string).
+// A legacy multi-component token ("p" as a JSON array) must fail decode —
+// callers map that to cursorInvalid and restart from page 1 rather than
+// guessing which component to seek on.
+func TestDecodeRejectsLegacyArrayPosition(t *testing.T) {
+	raw := `{"c":"cluster-a","q":"sig","s":"name","d":"asc","l":100,"p":["web"],"u":"uid-1"}`
+	token := base64.RawURLEncoding.EncodeToString([]byte(raw))
+	if _, err := Decode(token); err == nil {
+		t.Fatal("expected decode to reject an array-shaped position payload")
 	}
 }
 

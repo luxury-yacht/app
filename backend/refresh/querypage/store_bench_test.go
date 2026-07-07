@@ -78,7 +78,7 @@ func BenchmarkStoreQueryDeepPage(b *testing.B) {
 			s, _ := buildStore(n)
 			q := Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 250}
 			cur := FirstPage(q.ClusterID, q.Signature, q.Sort, q.Direction, q.Limit)
-			cur.Position = []string{fmt.Sprintf("pod-%07d", n/2)}
+			cur.Position = fmt.Sprintf("pod-%07d", n/2)
 			cur.UID = fmt.Sprintf("uid-%07d", n/2)
 			q.Cursor = cur.Encode()
 			b.ResetTimer()
@@ -88,5 +88,37 @@ func BenchmarkStoreQueryDeepPage(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// BenchmarkStoreQueryAround measures the anchored jump: one counted O(rank+limit)
+// walk to the page-aligned window containing the anchor. mid = rank ~N/2,
+// deep = last rank (worst case, a full-index counted walk). Budget context in
+// docs/architecture/large-data.md "Current Browse Budget".
+func BenchmarkStoreQueryAround(b *testing.B) {
+	for _, n := range []int{100_000, 250_000} {
+		for _, tc := range []struct {
+			label string
+			rank  int
+		}{
+			{"mid", n / 2},
+			{"deep", n - 1},
+		} {
+			b.Run(fmt.Sprintf("N=%d/%s", n, tc.label), func(b *testing.B) {
+				s, _ := buildStore(n)
+				q := Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 50}
+				anchor := fmt.Sprintf("uid-%07d", tc.rank)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					page, outcome, err := s.QueryAround(q, anchor)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if !outcome.Found || len(page.Rows) == 0 {
+						b.Fatalf("anchor not served: %+v", outcome)
+					}
+				}
+			})
+		}
 	}
 }

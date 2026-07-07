@@ -522,6 +522,10 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   continue?: string;
   previous?: string;
   cursorInvalid?: boolean;
+  /** Present iff the request carried an anchor. */
+  anchor?: ResourceQueryAnchorResult;
+  /** Serve-time rank of the page's first row; absent = not computed, 0 = page 1. */
+  pageStartRank?: number;
   total: number;
   /** In-scope item count before filters — the "of M" in "showing N of M items due to filters". */
   unfilteredTotal?: number;
@@ -553,6 +557,8 @@ export interface ResourceQueryRequest {
   sortDirection?: string;
   limit?: number;
   continue?: string;
+  /** Mutually exclusive with `continue`; see ResourceQueryAnchor. */
+  anchor?: ResourceQueryAnchor;
 }
 
 export interface ResourceQueryPredicate {
@@ -561,16 +567,31 @@ export interface ResourceQueryPredicate {
   value?: string;
 }
 
-export interface ResourceQueryResult {
-  rows: ResourceQueryRow[];
-  continue?: string;
-  cursorInvalid?: boolean;
-  total: number;
-  totalIsExact: boolean;
-  facets: ResourceQueryFacets;
-  facetsExact: boolean;
-  partial?: ResourceQueryIssue[];
-  dynamic?: ResourceQueryDynamicRef;
+/**
+ * Anchor jump target: the full object reference whose containing page the
+ * request asks for, under the request's sort+filters. Mirrors the backend
+ * `ResourceQueryAnchor`; mutually exclusive with a continue token.
+ */
+export interface ResourceQueryAnchor {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  namespace?: string;
+  name: string;
+  uid?: string;
+}
+
+/**
+ * How the serve resolved the request's anchor. A missing anchor still serves
+ * the first page; `reason` is then 'filtered' (excluded by current
+ * filters/search) or 'not-found'. `rank` is 0-based under THIS request's
+ * sort+filters (-1 when not found).
+ */
+export interface ResourceQueryAnchorResult {
+  found: boolean;
+  rank: number;
+  reason?: 'filtered' | 'not-found';
 }
 
 export interface ResourceQueryCapabilities {
@@ -600,6 +621,14 @@ export interface ResourceQueryEnvelopeFields {
   continue?: string;
   previous?: string;
   cursorInvalid?: boolean;
+  /** Present iff the request carried an anchor. */
+  anchor?: ResourceQueryAnchorResult;
+  /**
+   * 0-based rank of the served page's first row among matching rows. Absent
+   * means "not computed" (plain cursor pages); 0 is a real value (page 1) —
+   * never treat absence and 0 interchangeably.
+   */
+  pageStartRank?: number;
   total?: number;
   totalIsExact?: boolean;
   kinds?: string[];
@@ -611,47 +640,6 @@ export interface ResourceQueryEnvelopeFields {
   issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
   capabilities?: ResourceQueryCapabilities;
-}
-
-export interface ResourceQueryRow {
-  clusterId: string;
-  group: string;
-  version: string;
-  kind: string;
-  resource: string;
-  namespace?: string;
-  name: string;
-  uid?: string;
-  status?: string;
-  ready?: string;
-  details?: string;
-  age?: string;
-  restarts?: number;
-  owner?: string;
-  node?: string;
-  crdName?: string;
-  crdGroup?: string;
-  crdScope?: string;
-  storageVersion?: string;
-  storageClass?: string;
-  capacity?: string;
-  claim?: string;
-  chartVersion?: string;
-  appVersion?: string;
-  helmRevision?: string;
-  helmUpdated?: string;
-  autoscalingTarget?: string;
-  autoscalingCurrent?: string;
-  autoscalingDesired?: string;
-  cpu?: string;
-  memory?: string;
-}
-
-export interface ResourceQueryFacets {
-  kinds?: string[];
-  namespaces?: string[];
-  statuses?: string[];
-  nodes?: string[];
 }
 
 export interface ResourceQueryIssue {

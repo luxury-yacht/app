@@ -52,6 +52,10 @@ type NodeBuilder struct {
 	// never written to the maintained store, so a metric tick cannot re-project stored
 	// rows. nil (a unit test) serves rows without usage.
 	metrics metrics.Provider
+	// perBuild reuses the per-Build engine store across page turns/sort flips
+	// while the version watermark + metric tick are unchanged (plan P6). The
+	// list-fallback builder deliberately passes no cache.
+	perBuild *perBuildStoreCache[NodeSummary]
 }
 
 // NodeListBuilder assembles node payloads by issuing direct list calls.
@@ -130,6 +134,7 @@ func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, cluster
 		maintained: maintained,
 		ingest:     ingestManager,
 		metrics:    provider,
+		perBuild:   &perBuildStoreCache[NodeSummary]{},
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          "nodes",
@@ -159,6 +164,7 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 // metric source clock, never the object version.
 func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
+	version := nodeDomainIngestVersion(b.ingest)
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
@@ -166,11 +172,16 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		// Two-store watermark (node + pod RVs): the rows join pod aggregates,
 		// so pod changes must advance the validator or refetches 304 with
 		// stale pod counts.
-		nodeDomainIngestVersion(b.ingest),
+		version,
 		podAggregatesFromIngest(b.ingest),
 		nodeUsage,
 		podUsage,
 		metadata,
+		// Reuse the per-Build engine store across page turns/sort flips while
+		// the watermark and metric tick (DynamicRevision, in the cache key) are
+		// unchanged. The same watermark keys the cache: pod-aggregate changes
+		// advance it, so re-joined rows can never serve stale from the cache.
+		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)
 }
 
@@ -316,13 +327,14 @@ func buildNodeSnapshotFromIngestUsage(
 	nodeMetrics map[string]metrics.NodeUsage,
 	podMetrics map[string]metrics.PodUsage,
 	metricsMetadata metrics.Metadata,
+	opts ...typedServeOption[NodeSummary],
 ) (*refresh.Snapshot, error) {
 	items := make([]NodeSummary, 0, len(ownRows))
 	podsByNode := podAggregatesByNode(podAggregates)
 	for _, own := range ownRows {
 		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Name], podMetrics, nodeMetrics))
 	}
-	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMetadata)
+	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMetadata, opts...)
 }
 
 // podAggregatesByNode groups the projected pod aggregates by their NodeName for the per-node
@@ -351,6 +363,7 @@ func finishNodeSnapshot(
 	items []NodeSummary,
 	version uint64,
 	metricsMetadata metrics.Metadata,
+	opts ...typedServeOption[NodeSummary],
 ) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -373,6 +386,7 @@ func finishNodeSnapshot(
 		"nodes",
 		func(NodeSummary) string { return nodepkg.Identity.Kind },
 		nil,
+		opts...,
 	)
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.

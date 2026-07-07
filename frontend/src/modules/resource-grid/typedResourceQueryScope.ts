@@ -5,6 +5,8 @@ import type {
 } from '@shared/components/tables/GridTable';
 import type { SortConfig } from '@hooks/useTableSort';
 import type {
+  ResourceQueryAnchor,
+  ResourceQueryAnchorResult,
   ResourceQueryCapabilities,
   ResourceQueryDynamicRef,
   ResourceQueryIssue,
@@ -12,6 +14,14 @@ import type {
 
 export interface TypedQueryPayload {
   continue?: string;
+  /** Backend prev-page cursor — populated on every engine-served response. */
+  previous?: string;
+  /** Token addressing THIS page (counted serves) — page-stable live refetch after a jump. */
+  self?: string;
+  /** Present iff the request carried an anchor. */
+  anchor?: ResourceQueryAnchorResult;
+  /** Serve-time rank of the page's first row; absent = not computed, 0 = page 1. */
+  pageStartRank?: number;
   cursorInvalid?: boolean;
   total?: number;
   // Items in scope before the request's filters — the "of M" in "showing N of M due to filters".
@@ -32,6 +42,11 @@ export interface TypedResourceQueryDescriptor {
   baseScope?: string;
   predicates?: Record<string, string | null | undefined>;
   continueToken?: string | null;
+  /**
+   * Anchor jump target — mutually exclusive with continueToken (the backend
+   * validates; the builder drops the continue token when an anchor is set).
+   */
+  anchor?: ResourceQueryAnchor | null;
 }
 
 export interface TypedResourceQueryLifecycleDescriptor extends TypedResourceQueryDescriptor {
@@ -121,7 +136,24 @@ export function buildTypedResourceQueryScope(
       params.set(`predicate.${key}`, value);
     }
   }
-  if (descriptor.continueToken) {
+  if (descriptor.anchor) {
+    // Anchor and continue are mutually exclusive on the wire; the anchor wins
+    // (it IS the page address for this request).
+    const anchor = descriptor.anchor;
+    params.set('anchor.clusterId', anchor.clusterId);
+    if (anchor.group) {
+      params.set('anchor.group', anchor.group);
+    }
+    params.set('anchor.version', anchor.version);
+    params.set('anchor.kind', anchor.kind);
+    if (anchor.namespace) {
+      params.set('anchor.namespace', anchor.namespace);
+    }
+    params.set('anchor.name', anchor.name);
+    if (anchor.uid) {
+      params.set('anchor.uid', anchor.uid);
+    }
+  } else if (descriptor.continueToken) {
     params.set('continue', descriptor.continueToken);
   }
   const baseScope = descriptor.baseScope ?? 'namespace:all';

@@ -12,6 +12,13 @@ import (
 // which sort orders and facets it exposes, and what text is searchable. Sort and
 // facet values are strings; numeric sorts must be encoded order-preservingly by the
 // extractor (e.g. zero-padded), so lexical order matches numeric order.
+//
+// UID is the store's unique row key AND the tie order for equal sort values
+// (ascLess/descLess tie-break by it, ascending in both directions), so its shape is
+// user-visible whenever sort values collide: give it a human-meaningful form — the
+// typed tables use the lowercased kind/namespace/name adapter key, the catalog its
+// identity chain — never an arbitrary identifier like the Kubernetes object UID.
+// Pinned by TestTiedSortValuesOrderByHumanKey.
 type Schema[R any] struct {
 	UID        func(R) string
 	SortKeys   map[string]func(R) string
@@ -40,6 +47,30 @@ type Page[R any] struct {
 	PrevCursor string
 	Facets     map[string]map[string]int
 	Total      int
+
+	// CursorInvalid reports that the request's cursor was rejected — undecodable,
+	// pinned to a different query shape, or an un-navigable backward dead end (a
+	// valid prev-page cursor whose predecessors were all deleted). The served page
+	// is a first-page restart for the first two, and the empty dead-end page for
+	// the last; callers forward the flag so the client resets its pagination
+	// state. Owning this in the engine keeps every executor's degrade behavior
+	// identical — callers need no cursor pre-validation of their own.
+	CursorInvalid bool
+
+	// PageStartRank is the 0-based rank of the served page's first row among the
+	// query's matching rows — exact position honesty for the footer. Counted
+	// serves (QueryAround/QueryAt) fill it; the cursor-based Query path returns
+	// -1 (not computed — the O(rank) walk it would cost is gated behind the P9
+	// benchmark). The wire layer maps ≥0 to a pointer so rank 0 survives
+	// omitempty.
+	PageStartRank int
+
+	// SelfCursor addresses THIS page: a later plain Query with it reproduces the
+	// window (the page-stability primitive live refetches use after an anchored
+	// or offset landing — cursor-addressed pages already hold their own request
+	// token). Counted serves mint it from the entry preceding the window; "" for
+	// a first-page window, whose address is the empty token.
+	SelfCursor string
 }
 
 // indexEntry is one sorted-index entry: a string sort value plus the row UID as the
@@ -409,40 +440,21 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		limit = 100
 	}
 
+	// Cursor handling never errors a serve: a token that fails to decode or pins a
+	// different query shape restarts from the first page with CursorInvalid set, so
+	// a stale client degrades to page 1 instead of a failed request.
+	cursorInvalid := false
 	cur, err := Decode(q.Cursor)
-	if err != nil {
-		return Page[R]{}, err
-	}
-	if cur.Validate(q.ClusterID, q.Signature, q.Sort, q.Direction, limit) != nil {
-		cur = Cursor{} // stale / mismatched cursor -> restart from the first page
+	if err != nil || cur.Validate(q.ClusterID, q.Signature, q.Sort, q.Direction, limit) != nil {
+		cur = Cursor{}
+		cursorInvalid = true
 	}
 
 	hasPivot := !cur.IsFirstPage()
 	backward := hasPivot && cur.Backward
-	pivot := indexEntry{uid: cur.UID}
-	if hasPivot && len(cur.Position) > 0 {
-		pivot.val = cur.Position[0]
-	}
+	pivot := indexEntry{val: cur.Position, uid: cur.UID}
 
-	// Lower the search term once; matchValuesMatches compares it against each row's
-	// pre-lowered cached SearchText, so neither side is re-lowered per row.
-	searchLower := strings.ToLower(q.Search)
-
-	// Precompute the trigram candidate superset ONCE per query (no limit, so the sort
-	// walk can reach any matching row in cursor order). narrow=false for <3-char terms
-	// or read-only stores ⇒ the per-row check falls back to the linear Contains verify.
-	candidates, narrow := s.searchCandidates(searchLower)
-
-	// matchesUID tests the query against a uid's cached match values (facets + search)
-	// without reconstructing the row. A uid present in the sort index always has a
-	// cached entry (maintained in lockstep by Upsert/Delete).
-	matchesUID := func(uid string) bool {
-		rowID, ok := s.rows.rowID(uid)
-		if !ok {
-			return false
-		}
-		return s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow)
-	}
+	matchesUID, searchLower, candidates, narrow := s.matcherFor(q)
 
 	// Collect up to limit+1 matching entries from the pivot, in walk order, so the
 	// limit+1th tells us whether a further page exists on the walked side.
@@ -476,6 +488,13 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	if overflow {
 		entries = entries[:limit]
 	}
+	// A valid backward cursor that collected nothing means every predecessor was
+	// deleted since the token was minted — an un-navigable dead end, not a page.
+	// Flag it so the client restarts at page 1. (Owned here, not per-caller, so
+	// typed and catalog executors cannot diverge on the rule.)
+	if backward && len(entries) == 0 {
+		cursorInvalid = true
+	}
 	if backward {
 		// The downward walk produced reverse order; flip to forward (display) order.
 		for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
@@ -494,33 +513,58 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	// first row (backward). Existence on the WALKED side comes from `overflow`; on the
 	// side we came FROM, a page always exists (we navigated here from it): a forward
 	// page reached via a non-first cursor has a prev; a backward page always has a next.
-	pin := func(e indexEntry, back bool) string {
-		c := FirstPage(q.ClusterID, q.Signature, q.Sort, q.Direction, limit)
-		c.Position = []string{e.val}
-		c.UID = e.uid
-		c.Backward = back
-		return c.Encode()
-	}
 	next, prev := "", ""
 	if len(entries) > 0 {
 		first, last := entries[0], entries[len(entries)-1]
 		if backward {
 			if overflow {
-				prev = pin(first, true)
+				prev = s.pinCursor(q, limit, first, true)
 			}
-			next = pin(last, false)
+			next = s.pinCursor(q, limit, last, false)
 		} else {
 			if overflow {
-				next = pin(last, false)
+				next = s.pinCursor(q, limit, last, false)
 			}
 			if hasPivot {
-				prev = pin(first, true)
+				prev = s.pinCursor(q, limit, first, true)
 			}
 		}
 	}
 
-	// Total: the unfiltered live count, or a column-only scan over the cached match
-	// values when filters/search are present (no row reconstruction).
+	facets, total := s.facetsAndTotal(q, searchLower, candidates, narrow)
+
+	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total, CursorInvalid: cursorInvalid, PageStartRank: -1}, nil
+}
+
+// matcherFor returns the per-UID match predicate for one query plus the lowered
+// search term and trigram gate it closes over — the matching context shared by
+// Query, QueryAround, and QueryAt. Callers must hold s.mu.
+//
+// The search term is lowered once; matchValuesMatches compares it against each
+// row's pre-lowered cached SearchText, so neither side is re-lowered per row.
+// The trigram candidate superset is precomputed ONCE per query (no limit, so a
+// sort walk can reach any matching row in cursor order); narrow=false for
+// <3-char terms or read-only stores ⇒ the per-row check falls back to the
+// linear Contains verify. A uid present in a sort index always has a cached
+// match entry (maintained in lockstep by Upsert/Delete).
+func (s *Store[R]) matcherFor(q Query) (matchesUID func(string) bool, searchLower string, candidates map[uint32]struct{}, narrow bool) {
+	searchLower = strings.ToLower(q.Search)
+	candidates, narrow = s.searchCandidates(searchLower)
+	matchesUID = func(uid string) bool {
+		rowID, ok := s.rows.rowID(uid)
+		if !ok {
+			return false
+		}
+		return s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow)
+	}
+	return matchesUID, searchLower, candidates, narrow
+}
+
+// facetsAndTotal returns the unfiltered facet counter copy and the query's exact
+// total — the unfiltered live count, or a column-only scan over the cached match
+// values when filters/search are present (no row reconstruction). The Page tail
+// shared by every serve entry point. Callers must hold s.mu.
+func (s *Store[R]) facetsAndTotal(q Query, searchLower string, candidates map[uint32]struct{}, narrow bool) (map[string]map[string]int, int) {
 	total := s.rows.len()
 	if len(q.Filters) > 0 || q.Search != "" {
 		total = 0
@@ -530,7 +574,6 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 			}
 		}
 	}
-
 	facets := make(map[string]map[string]int, len(s.facets))
 	for name, counts := range s.facets {
 		m := make(map[string]int, len(counts))
@@ -539,6 +582,207 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 		}
 		facets[name] = m
 	}
+	return facets, total
+}
 
-	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total}, nil
+// pinCursor mints the opaque boundary cursor for one index entry under q's
+// pinned query shape.
+func (s *Store[R]) pinCursor(q Query, limit int, e indexEntry, back bool) string {
+	c := FirstPage(q.ClusterID, q.Signature, q.Sort, q.Direction, limit)
+	c.Position = e.val
+	c.UID = e.uid
+	c.Backward = back
+	return c.Encode()
+}
+
+// AnchorOutcome reports how QueryAround resolved its anchor row under the
+// query's filters — the engine-level truth the serve layer maps to the
+// contract's user-visible "filtered" / "not-found" reasons.
+type AnchorOutcome struct {
+	// Found: the anchor row exists AND matches the query's filters/search;
+	// Rank is then its 0-based position among matching rows in display order.
+	Found bool
+	// Filtered: the anchor row exists in the store but the query's
+	// filters/search exclude it. Mutually exclusive with Found.
+	Filtered bool
+	// Rank is valid only when Found; -1 otherwise.
+	Rank int
+}
+
+// QueryAround serves the PAGE-ALIGNED window containing the row whose schema
+// UID equals anchorKey, under q's sort, direction, filters, and search — the
+// engine primitive behind "jump to this object in the list". One counted
+// O(rank + limit) walk (plus skipped non-matching entries) yields the exact
+// 0-based rank, the aligned window (pageStart = rank - rank%limit), and
+// ordinary keyset prev/next cursors minted from the window boundaries — so
+// pagination after a jump is indistinguishable from pagination that arrived
+// from page 1, and rank is derived per request, never stored. A missing or
+// filtered-out anchor serves the FIRST page instead (one round trip, sane
+// landing) with the outcome saying why. q.Cursor is ignored: anchor and
+// continue are mutually exclusive at the contract layer.
+func (s *Store[R]) QueryAround(q Query, anchorKey string) (Page[R], AnchorOutcome, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	si, ok := s.idx[q.Sort]
+	if !ok {
+		return Page[R]{}, AnchorOutcome{Rank: -1}, fmt.Errorf("querypage: unknown sort %q", q.Sort)
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	matchesUID, searchLower, candidates, narrow := s.matcherFor(q)
+
+	// Resolve the anchor BEFORE walking: an O(1) presence + match check under
+	// the same RLock as the walk (no found-then-vanished race within a serve),
+	// and an absent anchor skips the counted walk entirely.
+	outcome := AnchorOutcome{Rank: -1}
+	if rowID, present := s.rows.rowID(anchorKey); present {
+		if s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow) {
+			outcome.Found = true
+		} else {
+			outcome.Filtered = true
+		}
+	}
+
+	index := si.forDirection(q.Direction)
+	var window []indexEntry
+	var selfPivot indexEntry
+	pageStart := 0
+	overflow := false
+	hasSelfPivot := false
+	if outcome.Found {
+		window, pageStart, outcome.Rank, overflow, selfPivot, hasSelfPivot = countedAnchorWindow(index, limit, matchesUID, anchorKey)
+	} else {
+		window, overflow, selfPivot, hasSelfPivot = countedOffsetWindow(index, limit, 0, matchesUID)
+	}
+
+	page := s.buildCountedPage(q, limit, window, pageStart, overflow, selfPivot, hasSelfPivot)
+	page.Facets, page.Total = s.facetsAndTotal(q, searchLower, candidates, narrow)
+	return page, outcome, nil
+}
+
+// QueryAt serves the page starting at startRank (0-based) among matching rows —
+// the bounded offset contract behind numbered page jumps. startRank is clamped
+// to the last page-aligned start (negatives to 0) so a stale page number lands
+// on the nearest real page instead of an empty one; the served start is
+// reported on Page.PageStartRank. q.Cursor is ignored.
+func (s *Store[R]) QueryAt(q Query, startRank int) (Page[R], error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	si, ok := s.idx[q.Sort]
+	if !ok {
+		return Page[R]{}, fmt.Errorf("querypage: unknown sort %q", q.Sort)
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	matchesUID, searchLower, candidates, narrow := s.matcherFor(q)
+
+	// The exact filtered total is needed for the Page tail anyway; computing it
+	// first lets the clamp use it without a second scan.
+	facets, total := s.facetsAndTotal(q, searchLower, candidates, narrow)
+	if startRank < 0 || total == 0 {
+		startRank = 0
+	} else if last := ((total - 1) / limit) * limit; startRank > last {
+		startRank = last
+	}
+
+	index := si.forDirection(q.Direction)
+	window, overflow, selfPivot, hasSelfPivot := countedOffsetWindow(index, limit, startRank, matchesUID)
+	page := s.buildCountedPage(q, limit, window, startRank, overflow, selfPivot, hasSelfPivot)
+	page.Facets, page.Total = facets, total
+	return page, nil
+}
+
+// buildCountedPage reconstructs the window's rows and mints its boundary
+// cursors: prev exists iff the window starts past rank 0, next iff the walk
+// probed one further match past the window, and self (from the entry
+// preceding the window) addresses the window itself for page-stable refetch.
+// Facets/Total are filled by the caller (shared facetsAndTotal); CursorInvalid
+// is never set on counted serves.
+func (s *Store[R]) buildCountedPage(q Query, limit int, window []indexEntry, pageStart int, overflow bool, selfPivot indexEntry, hasSelfPivot bool) Page[R] {
+	rows := make([]R, len(window))
+	for i, e := range window {
+		rows[i], _ = s.rows.get(e.uid)
+	}
+	next, prev, self := "", "", ""
+	if len(window) > 0 {
+		if overflow {
+			next = s.pinCursor(q, limit, window[len(window)-1], false)
+		}
+		if pageStart > 0 {
+			prev = s.pinCursor(q, limit, window[0], true)
+		}
+	}
+	if hasSelfPivot {
+		self = s.pinCursor(q, limit, selfPivot, false)
+	}
+	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, PageStartRank: pageStart, SelfCursor: self}
+}
+
+// countedAnchorWindow walks the direction index in display order counting
+// matching rows, buffering the current page of up to limit entries and
+// clearing the buffer at each page boundary, until the anchor lands in the
+// buffer; it then fills the page and probes for one further match (overflow ⇒
+// a next page exists). selfPivot is the last entry of the page BEFORE the
+// window (captured at the final buffer clear) — the window's own keyset
+// address. The caller guarantees the anchor matches, so the walk always
+// terminates at the anchor's page in O(rank + limit) matching steps.
+func countedAnchorWindow(index *btree.BTreeG[indexEntry], limit int, matches func(string) bool, anchorKey string) (window []indexEntry, pageStart, rank int, overflow bool, selfPivot indexEntry, hasSelfPivot bool) {
+	window = make([]indexEntry, 0, limit)
+	count := 0
+	rank = -1
+	index.Ascend(func(e indexEntry) bool {
+		if !matches(e.uid) {
+			return true
+		}
+		if rank >= 0 && len(window) == limit {
+			overflow = true
+			return false
+		}
+		if rank < 0 && len(window) == limit {
+			selfPivot = window[limit-1]
+			hasSelfPivot = true
+			window = window[:0]
+			pageStart = count
+		}
+		window = append(window, e)
+		if e.uid == anchorKey {
+			rank = count
+		}
+		count++
+		return true
+	})
+	return window, pageStart, rank, overflow, selfPivot, hasSelfPivot
+}
+
+// countedOffsetWindow counts matching rows up to startRank, collects up to
+// limit entries from there, and probes for one further match (overflow ⇒ a
+// next page exists). selfPivot is the matching entry at rank startRank-1 (the
+// window's keyset address); absent when the window starts at rank 0.
+func countedOffsetWindow(index *btree.BTreeG[indexEntry], limit, startRank int, matches func(string) bool) (window []indexEntry, overflow bool, selfPivot indexEntry, hasSelfPivot bool) {
+	window = make([]indexEntry, 0, limit)
+	count := 0
+	index.Ascend(func(e indexEntry) bool {
+		if !matches(e.uid) {
+			return true
+		}
+		if count >= startRank {
+			if len(window) == limit {
+				overflow = true
+				return false
+			}
+			window = append(window, e)
+		} else if count == startRank-1 {
+			selfPivot = e
+			hasSelfPivot = true
+		}
+		count++
+		return true
+	})
+	return window, overflow, selfPivot, hasSelfPivot
 }

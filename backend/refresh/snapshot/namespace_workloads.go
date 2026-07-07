@@ -94,6 +94,10 @@ type NamespaceWorkloadsBuilder struct {
 	// event — it is computed at serve from the pod ingest source, exactly as the pod-aggregate
 	// + HPA overlays are.
 	workloadsMaintained *typedMaintainedStore[WorkloadSummary]
+	// perBuild reuses the per-Build engine store across page turns/sort flips
+	// while the version watermark + metric tick are unchanged (plan P6).
+	// Per-cluster (owned by this builder), dropped with it on teardown.
+	perBuild *perBuildStoreCache[WorkloadSummary]
 }
 
 // podWorkloadsIngestSource supplies the cut pod kind's projected rows the workloads
@@ -196,6 +200,7 @@ func RegisterNamespaceWorkloadsDomain(
 		logger:              logger,
 		workloadsMaintained: maintained,
 		metrics:             provider,
+		perBuild:            &perBuildStoreCache[WorkloadSummary]{},
 	}
 	if perms.IncludePods {
 		// Pods is cut to the ingest path: the per-owner aggregation and standalone-pod
@@ -317,6 +322,13 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		"workloads",
 		func(r WorkloadSummary) string { return r.Kind },
 		issues,
+		// Reuse the per-Build engine store across page turns/sort flips while the
+		// version watermark and metric tick (DynamicRevision, inside the cache
+		// key) are unchanged. The key is exactly the domain's existing refetch
+		// identity (the same watermark gates the 304 validator), so anything it
+		// doesn't cover — e.g. the HPA overlay, which advances no RV here — was
+		// already served stale by 304s and gains no new staleness from the cache.
+		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)
 	return &refresh.Snapshot{
 		Domain:         namespaceWorkloadsDomainName,
@@ -522,6 +534,7 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		Key: func(row WorkloadSummary) string {
 			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name))
 		},
+		AnchorKey: namespacedTableKey,
 		Namespace: func(row WorkloadSummary) string { return row.Namespace },
 		Kind:      func(row WorkloadSummary) string { return row.Kind },
 		SearchText: func(row WorkloadSummary) []string {

@@ -301,6 +301,25 @@ Measured on 2026-05-31 with Apple M2 Max using the synthetic catalog benchmark:
 - 250k per-cluster catalog index residency: 66.80 MB.
 - 3 x 100k multi-cluster catalog index residency: 80.19 MB aggregate.
 
+Anchored jump (measured 2026-07-06 on Apple M2 Max, engine microbenchmark
+`BenchmarkStoreQueryAround`, limit 50 — one counted O(rank + limit) walk per
+user-initiated jump, a one-shot action, not a per-page cost):
+
+- 100k anchor at rank N/2: 3.24 ms; at rank N-1 (worst case): 6.92 ms.
+- 250k anchor at rank N/2: 14.35 ms; at rank N-1 (worst case): 33.16 ms.
+
+The deep-anchor worst case exceeds the per-page serve budget above (b-tree
+iteration costs more per entry than the flat match-value scan); that is
+accepted for a one-shot jump. Order-statistics indexes stay not-built; revisit
+only on a measured UX regression.
+
+Per-Build page turns (measured 2026-07-06 on Apple M2 Max,
+`BenchmarkPerBuildPageTurn`, 100k rows): uncached rebuild 618.9 ms per page
+turn; single-slot store cache hit 0.024 ms; churn (version bump per request,
+always a miss) 627.6 ms — identical to uncached, so the cache's win is
+quiet-domain-only by design (the key is the domain's refetch identity: source
+version watermark + metric revision + matched-set inputs).
+
 ## Change Checklist
 
 When touching high-volume data:

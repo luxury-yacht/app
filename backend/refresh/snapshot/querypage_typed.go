@@ -111,15 +111,109 @@ func typedQueryPredicateSignatureParts(predicates []ResourceQueryPredicate) []st
 	return parts
 }
 
+// perBuildStoreCache is the single-slot per-(cluster, domain) reuse of the
+// per-Build engine store (plan docs/plans/pagination.md F6/P6): page turns and
+// sort changes reuse the matched-set store instead of paying an O(N log N)
+// matcher+store+index rebuild per request. The slot is keyed by the matched-set
+// identity plus the caller's version token and the metric revision — see
+// perBuildCacheKey. Owned by the domain's per-cluster builder, so cluster
+// teardown drops it with the builder. Cached stores are read-only after build
+// (Query/QueryAround take the store's RLock), so concurrent Builds may share
+// one safely; two concurrent misses both build and the last put wins —
+// acceptable single-slot semantics.
+type perBuildStoreCache[T any] struct {
+	mu           sync.Mutex
+	key          string
+	store        *querypage.Store[T]
+	matchedTotal int
+	namespaces   []string
+	kinds        []string
+}
+
+func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.store == nil || c.key != key {
+		return nil, 0, nil, nil, false
+	}
+	return c.store, c.matchedTotal, c.namespaces, c.kinds, true
+}
+
+func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.key = key
+	c.store = store
+	c.matchedTotal = matchedTotal
+	c.namespaces = namespaces
+	c.kinds = kinds
+}
+
+// perBuildCacheKey identifies the matched set a per-Build store was built
+// from: the base scope + every matcher input (search, includeMetadata, kinds,
+// namespaces, predicates) + the caller's source-version token + the metric
+// revision. DynamicRevision matters because metric-joined domains overlay
+// usage onto the rows BEFORE the store is built — a key without it would
+// freeze metric values AND metric sort order across ticks. Sort, direction,
+// limit, cursor, and anchor are deliberately excluded: the store carries every
+// schema sort index, so those requests hit the same slot.
+func perBuildCacheKey(query typedTableQuery, versionToken string) string {
+	var b strings.Builder
+	b.WriteString(versionToken)
+	b.WriteByte('\n')
+	b.WriteString(query.DynamicRevision)
+	b.WriteByte('\n')
+	b.WriteString(query.BaseScope)
+	b.WriteByte('\n')
+	b.WriteString(strings.ToLower(strings.TrimSpace(query.Request.Search)))
+	b.WriteByte('\n')
+	if query.Request.IncludeMetadata {
+		b.WriteByte('m')
+	}
+	b.WriteByte('\n')
+	kinds := lowerTrimAll(query.Request.Kinds)
+	sort.Strings(kinds)
+	b.WriteString(strings.Join(kinds, ","))
+	b.WriteByte('\n')
+	namespaces := lowerTrimAll(query.Request.Namespaces)
+	sort.Strings(namespaces)
+	b.WriteString(strings.Join(namespaces, ","))
+	b.WriteByte('\n')
+	b.WriteString(strings.Join(typedQueryPredicateSignatureParts(query.Request.Predicates), ","))
+	return b.String()
+}
+
+// typedServeOption configures optional serve behavior without touching the
+// call sites that don't need it.
+type typedServeOption[T any] func(*typedServeConfig[T])
+
+type typedServeConfig[T any] struct {
+	cache        *perBuildStoreCache[T]
+	versionToken string
+}
+
+// withPerBuildCache opts a per-Build serve into the single-slot store cache.
+// versionToken must change whenever the domain's source data changes (the
+// domain's snapshot version watermark); metric ticks are covered separately by
+// query.DynamicRevision inside the cache key.
+func withPerBuildCache[T any](cache *perBuildStoreCache[T], versionToken string) typedServeOption[T] {
+	return func(cfg *typedServeConfig[T]) {
+		cfg.cache = cache
+		cfg.versionToken = versionToken
+	}
+}
+
 // applyTypedTableQueryViaStore answers a typed table query through the querypage
-// engine instead of the bespoke per-query sort. It produces the SAME
-// typedTableQueryPage as applyTypedTableQuery: identical rows/order/pagination (the
-// engine matches the live total order exactly), and identical facets/totals
-// (computed by the same matcher + facet collector). The continue token is the
-// engine's own opaque cursor — opaque to the frontend, which only round-trips it.
-func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T], schema querypage.Schema[T]) typedTableQueryPage[T] {
-	if !query.Enabled {
-		return applyTypedTableQuery(items, query, adapter)
+// engine — the one production executor. Its output order and facets/totals are
+// pinned byte-identical to the brute sort→filter→slice oracle
+// (typed_table_query_oracle_test.go) by the per-domain parity gates. The
+// continue token is the engine's opaque cursor — the frontend only round-trips
+// it. Precondition: query.Enabled (every caller checks; window mode is served
+// by truncateSnapshotWindow, not an executor).
+func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapter typedTableQueryAdapter[T], schema querypage.Schema[T], opts ...typedServeOption[T]) typedTableQueryPage[T] {
+	var cfg typedServeConfig[T]
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 
 	// Apply the FULL live matcher first — namespace + kind + search + predicates —
@@ -127,18 +221,36 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	// (rather than all items and re-filtering inside Query) is what makes the engine
 	// honor predicates: the engine's Filters/Search cover only its facet dimensions,
 	// not the adapter's predicate function, so a predicate the engine never sees must
-	// already have been excluded here.
-	matcher := newTypedTableQueryMatcher(query, adapter)
-	matched := make([]T, 0, len(items))
-	for _, it := range items {
-		if matcher.Matches(it) {
-			matched = append(matched, it)
-		}
+	// already have been excluded here. A caller-owned single-slot cache skips this
+	// whole rebuild when the matched-set identity and source version are unchanged
+	// (page turns, sort flips).
+	var store *querypage.Store[T]
+	var matchedTotal int
+	var matchedNamespaces, matchedKinds []string
+	cacheKey := ""
+	cached := false
+	if cfg.cache != nil {
+		cacheKey = perBuildCacheKey(query, cfg.versionToken)
+		store, matchedTotal, matchedNamespaces, matchedKinds, cached = cfg.cache.get(cacheKey)
 	}
-
-	store := querypage.NewStore(schema)
-	for _, it := range matched {
-		store.Upsert(it)
+	if !cached {
+		matcher := newTypedTableQueryMatcher(query, adapter)
+		matched := make([]T, 0, len(items))
+		for _, it := range items {
+			if matcher.Matches(it) {
+				matched = append(matched, it)
+			}
+		}
+		store = querypage.NewStore(schema)
+		for _, it := range matched {
+			store.Upsert(it)
+		}
+		matchedTotal = len(matched)
+		matchedNamespaces = collectTypedTableFacet(matched, adapter.Namespace)
+		matchedKinds = collectTypedTableFacet(matched, adapter.Kind)
+		if cfg.cache != nil {
+			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds)
+		}
 	}
 
 	sortField := strings.ToLower(strings.TrimSpace(query.Request.SortField))
@@ -152,41 +264,91 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	limit := query.Request.Limit
 	sig := typedQuerySignature(sortField, dir, limit, query.Request)
 
-	token := ""
-	cursorInvalid := false
-	if query.Request.Continue != "" {
-		if cur, err := querypage.Decode(query.Request.Continue); err != nil ||
-			cur.Validate(query.Request.ClusterID, sig, sortField, dir, limit) != nil {
-			cursorInvalid = true
-		} else {
-			token = query.Request.Continue
-		}
-	}
-
-	// The store already holds only matched rows, so Query needs Sort/Direction/
-	// Limit/Cursor only — no Filters/Search (they were applied by the matcher).
-	page, _ := store.Query(querypage.Query{
+	// Cursor decode/validate is owned by the engine: an invalid token restarts at
+	// page 1 and surfaces on page.CursorInvalid — no caller pre-validation.
+	// The store already holds only matched rows, so the engine query needs
+	// Sort/Direction/Limit/Cursor only — no Filters/Search (they were applied by
+	// the matcher).
+	engineQuery := querypage.Query{
 		ClusterID: query.Request.ClusterID,
 		Signature: sig,
 		Sort:      sortField,
 		Direction: dir,
 		Limit:     limit,
-		Cursor:    token,
-	})
+	}
+	var page querypage.Page[T]
+	var anchorResult *ResourceQueryAnchorResult
+	if anchor := query.Request.Anchor; anchor != nil {
+		key := typedAnchorKey(adapter, anchor)
+		var outcome querypage.AnchorOutcome
+		page, outcome, _ = store.QueryAround(engineQuery, key)
+		// This store holds ONLY matched rows, so an anchor the engine cannot find
+		// is ambiguous: present in the full item list ⇒ excluded by the request's
+		// filters ("filtered"); absent ⇒ "not-found".
+		if !outcome.Found && key != "" {
+			for _, it := range items {
+				if adapter.Key(it) == key {
+					outcome.Filtered = true
+					break
+				}
+			}
+		}
+		anchorResult = anchorResultFromOutcome(outcome)
+	} else {
+		engineQuery.Cursor = query.Request.Continue
+		page, _ = store.Query(engineQuery)
+	}
 
 	return typedTableQueryPage[T]{
 		Rows:            page.Rows,
 		Continue:        page.NextCursor,
-		CursorInvalid:   cursorInvalid,
-		Total:           len(matched),
+		Previous:        page.PrevCursor,
+		Self:            page.SelfCursor,
+		CursorInvalid:   page.CursorInvalid,
+		Anchor:          anchorResult,
+		PageStartRank:   pageStartRankPtr(page.PageStartRank),
+		Total:           matchedTotal,
 		UnfilteredTotal: len(items),
 		TotalIsExact:    true,
 		FacetsExact:     true,
-		Namespaces:      collectTypedTableFacet(matched, adapter.Namespace),
-		Kinds:           collectTypedTableFacet(matched, adapter.Kind),
+		Namespaces:      matchedNamespaces,
+		Kinds:           matchedKinds,
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,
 	}
+}
+
+// typedAnchorKey resolves a request anchor to the adapter's row key, or ""
+// when the adapter cannot key anchors (no AnchorKey — the anchor then reports
+// not-found).
+func typedAnchorKey[T any](adapter typedTableQueryAdapter[T], anchor *ResourceQueryAnchor) string {
+	if anchor == nil || adapter.AnchorKey == nil {
+		return ""
+	}
+	return adapter.AnchorKey(anchor.Kind, anchor.Namespace, anchor.Name)
+}
+
+// anchorResultFromOutcome maps the engine's anchor outcome onto the wire
+// contract's user-visible result ("filtered" vs "not-found" are distinct
+// truths; rank is -1 when not found).
+func anchorResultFromOutcome(outcome querypage.AnchorOutcome) *ResourceQueryAnchorResult {
+	if outcome.Found {
+		return &ResourceQueryAnchorResult{Found: true, Rank: outcome.Rank}
+	}
+	reason := "not-found"
+	if outcome.Filtered {
+		reason = "filtered"
+	}
+	return &ResourceQueryAnchorResult{Found: false, Rank: -1, Reason: reason}
+}
+
+// pageStartRankPtr maps the engine's -1 "not computed" sentinel to a nil wire
+// pointer, keeping rank 0 explicit on the wire.
+func pageStartRankPtr(rank int) *int {
+	if rank < 0 {
+		return nil
+	}
+	return &rank
 }
 
 // maintainedScopeBase builds the querypage facet filters that pin a maintained
@@ -318,24 +480,14 @@ func resolveMaintainedDirect[T any](
 	sig := typedQuerySignature(sortField, dir, limit, query.Request)
 	searchLower := strings.ToLower(strings.TrimSpace(query.Request.Search))
 
-	token := ""
-	cursorInvalid := false
-	if query.Request.Continue != "" {
-		if cur, err := querypage.Decode(query.Request.Continue); err != nil ||
-			cur.Validate(query.Request.ClusterID, sig, sortField, dir, limit) != nil {
-			cursorInvalid = true
-		} else {
-			token = query.Request.Continue
-		}
-	}
-
 	// The page query honors the request's full visible scope (available ∩ user kinds,
 	// namespace ∩ user namespaces) plus search, walking the FULL sort index and
 	// skipping non-matching rows. Because the matched rows keep their relative order in
 	// the full index, the page rows, order, and boundary cursor are identical to a
-	// matched-only store queried with no filters.
+	// matched-only store queried with no filters. Cursor decode/validate is owned by
+	// the engine: an invalid token restarts at page 1 on page.CursorInvalid.
 	pageBase := maintainedScopeBase(availableKinds, namespace, query.Request.Kinds, query.Request.Namespaces, true)
-	page, _ := store.Query(querypage.Query{
+	engineQuery := querypage.Query{
 		ClusterID: query.Request.ClusterID,
 		Signature: sig,
 		Sort:      sortField,
@@ -345,8 +497,19 @@ func resolveMaintainedDirect[T any](
 		// Query lowercases internally, matching the live matcher's needle exactly.
 		Search:  query.Request.Search,
 		Filters: pageBase,
-		Cursor:  token,
-	})
+	}
+	var page querypage.Page[T]
+	var anchorResult *ResourceQueryAnchorResult
+	if anchor := query.Request.Anchor; anchor != nil {
+		// This store holds ALL rows (scope applied via engine filters), so the
+		// engine's own found/filtered/not-found outcome is authoritative.
+		var outcome querypage.AnchorOutcome
+		page, outcome, _ = store.QueryAround(engineQuery, typedAnchorKey(adapter, anchor))
+		anchorResult = anchorResultFromOutcome(outcome)
+	} else {
+		engineQuery.Cursor = query.Request.Continue
+		page, _ = store.Query(engineQuery)
+	}
 
 	// Facets + Total are over the user-matched set (page query's scope). UnfilteredTotal
 	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
@@ -365,7 +528,11 @@ func resolveMaintainedDirect[T any](
 	resultPage := typedTableQueryPage[T]{
 		Rows:            page.Rows,
 		Continue:        page.NextCursor,
-		CursorInvalid:   cursorInvalid,
+		Previous:        page.PrevCursor,
+		Self:            page.SelfCursor,
+		CursorInvalid:   page.CursorInvalid,
+		Anchor:          anchorResult,
+		PageStartRank:   pageStartRankPtr(page.PageStartRank),
 		Total:           matchedTotal,
 		UnfilteredTotal: unfilteredTotal,
 		TotalIsExact:    true,
@@ -397,9 +564,10 @@ func resolveTypedSnapshotPageViaStore[T any](
 	windowNoun string,
 	kindOf func(T) string,
 	issues []ResourceQueryIssue,
+	opts ...typedServeOption[T],
 ) typedSnapshotPage[T] {
 	if query.Enabled {
-		page := applyTypedTableQueryViaStore(rows, query, adapter, schema)
+		page := applyTypedTableQueryViaStore(rows, query, adapter, schema, opts...)
 		return typedSnapshotPage[T]{
 			Envelope: typedQueryEnvelope(domain, page, capabilities).withDegraded(len(issues) == 0, issues),
 			Rows:     page.Rows,

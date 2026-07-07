@@ -902,6 +902,9 @@ describe('useTypedResourceQuery', () => {
             rows: [{ name: 'pod-c' }],
             total: 3,
             totalIsExact: true,
+            // Backend-minted prev cursor (F5): populated on every response —
+            // the hook keeps no client token stack.
+            previous: 'cursor-page-1-prev',
           },
         },
       })
@@ -948,9 +951,10 @@ describe('useTypedResourceQuery', () => {
       await Promise.resolve();
     });
 
+    // Backward paging rides the BACKEND prev cursor, not a client stack.
     expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        scope: expect.not.stringContaining('continue='),
+        scope: expect.stringContaining('continue=cursor-page-1-prev'),
       })
     );
     expect(result?.rows).toEqual([{ name: 'pod-a' }, { name: 'pod-b' }]);

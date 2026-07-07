@@ -52,6 +52,10 @@ type PodBuilder struct {
 	// is never written to the maintained store or the projection cache, so a metric
 	// tick cannot re-project stored rows. nil (a unit test) serves the no-data marker.
 	metrics metrics.Provider
+	// perBuild reuses the per-Build engine store across page turns/sort flips
+	// while the object version + metric tick are unchanged (plan P6). Per-cluster
+	// (owned by this builder), dropped with it on teardown.
+	perBuild *perBuildStoreCache[PodSummary]
 }
 
 // newPodBuilder wires a PodBuilder with the projection memo cache enabled.
@@ -257,6 +261,7 @@ func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterM
 		projCache:  newPodProjectionCache(),
 		maintained: maintained,
 		metrics:    provider,
+		perBuild:   &perBuildStoreCache[PodSummary]{},
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -329,6 +334,10 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		"pods",
 		func(PodSummary) string { return podres.Identity.Kind },
 		nil,
+		// Reuse the per-Build engine store across page turns/sort flips while the
+		// object version and metric tick (DynamicRevision, inside the cache key)
+		// are unchanged.
+		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)
 
 	snapshot := &refresh.Snapshot{
@@ -551,6 +560,9 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 	return typedTableQueryAdapter[PodSummary]{
 		Key: func(pod PodSummary) string {
 			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name))
+		},
+		AnchorKey: func(_, namespace, name string) string {
+			return fmt.Sprintf("%s/%s", strings.ToLower(namespace), strings.ToLower(name))
 		},
 		Namespace: func(pod PodSummary) string { return pod.Namespace },
 		Kind:      func(PodSummary) string { return podres.Identity.Kind },
