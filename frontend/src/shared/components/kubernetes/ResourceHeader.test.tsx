@@ -29,6 +29,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => panel.current,
 }));
 
+const navigateToView = vi.fn();
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView }),
+}));
+
 import { ResourceHeader } from './ResourceHeader';
 
 const labelOrder = (c: HTMLElement) =>
@@ -145,5 +150,43 @@ describe('ResourceHeader', () => {
     await render();
 
     expect(labelOrder(container)).not.toContain('Last Modified');
+  });
+
+  it('alt-clicks the Namespace value to reveal the HOST object, not the Namespace kind', async () => {
+    // The panel is showing a Pod in namespace "shop"; its details render the
+    // namespace as a link.
+    const hostObject = {
+      kind: 'Pod',
+      name: 'web-5',
+      namespace: 'shop',
+      clusterId: 'c1',
+      group: '',
+      version: 'v1',
+    };
+    panel.current = { objectData: hostObject };
+    navigateToView.mockClear();
+
+    await act(async () => {
+      root.render(<ResourceHeader kind="Pod" name="web-5" namespace="shop" />);
+      await Promise.resolve();
+    });
+
+    const nsLabel = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
+      (el) => el.textContent === 'Namespace'
+    );
+    const nsLink = nsLabel?.parentElement?.querySelector<HTMLElement>('.object-panel-link');
+    expect(nsLink?.textContent).toBe('shop');
+
+    act(() => {
+      nsLink?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    });
+
+    // Reveals the host object (which selects its namespace in the sidebar),
+    // NOT a { kind: 'Namespace' } ref (which routed to Cluster → Config).
+    expect(navigateToView).toHaveBeenCalledTimes(1);
+    const ref = navigateToView.mock.calls[0][0];
+    expect(ref.kind).toBe('Pod');
+    expect(ref.name).toBe('web-5');
+    expect(ref.namespace).toBe('shop');
   });
 });

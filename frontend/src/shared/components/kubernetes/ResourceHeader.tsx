@@ -42,6 +42,11 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
                 clusterId: objectData?.clusterId ?? undefined,
                 clusterName: objectData?.clusterName ?? undefined,
               })}
+              // Alt-click reveals the object currently open in the panel (which
+              // also selects this namespace in the sidebar), rather than
+              // routing to the Namespace kind's own view. Plain click still
+              // opens the Namespace object.
+              navigateRef={objectData ?? undefined}
             >
               {namespace}
             </ObjectPanelLink>

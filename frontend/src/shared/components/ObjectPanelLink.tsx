@@ -14,6 +14,14 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface ObjectPanelLinkProps {
   objectRef: KubernetesObjectReference;
+  /**
+   * Optional alt-click / navigate target, when it should differ from the
+   * opened object. The namespace field in object-panel details uses this: a
+   * plain click opens the Namespace object, but alt-click should reveal the
+   * HOST object (the one whose panel is open) in its list — which also selects
+   * the namespace in the sidebar. Falls back to objectRef when omitted.
+   */
+  navigateRef?: KubernetesObjectReference;
   children: React.ReactNode;
   title?: string;
   className?: string;
@@ -21,24 +29,26 @@ export interface ObjectPanelLinkProps {
 
 export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
   objectRef,
+  navigateRef,
   children,
   title,
   className,
 }) => {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
+  const navigateTarget = navigateRef ?? objectRef;
 
   const handleClick = useCallback(
     (event: React.MouseEvent) => {
       if (event.altKey) {
         event.preventDefault();
         event.stopPropagation();
-        navigateToView(objectRef);
+        navigateToView(navigateTarget);
       } else {
         openWithObject(objectRef);
       }
     },
-    [objectRef, openWithObject, navigateToView]
+    [objectRef, navigateTarget, openWithObject, navigateToView]
   );
 
   const handleKeyDown = useCallback(
@@ -46,13 +56,13 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         if (event.altKey) {
-          navigateToView(objectRef);
+          navigateToView(navigateTarget);
         } else {
           openWithObject(objectRef);
         }
       }
     },
-    [objectRef, openWithObject, navigateToView]
+    [objectRef, navigateTarget, openWithObject, navigateToView]
   );
 
   const combinedClassName = ['object-panel-link', className].filter(Boolean).join(' ');
