@@ -69,11 +69,19 @@ export function useNavigateToView(): NavigateToViewResult {
       }
 
       // 5. Emit focus request so the target GridTable highlights the row.
-      //    Use the same canonical identity backbone as object opening.
+      //    Use the same canonical identity backbone as object opening. Stamp the
+      //    destination viewId (`${viewType}-${tab}`, matching a table's viewId) so
+      //    only the destination table can turn an unmatched request into an
+      //    anchor jump — a same-cluster non-target table (e.g. an object-panel
+      //    pods list) must not consume it and fire a false not-found.
       const focusRequest = buildGridTableFocusRequest(objectRef);
       if (focusRequest) {
-        setPendingFocusRequest(focusRequest);
-        eventBus.emit('gridtable:focus-request', focusRequest);
+        const request = {
+          ...focusRequest,
+          destinationViewId: `${destination.viewType}-${destination.tab}`,
+        };
+        setPendingFocusRequest(request);
+        eventBus.emit('gridtable:focus-request', request);
       }
     },
     [

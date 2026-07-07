@@ -199,6 +199,7 @@ function useTypedQueryLifecycle<
 >({
   clusterId,
   domain,
+  viewId,
   label,
   baseScope,
   queryTableMode,
@@ -211,6 +212,7 @@ function useTypedQueryLifecycle<
 }: {
   clusterId?: string | null;
   domain: RefreshDomain;
+  viewId: string;
   label: string;
   baseScope?: string;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
@@ -290,6 +292,7 @@ function useTypedQueryLifecycle<
   useAnchorOnUnmatchedFocusRequest({
     clusterId,
     domain,
+    viewId,
     loaded,
     rows: data,
     anchorTo: query.anchorTo,
@@ -320,9 +323,10 @@ const anchorDecisionKeyExtractor = () => '';
 // row, turn it into a backend anchor jump — the landing page then contains
 // the row and the normal buffer match takes over. A missing anchor
 // (filtered/not-found) is reported through the app's notification channel.
-function useAnchorOnUnmatchedFocusRequest<TRow>({
+export function useAnchorOnUnmatchedFocusRequest<TRow>({
   clusterId,
   domain,
+  viewId,
   loaded,
   rows,
   anchorTo,
@@ -330,6 +334,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
 }: {
   clusterId?: string | null;
   domain: RefreshDomain;
+  viewId: string;
   loaded: boolean;
   rows: TRow[];
   anchorTo: UseTypedResourceQueryResult<TRow>['anchorTo'];
@@ -343,6 +348,14 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     }
     const request = peekPendingFocusRequest();
     if (!request || request.clusterId !== clusterId) {
+      return;
+    }
+    // Only the navigation DESTINATION table reacts: the request is stamped with
+    // the destination viewId (useNavigateToView), so a same-cluster non-target
+    // table (an object-panel pods list, a different tab) can't consume it and
+    // fire a spurious anchor / false not-found. A request with no destination
+    // (no emitter produces one today) does not anchor.
+    if (request.destinationViewId !== viewId) {
       return;
     }
     // One jump per request (buffer identity): a not-found landing must not
@@ -372,7 +385,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
       name: request.name,
       uid: request.uid,
     });
-  }, [anchorTo, clusterId, loaded, rows]);
+  }, [anchorTo, clusterId, loaded, rows, viewId]);
 
   useEffect(() => {
     if (!anchorResult || anchorResult.found) {
@@ -555,6 +568,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
     domain,
+    viewId: tableParams.viewId,
     label,
     // Scope the typed query to the selected namespace, reusing the exact base the live
     // subscription above already uses. namespaceScopeKey normalizes the raw namespace name to the
@@ -660,6 +674,7 @@ export function useQueryBackedClusterResourceGridTable<
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
     domain,
+    viewId: tableParams.viewId,
     label,
     baseScope,
     queryTableMode,

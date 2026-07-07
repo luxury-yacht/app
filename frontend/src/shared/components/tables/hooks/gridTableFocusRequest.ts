@@ -9,6 +9,14 @@ export interface GridTableFocusRequest {
   clusterId: string;
   rowKey?: string;
   /**
+   * The navigation destination this request is aimed at (`${viewType}-${tab}`,
+   * matching a table's `viewId`). Set by useNavigateToView so ONLY the
+   * destination table turns an unmatched request into an anchor jump — a
+   * same-cluster non-target table (e.g. an object-panel pods list) must not
+   * consume it and fire a false not-found.
+   */
+  destinationViewId?: string;
+  /**
    * Full-reference fields: kept so a query-backed table can turn an
    * unmatched request into a backend anchor jump (which requires a full
    * object reference — version at minimum). Absent when the entry point's
