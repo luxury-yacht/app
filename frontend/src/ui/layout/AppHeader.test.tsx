@@ -63,7 +63,7 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['Favorites']);
+    ).toEqual(['Favorites', 'Command Palette']);
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {

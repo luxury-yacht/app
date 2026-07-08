@@ -714,3 +714,27 @@ export const PlusIcon: React.FC<IconProps> = ({
     <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
+
+/** Plain magnifying glass (search). Same geometry as ZoomInIcon minus the plus. */
+export const SearchIcon: React.FC<IconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+  ariaHidden,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden={ariaHidden}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="10.1" cy="10.1" r="8" />
+    <line x1="21.9" y1="21.9" x2="16.3" y2="16.3" />
+  </svg>
+);

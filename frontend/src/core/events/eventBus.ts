@@ -54,6 +54,10 @@ export interface AppEvents {
   // File → Open Cluster).
   'command-palette:open-kubeconfigs': void;
 
+  // Open the command palette in its normal (search) mode — the header search
+  // button.
+  'command-palette:open': void;
+
   // Auth events — bridged from Wails runtime by AuthErrorContext.
   'cluster:auth:failed': { clusterId: string };
   'cluster:auth:recovered': { clusterId: string };

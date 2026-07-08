@@ -13,6 +13,8 @@ import UpdateStatus from '@ui/status/UpdateStatus';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { isMacPlatform } from '@/utils/platform';
+import { eventBus } from '@/core/events';
+import { SearchIcon } from '@shared/components/icons/SharedIcons';
 import './AppHeader.css';
 
 const AppHeader: React.FC = () => {
@@ -39,7 +41,17 @@ const AppHeader: React.FC = () => {
           <MetricsStatus />
           <SessionsStatus />
         </div>
-        <FavMenuDropdown lastHeaderControl />
+        <FavMenuDropdown />
+        <button
+          type="button"
+          className="settings-button"
+          onClick={() => eventBus.emit('command-palette:open')}
+          title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
+          aria-label="Command Palette"
+          data-app-header-last-focusable="true"
+        >
+          <SearchIcon width={14} height={14} />
+        </button>
       </div>
     </div>
   );

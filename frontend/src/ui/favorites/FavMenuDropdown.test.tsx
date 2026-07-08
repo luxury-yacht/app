@@ -228,23 +228,6 @@ describe('FavMenuDropdown', () => {
     expect(btn!.className).toContain('settings-button');
   });
 
-  it('marks the trigger as the last header control when requested', async () => {
-    await act(async () => {
-      root.render(<FavMenuDropdown lastHeaderControl />);
-      await Promise.resolve();
-    });
-
-    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(trigger?.getAttribute('data-app-header-last-focusable')).toBe('true');
-  });
-
-  it('omits the last-header-control marker by default', async () => {
-    await renderComponent();
-
-    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(trigger?.hasAttribute('data-app-header-last-focusable')).toBe(false);
-  });
-
   it('opens the dropdown from keyboard activation on the trigger', async () => {
     await renderComponent();
 

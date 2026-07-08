@@ -793,6 +793,9 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     openedDirectlyRef.current = true;
   }, [hasActiveBlockingSurface, isOpen, open]);
   useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
+  // The header search button opens the palette in its normal (search) mode via
+  // the same guarded open path as the keyboard shortcut.
+  useEventBus('command-palette:open', () => openShortcutRef.current(), []);
 
   // Focus input when opened
   useEffect(() => {

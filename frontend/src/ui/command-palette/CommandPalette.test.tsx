@@ -313,6 +313,25 @@ describe('CommandPalette component behaviour', () => {
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
   });
 
+  it('opens in normal (search) mode when command-palette:open fires', async () => {
+    const commands: Command[] = [
+      { id: 'a', label: 'Alpha', category: 'Application', action: vi.fn() },
+      { id: 'kc', label: 'cluster-x', category: 'Kubeconfigs', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    await act(async () => {
+      eventBus.emit('command-palette:open');
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.command-palette')).not.toBeNull();
+    // Normal mode shows all categories (not filtered to Kubeconfigs).
+    const labels = queryItems().map((el) => el.textContent ?? '');
+    expect(labels.some((label) => label.includes('Alpha'))).toBe(true);
+  });
+
   it('navigates commands with the keyboard and executes the selection', async () => {
     vi.useFakeTimers();
     const firstAction = vi.fn();

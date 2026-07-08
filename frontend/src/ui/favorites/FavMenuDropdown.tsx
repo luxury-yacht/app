@@ -41,16 +41,7 @@ function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-interface FavMenuDropdownProps {
-  /**
-   * Marks this control as the app header's last focusable element so keyboard
-   * region navigation (appFocusRegions / SidebarKeys) can hand off Tab from the
-   * header to the sidebar. Set by AppHeader.
-   */
-  lastHeaderControl?: boolean;
-}
-
-const FavMenuDropdown: React.FC<FavMenuDropdownProps> = ({ lastHeaderControl = false }) => {
+const FavMenuDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
 
@@ -172,7 +163,6 @@ const FavMenuDropdown: React.FC<FavMenuDropdownProps> = ({ lastHeaderControl = f
         aria-label="Favorites"
         role="button"
         tabIndex={0}
-        data-app-header-last-focusable={lastHeaderControl ? 'true' : undefined}
       >
         <FavoriteFilledIcon width={14} height={14} />
       </div>
