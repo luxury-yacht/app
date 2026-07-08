@@ -26,11 +26,6 @@ vi.mock('@ui/settings/sections/AppearanceSection', () => ({
   default: vi.fn(() => <div data-testid="section-appearance" />),
 }));
 
-vi.mock('@ui/settings/sections/KubeconfigsSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-kubeconfigs" />),
-}));
-
 vi.mock('@ui/settings/sections/DisplaySection', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="section-display" />),
@@ -186,23 +181,23 @@ describe('SettingsModal', () => {
     vi.useRealTimers();
   });
 
-  it('renders Appearance section by default and switches to Kubeconfigs on tab click', async () => {
+  it('renders Appearance section by default and switches to Display on tab click', async () => {
     expect(document.querySelector('[data-testid="section-appearance"]')).toBeTruthy();
-    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeNull();
+    expect(document.querySelector('[data-testid="section-display"]')).toBeNull();
 
     const tabs = Array.from(
       document.querySelectorAll('.settings-modal-tab')
     ) as HTMLButtonElement[];
-    const kubeconfigTab = tabs.find((t) => t.textContent?.includes('Kubeconfigs'));
-    expect(kubeconfigTab).toBeTruthy();
+    const displayTab = tabs.find((t) => t.textContent?.includes('Display'));
+    expect(displayTab).toBeTruthy();
 
     await act(async () => {
-      kubeconfigTab!.click();
+      displayTab!.click();
       await Promise.resolve();
     });
 
     expect(document.querySelector('[data-testid="section-appearance"]')).toBeNull();
-    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="section-display"]')).toBeTruthy();
   });
 
   it('honors initialTab prop on open', async () => {

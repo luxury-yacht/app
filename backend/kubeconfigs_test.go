@@ -52,6 +52,60 @@ func hasKubeconfig(configs []KubeconfigInfo, path string, context string) bool {
 	return false
 }
 
+// findKubeconfig returns the matching entry (or nil) so tests can inspect fields.
+func findKubeconfig(configs []KubeconfigInfo, path string, context string) *KubeconfigInfo {
+	for i := range configs {
+		if configs[i].Path == path && configs[i].Context == context {
+			return &configs[i]
+		}
+	}
+	return nil
+}
+
+func TestAppendKubeconfigFromFileMarksInvalidContexts(t *testing.T) {
+	dir := t.TempDir()
+	// "valid-ctx" references an existing cluster+user; "broken-ctx" references a
+	// cluster that is not defined in the file, so clientcmd.ConfirmUsable fails.
+	content := `apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://127.0.0.1:6443
+  name: good-cluster
+contexts:
+- context:
+    cluster: good-cluster
+    user: good-user
+  name: valid-ctx
+- context:
+    cluster: missing-cluster
+    user: good-user
+  name: broken-ctx
+kind: Config
+preferences: {}
+users:
+- name: good-user
+  user:
+    token: test-token
+`
+	path := filepath.Join(dir, "multi-config")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	app := newTestAppWithDefaults(t)
+	app.appendKubeconfigFromFile(path, "multi-config", dir, "", false, map[string]struct{}{})
+
+	valid := findKubeconfig(app.availableKubeconfigs, path, "valid-ctx")
+	require.NotNil(t, valid, "expected valid-ctx to be discovered")
+	assert.False(t, valid.Invalid, "valid-ctx references an existing cluster and user")
+	assert.Empty(t, valid.InvalidReason)
+	assert.Equal(t, dir, valid.SourcePath, "SourcePath should be the search-path entry it was discovered from")
+
+	broken := findKubeconfig(app.availableKubeconfigs, path, "broken-ctx")
+	require.NotNil(t, broken, "expected broken-ctx to be discovered")
+	assert.True(t, broken.Invalid, "broken-ctx references a missing cluster")
+	assert.NotEmpty(t, broken.InvalidReason)
+}
+
 func TestApp_discoverKubeconfigs(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -174,7 +228,7 @@ users:
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	app := newTestAppWithDefaults(t)
-	app.appendKubeconfigFromFile(path, "exec-config", "", false, map[string]struct{}{})
+	app.appendKubeconfigFromFile(path, "exec-config", dir, "", false, map[string]struct{}{})
 
 	require.True(t, hasKubeconfig(app.availableKubeconfigs, path, "exec-context"),
 		"discovery must accept a kubeconfig whose user.exec.command helper is missing")

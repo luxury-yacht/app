@@ -47,7 +47,6 @@ export interface AppEvents {
   // Kubeconfig events
   'kubeconfig:changing': string; // config name
   'kubeconfig:changed': string; // config name
-  'kubeconfig:change-request': string; // config name to change to
   'kubeconfig:selection-changed': void;
 
   // Auth events — bridged from Wails runtime by AuthErrorContext.

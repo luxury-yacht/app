@@ -71,12 +71,12 @@ func (a *App) discoverKubeconfigsLocked() error {
 					continue
 				}
 				path := filepath.Join(resolved, d.Name())
-				a.appendKubeconfigFromFile(path, d.Name(), defaultConfigPath, true, seenFiles)
+				a.appendKubeconfigFromFile(path, d.Name(), entry, defaultConfigPath, true, seenFiles)
 			}
 			continue
 		}
 
-		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), defaultConfigPath, false, seenFiles)
+		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), entry, defaultConfigPath, false, seenFiles)
 	}
 
 	if !foundRoot {
@@ -87,7 +87,7 @@ func (a *App) discoverKubeconfigsLocked() error {
 }
 
 // appendKubeconfigFromFile validates a kubeconfig file and appends its contexts.
-func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
+func (a *App) appendKubeconfigFromFile(path string, name string, sourcePath string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
 	cleanedPath := filepath.Clean(path)
 	if applyHeuristics && shouldSkipKubeconfigName(name) {
 		return
@@ -118,14 +118,26 @@ func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPa
 
 	a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
 
-	// Create an entry for each context in the kubeconfig.
+	// Create an entry for each context in the kubeconfig. Validate each context
+	// structurally (references an existing cluster + user) via ConfirmUsable —
+	// syntax only, no server connectivity — so the Open Cluster UI can flag and
+	// disable broken contexts.
 	for contextName := range config.Contexts {
+		invalid := false
+		invalidReason := ""
+		if err := clientcmd.ConfirmUsable(*config, contextName); err != nil {
+			invalid = true
+			invalidReason = err.Error()
+		}
 		a.availableKubeconfigs = append(a.availableKubeconfigs, KubeconfigInfo{
 			Name:             displayName,
 			Path:             cleanedPath,
 			Context:          contextName,
 			IsDefault:        isDefault,
 			IsCurrentContext: contextName == config.CurrentContext,
+			Invalid:          invalid,
+			InvalidReason:    invalidReason,
+			SourcePath:       sourcePath,
 		})
 	}
 }

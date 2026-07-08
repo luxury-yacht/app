@@ -14,13 +14,11 @@ import { CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { FloatPanelIcon } from '@shared/components/icons/DockableIcons';
 import {
   AppearanceModeIcon,
-  KubeconfigsIcon,
   DisplayIcon,
   AdvancedIcon,
 } from '@shared/components/icons/SettingsIcons';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import AppearanceSection from '@ui/settings/sections/AppearanceSection';
-import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
 import DisplaySection from '@ui/settings/sections/DisplaySection';
 import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
 import AdvancedSection from '@ui/settings/sections/AdvancedSection';
@@ -48,17 +46,23 @@ interface TabDefinition {
 
 const TABS: TabDefinition[] = [
   { id: 'appearance', label: 'Appearance', icon: AppearanceModeIcon },
-  { id: 'kubeconfigs', label: 'Kubeconfigs', icon: KubeconfigsIcon },
   { id: 'display', label: 'Display', icon: DisplayIcon },
   { id: 'object-panel', label: 'Object Panel', icon: FloatPanelIcon },
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
 ];
 
+const KNOWN_TAB_IDS = new Set<SettingsTabId>(TABS.map((tab) => tab.id));
+
+// A previously-persisted tab that no longer exists (e.g. the removed Kubeconfigs
+// tab) falls back to the default so the settings panel is never blank.
+const resolveTab = (tab: SettingsTabId | null | undefined): SettingsTabId =>
+  tab && KNOWN_TAB_IDS.has(tab) ? tab : DEFAULT_SETTINGS_TAB;
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTabId>(
-    () => initialTab ?? getLastSettingsTab() ?? DEFAULT_SETTINGS_TAB
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
+    resolveTab(initialTab ?? getLastSettingsTab())
   );
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -70,7 +74,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
       setIsClosing(false);
       // When opening, honor an explicit initialTab override; otherwise restore
       // the last-used tab (falling back to default).
-      setActiveTab(initialTab ?? getLastSettingsTab() ?? DEFAULT_SETTINGS_TAB);
+      setActiveTab(resolveTab(initialTab ?? getLastSettingsTab()));
     } else if (shouldRender) {
       setIsClosing(true);
       const timer = setTimeout(() => {
@@ -176,7 +180,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
         <div className="settings-modal-content">
           {activeTab === 'appearance' && <AppearanceSection />}
-          {activeTab === 'kubeconfigs' && <KubeconfigsSection />}
           {activeTab === 'display' && <DisplaySection />}
           {activeTab === 'object-panel' && <ObjectPanelSection />}
           {activeTab === 'advanced' && <AdvancedSection />}

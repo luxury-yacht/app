@@ -14,10 +14,6 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => viewStateMock,
 }));
 
-vi.mock('@shared/components/KubeconfigSelector', () => ({
-  default: () => <button type="button">Kubeconfig</button>,
-}));
-
 vi.mock('@ui/favorites/FavMenuDropdown', () => ({
   default: () => <button type="button">Favorites</button>,
 }));
@@ -75,7 +71,7 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['Kubeconfig', 'Favorites', 'Settings']);
+    ).toEqual(['Favorites', 'Settings']);
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {

@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import KubeconfigSelector from '@shared/components/KubeconfigSelector';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
 import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
@@ -81,7 +80,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
           <MetricsStatus />
           <SessionsStatus />
         </div>
-        <KubeconfigSelector />
         <FavMenuDropdown />
         <div
           className="settings-button"

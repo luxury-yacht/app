@@ -192,6 +192,9 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+        sourcePath: '',
       },
     ];
 
@@ -219,6 +222,9 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+        sourcePath: '',
       },
     ];
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
@@ -245,6 +251,9 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+        sourcePath: '',
       },
       {
         name: 'beta',
@@ -252,6 +261,9 @@ describe('CommandPaletteCommands', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+        sourcePath: '',
       },
     ];
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
