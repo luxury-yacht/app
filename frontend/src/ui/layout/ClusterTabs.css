@@ -52,3 +52,27 @@
   outline: 2px solid var(--focus-ring, #4a90d9);
   outline-offset: -2px;
 }
+
+/* --- Tab visual hierarchy (style only; scoped to the cluster tab strip so the
+   dockable/diagnostics/object-panel <Tabs> surfaces are unaffected). --- */
+
+/* Inactive tabs use a lighter weight so the active tab stands out. Colour is
+   left to the base rules (muted, and brighter on hover). */
+.cluster-tabs .tab-item {
+  font-weight: var(--font-weight-normal);
+}
+
+/* Active tab: bold, full-brightness text, accent underline (was a muted
+   same-weight underline, so the selection barely read). */
+.cluster-tabs .tab-item--active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Quieter dividers — fainter and shorter. Adjusts colour/size, NOT opacity, so
+   the base rules that hide the divider next to the active/hovered tab still work. */
+.cluster-tabs .tab-item:not(:last-child)::after {
+  height: 50%;
+  top: 30%;
+  background-color: var(--color-border);
+}

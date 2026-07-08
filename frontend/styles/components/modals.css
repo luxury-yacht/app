@@ -18,7 +18,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: var(--app-header-height, 39px);
+  height: var(--app-header-height);
   z-index: 1;
   --wails-draggable: true;
   cursor: default;
@@ -26,7 +26,7 @@
 
 .modal-backdrop {
   position: absolute;
-  top: var(--app-header-height, 39px);
+  top: var(--app-header-height);
   left: 0;
   right: 0;
   bottom: 0;
