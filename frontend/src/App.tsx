@@ -162,6 +162,7 @@ function AppContent() {
   useWailsRuntimeEvents({
     onOpenSettings: () => viewState.setIsSettingsOpen(true),
     onOpenAbout: () => viewState.setIsAboutOpen(true),
+    onOpenCluster: () => viewState.setIsOpenClusterModalOpen(true),
     onToggleSidebar: () => viewState.toggleSidebar(),
     onToggleAppLogsPanel: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,

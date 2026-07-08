@@ -96,6 +96,15 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 		go spawnNewWindow()
 	})
 
+	// Open Cluster emits an event the frontend uses to open the Open Cluster
+	// modal (the "+" in the cluster tab bar does the same). The accelerator is
+	// the shortcut, mirroring New Window/Close.
+	fileMenu.AddText("Open Cluster", keys.CmdOrCtrl("o"), func(_ *menu.CallbackData) {
+		if app.Ctx != nil {
+			app.emitEvent("open-cluster")
+		}
+	})
+
 	// Close emits an event to the frontend, which decides whether to close a
 	// cluster tab or quit the application (Chrome/VS Code style Cmd/Ctrl+W).
 	fileMenu.AddText("Close", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
