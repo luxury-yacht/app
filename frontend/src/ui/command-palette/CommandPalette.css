@@ -2,18 +2,17 @@
 
 .command-palette {
   position: fixed;
-  top: 9vh;
+  top: 170px;
   left: 0;
   right: 0;
   margin: 0 auto;
   width: 90%;
   max-width: 600px;
-  max-height: 60vh;
-  background: var(--color-bg);
-  /* Subtle top highlight for depth */
+  height: 60vh;
+  max-height: 600px;
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-top-color: rgba(255, 255, 255, 0.1);
-  border-radius: var(--border-radius-lg, 12px);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   z-index: var(--z-index-overlay);
@@ -53,13 +52,18 @@
 
 .command-palette-input {
   width: 100%;
-  padding: 0.4rem 1rem;
+  padding: 0.5rem 1rem;
   font-size: 0.85rem;
   background: transparent;
   border: none;
   outline: none;
   color: var(--color-text);
   box-sizing: border-box;
+}
+
+.command-palette-input:focus-visible {
+  box-shadow: none;
+  border-color: transparent;
 }
 
 .command-palette-input::placeholder {
@@ -111,7 +115,7 @@
 .command-palette-item {
   display: flex;
   align-items: center;
-  padding: 0.25rem 0.5rem;
+  padding: 0.35rem 0.5rem;
   padding-left: 2rem;
   cursor: pointer;
   transition:
@@ -127,7 +131,7 @@
 }
 
 .command-palette-item.selected {
-  background-color: var(--color-bg-secondary);
+  background-color: var(--color-bg-tertiary);
   border-left-color: var(--color-accent);
   position: relative;
 }
