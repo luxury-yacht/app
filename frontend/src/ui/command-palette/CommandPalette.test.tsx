@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
 import type { Command } from './CommandPaletteCommands';
+import { eventBus } from '@/core/events';
 import { CommandPalette, buildCatalogDisplayEntries, parseQueryTokens } from './CommandPalette';
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
@@ -291,6 +292,25 @@ describe('CommandPalette component behaviour', () => {
     // A second emit must not throw or re-open; the guarded open path no-ops.
     await emitWailsEvent('open-command-palette');
     expect(container.querySelectorAll('.command-palette').length).toBe(1);
+  });
+
+  it('opens in kubeconfig mode when command-palette:open-kubeconfigs fires', async () => {
+    const commands: Command[] = [
+      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
+      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    await act(async () => {
+      eventBus.emit('command-palette:open-kubeconfigs');
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.command-palette')).not.toBeNull();
+    const labels = queryItems().map((el) => el.textContent ?? '');
+    expect(labels.some((label) => label.includes('cluster-a'))).toBe(true);
+    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
   });
 
   it('navigates commands with the keyboard and executes the selection', async () => {

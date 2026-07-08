@@ -162,7 +162,7 @@ function AppContent() {
   useWailsRuntimeEvents({
     onOpenSettings: () => viewState.setIsSettingsOpen(true),
     onOpenAbout: () => viewState.setIsAboutOpen(true),
-    onOpenCluster: () => viewState.setIsOpenClusterModalOpen(true),
+    onOpenCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
     onToggleSidebar: () => viewState.toggleSidebar(),
     onToggleAppLogsPanel: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,

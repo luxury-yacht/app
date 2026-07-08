@@ -92,13 +92,12 @@ users:
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	app := newTestAppWithDefaults(t)
-	app.appendKubeconfigFromFile(path, "multi-config", dir, "", false, map[string]struct{}{})
+	app.appendKubeconfigFromFile(path, "multi-config", "", false, map[string]struct{}{})
 
 	valid := findKubeconfig(app.availableKubeconfigs, path, "valid-ctx")
 	require.NotNil(t, valid, "expected valid-ctx to be discovered")
 	assert.False(t, valid.Invalid, "valid-ctx references an existing cluster and user")
 	assert.Empty(t, valid.InvalidReason)
-	assert.Equal(t, dir, valid.SourcePath, "SourcePath should be the search-path entry it was discovered from")
 
 	broken := findKubeconfig(app.availableKubeconfigs, path, "broken-ctx")
 	require.NotNil(t, broken, "expected broken-ctx to be discovered")
@@ -228,7 +227,7 @@ users:
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	app := newTestAppWithDefaults(t)
-	app.appendKubeconfigFromFile(path, "exec-config", dir, "", false, map[string]struct{}{})
+	app.appendKubeconfigFromFile(path, "exec-config", "", false, map[string]struct{}{})
 
 	require.True(t, hasKubeconfig(app.availableKubeconfigs, path, "exec-context"),
 		"discovery must accept a kubeconfig whose user.exec.command helper is missing")

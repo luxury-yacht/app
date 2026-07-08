@@ -14,8 +14,6 @@ interface ModalStateContextType {
   isAboutOpen: boolean;
   isObjectDiffOpen: boolean;
   objectDiffOpenRequest: ObjectDiffOpenRequest | null;
-  /** Open Cluster modal, launched from the cluster tab bar's "+" button. */
-  isOpenClusterModalOpen: boolean;
   /**
    * Application Logs Panel visibility. App-global (not per-cluster):
    * Application Logs are the application's own log output, not workspace
@@ -28,7 +26,6 @@ interface ModalStateContextType {
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
-  setIsOpenClusterModalOpen: (open: boolean) => void;
   openObjectDiff: (request?: { left?: ObjectDiffOpenRequest['left'] }) => void;
   setShowAppLogsPanel: (open: boolean) => void;
   toggleAppLogsPanel: () => void;
@@ -55,7 +52,6 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
   const [objectDiffOpenRequest, setObjectDiffOpenRequest] = useState<ObjectDiffOpenRequest | null>(
     null
   );
-  const [isOpenClusterModalOpen, setIsOpenClusterModalOpen] = useState(false);
   const [showAppLogsPanel, setShowAppLogsPanel] = useState(false);
 
   const toggleAppLogsPanel = useCallback(() => {
@@ -83,12 +79,10 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
-      isOpenClusterModalOpen,
       showAppLogsPanel,
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
-      setIsOpenClusterModalOpen,
       openObjectDiff,
       setShowAppLogsPanel,
       toggleAppLogsPanel,
@@ -98,7 +92,6 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
-      isOpenClusterModalOpen,
       showAppLogsPanel,
       openObjectDiff,
       toggleAppLogsPanel,

@@ -22,6 +22,7 @@ import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { EventsOn } from '@wailsjs/runtime/runtime';
+import { useEventBus } from '@/core/events';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -766,6 +767,25 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     });
     return dispose;
   }, []);
+
+  // Open the palette directly in kubeconfig-select mode. This is the "Open
+  // Cluster" surface: the "+" in the cluster tab bar, ⌘O, and File → Open Cluster
+  // all emit this event. open() resets the mode, so set it after.
+  const openInKubeconfigMode = useCallback(() => {
+    if (isOpen) {
+      setKubeconfigSelectMode(true);
+      setSearchQuery('');
+      setSelectedIndex(0);
+      selectedIndexRef.current = 0;
+      return;
+    }
+    if (hasActiveBlockingSurface()) {
+      return;
+    }
+    open();
+    setKubeconfigSelectMode(true);
+  }, [hasActiveBlockingSurface, isOpen, open]);
+  useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
 
   // Focus input when opened
   useEffect(() => {

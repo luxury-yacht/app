@@ -71,12 +71,12 @@ func (a *App) discoverKubeconfigsLocked() error {
 					continue
 				}
 				path := filepath.Join(resolved, d.Name())
-				a.appendKubeconfigFromFile(path, d.Name(), entry, defaultConfigPath, true, seenFiles)
+				a.appendKubeconfigFromFile(path, d.Name(), defaultConfigPath, true, seenFiles)
 			}
 			continue
 		}
 
-		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), entry, defaultConfigPath, false, seenFiles)
+		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), defaultConfigPath, false, seenFiles)
 	}
 
 	if !foundRoot {
@@ -87,7 +87,7 @@ func (a *App) discoverKubeconfigsLocked() error {
 }
 
 // appendKubeconfigFromFile validates a kubeconfig file and appends its contexts.
-func (a *App) appendKubeconfigFromFile(path string, name string, sourcePath string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
+func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
 	cleanedPath := filepath.Clean(path)
 	if applyHeuristics && shouldSkipKubeconfigName(name) {
 		return
@@ -137,7 +137,6 @@ func (a *App) appendKubeconfigFromFile(path string, name string, sourcePath stri
 			IsCurrentContext: contextName == config.CurrentContext,
 			Invalid:          invalid,
 			InvalidReason:    invalidReason,
-			SourcePath:       sourcePath,
 		})
 	}
 }

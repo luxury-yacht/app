@@ -49,6 +49,11 @@ export interface AppEvents {
   'kubeconfig:changed': string; // config name
   'kubeconfig:selection-changed': void;
 
+  // Open the command palette directly in kubeconfig-select mode — the entry
+  // points for opening a cluster (the "+" in the cluster tab bar, ⌘O, and
+  // File → Open Cluster).
+  'command-palette:open-kubeconfigs': void;
+
   // Auth events — bridged from Wails runtime by AuthErrorContext.
   'cluster:auth:failed': { clusterId: string };
   'cluster:auth:recovered': { clusterId: string };

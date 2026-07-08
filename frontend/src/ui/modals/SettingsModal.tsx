@@ -14,11 +14,13 @@ import { CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { FloatPanelIcon } from '@shared/components/icons/DockableIcons';
 import {
   AppearanceModeIcon,
+  KubeconfigsIcon,
   DisplayIcon,
   AdvancedIcon,
 } from '@shared/components/icons/SettingsIcons';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import AppearanceSection from '@ui/settings/sections/AppearanceSection';
+import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
 import DisplaySection from '@ui/settings/sections/DisplaySection';
 import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
 import AdvancedSection from '@ui/settings/sections/AdvancedSection';
@@ -46,6 +48,7 @@ interface TabDefinition {
 
 const TABS: TabDefinition[] = [
   { id: 'appearance', label: 'Appearance', icon: AppearanceModeIcon },
+  { id: 'kubeconfigs', label: 'Kubeconfigs', icon: KubeconfigsIcon },
   { id: 'display', label: 'Display', icon: DisplayIcon },
   { id: 'object-panel', label: 'Object Panel', icon: FloatPanelIcon },
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
@@ -180,6 +183,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
         <div className="settings-modal-content">
           {activeTab === 'appearance' && <AppearanceSection />}
+          {activeTab === 'kubeconfigs' && <KubeconfigsSection />}
           {activeTab === 'display' && <DisplaySection />}
           {activeTab === 'object-panel' && <ObjectPanelSection />}
           {activeTab === 'advanced' && <AdvancedSection />}

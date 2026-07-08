@@ -5145,7 +5145,6 @@ export namespace types {
 	    isCurrentContext: boolean;
 	    invalid: boolean;
 	    invalidReason: string;
-	    sourcePath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new KubeconfigInfo(source);
@@ -5160,7 +5159,6 @@ export namespace types {
 	        this.isCurrentContext = source["isCurrentContext"];
 	        this.invalid = source["invalid"];
 	        this.invalidReason = source["invalidReason"];
-	        this.sourcePath = source["sourcePath"];
 	    }
 	}
 	export class NodeLogSource {

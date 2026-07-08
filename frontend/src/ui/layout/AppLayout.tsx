@@ -65,10 +65,6 @@ const ObjectDiffModal = withLazyBoundary(
   () => import('@ui/modals/ObjectDiffModal'),
   'Loading diff viewer...'
 );
-const OpenClusterModal = withLazyBoundary(
-  () => import('@ui/modals/OpenClusterModal'),
-  'Loading clusters...'
-);
 const AppLogsPanel = withLazyBoundary(
   () => import('@ui/panels/app-logs/AppLogsPanel'),
   'Loading Application Logs Panel...'
@@ -95,12 +91,11 @@ export const AppLayout: React.FC = () => {
   const [isIconDebugOverlayVisible, setIsIconDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
 
-  // Stable so the memoized ClusterTabs doesn't re-render on every AppLayout render.
-  const { setIsOpenClusterModalOpen } = viewState;
-  const handleOpenCluster = useCallback(
-    () => setIsOpenClusterModalOpen(true),
-    [setIsOpenClusterModalOpen]
-  );
+  // The "+" opens the command palette in kubeconfig mode (the Open Cluster
+  // surface). Stable so the memoized ClusterTabs doesn't re-render needlessly.
+  const handleOpenCluster = useCallback(() => {
+    eventBus.emit('command-palette:open-kubeconfigs');
+  }, []);
   // Empty-space drop target for dockable tabs: dropping a tab in empty
   // content area spawns a new floating group at the cursor. The ref is
   // merged onto the existing `<main>` element below — no new wrapper,
@@ -346,15 +341,6 @@ export const AppLayout: React.FC = () => {
           isOpen={viewState.isObjectDiffOpen}
           initialRequest={viewState.objectDiffOpenRequest}
           onClose={() => viewState.setIsObjectDiffOpen(false)}
-        />
-      </PanelErrorBoundary>
-      <PanelErrorBoundary
-        onClose={() => viewState.setIsOpenClusterModalOpen(false)}
-        panelName="open-cluster"
-      >
-        <OpenClusterModal
-          isOpen={viewState.isOpenClusterModalOpen}
-          onClose={() => viewState.setIsOpenClusterModalOpen(false)}
         />
       </PanelErrorBoundary>
       <ErrorNotificationSystem />
