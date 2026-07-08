@@ -107,7 +107,7 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 
 	// Close emits an event to the frontend, which decides whether to close a
 	// cluster tab or quit the application (Chrome/VS Code style Cmd/Ctrl+W).
-	fileMenu.AddText("Close", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
+	fileMenu.AddText("Close Cluster", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
 		if app.Ctx != nil {
 			app.emitEvent("menu:close")
 		}

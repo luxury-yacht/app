@@ -219,6 +219,10 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
+  // True when the palette was opened straight into a sub-mode (e.g. kubeconfig
+  // mode via the "+"/⌘O event). Then Escape closes in one press instead of
+  // backing out to a general palette the user never navigated through.
+  const openedDirectlyRef = useRef(false);
   const mouseSelectionArmedRef = useRef(false);
   const { hasActiveBlockingSurface } = useKeyboardContext();
   const { openWithObject } = useObjectPanel();
@@ -459,6 +463,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
+    openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
     setCatalogStats(null);
@@ -475,6 +480,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
+    openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
     setCatalogStats(null);
@@ -619,14 +625,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     if (!isOpen) {
       return false;
     }
-    if (namespaceSelectMode) {
+    if (namespaceSelectMode || kubeconfigSelectMode) {
+      // If the palette was opened straight into this sub-mode, Escape closes it;
+      // otherwise it backs out to the general palette it was navigated from.
+      if (openedDirectlyRef.current) {
+        close();
+        return true;
+      }
       setNamespaceSelectMode(false);
-      setSearchQuery('');
-      updateSelection(0);
-      setHideCursor(false);
-      return true;
-    }
-    if (kubeconfigSelectMode) {
       setKubeconfigSelectMode(false);
       setSearchQuery('');
       updateSelection(0);
@@ -784,6 +790,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     }
     open();
     setKubeconfigSelectMode(true);
+    openedDirectlyRef.current = true;
   }, [hasActiveBlockingSurface, isOpen, open]);
   useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
 
