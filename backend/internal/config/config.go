@@ -17,7 +17,11 @@ const (
 	KubernetesClientBurst = 500
 
 	// KubernetesClientPreflightTimeout bounds the credential preflight check during client construction.
-	KubernetesClientPreflightTimeout = 8 * time.Second
+	// Must accommodate interactive exec credential plugins (e.g. kubectl-oidc_login/kubelogin) whose
+	// browser-based authcode flow can take well over a minute on first login or token expiry. kubelogin's
+	// own default authentication timeout is 180s, so we allow the same headroom here; otherwise the app
+	// would abort the login before the user can complete SSO in the browser.
+	KubernetesClientPreflightTimeout = 3 * time.Minute
 )
 
 // Refresh subsystem settings.
@@ -510,7 +514,10 @@ const (
 	ClusterAuthConnectivityRetryInterval = 15 * time.Second
 
 	// ClusterAuthRecoveryProbeTimeout bounds a single auth recovery probe request.
-	ClusterAuthRecoveryProbeTimeout = 10 * time.Second
+	// Sized to match the preflight timeout so an interactive exec credential plugin
+	// (e.g. kubectl-oidc_login/kubelogin) has time to complete its browser-based login
+	// during recovery instead of being killed mid-flow.
+	ClusterAuthRecoveryProbeTimeout = 3 * time.Minute
 
 	// ClusterAuthSteadyRetryInterval is the delay between recovery probes after
 	// the auth verdict has settled to invalid. The recovery loop never stops,
