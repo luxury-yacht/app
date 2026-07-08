@@ -228,8 +228,8 @@ export const AppLayout: React.FC = () => {
           <div className="no-active-clusters-overlay" role="status">
             {/* Block interactions and loading when no clusters are active. */}
             <div className="no-active-clusters-message">
-              <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or click + in the upper right
-              corner to open a cluster
+              No active clusters. Press <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or
+              click Open Cluster.
             </div>
           </div>
         )}

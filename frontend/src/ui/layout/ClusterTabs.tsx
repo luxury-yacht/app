@@ -48,6 +48,10 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
+  const fullAddWidthRef = useRef(140);
+  const showAddLabelRef = useRef(true);
+  const [showAddLabel, setShowAddLabel] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -199,6 +203,42 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     };
   }, [orderedTabs.length]);
 
+  useEffect(() => {
+    // Show "Open Cluster" beside the "+" while the bar has room; collapse to just
+    // "+" when the tabs need the space. The test compares the tabs' full content
+    // width to the wrapper minus the EXPANDED button width, so it doesn't
+    // flip-flop when toggling the label itself changes the layout.
+    const wrapper = tabsRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const strip = wrapper.querySelector<HTMLElement>('.cluster-tabs');
+
+    const measure = () => {
+      // Skip before layout (also keeps the label expanded in non-layout tests).
+      if (!wrapper.clientWidth) {
+        return;
+      }
+      if (showAddLabelRef.current && addBtnRef.current) {
+        fullAddWidthRef.current = addBtnRef.current.offsetWidth;
+      }
+      const tabsContentWidth = strip ? strip.scrollWidth : 0;
+      const next = tabsContentWidth + fullAddWidthRef.current <= wrapper.clientWidth;
+      if (next !== showAddLabelRef.current) {
+        showAddLabelRef.current = next;
+        setShowAddLabel(next);
+      }
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    if (strip) {
+      observer.observe(strip);
+    }
+    return () => observer.disconnect();
+  }, [orderedTabs.length]);
+
   // Note: `makeDragSource` produces a fresh closure every call (by design —
   // one call per tab per render). Do NOT wrap this .map() in useMemo with
   // `makeDragSource` as a dep: the factory has new identity each render and
@@ -235,12 +275,14 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       {/* Pinned to the right, outside the scrolling <Tabs> strip, so it can never
           scroll off. It is also the sole affordance when no clusters are open. */}
       <button
+        ref={addBtnRef}
         type="button"
         className="cluster-tabs-add"
         title="Open Cluster"
         aria-label="Open Cluster"
         onClick={() => onOpenCluster?.()}
       >
+        {showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
         <PlusIcon width={14} height={14} />
       </button>
     </div>

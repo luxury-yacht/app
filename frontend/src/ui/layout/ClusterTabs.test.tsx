@@ -116,6 +116,15 @@ describe('ClusterTabs', () => {
     expect(onOpenCluster).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the Open Cluster label next to the + by default', async () => {
+    mockState.selectedKubeconfigs = ['a'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs();
+
+    const addButton = container.querySelector('.cluster-tabs-add');
+    expect(addButton?.textContent).toContain('Open Cluster');
+  });
+
   it('orders tabs by persisted drag order with selection-order fallback', async () => {
     setClusterTabOrder(['b']);
     mockState.selectedKubeconfigs = ['a', 'b', 'c'];
