@@ -17,9 +17,6 @@ const meta: Meta<typeof AppHeader> = {
   parameters: {
     layout: 'fullscreen',
   },
-  args: {
-    contentTitle: 'cluster: production • namespace: default • view: Pods',
-  },
 };
 
 export default meta;

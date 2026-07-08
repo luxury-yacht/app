@@ -1,7 +1,7 @@
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   height: 38px;
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -14,41 +14,6 @@
 .app-header--mac {
   /* Offset for macOS window controls */
   padding-left: calc(80px / var(--app-zoom-factor, 1));
-}
-
-.app-header-center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-}
-
-.app-header-title {
-  /* Use display font for header title */
-  display: inline-flex;
-  align-items: baseline;
-  gap: 1.2rem;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: default;
-}
-
-.app-header-label {
-  color: var(--color-text-tertiary);
-  font-weight: 600;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  padding-right: 0.25rem;
-  letter-spacing: 0.03rem;
-}
-
-.app-header-value {
-  color: var(--color-text);
-  font-size: 0.8rem;
-  font-weight: 500;
 }
 
 .app-header-controls {

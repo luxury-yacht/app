@@ -52,7 +52,7 @@ describe('AppHeader', () => {
 
   it('renders header controls in the expected tab order', () => {
     act(() => {
-      root.render(<AppHeader contentTitle="cluster: dev" />);
+      root.render(<AppHeader />);
     });
 
     const focusables = Array.from(
@@ -69,7 +69,7 @@ describe('AppHeader', () => {
   it('does not toggle maximise from the header while a modal is open', () => {
     document.body.classList.add('modal-surface-open');
     act(() => {
-      root.render(<AppHeader contentTitle="cluster: dev" />);
+      root.render(<AppHeader />);
     });
 
     const header = container.querySelector('.app-header') as HTMLDivElement;

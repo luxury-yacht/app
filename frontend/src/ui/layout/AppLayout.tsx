@@ -30,7 +30,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
-import { ALL_NAMESPACES_DISPLAY_NAME, isAllNamespaces } from '@modules/namespace/constants';
+import { isAllNamespaces } from '@modules/namespace/constants';
 // Command Palette
 import { CommandPalette } from '@ui/command-palette/CommandPalette';
 import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCommands';
@@ -134,76 +134,9 @@ export const AppLayout: React.FC = () => {
     });
   }, []);
 
-  const getContentTitle = () => {
-    if (!hasActiveClusters) {
-      return 'No Active Clusters';
-    }
-    // Return empty string for welcome page (no view selected)
-    if (!viewState.viewType) {
-      return '';
-    }
-
-    const clusterLabel = kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
-    const namespaceLabel =
-      viewState.viewType === 'namespace' && namespace.selectedNamespace
-        ? isAllNamespaces(namespace.selectedNamespace)
-          ? ALL_NAMESPACES_DISPLAY_NAME
-          : namespace.selectedNamespace
-        : '';
-    const viewLabel = (() => {
-      if (viewState.viewType === 'overview') {
-        return 'Cluster Overview';
-      }
-
-      if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
-        const tabTitlesCluster: Record<string, string> = {
-          browse: 'Browse',
-          nodes: 'Nodes',
-          rbac: 'RBAC',
-          storage: 'Storage',
-          config: 'Config',
-          crds: 'CRDs',
-          custom: 'Custom Resources',
-          events: 'Events',
-        };
-        return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
-      }
-
-      if (viewState.viewType === 'namespace' && viewState.activeNamespaceTab) {
-        const tabTitlesNamespace: Record<string, string> = {
-          objects: 'All Objects',
-          map: 'Map',
-          workloads: 'Workloads',
-          pods: 'Pods',
-          autoscaling: 'Autoscaling',
-          config: 'Config',
-          custom: 'Custom Resources',
-          events: 'Events',
-          helm: 'Helm',
-          network: 'Network',
-          quotas: 'Quotas',
-          rbac: 'RBAC',
-          storage: 'Storage',
-        };
-        return tabTitlesNamespace[viewState.activeNamespaceTab] || 'Namespace';
-      }
-
-      const titles: Record<string, string> = {
-        cluster: 'Cluster Resources',
-        namespace: 'Namespace',
-      };
-      return titles[viewState.viewType] || '';
-    })();
-
-    const clusterText = clusterLabel ? `cluster: ${clusterLabel}` : '';
-    const namespaceText = namespaceLabel ? `namespace: ${namespaceLabel}` : '';
-    const viewText = viewLabel ? `view: ${viewLabel}` : '';
-    return [clusterText, namespaceText, viewText].filter(Boolean).join(' • ');
-  };
-
   return (
     <div className="app-container">
-      <AppHeader contentTitle={getContentTitle()} />
+      <AppHeader />
       <ClusterTabs onOpenCluster={handleOpenCluster} />
 
       <main

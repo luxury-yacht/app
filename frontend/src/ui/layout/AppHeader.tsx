@@ -15,11 +15,7 @@ import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 
-interface AppHeaderProps {
-  contentTitle: string;
-}
-
-const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
+const AppHeader: React.FC = () => {
   const isMac = isMacPlatform();
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
@@ -36,29 +32,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
       onDoubleClick={handleHeaderDoubleClick}
       data-app-region="header"
     >
-      <div className="app-header-center">
-        <span className="app-header-title">
-          {contentTitle.split(' • ').map((segment, index) => {
-            const separatorIndex = segment.indexOf(': ');
-            const hasLabel = separatorIndex > -1;
-            const label = hasLabel ? segment.slice(0, separatorIndex) : segment;
-            const value = hasLabel ? segment.slice(separatorIndex + 2) : '';
-            return (
-              <span key={`${label}-${index}`} className="app-header-segment">
-                {hasLabel ? (
-                  <>
-                    <span className="app-header-label">{label}</span>{' '}
-                    <span className="app-header-value">{value}</span>
-                  </>
-                ) : (
-                  <span className="app-header-value">{label}</span>
-                )}
-              </span>
-            );
-          })}
-        </span>
-      </div>
-
       <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>
         <UpdateStatus />
         <div className="status-indicators">
