@@ -65,6 +65,10 @@ const ObjectDiffModal = withLazyBoundary(
   () => import('@ui/modals/ObjectDiffModal'),
   'Loading diff viewer...'
 );
+const OpenClusterModal = withLazyBoundary(
+  () => import('@ui/modals/OpenClusterModal'),
+  'Loading clusters...'
+);
 const AppLogsPanel = withLazyBoundary(
   () => import('@ui/panels/app-logs/AppLogsPanel'),
   'Loading Application Logs Panel...'
@@ -90,6 +94,13 @@ export const AppLayout: React.FC = () => {
   const [isMapDebugOverlayVisible, setIsMapDebugOverlayVisible] = useState(false);
   const [isIconDebugOverlayVisible, setIsIconDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
+
+  // Stable so the memoized ClusterTabs doesn't re-render on every AppLayout render.
+  const { setIsOpenClusterModalOpen } = viewState;
+  const handleOpenCluster = useCallback(
+    () => setIsOpenClusterModalOpen(true),
+    [setIsOpenClusterModalOpen]
+  );
   // Empty-space drop target for dockable tabs: dropping a tab in empty
   // content area spawns a new floating group at the cursor. The ref is
   // merged onto the existing `<main>` element below — no new wrapper,
@@ -197,7 +208,7 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="app-container">
       <AppHeader contentTitle={getContentTitle()} />
-      <ClusterTabs />
+      <ClusterTabs onOpenCluster={handleOpenCluster} />
 
       <main
         ref={emptySpaceDropRef as (el: HTMLElement | null) => void}
@@ -288,7 +299,7 @@ export const AppLayout: React.FC = () => {
           <div className="no-active-clusters-overlay" role="status">
             {/* Block interactions and loading when no clusters are active. */}
             <div className="no-active-clusters-message">
-              No active clusters. Select a cluster from the kubeconfig dropdown.
+              No clusters open. Click the + in the tab bar to open a cluster.
             </div>
           </div>
         )}
@@ -335,6 +346,15 @@ export const AppLayout: React.FC = () => {
           isOpen={viewState.isObjectDiffOpen}
           initialRequest={viewState.objectDiffOpenRequest}
           onClose={() => viewState.setIsObjectDiffOpen(false)}
+        />
+      </PanelErrorBoundary>
+      <PanelErrorBoundary
+        onClose={() => viewState.setIsOpenClusterModalOpen(false)}
+        panelName="open-cluster"
+      >
+        <OpenClusterModal
+          isOpen={viewState.isOpenClusterModalOpen}
+          onClose={() => viewState.setIsOpenClusterModalOpen(false)}
         />
       </PanelErrorBoundary>
       <ErrorNotificationSystem />

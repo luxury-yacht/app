@@ -20,3 +20,32 @@
   min-width: 0;
   padding: 0;
 }
+
+/* Open-cluster "+" button. A flex sibling of <Tabs> (never inside its scroll
+   container), pinned to the right via margin-left:auto so it stays visible no
+   matter how many tabs scroll under it — and is the only control when zero
+   clusters are open. */
+.cluster-tabs-add {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  align-self: stretch;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #8a8a8a);
+  cursor: pointer;
+}
+
+.cluster-tabs-add:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--hover-bg, rgba(255, 255, 255, 0.06));
+}
+
+.cluster-tabs-add:focus-visible {
+  outline: 2px solid var(--focus-ring, #4a90d9);
+  outline-offset: -2px;
+}

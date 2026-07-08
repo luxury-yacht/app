@@ -68,22 +68,52 @@ describe('ClusterTabs', () => {
     container.remove();
   });
 
-  const renderTabs = async () => {
+  const renderTabs = async (props: { onOpenCluster?: () => void } = {}) => {
     await act(async () => {
       root.render(
         <TabDragProvider>
-          <ClusterTabs />
+          <ClusterTabs {...props} />
         </TabDragProvider>
       );
     });
   };
 
-  it('hides the tab row when fewer than two clusters are open', async () => {
+  it('renders the tab strip with a single cluster open', async () => {
     mockState.selectedKubeconfigs = ['a'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
+    expect(container.querySelector('.cluster-tabs')).not.toBeNull();
+    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
+      (node as HTMLElement).textContent?.trim()
+    );
+    expect(labels).toEqual(['a']);
+  });
+
+  it('renders only the add-cluster button when no clusters are open', async () => {
+    mockState.selectedKubeconfigs = [];
+    mockState.selectedKubeconfig = '';
+    await renderTabs();
+
+    expect(container.querySelector('.cluster-tabs-add')).not.toBeNull();
+    // No tab strip (and therefore no tabs) when there is nothing to switch between.
     expect(container.querySelector('.cluster-tabs')).toBeNull();
+  });
+
+  it('invokes onOpenCluster when the add-cluster button is clicked', async () => {
+    const onOpenCluster = vi.fn();
+    mockState.selectedKubeconfigs = ['a'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs({ onOpenCluster });
+
+    const addButton = container.querySelector('.cluster-tabs-add') as HTMLElement | null;
+    expect(addButton).not.toBeNull();
+
+    act(() => {
+      addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenCluster).toHaveBeenCalledTimes(1);
   });
 
   it('orders tabs by persisted drag order with selection-order fallback', async () => {

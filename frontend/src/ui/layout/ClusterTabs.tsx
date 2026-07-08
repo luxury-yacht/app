@@ -19,7 +19,7 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import './ClusterTabs.css';
@@ -33,7 +33,12 @@ type ClusterTab = {
   selection: string;
 };
 
-const ClusterTabs: React.FC = () => {
+interface ClusterTabsProps {
+  /** Opens the Open Cluster modal. Wired from AppLayout. */
+  onOpenCluster?: () => void;
+}
+
+const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   const {
     selectedKubeconfigs,
     selectedKubeconfig,
@@ -175,10 +180,6 @@ const ClusterTabs: React.FC = () => {
     }
 
     const root = document.documentElement;
-    if (orderedTabs.length < 2) {
-      root.style.setProperty('--cluster-tabs-height', '0px');
-      return;
-    }
     const updateHeight = () => {
       const height = tabsRef.current?.getBoundingClientRect().height ?? 0;
       root.style.setProperty('--cluster-tabs-height', `${Math.round(height)}px`);
@@ -197,10 +198,6 @@ const ClusterTabs: React.FC = () => {
       root.style.setProperty('--cluster-tabs-height', '0px');
     };
   }, [orderedTabs.length]);
-
-  if (orderedTabs.length < 2) {
-    return null;
-  }
 
   // Note: `makeDragSource` produces a fresh closure every call (by design —
   // one call per tab per render). Do NOT wrap this .map() in useMemo with
@@ -222,17 +219,30 @@ const ClusterTabs: React.FC = () => {
 
   return (
     <div ref={assignRootRef} className="cluster-tabs-wrapper">
-      <Tabs
-        aria-label="Cluster Tabs"
-        tabs={tabDescriptors}
-        activeId={activeTabId}
-        onActivate={(id) => {
-          const tab = tabsById.get(id);
-          if (tab) handleTabClick(tab.selection);
-        }}
-        dropInsertIndex={dropInsertIndex}
-        className="cluster-tabs"
-      />
+      {orderedTabs.length > 0 && (
+        <Tabs
+          aria-label="Cluster Tabs"
+          tabs={tabDescriptors}
+          activeId={activeTabId}
+          onActivate={(id) => {
+            const tab = tabsById.get(id);
+            if (tab) handleTabClick(tab.selection);
+          }}
+          dropInsertIndex={dropInsertIndex}
+          className="cluster-tabs"
+        />
+      )}
+      {/* Pinned to the right, outside the scrolling <Tabs> strip, so it can never
+          scroll off. It is also the sole affordance when no clusters are open. */}
+      <button
+        type="button"
+        className="cluster-tabs-add"
+        title="Open Cluster"
+        aria-label="Open Cluster"
+        onClick={() => onOpenCluster?.()}
+      >
+        <PlusIcon width={14} height={14} />
+      </button>
     </div>
   );
 };

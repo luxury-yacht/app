@@ -18,6 +18,8 @@ directory
      |- context
 ```
 
+- In addition to clicking the + button, ctrl/cmd+O opens the Open Cluster modal
+  - Add "Open Cluster" to the OS File menu
 - Only show files that contain contexts. Do not rely on extensions, or lack of extensions
 - Attempt to validate the contexts, and put a warning icon next to invalid contexts. Invalid contexts should not be clickable
   - Validate syntax only, no connectivity checks

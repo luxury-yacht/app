@@ -1,0 +1,22 @@
+.open-cluster-modal {
+  width: 480px;
+  max-width: 90vw;
+}
+
+.open-cluster-modal__body {
+  padding: 16px;
+  min-height: 120px;
+}
+
+.open-cluster-modal__placeholder {
+  margin: 0;
+  color: var(--text-secondary, #8a8a8a);
+}
+
+.open-cluster-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
