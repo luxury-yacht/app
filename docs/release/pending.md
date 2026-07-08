@@ -1,6 +1,7 @@
 ### Added
 
 - Pagination controls now allow you to manually enter and jump straight to a specific page number.
+- Command Palette is now in the **View** menu
 
 ### Changed
 

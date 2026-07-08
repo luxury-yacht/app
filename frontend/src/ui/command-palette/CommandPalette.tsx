@@ -21,6 +21,7 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { EventsOn } from '@wailsjs/runtime/runtime';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -751,6 +752,20 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     enabled: true,
     priority: 100,
   });
+
+  // Also open from the native "View → Command Palette" menu item, which emits
+  // this runtime event. Held in a ref so the subscription stays stable across
+  // the open/close re-renders that recreate handleGlobalOpenShortcut.
+  const openShortcutRef = useRef(handleGlobalOpenShortcut);
+  useEffect(() => {
+    openShortcutRef.current = handleGlobalOpenShortcut;
+  }, [handleGlobalOpenShortcut]);
+  useEffect(() => {
+    const dispose = EventsOn('open-command-palette', () => {
+      openShortcutRef.current();
+    });
+    return dispose;
+  }, []);
 
   // Focus input when opened
   useEffect(() => {

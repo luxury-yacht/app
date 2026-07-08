@@ -174,6 +174,17 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 func createViewMenu(appMenu *menu.Menu, app *App) {
 	viewMenu := appMenu.AddSubmenu("View")
 
+	// Command Palette — the primary way to jump to any command or object. Placed
+	// first (as in VS Code's View menu) so the shortcut is discoverable. The
+	// frontend binds the same Cmd/Ctrl+Shift+P shortcut; the click emits an event
+	// the palette listens for and opens through its guarded open path, so firing
+	// both the native accelerator and the web shortcut is harmless.
+	viewMenu.AddText("Command Palette", keys.Combo("p", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
+		app.emitEvent("open-command-palette")
+	})
+
+	viewMenu.AddSeparator()
+
 	// Zoom controls
 	//
 	// On Windows the Wails v2 keyMap has no entries for "+" or "-", so native

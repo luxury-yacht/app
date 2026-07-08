@@ -32,7 +32,7 @@ app.syso
 !scripts/build/
 
 # Frontend dependencies and build
-frontend/node_modules/
+**/node_modules/
 frontend/dist/
 frontend/coverage/
 *.js.map

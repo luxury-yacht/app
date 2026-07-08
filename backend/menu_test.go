@@ -163,6 +163,35 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 	assertMenuContainsLabel(t, labels, "Show Diagnostics Panel")
 }
 
+func TestViewMenuOffersCommandPalette(t *testing.T) {
+	app := &App{Ctx: context.Background()}
+	events := []string{}
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		events = append(events, name)
+	}
+	m := menu.NewMenu()
+
+	createViewMenu(m, app)
+
+	viewMenu := findSubmenu(t, m, "View")
+	assertMenuContainsLabel(t, menuLabels(viewMenu), "Command Palette")
+
+	clicked := false
+	for _, item := range viewMenu.Items {
+		if item.Label == "Command Palette" && item.Click != nil {
+			item.Click(nil)
+			clicked = true
+		}
+	}
+	if !clicked {
+		t.Fatal("expected View menu item \"Command Palette\" with click handler")
+	}
+
+	if len(events) != 1 || events[0] != "open-command-palette" {
+		t.Fatalf("expected [open-command-palette], got %#v", events)
+	}
+}
+
 func assertMenuContainsLabel(t *testing.T, labels []string, want string) {
 	t.Helper()
 	for _, label := range labels {

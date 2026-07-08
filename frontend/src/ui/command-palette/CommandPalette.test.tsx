@@ -147,6 +147,20 @@ vi.mock('@/core/refresh/client', () => ({
   fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
 }));
 
+// Capture Wails runtime event subscriptions so tests can emit native-menu
+// events (e.g. the View → Command Palette item) to the component.
+const wailsEventHandlers = new Map<string, (...args: unknown[]) => void>();
+
+vi.mock('@wailsjs/runtime/runtime', () => ({
+  EventsOn: (event: string, handler: (...args: unknown[]) => void) => {
+    wailsEventHandlers.set(event, handler);
+    return () => wailsEventHandlers.delete(event);
+  },
+  EventsOff: (event: string) => {
+    wailsEventHandlers.delete(event);
+  },
+}));
+
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (options: {
     key: string;
@@ -210,6 +224,15 @@ describe('CommandPalette component behaviour', () => {
     });
   };
 
+  const emitWailsEvent = async (event: string, ...args: unknown[]) => {
+    const handler = wailsEventHandlers.get(event);
+    expect(handler).toBeTruthy();
+    await act(async () => {
+      handler?.(...args);
+      await Promise.resolve();
+    });
+  };
+
   const queryItems = () =>
     Array.from(container.querySelectorAll<HTMLDivElement>('.command-palette-item'));
 
@@ -235,6 +258,7 @@ describe('CommandPalette component behaviour', () => {
   beforeEach(() => {
     registeredGlobalShortcuts = [];
     registeredPaletteShortcuts = [];
+    wailsEventHandlers.clear();
     fetchSnapshotMock.mockReset();
     openWithObjectMock.mockReset();
     container = document.createElement('div');
@@ -248,6 +272,25 @@ describe('CommandPalette component behaviour', () => {
     });
     container.remove();
     vi.useRealTimers();
+  });
+
+  it('opens when the native View menu emits open-command-palette', async () => {
+    await renderPalette([]);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    await emitWailsEvent('open-command-palette');
+
+    expect(container.querySelector('.command-palette')).toBeTruthy();
+  });
+
+  it('ignores open-command-palette while it is already open', async () => {
+    await renderPalette([]);
+    await emitWailsEvent('open-command-palette');
+    expect(container.querySelector('.command-palette')).toBeTruthy();
+
+    // A second emit must not throw or re-open; the guarded open path no-ops.
+    await emitWailsEvent('open-command-palette');
+    expect(container.querySelectorAll('.command-palette').length).toBe(1);
   });
 
   it('navigates commands with the keyboard and executes the selection', async () => {
