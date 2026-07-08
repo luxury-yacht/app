@@ -104,7 +104,7 @@
 }
 
 .command-palette-group-header {
-  padding: 0.25rem 1rem;
+  padding: 1rem 1rem 0.25rem 1rem;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
