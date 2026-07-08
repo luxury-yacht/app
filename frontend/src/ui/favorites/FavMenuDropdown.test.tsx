@@ -9,6 +9,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts';
 import type { Favorite } from '@/core/persistence/favorites';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +167,19 @@ describe('FavMenuDropdown', () => {
   const renderComponent = async () => {
     await act(async () => {
       root.render(<FavMenuDropdown />);
+      await Promise.resolve();
+    });
+  };
+
+  // Escape-to-close relies on the keyboard-surface registry, which only exists
+  // inside a KeyboardProvider (the shell always provides one).
+  const renderWithKeyboard = async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <FavMenuDropdown />
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   };
@@ -390,6 +404,47 @@ describe('FavMenuDropdown', () => {
     expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
 
     await clickButton();
+    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+  });
+
+  // -----------------------------------------------------------------------
+  // 9. Escape closes the dropdown when it is open
+  // -----------------------------------------------------------------------
+
+  it('closes the dropdown when Escape is pressed', async () => {
+    await renderWithKeyboard();
+
+    await clickButton();
+    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
+
+    // Focus stays on the trigger after opening, so Escape targets an element
+    // inside the menu's keyboard surface.
+    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
+    expect(trigger).toBeTruthy();
+    trigger!.focus();
+
+    await act(async () => {
+      trigger!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+  });
+
+  it('leaves the dropdown closed unaffected by Escape', async () => {
+    await renderWithKeyboard();
+
+    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
     expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
   });
 });

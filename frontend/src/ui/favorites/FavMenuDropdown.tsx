@@ -16,6 +16,7 @@ import {
   FavoritePinIcon,
 } from '@shared/components/icons/FavoriteIcons';
 import { useFavorites } from '@core/contexts/FavoritesContext';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
@@ -64,6 +65,18 @@ const FavMenuDropdown: React.FC = () => {
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
   const closeDropdown = useCallback(() => setIsOpen(false), []);
+
+  // Register the open menu as a keyboard surface so Escape closes it, matching
+  // the menu/dropdown keyboard contract (docs/frontend/keyboard.md).
+  useKeyboardSurface({
+    kind: 'menu',
+    rootRef: anchorRef,
+    active: isOpen,
+    onEscape: () => {
+      closeDropdown();
+      return true;
+    },
+  });
   const handleTriggerKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key !== 'Enter' && event.key !== ' ') {
