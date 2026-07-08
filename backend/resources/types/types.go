@@ -19,6 +19,8 @@ type KubeconfigInfo struct {
 	Context          string `json:"context"`          // Context name within the file
 	IsDefault        bool   `json:"isDefault"`        // Whether this is from the default config file
 	IsCurrentContext bool   `json:"isCurrentContext"` // Whether this is the current context in the file
+	Invalid          bool   `json:"invalid"`          // Structural validation (clientcmd ConfirmUsable) failed; zero value = valid
+	InvalidReason    string `json:"invalidReason"`    // Why the context is invalid (empty when valid)
 }
 
 // WindowSettings represents the window position and size

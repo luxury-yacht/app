@@ -117,6 +117,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -124,6 +126,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -151,6 +155,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -158,6 +164,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -184,6 +192,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -191,6 +201,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -217,6 +229,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -224,6 +238,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -255,6 +271,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -283,6 +301,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -322,6 +342,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -329,6 +351,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -336,6 +360,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -386,6 +412,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -393,6 +421,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -451,6 +481,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -458,6 +490,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -465,6 +499,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -530,6 +566,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -537,6 +575,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -544,6 +584,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -578,6 +620,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -585,6 +629,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -592,6 +638,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -626,6 +674,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -633,6 +683,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -663,6 +715,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -670,6 +724,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -677,6 +733,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -712,6 +770,8 @@ describe('KubeconfigContext', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -719,6 +779,8 @@ describe('KubeconfigContext', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'gamma',
@@ -726,6 +788,8 @@ describe('KubeconfigContext', () => {
         context: 'staging',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);
@@ -783,6 +847,8 @@ describe('KubeconfigContext', () => {
         context: 'minikube',
         isDefault: true,
         isCurrentContext: true,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     getKubeconfigsMock.mockResolvedValue(kubeconfigs);

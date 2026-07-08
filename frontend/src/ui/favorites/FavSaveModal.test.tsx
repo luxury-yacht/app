@@ -49,7 +49,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
     setActiveKubeconfig: vi.fn(),
-    setSelectedKubeconfig: vi.fn().mockResolvedValue(undefined),
     getClusterMeta: vi.fn((selection: string) =>
       selection === '/home/user/.kube/config:prod-cluster'
         ? { id: 'config:prod-cluster', name: 'prod-cluster' }

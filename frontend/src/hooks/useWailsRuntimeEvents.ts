@@ -38,6 +38,7 @@ export interface UseClusterHealthListenerResult {
 interface WailsRuntimeEventHandlers {
   onOpenSettings: () => void;
   onOpenAbout: () => void;
+  onOpenCluster: () => void;
   onToggleSidebar: () => void;
   onToggleAppLogsPanel: () => void;
   onToggleDiagnostics: () => void;
@@ -63,6 +64,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
   const {
     onOpenSettings,
     onOpenAbout,
+    onOpenCluster,
     onToggleSidebar,
     onToggleAppLogsPanel,
     onToggleDiagnostics,
@@ -78,6 +80,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     const eventHandlers: Array<[string, () => void]> = [
       ['open-settings', onOpenSettings],
       ['open-about', onOpenAbout],
+      ['open-cluster', onOpenCluster],
       ['toggle-sidebar', onToggleSidebar],
       ['toggle-app-logs-panel', onToggleAppLogsPanel],
       ['toggle-diagnostics', onToggleDiagnostics],
@@ -94,6 +97,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
   }, [
     onOpenSettings,
     onOpenAbout,
+    onOpenCluster,
     onToggleSidebar,
     onToggleAppLogsPanel,
     onToggleDiagnostics,

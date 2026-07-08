@@ -42,7 +42,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
     setActiveKubeconfig: vi.fn(),
-    setSelectedKubeconfig: vi.fn().mockResolvedValue(undefined),
     getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
     kubeconfigs: [],
     loadKubeconfigs: vi.fn().mockResolvedValue(undefined),

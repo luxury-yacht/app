@@ -22,6 +22,7 @@ import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { EventsOn } from '@wailsjs/runtime/runtime';
+import { useEventBus } from '@/core/events';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -218,6 +219,10 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
+  // True when the palette was opened straight into a sub-mode (e.g. kubeconfig
+  // mode via the "+"/⌘O event). Then Escape closes in one press instead of
+  // backing out to a general palette the user never navigated through.
+  const openedDirectlyRef = useRef(false);
   const mouseSelectionArmedRef = useRef(false);
   const { hasActiveBlockingSurface } = useKeyboardContext();
   const { openWithObject } = useObjectPanel();
@@ -458,6 +463,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
+    openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
     setCatalogStats(null);
@@ -474,6 +480,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
+    openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
     setCatalogStats(null);
@@ -618,14 +625,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     if (!isOpen) {
       return false;
     }
-    if (namespaceSelectMode) {
+    if (namespaceSelectMode || kubeconfigSelectMode) {
+      // If the palette was opened straight into this sub-mode, Escape closes it;
+      // otherwise it backs out to the general palette it was navigated from.
+      if (openedDirectlyRef.current) {
+        close();
+        return true;
+      }
       setNamespaceSelectMode(false);
-      setSearchQuery('');
-      updateSelection(0);
-      setHideCursor(false);
-      return true;
-    }
-    if (kubeconfigSelectMode) {
       setKubeconfigSelectMode(false);
       setSearchQuery('');
       updateSelection(0);
@@ -766,6 +773,29 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     });
     return dispose;
   }, []);
+
+  // Open the palette directly in kubeconfig-select mode. This is the "Open
+  // Cluster" surface: the "+" in the cluster tab bar, ⌘O, and File → Open Cluster
+  // all emit this event. open() resets the mode, so set it after.
+  const openInKubeconfigMode = useCallback(() => {
+    if (isOpen) {
+      setKubeconfigSelectMode(true);
+      setSearchQuery('');
+      setSelectedIndex(0);
+      selectedIndexRef.current = 0;
+      return;
+    }
+    if (hasActiveBlockingSurface()) {
+      return;
+    }
+    open();
+    setKubeconfigSelectMode(true);
+    openedDirectlyRef.current = true;
+  }, [hasActiveBlockingSurface, isOpen, open]);
+  useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
+  // The header search button opens the palette in its normal (search) mode via
+  // the same guarded open path as the keyboard shortcut.
+  useEventBus('command-palette:open', () => openShortcutRef.current(), []);
 
   // Focus input when opened
   useEffect(() => {

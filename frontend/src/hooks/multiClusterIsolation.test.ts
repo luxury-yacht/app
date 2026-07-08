@@ -122,6 +122,7 @@ describe('Wails Runtime Event Listener Cleanup', () => {
     const handlers = {
       onOpenSettings: vi.fn(),
       onOpenAbout: vi.fn(),
+      onOpenCluster: vi.fn(),
       onToggleSidebar: vi.fn(),
       onToggleAppLogsPanel: vi.fn(),
       onToggleDiagnostics: vi.fn(),
@@ -139,6 +140,7 @@ describe('Wails Runtime Event Listener Cleanup', () => {
     });
 
     expect(mockRuntime.handlers.has('open-settings')).toBe(true);
+    expect(mockRuntime.handlers.has('open-cluster')).toBe(true);
 
     act(() => {
       root.unmount();

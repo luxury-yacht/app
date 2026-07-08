@@ -18,6 +18,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { eventBus } from '@/core/events';
+import { isMacPlatform } from '@/utils/platform';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
 import ClusterTabs from '@ui/layout/ClusterTabs';
@@ -29,7 +30,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
-import { ALL_NAMESPACES_DISPLAY_NAME, isAllNamespaces } from '@modules/namespace/constants';
+import { isAllNamespaces } from '@modules/namespace/constants';
 // Command Palette
 import { CommandPalette } from '@ui/command-palette/CommandPalette';
 import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCommands';
@@ -90,6 +91,12 @@ export const AppLayout: React.FC = () => {
   const [isMapDebugOverlayVisible, setIsMapDebugOverlayVisible] = useState(false);
   const [isIconDebugOverlayVisible, setIsIconDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
+
+  // The "+" opens the command palette in kubeconfig mode (the Open Cluster
+  // surface). Stable so the memoized ClusterTabs doesn't re-render needlessly.
+  const handleOpenCluster = useCallback(() => {
+    eventBus.emit('command-palette:open-kubeconfigs');
+  }, []);
   // Empty-space drop target for dockable tabs: dropping a tab in empty
   // content area spawns a new floating group at the cursor. The ref is
   // merged onto the existing `<main>` element below — no new wrapper,
@@ -127,77 +134,10 @@ export const AppLayout: React.FC = () => {
     });
   }, []);
 
-  const getContentTitle = () => {
-    if (!hasActiveClusters) {
-      return 'No Active Clusters';
-    }
-    // Return empty string for welcome page (no view selected)
-    if (!viewState.viewType) {
-      return '';
-    }
-
-    const clusterLabel = kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
-    const namespaceLabel =
-      viewState.viewType === 'namespace' && namespace.selectedNamespace
-        ? isAllNamespaces(namespace.selectedNamespace)
-          ? ALL_NAMESPACES_DISPLAY_NAME
-          : namespace.selectedNamespace
-        : '';
-    const viewLabel = (() => {
-      if (viewState.viewType === 'overview') {
-        return 'Cluster Overview';
-      }
-
-      if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
-        const tabTitlesCluster: Record<string, string> = {
-          browse: 'Browse',
-          nodes: 'Nodes',
-          rbac: 'RBAC',
-          storage: 'Storage',
-          config: 'Config',
-          crds: 'CRDs',
-          custom: 'Custom Resources',
-          events: 'Events',
-        };
-        return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
-      }
-
-      if (viewState.viewType === 'namespace' && viewState.activeNamespaceTab) {
-        const tabTitlesNamespace: Record<string, string> = {
-          objects: 'All Objects',
-          map: 'Map',
-          workloads: 'Workloads',
-          pods: 'Pods',
-          autoscaling: 'Autoscaling',
-          config: 'Config',
-          custom: 'Custom Resources',
-          events: 'Events',
-          helm: 'Helm',
-          network: 'Network',
-          quotas: 'Quotas',
-          rbac: 'RBAC',
-          storage: 'Storage',
-        };
-        return tabTitlesNamespace[viewState.activeNamespaceTab] || 'Namespace';
-      }
-
-      const titles: Record<string, string> = {
-        cluster: 'Cluster Resources',
-        namespace: 'Namespace',
-      };
-      return titles[viewState.viewType] || '';
-    })();
-
-    const clusterText = clusterLabel ? `cluster: ${clusterLabel}` : '';
-    const namespaceText = namespaceLabel ? `namespace: ${namespaceLabel}` : '';
-    const viewText = viewLabel ? `view: ${viewLabel}` : '';
-    return [clusterText, namespaceText, viewText].filter(Boolean).join(' • ');
-  };
-
   return (
     <div className="app-container">
-      <AppHeader contentTitle={getContentTitle()} />
-      <ClusterTabs />
+      <AppHeader />
+      <ClusterTabs onOpenCluster={handleOpenCluster} />
 
       <main
         ref={emptySpaceDropRef as (el: HTMLElement | null) => void}
@@ -288,7 +228,8 @@ export const AppLayout: React.FC = () => {
           <div className="no-active-clusters-overlay" role="status">
             {/* Block interactions and loading when no clusters are active. */}
             <div className="no-active-clusters-message">
-              No active clusters. Select a cluster from the kubeconfig dropdown.
+              No active clusters. Press <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or
+              click Open Cluster.
             </div>
           </div>
         )}

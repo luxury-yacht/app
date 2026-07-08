@@ -163,6 +163,35 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 	assertMenuContainsLabel(t, labels, "Show Diagnostics Panel")
 }
 
+func TestFileMenuOffersOpenCluster(t *testing.T) {
+	app := &App{Ctx: context.Background()}
+	events := []string{}
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		events = append(events, name)
+	}
+	m := menu.NewMenu()
+
+	createApplicationMenu(m, app)
+
+	fileMenu := findSubmenu(t, m, "File")
+	assertMenuContainsLabel(t, menuLabels(fileMenu), "Open Cluster")
+
+	clicked := false
+	for _, item := range fileMenu.Items {
+		if item.Label == "Open Cluster" && item.Click != nil {
+			item.Click(nil)
+			clicked = true
+		}
+	}
+	if !clicked {
+		t.Fatal("expected File menu item \"Open Cluster\" with click handler")
+	}
+
+	if len(events) != 1 || events[0] != "open-cluster" {
+		t.Fatalf("expected [open-cluster], got %#v", events)
+	}
+}
+
 func TestViewMenuOffersCommandPalette(t *testing.T) {
 	app := &App{Ctx: context.Background()}
 	events := []string{}

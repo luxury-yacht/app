@@ -192,6 +192,8 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
 
@@ -211,6 +213,72 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
+  it('sorts kubeconfig commands by context, not filename', () => {
+    mocks.kubeconfig.kubeconfigs = [
+      {
+        name: 'zfile',
+        path: '/kube/zfile',
+        context: 'charlie',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+      {
+        name: 'afile',
+        path: '/kube/afile',
+        context: 'alpha',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+      {
+        name: 'mfile',
+        path: '/kube/mfile',
+        context: 'bravo',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+    ];
+
+    const { getCommands, unmount } = renderHook();
+    const labels = getCommands()
+      .filter((command) => command.category === 'Kubeconfigs')
+      .map((command) => command.label);
+
+    expect(labels).toEqual(['afile:alpha', 'mfile:bravo', 'zfile:charlie']);
+
+    unmount();
+  });
+
+  it('flags an invalid kubeconfig context and does not open it', () => {
+    mocks.kubeconfig.kubeconfigs = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'broken',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: true,
+        invalidReason: 'no cluster',
+      },
+    ];
+
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'kubeconfig-/kube/alpha:broken');
+
+    expect(command?.description).toContain('Invalid');
+    command?.action();
+
+    expect(mocks.kubeconfig.openKubeconfig).not.toHaveBeenCalled();
+    expect(mocks.kubeconfig.setActiveKubeconfig).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
   it('switches to an active kubeconfig without removing it', () => {
     mocks.kubeconfig.kubeconfigs = [
       {
@@ -219,6 +287,8 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
@@ -245,6 +315,8 @@ describe('CommandPaletteCommands', () => {
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
       {
         name: 'beta',
@@ -252,6 +324,8 @@ describe('CommandPaletteCommands', () => {
         context: 'prod',
         isDefault: false,
         isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
       },
     ];
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];

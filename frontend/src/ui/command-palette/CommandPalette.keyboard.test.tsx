@@ -7,6 +7,7 @@ import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import type { Command } from './CommandPaletteCommands';
+import { eventBus } from '@/core/events';
 import { CommandPalette } from './CommandPalette';
 
 const openWithObjectMock = vi.fn();
@@ -193,6 +194,38 @@ describe('CommandPalette keyboard integration', () => {
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
 
+    await act(async () => {
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).toBeNull();
+  });
+
+  it('closes on the first Escape when opened directly in kubeconfig mode', async () => {
+    const commands: Command[] = [
+      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
+    ];
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <CommandPalette commands={commands} />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      eventBus.emit('command-palette:open-kubeconfigs');
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).not.toBeNull();
+
+    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
     await act(async () => {
       input?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })

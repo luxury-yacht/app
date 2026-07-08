@@ -70,7 +70,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     selectedClusterIds: kubeconfigState.selectedKubeconfigs,
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: setSelectedKubeconfigsMock,
-    setSelectedKubeconfig: vi.fn(),
     closeKubeconfig: closeKubeconfigMock,
     setActiveKubeconfig: setActiveKubeconfigMock,
     getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
@@ -396,9 +395,27 @@ describe('GlobalShortcuts', () => {
     expect(QuitMock).not.toHaveBeenCalled();
   });
 
-  it('quits the application on menu:close when one or no tabs remain', async () => {
+  it('closes the last cluster tab on menu:close without quitting the app', async () => {
     kubeconfigState.selectedKubeconfig = 'cluster-1';
     kubeconfigState.selectedKubeconfigs = ['cluster-1'];
+
+    await renderComponent({});
+
+    expect(wailsEventHandlers['menu:close']).toBeDefined();
+
+    await act(async () => {
+      wailsEventHandlers['menu:close']();
+      await Promise.resolve();
+    });
+
+    expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-1');
+    expect(QuitMock).not.toHaveBeenCalled();
+    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
+  });
+
+  it('does nothing on menu:close when no clusters are open', async () => {
+    kubeconfigState.selectedKubeconfig = '';
+    kubeconfigState.selectedKubeconfigs = [];
 
     await renderComponent({});
 
@@ -408,8 +425,8 @@ describe('GlobalShortcuts', () => {
       wailsEventHandlers['menu:close']();
     });
 
-    expect(QuitMock).toHaveBeenCalledTimes(1);
-    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
+    expect(closeKubeconfigMock).not.toHaveBeenCalled();
+    expect(QuitMock).not.toHaveBeenCalled();
   });
 
   it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {

@@ -39,7 +39,7 @@ textarea,
 .app-container {
   flex: 1;
   display: grid;
-  grid-template-rows: 38px auto 1fr;
+  grid-template-rows: var(--app-header-height) auto 1fr;
   grid-template-columns: auto 1fr;
   border: 1px solid var(--color-bg-secondary);
   overflow: hidden;

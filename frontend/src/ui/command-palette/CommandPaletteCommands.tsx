@@ -652,29 +652,47 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
-    return kubeconfigs.map((config) => {
+    // Order by context (the primary identity users read), then filename to keep
+    // duplicate context names deterministic.
+    const sorted = [...kubeconfigs].sort((a, b) => {
+      const byContext = a.context.localeCompare(b.context);
+      return byContext !== 0 ? byContext : a.name.localeCompare(b.name);
+    });
+
+    return sorted.map((config) => {
       // Backend ALWAYS expects format "path:context"
       const configValue = `${config.path}:${config.context}`;
       const isActive = selectedKubeconfigs.includes(configValue);
       const label = `${config.name}:${config.context}`;
+      const isInvalid = config.invalid;
 
       return {
         id: `kubeconfig-${configValue}`,
         label,
         renderLabel: (
           <span className="command-palette-kubeconfig-label">
-            <span className="command-palette-kubeconfig-file">{config.name}</span>
-            <span className="command-palette-kubeconfig-separator" aria-hidden="true">
-              :
-            </span>
             <span className="command-palette-kubeconfig-context">{config.context}</span>
+            {isInvalid && (
+              <span className="command-palette-kubeconfig-invalid" title={config.invalidReason}>
+                ⚠ invalid
+              </span>
+            )}
+            {config.name !== config.context && (
+              <span className="command-palette-kubeconfig-file">{config.name}</span>
+            )}
           </span>
         ),
-        description:
-          config.name !== config.context ? `From ${config.name}` : 'Switch to this context',
+        description: isInvalid
+          ? `Invalid: ${config.invalidReason || 'unusable context'}`
+          : config.name !== config.context
+            ? `From ${config.name}`
+            : 'Switch to this context',
         category: 'Kubeconfigs',
-        icon: isActive ? '✓' : undefined,
+        icon: isInvalid ? undefined : isActive ? '✓' : undefined,
         action: () => {
+          if (isInvalid) {
+            return; // A structurally-invalid context can't be opened.
+          }
           if (isActive) {
             setActiveKubeconfig(configValue);
             return;

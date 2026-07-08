@@ -3,19 +3,8 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppHeader from './AppHeader';
 
-const viewStateMock = vi.hoisted(() => ({
-  setIsSettingsOpen: vi.fn(),
-}));
 const runtimeMock = vi.hoisted(() => ({
   WindowToggleMaximise: vi.fn(),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => viewStateMock,
-}));
-
-vi.mock('@shared/components/KubeconfigSelector', () => ({
-  default: () => <button type="button">Kubeconfig</button>,
 }));
 
 vi.mock('@ui/favorites/FavMenuDropdown', () => ({
@@ -50,7 +39,6 @@ describe('AppHeader', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    viewStateMock.setIsSettingsOpen.mockReset();
     runtimeMock.WindowToggleMaximise.mockReset();
   });
 
@@ -64,7 +52,7 @@ describe('AppHeader', () => {
 
   it('renders header controls in the expected tab order', () => {
     act(() => {
-      root.render(<AppHeader contentTitle="cluster: dev" />);
+      root.render(<AppHeader />);
     });
 
     const focusables = Array.from(
@@ -75,13 +63,13 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['Kubeconfig', 'Favorites', 'Settings']);
+    ).toEqual(['Favorites', 'Command Palette']);
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {
     document.body.classList.add('modal-surface-open');
     act(() => {
-      root.render(<AppHeader contentTitle="cluster: dev" />);
+      root.render(<AppHeader />);
     });
 
     const header = container.querySelector('.app-header') as HTMLDivElement;

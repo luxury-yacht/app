@@ -19,7 +19,7 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import './ClusterTabs.css';
@@ -33,7 +33,12 @@ type ClusterTab = {
   selection: string;
 };
 
-const ClusterTabs: React.FC = () => {
+interface ClusterTabsProps {
+  /** Opens the Open Cluster modal. Wired from AppLayout. */
+  onOpenCluster?: () => void;
+}
+
+const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   const {
     selectedKubeconfigs,
     selectedKubeconfig,
@@ -43,6 +48,10 @@ const ClusterTabs: React.FC = () => {
   } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
+  const fullAddWidthRef = useRef(140);
+  const showAddLabelRef = useRef(true);
+  const [showAddLabel, setShowAddLabel] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -175,10 +184,6 @@ const ClusterTabs: React.FC = () => {
     }
 
     const root = document.documentElement;
-    if (orderedTabs.length < 2) {
-      root.style.setProperty('--cluster-tabs-height', '0px');
-      return;
-    }
     const updateHeight = () => {
       const height = tabsRef.current?.getBoundingClientRect().height ?? 0;
       root.style.setProperty('--cluster-tabs-height', `${Math.round(height)}px`);
@@ -198,9 +203,48 @@ const ClusterTabs: React.FC = () => {
     };
   }, [orderedTabs.length]);
 
-  if (orderedTabs.length < 2) {
-    return null;
-  }
+  useEffect(() => {
+    // Show "Open Cluster" beside the "+" while the bar has room; collapse to just
+    // "+" when the tabs need the space. The test compares the tabs' full content
+    // width to the wrapper minus the EXPANDED button width, so it doesn't
+    // flip-flop when toggling the label itself changes the layout.
+    const wrapper = tabsRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const strip = wrapper.querySelector<HTMLElement>('.cluster-tabs');
+
+    const measure = () => {
+      // Skip before layout (also keeps the label expanded in non-layout tests).
+      if (!wrapper.clientWidth) {
+        return;
+      }
+      if (showAddLabelRef.current && addBtnRef.current) {
+        fullAddWidthRef.current = addBtnRef.current.offsetWidth;
+      }
+      // Sum the tab widths directly. scrollWidth only reports the intrinsic
+      // content width while the strip OVERFLOWS; once the tabs fit it equals the
+      // strip's own (wide) width, which would wedge the label collapsed after the
+      // window is widened.
+      let tabsContentWidth = 0;
+      strip?.querySelectorAll<HTMLElement>('.tab-item').forEach((el) => {
+        tabsContentWidth += el.offsetWidth;
+      });
+      const next = tabsContentWidth + fullAddWidthRef.current <= wrapper.clientWidth;
+      if (next !== showAddLabelRef.current) {
+        showAddLabelRef.current = next;
+        setShowAddLabel(next);
+      }
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    if (strip) {
+      observer.observe(strip);
+    }
+    return () => observer.disconnect();
+  }, [orderedTabs.length]);
 
   // Note: `makeDragSource` produces a fresh closure every call (by design —
   // one call per tab per render). Do NOT wrap this .map() in useMemo with
@@ -222,17 +266,32 @@ const ClusterTabs: React.FC = () => {
 
   return (
     <div ref={assignRootRef} className="cluster-tabs-wrapper">
-      <Tabs
-        aria-label="Cluster Tabs"
-        tabs={tabDescriptors}
-        activeId={activeTabId}
-        onActivate={(id) => {
-          const tab = tabsById.get(id);
-          if (tab) handleTabClick(tab.selection);
-        }}
-        dropInsertIndex={dropInsertIndex}
-        className="cluster-tabs"
-      />
+      {orderedTabs.length > 0 && (
+        <Tabs
+          aria-label="Cluster Tabs"
+          tabs={tabDescriptors}
+          activeId={activeTabId}
+          onActivate={(id) => {
+            const tab = tabsById.get(id);
+            if (tab) handleTabClick(tab.selection);
+          }}
+          dropInsertIndex={dropInsertIndex}
+          className="cluster-tabs"
+        />
+      )}
+      {/* Pinned to the right, outside the scrolling <Tabs> strip, so it can never
+          scroll off. It is also the sole affordance when no clusters are open. */}
+      <button
+        ref={addBtnRef}
+        type="button"
+        className="cluster-tabs-add"
+        title="Open Cluster"
+        aria-label="Open Cluster"
+        onClick={() => onOpenCluster?.()}
+      >
+        {showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
+        <PlusIcon width={14} height={14} />
+      </button>
     </div>
   );
 };

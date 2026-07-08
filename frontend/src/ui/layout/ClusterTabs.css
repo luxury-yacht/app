@@ -11,6 +11,9 @@
   grid-row: 2;
   display: flex;
   min-width: 0;
+  min-height: calc(var(--tab-height, 32px) + 1px);
+  background-color: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* The shared <Tabs> root fills the wrapper so the strip occupies the
@@ -19,4 +22,62 @@
   flex: 1 1 auto;
   min-width: 0;
   padding: 0;
+}
+
+/* Open-cluster "+" button. A flex sibling of <Tabs> (never inside its scroll
+   container), pinned to the right via margin-left:auto so it stays visible no
+   matter how many tabs scroll under it — and is the only control when zero
+   clusters are open. */
+.cluster-tabs-add {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: stretch;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+.cluster-tabs-add__label {
+  white-space: nowrap;
+}
+
+.cluster-tabs-add:hover {
+  color: var(--color-text);
+  background: var(--color-bg-tertiary);
+}
+
+.cluster-tabs-add:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* --- Tab visual hierarchy (style only; scoped to the cluster tab strip so the
+   dockable/diagnostics/object-panel <Tabs> surfaces are unaffected). --- */
+
+/* Inactive tabs use a lighter weight so the active tab stands out. Colour is
+   left to the base rules (muted, and brighter on hover). */
+.cluster-tabs .tab-item {
+  font-weight: var(--font-weight-normal);
+}
+
+/* Active tab: bold, full-brightness text, accent underline (was a muted
+   same-weight underline, so the selection barely read). */
+.cluster-tabs .tab-item--active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Quieter dividers — fainter and shorter. Adjusts colour/size, NOT opacity, so
+   the base rules that hide the divider next to the active/hovered tab still work. */
+.cluster-tabs .tab-item:not(:last-child)::after {
+  height: 50%;
+  top: 30%;
+  background-color: var(--color-border);
 }

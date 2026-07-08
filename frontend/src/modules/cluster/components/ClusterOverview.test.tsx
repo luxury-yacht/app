@@ -49,7 +49,6 @@ const {
         selectedClusterIds: ['cluster-1'],
         kubeconfigsLoading: false,
         setSelectedKubeconfigs: vi.fn(),
-        setSelectedKubeconfig: vi.fn(),
         setActiveKubeconfig: vi.fn(),
         getClusterMeta: vi.fn(),
         loadKubeconfigs: vi.fn(),

@@ -6,36 +6,19 @@
  */
 
 import React from 'react';
-import KubeconfigSelector from '@shared/components/KubeconfigSelector';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
 import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
-import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
-import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { isMacPlatform } from '@/utils/platform';
+import { eventBus } from '@/core/events';
+import { SearchIcon } from '@shared/components/icons/SharedIcons';
 import './AppHeader.css';
 
-interface AppHeaderProps {
-  contentTitle: string;
-}
-
-const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
-  const viewState = useViewState();
-
+const AppHeader: React.FC = () => {
   const isMac = isMacPlatform();
-  const activateOnEnterOrSpace = (
-    event: React.KeyboardEvent<HTMLElement>,
-    onActivate: () => void
-  ) => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
-    }
-    event.preventDefault();
-    onActivate();
-  };
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
@@ -51,29 +34,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
       onDoubleClick={handleHeaderDoubleClick}
       data-app-region="header"
     >
-      <div className="app-header-center">
-        <span className="app-header-title">
-          {contentTitle.split(' • ').map((segment, index) => {
-            const separatorIndex = segment.indexOf(': ');
-            const hasLabel = separatorIndex > -1;
-            const label = hasLabel ? segment.slice(0, separatorIndex) : segment;
-            const value = hasLabel ? segment.slice(separatorIndex + 2) : '';
-            return (
-              <span key={`${label}-${index}`} className="app-header-segment">
-                {hasLabel ? (
-                  <>
-                    <span className="app-header-label">{label}</span>{' '}
-                    <span className="app-header-value">{value}</span>
-                  </>
-                ) : (
-                  <span className="app-header-value">{label}</span>
-                )}
-              </span>
-            );
-          })}
-        </span>
-      </div>
-
       <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>
         <UpdateStatus />
         <div className="status-indicators">
@@ -81,24 +41,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
           <MetricsStatus />
           <SessionsStatus />
         </div>
-        <KubeconfigSelector />
         <FavMenuDropdown />
-        <div
+        <button
+          type="button"
           className="settings-button"
-          onClick={() => viewState.setIsSettingsOpen(true)}
-          onKeyDown={(event) =>
-            activateOnEnterOrSpace(event, () => {
-              viewState.setIsSettingsOpen(true);
-            })
-          }
-          title="Settings"
-          aria-label="Settings"
-          role="button"
-          tabIndex={0}
+          onClick={() => eventBus.emit('command-palette:open')}
+          title={`Command Palette (${isMac ? '⇧⌘P' : 'Ctrl+Shift+P'})`}
+          aria-label="Command Palette"
           data-app-header-last-focusable="true"
         >
-          <SettingsIcon width={20} height={20} />
-        </div>
+          <SearchIcon width={14} height={14} />
+        </button>
       </div>
     </div>
   );

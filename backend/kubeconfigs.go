@@ -118,14 +118,25 @@ func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPa
 
 	a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
 
-	// Create an entry for each context in the kubeconfig.
+	// Create an entry for each context in the kubeconfig. Validate each context
+	// structurally (references an existing cluster + user) via ConfirmUsable —
+	// syntax only, no server connectivity — so the Open Cluster UI can flag and
+	// disable broken contexts.
 	for contextName := range config.Contexts {
+		invalid := false
+		invalidReason := ""
+		if err := clientcmd.ConfirmUsable(*config, contextName); err != nil {
+			invalid = true
+			invalidReason = err.Error()
+		}
 		a.availableKubeconfigs = append(a.availableKubeconfigs, KubeconfigInfo{
 			Name:             displayName,
 			Path:             cleanedPath,
 			Context:          contextName,
 			IsDefault:        isDefault,
 			IsCurrentContext: contextName == config.CurrentContext,
+			Invalid:          invalid,
+			InvalidReason:    invalidReason,
 		})
 	}
 }

@@ -18,7 +18,7 @@ import {
   mergeClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { EventsOn, EventsOff, Quit } from '@wailsjs/runtime/runtime';
+import { EventsOn, EventsOff } from '@wailsjs/runtime/runtime';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
@@ -292,21 +292,19 @@ export function GlobalShortcuts({
   });
 
   // Handle menu:close event from the backend (Cmd/Ctrl+W via native menu).
-  // Closes the active cluster tab, or quits when no tabs remain.
+  // Closes the active cluster tab. Closing the last cluster leaves the app
+  // running in its no-clusters state; it no longer quits (handleCloseClusterTab
+  // is a no-op when nothing is open).
   useEffect(() => {
     const handleMenuClose = () => {
-      if (selectedKubeconfigs.length <= 1) {
-        Quit();
-      } else {
-        handleCloseClusterTab();
-      }
+      handleCloseClusterTab();
     };
 
     EventsOn('menu:close', handleMenuClose);
     return () => {
       EventsOff('menu:close');
     };
-  }, [selectedKubeconfigs, handleCloseClusterTab]);
+  }, [handleCloseClusterTab]);
 
   useShortcut({
     key: KeyCodes.ARROW_LEFT,

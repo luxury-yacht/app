@@ -24,7 +24,7 @@ import {
   computeClusterHashes,
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
-import { eventBus, useEventBus } from '@/core/events';
+import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import {
@@ -41,7 +41,6 @@ interface KubeconfigContextType {
   selectedClusterIds: string[];
   kubeconfigsLoading: boolean;
   setSelectedKubeconfigs: (configs: string[]) => Promise<void>;
-  setSelectedKubeconfig: (config: string) => Promise<void>;
   openKubeconfig: (selection: string) => Promise<void>;
   closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
@@ -491,12 +490,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [applySelectionTransition]
   );
 
-  const setSelectedKubeconfig = useCallback(
-    async (config: string) => {
-      await setSelectedKubeconfigs(config ? [config] : []);
-    },
-    [setSelectedKubeconfigs]
-  );
 
   const openKubeconfig = useCallback(
     async (selection: string) => {
@@ -624,17 +617,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     void runGC();
   }, [kubeconfigs, selectedClusterIds]);
 
-  // Listen for kubeconfig change events from command palette
-  useEventBus(
-    'kubeconfig:change-request',
-    (newKubeconfig) => {
-      if (newKubeconfig) {
-        setSelectedKubeconfig(newKubeconfig);
-      }
-    },
-    [setSelectedKubeconfig]
-  );
-
   // Memoize context value
   const contextValue = useMemo(
     () => ({
@@ -646,7 +628,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
-      setSelectedKubeconfig,
       openKubeconfig,
       closeKubeconfig,
       setActiveKubeconfig,
@@ -662,7 +643,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
-      setSelectedKubeconfig,
       openKubeconfig,
       closeKubeconfig,
       setActiveKubeconfig,

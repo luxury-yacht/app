@@ -54,11 +54,18 @@ const TABS: TabDefinition[] = [
   { id: 'advanced', label: 'Advanced', icon: AdvancedIcon },
 ];
 
+const KNOWN_TAB_IDS = new Set<SettingsTabId>(TABS.map((tab) => tab.id));
+
+// A previously-persisted tab that no longer exists (e.g. the removed Kubeconfigs
+// tab) falls back to the default so the settings panel is never blank.
+const resolveTab = (tab: SettingsTabId | null | undefined): SettingsTabId =>
+  tab && KNOWN_TAB_IDS.has(tab) ? tab : DEFAULT_SETTINGS_TAB;
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTabId>(
-    () => initialTab ?? getLastSettingsTab() ?? DEFAULT_SETTINGS_TAB
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
+    resolveTab(initialTab ?? getLastSettingsTab())
   );
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -70,7 +77,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
       setIsClosing(false);
       // When opening, honor an explicit initialTab override; otherwise restore
       // the last-used tab (falling back to default).
-      setActiveTab(initialTab ?? getLastSettingsTab() ?? DEFAULT_SETTINGS_TAB);
+      setActiveTab(resolveTab(initialTab ?? getLastSettingsTab()));
     } else if (shouldRender) {
       setIsClosing(true);
       const timer = setTimeout(() => {
