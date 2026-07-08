@@ -1,6 +1,3 @@
-- Should we use cmd+k instead of (or in addition to) cmd+shift+p for the command palette?
-- cmd+o opens the palette for kubeconfig selection
-
 - Build a plugin architecture
   - AI
     - Conversational support to perform functions of the app

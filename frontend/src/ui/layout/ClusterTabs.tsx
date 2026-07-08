@@ -222,7 +222,14 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       if (showAddLabelRef.current && addBtnRef.current) {
         fullAddWidthRef.current = addBtnRef.current.offsetWidth;
       }
-      const tabsContentWidth = strip ? strip.scrollWidth : 0;
+      // Sum the tab widths directly. scrollWidth only reports the intrinsic
+      // content width while the strip OVERFLOWS; once the tabs fit it equals the
+      // strip's own (wide) width, which would wedge the label collapsed after the
+      // window is widened.
+      let tabsContentWidth = 0;
+      strip?.querySelectorAll<HTMLElement>('.tab-item').forEach((el) => {
+        tabsContentWidth += el.offsetWidth;
+      });
       const next = tabsContentWidth + fullAddWidthRef.current <= wrapper.clientWidth;
       if (next !== showAddLabelRef.current) {
         showAddLabelRef.current = next;
