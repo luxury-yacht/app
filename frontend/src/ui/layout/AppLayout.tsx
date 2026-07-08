@@ -18,6 +18,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { eventBus } from '@/core/events';
+import { isMacPlatform } from '@/utils/platform';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
 import ClusterTabs from '@ui/layout/ClusterTabs';
@@ -294,7 +295,8 @@ export const AppLayout: React.FC = () => {
           <div className="no-active-clusters-overlay" role="status">
             {/* Block interactions and loading when no clusters are active. */}
             <div className="no-active-clusters-message">
-              No clusters open. Click the + in the tab bar to open a cluster.
+              <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or click + in the upper right
+              corner to open a cluster
             </div>
           </div>
         )}

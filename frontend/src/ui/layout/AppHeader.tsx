@@ -11,9 +11,7 @@ import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
-import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
-import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 
@@ -22,19 +20,7 @@ interface AppHeaderProps {
 }
 
 const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
-  const viewState = useViewState();
-
   const isMac = isMacPlatform();
-  const activateOnEnterOrSpace = (
-    event: React.KeyboardEvent<HTMLElement>,
-    onActivate: () => void
-  ) => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
-    }
-    event.preventDefault();
-    onActivate();
-  };
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
@@ -80,23 +66,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
           <MetricsStatus />
           <SessionsStatus />
         </div>
-        <FavMenuDropdown />
-        <div
-          className="settings-button"
-          onClick={() => viewState.setIsSettingsOpen(true)}
-          onKeyDown={(event) =>
-            activateOnEnterOrSpace(event, () => {
-              viewState.setIsSettingsOpen(true);
-            })
-          }
-          title="Settings"
-          aria-label="Settings"
-          role="button"
-          tabIndex={0}
-          data-app-header-last-focusable="true"
-        >
-          <SettingsIcon width={20} height={20} />
-        </div>
+        <FavMenuDropdown lastHeaderControl />
       </div>
     </div>
   );

@@ -3,15 +3,8 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppHeader from './AppHeader';
 
-const viewStateMock = vi.hoisted(() => ({
-  setIsSettingsOpen: vi.fn(),
-}));
 const runtimeMock = vi.hoisted(() => ({
   WindowToggleMaximise: vi.fn(),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => viewStateMock,
 }));
 
 vi.mock('@ui/favorites/FavMenuDropdown', () => ({
@@ -46,7 +39,6 @@ describe('AppHeader', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    viewStateMock.setIsSettingsOpen.mockReset();
     runtimeMock.WindowToggleMaximise.mockReset();
   });
 
@@ -71,7 +63,7 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['Favorites', 'Settings']);
+    ).toEqual(['Favorites']);
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {
