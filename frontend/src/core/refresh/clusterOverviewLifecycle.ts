@@ -1,4 +1,4 @@
-import type { ClusterLifecycleState } from '@core/contexts/ClusterLifecycleContext';
+import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
 
 const clusterOverviewRefreshableStates = new Set<ClusterLifecycleState>([
   'loading',
@@ -7,13 +7,13 @@ const clusterOverviewRefreshableStates = new Set<ClusterLifecycleState>([
 ]);
 
 export const canActivateClusterOverviewRefresh = (
-  lifecycleState: ClusterLifecycleState
+  lifecycleState: ClusterLifecycleState | undefined
 ): boolean => {
-  return clusterOverviewRefreshableStates.has(lifecycleState);
+  return lifecycleState !== undefined && clusterOverviewRefreshableStates.has(lifecycleState);
 };
 
 export const shouldSuppressClusterOverviewUnavailableError = (
-  lifecycleState: ClusterLifecycleState,
+  lifecycleState: ClusterLifecycleState | undefined,
   error?: string | null
 ): boolean => {
   if (!error?.includes('no active clusters available')) {

@@ -95,7 +95,14 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Pods/PodsTab', () => ({
 describe('ObjectPanelContent', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  const objectData = { kind: 'Deployment', name: 'api', namespace: 'team-a' };
+  const objectData = {
+    kind: 'Deployment',
+    name: 'api',
+    namespace: 'team-a',
+    clusterId: 'cluster-1',
+    group: 'apps',
+    version: 'v1',
+  };
 
   const baseProps: React.ComponentProps<typeof ObjectPanelContent> = {
     activeTab: 'details',

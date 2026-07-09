@@ -8,6 +8,7 @@
  * Includes error handling in event callbacks to prevent crashes.
  */
 
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
@@ -149,8 +150,9 @@ export interface AppEvents {
   // finds and focuses a specific row matching the given resource fields.
   'gridtable:focus-request': GridTableFocusRequest;
 
-  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext.
-  'cluster:lifecycle': { clusterId: string; state: string; previousState: string };
+  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext,
+  // which closes the state union at the ingestion boundary.
+  'cluster:lifecycle': { clusterId: string; state: ClusterLifecycleState };
 
   // App visibility events
   'app:visibility-hidden': void;

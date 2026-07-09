@@ -28,7 +28,7 @@ const ConnectivityStatus: React.FC = () => {
   const authState = useActiveClusterAuthState(selectedClusterId);
   const { getClusterState } = useClusterLifecycle();
   const { namespaceReady, namespacesPermissionDenied } = useNamespace();
-  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : undefined;
 
   useEffect(() => {
     setIsPaused(!getAutoRefreshEnabled());

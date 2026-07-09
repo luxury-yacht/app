@@ -9,7 +9,7 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
-  type ResolvedObjectReference,
+  type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
 import type { OpenWithObjectOptions } from '@modules/object-panel/hooks/useObjectPanel';
 
@@ -26,7 +26,7 @@ export interface ResourceGridObjectIdentityInput {
 
 export interface ResourceGridObjectIdentityAdapter<T> {
   key: (row: T, index?: number) => string;
-  ref: (row: T) => ResolvedObjectReference;
+  ref: (row: T) => ClusterObjectReference;
   open: (row: T) => void;
   openMap: (row: T) => void;
   navigate: (row: T) => void;

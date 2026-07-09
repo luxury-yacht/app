@@ -19,7 +19,7 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
   const { selectedClusterId } = useKubeconfig();
   const { viewType } = useViewState();
   const { getClusterState } = useClusterLifecycle();
-  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : undefined;
   const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
 
   // Metrics for foreground UI should follow the active cluster only.

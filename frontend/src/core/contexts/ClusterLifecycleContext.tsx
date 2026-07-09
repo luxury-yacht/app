@@ -10,22 +10,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { requestAppState, readAllClusterLifecycleStates } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { parseClusterLifecycleState, type ClusterLifecycleState } from './clusterLifecycleState';
 
 // ---------- Types ----------
 
-export type ClusterLifecycleState =
-  | 'connecting'
-  | 'auth_failed'
-  | 'connected'
-  | 'loading'
-  | 'loading_slow'
-  | 'ready'
-  | 'disconnected'
-  | 'reconnecting'
-  | '';
-
 interface ClusterLifecycleContextType {
-  getClusterState: (clusterId: string) => ClusterLifecycleState;
+  /** Current lifecycle state, or undefined when the cluster is not tracked. */
+  getClusterState: (clusterId: string) => ClusterLifecycleState | undefined;
   isClusterReady: (clusterId: string) => boolean;
 }
 
@@ -72,24 +63,29 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
     const handleLifecycleEvent = (...args: unknown[]) => {
       const payload = args[0] as
         { clusterId?: string; state?: string; previousState?: string } | undefined;
-      if (!active || !payload?.clusterId || !payload.state) {
+      if (!active || !payload?.clusterId) {
         return;
       }
-      eventDelivered.add(payload.clusterId);
-      eventBus.emit('cluster:lifecycle', {
-        clusterId: payload.clusterId,
-        state: payload.state,
-        previousState: payload.previousState ?? '',
-      });
+      // Close the union at the boundary: transitions carrying an unknown state
+      // (version skew) are dropped — the previous state stays authoritative,
+      // and the dropped event does NOT count as "delivered" so hydration can
+      // still backfill this cluster.
+      const state = parseClusterLifecycleState(payload.state);
+      if (!state) {
+        return;
+      }
+      const clusterId = payload.clusterId;
+      eventDelivered.add(clusterId);
+      eventBus.emit('cluster:lifecycle', { clusterId, state });
       setStates((prev) => {
         // Identity-stable on no-op events: consumers key derived scope lists on
         // getClusterState identity, and a fresh Map per redundant event re-runs
         // their reconciliation effects on every heartbeat.
-        if (prev.get(payload.clusterId!) === payload.state) {
+        if (prev.get(clusterId) === state) {
           return prev;
         }
         const next = new Map(prev);
-        next.set(payload.clusterId!, payload.state as ClusterLifecycleState);
+        next.set(clusterId, state);
         return next;
       });
     };
@@ -104,23 +100,28 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
       read: readAllClusterLifecycleStates,
     }).then((result: Record<string, string> | null) => {
       if (active && result) {
+        // Normalize at the boundary; entries with an unknown state are dropped
+        // (warned once by the parser) rather than stored or relayed.
+        const hydrated: Array<[string, ClusterLifecycleState]> = [];
+        for (const [clusterId, raw] of Object.entries(result)) {
+          const state = parseClusterLifecycleState(raw);
+          if (clusterId && state) {
+            hydrated.push([clusterId, state]);
+          }
+        }
         setStates((prev) => {
-          const merged = new Map(Object.entries(result) as [string, ClusterLifecycleState][]);
+          const merged = new Map(hydrated);
           // Events received after the RPC was sent take precedence.
           prev.forEach((state, id) => merged.set(id, state));
           return merged;
         });
         // Backfill eventBus consumers for clusters the relay hasn't spoken
         // for. Everything the UI map learns, the refresh layer must learn.
-        Object.entries(result).forEach(([clusterId, state]) => {
-          if (!clusterId || !state || eventDelivered.has(clusterId)) {
+        hydrated.forEach(([clusterId, state]) => {
+          if (eventDelivered.has(clusterId)) {
             return;
           }
-          eventBus.emit('cluster:lifecycle', {
-            clusterId,
-            state,
-            previousState: '',
-          });
+          eventBus.emit('cluster:lifecycle', { clusterId, state });
         });
       }
     });
@@ -153,8 +154,8 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
   // ---------- Accessors ----------
 
   const getClusterState = useCallback(
-    (clusterId: string): ClusterLifecycleState => {
-      return states.get(clusterId) || '';
+    (clusterId: string): ClusterLifecycleState | undefined => {
+      return states.get(clusterId);
     },
     [states]
   );

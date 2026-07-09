@@ -8,7 +8,7 @@
 import { useMemo } from 'react';
 import { useResourceMetrics } from '@/core/resource-metrics';
 import type { UtilizationData } from './detailsTabTypes';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 
 const UTILIZATION_KINDS = new Set([
   'pod',
@@ -54,12 +54,12 @@ interface UtilizationDetail {
 }
 
 interface UseUtilizationDataParams {
-  objectData: KubernetesObjectReference | null | undefined;
+  objectData: ObjectPanelRef | null | undefined;
   detail: unknown;
 }
 
 function deriveDetailUtilizationData(
-  objectData: KubernetesObjectReference | null | undefined,
+  objectData: ObjectPanelRef | null | undefined,
   detail: unknown
 ): UtilizationData | null {
   const objectKind = objectData?.kind?.toLowerCase();
@@ -193,9 +193,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
   }, [detailMetrics, liveMetrics.metrics, objectKind]);
 }
 
-export function useHasUtilization(
-  objectData: KubernetesObjectReference | null | undefined
-): boolean {
+export function useHasUtilization(objectData: ObjectPanelRef | null | undefined): boolean {
   return useMemo(() => {
     const kind = objectData?.kind?.toLowerCase();
     return kind ? UTILIZATION_KINDS.has(kind) : false;

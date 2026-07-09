@@ -23,6 +23,7 @@ import {
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { useRefreshScopedDomain } from '@core/refresh';
+import type { DomainStatus } from '@core/refresh/store';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
 import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -139,7 +140,8 @@ const buildSelectionParts = (item: CatalogItem | null, useShortNames: boolean) =
   };
 };
 
-const isSnapshotLoading = (status: string) => status === 'loading' || status === 'initialising';
+const isSnapshotLoading = (status: DomainStatus) =>
+  status === 'loading' || status === 'initialising';
 
 // Format a concise, user-friendly age label for change notifications.
 const formatChangeAge = (timestamp: number): string => {

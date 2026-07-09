@@ -2,6 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { buildConnectivityPresentation } from './connectivityPresentation';
 
 describe('buildConnectivityPresentation', () => {
+  it('shows "No cluster selected" when there is no lifecycle state (untracked/none selected)', () => {
+    const presentation = buildConnectivityPresentation({
+      clusterId: undefined,
+      clusterName: undefined,
+      lifecycleState: undefined,
+      namespaceReady: false,
+      health: 'healthy',
+      isPaused: false,
+      isRefreshing: false,
+      authState: {
+        hasError: false,
+        isRecovering: false,
+        reason: '',
+        clusterName: '',
+        secondsUntilRetry: 0,
+        errorClass: '',
+        execCommand: '',
+        diagnosticKind: '',
+        diagnosticSummary: '',
+      },
+    });
+
+    expect(presentation.status).toBe('inactive');
+    expect(presentation.summary).toBe('No cluster selected');
+  });
+
   it('shows restricted access — not perpetual loading — when namespace listing is permission-denied', () => {
     const presentation = buildConnectivityPresentation({
       clusterId: 'cluster-a',

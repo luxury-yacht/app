@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { UtilizationData } from './detailsTabTypes';
 import { useUtilizationData } from './useUtilizationData';
 
@@ -30,7 +30,7 @@ vi.mock('@/core/settings/appPreferences', () => ({
 }));
 
 interface HookProps {
-  objectData: KubernetesObjectReference;
+  objectData: ObjectPanelRef;
   detail: unknown;
 }
 

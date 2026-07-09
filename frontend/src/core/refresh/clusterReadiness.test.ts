@@ -9,11 +9,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus } from '@/core/events';
 import { clusterReadiness } from './clusterReadiness';
 
-const lifecycle = (clusterId: string, state: string) => {
-  eventBus.emit('cluster:lifecycle', { clusterId, state, previousState: '' });
+const lifecycle = (clusterId: string, state: ClusterLifecycleState) => {
+  eventBus.emit('cluster:lifecycle', { clusterId, state });
 };
 
 describe('clusterReadiness', () => {
@@ -41,7 +42,7 @@ describe('clusterReadiness', () => {
   });
 
   it('treats failure and teardown states as unserviceable', () => {
-    for (const state of ['auth_failed', 'disconnected', 'reconnecting']) {
+    for (const state of ['auth_failed', 'disconnected', 'reconnecting'] as const) {
       lifecycle('cluster-a', state);
       expect(clusterReadiness.isServiceable('cluster-a')).toBe(false);
     }

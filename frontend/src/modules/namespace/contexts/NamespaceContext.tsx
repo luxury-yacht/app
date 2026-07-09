@@ -35,7 +35,7 @@ import {
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
-import type { ClusterLifecycleState } from '@core/contexts/ClusterLifecycleContext';
+import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
 
 export interface NamespaceListItem {
   name: string;
@@ -86,7 +86,7 @@ interface NamespaceProviderProps {
   children: ReactNode;
 }
 
-const isNamespaceRefreshAvailable = (state: ClusterLifecycleState): boolean =>
+const isNamespaceRefreshAvailable = (state: ClusterLifecycleState | undefined): boolean =>
   state === 'loading' || state === 'loading_slow' || state === 'ready';
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {

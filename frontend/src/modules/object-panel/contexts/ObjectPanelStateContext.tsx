@@ -25,6 +25,7 @@ import {
   buildObjectPanelRef,
   getObjectPanelScopeEvictions,
   objectPanelId,
+  type ObjectPanelRef,
 } from '@modules/object-panel/objectPanelRef';
 
 export { objectPanelId } from '@modules/object-panel/objectPanelRef';
@@ -40,7 +41,7 @@ export { objectPanelId } from '@modules/object-panel/objectPanelRef';
  * back. The cache should only be freed when the user actually closes
  * the panel for good, which is what this helper enforces.
  */
-const evictPanelScopes = (ref: KubernetesObjectReference): void => {
+const evictPanelScopes = (ref: ObjectPanelRef): void => {
   getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
     resetRefreshDomain(domain, scope);
     if (domain === 'container-logs') {
@@ -51,7 +52,7 @@ const evictPanelScopes = (ref: KubernetesObjectReference): void => {
 
 interface ObjectPanelState {
   // Map of panelId → objectRef for all open object panels
-  openPanels: Map<string, KubernetesObjectReference>;
+  openPanels: Map<string, ObjectPanelRef>;
   // Map of panelId → which sub-tab (Details/YAML/Events/etc.) is active
   // for that panel. Lifted out of ObjectPanel's useReducer so the active
   // sub-tab survives cluster switches: ObjectPanel components unmount
@@ -71,7 +72,7 @@ interface ObjectPanelStateContextType {
   // Derived: true if any object panel is open
   showObjectPanel: boolean;
   // The full map of open panels
-  openPanels: Map<string, KubernetesObjectReference>;
+  openPanels: Map<string, ObjectPanelRef>;
 
   // Open/activate a panel for the given object reference.
   // If the object is already open, activates the existing tab.

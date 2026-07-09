@@ -12,17 +12,17 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import {
   buildObjectReference,
   buildRequiredObjectReference,
+  type ClusterObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
-export interface ObjectPanelRef extends ResolvedObjectReference {
-  clusterId: string;
-  group: string;
-  version: string;
-  kind: string;
-  name: string;
-}
+/**
+ * The panel system's reference currency: a cluster-complete object reference.
+ * Everything past useObjectPanel.openWithObject's validation boundary carries
+ * this shape, so a panel ref without full identity does not compile.
+ */
+export type ObjectPanelRef = ClusterObjectReference;
 
 export interface ObjectPanelRefOptions {
   clusterScope?: string;
@@ -138,10 +138,9 @@ export const buildObjectPanelRef = (
   if (!clusterId) {
     throw new Error('Object panel reference is missing clusterId');
   }
-  const ref = buildRequiredObjectReference(normalizePanelInput(input), {
+  return buildRequiredObjectReference(normalizePanelInput(input), {
     fallbackClusterId: clusterId,
   });
-  return ref as ObjectPanelRef;
 };
 
 export const objectPanelId = (ref: KubernetesObjectReference): string => {

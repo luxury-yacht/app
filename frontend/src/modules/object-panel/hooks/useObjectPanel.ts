@@ -10,10 +10,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { useDockablePanelContext } from '@ui/dockable';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import {
-  assertObjectRefHasRequiredIdentity,
-  type KubernetesObjectReference,
-} from '@/types/view-state';
+import type { KubernetesObjectReference } from '@/types/view-state';
+import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 
@@ -36,7 +35,7 @@ export interface OpenWithObjectOptions {
  * without relying on a single global selected object.
  */
 interface CurrentObjectPanelContextValue {
-  objectData: KubernetesObjectReference | null;
+  objectData: ObjectPanelRef | null;
   panelId: string | null;
   // Object creation time (RFC3339 UTC) for the current object. The shared
   // ResourceHeader formats it into Age for every kind. Empty/absent when the

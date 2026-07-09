@@ -35,19 +35,21 @@ type clusterLifecycleEntry struct {
 type clusterLifecycle struct {
 	mu            sync.Mutex
 	entries       map[string]*clusterLifecycleEntry
-	emitter       func(clusterId, state, previousState string)
+	emitter       func(clusterId string, state, previousState ClusterLifecycleState)
 	slowThreshold time.Duration
 }
 
 // newClusterLifecycle creates a lifecycle tracker with the default slow-loading threshold.
-func newClusterLifecycle(emitter func(clusterId, state, previousState string)) *clusterLifecycle {
+func newClusterLifecycle(
+	emitter func(clusterId string, state, previousState ClusterLifecycleState),
+) *clusterLifecycle {
 	return newClusterLifecycleWithSlowThreshold(emitter, config.ClusterLifecycleSlowLoadingThreshold)
 }
 
 // newClusterLifecycleWithSlowThreshold creates a lifecycle tracker with a custom
 // slow-loading threshold (useful for testing with shorter durations).
 func newClusterLifecycleWithSlowThreshold(
-	emitter func(clusterId, state, previousState string),
+	emitter func(clusterId string, state, previousState ClusterLifecycleState),
 	threshold time.Duration,
 ) *clusterLifecycle {
 	return &clusterLifecycle{
@@ -93,7 +95,7 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 			cl.mu.Unlock()
 
 			if cl.emitter != nil {
-				cl.emitter(clusterId, string(ClusterStateLoadingSlow), string(ClusterStateLoading))
+				cl.emitter(clusterId, ClusterStateLoadingSlow, ClusterStateLoading)
 			}
 		})
 	}
@@ -101,7 +103,7 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 	cl.mu.Unlock()
 
 	if cl.emitter != nil {
-		cl.emitter(clusterId, string(state), string(previousState))
+		cl.emitter(clusterId, state, previousState)
 	}
 }
 

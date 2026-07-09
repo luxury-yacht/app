@@ -56,6 +56,41 @@ when discovery, typed code, or the catalog supplies it.
 Synthetic app resources still need stable identity. Helm releases use
 `helm.sh/v3`, `HelmRelease`.
 
+### Frontend Reference Types
+
+Frontend object references form a ladder; carry the narrowest type the boundary
+allows:
+
+- `KubernetesObjectReference` (`frontend/src/types/view-state.ts`) — the loose,
+  pre-validation boundary shape for raw Kubernetes payloads and heterogeneous
+  link/row inputs. Every identity field is nullable. It must not leak past a
+  validation boundary.
+- `ResolvedObjectReference` (`frontend/src/shared/utils/objectIdentity.ts`) —
+  GVK + name required; built by `buildObjectReference`.
+- `ClusterObjectReference` (same module) — `clusterId` also required, the shape
+  the Agent Contract demands past a cluster-identity boundary. Built by
+  `buildRequiredObjectReference` / `buildRequiredRelatedObjectReference`, or
+  narrowed in place by `assertObjectRefHasRequiredIdentity` — an assertion
+  function and the single runtime chokepoint, called at
+  `useObjectPanel.openWithObject`. The object-panel chain carries it end-to-end
+  as `ObjectPanelRef` (an alias), from `openPanels` through
+  `CurrentObjectPanelContext` to detail and utilization props.
+
+Rules:
+
+- Pre-chokepoint aggregation boundaries (`useNavigateToView`, `useObjectLink`,
+  `ObjectPanelLink`, `useObjectActionController` inputs,
+  `buildGridTableFocusRequest`) deliberately accept the loose type: they
+  collect heterogeneous producers, and their outputs already enforce identity
+  at runtime (focus requests require `clusterId`; panel opening asserts). Do
+  not scatter the loose→required conversion into individual producers.
+- `fallbackClusterId` is an explicit, producer-side decision at cluster-scoped
+  views. Never bake a selected-cluster default into shared helpers.
+- References narrowed in place by the assert may still hold `null` in optional
+  fields — the assert preserves the original object so raw payload fields
+  survive, while the builders normalize. Required fields are verified non-empty
+  either way.
+
 ## Status
 
 Projected DTO status fields:

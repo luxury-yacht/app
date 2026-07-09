@@ -491,7 +491,6 @@ describe('useCapabilities', () => {
       eventBus.emit('cluster:lifecycle', {
         clusterId: 'test-cluster',
         state: 'ready',
-        previousState: 'loading',
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -584,7 +583,6 @@ describe('useCapabilities', () => {
       eventBus.emit('cluster:lifecycle', {
         clusterId: 'test-cluster',
         state: 'ready',
-        previousState: 'loading',
       });
       await Promise.resolve();
       await Promise.resolve();
