@@ -6,3 +6,5 @@
 - Internal type-safety hardening. Cluster lifecycle states, drain status rendering, drain progress phases, navigation view types, appearance mode, and object references now use closed types end-to-end, so an invalid state fails at compile time instead of causing a bug at runtime.
 
 ### Fixed
+
+- Release notes tooltip for the update notification is now scrollable.

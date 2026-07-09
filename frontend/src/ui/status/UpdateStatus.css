@@ -70,7 +70,7 @@
    the viewport; all content stays reachable. */
 .update-status__tooltip-notes {
   white-space: pre-wrap;
-  max-height: 50vh;
+  max-height: 350px;
   overflow-y: auto;
   color: var(--color-text-secondary);
   line-height: 1.35;

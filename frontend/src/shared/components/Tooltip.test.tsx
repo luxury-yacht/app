@@ -220,6 +220,44 @@ describe('Tooltip', () => {
     vi.useRealTimers();
   });
 
+  it('keeps an interactive tooltip open while its own content scrolls', async () => {
+    // The document-level scroll dismisser exists because the tooltip is
+    // fixed-positioned and would detach from its trigger when the page
+    // scrolls. A scroll INSIDE the tooltip (e.g. the update chip's capped
+    // release-notes region) must not dismiss it — otherwise scrollable
+    // tooltip content is unreachable.
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({
+      content: <div data-testid="tooltip-scrollable">long scrollable notes</div>,
+      interactive: true,
+    });
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    // Scroll originating inside the tooltip content: stays open.
+    const scrollable = container.querySelector('[data-testid="tooltip-scrollable"]') as HTMLElement;
+    await act(async () => {
+      scrollable.dispatchEvent(new Event('scroll'));
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    // Page-level scroll: still dismisses.
+    await act(async () => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
   // -----------------------------------------------------------------------
   // Custom hoverDelay
   // -----------------------------------------------------------------------
