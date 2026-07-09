@@ -64,6 +64,23 @@
   flex-shrink: 0;
 }
 
+/* Right-aligned action button in a section header (namespace search). */
+.sidebar h3 .sidebar-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0 0.3rem;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.sidebar h3 .sidebar-header-action:hover {
+  color: var(--color-text);
+}
+
 /* Sidebar views container with animation (namespace/resources). */
 .sidebar-views {
   max-height: 400px;

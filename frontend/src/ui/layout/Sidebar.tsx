@@ -19,6 +19,7 @@ import {
   ClusterResourcesIcon,
   CategoryIcon,
   CloseIcon,
+  SearchIcon,
   WarningIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
@@ -26,6 +27,7 @@ import {
 import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
+import { eventBus } from '@/core/events';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -415,7 +417,18 @@ function Sidebar() {
             </div>
 
             <div className="sidebar-section namespaces-section">
-              <h3>Namespaces</h3>
+              <h3>
+                Namespaces
+                <button
+                  type="button"
+                  className="sidebar-header-action"
+                  title={`Select namespace (${isMacPlatform() ? '⇧⌘N' : 'Ctrl+Shift+N'})`}
+                  aria-label="Select namespace"
+                  onClick={() => eventBus.emit('command-palette:open-namespaces')}
+                >
+                  <SearchIcon width={12} height={12} />
+                </button>
+              </h3>
               {namespacesPermissionDenied ? (
                 // Fail fast: the namespaces domain is permission-gated
                 // backend-side; there is no fallback inference. The inline

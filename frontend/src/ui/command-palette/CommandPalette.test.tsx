@@ -316,6 +316,27 @@ describe('CommandPalette component behaviour', () => {
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
   });
 
+  it('opens in namespaces mode when command-palette:open-namespaces fires', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    await act(async () => {
+      eventBus.emit('command-palette:open-namespaces');
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.command-palette')).not.toBeNull();
+    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input!.placeholder).toBe('Select a namespace...');
+    const labels = queryItems().map((el) => el.textContent ?? '');
+    expect(labels.some((label) => label.includes('prod'))).toBe(true);
+    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+  });
+
   it('opens directly in namespaces mode via the global namespace shortcut', async () => {
     const commands: Command[] = [
       { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },

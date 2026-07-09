@@ -55,6 +55,11 @@ export interface AppEvents {
   // File → Open Cluster).
   'command-palette:open-kubeconfigs': void;
 
+  // Open the command palette directly in namespace-select mode — the search
+  // button in the sidebar's Namespaces header (⇧⌘N reaches the same mode via
+  // the frontend shortcut system).
+  'command-palette:open-namespaces': void;
+
   // Open the command palette in its normal (search) mode — the header search
   // button.
   'command-palette:open': void;

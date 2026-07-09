@@ -1,6 +1,8 @@
 ### Added
 
 - `shift+ctrl/cmd+N` opens the Command Palette in namespace selection mode
+- The Namespaces header in the sidebar has a search button that opens the
+  Command Palette in namespace selection mode
 
 ### Changed
 

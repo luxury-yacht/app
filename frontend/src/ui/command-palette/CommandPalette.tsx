@@ -801,6 +801,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   }, [openInSelectMode]);
   useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
   const openInNamespaceMode = useCallback(() => openInSelectMode('namespaces'), [openInSelectMode]);
+  // The search button in the sidebar's Namespaces header emits this event.
+  useEventBus('command-palette:open-namespaces', openInNamespaceMode, [openInNamespaceMode]);
   // Open the palette straight into namespace selection. Registered in the
   // frontend shortcut system (not the native menu), like ⌘⇧P above.
   useShortcut({

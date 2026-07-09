@@ -12,6 +12,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import Sidebar from './Sidebar';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -168,6 +169,31 @@ describe('Sidebar', () => {
     container = null;
     root = null;
     vi.clearAllMocks();
+  });
+
+  it('opens the command palette in namespace mode from the Namespaces header button', () => {
+    renderSidebar();
+
+    const button = document.querySelector<HTMLButtonElement>(
+      '.namespaces-section h3 .sidebar-header-action'
+    );
+    expect(button).not.toBeNull();
+
+    const openNamespaces = vi.fn();
+    const unsubscribe = eventBus.on('command-palette:open-namespaces', openNamespaces);
+    act(() => {
+      button!.click();
+    });
+    unsubscribe();
+
+    expect(openNamespaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the Namespaces header button when namespace listing is denied', () => {
+    namespaceState.namespacesPermissionDenied = true;
+    renderSidebar();
+
+    expect(document.querySelector('.namespaces-section h3 .sidebar-header-action')).not.toBeNull();
   });
 
   it('shows the permission message and the scope editor when listing is denied', () => {
