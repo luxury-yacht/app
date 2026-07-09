@@ -1,8 +1,6 @@
 ### Added
 
-- `shift+ctrl/cmd+N` opens the Command Palette in namespace selection mode
-- The Namespaces header in the sidebar has a search button that opens the
-  Command Palette in namespace selection mode
+- Long-requested by David C., who said not having it is "gross": search for namespaces! Open the Command Palette in namespace search mode either with `shift+ctrl/cmd+N` or by clicking the new search button next to the Namespaces header in the sidebar.
 
 ### Changed
 
