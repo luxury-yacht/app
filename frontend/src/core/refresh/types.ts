@@ -165,11 +165,39 @@ export interface DrainNodeOptionsPayload {
   skipWaitForPodsToTerminate: boolean;
 }
 
+/**
+ * Closed set of drain event phases the backend emits (mirrors the Go
+ * `DrainEventPhase` constants in backend/nodemaintenance/store.go). Drain
+ * progress derivation gates on these — add new phases in both places.
+ */
+export type DrainEventPhase =
+  // Job lifecycle phases (emitted by the store).
+  | 'scheduled'
+  | 'cancel-requested'
+  | 'cancelled'
+  | 'completed'
+  // Drain step phases (emitted by the node drainer).
+  | 'cordon'
+  | 'cordon-retained'
+  | 'error'
+  | 'warning'
+  | 'plan'
+  | 'skip-wait'
+  | 'wait'
+  | 'wait-complete'
+  // Per-pod phases (eviction vs deletion variants).
+  | 'evicting'
+  | 'deleting'
+  | 'evicted'
+  | 'deleted'
+  | 'evict-error'
+  | 'delete-error';
+
 export interface NodeMaintenanceDrainEvent {
   id: string;
   timestamp: number;
   kind: 'info' | 'pod' | 'error';
-  phase?: string;
+  phase?: DrainEventPhase;
   message?: string;
   podNamespace?: string;
   podName?: string;

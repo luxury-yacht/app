@@ -28,7 +28,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
+import { parseClusterViewType, parseNamespaceViewType } from '@/types/navigation/views';
 
 // ---------- Types ----------
 
@@ -134,15 +134,20 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
         viewState.onNamespaceSelect(pendingFavorite.namespace);
       }
       // Set the tab AFTER onNamespaceSelect, which defaults to 'browse'
-      // when coming from a non-namespace view. The favorite's view overrides that.
-      viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
+      // when coming from a non-namespace view. The favorite's view overrides
+      // that — unless the persisted string is no longer a valid tab (saved
+      // before a rename, or corrupted), in which case the default stands.
+      const favoriteTab = parseNamespaceViewType(pendingFavorite.view);
+      if (favoriteTab) {
+        viewState.setActiveNamespaceTab(favoriteTab);
+      }
       viewState.setSidebarSelection({
         type: 'namespace',
         value: pendingFavorite.namespace || '',
       });
     } else if (pendingFavorite.viewType === 'cluster') {
       viewState.setViewType('cluster');
-      viewState.setActiveClusterView((pendingFavorite.view as ClusterViewType) || null);
+      viewState.setActiveClusterView(parseClusterViewType(pendingFavorite.view) ?? null);
       viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
     }
   }, [

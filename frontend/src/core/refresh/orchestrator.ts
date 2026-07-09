@@ -1417,7 +1417,7 @@ class RefreshOrchestrator {
     }
     // A settled denial: block the scope's streaming (cleared on scope change
     // or auth recovery) so it does not resync-loop against a 403 forever.
-    const domain = payload.domain as RefreshDomain;
+    const domain = payload.domain;
     const runtime = this.getRuntimeForScope(domain, scope);
     if (!runtime.blockStreaming(domain, scope)) {
       return;
@@ -1447,7 +1447,7 @@ class RefreshOrchestrator {
       return;
     }
     // Disable streaming for drifted scopes so snapshots remain the source of truth.
-    const domain = payload.domain as RefreshDomain;
+    const domain = payload.domain;
     const runtime = this.getRuntimeForScope(domain, scope);
     if (!runtime.blockStreaming(domain, scope)) {
       return;
@@ -1471,7 +1471,7 @@ class RefreshOrchestrator {
     if (!scope) {
       return;
     }
-    const domain = payload.domain as RefreshDomain;
+    const domain = payload.domain;
     this.getRuntimeForScope(domain, scope).setStreamHealth(domain, scope, payload);
   };
 

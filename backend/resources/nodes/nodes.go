@@ -213,7 +213,7 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 			return
 		}
 		if cordoned {
-			job.AddInfo("cordon-retained", "Node remains cordoned after drain failure")
+			job.AddInfo(nodemaintenance.DrainPhaseCordonRetained, "Node remains cordoned after drain failure")
 		}
 		job.Complete(nodemaintenance.DrainStatusFailed, err.Error())
 		return
@@ -223,9 +223,9 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 
 // cordonForDrain marks the node unschedulable and records drain events.
 func (s *Service) cordonForDrain(job *nodemaintenance.DrainJob, nodeName string) error {
-	job.AddInfo("cordon", "Cordoning node")
+	job.AddInfo(nodemaintenance.DrainPhaseCordon, "Cordoning node")
 	if cordonErr := s.Cordon(nodeName); cordonErr != nil {
-		job.AddInfo("error", fmt.Sprintf("Failed to cordon node: %v", cordonErr))
+		job.AddInfo(nodemaintenance.DrainPhaseError, fmt.Sprintf("Failed to cordon node: %v", cordonErr))
 		return fmt.Errorf("failed to cordon node before draining: %w", cordonErr)
 	}
 	return nil
@@ -267,29 +267,29 @@ func (s *Service) runKubectlDrain(nodeName string, options restypes.DrainNodeOpt
 	list, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
 		err := utilerrors.NewAggregate(errs)
-		job.AddInfo("error", err.Error())
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return err
 	}
 	if warnings := list.Warnings(); warnings != "" {
-		job.AddInfo("warning", warnings)
+		job.AddInfo(nodemaintenance.DrainPhaseWarning, warnings)
 	}
 
 	pods := list.Pods()
-	job.AddInfo("plan", fmt.Sprintf("%s %d pods", drainOperationLabel(options), len(pods)))
+	job.AddInfo(nodemaintenance.DrainPhasePlan, fmt.Sprintf("%s %d pods", drainOperationLabel(options), len(pods)))
 	if options.SkipWaitForPodsToTerminate {
-		job.AddInfo("skip-wait", "Submitting pod deletion or eviction without waiting for termination")
+		job.AddInfo(nodemaintenance.DrainPhaseSkipWait, "Submitting pod deletion or eviction without waiting for termination")
 		return s.deleteOrEvictPodsWithoutWait(drainer, pods)
 	}
 
-	job.AddInfo("wait", "Waiting for pods to terminate")
+	job.AddInfo(nodemaintenance.DrainPhaseWait, "Waiting for pods to terminate")
 	if err := drainer.DeleteOrEvictPods(pods); err != nil {
 		if isDrainTimeoutError(err, drainer.Timeout) {
 			err = fmt.Errorf("drain timed out after %s while waiting for pods to terminate: %w", drainer.Timeout, err)
 		}
-		job.AddInfo("error", err.Error())
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return err
 	}
-	job.AddInfo("wait-complete", "All pods drained")
+	job.AddInfo(nodemaintenance.DrainPhaseWaitComplete, "All pods drained")
 	return nil
 }
 
@@ -393,11 +393,11 @@ func drainOperationGerund(usingEviction bool) string {
 	return "deleting"
 }
 
-func drainPodStartedPhase(usingEviction bool) string {
+func drainPodStartedPhase(usingEviction bool) nodemaintenance.DrainEventPhase {
 	if usingEviction {
-		return "evicting"
+		return nodemaintenance.DrainPhaseEvicting
 	}
-	return "deleting"
+	return nodemaintenance.DrainPhaseDeleting
 }
 
 func drainPodStartedMessage(usingEviction bool) string {
@@ -407,11 +407,11 @@ func drainPodStartedMessage(usingEviction bool) string {
 	return "Deleting pod"
 }
 
-func drainPodFinishedPhase(usingEviction bool) string {
+func drainPodFinishedPhase(usingEviction bool) nodemaintenance.DrainEventPhase {
 	if usingEviction {
-		return "evicted"
+		return nodemaintenance.DrainPhaseEvicted
 	}
-	return "deleted"
+	return nodemaintenance.DrainPhaseDeleted
 }
 
 func drainPodFinishedMessage(usingEviction bool) string {
@@ -421,11 +421,11 @@ func drainPodFinishedMessage(usingEviction bool) string {
 	return "Pod deleted"
 }
 
-func drainPodErrorPhase(usingEviction bool) string {
+func drainPodErrorPhase(usingEviction bool) nodemaintenance.DrainEventPhase {
 	if usingEviction {
-		return "evict-error"
+		return nodemaintenance.DrainPhaseEvictError
 	}
-	return "delete-error"
+	return nodemaintenance.DrainPhaseDeleteError
 }
 
 // Delete removes a node from the cluster.

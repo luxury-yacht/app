@@ -7,7 +7,11 @@
  * indicator instead of just a raw event log.
  */
 
-import type { NodeMaintenanceDrainEvent, NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import type {
+  DrainEventPhase,
+  NodeMaintenanceDrainEvent,
+  NodeMaintenanceDrainJob,
+} from '@/core/refresh/types';
 
 export type DrainPodStatus = 'in-progress' | 'done' | 'failed';
 
@@ -46,10 +50,19 @@ export interface DrainProgress {
   timeoutSeconds?: number;
 }
 
-const PLAN_PHASE = 'plan';
-const POD_STARTED_PHASES = new Set(['evicting', 'deleting']);
-const POD_FINISHED_PHASES = new Set(['evicted', 'deleted']);
-const POD_ERROR_PHASES = new Set(['evict-error', 'delete-error']);
+const PLAN_PHASE: DrainEventPhase = 'plan';
+const POD_STARTED_PHASES: ReadonlySet<DrainEventPhase> = new Set<DrainEventPhase>([
+  'evicting',
+  'deleting',
+]);
+const POD_FINISHED_PHASES: ReadonlySet<DrainEventPhase> = new Set<DrainEventPhase>([
+  'evicted',
+  'deleted',
+]);
+const POD_ERROR_PHASES: ReadonlySet<DrainEventPhase> = new Set<DrainEventPhase>([
+  'evict-error',
+  'delete-error',
+]);
 
 const PLAN_COUNT_PATTERN = /(\d+)\s+pods?/i;
 
@@ -99,17 +112,17 @@ function rollupPods(events: NodeMaintenanceDrainEvent[]): Map<string, DrainPodPr
       name,
       status: 'in-progress' as DrainPodStatus,
     };
-    const phase = event.phase ?? '';
+    const phase = event.phase;
 
-    if (POD_STARTED_PHASES.has(phase)) {
+    if (phase && POD_STARTED_PHASES.has(phase)) {
       existing.status = 'in-progress';
       existing.startedAt = existing.startedAt ?? event.timestamp;
       existing.message = event.message;
-    } else if (POD_FINISHED_PHASES.has(phase)) {
+    } else if (phase && POD_FINISHED_PHASES.has(phase)) {
       existing.status = 'done';
       existing.completedAt = event.timestamp;
       existing.message = event.message;
-    } else if (POD_ERROR_PHASES.has(phase) || event.kind === 'error') {
+    } else if ((phase && POD_ERROR_PHASES.has(phase)) || event.kind === 'error') {
       existing.status = 'failed';
       existing.completedAt = event.timestamp;
       existing.message = event.message;
