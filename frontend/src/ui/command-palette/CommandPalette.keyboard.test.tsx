@@ -52,6 +52,24 @@ const dispatchOpenShortcut = (target: EventTarget = document) => {
   return event;
 };
 
+const dispatchNamespaceShortcut = (target: EventTarget = document) => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'N',
+    bubbles: true,
+    cancelable: true,
+    shiftKey: true,
+    ...(macPlatform ? { metaKey: true } : { ctrlKey: true }),
+  });
+
+  if (target instanceof Node) {
+    target.dispatchEvent(event);
+  } else {
+    document.dispatchEvent(event);
+  }
+
+  return event;
+};
+
 function BlockingSurfaceHarness() {
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -230,6 +248,67 @@ describe('CommandPalette keyboard integration', () => {
       input?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
       );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).toBeNull();
+  });
+
+  it('opens directly in namespaces mode on the namespace shortcut and closes on first Escape', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
+    ];
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <CommandPalette commands={commands} />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      dispatchNamespaceShortcut();
+      await Promise.resolve();
+    });
+
+    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input).not.toBeNull();
+    expect(input!.placeholder).toBe('Select a namespace...');
+    const labels = Array.from(
+      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
+    ).map((el) => el.textContent);
+    expect(labels).toEqual(['prod']);
+
+    await act(async () => {
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).toBeNull();
+  });
+
+  it('does not open in namespaces mode while another blocking surface is active', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+    ];
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <BlockingSurfaceHarness />
+          <CommandPalette commands={commands} />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      dispatchNamespaceShortcut();
       await Promise.resolve();
     });
 

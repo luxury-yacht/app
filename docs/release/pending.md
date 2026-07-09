@@ -1,5 +1,7 @@
 ### Added
 
+- `shift+ctrl/cmd+N` opens the Command Palette in namespace selection mode
+
 ### Changed
 
 - Cluster connection-state handling is more resilient: an unrecognized lifecycle state (e.g. from a mismatched backend/frontend version) is now logged once and ignored instead of being able to silently stall data loading for that cluster.
