@@ -203,14 +203,14 @@ export const resolveObjectActionPolicy = ({
 
   const anyPending = Boolean(
     permissions.restart?.pending ||
-    permissions.rollback?.pending ||
-    permissions.scale?.pending ||
-    permissions.trigger?.pending ||
-    permissions.suspend?.pending ||
-    permissions.delete?.pending ||
-    permissions.portForward?.pending ||
-    permissions.cordon?.pending ||
-    permissions.drain?.pending
+      permissions.rollback?.pending ||
+      permissions.scale?.pending ||
+      permissions.trigger?.pending ||
+      permissions.suspend?.pending ||
+      permissions.delete?.pending ||
+      permissions.portForward?.pending ||
+      permissions.cordon?.pending ||
+      permissions.drain?.pending
   );
 
   const triggerEnabled =
@@ -247,8 +247,8 @@ export const resolveObjectActionPolicy = ({
         : null;
   const scaleActionDisabled = Boolean(
     actionLoading ||
-    (scaleActionId === OBJECT_ACTION_IDS.scaleToZero && !handlers.scaleToZero) ||
-    (scaleActionId === OBJECT_ACTION_IDS.resumeFromZero && !handlers.resumeFromZero)
+      (scaleActionId === OBJECT_ACTION_IDS.scaleToZero && !handlers.scaleToZero) ||
+      (scaleActionId === OBJECT_ACTION_IDS.resumeFromZero && !handlers.resumeFromZero)
   );
 
   const cordonActionId =

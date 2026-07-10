@@ -21,14 +21,16 @@ type SearchQueryOptions = {
 };
 
 const searchMocks = vi.hoisted(() => {
-  const getSearchQuery = vi.fn((): SearchQueryOptions => ({
-    search: 'term',
-    caseSensitive: false,
-    literal: false,
-    regexp: false,
-    wholeWord: false,
-    replace: 'replace-term',
-  }));
+  const getSearchQuery = vi.fn(
+    (): SearchQueryOptions => ({
+      search: 'term',
+      caseSensitive: false,
+      literal: false,
+      regexp: false,
+      wholeWord: false,
+      replace: 'replace-term',
+    })
+  );
 
   class SearchQuery {
     search: string;

@@ -84,12 +84,12 @@ const parsedTolerations = (d: PodDetailInfo): ParsedToleration[] =>
 const hasRuntimeGroup = (d: PodDetailInfo): boolean =>
   Boolean(
     d.qosClass ||
-    d.priorityClass ||
-    (d.restartPolicy && d.restartPolicy !== 'Always') ||
-    (d.serviceAccount && d.serviceAccount !== 'default') ||
-    d.hostNetwork ||
-    d.hostPID ||
-    d.hostIPC
+      d.priorityClass ||
+      (d.restartPolicy && d.restartPolicy !== 'Always') ||
+      (d.serviceAccount && d.serviceAccount !== 'default') ||
+      d.hostNetwork ||
+      d.hostPID ||
+      d.hostIPC
   );
 
 export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {

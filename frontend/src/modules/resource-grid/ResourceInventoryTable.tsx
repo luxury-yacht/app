@@ -23,10 +23,11 @@ import {
   type ResourceInventorySourceState,
 } from './useResourceInventoryTable';
 
-interface ResourceInventoryTableProps<T> extends Omit<
-  GridTableProps<T>,
-  'data' | 'keyExtractor' | 'loading' | 'emptyMessage' | 'loadingOverlay'
-> {
+interface ResourceInventoryTableProps<T>
+  extends Omit<
+    GridTableProps<T>,
+    'data' | 'keyExtractor' | 'loading' | 'emptyMessage' | 'loadingOverlay'
+  > {
   /** Normalized source state from `boundedRowsSource` or `backendQuerySource`. */
   source: ResourceInventorySourceState<T>;
   /** GridTable binding (keyExtractor required; data is supplied from the source). */

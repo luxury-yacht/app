@@ -297,8 +297,7 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
  * Combines all specialized contexts into a single interface
  */
 interface ViewStateContextType
-  extends
-    NavigationStateContextType,
+  extends NavigationStateContextType,
     ReturnType<typeof useSidebarState>,
     ReturnType<typeof useObjectPanelState>,
     ReturnType<typeof useModalState> {}

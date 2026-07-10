@@ -116,10 +116,7 @@ const renderCapabilitiesHook = async (
       return result.current;
     },
     async rerender(
-      update: {
-        descriptors?: CapabilityDescriptor[];
-        options?: UseCapabilitiesOptions;
-      } = {}
+      update: { descriptors?: CapabilityDescriptor[]; options?: UseCapabilitiesOptions } = {}
     ) {
       if (update.descriptors) {
         props.descriptors = update.descriptors;

@@ -112,7 +112,7 @@ export function canResolveEventObjectReference(input: EventObjectReferenceInput)
 
   return Boolean(
     buildEventObjectReference(input) ||
-    (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
+      (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
   );
 }
 

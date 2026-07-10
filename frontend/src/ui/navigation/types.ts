@@ -27,4 +27,10 @@ export type NamespaceViewType =
  * Tab types for cluster-scoped resources
  */
 export type ClusterViewType =
-  'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
+  | 'nodes'
+  | 'rbac'
+  | 'storage'
+  | 'config'
+  | 'crds'
+  | 'custom'
+  | 'events';

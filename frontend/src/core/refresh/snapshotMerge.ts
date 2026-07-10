@@ -166,6 +166,7 @@ export const mergePollingListPayload = <K extends RefreshDomain>(
   scope?: string
 ): DomainPayloadMap[K] => {
   const descriptor = pollingListMergeDescriptors[domain as PollingListMergeDomain] as unknown as
-    PollingListMergeDescriptor<DomainPayloadMap[K] & object, object> | undefined;
+    | PollingListMergeDescriptor<DomainPayloadMap[K] & object, object>
+    | undefined;
   return descriptor ? mergePollingPayloadWithDescriptor(payload, scope, descriptor) : payload;
 };

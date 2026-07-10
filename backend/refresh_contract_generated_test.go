@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -19,9 +20,16 @@ func TestRefreshTypeScriptContractGeneratedInSync(t *testing.T) {
 }
 
 func TestRefreshTypeScriptContractHasSingleFormattingOwner(t *testing.T) {
-	prettierIgnore, err := os.ReadFile("../frontend/.prettierignore")
+	biomeConfigJSON, err := os.ReadFile("../frontend/biome.json")
 	require.NoError(t, err)
-	require.Contains(t, string(prettierIgnore), "src/core/refresh/types.generated.ts")
+
+	var biomeConfig struct {
+		Files struct {
+			Includes []string `json:"includes"`
+		} `json:"files"`
+	}
+	require.NoError(t, json.Unmarshal(biomeConfigJSON, &biomeConfig))
+	require.Contains(t, biomeConfig.Files.Includes, "!!src/core/refresh/types.generated.ts")
 
 	gitAttributes, err := os.ReadFile("../.gitattributes")
 	require.NoError(t, err)

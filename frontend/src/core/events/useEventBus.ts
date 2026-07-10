@@ -18,9 +18,9 @@ export function useEventBus<K extends keyof AppEvents>(
   callback: EventCallback<AppEvents[K]>,
   deps: React.DependencyList = []
 ): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: callers explicitly control callback resubscription through deps
   useEffect(() => {
     const unsubscribe = eventBus.on(event, callback);
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event, ...deps]);
 }

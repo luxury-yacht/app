@@ -1,7 +1,7 @@
 {
   "recommendations": [
-    // Prettier - Code formatter
-    "esbenp.prettier-vscode",
+    // Biome - formatter and linter
+    "biomejs.biome",
 
     // Go support
     "golang.go",

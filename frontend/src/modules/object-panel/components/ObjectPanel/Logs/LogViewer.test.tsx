@@ -661,7 +661,8 @@ describe('LogViewer active pod synchronisation', () => {
       registerCalls.length > 0 ? registerCalls[registerCalls.length - 1] : undefined;
     expect(registerCall).toBeTruthy();
     const fallbackFetcher = registerCall?.[1] as
-      ((isManual?: boolean) => Promise<void>) | undefined;
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
     expect(typeof fallbackFetcher).toBe('function');
 
     (FetchContainerLogs as unknown as ViMock).mockClear();
@@ -713,7 +714,8 @@ describe('LogViewer active pod synchronisation', () => {
 
     const registerCalls = mockModules.fallbackManager.register.mock.calls;
     const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
-      ((isManual?: boolean) => Promise<void>) | undefined;
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
 
     await act(async () => {
       await fallbackFetcher?.(true);
@@ -2905,8 +2907,9 @@ describe('LogViewer active pod synchronisation', () => {
     // store stay in lockstep — this is what happens in production when
     // ContainerLogsStreamConnection.handleLogEvent calls applyPayload on the
     // module-scoped containerLogsStreamManager instance.
-    const { containerLogsStreamManager } =
-      await import('@/core/refresh/streaming/containerLogsStreamManager');
+    const { containerLogsStreamManager } = await import(
+      '@/core/refresh/streaming/containerLogsStreamManager'
+    );
 
     // Seed via applyPayload (not seedLogSnapshot) so the manager's
     // internal buffers AND the scoped store both have the entries. Use

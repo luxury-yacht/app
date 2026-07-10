@@ -86,9 +86,9 @@ vi.mock('@uiw/react-codemirror', async () => {
       props.extensions?.find((extension: unknown) => {
         return Boolean(
           extension &&
-          typeof extension === 'object' &&
-          'contextmenu' in extension &&
-          typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
+            typeof extension === 'object' &&
+            'contextmenu' in extension &&
+            typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
         );
       })?.contextmenu ?? null;
 
@@ -707,7 +707,8 @@ describe('YamlEditor', () => {
     const computedDecorations = (
       codeMirrorState.props.extensions as Array<Record<string, unknown>>
     ).find((extension) => extension.type === 'computedDecorations') as
-      { compute: (state: { doc: { toString: () => string } }) => unknown } | undefined;
+      | { compute: (state: { doc: { toString: () => string } }) => unknown }
+      | undefined;
     expect(computedDecorations).toBeTruthy();
 
     codeMirrorState.decorationRanges = [];

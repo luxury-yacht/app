@@ -47,8 +47,7 @@ updates:
         patterns:
           - 'vite*'
           - 'typescript'
-          - 'eslint*'
-          - 'prettier'
+          - '@biomejs/biome'
       testing:
         patterns:
           - '*test*'

@@ -297,8 +297,9 @@ export const useObjectPanelCapabilities = ({
   featureSupport,
 }: UseObjectPanelCapabilitiesOptions): ObjectPanelCapabilitiesResult => {
   const [nodeLogSources, setNodeLogSources] = useState<NodeLogSource[]>([]);
-  const [nodeLogsCapabilityState, setNodeLogsCapabilityState] =
-    useState<CapabilityState>(createCapabilityState());
+  const [nodeLogsCapabilityState, setNodeLogsCapabilityState] = useState<CapabilityState>(
+    createCapabilityState()
+  );
   const capabilityDescriptorInfo = useMemo(
     () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
     [featureSupport, objectData, objectKind]

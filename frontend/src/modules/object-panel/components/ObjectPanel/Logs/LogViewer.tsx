@@ -337,7 +337,11 @@ const formatSelectedFilterLabel = (
 };
 
 type LogEmptyState =
-  'none' | 'no_logs_yet' | 'no_previous_logs' | 'no_filter_matches' | 'unavailable';
+  | 'none'
+  | 'no_logs_yet'
+  | 'no_previous_logs'
+  | 'no_filter_matches'
+  | 'unavailable';
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   resourceKind: resourceKind,
@@ -403,9 +407,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // state (containers, availablePods, parsedContainerLogs, view mode, etc.)
   // don't trigger an unnecessary writeback. The previous-logs view is the only
   // mode that persists, so depend on that boolean (not the loading sub-state).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: individual persistent fields intentionally control preference writeback
   useEffect(() => {
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only persistent fields trigger writeback; `state` is read inside
   }, [
     panelId,
     state.selectedContainer,
@@ -998,6 +1002,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: getActualContainerName is a render-local pure helper with stable behavior
   const selectorOptions = useMemo(() => {
     const options: DropdownOption[] = [];
 

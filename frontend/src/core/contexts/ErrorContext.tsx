@@ -126,10 +126,10 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   );
 
   // Replay any errors captured before the provider mounted (once only)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: history is intentionally replayed once when the provider mounts
   useEffect(() => {
     const history = errorHandler.getHistory();
     history.forEach((error) => addError(error));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
   }, []);
 
   // Subscribe to future errors from the global handler

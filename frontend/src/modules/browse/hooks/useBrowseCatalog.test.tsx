@@ -48,6 +48,7 @@ vi.mock('@/core/data-access', () => ({
       mocks.refreshFns.set(key, refresh);
     }
     return {
+      // biome-ignore lint/correctness/useHookAtTopLevel: this is a stable mock function, not a React component or custom hook
       state: domain && scope ? mocks.useRefreshScopedDomain(domain, scope) : { status: 'idle' },
       refresh,
     };

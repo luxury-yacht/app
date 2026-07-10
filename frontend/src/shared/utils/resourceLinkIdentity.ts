@@ -57,8 +57,8 @@ const validateResourceRefReason = (ref?: ResourceRef | null): string | undefined
 const validateDisplayRef = (ref?: DisplayRef | null): boolean =>
   Boolean(
     normalizeOptional(ref?.clusterId) &&
-    normalizeOptional(ref?.kind) &&
-    normalizeOptional(ref?.name)
+      normalizeOptional(ref?.kind) &&
+      normalizeOptional(ref?.name)
   );
 
 export const validateResourceLink = (link?: ResourceLink | null): boolean => {

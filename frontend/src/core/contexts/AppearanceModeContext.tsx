@@ -63,6 +63,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
     });
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: this subscription intentionally installs once and reads current preferences from the event callbacks
   useEffect(() => {
     const preference = getAppearanceModePreference();
     const initialMode = preference === 'system' ? detectSystemAppearanceMode() : preference;

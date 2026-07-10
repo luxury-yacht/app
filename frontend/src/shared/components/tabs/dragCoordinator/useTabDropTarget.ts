@@ -200,6 +200,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable handlers intentionally do not churn the ref callback identity
   const ref = useCallback<RefCallback<HTMLElement>>(
     (el) => {
       // Detach from old element
@@ -229,11 +230,11 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     },
     // The handler functions are stable (empty deps) so they don't need
     // to be listed; including them would churn the ref callback identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [registerTarget, unregisterTarget]
   );
 
   // Cleanup on unmount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup intentionally uses the mount-time target registration and handlers
   useEffect(() => {
     // Capture refs to locals so the cleanup function uses the values that
     // existed when the effect ran, not whatever they happen to be at unmount.
@@ -248,7 +249,6 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       }
       unregisterTarget(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { ref, isDragOver, dropInsertIndex };

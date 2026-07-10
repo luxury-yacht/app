@@ -69,7 +69,9 @@ export type ObjectRefresherName =
   | ObjectHelmValuesRefresherName;
 
 export type StaticRefresherName =
-  NamespaceRefresherName | ClusterRefresherName | SystemRefresherName;
+  | NamespaceRefresherName
+  | ClusterRefresherName
+  | SystemRefresherName;
 
 export type RefresherName = StaticRefresherName | ObjectRefresherName;
 

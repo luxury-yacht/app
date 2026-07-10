@@ -59,6 +59,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
+      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
       useEffect(() => {
         const listId = ctx.registerShortcut({
           key: 'l',
@@ -69,7 +70,6 @@ describe('KeyboardProvider', () => {
         return () => {
           ctx.unregisterShortcut(listId);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
       return null;
@@ -100,6 +100,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
+      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
       useEffect(() => {
         const lowId = ctx.registerShortcut({
           key: 'k',
@@ -117,7 +118,6 @@ describe('KeyboardProvider', () => {
           ctx.unregisterShortcut(lowId);
           ctx.unregisterShortcut(highId);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
       return null;
@@ -225,6 +225,7 @@ describe('keyboard handling edge cases', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
+      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
       useEffect(() => {
         const plainId = ctx.registerShortcut({
           key: 'c',
@@ -242,7 +243,6 @@ describe('keyboard handling edge cases', () => {
           ctx.unregisterShortcut(plainId);
           ctx.unregisterShortcut(extendedId);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
       return null;
@@ -328,10 +328,10 @@ describe('keyboard handling edge cases', () => {
 
     const Harness = () => {
       const ctx = useKeyboardContext();
+      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
       useEffect(() => {
         const id = ctx.registerSurface({ kind: 'editor', rootRef, onNativeAction });
         return () => ctx.unregisterSurface(id);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
       return null;
     };
@@ -353,7 +353,8 @@ describe('keyboard handling edge cases', () => {
       ([event]) => event === 'menu:cut'
     );
     const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
-      (() => void) | undefined;
+      | (() => void)
+      | undefined;
     expect(typeof cutHandler).toBe('function');
 
     act(() => {
@@ -393,7 +394,8 @@ describe('keyboard handling edge cases', () => {
       ([event]) => event === 'menu:cut'
     );
     const cutHandler = cutRegistrations[cutRegistrations.length - 1]?.[1] as
-      (() => void) | undefined;
+      | (() => void)
+      | undefined;
     expect(typeof cutHandler).toBe('function');
 
     act(() => {

@@ -99,7 +99,6 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     return positions;
     // rowHeightCacheVersion is load-bearing here: it forces recomputation when
     // measured row heights change even though the cache itself lives in a ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowHeightCacheVersion, visibleLines.length]);
 
   const totalVirtualHeight = useMemo(

@@ -662,23 +662,22 @@ describe('ObjectPanel tab availability', () => {
     ['ValidatingWebhookConfiguration', { webhooks: [] }],
   ] as const;
 
-  it.each(detailMappingCases)(
-    'exposes the detail payload as the active detail for %s resources',
-    async (kind, detailsPayload) => {
-      await renderObjectPanel({
-        kind,
-        name: 'resource',
-        namespace: 'team-a',
-        scopedDomain: {
-          data: { details: detailsPayload },
-          status: 'ready',
-          error: null,
-        },
-      });
+  it.each(
+    detailMappingCases
+  )('exposes the detail payload as the active detail for %s resources', async (kind, detailsPayload) => {
+    await renderObjectPanel({
+      kind,
+      name: 'resource',
+      namespace: 'team-a',
+      scopedDomain: {
+        data: { details: detailsPayload },
+        status: 'ready',
+        error: null,
+      },
+    });
 
-      expect(detailsTabPropsRef.current.detailModel.activeDetail).toEqual(detailsPayload);
-    }
-  );
+    expect(detailsTabPropsRef.current.detailModel.activeDetail).toEqual(detailsPayload);
+  });
 
   it('derives no typed detail sections for unknown kinds', async () => {
     await renderObjectPanel({

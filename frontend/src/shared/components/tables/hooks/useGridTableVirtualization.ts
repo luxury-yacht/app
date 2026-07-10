@@ -214,7 +214,6 @@ export function useGridTableVirtualization<T>({
     }
     return pos;
     // heightCacheVersion is included so positions recompute after measurements.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, keyExtractor, virtualizationConfig.estimateRowHeight, heightCacheVersion]);
 
   // --- Viewport and scroll tracking ---
@@ -352,6 +351,7 @@ export function useGridTableVirtualization<T>({
     };
   }, [filteringEnabled, filterSignature, shouldVirtualize, wrapperRef, updateColumnWindowRange]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup intentionally captures the mount-time sampler and hover callbacks
   useEffect(() => {
     return () => {
       // Clear any hover state unconditionally on unmount.
@@ -359,7 +359,6 @@ export function useGridTableVirtualization<T>({
       stopFrameSampler('unmount');
     };
     // We only need to run this on unmount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- Virtual range: binary-search the positions array ---

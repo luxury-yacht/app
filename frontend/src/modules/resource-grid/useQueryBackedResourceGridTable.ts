@@ -133,10 +133,8 @@ export const isLiveDomainInitialLoadPending = (state: {
   !state.permissionDenied &&
   (state.status === 'loading' || state.status === 'initialising');
 
-export interface QueryBackedNamespaceGridResult<
-  T extends ResourceGridTableRow,
-  TPayload = unknown,
-> extends ResourceGridTableResult<T> {
+export interface QueryBackedNamespaceGridResult<T extends ResourceGridTableRow, TPayload = unknown>
+  extends ResourceGridTableResult<T> {
   /**
    * The typed query's last applied page payload. Rows come through `source`;
    * payload-level metadata (e.g. the pods metrics meta, scoped to the queried
@@ -508,9 +506,7 @@ const useResolvedQueryKeyExtractor = <TRow extends ResourceGridTableRow>(
 export interface QueryBackedNamespaceGridParams<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
->
-  extends
-    Omit<
+> extends Omit<
       NamespaceResourceGridTableParams<TRow>,
       | 'data'
       | 'tableMode'
@@ -614,9 +610,7 @@ export function useQueryBackedNamespaceResourceGridTable<
 export interface QueryBackedClusterGridParams<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
->
-  extends
-    Omit<
+> extends Omit<
       ClusterResourceGridTableParams<TRow>,
       | 'data'
       | 'tableMode'

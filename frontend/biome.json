@@ -1,0 +1,109 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "files": {
+    "includes": [
+      "src/**/*.{js,jsx,ts,tsx,css,json}",
+      "biome.json",
+      "vite.config.ts",
+      "vitest.setup.ts",
+      "!!src/core/refresh/types.generated.ts",
+      "!!dist",
+      "!!wailsjs"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "includes": ["src/**/*.{ts,tsx}", "vite.config.ts", "vitest.setup.ts"],
+    "rules": {
+      "preset": "none",
+      "correctness": {
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "reportUnnecessaryDependencies": false
+          }
+        },
+        "useHookAtTopLevel": "error"
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "@wailsjs/go/backend/App": {
+                "importNames": [
+                  "FindCatalogObjectByUID",
+                  "FindCatalogObjectMatch",
+                  "GetAllClusterAuthStates",
+                  "GetAllClusterLifecycleStates",
+                  "GetAppInfo",
+                  "GetAppSettings",
+                  "GetClusterPortForwardCount",
+                  "GetKubeconfigSearchPaths",
+                  "GetKubeconfigs",
+                  "GetLogScopeContainers",
+                  "GetLogs",
+                  "GetObjectYAMLByGVK",
+                  "GetPodContainers",
+                  "GetRefreshBaseURL",
+                  "GetRevisionHistory",
+                  "GetSelectedKubeconfigs",
+                  "GetSelectionDiagnostics",
+                  "GetShellSessionBacklog",
+                  "GetTargetPorts",
+                  "GetAppearanceModeInfo",
+                  "GetThemes",
+                  "GetZoomLevel",
+                  "IsWorkloadHPAManaged",
+                  "ListPortForwards",
+                  "ListShellSessions"
+                ],
+                "message": "Route read-only backend bindings through appStateAccess/dataAccess adapters instead of importing them directly."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "jsxQuoteStyle": "double",
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "es5"
+    }
+  },
+  "plugins": ["./biome-plugins/data-access-boundaries.grit"],
+  "overrides": [
+    {
+      "includes": [
+        "src/core/app-state-access/readers.ts",
+        "src/core/data-access/readers.ts",
+        "src/core/refresh/client.ts",
+        "src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts",
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    }
+  ]
+}

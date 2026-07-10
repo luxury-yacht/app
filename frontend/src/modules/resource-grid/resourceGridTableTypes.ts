@@ -50,7 +50,10 @@ export interface ResourceGridTableRow {
 }
 
 export type ResourceGridTableMode =
-  'Local Complete' | 'Local Partial' | 'Query Backed Static' | 'Query Backed Dynamic';
+  | 'Local Complete'
+  | 'Local Partial'
+  | 'Query Backed Static'
+  | 'Query Backed Dynamic';
 
 export const isQueryBackedResourceGridTableMode = (mode: ResourceGridTableMode): boolean =>
   mode === 'Query Backed Static' || mode === 'Query Backed Dynamic';
@@ -89,9 +92,8 @@ export interface ResourceGridMetadataSearchParams<T extends ResourceGridTableRow
   getMetadataMaps: (row: T) => (Record<string, string> | undefined)[];
 }
 
-export interface ClusterResourceGridTableParams<
-  T extends ResourceGridTableRow,
-> extends ResourceGridTableBaseParams<T> {
+export interface ClusterResourceGridTableParams<T extends ResourceGridTableRow>
+  extends ResourceGridTableBaseParams<T> {
   // Cluster/namespace resource tables always receive persistence AND a resolved
   // key extractor from their query-backed wrapper, so both are required here
   // (the base hooks no longer own fallbacks for either).
@@ -102,9 +104,8 @@ export interface ClusterResourceGridTableParams<
   showNamespaceFilters?: boolean;
 }
 
-export interface NamespaceResourceGridTableParams<
-  T extends ResourceGridTableRow,
-> extends ResourceGridTableBaseParams<T> {
+export interface NamespaceResourceGridTableParams<T extends ResourceGridTableRow>
+  extends ResourceGridTableBaseParams<T> {
   persistenceOverride: ResourceGridPersistence<T>;
   keyExtractor: (item: T, index: number) => string;
   namespace: string;
@@ -112,9 +113,8 @@ export interface NamespaceResourceGridTableParams<
   showNamespaceFilters?: boolean;
 }
 
-export interface ObjectPanelResourceGridTableParams<
-  T extends ResourceGridTableRow,
-> extends ResourceGridTableBaseParams<T> {
+export interface ObjectPanelResourceGridTableParams<T extends ResourceGridTableRow>
+  extends ResourceGridTableBaseParams<T> {
   clusterIdentity?: string | null;
   enabled?: boolean;
   defaultSort?: SortConfig;
@@ -135,10 +135,8 @@ export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   hydrated: boolean;
 }
 
-export interface ResourceGridCommonParams<T extends ResourceGridTableRow> extends Omit<
-  ResourceGridTableBaseParams<T>,
-  'viewId' | 'filterOptions'
-> {
+export interface ResourceGridCommonParams<T extends ResourceGridTableRow>
+  extends Omit<ResourceGridTableBaseParams<T>, 'viewId' | 'filterOptions'> {
   persistence: ResourceGridPersistence<T>;
   keyExtractor: (item: T, index: number) => string;
   defaultSortKey?: string;

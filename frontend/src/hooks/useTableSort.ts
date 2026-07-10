@@ -139,6 +139,7 @@ export function useTableSort<T>(
     return Object.keys(map).length > 0 ? map : null;
   }, [columns]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: parseAge is a module-level pure function with stable identity
   const sortedData = useMemo(() => {
     const startedAt = getNow();
 

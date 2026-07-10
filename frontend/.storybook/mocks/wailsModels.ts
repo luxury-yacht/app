@@ -3,7 +3,7 @@
  * Replicates the Wails-generated model classes with browser-compatible constructors.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* biome-ignore-all lint/suspicious/noExplicitAny: generated-model mocks mirror Wails' untyped payload constructors */
 export namespace backend {
   export class UpdateInfo {
     currentVersion: string;

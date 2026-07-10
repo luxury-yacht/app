@@ -19,6 +19,7 @@ function KubeconfigsSection() {
   const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: kubeconfig paths intentionally load once when the section mounts
   useEffect(() => {
     loadKubeconfigPaths();
   }, []);

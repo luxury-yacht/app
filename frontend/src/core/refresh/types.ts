@@ -24,9 +24,8 @@ export interface PermissionDeniedDetails extends Partial<RefreshPermissionDenied
   name?: string;
 }
 
-export interface PermissionDeniedStatus extends Partial<
-  Omit<RefreshPermissionDeniedStatus, 'details'>
-> {
+export interface PermissionDeniedStatus
+  extends Partial<Omit<RefreshPermissionDeniedStatus, 'details'>> {
   details?: PermissionDeniedDetails;
 }
 

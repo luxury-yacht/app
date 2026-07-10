@@ -357,7 +357,6 @@ export const useCapabilities = (
 
     return map;
     // namedResultsVersion triggers recomputation when named results update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, normalizedDescriptors, permissionMap, namedResultsVersion]);
 
   const loading =

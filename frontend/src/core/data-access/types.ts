@@ -14,7 +14,11 @@ import type { DomainPayloadMap } from '@/core/refresh/types';
 // for a healthy stream — the signal is the stream announcing changed data.
 export type DataRequestReason = 'background' | 'startup' | 'user' | 'stream-signal';
 export type DataAccessAdapter =
-  'refresh-domain' | 'context-refresh' | 'rpc-read' | 'permission-read' | 'capability-read';
+  | 'refresh-domain'
+  | 'context-refresh'
+  | 'rpc-read'
+  | 'permission-read'
+  | 'capability-read';
 
 export type DataBlockedReason = 'auto-refresh-disabled';
 
@@ -26,9 +30,8 @@ export interface RefreshDomainRequest {
   label?: string;
 }
 
-export interface RefreshDomainStateRequest<
-  K extends RefreshDomain = RefreshDomain,
-> extends RefreshDomainRequest {
+export interface RefreshDomainStateRequest<K extends RefreshDomain = RefreshDomain>
+  extends RefreshDomainRequest {
   domain: K;
   cleanup?: boolean;
   preserveState?: boolean;

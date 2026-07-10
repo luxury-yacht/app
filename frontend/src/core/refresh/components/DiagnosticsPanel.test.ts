@@ -185,7 +185,7 @@ vi.mock('../store', async () => {
   };
 });
 
-let getPermissionKeyRef: (typeof import('@/core/capabilities'))['getPermissionKey'];
+let getPermissionKeyRef: typeof import('@/core/capabilities')['getPermissionKey'];
 
 beforeAll(async () => {
   ({ getPermissionKey: getPermissionKeyRef } = await import('@/core/capabilities'));
