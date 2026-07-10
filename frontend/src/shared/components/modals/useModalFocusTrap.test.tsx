@@ -1,7 +1,7 @@
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocusTrap';
 
 const TestModal: React.FC<{
@@ -29,12 +29,6 @@ describe('useModalFocusTrap', () => {
   let outsideButton: HTMLButtonElement;
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (
-      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     appRoot = document.createElement('div');

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SessionsStatus from './SessionsStatus';
 
 const listShellSessionsMock = vi.hoisted(() => vi.fn());
@@ -109,10 +109,6 @@ describe('SessionsStatus shell session jump action', () => {
     command: ['/bin/sh'],
     startedAt: '2026-02-20T00:00:00Z',
   };
-
-  beforeAll(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

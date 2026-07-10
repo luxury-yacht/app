@@ -11,8 +11,6 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 type SampleRow = { name: string; kind?: string };
 
 const columns: GridColumnDefinition<SampleRow>[] = [

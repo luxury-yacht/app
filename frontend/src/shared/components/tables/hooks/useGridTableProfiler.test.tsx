@@ -17,8 +17,6 @@ vi.mock('./useFrameSampler', () => ({
   useFrameSampler: () => ({ start: startMock, stop: stopMock }),
 }));
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 type HarnessHandle = {
   start: () => void;
   stop: (reason?: 'timeout' | 'manual' | 'unmount') => void;

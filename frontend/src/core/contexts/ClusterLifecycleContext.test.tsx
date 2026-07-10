@@ -11,6 +11,11 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { eventBus } from '@/core/events';
+import {
+  createWailsRuntimeHarness,
+  type WailsRuntimeHarness,
+} from '@/test-utils/wailsRuntimeHarness';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 import { ClusterLifecycleProvider, useClusterLifecycle } from './ClusterLifecycleContext';
 
 // Mock useKubeconfig — tests control selectedClusterIds via this ref.
@@ -27,9 +32,9 @@ describe('ClusterLifecycleContext', () => {
   let root: ReactDOM.Root;
   const stateRef: { current: ReturnType<typeof useClusterLifecycle> | null } = { current: null };
 
-  // Track registered listeners and their disposers
-  let listeners: Map<string, Array<(...args: unknown[]) => void>>;
-  let disposerCalls: string[];
+  let runtimeHarness: WailsRuntimeHarness;
+  let restoreRuntime: () => void;
+  let restoreGo: () => void;
 
   // Mock for the Go backend RPC
   let mockGetAllStates: ReturnType<typeof vi.fn>;
@@ -41,38 +46,20 @@ describe('ClusterLifecycleContext', () => {
 
   beforeEach(() => {
     eventBus.clear();
-    listeners = new Map();
-    disposerCalls = [];
     mockSelectedClusterIds.current = ['cluster-a', 'cluster-b'];
     mockGetAllStates = vi.fn().mockResolvedValue(null);
 
-    // Mock window.runtime with EventsOn that tracks registrations.
-    (window as any).runtime = {
-      EventsOn: vi.fn((eventName: string, callback: (...args: unknown[]) => void) => {
-        if (!listeners.has(eventName)) {
-          listeners.set(eventName, []);
-        }
-        listeners.get(eventName)!.push(callback);
-
-        return () => {
-          disposerCalls.push(eventName);
-          const cbs = listeners.get(eventName);
-          if (cbs) {
-            const idx = cbs.indexOf(callback);
-            if (idx >= 0) cbs.splice(idx, 1);
-          }
-        };
-      }),
-    };
+    runtimeHarness = createWailsRuntimeHarness();
+    restoreRuntime = installWindowProperty('runtime', runtimeHarness.runtime);
 
     // Mock window.go.backend.App.GetAllClusterLifecycleStates
-    (window as any).go = {
+    restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           GetAllClusterLifecycleStates: mockGetAllStates,
         },
       },
-    };
+    });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -86,8 +73,8 @@ describe('ClusterLifecycleContext', () => {
       root.unmount();
     });
     container.remove();
-    delete (window as any).runtime;
-    delete (window as any).go;
+    restoreRuntime();
+    restoreGo();
   });
 
   const renderProvider = async () => {
@@ -182,8 +169,10 @@ describe('ClusterLifecycleContext', () => {
 
     await renderProvider();
     await act(async () => {
-      listeners.get('cluster:lifecycle')?.forEach((cb) => {
-        cb({ clusterId: 'cluster-a', state: 'loading', previousState: 'connected' });
+      runtimeHarness.emit('cluster:lifecycle', {
+        clusterId: 'cluster-a',
+        state: 'loading',
+        previousState: 'connected',
       });
       await Promise.resolve();
     });
@@ -204,7 +193,7 @@ describe('ClusterLifecycleContext', () => {
     await renderProvider();
 
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'loading',
         previousState: 'connected',
@@ -215,7 +204,7 @@ describe('ClusterLifecycleContext', () => {
 
     // Same cluster, same state: a no-op event must not mint a new identity.
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'loading',
         previousState: 'connected',
@@ -225,7 +214,7 @@ describe('ClusterLifecycleContext', () => {
 
     // A REAL change still updates state (and may change identity).
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'ready',
         previousState: 'loading',
@@ -237,11 +226,11 @@ describe('ClusterLifecycleContext', () => {
   it('subscribes to cluster:lifecycle events and updates state', async () => {
     await renderProvider();
 
-    expect(listeners.get('cluster:lifecycle')?.length).toBe(1);
+    expect(runtimeHarness.listenerCount('cluster:lifecycle')).toBe(1);
 
     // Simulate a lifecycle event from the backend
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'loading',
         previousState: 'connected',
@@ -258,7 +247,7 @@ describe('ClusterLifecycleContext', () => {
     await renderProvider();
 
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'ready',
         previousState: 'loading',
@@ -276,14 +265,14 @@ describe('ClusterLifecycleContext', () => {
   it('calls disposer on unmount', async () => {
     await renderProvider();
 
-    expect(listeners.get('cluster:lifecycle')?.length).toBe(1);
+    expect(runtimeHarness.listenerCount('cluster:lifecycle')).toBe(1);
 
     act(() => {
       root.unmount();
     });
 
-    expect(disposerCalls).toContain('cluster:lifecycle');
-    expect(listeners.get('cluster:lifecycle')?.length).toBe(0);
+    expect(runtimeHarness.disposerCalls).toContain('cluster:lifecycle');
+    expect(runtimeHarness.listenerCount('cluster:lifecycle')).toBe(0);
 
     // Re-create root so afterEach unmount doesn't fail
     root = ReactDOM.createRoot(container);
@@ -294,13 +283,13 @@ describe('ClusterLifecycleContext', () => {
 
     // No clusterId
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({ state: 'ready' });
+      runtimeHarness.emit('cluster:lifecycle', { state: 'ready' });
     });
     expect(stateRef.current?.getClusterState('')).toBeUndefined();
 
     // No state
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({ clusterId: 'cluster-a' });
+      runtimeHarness.emit('cluster:lifecycle', { clusterId: 'cluster-a' });
     });
     expect(stateRef.current?.getClusterState('cluster-a')).toBeUndefined();
   });
@@ -318,7 +307,7 @@ describe('ClusterLifecycleContext', () => {
     await renderProvider();
 
     act(() => {
-      listeners.get('cluster:lifecycle')![0]({
+      runtimeHarness.emit('cluster:lifecycle', {
         clusterId: 'cluster-a',
         state: 'context-test-bogus-live',
         previousState: 'loading',

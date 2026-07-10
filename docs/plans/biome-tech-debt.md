@@ -178,14 +178,23 @@ Progress as of 2026-07-10:
 
 - ✅ Storybook mocks now use the global `noExplicitAny` and `noNonNullAssertion` errors.
 - ✅ Tests under `src/hooks`, `src/shared/utils`, and `src/utils` now use both rules at error level.
+- ✅ Tests under core connection, contexts, data access, events, logging, persistence, resource
+  metrics, and settings now use both rules at error level.
 - ✅ Added the typed `requireValue` assertion helper with a focused contract test.
+- ✅ Added typed Wails event-runtime and reversible window-property test harnesses with focused
+  contract tests.
 - ✅ Removed 153 redundant `(globalThis as any).IS_REACT_ACT_ENVIRONMENT` assignments from 146
   test files; `vitest.setup.ts` remains the shared owner.
-- ⏳ The next audited boundary is `src/core/contexts`: its remaining Wails runtime mocks and map
-  assertions must move to typed global factories and `requireValue` before enabling the rules.
+- ✅ Removed the remaining typed per-file `IS_REACT_ACT_ENVIRONMENT` assignments; the shared setup
+  is now the only owner.
+- ✅ Current strict audit: 803 explicit-`any` and 928 non-null-assertion diagnostics remain. The
+  largest concentrations are shared tables, object-panel components, namespace components,
+  dockable panels, refresh streaming, and object-map tests.
+- ⏳ The next audited boundary is `src/modules/resource-grid`, with 28 diagnostics concentrated in
+  GridTable mock props, typed query mock calls, pagination React elements, and hook-result checks.
 
-- [ ] Inventory explicit `any` by mock boundary and introduce shared typed factories.
-- [ ] Inventory non-null assertions by pattern and introduce assertion helpers.
+- ✅ Inventory explicit `any` by mock boundary and introduce shared typed factories.
+- ✅ Inventory non-null assertions by pattern and introduce assertion helpers.
 - [ ] Enable the two rules for one test area at a time.
 - [ ] Remove the broad test and Storybook override.
 

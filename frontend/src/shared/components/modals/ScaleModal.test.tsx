@@ -1,7 +1,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ScaleModal from './ScaleModal';
 
 describe('ScaleModal', () => {
@@ -21,12 +21,6 @@ describe('ScaleModal', () => {
     onScaleToZero: vi.fn(),
     onValueChange: vi.fn(),
   };
-
-  beforeAll(() => {
-    (
-      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

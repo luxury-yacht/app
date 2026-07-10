@@ -337,6 +337,14 @@
     },
     {
       "includes": [
+        "src/core/contexts/**/*.test.{ts,tsx}",
+        "src/core/connection/**/*.test.{ts,tsx}",
+        "src/core/data-access/**/*.test.{ts,tsx}",
+        "src/core/events/**/*.test.{ts,tsx}",
+        "src/core/logging/**/*.test.{ts,tsx}",
+        "src/core/persistence/**/*.test.{ts,tsx}",
+        "src/core/resource-metrics/**/*.test.{ts,tsx}",
+        "src/core/settings/**/*.test.{ts,tsx}",
         "src/hooks/**/*.test.{ts,tsx}",
         "src/shared/utils/**/*.test.{ts,tsx}",
         "src/utils/**/*.test.{ts,tsx}"

@@ -5,7 +5,7 @@ import {
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePanelSurfaceCycling } from './usePanelSurfaceCycling';
 
 const dispatchShortcut = (target: HTMLElement, key: string) => {
@@ -23,10 +23,6 @@ const dispatchShortcut = (target: HTMLElement, key: string) => {
 describe('usePanelSurfaceCycling', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

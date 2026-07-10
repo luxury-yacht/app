@@ -7,7 +7,7 @@
 
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
@@ -1227,11 +1227,6 @@ describe('doorbell refetch quietness on a paged catalog', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let result: UseBrowseCatalogResult | null;
-
-  beforeAll(() => {
-    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-      true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

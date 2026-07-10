@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 import {
   logAppLogsDebug,
   logAppLogsError,
@@ -11,27 +12,33 @@ const logAppLogsFromFrontendMock = vi.fn();
 const logAppLogsFromFrontendWithClusterMock = vi.fn();
 
 const setBackendLogApi = (api: unknown) => {
-  (window as any).go = {
+  installWindowProperty('go', {
     backend: {
       App: api,
     },
-  };
+  });
 };
 
 describe('appLogsClient', () => {
+  let restoreGo: () => void;
+
   beforeEach(() => {
     logAppLogsFromFrontendMock.mockReset();
     logAppLogsFromFrontendWithClusterMock.mockReset();
-    setBackendLogApi({
-      LogAppLogsFromFrontend: logAppLogsFromFrontendMock,
-      LogAppLogsFromFrontendWithCluster: logAppLogsFromFrontendWithClusterMock,
+    restoreGo = installWindowProperty('go', {
+      backend: {
+        App: {
+          LogAppLogsFromFrontend: logAppLogsFromFrontendMock,
+          LogAppLogsFromFrontendWithCluster: logAppLogsFromFrontendWithClusterMock,
+        },
+      },
     });
-    delete (window as any).runtime;
+    Reflect.deleteProperty(window, 'runtime');
   });
 
   afterEach(() => {
-    delete (window as any).go;
-    delete (window as any).runtime;
+    restoreGo();
+    Reflect.deleteProperty(window, 'runtime');
   });
 
   it('sends frontend logs to backend application logs with normalized inputs', () => {
@@ -91,7 +98,7 @@ describe('appLogsClient', () => {
   });
 
   it('ignores unavailable or failing backend logging APIs', () => {
-    delete (window as any).go;
+    Reflect.deleteProperty(window, 'go');
     expect(() => logAppLogsError('missing api', 'Frontend')).not.toThrow();
 
     setBackendLogApi({});
@@ -110,14 +117,14 @@ describe('appLogsClient', () => {
   it('subscribes to app-logs events and returns the Wails disposer', () => {
     const dispose = vi.fn();
     const handler = vi.fn();
-    (window as any).runtime = {
+    installWindowProperty('runtime', {
       EventsOn: vi.fn((_eventName: string, eventHandler: (event?: unknown) => void) => {
         eventHandler({ sequence: 12 });
         eventHandler('unexpected payload');
         return dispose;
       }),
       EventsOff: vi.fn(),
-    };
+    });
 
     const unsubscribe = subscribeAppLogsAdded(handler);
 
@@ -133,10 +140,10 @@ describe('appLogsClient', () => {
 
   it('falls back to callback-specific EventsOff when EventsOn has no disposer', () => {
     const handler = vi.fn();
-    (window as any).runtime = {
+    installWindowProperty('runtime', {
       EventsOn: vi.fn(),
       EventsOff: vi.fn(),
-    };
+    });
 
     const unsubscribe = subscribeAppLogsAdded(handler);
     unsubscribe();
