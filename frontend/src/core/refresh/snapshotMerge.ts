@@ -19,9 +19,9 @@ import type {
   RefreshDomain,
 } from './types';
 
-type NamespaceRow = NamespaceSnapshotPayload['namespaces'][number];
-type CatalogRow = CatalogSnapshotPayload['items'][number];
-type NodeMaintenanceRow = NodeMaintenanceSnapshotPayload['drains'][number];
+type NamespaceRow = NonNullable<NamespaceSnapshotPayload['namespaces']>[number];
+type CatalogRow = NonNullable<CatalogSnapshotPayload['items']>[number];
+type NodeMaintenanceRow = NonNullable<NodeMaintenanceSnapshotPayload['drains']>[number];
 
 const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
   if (left === right) {

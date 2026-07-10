@@ -487,9 +487,9 @@ func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
 	require.Equal(t, "42", prod.ResourceVersion)
 	require.Equal(t, created.Unix(), prod.CreationUnix)
 
-	require.Equal(t, "not-found", byName["ghost"].ScopeStatus,
+	require.Equal(t, NamespaceScopeStatusNotFound, byName["ghost"].ScopeStatus,
 		"a permitted GET returning 404 is definitive")
-	require.Equal(t, "no-access", byName["locked"].ScopeStatus,
+	require.Equal(t, NamespaceScopeStatusNoAccess, byName["locked"].ScopeStatus,
 		"403 is honest: may not exist or may be denied")
 }
 

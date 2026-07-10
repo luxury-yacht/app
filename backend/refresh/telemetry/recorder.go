@@ -9,31 +9,39 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 )
 
+// SnapshotLastStatus is the closed set of refresh outcomes recorded per domain.
+type SnapshotLastStatus string
+
+const (
+	SnapshotLastStatusSuccess SnapshotLastStatus = "success"
+	SnapshotLastStatusError   SnapshotLastStatus = "error"
+)
+
 // SnapshotStatus captures the latest refresh outcome for a domain.
 type SnapshotStatus struct {
-	Domain             string   `json:"domain"`
-	Scope              string   `json:"scope,omitempty"`
-	ClusterID          string   `json:"clusterId,omitempty"`
-	ClusterName        string   `json:"clusterName,omitempty"`
-	LastStatus         string   `json:"lastStatus"`
-	LastError          string   `json:"lastError,omitempty"`
-	LastWarning        string   `json:"lastWarning,omitempty"`
-	LastDurationMs     int64    `json:"lastDurationMs"`
-	LastUpdated        int64    `json:"lastUpdated"`
-	SuccessCount       uint64   `json:"successCount"`
-	FailureCount       uint64   `json:"failureCount"`
-	TotalDurationMs    int64    `json:"totalDurationMs,omitempty"`
-	AverageDurationMs  int64    `json:"averageDurationMs,omitempty"`
-	Truncated          bool     `json:"truncated,omitempty"`
-	TotalItems         int      `json:"totalItems,omitempty"`
-	Warnings           []string `json:"warnings,omitempty"`
-	FallbackCount      uint64   `json:"fallbackCount,omitempty"`
-	HydrationCount     uint64   `json:"hydrationCount,omitempty"`
-	LastBatchIndex     int      `json:"lastBatchIndex,omitempty"`
-	TotalBatches       int      `json:"totalBatches,omitempty"`
-	LastBatchSize      int      `json:"lastBatchSize,omitempty"`
-	IsFinalBatch       bool     `json:"isFinalBatch,omitempty"`
-	TimeToFirstBatchMs int64    `json:"timeToFirstBatchMs,omitempty"`
+	Domain             string             `json:"domain"`
+	Scope              string             `json:"scope,omitempty"`
+	ClusterID          string             `json:"clusterId,omitempty"`
+	ClusterName        string             `json:"clusterName,omitempty"`
+	LastStatus         SnapshotLastStatus `json:"lastStatus"`
+	LastError          string             `json:"lastError,omitempty"`
+	LastWarning        string             `json:"lastWarning,omitempty"`
+	LastDurationMs     int64              `json:"lastDurationMs"`
+	LastUpdated        int64              `json:"lastUpdated"`
+	SuccessCount       uint64             `json:"successCount"`
+	FailureCount       uint64             `json:"failureCount"`
+	TotalDurationMs    int64              `json:"totalDurationMs,omitempty"`
+	AverageDurationMs  int64              `json:"averageDurationMs,omitempty"`
+	Truncated          bool               `json:"truncated,omitempty"`
+	TotalItems         int                `json:"totalItems,omitempty"`
+	Warnings           []string           `json:"warnings,omitempty"`
+	FallbackCount      uint64             `json:"fallbackCount,omitempty"`
+	HydrationCount     uint64             `json:"hydrationCount,omitempty"`
+	LastBatchIndex     int                `json:"lastBatchIndex,omitempty"`
+	TotalBatches       int                `json:"totalBatches,omitempty"`
+	LastBatchSize      int                `json:"lastBatchSize,omitempty"`
+	IsFinalBatch       bool               `json:"isFinalBatch,omitempty"`
+	TimeToFirstBatchMs int64              `json:"timeToFirstBatchMs,omitempty"`
 	// MaxInformerSyncWaitMs is the PEAK time a Build for this domain spent blocked
 	// in waitForInformerSync (the initial-LIST / informer settle gate) before
 	// building. It is recorded as a max, not a last, because the wait is ~0 once the
@@ -60,6 +68,14 @@ type Summary struct {
 	Streams    []StreamStatus   `json:"streams"`
 	Catalog    *CatalogStatus   `json:"catalog,omitempty"`
 	Connection ConnectionStats  `json:"connection"`
+}
+
+// EmptySummary returns the valid zero-observation wire shape.
+func EmptySummary() Summary {
+	return Summary{
+		Snapshots: []SnapshotStatus{},
+		Streams:   []StreamStatus{},
+	}
 }
 
 // Summarizer produces a telemetry Summary. *Recorder is the single-cluster
@@ -249,11 +265,11 @@ func (r *Recorder) RecordSnapshot(
 		entry.LastWarning = ""
 	}
 	if err != nil {
-		entry.LastStatus = "error"
+		entry.LastStatus = SnapshotLastStatusError
 		entry.LastError = err.Error()
 		entry.FailureCount++
 	} else {
-		entry.LastStatus = "success"
+		entry.LastStatus = SnapshotLastStatusSuccess
 		entry.LastError = ""
 		entry.SuccessCount++
 	}
@@ -379,12 +395,11 @@ func (r *Recorder) SnapshotSummary() Summary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	out := Summary{
-		Metrics:    r.metrics,
-		Snapshots:  make([]SnapshotStatus, 0, len(r.snapshots)),
-		Streams:    make([]StreamStatus, 0, len(r.streams)),
-		Connection: r.connection,
-	}
+	out := EmptySummary()
+	out.Metrics = r.metrics
+	out.Connection = r.connection
+	out.Snapshots = make([]SnapshotStatus, 0, len(r.snapshots))
+	out.Streams = make([]StreamStatus, 0, len(r.streams))
 	if r.catalog.LastUpdated != 0 {
 		catalogCopy := r.catalog
 		out.Catalog = &catalogCopy

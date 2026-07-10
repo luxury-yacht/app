@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { useBrowseCatalog, type UseBrowseCatalogResult } from './useBrowseCatalog';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 
 const mocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
@@ -98,21 +99,14 @@ const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   ...overrides,
 });
 
-const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  items: [],
-  continue: '',
-  total: 0,
-  resourceCount: 0,
-  kinds: [{ kind: 'Pod', namespaced: true }],
-  namespaces: ['default'],
-  batchIndex: 0,
-  batchSize: 0,
-  totalBatches: 1,
-  isFinal: true,
-  ...overrides,
-});
+const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload =>
+  makeCatalogSnapshotPayload({
+    clusterId: 'cluster-1',
+    clusterName: 'Cluster 1',
+    kinds: [{ kind: 'Pod', namespaced: true }],
+    namespaces: ['default'],
+    ...overrides,
+  });
 
 const defaultPinnedNamespaces = ['default'];
 

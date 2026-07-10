@@ -93,10 +93,17 @@ type ResourceQueryAnchor struct {
 // exists but the request's filters/search exclude it) or "not-found" (deleted,
 // or identity mismatch). Rank is the anchor row's 0-based position among the
 // matching rows under THIS request's sort+filters (-1 when not found).
+type ResourceQueryAnchorReason string
+
+const (
+	ResourceQueryAnchorFiltered ResourceQueryAnchorReason = "filtered"
+	ResourceQueryAnchorNotFound ResourceQueryAnchorReason = "not-found"
+)
+
 type ResourceQueryAnchorResult struct {
-	Found  bool   `json:"found"`
-	Rank   int    `json:"rank"`
-	Reason string `json:"reason,omitempty"`
+	Found  bool                      `json:"found"`
+	Rank   int                       `json:"rank"`
+	Reason ResourceQueryAnchorReason `json:"reason,omitempty"`
 }
 
 // validate enforces the request's page-address contract: continue, anchor,

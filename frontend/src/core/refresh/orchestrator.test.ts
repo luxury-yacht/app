@@ -12,7 +12,7 @@ import {
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
-import type { PodSnapshotEntry, RefreshDomain } from './types';
+import type { RefreshDomain } from './types';
 import {
   getRefreshState,
   getScopedDomainState,
@@ -30,6 +30,13 @@ import {
 import { buildClusterScope } from './clusterScope';
 import { clusterReadiness } from './clusterReadiness';
 import { eventBus } from '@/core/events';
+import {
+  makeCatalogSnapshotPayload,
+  makeClusterConfigSnapshotPayload,
+  makeClusterEventsSnapshotPayload,
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from './refreshContractTestBuilders';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),
@@ -276,26 +283,6 @@ describe('refreshOrchestrator', () => {
       },
     });
   };
-
-  const makePodRow = (overrides: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
-    clusterId: 'cluster-a',
-    namespace: 'default',
-    name: 'pod-a',
-    node: 'node-a',
-    status: 'Running',
-    ready: '1/1',
-    restarts: 0,
-    age: '1m',
-    ownerKind: 'ReplicaSet',
-    ownerName: 'pod-a-rs',
-    cpuRequest: '10m',
-    cpuLimit: '20m',
-    cpuUsage: '10m',
-    memRequest: '10Mi',
-    memLimit: '20Mi',
-    memUsage: '20Mi',
-    ...overrides,
-  });
 
   it('holds scoped fetches for an initializing cluster and dispatches once it becomes serviceable', async () => {
     clusterReadiness.resetForTests();
@@ -1054,6 +1041,7 @@ describe('refreshOrchestrator', () => {
     const scope = 'cluster-a';
     const cachedNamespace = {
       clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
       ref: {
         clusterId: 'cluster-a',
         group: '',
@@ -1070,6 +1058,7 @@ describe('refreshOrchestrator', () => {
     };
     const changedNamespace = {
       clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
       ref: {
         clusterId: 'cluster-a',
         group: '',
@@ -1088,7 +1077,11 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('namespaces', scope, (prev) => ({
       ...prev,
       status: 'ready',
-      data: { namespaces: [cachedNamespace, changedNamespace], clusterId: 'test-cluster' },
+      data: {
+        namespaces: [cachedNamespace, changedNamespace],
+        clusterId: 'test-cluster',
+        clusterName: 'Test Cluster',
+      },
       stats: { itemCount: 2, buildDurationMs: 0 },
     }));
 
@@ -1102,6 +1095,7 @@ describe('refreshOrchestrator', () => {
         payload: {
           namespaces: [{ ...cachedNamespace }, { ...changedNamespace, phase: 'Terminating' }],
           clusterId: 'test-cluster',
+          clusterName: 'Test Cluster',
         },
         stats: { itemCount: 2, buildDurationMs: 0 },
       },
@@ -1202,6 +1196,7 @@ describe('refreshOrchestrator', () => {
   it('reuses cached catalog diff items when polling snapshots are unchanged', async () => {
     const cachedItem = {
       clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
       kind: 'Deployment',
       group: 'apps',
       version: 'v1',
@@ -1215,6 +1210,7 @@ describe('refreshOrchestrator', () => {
     };
     const changedItem = {
       clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
       kind: 'ConfigMap',
       group: '',
       version: 'v1',
@@ -1231,16 +1227,17 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('catalog-diff', scope, (prev) => ({
       ...prev,
       status: 'ready',
-      data: {
+      data: makeCatalogSnapshotPayload({
         clusterId: 'cluster-a',
         items: [cachedItem, changedItem],
         total: 2,
+        unfilteredTotal: 2,
         resourceCount: 2,
         batchIndex: 0,
         batchSize: 2,
         totalBatches: 1,
         isFinal: true,
-      },
+      }),
       stats: { itemCount: 2, buildDurationMs: 0 },
     }));
 
@@ -1823,7 +1820,9 @@ describe('refreshOrchestrator', () => {
         sequence: 1,
         payload: {
           clusterId: 'cluster-a',
-          rows: [makePodRow({ clusterId: 'cluster-a', namespace: 'team-a', name: 'pod-a' })],
+          rows: [
+            makePodSnapshotEntry({ clusterId: 'cluster-a', namespace: 'team-a', name: 'pod-a' }),
+          ],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
@@ -1856,10 +1855,10 @@ describe('refreshOrchestrator', () => {
 
     setScopedDomainState('pods', scope, () => ({
       status: 'ready',
-      data: {
+      data: makePodSnapshotPayload({
         clusterId: 'cluster-a',
         rows: [
-          makePodRow({
+          makePodSnapshotEntry({
             clusterId: 'cluster-a',
             namespace: 'team-a',
             name: 'pod-a',
@@ -1868,7 +1867,7 @@ describe('refreshOrchestrator', () => {
             memUsage: '20Mi',
           }),
         ],
-      },
+      }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1886,7 +1885,7 @@ describe('refreshOrchestrator', () => {
         payload: {
           clusterId: 'cluster-a',
           rows: [
-            makePodRow({
+            makePodSnapshotEntry({
               clusterId: 'cluster-a',
               namespace: 'team-a',
               name: 'pod-a',
@@ -2433,23 +2432,30 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('cluster-events', 'cluster', (previous) => ({
       ...previous,
       status: 'ready',
-      data: {
+      data: makeClusterEventsSnapshotPayload({
         clusterId: 'cluster-a',
         rows: [
           {
             kind: 'Event',
             clusterId: 'cluster-a',
+            clusterName: 'Cluster A',
             name: 'existing',
+            uid: 'existing-uid',
+            resourceVersion: '1',
             namespace: 'default',
+            objectNamespace: 'default',
+            objectUid: 'web-uid',
+            objectApiVersion: 'v1',
             type: 'Normal',
             source: 'kubelet',
             reason: 'Started',
             object: 'Pod/web',
             message: 'still here',
             age: '1m',
+            ageTimestamp: 1,
           },
         ],
-      },
+      }),
       error: null,
       lastUpdated: 1,
       lastAutoRefresh: 1,
@@ -2655,10 +2661,10 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('pods', scope, (previous) => ({
       ...previous,
       status: 'ready',
-      data: {
+      data: makePodSnapshotPayload({
         clusterId: 'cluster-b',
-        rows: [makePodRow({ clusterId: 'cluster-b', name: 'cached-pod' })],
-      },
+        rows: [makePodSnapshotEntry({ clusterId: 'cluster-b', name: 'cached-pod' })],
+      }),
       scope,
     }));
     refreshOrchestrator.setScopedDomainEnabled('pods', scope, false, {
@@ -2675,7 +2681,7 @@ describe('refreshOrchestrator', () => {
         sequence: 2,
         payload: {
           clusterId: 'cluster-b',
-          rows: [makePodRow({ clusterId: 'cluster-b', name: 'fresh-pod' })],
+          rows: [makePodSnapshotEntry({ clusterId: 'cluster-b', name: 'fresh-pod' })],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
@@ -2711,7 +2717,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('cluster-config', scopeB, (previous) => ({
       ...previous,
       status: 'ready',
-      data: { clusterId: 'cluster-b', rows: [] },
+      data: makeClusterConfigSnapshotPayload({ clusterId: 'cluster-b', rows: [] }),
       scope: scopeB,
     }));
 
@@ -2816,7 +2822,7 @@ describe('refreshOrchestrator', () => {
     // Cluster A's stream is healthy; cluster B's stream is not.
     resourceStreamMocks.isHealthy.mockImplementation((...args: unknown[]) => args[1] === scopeA);
 
-    const podA = makePodRow({
+    const podA = makePodSnapshotEntry({
       clusterId: 'cluster-a',
       namespace: 'default',
       name: 'pod-a',
@@ -2824,7 +2830,7 @@ describe('refreshOrchestrator', () => {
       cpuUsage: '10m',
       memUsage: '20Mi',
     });
-    const podB = makePodRow({
+    const podB = makePodSnapshotEntry({
       clusterId: 'cluster-b',
       namespace: 'default',
       name: 'pod-b',
@@ -2836,7 +2842,7 @@ describe('refreshOrchestrator', () => {
 
     setScopedDomainState('pods', scopeA, () => ({
       status: 'ready',
-      data: { clusterId: 'cluster-a', rows: [podA] },
+      data: makePodSnapshotPayload({ clusterId: 'cluster-a', rows: [podA] }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -2844,7 +2850,7 @@ describe('refreshOrchestrator', () => {
     }));
     setScopedDomainState('pods', scopeB, () => ({
       status: 'ready',
-      data: { clusterId: 'cluster-b', rows: [podB] },
+      data: makePodSnapshotPayload({ clusterId: 'cluster-b', rows: [podB] }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -2905,7 +2911,7 @@ describe('refreshOrchestrator', () => {
     // An unhealthy stream forces the poll fallback so the snapshot path runs.
     resourceStreamMocks.isHealthy.mockReturnValue(false);
 
-    const existingPod = makePodRow({
+    const existingPod = makePodSnapshotEntry({
       clusterId: 'cluster-a',
       namespace: 'default',
       name: 'pod-a',
@@ -2915,10 +2921,10 @@ describe('refreshOrchestrator', () => {
     });
     setScopedDomainState('pods', scope, () => ({
       status: 'ready',
-      data: {
+      data: makePodSnapshotPayload({
         clusterId: 'cluster-a',
         rows: [existingPod],
-      },
+      }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -2985,7 +2991,7 @@ describe('refreshOrchestrator', () => {
 
     setScopedDomainState('cluster-config', scope, () => ({
       status: 'ready',
-      data: {
+      data: makeClusterConfigSnapshotPayload({
         clusterId: 'test-cluster',
         rows: [
           {
@@ -2994,9 +3000,10 @@ describe('refreshOrchestrator', () => {
             details: 'cluster defaults',
             age: '5m',
             clusterId: 'test-cluster',
+            clusterName: 'Test Cluster',
           },
         ],
-      },
+      }),
       stats: null,
       error: null,
       etag: '123',

@@ -224,7 +224,7 @@ const catalogItemFromResource = (
   creationTimestamp: resource.age ?? '',
   scope: 'Namespace',
   clusterId: resource.clusterId,
-  clusterName: resource.clusterName,
+  clusterName: resource.clusterName ?? '',
   actionFacts: resource.status ? { status: resource.status } : undefined,
   ...overrides,
 });

@@ -10,86 +10,27 @@ import {
   GetRefreshBaseURL,
   GetSelectionDiagnostics,
 } from '@wailsjs/go/backend/App';
+import type { backend } from '@wailsjs/go/models';
 
-import type { TelemetrySummary } from './types';
+import {
+  assertRefreshSnapshotEnvelope,
+  assertTelemetrySummary,
+  type RefreshDomain,
+  type RefreshSnapshot,
+  type SnapshotStats,
+  type TelemetrySummary,
+} from './types';
 import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
 
-export interface SnapshotStats {
-  itemCount: number;
-  buildDurationMs: number;
-  totalItems?: number;
-  truncated?: boolean;
-  warnings?: string[];
-  batchIndex?: number;
-  batchSize?: number;
-  totalBatches?: number;
-  isFinalBatch?: boolean;
-  timeToFirstBatchMs?: number;
-  timeToFirstRowMs?: number;
-  buildStartedAtUnix?: number;
-}
+export type Snapshot<TPayload> = RefreshSnapshot<TPayload>;
+export type { SnapshotStats };
+export type NormalizedTelemetrySummary = Omit<TelemetrySummary, 'snapshots' | 'streams'> & {
+  snapshots: NonNullable<TelemetrySummary['snapshots']>;
+  streams: NonNullable<TelemetrySummary['streams']>;
+};
 
-export interface Snapshot<TPayload> {
-  domain: string;
-  scope?: string;
-  version: number;
-  sourceVersion?: string;
-  sourceVersions?: Record<string, string>;
-  checksum?: string;
-  generatedAt: number;
-  sequence: number;
-  payload: TPayload;
-  stats: SnapshotStats;
-}
-
-export interface SelectionDiagnostics {
-  activeQueueDepth: number;
-  maxQueueDepth: number;
-  sampleCount: number;
-  totalMutations: number;
-  completedMutations: number;
-  failedMutations: number;
-  canceledMutations: number;
-  supersededMutations: number;
-  lastUpdatedMs?: number;
-  lastReason?: string;
-  lastError?: string;
-  lastQueueMs?: number;
-  lastTotalMs?: number;
-  queueP50Ms?: number;
-  queueP95Ms?: number;
-  totalP50Ms?: number;
-  totalP95Ms?: number;
-  intentP50Ms?: number;
-  intentP95Ms?: number;
-  commitP50Ms?: number;
-  commitP95Ms?: number;
-  clientSyncP50Ms?: number;
-  clientSyncP95Ms?: number;
-  refreshP50Ms?: number;
-  refreshP95Ms?: number;
-  catalogP50Ms?: number;
-  catalogP95Ms?: number;
-}
-
-export interface KubernetesAPIClientDiagnostics {
-  clusterId: string;
-  clusterName: string;
-  configuredQPS: number;
-  configuredBurst: number;
-  qps1s: number;
-  qps10s: number;
-  qps60s: number;
-  peakQPS1s: number;
-  totalRequests: number;
-  status2xx: number;
-  status3xx: number;
-  status4xx: number;
-  status5xx: number;
-  status429: number;
-  errors: number;
-  lastRequestMs?: number;
-}
+export type SelectionDiagnostics = backend.SelectionDiagnostics;
+export type KubernetesAPIClientDiagnostics = backend.KubernetesAPIClientDiagnostics;
 
 interface FetchSnapshotOptions {
   scope?: string;
@@ -173,7 +114,7 @@ export async function ensureRefreshBaseURL(): Promise<string> {
 }
 
 export async function fetchSnapshot<TPayload>(
-  domain: string,
+  domain: RefreshDomain,
   options: FetchSnapshotOptions = {}
 ): Promise<{ snapshot?: Snapshot<TPayload>; etag?: string; notModified: boolean }> {
   const buildRequest = async () => {
@@ -238,7 +179,8 @@ export async function fetchSnapshot<TPayload>(
     throw permissionDenied ? new SnapshotPermissionDeniedError(message) : new Error(message);
   }
 
-  const snapshot = (await response.json()) as Snapshot<TPayload>;
+  const snapshot: unknown = await response.json();
+  assertRefreshSnapshotEnvelope<TPayload>(snapshot, domain);
   return {
     snapshot,
     etag: response.headers.get('ETag') ?? undefined,
@@ -285,7 +227,7 @@ export function invalidateRefreshBaseURL(): void {
   refreshReadyPromise = null;
 }
 
-export async function fetchTelemetrySummary(): Promise<TelemetrySummary> {
+export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummary> {
   const baseURL = await resolveRefreshBaseURL();
   const url = new URL('/api/v2/telemetry/summary', baseURL);
 
@@ -294,7 +236,13 @@ export async function fetchTelemetrySummary(): Promise<TelemetrySummary> {
     throw new Error(`Telemetry request failed: ${response.status} ${response.statusText}`);
   }
 
-  return (await response.json()) as TelemetrySummary;
+  const summary: unknown = await response.json();
+  assertTelemetrySummary(summary);
+  return {
+    ...summary,
+    snapshots: summary.snapshots ?? [],
+    streams: summary.streams ?? [],
+  };
 }
 
 export async function setMetricsActive(active: boolean): Promise<void> {
@@ -312,11 +260,11 @@ export async function setMetricsActive(active: boolean): Promise<void> {
 }
 
 export async function fetchSelectionDiagnostics(): Promise<SelectionDiagnostics> {
-  return (await GetSelectionDiagnostics()) as SelectionDiagnostics;
+  return GetSelectionDiagnostics();
 }
 
 export async function fetchKubernetesAPIClientDiagnostics(): Promise<
   KubernetesAPIClientDiagnostics[]
 > {
-  return (await GetKubernetesAPIClientDiagnostics()) as KubernetesAPIClientDiagnostics[];
+  return GetKubernetesAPIClientDiagnostics();
 }

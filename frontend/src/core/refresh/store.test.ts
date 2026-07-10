@@ -22,6 +22,10 @@ import {
   setScopedDomainState,
   subscribe,
 } from './store';
+import {
+  makeClusterConfigSnapshotPayload,
+  makeNamespaceConfigSnapshotPayload,
+} from './refreshContractTestBuilders';
 
 describe('refresh store helpers', () => {
   afterEach(() => {
@@ -40,7 +44,7 @@ describe('refresh store helpers', () => {
     setDomainState('cluster-config', (previous) => ({
       ...previous,
       status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeClusterConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
 
     expect(listener).toHaveBeenCalled();
@@ -48,7 +52,7 @@ describe('refresh store helpers', () => {
 
     const state = getDomainState('cluster-config');
     expect(state.status).toBe('ready');
-    expect(state.data).toEqual({ rows: [], clusterId: 'test-cluster' });
+    expect(state.data).toMatchObject({ rows: [], clusterId: 'test-cluster' });
   });
 
   it('skips notifications when domain state updater returns the existing reference', () => {
@@ -67,13 +71,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
 
     const scopedState = getScopedDomainState('namespace-config', 'team-a');
     expect(scopedState.status).toBe('ready');
     expect(scopedState.scope).toBe('team-a');
-    expect(scopedState.data).toEqual({ rows: [], clusterId: 'test-cluster' });
+    expect(scopedState.data).toMatchObject({ rows: [], clusterId: 'test-cluster' });
 
     resetScopedDomainState('namespace-config', 'team-a');
     const resetState = getScopedDomainState('namespace-config', 'team-a');
@@ -86,13 +90,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
     setScopedDomainState('namespace-config', 'team-b', (previous) => ({
       ...previous,
       status: 'ready',
       scope: 'team-b',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
 
     const listener = vi.fn();
@@ -131,7 +135,7 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
 
     const entries = getScopedDomainEntries('namespace-config');
@@ -146,13 +150,13 @@ describe('refresh store helpers', () => {
       ...previous,
       status: 'ready',
       scope: 'team-a',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
     setScopedDomainState('namespace-config', 'team-b', (previous) => ({
       ...previous,
       status: 'ready',
       scope: 'team-b',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ clusterId: 'test-cluster' }),
     }));
 
     resetAllScopedDomainStates('namespace-config');

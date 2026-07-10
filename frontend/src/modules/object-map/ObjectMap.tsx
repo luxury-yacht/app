@@ -33,6 +33,7 @@ import {
   pruneObjectMapSelectedKinds,
 } from './objectMapVisibleState';
 import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
+import { normalizeObjectMapPayload } from './objectMapPayload';
 import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import {
   AutoFitIcon,
@@ -89,13 +90,14 @@ export interface ObjectMapProps {
 }
 
 const ObjectMap: React.FC<ObjectMapProps> = ({
-  payload,
+  payload: wirePayload,
   onRefresh,
   isRefreshing = false,
   onOpenPanel,
   onNavigateView,
   onOpenObjectMap,
 }) => {
+  const payload = useMemo(() => normalizeObjectMapPayload(wirePayload), [wirePayload]);
   const modelTimingStartedAt = objectMapTimingNow();
   const model = useObjectMapModel(payload);
   const modelTimingMs = objectMapTimingNow() - modelTimingStartedAt;

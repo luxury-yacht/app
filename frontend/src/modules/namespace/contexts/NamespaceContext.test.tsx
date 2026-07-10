@@ -248,6 +248,22 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
+  it('normalizes a nullable namespace wire list', () => {
+    namespaceDomainRef.current = {
+      status: 'ready',
+      data: { namespaces: null },
+      error: null,
+    } as unknown as typeof namespaceDomainRef.current;
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces).toEqual([]);
+    cleanup();
+  });
+
   it('enables and starts namespace refresh separately for every open cluster', () => {
     const { cleanup } = renderWithProvider();
     act(() => {

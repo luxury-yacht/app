@@ -336,7 +336,6 @@ export function useContainerLogsStreamFallback({
                   batchSize: previous.stats?.batchSize,
                   totalBatches: previous.stats?.totalBatches,
                   isFinalBatch: previous.stats?.isFinalBatch,
-                  timeToFirstBatchMs: previous.stats?.timeToFirstBatchMs,
                   timeToFirstRowMs: previous.stats?.timeToFirstRowMs,
                   buildStartedAtUnix: previous.stats?.buildStartedAtUnix,
                 }

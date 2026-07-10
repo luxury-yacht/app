@@ -230,7 +230,7 @@ const catalogItemFromCustom = (
     creationTimestamp,
     scope: 'Cluster',
     clusterId: resource.clusterId,
-    clusterName: resource.clusterName,
+    clusterName: resource.clusterName ?? '',
     actionFacts: resource.status ? { status: resource.status } : undefined,
     ...overrides,
   };

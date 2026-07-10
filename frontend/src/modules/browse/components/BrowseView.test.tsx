@@ -12,6 +12,7 @@ import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -229,32 +230,34 @@ const sortableKeys = (): string[] =>
 const catalogPayload = (
   items: CatalogItem[],
   overrides: Partial<CatalogSnapshotPayload> = {}
-): CatalogSnapshotPayload => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  items,
-  continue: '',
-  total: items.length,
-  totalIsExact: true,
-  resourceCount: items.length,
-  kinds: [
-    { kind: 'Node', namespaced: false },
-    { kind: 'Pod', namespaced: true },
-  ],
-  namespaces: Array.from(
-    new Set(
-      items
-        .map((item) => item.namespace)
-        .filter((namespace): namespace is string => Boolean(namespace))
-    )
-  ),
-  facetsExact: true,
-  batchIndex: 0,
-  batchSize: items.length,
-  totalBatches: 1,
-  isFinal: true,
-  ...overrides,
-});
+): CatalogSnapshotPayload =>
+  makeCatalogSnapshotPayload({
+    clusterId: 'cluster-1',
+    clusterName: 'Cluster 1',
+    items,
+    continue: '',
+    total: items.length,
+    unfilteredTotal: items.length,
+    totalIsExact: true,
+    resourceCount: items.length,
+    kinds: [
+      { kind: 'Node', namespaced: false },
+      { kind: 'Pod', namespaced: true },
+    ],
+    namespaces: Array.from(
+      new Set(
+        items
+          .map((item) => item.namespace)
+          .filter((namespace): namespace is string => Boolean(namespace))
+      )
+    ),
+    facetsExact: true,
+    batchIndex: 0,
+    batchSize: items.length,
+    totalBatches: 1,
+    isFinal: true,
+    ...overrides,
+  });
 
 describe('BrowseView', () => {
   let container: HTMLDivElement;

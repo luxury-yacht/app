@@ -4,6 +4,14 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import {
+  makeClusterNodeSnapshotEntry,
+  makeClusterNodeSnapshotPayload,
+  makeNamespaceWorkloadSummary,
+  makeNamespaceWorkloadSnapshotPayload,
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { UtilizationData } from './detailsTabTypes';
 import { useUtilizationData } from './useUtilizationData';
@@ -115,11 +123,10 @@ describe('useUtilizationData', () => {
         ...previous,
         status: 'ready',
         scope: 'cluster-a|namespace:team-a',
-        data: {
+        data: makePodSnapshotPayload({
           clusterId: 'cluster-a',
           rows: [
-            {
-              clusterId: 'cluster-a',
+            makePodSnapshotEntry({
               name: 'api',
               namespace: 'team-a',
               node: 'node-a',
@@ -135,10 +142,10 @@ describe('useUtilizationData', () => {
               memUsage: '256Mi',
               memRequest: '96Mi',
               memLimit: '512Mi',
-            },
+            }),
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
-        },
+        }),
       }));
       await Promise.resolve();
     });
@@ -185,12 +192,10 @@ describe('useUtilizationData', () => {
         ...previous,
         status: 'ready',
         scope: 'cluster-a|namespace:team-a',
-        data: {
+        data: makeNamespaceWorkloadSnapshotPayload({
           clusterId: 'cluster-a',
           rows: [
-            {
-              clusterId: 'cluster-a',
-              kind: 'Deployment',
+            makeNamespaceWorkloadSummary({
               name: 'api',
               namespace: 'team-a',
               ready: '2/3',
@@ -203,10 +208,10 @@ describe('useUtilizationData', () => {
               memUsage: '384Mi',
               memRequest: '192Mi',
               memLimit: '768Mi',
-            },
+            }),
           ],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
-        },
+        }),
       }));
       await Promise.resolve();
     });
@@ -262,11 +267,10 @@ describe('useUtilizationData', () => {
           ...previous,
           status: 'ready',
           scope: 'cluster-a|namespace:team-a',
-          data: {
+          data: makeNamespaceWorkloadSnapshotPayload({
             clusterId: 'cluster-a',
             rows: [
-              {
-                clusterId: 'cluster-a',
+              makeNamespaceWorkloadSummary({
                 kind,
                 name: 'api',
                 namespace: 'team-a',
@@ -280,10 +284,10 @@ describe('useUtilizationData', () => {
                 memUsage: '384Mi',
                 memRequest: '192Mi',
                 memLimit: '768Mi',
-              },
+              }),
             ],
             metrics: { stale: false, successCount: 1, failureCount: 0 },
-          },
+          }),
         }));
         await Promise.resolve();
       });
@@ -329,38 +333,11 @@ describe('useUtilizationData', () => {
         ...previous,
         status: 'ready',
         scope: 'cluster-a|',
-        data: {
+        data: makeClusterNodeSnapshotPayload({
           clusterId: 'cluster-a',
-          rows: [
-            {
-              clusterId: 'cluster-a',
-              name: 'node-a',
-              status: 'Ready',
-              roles: 'worker',
-              age: '1d',
-              version: 'v1.31.0',
-              cpuCapacity: '8',
-              cpuAllocatable: '7600m',
-              cpuRequests: '2',
-              cpuLimits: '4',
-              cpuUsage: '1200m',
-              memoryCapacity: '32Gi',
-              memoryAllocatable: '30Gi',
-              memRequests: '6Gi',
-              memLimits: '12Gi',
-              memoryUsage: '5Gi',
-              pods: '18',
-              podsCapacity: '110',
-              podsAllocatable: '100',
-              restarts: 0,
-              kind: 'Node',
-              cpu: '1200m',
-              memory: '5Gi',
-              unschedulable: false,
-            },
-          ],
+          rows: [makeClusterNodeSnapshotEntry()],
           metrics: { stale: false, successCount: 1, failureCount: 0 },
-        },
+        }),
       }));
       await Promise.resolve();
     });

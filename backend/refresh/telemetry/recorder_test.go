@@ -93,7 +93,7 @@ func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	s := summary.Snapshots[0]
 	require.Equal(t, "domains", s.Domain)
 	require.Equal(t, "scopeB", s.Scope)
-	require.Equal(t, "success", s.LastStatus)
+	require.Equal(t, SnapshotLastStatusSuccess, s.LastStatus)
 	require.Equal(t, "", s.LastError)
 	require.Equal(t, int64(150), s.AverageDurationMs)
 	require.Equal(t, 2, s.TotalBatches)

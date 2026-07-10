@@ -10,9 +10,9 @@ import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
   ContainerLogsEntry,
   ContainerLogsSnapshotPayload,
-  PermissionDeniedStatus,
+  ContainerLogsStreamEventPayload,
 } from '../types';
-import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import { eventBus } from '@/core/events';
 import {
   getObjPanelLogsBufferMaxSize,
@@ -25,32 +25,49 @@ import { streamReconnectDelay } from './streamTiming';
 import { StreamVisibilityController } from './streamVisibilityController';
 
 type StreamMode = 'stream' | 'manual';
+type StreamEventPayload = ContainerLogsStreamEventPayload;
 
-interface StreamEventPayload {
-  domain: string;
-  scope: string;
-  sequence: number;
-  generatedAt: number;
-  reset?: boolean;
-  entries?: Array<{
-    timestamp?: string;
-    pod?: string;
-    container?: string;
-    line?: string;
-    isInit?: boolean;
-    isEphemeral?: boolean;
-  }>;
-  warnings?: string[];
-  error?: string;
-  errorDetails?: PermissionDeniedStatus;
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isValidPermissionStatus = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    typeof value.kind !== 'string' ||
+    typeof value.apiVersion !== 'string' ||
+    typeof value.message !== 'string' ||
+    typeof value.reason !== 'string' ||
+    typeof value.code !== 'number'
+  ) {
+    return false;
+  }
+  if (value.details === undefined) {
+    return true;
+  }
+  return (
+    isRecord(value.details) &&
+    (value.details.domain === undefined || typeof value.details.domain === 'string') &&
+    (value.details.resource === undefined || typeof value.details.resource === 'string')
+  );
+};
+
+const isValidLogEntry = (value: unknown): boolean =>
+  isRecord(value) &&
+  typeof value.timestamp === 'string' &&
+  typeof value.pod === 'string' &&
+  typeof value.container === 'string' &&
+  typeof value.line === 'string' &&
+  typeof value.isInit === 'boolean' &&
+  (value.isEphemeral === undefined || typeof value.isEphemeral === 'boolean');
 
 function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPayload {
-  if (typeof data !== 'object' || data === null) {
+  if (!isRecord(data)) {
     return false;
   }
 
-  const obj = data as Record<string, unknown>;
+  const obj = data;
 
   // Required fields
   if (typeof obj.domain !== 'string' || typeof obj.scope !== 'string') {
@@ -72,19 +89,21 @@ function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPa
   }
 
   if (
-    obj.warnings !== undefined &&
+    obj.warnings != null &&
     (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
   ) {
     return false;
   }
 
-  if (obj.errorDetails !== undefined && !isPermissionDeniedStatus(obj.errorDetails)) {
+  if (obj.errorDetails !== undefined && !isValidPermissionStatus(obj.errorDetails)) {
     return false;
   }
 
   // entries must be an array if present
-  if (obj.entries !== undefined && !Array.isArray(obj.entries)) {
-    return false;
+  if (obj.entries !== undefined) {
+    if (!Array.isArray(obj.entries) || obj.entries.some((entry) => !isValidLogEntry(entry))) {
+      return false;
+    }
   }
 
   return true;
@@ -204,6 +223,7 @@ class ContainerLogsStreamConnection {
       const parsed: unknown = JSON.parse(event.data);
       if (!isValidContainerLogsStreamPayload(parsed)) {
         console.error('Invalid container logs stream payload structure');
+        this.handleProtocolError('Invalid container logs stream payload');
         return;
       }
       if (parsed.scope !== this.scope || parsed.domain !== DOMAIN_NAME) {
@@ -217,8 +237,17 @@ class ContainerLogsStreamConnection {
       }
     } catch (error) {
       console.error('Failed to parse container logs stream payload', error);
+      this.handleProtocolError('Failed to parse container logs stream payload');
     }
   };
+
+  private handleProtocolError(message: string): void {
+    this.manager.handleStreamError(this.scope, message);
+    if (this.mode === 'manual') {
+      this.reject?.(new Error(message));
+      this.stop(false);
+    }
+  }
 
   private handleError = () => {
     if (this.closed) {
@@ -438,7 +467,7 @@ export class ContainerLogsStreamManager {
     );
     const isManual = mode === 'manual';
     if (payload.warnings !== undefined) {
-      if (payload.warnings.length > 0) {
+      if (payload.warnings && payload.warnings.length > 0) {
         this.backendWarnings.set(scope, payload.warnings);
       } else {
         this.backendWarnings.delete(scope);

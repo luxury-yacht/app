@@ -1,17 +1,19 @@
 import { ensureRefreshBaseURL, invalidateRefreshBaseURL } from '../client';
+import type { ResourceStreamClientMessage as ResourceStreamWireClientMessage } from '../types';
 import type { DoorbellDomain } from './resourceStreamDomains';
 import { streamReconnectDelay } from './streamTiming';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const RECONNECT_JITTER_FACTOR = 0.2;
 
-export type ResourceStreamClientMessage = {
-  type: string;
+export type ResourceStreamClientMessage = Omit<
+  ResourceStreamWireClientMessage,
+  'type' | 'domain' | 'scope'
+> & {
+  type: Extract<ResourceStreamWireClientMessage['type'], 'REQUEST' | 'CANCEL'>;
   clusterId?: string;
   domain: DoorbellDomain;
   scope: string;
-  resourceVersion?: string;
-  resumeToken?: string;
 };
 
 export type ResourceStreamConnectionDelegate = {

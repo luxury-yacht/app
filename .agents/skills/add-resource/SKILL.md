@@ -324,8 +324,10 @@ contract together:
   handler in `stream_registration_direct.go`/`stream_registration_network.go` only
   for related-object invalidation or a non-shared informer factory. Add resource
   stream tests when live row updates are needed
-- Frontend `RefreshDomain` and `DomainPayloadMap` in
-  `frontend/src/core/refresh/types.ts`
+- Backend-owned refresh DTO and domain payload mapping in
+  `backend/internal/genrefreshcontracts/registry.go`; run
+  `go generate ./backend` and never hand-edit
+  `frontend/src/core/refresh/types.generated.ts`
 - Frontend resource stream descriptors in
   `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` when live row
   updates are needed

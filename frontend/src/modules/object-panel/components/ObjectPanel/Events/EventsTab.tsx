@@ -62,21 +62,7 @@ interface EventsTabProps {
 }
 
 function normalizeEventSource(source: ObjectEventSummary['source'] | undefined): string {
-  if (typeof source === 'string') {
-    return source.trim() || 'Unknown';
-  }
-  if (!source) {
-    return 'Unknown';
-  }
-  if (source.component) {
-    return source.host ? `${source.component} on ${source.host}` : source.component;
-  }
-  if (source.reportingController) {
-    return source.reportingInstance
-      ? `${source.reportingController} (${source.reportingInstance})`
-      : source.reportingController;
-  }
-  return 'Unknown';
+  return source?.trim() || 'Unknown';
 }
 
 interface EventDisplay {

@@ -34,9 +34,8 @@ const (
 	EventKindError DrainEventKind = "error"
 )
 
-// DrainEventPhase is the closed set of drain event phases. The frontend
-// mirrors this vocabulary (`DrainEventPhase` in frontend/src/core/refresh/types.ts)
-// and derives progress counts from it — add new phases in both places.
+// DrainEventPhase is the closed set of drain event phases. The refresh contract
+// generator discovers these typed constants and emits the frontend union.
 type DrainEventPhase string
 
 const (
@@ -79,7 +78,7 @@ type DrainEvent struct {
 // DrainJob summarises the lifecycle of a single drain invocation.
 type DrainJob struct {
 	store       *Store
-	ClusterID   string                    `json:"clusterId,omitempty"`
+	ClusterID   string                    `json:"clusterId"`
 	ClusterName string                    `json:"clusterName,omitempty"`
 	ID          string                    `json:"id"`
 	NodeName    string                    `json:"nodeName"`
@@ -93,7 +92,7 @@ type DrainJob struct {
 
 // Snapshot is the payload returned to refresh clients.
 type Snapshot struct {
-	ClusterID   string     `json:"clusterId,omitempty"`
+	ClusterID   string     `json:"clusterId"`
 	ClusterName string     `json:"clusterName,omitempty"`
 	Drains      []DrainJob `json:"drains"`
 }

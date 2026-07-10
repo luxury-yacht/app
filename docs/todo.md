@@ -1,0 +1,3 @@
+- Warning events on cluster overview not sizing properly
+- Switching cluster tabs sometimes reloads data
+- Intermittent "awaiting metrics data", check the thresholds for that

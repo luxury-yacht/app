@@ -24,7 +24,13 @@ Applies to React/TypeScript code under `frontend/`.
 
 ## Refresh Orchestrator Notes
 
-- Update `frontend/src/core/refresh/types.ts` (`RefreshDomain`, `DomainPayloadMap`) when adding domains.
+- Add backend-owned domain payload DTOs to
+  `backend/internal/genrefreshcontracts/registry.go`, then run
+  `go generate ./backend`. Never hand-edit
+	`frontend/src/core/refresh/types.generated.ts` or format it with Prettier; the
+	Go generator is its only writer. Set domain payload mappings through
+	`refreshPayloadType` in `backend/refresh/domain/refresh-domain-contract.json`.
+	Keep only frontend-owned reducer state in `frontend/src/core/refresh/types.ts`.
 - Register refresher names in `frontend/src/core/refresh/refresherTypes.ts` and timing in `frontend/src/core/refresh/refresherConfig.ts`.
 - Register domains in `frontend/src/core/refresh/orchestrator.ts` and diagnostics config in `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
 - Manual refresh targets are mapped in `frontend/src/core/refresh/refresherTypes.ts` and selected in `frontend/src/core/refresh/RefreshManager.ts`.
