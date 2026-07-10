@@ -33,6 +33,8 @@ Use the lightest enforceable form:
 - Backend-owned refresh HTTP/stream DTOs and snapshot envelope:
   `backend/internal/genrefreshcontracts/registry.go`, generated as
   `frontend/src/core/refresh/types.generated.ts`
+- Refresh domain-to-payload mappings: `refreshPayloadType` beside each domain in
+  `backend/refresh/domain/refresh-domain-contract.json`
 - Backend-owned resource identities:
   `backend/resourcecontract/builtin-resource-identities.json`
 - Wails DTOs:

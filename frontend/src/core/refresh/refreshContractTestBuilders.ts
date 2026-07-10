@@ -2,10 +2,13 @@ import type {
   CatalogSnapshotPayload,
   ClusterConfigSnapshotPayload,
   ClusterEventsSnapshotPayload,
+  ClusterNodeSnapshotEntry,
   ClusterNodeSnapshotPayload,
   NamespaceAutoscalingSnapshotPayload,
   NamespaceConfigSnapshotPayload,
+  NamespaceWorkloadSummary,
   NamespaceWorkloadSnapshotPayload,
+  PodSnapshotEntry,
   PodSnapshotPayload,
   ResourceQueryCapabilities,
   TelemetrySummary,
@@ -28,6 +31,15 @@ const queryEnvelope = (table: string) => ({
   capabilities: capabilities(),
 });
 
+const emptyRowsPayload = (table: string) => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  ...queryEnvelope(table),
+  rows: [],
+});
+
+const metricsStatus = () => ({ stale: false, successCount: 0, failureCount: 0 });
+
 export const makePodSnapshotPayload = (
   overrides: Partial<PodSnapshotPayload> = {}
 ): PodSnapshotPayload => ({
@@ -35,7 +47,7 @@ export const makePodSnapshotPayload = (
   clusterName: 'Cluster A',
   ...queryEnvelope('pods'),
   rows: [],
-  metrics: { stale: false, successCount: 0, failureCount: 0 },
+  metrics: metricsStatus(),
   totalCount: 0,
   healthCounts: {},
   ...overrides,
@@ -44,40 +56,28 @@ export const makePodSnapshotPayload = (
 export const makeClusterConfigSnapshotPayload = (
   overrides: Partial<ClusterConfigSnapshotPayload> = {}
 ): ClusterConfigSnapshotPayload => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  ...queryEnvelope('cluster-config'),
-  rows: [],
+  ...emptyRowsPayload('cluster-config'),
   ...overrides,
 });
 
 export const makeClusterEventsSnapshotPayload = (
   overrides: Partial<ClusterEventsSnapshotPayload> = {}
 ): ClusterEventsSnapshotPayload => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  ...queryEnvelope('cluster-events'),
-  rows: [],
+  ...emptyRowsPayload('cluster-events'),
   ...overrides,
 });
 
 export const makeNamespaceConfigSnapshotPayload = (
   overrides: Partial<NamespaceConfigSnapshotPayload> = {}
 ): NamespaceConfigSnapshotPayload => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  ...queryEnvelope('namespace-config'),
-  rows: [],
+  ...emptyRowsPayload('namespace-config'),
   ...overrides,
 });
 
 export const makeNamespaceAutoscalingSnapshotPayload = (
   overrides: Partial<NamespaceAutoscalingSnapshotPayload> = {}
 ): NamespaceAutoscalingSnapshotPayload => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  ...queryEnvelope('namespace-autoscaling'),
-  rows: [],
+  ...emptyRowsPayload('namespace-autoscaling'),
   ...overrides,
 });
 
@@ -88,7 +88,7 @@ export const makeNamespaceWorkloadSnapshotPayload = (
   clusterName: 'Cluster A',
   ...queryEnvelope('namespace-workloads'),
   rows: [],
-  metrics: { stale: false, successCount: 0, failureCount: 0 },
+  metrics: metricsStatus(),
   ...overrides,
 });
 
@@ -99,7 +99,7 @@ export const makeClusterNodeSnapshotPayload = (
   clusterName: 'Cluster A',
   ...queryEnvelope('nodes'),
   rows: [],
-  metrics: { stale: false, successCount: 0, failureCount: 0 },
+  metrics: metricsStatus(),
   ...overrides,
 });
 
@@ -122,6 +122,77 @@ export const makeCatalogSnapshotPayload = (
   batchSize: 0,
   totalBatches: 1,
   isFinal: true,
+  ...overrides,
+});
+
+export const makePodSnapshotEntry = (
+  overrides: Partial<PodSnapshotEntry> = {}
+): PodSnapshotEntry => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  namespace: 'default',
+  name: 'pod-a',
+  node: 'node-a',
+  status: 'Running',
+  ready: '1/1',
+  restarts: 0,
+  age: '1m',
+  ownerKind: 'Deployment',
+  ownerName: 'web',
+  portForwardAvailable: false,
+  cpuRequest: '10m',
+  cpuLimit: '20m',
+  cpuUsage: '10m',
+  memRequest: '10Mi',
+  memLimit: '20Mi',
+  memUsage: '20Mi',
+  ...overrides,
+});
+
+export const makeClusterNodeSnapshotEntry = (
+  overrides: Partial<ClusterNodeSnapshotEntry> = {}
+): ClusterNodeSnapshotEntry => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  name: 'node-a',
+  status: 'Ready',
+  roles: 'worker',
+  age: '1d',
+  version: 'v1.31.0',
+  cpuCapacity: '8',
+  cpuAllocatable: '7600m',
+  cpuRequests: '2',
+  cpuLimits: '4',
+  cpuUsage: '1200m',
+  memoryCapacity: '32Gi',
+  memoryAllocatable: '30Gi',
+  memRequests: '6Gi',
+  memLimits: '12Gi',
+  memoryUsage: '5Gi',
+  pods: '18',
+  podsCapacity: '110',
+  podsAllocatable: '100',
+  restarts: 0,
+  kind: 'Node',
+  cpu: '1200m',
+  memory: '5Gi',
+  unschedulable: false,
+  ...overrides,
+});
+
+export const makeNamespaceWorkloadSummary = (
+  overrides: Partial<NamespaceWorkloadSummary> = {}
+): NamespaceWorkloadSummary => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  kind: 'Deployment',
+  name: 'api',
+  namespace: 'default',
+  ready: '1/1',
+  status: 'Ready',
+  restarts: 0,
+  age: '1m',
+  portForwardAvailable: false,
   ...overrides,
 });
 

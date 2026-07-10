@@ -12,8 +12,9 @@ then stored by the frontend under cluster-aware scopes.
 - `backend/refresh/snapshot` owns list/table snapshot payloads.
 - Backend refresh HTTP/stream DTOs, the generic snapshot envelope,
   refresh-domain union, and backend domain-to-payload map are generated into
-  `frontend/src/core/refresh/types.generated.ts`. The generator registry lives
-  in `backend/internal/genrefreshcontracts/registry.go`.
+	`frontend/src/core/refresh/types.generated.ts`. DTO and enum registrations live
+	in `backend/internal/genrefreshcontracts/registry.go`; domain payload mappings
+	live beside their owners as `refreshPayloadType` in the shared domain contract.
 - `backend/refresh/resourcestream` owns change signals for streamed table
   domains; rows are served by the snapshot/query path.
 - `backend/resources` owns rich detail payloads and imperative helpers, not
@@ -221,9 +222,8 @@ the capability conformance table.
 When adding or changing a domain:
 
 1. Update the shared domain contract and both backend/frontend registrations.
-   Register its backend payload mapping in
-   `backend/internal/genrefreshcontracts/registry.go`, then run
-   `go generate ./backend`.
+	 Register its backend DTO in `backend/internal/genrefreshcontracts/registry.go`,
+	 set its authored `refreshPayloadType`, then run `go generate ./backend`.
 2. Define the scope shape and whether multiple active scopes are allowed.
 3. Decide snapshot, stream, cache, permission, diagnostics, and row-merge
    behavior explicitly.

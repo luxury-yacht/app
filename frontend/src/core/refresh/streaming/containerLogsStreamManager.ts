@@ -89,7 +89,7 @@ function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPa
   }
 
   if (
-    obj.warnings !== undefined &&
+    obj.warnings != null &&
     (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
   ) {
     return false;
@@ -223,6 +223,7 @@ class ContainerLogsStreamConnection {
       const parsed: unknown = JSON.parse(event.data);
       if (!isValidContainerLogsStreamPayload(parsed)) {
         console.error('Invalid container logs stream payload structure');
+        this.handleProtocolError('Invalid container logs stream payload');
         return;
       }
       if (parsed.scope !== this.scope || parsed.domain !== DOMAIN_NAME) {
@@ -236,8 +237,17 @@ class ContainerLogsStreamConnection {
       }
     } catch (error) {
       console.error('Failed to parse container logs stream payload', error);
+      this.handleProtocolError('Failed to parse container logs stream payload');
     }
   };
+
+  private handleProtocolError(message: string): void {
+    this.manager.handleStreamError(this.scope, message);
+    if (this.mode === 'manual') {
+      this.reject?.(new Error(message));
+      this.stop(false);
+    }
+  }
 
   private handleError = () => {
     if (this.closed) {
@@ -457,7 +467,7 @@ export class ContainerLogsStreamManager {
     );
     const isManual = mode === 'manual';
     if (payload.warnings !== undefined) {
-      if (payload.warnings.length > 0) {
+      if (payload.warnings && payload.warnings.length > 0) {
         this.backendWarnings.set(scope, payload.warnings);
       } else {
         this.backendWarnings.delete(scope);

@@ -215,7 +215,7 @@ func (s *Server) handleTelemetrySummary(w http.ResponseWriter, r *http.Request) 
 
 	if s.telemetry == nil {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(telemetry.Summary{})
+		_ = json.NewEncoder(w).Encode(telemetry.EmptySummary())
 		return
 	}
 

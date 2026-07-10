@@ -48,8 +48,10 @@ Applies to Go code under `backend/`.
 - Domain checklist: add or update snapshot builders in `backend/refresh/snapshot/*.go`, register domains in `backend/refresh/system/registrations.go`, and keep permission gates aligned with `backend/refresh/system/permission_gate.go`.
 - Refresh HTTP and stream DTOs are generated into
   `frontend/src/core/refresh/types.generated.ts` from
-  `backend/internal/genrefreshcontracts`; register new payload types and domain
-  mappings there, then run `go generate ./backend`.
+	`backend/internal/genrefreshcontracts`; register new DTO and enum types there,
+	set each domain's `refreshPayloadType` in
+	`backend/refresh/domain/refresh-domain-contract.json`, then run
+	`go generate ./backend`.
 - Permission-gated domains: use `RegisterPermissionDeniedDomain` in `backend/refresh/snapshot/permission.go` and surface `PermissionIssue` entries through the refresh system permission-gate paths.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
 - Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate stream routes are wired in `backend/app_refresh_setup.go`.

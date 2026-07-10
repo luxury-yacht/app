@@ -393,7 +393,7 @@ func warningPayload(warnings []string, includeEmpty bool) *[]string {
 	if len(warnings) == 0 && !includeEmpty {
 		return nil
 	}
-	copied := append([]string(nil), warnings...)
+	copied := append([]string{}, warnings...)
 	return &copied
 }
 

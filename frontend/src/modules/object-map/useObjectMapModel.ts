@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
+import type { NormalizedObjectMapPayload } from './objectMapPayload';
 import {
   computeCollapseInfo,
   filterByCollapseInfo,
@@ -43,7 +43,7 @@ interface NodeDragState {
   didDrag: boolean;
 }
 
-export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
+export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
   const seedId = useMemo(() => {
     const ref = payload.seed;
     const namespace = ref.namespace ?? '';

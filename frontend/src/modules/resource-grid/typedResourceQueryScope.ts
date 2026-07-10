@@ -172,7 +172,8 @@ export function buildTypedResourceQueryScope(
  * `rows` — shared by every view so the mapping exists once (module-level, so
  * its identity is stable across renders).
  */
-export const selectPayloadRows = <TRow>(payload: { rows?: TRow[] }): TRow[] => payload.rows ?? [];
+export const selectPayloadRows = <TRow>(payload: { rows?: TRow[] | null }): TRow[] =>
+  payload.rows ?? [];
 
 export function filterOptionsFromTypedPayload(
   payload: TypedQueryPayload

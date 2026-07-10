@@ -12,7 +12,7 @@ import {
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
-import type { PodSnapshotEntry, RefreshDomain } from './types';
+import type { RefreshDomain } from './types';
 import {
   getRefreshState,
   getScopedDomainState,
@@ -34,6 +34,7 @@ import {
   makeCatalogSnapshotPayload,
   makeClusterConfigSnapshotPayload,
   makeClusterEventsSnapshotPayload,
+  makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from './refreshContractTestBuilders';
 
@@ -282,28 +283,6 @@ describe('refreshOrchestrator', () => {
       },
     });
   };
-
-  const makePodRow = (overrides: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
-    clusterId: 'cluster-a',
-    clusterName: 'Cluster A',
-    namespace: 'default',
-    name: 'pod-a',
-    node: 'node-a',
-    status: 'Running',
-    ready: '1/1',
-    restarts: 0,
-    age: '1m',
-    ownerKind: 'ReplicaSet',
-    ownerName: 'pod-a-rs',
-    portForwardAvailable: false,
-    cpuRequest: '10m',
-    cpuLimit: '20m',
-    cpuUsage: '10m',
-    memRequest: '10Mi',
-    memLimit: '20Mi',
-    memUsage: '20Mi',
-    ...overrides,
-  });
 
   it('holds scoped fetches for an initializing cluster and dispatches once it becomes serviceable', async () => {
     clusterReadiness.resetForTests();
@@ -1841,7 +1820,9 @@ describe('refreshOrchestrator', () => {
         sequence: 1,
         payload: {
           clusterId: 'cluster-a',
-          rows: [makePodRow({ clusterId: 'cluster-a', namespace: 'team-a', name: 'pod-a' })],
+          rows: [
+            makePodSnapshotEntry({ clusterId: 'cluster-a', namespace: 'team-a', name: 'pod-a' }),
+          ],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
@@ -1877,7 +1858,7 @@ describe('refreshOrchestrator', () => {
       data: makePodSnapshotPayload({
         clusterId: 'cluster-a',
         rows: [
-          makePodRow({
+          makePodSnapshotEntry({
             clusterId: 'cluster-a',
             namespace: 'team-a',
             name: 'pod-a',
@@ -1904,7 +1885,7 @@ describe('refreshOrchestrator', () => {
         payload: {
           clusterId: 'cluster-a',
           rows: [
-            makePodRow({
+            makePodSnapshotEntry({
               clusterId: 'cluster-a',
               namespace: 'team-a',
               name: 'pod-a',
@@ -2682,7 +2663,7 @@ describe('refreshOrchestrator', () => {
       status: 'ready',
       data: makePodSnapshotPayload({
         clusterId: 'cluster-b',
-        rows: [makePodRow({ clusterId: 'cluster-b', name: 'cached-pod' })],
+        rows: [makePodSnapshotEntry({ clusterId: 'cluster-b', name: 'cached-pod' })],
       }),
       scope,
     }));
@@ -2700,7 +2681,7 @@ describe('refreshOrchestrator', () => {
         sequence: 2,
         payload: {
           clusterId: 'cluster-b',
-          rows: [makePodRow({ clusterId: 'cluster-b', name: 'fresh-pod' })],
+          rows: [makePodSnapshotEntry({ clusterId: 'cluster-b', name: 'fresh-pod' })],
         },
         stats: { itemCount: 1, buildDurationMs: 0 },
       },
@@ -2841,7 +2822,7 @@ describe('refreshOrchestrator', () => {
     // Cluster A's stream is healthy; cluster B's stream is not.
     resourceStreamMocks.isHealthy.mockImplementation((...args: unknown[]) => args[1] === scopeA);
 
-    const podA = makePodRow({
+    const podA = makePodSnapshotEntry({
       clusterId: 'cluster-a',
       namespace: 'default',
       name: 'pod-a',
@@ -2849,7 +2830,7 @@ describe('refreshOrchestrator', () => {
       cpuUsage: '10m',
       memUsage: '20Mi',
     });
-    const podB = makePodRow({
+    const podB = makePodSnapshotEntry({
       clusterId: 'cluster-b',
       namespace: 'default',
       name: 'pod-b',
@@ -2930,7 +2911,7 @@ describe('refreshOrchestrator', () => {
     // An unhealthy stream forces the poll fallback so the snapshot path runs.
     resourceStreamMocks.isHealthy.mockReturnValue(false);
 
-    const existingPod = makePodRow({
+    const existingPod = makePodSnapshotEntry({
       clusterId: 'cluster-a',
       namespace: 'default',
       name: 'pod-a',

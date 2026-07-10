@@ -158,6 +158,38 @@ describe('ContainerLogsStreamManager', () => {
     expect(state.stats?.warnings).toBeUndefined();
   });
 
+  test('applyPayload treats a null warning list as a warning clear', async () => {
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        warnings: ['selection truncated'],
+        entries: [],
+      },
+      'stream'
+    );
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: 124,
+        warnings: null,
+        entries: [],
+      },
+      'stream'
+    );
+
+    expect(getScopedDomainState('container-logs', SCOPE).stats?.warnings).toBeUndefined();
+  });
+
   test('applyPayload uses permission denied details when provided', async () => {
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -353,6 +385,57 @@ describe('ContainerLogsStreamManager', () => {
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
   });
 
+  test('accepts a null warning list from the stream as a warning clear', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      constructor() {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        warnings: ['selection truncated'],
+        entries: [],
+      },
+      'stream'
+    );
+
+    await manager.startStream(SCOPE);
+    MockEventSource.instances[0]?.emit('log', {
+      data: JSON.stringify({
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: 124,
+        warnings: null,
+        entries: [],
+      }),
+    });
+
+    const state = getScopedDomainState('container-logs', SCOPE);
+    expect(state.status).toBe('ready');
+    expect(state.stats?.warnings).toBeUndefined();
+    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+  });
+
   test('rejects a stream payload whose log entry is missing backend-required fields', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];
@@ -389,6 +472,50 @@ describe('ContainerLogsStreamManager', () => {
     const state = getScopedDomainState('container-logs', SCOPE);
     expect(state.data).toBeNull();
     expect(consoleError).toHaveBeenCalledWith('Invalid container logs stream payload structure');
+    consoleError.mockRestore();
+  });
+
+  test('rejects a manual refresh when its reset frame violates the log entry contract', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      constructor() {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    const refreshPromise = manager.refreshOnce(SCOPE);
+    await Promise.resolve();
+
+    MockEventSource.instances[0]?.emit('log', {
+      data: JSON.stringify({
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        reset: true,
+        entries: [{ pod: 'pod-a', container: 'app' }],
+      }),
+    });
+
+    await expect(refreshPromise).rejects.toThrow('Invalid container logs stream payload');
+    expect(getScopedDomainState('container-logs', SCOPE).status).toBe('error');
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Invalid container logs stream payload' }),
+      expect.objectContaining({ scope: SCOPE })
+    );
     consoleError.mockRestore();
   });
 

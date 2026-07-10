@@ -398,6 +398,27 @@ func TestTelemetrySummary(t *testing.T) {
 	}
 }
 
+func TestTelemetrySummaryWithoutRecorderReturnsEmptyArrays(t *testing.T) {
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/telemetry/summary", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode telemetry fallback: %v", err)
+	}
+	for _, field := range []string{"snapshots", "streams"} {
+		items, ok := payload[field].([]any)
+		if !ok || len(items) != 0 {
+			t.Fatalf("expected %s to be an empty array, got %#v", field, payload[field])
+		}
+	}
+}
+
 func TestMetricsActiveEndpoint(t *testing.T) {
 	controller := &fakeMetricsController{}
 	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, controller)

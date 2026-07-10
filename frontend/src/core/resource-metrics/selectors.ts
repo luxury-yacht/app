@@ -25,7 +25,7 @@ export const selectPodMetrics = (
   payload: PodSnapshotPayload | null | undefined,
   ref: ResolvedObjectReference
 ): ResourceMetricsData | null => {
-  const row = payload?.rows.find(
+  const row = (payload?.rows ?? []).find(
     (candidate) =>
       sameText(candidate.clusterId, ref.clusterId) &&
       sameText(candidate.namespace, ref.namespace) &&
@@ -42,7 +42,7 @@ export const selectWorkloadMetrics = (
   payload: NamespaceWorkloadSnapshotPayload | null | undefined,
   ref: ResolvedObjectReference
 ): ResourceMetricsData | null => {
-  const row = payload?.rows.find(
+  const row = (payload?.rows ?? []).find(
     (candidate) =>
       sameText(candidate.clusterId, ref.clusterId) &&
       sameText(candidate.namespace, ref.namespace) &&
@@ -60,7 +60,7 @@ export const selectNodeMetrics = (
   payload: ClusterNodeSnapshotPayload | null | undefined,
   ref: ResolvedObjectReference
 ): ResourceMetricsData | null => {
-  const row = payload?.rows.find(
+  const row = (payload?.rows ?? []).find(
     (candidate) =>
       sameText(candidate.clusterId, ref.clusterId) && sameText(candidate.name, ref.name)
   );

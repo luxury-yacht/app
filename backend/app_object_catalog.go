@@ -17,6 +17,7 @@ import (
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,19 +49,19 @@ type CatalogDiagnostics struct {
 
 // CatalogDomainDiagnostics captures per-domain telemetry details.
 type CatalogDomainDiagnostics struct {
-	Domain            string `json:"domain"`
-	Scope             string `json:"scope,omitempty"`
-	LastStatus        string `json:"lastStatus"`
-	LastError         string `json:"lastError,omitempty"`
-	LastWarning       string `json:"lastWarning,omitempty"`
-	LastDurationMs    int64  `json:"lastDurationMs"`
-	AverageDurationMs int64  `json:"averageDurationMs,omitempty"`
-	SuccessCount      uint64 `json:"successCount,omitempty"`
-	FailureCount      uint64 `json:"failureCount,omitempty"`
-	TotalItems        int    `json:"totalItems,omitempty"`
-	Truncated         bool   `json:"truncated,omitempty"`
-	FallbackCount     uint64 `json:"fallbackCount,omitempty"`
-	HydrationCount    uint64 `json:"hydrationCount,omitempty"`
+	Domain            string                       `json:"domain"`
+	Scope             string                       `json:"scope,omitempty"`
+	LastStatus        telemetry.SnapshotLastStatus `json:"lastStatus"`
+	LastError         string                       `json:"lastError,omitempty"`
+	LastWarning       string                       `json:"lastWarning,omitempty"`
+	LastDurationMs    int64                        `json:"lastDurationMs"`
+	AverageDurationMs int64                        `json:"averageDurationMs,omitempty"`
+	SuccessCount      uint64                       `json:"successCount,omitempty"`
+	FailureCount      uint64                       `json:"failureCount,omitempty"`
+	TotalItems        int                          `json:"totalItems,omitempty"`
+	Truncated         bool                         `json:"truncated,omitempty"`
+	FallbackCount     uint64                       `json:"fallbackCount,omitempty"`
+	HydrationCount    uint64                       `json:"hydrationCount,omitempty"`
 }
 
 // CatalogHealth summarises the live health of the catalog service.

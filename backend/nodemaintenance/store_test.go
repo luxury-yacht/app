@@ -2,11 +2,30 @@ package nodemaintenance
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
+
+func TestMaintenanceWireIdentityIsRequired(t *testing.T) {
+	for name, value := range map[string]any{
+		"drain job": DrainJob{},
+		"snapshot":  Snapshot{Drains: []DrainJob{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatalf("marshal maintenance payload: %v", err)
+			}
+			if !strings.Contains(string(encoded), `"clusterId":""`) {
+				t.Fatalf("clusterId must remain required on the wire, got %s", encoded)
+			}
+		})
+	}
+}
 
 func TestStoreStartAndSnapshot(t *testing.T) {
 	store := NewStore(2)

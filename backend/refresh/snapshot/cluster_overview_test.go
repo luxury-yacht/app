@@ -531,6 +531,7 @@ func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
 	require.Zero(t, payload.Overview.TotalDaemonSets)
 	require.Zero(t, payload.Overview.TotalCronJobs)
 	require.Empty(t, payload.Overview.RecentEvents)
+	require.NotNil(t, payload.Overview.RecentEvents)
 }
 
 func TestClusterOverviewBuilderWaitsForRequiredIngestStores(t *testing.T) {

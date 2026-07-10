@@ -293,7 +293,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		pods             []*corev1.Pod
 		namespaces       []*corev1.Namespace
 		replicaSets      []*appsv1.ReplicaSet
-		recentEvents     []RecentEvent
+		recentEvents     = make([]RecentEvent, 0)
 		deploymentCount  int
 		statefulSetCount int
 		daemonSetCount   int
@@ -1031,7 +1031,7 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 		namespaceRes listResult[corev1.Namespace]
 	)
 	var deploymentCount, statefulSetCount, daemonSetCount, cronJobCount int
-	var recentEvents []RecentEvent
+	recentEvents := make([]RecentEvent, 0)
 
 	tasks := []func(context.Context) error{
 		func(context.Context) error {

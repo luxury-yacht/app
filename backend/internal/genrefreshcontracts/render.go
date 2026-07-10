@@ -26,6 +26,14 @@ type renderer struct {
 // Render generates the TypeScript representation of the backend-owned refresh
 // HTTP and stream wire contracts.
 func Render() ([]byte, error) {
+	resolvedEnums, err := resolveEnumSpecs(contractEnums)
+	if err != nil {
+		return nil, err
+	}
+	domains, err := loadContractDomains()
+	if err != nil {
+		return nil, err
+	}
 	r := &renderer{
 		names:       make(map[reflect.Type]string),
 		typesByName: make(map[string]reflect.Type),
@@ -33,7 +41,7 @@ func Render() ([]byte, error) {
 		definitions: make(map[reflect.Type]struct{}),
 	}
 
-	for _, spec := range contractEnums {
+	for _, spec := range resolvedEnums {
 		if err := r.registerName(spec.name, spec.typeOf); err != nil {
 			return nil, err
 		}
@@ -51,10 +59,13 @@ func Render() ([]byte, error) {
 	if err := r.discoverDefinitions(); err != nil {
 		return nil, err
 	}
+	if err := validateDomainPayloadTypes(domains, r.typesByName); err != nil {
+		return nil, err
+	}
 
 	var out bytes.Buffer
 	out.WriteString(generatedHeader)
-	for _, spec := range contractEnums {
+	for _, spec := range resolvedEnums {
 		r.renderEnum(&out, spec)
 	}
 
@@ -79,15 +90,20 @@ func Render() ([]byte, error) {
 	}
 
 	out.WriteString("export const REFRESH_DOMAINS = [\n")
-	for _, domain := range contractDomains {
+	for _, domain := range domains {
 		fmt.Fprintf(&out, "  %s,\n", quoteString(domain.domain))
 	}
 	out.WriteString("] as const;\n\n")
 	out.WriteString("export type RefreshDomain = (typeof REFRESH_DOMAINS)[number];\n\n")
-	r.renderSnapshotAssertion(&out)
-	r.renderTelemetryAssertion(&out)
+	r.renderValidationSupport(&out)
+	if err := r.renderSnapshotAssertion(&out); err != nil {
+		return nil, err
+	}
+	if err := r.renderTelemetryAssertion(&out); err != nil {
+		return nil, err
+	}
 	out.WriteString("export interface BackendDomainPayloadMap {\n")
-	for _, domain := range contractDomains {
+	for _, domain := range domains {
 		if domain.frontendOwned {
 			continue
 		}
@@ -158,9 +174,102 @@ func (r *renderer) renderSnapshotInterface(out *bytes.Buffer) error {
 	return nil
 }
 
-func (r *renderer) renderSnapshotAssertion(out *bytes.Buffer) {
-	out.WriteString(`const isRefreshRecord = (value: unknown): value is Record<string, unknown> =>
+func (r *renderer) renderValidationSupport(out *bytes.Buffer) {
+	out.WriteString(`type RefreshContractSchema =
+  | { kind: 'unknown'; nullable?: boolean }
+  | { kind: 'boolean' | 'number' | 'string'; nullable?: boolean }
+  | { kind: 'enum'; values: ReadonlyArray<string>; nullable?: boolean }
+  | { kind: 'array'; items: RefreshContractSchema; nullable?: boolean }
+  | { kind: 'record'; values: RefreshContractSchema; nullable?: boolean }
+  | {
+      kind: 'object';
+      fields: Readonly<Record<string, { optional: boolean; schema: RefreshContractSchema }>>;
+      nullable?: boolean;
+    };
+
+const isRefreshRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const refreshContractPath = (base: string, field: string): string =>
+  base.length > 0 ? ` + "`" + `${base}.${field}` + "`" + ` : field;
+
+const validateRefreshContract = (
+  value: unknown,
+  schema: RefreshContractSchema,
+  path: string
+): string | null => {
+  if (value === null) {
+    return schema.nullable ? null : ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+  }
+  switch (schema.kind) {
+    case 'unknown':
+      return null;
+    case 'boolean':
+    case 'string':
+      return typeof value === schema.kind ? null : ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+        ? null
+        : ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+    case 'enum':
+      return typeof value === 'string' && schema.values.includes(value)
+        ? null
+        : ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+    case 'array': {
+      if (!Array.isArray(value)) {
+        return ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        const reason = validateRefreshContract(value[index], schema.items, ` + "`" + `${path}[${index}]` + "`" + `);
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+    case 'record': {
+      if (!isRefreshRecord(value)) {
+        return ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+      }
+      for (const [key, item] of Object.entries(value)) {
+        const reason = validateRefreshContract(item, schema.values, refreshContractPath(path, key));
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+    case 'object': {
+      if (!isRefreshRecord(value)) {
+        return ` + "`" + `invalid ${path || 'value'}` + "`" + `;
+      }
+      for (const [field, descriptor] of Object.entries(schema.fields)) {
+        const fieldPath = refreshContractPath(path, field);
+        if (!(field in value)) {
+          if (descriptor.optional) {
+            continue;
+          }
+          return ` + "`" + `missing ${fieldPath}` + "`" + `;
+        }
+        const reason = validateRefreshContract(value[field], descriptor.schema, fieldPath);
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+  }
+};
+
+`)
+}
+
+func (r *renderer) renderSnapshotAssertion(out *bytes.Buffer) error {
+	out.WriteString("const refreshSnapshotSchema: RefreshContractSchema = ")
+	if err := r.renderValidationSchema(out, snapshotEnvelopeType, false, 0); err != nil {
+		return fmt.Errorf("render refresh snapshot validation schema: %w", err)
+	}
+	out.WriteString(`;
 
 export function assertRefreshSnapshotEnvelope<TPayload>(
   value: unknown,
@@ -174,75 +283,196 @@ export function assertRefreshSnapshotEnvelope<TPayload>(
   if (value.domain !== expectedDomain) {
     throw invalid(` + "`" + `received domain ${String(value.domain)}` + "`" + `);
   }
-  for (const field of ['version', 'generatedAt', 'sequence'] as const) {
-    if (typeof value[field] !== 'number' || !Number.isFinite(value[field])) {
-      throw invalid(` + "`" + `invalid ${field}` + "`" + `);
-    }
-  }
-  if (typeof value.checksum !== 'string') {
-    throw invalid('invalid checksum');
-  }
-  if (!('payload' in value)) {
-    throw invalid('missing payload');
-  }
-  if (!isRefreshRecord(value.stats)) {
-    throw invalid('invalid stats');
-  }
-  for (const field of ['itemCount', 'buildDurationMs'] as const) {
-    if (typeof value.stats[field] !== 'number' || !Number.isFinite(value.stats[field])) {
-      throw invalid(` + "`" + `invalid stats.${field}` + "`" + `);
-    }
+  const reason = validateRefreshContract(value, refreshSnapshotSchema, '');
+  if (reason) {
+    throw invalid(reason);
   }
 }
 
 `)
+	return nil
 }
 
-func (r *renderer) renderTelemetryAssertion(out *bytes.Buffer) {
-	out.WriteString(`export function assertTelemetrySummary(value: unknown): asserts value is TelemetrySummary {
+func (r *renderer) renderTelemetryAssertion(out *bytes.Buffer) error {
+	out.WriteString("const telemetrySummarySchema: RefreshContractSchema = ")
+	if err := r.renderValidationSchema(out, telemetrySummaryType, false, 0); err != nil {
+		return fmt.Errorf("render telemetry validation schema: %w", err)
+	}
+	out.WriteString(`;
+
+export function assertTelemetrySummary(value: unknown): asserts value is TelemetrySummary {
   const invalid = (reason: string): Error => new Error(` + "`" + `Invalid telemetry summary: ${reason}` + "`" + `);
   if (!isRefreshRecord(value)) {
     throw invalid('expected an object');
   }
-  if (!Array.isArray(value.snapshots)) {
-    throw invalid('invalid snapshots');
-  }
-  if (!Array.isArray(value.streams)) {
-    throw invalid('invalid streams');
-  }
-  if (!isRefreshRecord(value.metrics)) {
-    throw invalid('invalid metrics');
-  }
-  for (const field of [
-    'lastCollected',
-    'lastDurationMs',
-    'consecutiveFailures',
-    'successCount',
-    'failureCount',
-  ] as const) {
-    if (typeof value.metrics[field] !== 'number' || !Number.isFinite(value.metrics[field])) {
-      throw invalid(` + "`" + `invalid metrics.${field}` + "`" + `);
-    }
-  }
-  if (typeof value.metrics.active !== 'boolean') {
-    throw invalid('invalid metrics.active');
-  }
-  if (!isRefreshRecord(value.connection)) {
-    throw invalid('invalid connection');
-  }
-  for (const field of [
-    'retryAttempts',
-    'retrySuccesses',
-    'retryExhausted',
-    'transportRebuilds',
-  ] as const) {
-    if (typeof value.connection[field] !== 'number' || !Number.isFinite(value.connection[field])) {
-      throw invalid(` + "`" + `invalid connection.${field}` + "`" + `);
-    }
+  const reason = validateRefreshContract(value, telemetrySummarySchema, '');
+  if (reason) {
+    throw invalid(reason);
   }
 }
 
 `)
+	return nil
+}
+
+type validationField struct {
+	name     string
+	typeOf   reflect.Type
+	optional bool
+}
+
+func (r *renderer) renderValidationSchema(out *bytes.Buffer, typeOf reflect.Type, nullable bool, indent int) error {
+	for typeOf.Kind() == reflect.Pointer {
+		typeOf = typeOf.Elem()
+	}
+	if special, ok := specialTypeScriptType(typeOf); ok {
+		switch special {
+		case "string":
+			renderPrimitiveValidationSchema(out, "string", nullable)
+		case "Record<string, unknown>":
+			out.WriteString("{ kind: 'record', values: { kind: 'unknown' }")
+			renderValidationNullable(out, nullable)
+			out.WriteString(" }")
+		default:
+			return fmt.Errorf("unsupported special validation type %s for %s", special, typeOf)
+		}
+		return nil
+	}
+	if enum, ok := r.enums[typeOf]; ok {
+		out.WriteString("{ kind: 'enum', values: [")
+		for index, value := range enum.values {
+			if index > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(quoteString(value))
+		}
+		out.WriteString("]")
+		renderValidationNullable(out, nullable)
+		out.WriteString(" }")
+		return nil
+	}
+
+	switch typeOf.Kind() {
+	case reflect.Bool:
+		renderPrimitiveValidationSchema(out, "boolean", nullable)
+	case reflect.Float32, reflect.Float64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		renderPrimitiveValidationSchema(out, "number", nullable)
+	case reflect.String:
+		renderPrimitiveValidationSchema(out, "string", nullable)
+	case reflect.Interface:
+		out.WriteString("{ kind: 'unknown' }")
+	case reflect.Array, reflect.Slice:
+		out.WriteString("{ kind: 'array', items: ")
+		if err := r.renderValidationSchema(out, typeOf.Elem(), wireTypeCanMarshalNull(typeOf.Elem()), indent); err != nil {
+			return err
+		}
+		renderValidationNullable(out, nullable)
+		out.WriteString(" }")
+	case reflect.Map:
+		if typeOf.Key().Kind() != reflect.String {
+			return fmt.Errorf("map key %s is not representable as a validation record key", typeOf.Key())
+		}
+		out.WriteString("{ kind: 'record', values: ")
+		if err := r.renderValidationSchema(out, typeOf.Elem(), wireTypeCanMarshalNull(typeOf.Elem()), indent); err != nil {
+			return err
+		}
+		renderValidationNullable(out, nullable)
+		out.WriteString(" }")
+	case reflect.Struct:
+		fields, err := validationFields(typeOf, false)
+		if err != nil {
+			return err
+		}
+		out.WriteString("{ kind: 'object', fields: {\n")
+		for _, field := range fields {
+			writeIndent(out, indent+1)
+			fmt.Fprintf(out, "%s: { optional: %t, schema: ", quoteProperty(field.name), field.optional)
+			if err := r.renderValidationSchema(out, field.typeOf, validationFieldNullable(field.typeOf, field.optional), indent+1); err != nil {
+				return fmt.Errorf("%s.%s: %w", typeOf, field.name, err)
+			}
+			out.WriteString(" },\n")
+		}
+		writeIndent(out, indent)
+		out.WriteString("}")
+		renderValidationNullable(out, nullable)
+		out.WriteString(" }")
+	default:
+		return fmt.Errorf("unsupported Go validation type %s", typeOf)
+	}
+	return nil
+}
+
+func validationFields(typeOf reflect.Type, inheritedOptional bool) ([]validationField, error) {
+	fields := make([]validationField, 0, typeOf.NumField())
+	for index := 0; index < typeOf.NumField(); index++ {
+		field := typeOf.Field(index)
+		name, optional, skip := jsonField(field)
+		if skip {
+			continue
+		}
+		if field.Anonymous && name == "" {
+			embedded := indirect(field.Type)
+			if embedded.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("cannot flatten non-struct embedded validation field %s.%s", typeOf, field.Name)
+			}
+			nested, err := validationFields(embedded, inheritedOptional || optional)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, nested...)
+			continue
+		}
+		fields = append(fields, validationField{
+			name:     name,
+			typeOf:   field.Type,
+			optional: inheritedOptional || optional,
+		})
+	}
+	return fields, nil
+}
+
+func validationFieldNullable(typeOf reflect.Type, optional bool) bool {
+	if !optional {
+		return wireTypeCanMarshalNull(typeOf)
+	}
+	switch typeOf.Kind() {
+	case reflect.Pointer:
+		return wireTypeCanMarshalNull(typeOf.Elem())
+	case reflect.Slice, reflect.Map, reflect.Interface:
+		return false
+	default:
+		return wireTypeCanMarshalNull(typeOf)
+	}
+}
+
+func wireTypeCanMarshalNull(typeOf reflect.Type) bool {
+	if specialTypeCanMarshalNull(typeOf) {
+		return true
+	}
+	switch typeOf.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
+		return true
+	default:
+		return false
+	}
+}
+
+func renderPrimitiveValidationSchema(out *bytes.Buffer, kind string, nullable bool) {
+	fmt.Fprintf(out, "{ kind: %s", quoteString(kind))
+	renderValidationNullable(out, nullable)
+	out.WriteString(" }")
+}
+
+func renderValidationNullable(out *bytes.Buffer, nullable bool) {
+	if nullable {
+		out.WriteString(", nullable: true")
+	}
+}
+
+func writeIndent(out *bytes.Buffer, level int) {
+	out.WriteString(strings.Repeat("  ", level))
 }
 
 func (r *renderer) registerName(name string, typeOf reflect.Type) error {
@@ -304,6 +534,9 @@ func (r *renderer) walkType(typeOf reflect.Type) error {
 	if isSpecialType(typeOf) || r.enums[typeOf].name != "" {
 		return nil
 	}
+	if typeOf.Name() != "" && typeOf.PkgPath() != "" && typeOf.Kind() != reflect.Struct {
+		return fmt.Errorf("named Go wire type %s must be registered as an enum or special type", typeOf)
+	}
 	switch typeOf.Kind() {
 	case reflect.Array, reflect.Slice:
 		return r.walkType(typeOf.Elem())
@@ -364,14 +597,14 @@ func (r *renderer) renderFields(typeOf reflect.Type, inheritedOptional bool) ([]
 			if embedded.Kind() != reflect.Struct {
 				return nil, fmt.Errorf("cannot flatten non-struct embedded field %s.%s", typeOf, field.Name)
 			}
-			nested, err := r.renderFields(embedded, inheritedOptional || field.Type.Kind() == reflect.Pointer)
+			nested, err := r.renderFields(embedded, inheritedOptional || optional)
 			if err != nil {
 				return nil, err
 			}
 			fields = append(fields, nested...)
 			continue
 		}
-		typeScript, err := r.typeScriptType(field.Type)
+		typeScript, err := r.typeScriptFieldType(field.Type, optional)
 		if err != nil {
 			return nil, fmt.Errorf("%s.%s: %w", typeOf, field.Name, err)
 		}
@@ -384,15 +617,29 @@ func (r *renderer) renderFields(typeOf reflect.Type, inheritedOptional bool) ([]
 	return fields, nil
 }
 
-func (r *renderer) typeScriptType(typeOf reflect.Type) (string, error) {
+func (r *renderer) typeScriptFieldType(typeOf reflect.Type, optional bool) (string, error) {
+	return r.typeScriptTypeWithOuterNull(typeOf, !optional)
+}
+
+func (r *renderer) typeScriptTypeWithOuterNull(typeOf reflect.Type, outerNullable bool) (string, error) {
 	if typeOf.Kind() == reflect.Pointer {
-		return r.typeScriptType(typeOf.Elem())
+		value, err := r.typeScriptTypeWithOuterNull(typeOf.Elem(), true)
+		if err != nil {
+			return "", err
+		}
+		return nullableTypeScriptType(value, outerNullable), nil
 	}
 	if special, ok := specialTypeScriptType(typeOf); ok {
+		if specialTypeCanMarshalNull(typeOf) {
+			return nullableTypeScriptType(special, outerNullable), nil
+		}
 		return special, nil
 	}
 	if enum, ok := r.enums[typeOf]; ok {
 		return enum.name, nil
+	}
+	if typeOf.Name() != "" && typeOf.PkgPath() != "" && typeOf.Kind() != reflect.Struct {
+		return "", fmt.Errorf("named Go wire type %s must be registered as an enum or special type", typeOf)
 	}
 	if name, ok := r.names[typeOf]; ok && typeOf.Kind() == reflect.Struct {
 		return name, nil
@@ -409,20 +656,21 @@ func (r *renderer) typeScriptType(typeOf reflect.Type) (string, error) {
 	case reflect.Interface:
 		return "unknown", nil
 	case reflect.Array, reflect.Slice:
-		item, err := r.typeScriptType(typeOf.Elem())
+		item, err := r.typeScriptTypeWithOuterNull(typeOf.Elem(), true)
 		if err != nil {
 			return "", err
 		}
-		return "Array<" + item + ">", nil
+		collection := "Array<" + item + ">"
+		return nullableTypeScriptType(collection, typeOf.Kind() == reflect.Slice && outerNullable), nil
 	case reflect.Map:
 		if typeOf.Key().Kind() != reflect.String {
 			return "", fmt.Errorf("map key %s is not representable as a TypeScript record key", typeOf.Key())
 		}
-		value, err := r.typeScriptType(typeOf.Elem())
+		value, err := r.typeScriptTypeWithOuterNull(typeOf.Elem(), true)
 		if err != nil {
 			return "", err
 		}
-		return "Record<string, " + value + ">", nil
+		return nullableTypeScriptType("Record<string, "+value+">", outerNullable), nil
 	case reflect.Struct:
 		name := r.names[typeOf]
 		if name == "" {
@@ -447,7 +695,10 @@ func jsonField(field reflect.StructField) (name string, optional bool, skip bool
 		name = parts[0]
 	}
 	for _, option := range parts[1:] {
-		if option == "omitempty" || option == "omitzero" {
+		switch option {
+		case "omitempty":
+			optional = optional || jsonOmitEmptyCanOmit(field.Type)
+		case "omitzero":
 			optional = true
 		}
 	}
@@ -455,6 +706,28 @@ func jsonField(field reflect.StructField) (name string, optional bool, skip bool
 		name = field.Name
 	}
 	return name, optional, false
+}
+
+func jsonOmitEmptyCanOmit(typeOf reflect.Type) bool {
+	switch typeOf.Kind() {
+	case reflect.Array:
+		return typeOf.Len() == 0
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.String:
+		return true
+	default:
+		return false
+	}
+}
+
+func nullableTypeScriptType(value string, nullable bool) string {
+	if !nullable || value == "unknown" || strings.HasSuffix(value, " | null") {
+		return value
+	}
+	return value + " | null"
 }
 
 func indirect(typeOf reflect.Type) reflect.Type {
@@ -478,6 +751,10 @@ func specialTypeScriptType(typeOf reflect.Type) (string, bool) {
 		return "Record<string, unknown>", true
 	}
 	return "", false
+}
+
+func specialTypeCanMarshalNull(typeOf reflect.Type) bool {
+	return typeOf.PkgPath()+"."+typeOf.Name() == "k8s.io/apimachinery/pkg/apis/meta/v1.Time"
 }
 
 func automaticName(typeOf reflect.Type) string {

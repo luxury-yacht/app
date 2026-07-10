@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { makeTelemetrySummary } from './refreshContractTestBuilders';
 
 const mockGetBaseURL = vi.fn();
 const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
@@ -272,8 +273,7 @@ describe('fetchTelemetrySummary', () => {
   test('returns parsed telemetry summary payload', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
 
-    const summary = {
-      snapshots: [],
+    const summary = makeTelemetrySummary({
       metrics: {
         lastCollected: 1,
         lastDurationMs: 2,
@@ -282,14 +282,13 @@ describe('fetchTelemetrySummary', () => {
         failureCount: 1,
         active: true,
       },
-      streams: [],
       connection: {
         retryAttempts: 0,
         retrySuccesses: 0,
         retryExhausted: 0,
         transportRebuilds: 0,
       },
-    };
+    });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -320,8 +319,83 @@ describe('fetchTelemetrySummary', () => {
     const { fetchTelemetrySummary } = await import('./client');
 
     await expect(fetchTelemetrySummary()).rejects.toThrow(
-      'Invalid telemetry summary: invalid snapshots'
+      'Invalid telemetry summary: missing snapshots'
     );
+  });
+
+  test('rejects nested telemetry fields that do not match the backend DTO', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({
+        snapshots: [
+          {
+            domain: 42,
+            lastStatus: 'success',
+            lastDurationMs: 1,
+            lastUpdated: 2,
+            successCount: 1,
+            failureCount: 0,
+          },
+        ],
+        metrics: {
+          lastCollected: 1,
+          lastDurationMs: 2,
+          consecutiveFailures: 0,
+          successCount: 1,
+          failureCount: 0,
+          active: true,
+        },
+        streams: [],
+        connection: {
+          retryAttempts: 0,
+          retrySuccesses: 0,
+          retryExhausted: 0,
+          transportRebuilds: 0,
+        },
+      }),
+      headers: new Headers(),
+    });
+
+    const { fetchTelemetrySummary } = await import('./client');
+
+    await expect(fetchTelemetrySummary()).rejects.toThrow(
+      'Invalid telemetry summary: invalid snapshots[0].domain'
+    );
+  });
+
+  test('normalizes nullable telemetry collections for frontend consumers', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({
+        snapshots: null,
+        metrics: {
+          lastCollected: 0,
+          lastDurationMs: 0,
+          consecutiveFailures: 0,
+          successCount: 0,
+          failureCount: 0,
+          active: false,
+        },
+        streams: null,
+        connection: {
+          retryAttempts: 0,
+          retrySuccesses: 0,
+          retryExhausted: 0,
+          transportRebuilds: 0,
+        },
+      }),
+      headers: new Headers(),
+    });
+
+    const { fetchTelemetrySummary } = await import('./client');
+
+    await expect(fetchTelemetrySummary()).resolves.toMatchObject({ snapshots: [], streams: [] });
   });
 
   test('throws when telemetry request fails', async () => {

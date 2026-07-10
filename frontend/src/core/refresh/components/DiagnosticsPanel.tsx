@@ -22,7 +22,6 @@ import type {
   NodeMetricsInfo,
   PodSnapshotPayload,
   ContainerLogsSnapshotPayload,
-  TelemetrySummary,
   TelemetryStreamStatus,
 } from '../types';
 import { refreshManager } from '../RefreshManager';
@@ -36,6 +35,7 @@ import {
   fetchSelectionDiagnostics,
   fetchTelemetrySummary,
   type KubernetesAPIClientDiagnostics,
+  type NormalizedTelemetrySummary,
   type SelectionDiagnostics,
 } from '../client';
 import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
@@ -486,7 +486,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     },
     []
   );
-  const [telemetrySummary, setTelemetrySummary] = useState<TelemetrySummary | null>(null);
+  const [telemetrySummary, setTelemetrySummary] = useState<NormalizedTelemetrySummary | null>(null);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const [selectionDiagnostics, setSelectionDiagnostics] = useState<SelectionDiagnostics | null>(
     null

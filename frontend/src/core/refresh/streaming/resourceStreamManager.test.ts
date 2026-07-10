@@ -43,6 +43,7 @@ import { ResourceStreamManager, normalizeResourceScope } from './resourceStreamM
 import {
   makeNamespaceAutoscalingSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
+  makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '../refreshContractTestBuilders';
 
@@ -237,26 +238,10 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('pods', storeScope);
 
-    const existing = {
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      name: 'pod-a',
-      namespace: 'default',
-      node: 'node-a',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      age: '1m',
-      ownerKind: 'Deployment',
-      ownerName: 'web',
-      portForwardAvailable: false,
-      cpuRequest: '10m',
-      cpuLimit: '20m',
+    const existing = makePodSnapshotEntry({
       cpuUsage: '50m',
-      memRequest: '10Mi',
-      memLimit: '20Mi',
       memUsage: '40Mi',
-    };
+    });
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',

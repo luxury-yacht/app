@@ -598,6 +598,26 @@ func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
 	require.Equal(t, []string{"selection warning"}, withoutDrops)
 }
 
+func TestWarningClearPayloadEncodesAnEmptyArray(t *testing.T) {
+	payload := EventPayload{
+		Domain:      "container-logs",
+		Scope:       "cluster-a|default:/v1:Pod:web",
+		Sequence:    2,
+		GeneratedAt: 123,
+		Warnings:    warningPayload(nil, true),
+	}
+
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"domain":"container-logs",
+		"scope":"cluster-a|default:/v1:Pod:web",
+		"sequence":2,
+		"generatedAt":123,
+		"warnings":[]
+	}`, string(encoded))
+}
+
 func TestSplitTimestamp(t *testing.T) {
 	ts, line := splitTimestamp("2024-01-02T15:04:05Z some message")
 	if ts == "" || line != "some message" {

@@ -24,6 +24,10 @@ import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permis
 
 export type Snapshot<TPayload> = RefreshSnapshot<TPayload>;
 export type { SnapshotStats };
+export type NormalizedTelemetrySummary = Omit<TelemetrySummary, 'snapshots' | 'streams'> & {
+  snapshots: NonNullable<TelemetrySummary['snapshots']>;
+  streams: NonNullable<TelemetrySummary['streams']>;
+};
 
 export type SelectionDiagnostics = backend.SelectionDiagnostics;
 export type KubernetesAPIClientDiagnostics = backend.KubernetesAPIClientDiagnostics;
@@ -223,7 +227,7 @@ export function invalidateRefreshBaseURL(): void {
   refreshReadyPromise = null;
 }
 
-export async function fetchTelemetrySummary(): Promise<TelemetrySummary> {
+export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummary> {
   const baseURL = await resolveRefreshBaseURL();
   const url = new URL('/api/v2/telemetry/summary', baseURL);
 
@@ -234,7 +238,11 @@ export async function fetchTelemetrySummary(): Promise<TelemetrySummary> {
 
   const summary: unknown = await response.json();
   assertTelemetrySummary(summary);
-  return summary;
+  return {
+    ...summary,
+    snapshots: summary.snapshots ?? [],
+    streams: summary.streams ?? [],
+  };
 }
 
 export async function setMetricsActive(active: boolean): Promise<void> {

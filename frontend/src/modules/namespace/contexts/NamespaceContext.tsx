@@ -185,7 +185,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     if (!namespaceDomain.data || !activeClusterId || !activeClusterRefreshAvailable) {
       return [];
     }
-    return namespaceDomain.data.namespaces.filter((ns) => ns.clusterId === activeClusterId);
+    return (namespaceDomain.data.namespaces ?? []).filter((ns) => ns.clusterId === activeClusterId);
   }, [activeClusterId, activeClusterRefreshAvailable, namespaceDomain.data]);
 
   useEffect(() => {

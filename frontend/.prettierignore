@@ -9,6 +9,9 @@ coverage/
 # Wails generated files
 wailsjs/
 
+# Go-generated refresh contract
+src/core/refresh/types.generated.ts
+
 # Package manager files
 package-lock.json
 pnpm-lock.yaml

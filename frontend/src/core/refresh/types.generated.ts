@@ -38,6 +38,15 @@ export type NamespaceScopeStatus = 'not-found' | 'no-access';
 
 export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
 
+export type ResourceSource = 'kubernetes' | 'synthetic';
+
+export type ResourceScope = 'cluster' | 'namespaced';
+
+export type ResourceStatusSignalType =
+  'condition' | 'phase' | 'readiness' | 'resourceState' | 'deletion';
+
+export type TelemetrySnapshotLastStatus = 'success' | 'error';
+
 export const RESOURCE_STREAM_MESSAGE_TYPES = [
   'REQUEST',
   'CANCEL',
@@ -89,7 +98,7 @@ export interface CatalogItem {
 export interface CatalogNamespaceGroup {
   clusterId: string;
   clusterName: string;
-  namespaces: Array<string>;
+  namespaces: Array<string> | null;
   selectedNamespaces?: Array<string>;
 }
 
@@ -99,7 +108,7 @@ export interface CatalogSnapshotPayload {
   provider: ResourceQueryProvider;
   completeness?: ResourceQueryCompleteness;
   capabilities: ResourceQueryCapabilities;
-  items: Array<CatalogItem>;
+  items: Array<CatalogItem> | null;
   continue?: string;
   previous?: string;
   self?: string;
@@ -163,7 +172,7 @@ export interface ClusterCRDSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterCRDEntry>;
+  rows: Array<ClusterCRDEntry> | null;
 }
 
 export interface ClusterConfigEntry {
@@ -201,7 +210,7 @@ export interface ClusterConfigSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterConfigEntry>;
+  rows: Array<ClusterConfigEntry> | null;
 }
 
 export interface ClusterCustomEntry {
@@ -226,7 +235,7 @@ export interface ClusterCustomEntry {
 export interface ClusterCustomSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  resources: Array<ClusterCustomEntry>;
+  resources: Array<ClusterCustomEntry> | null;
   kinds?: Array<string>;
 }
 
@@ -275,7 +284,7 @@ export interface ClusterEventsSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterEventEntry>;
+  rows: Array<ClusterEventEntry> | null;
 }
 
 export interface ClusterNodeSnapshotEntry {
@@ -340,7 +349,7 @@ export interface ClusterNodeSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterNodeSnapshotEntry>;
+  rows: Array<ClusterNodeSnapshotEntry> | null;
   metrics: NodeMetricsInfo;
 }
 
@@ -393,7 +402,7 @@ export interface ClusterOverviewPayload {
   totalDaemonSets: number;
   totalCronJobs: number;
   workloadResourceUsage: WorkloadResourceUsage;
-  recentEvents: Array<RecentEventEntry>;
+  recentEvents: Array<RecentEventEntry> | null;
   unavailableResources?: Array<string>;
 }
 
@@ -441,7 +450,7 @@ export interface ClusterRBACSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterRBACEntry>;
+  rows: Array<ClusterRBACEntry> | null;
 }
 
 export interface ClusterStorageEntry {
@@ -485,7 +494,7 @@ export interface ClusterStorageSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterStorageEntry>;
+  rows: Array<ClusterStorageEntry> | null;
 }
 
 export interface ConditionFacts {
@@ -493,7 +502,7 @@ export interface ConditionFacts {
   status: string;
   reason?: string;
   message?: string;
-  lastTransitionTime?: string;
+  lastTransitionTime: string | null;
 }
 
 export interface ContainerLogsStreamEventPayload {
@@ -503,7 +512,7 @@ export interface ContainerLogsStreamEventPayload {
   generatedAt: number;
   reset?: boolean;
   entries?: Array<ContainerLogsWireEntry>;
-  warnings?: Array<string>;
+  warnings?: Array<string> | null;
   error?: string;
   errorDetails?: RefreshPermissionDeniedStatus;
 }
@@ -567,7 +576,7 @@ export interface NamespaceAutoscalingSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceAutoscalingSummary>;
+  rows: Array<NamespaceAutoscalingSummary> | null;
 }
 
 export interface NamespaceAutoscalingSummary {
@@ -609,7 +618,7 @@ export interface NamespaceConfigSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceConfigSummary>;
+  rows: Array<NamespaceConfigSummary> | null;
 }
 
 export interface NamespaceConfigSummary {
@@ -627,7 +636,7 @@ export interface NamespaceConfigSummary {
 export interface NamespaceCustomSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  resources: Array<NamespaceCustomSummary>;
+  resources: Array<NamespaceCustomSummary> | null;
   kinds?: Array<string>;
 }
 
@@ -696,7 +705,7 @@ export interface NamespaceEventsSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceEventSummary>;
+  rows: Array<NamespaceEventSummary> | null;
 }
 
 export interface NamespaceHelmSnapshotPayload {
@@ -723,7 +732,7 @@ export interface NamespaceHelmSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceHelmSummary>;
+  rows: Array<NamespaceHelmSummary> | null;
 }
 
 export interface NamespaceHelmSummary {
@@ -768,7 +777,7 @@ export interface NamespaceNetworkSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceNetworkSummary>;
+  rows: Array<NamespaceNetworkSummary> | null;
 }
 
 export interface NamespaceNetworkSummary {
@@ -820,7 +829,7 @@ export interface NamespaceQuotasSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceQuotaSummary>;
+  rows: Array<NamespaceQuotaSummary> | null;
 }
 
 export interface NamespaceRBACSnapshotPayload {
@@ -847,7 +856,7 @@ export interface NamespaceRBACSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceRBACSummary>;
+  rows: Array<NamespaceRBACSummary> | null;
 }
 
 export interface NamespaceRBACSummary {
@@ -864,7 +873,7 @@ export interface NamespaceRBACSummary {
 export interface NamespaceSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  namespaces: Array<NamespaceSummary>;
+  namespaces: Array<NamespaceSummary> | null;
 }
 
 export interface NamespaceStorageSnapshotPayload {
@@ -891,7 +900,7 @@ export interface NamespaceStorageSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceStorageSummary>;
+  rows: Array<NamespaceStorageSummary> | null;
 }
 
 export interface NamespaceStorageSummary {
@@ -951,7 +960,7 @@ export interface NamespaceWorkloadSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceWorkloadSummary>;
+  rows: Array<NamespaceWorkloadSummary> | null;
   metrics: PodMetricsInfo;
 }
 
@@ -991,7 +1000,7 @@ export interface NodeMaintenanceDrainEvent {
 }
 
 export interface NodeMaintenanceDrainJob {
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   id: string;
   nodeName: string;
@@ -1004,9 +1013,9 @@ export interface NodeMaintenanceDrainJob {
 }
 
 export interface NodeMaintenanceSnapshotPayload {
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
-  drains: Array<NodeMaintenanceDrainJob>;
+  drains: Array<NodeMaintenanceDrainJob> | null;
 }
 
 export interface NodeMetricsInfo {
@@ -1067,7 +1076,7 @@ export interface ObjectEventSummary {
 export interface ObjectEventsSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  events: Array<ObjectEventSummary>;
+  events: Array<ObjectEventSummary> | null;
 }
 
 export interface ObjectHelmManifestSnapshotPayload {
@@ -1081,7 +1090,7 @@ export interface ObjectHelmManifestSnapshotPayload {
 export interface ObjectHelmValuesSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  values: Record<string, unknown>;
+  values: Record<string, unknown> | null;
   revision?: number;
 }
 
@@ -1127,8 +1136,8 @@ export interface ObjectMapSnapshotPayload {
   clusterId: string;
   clusterName: string;
   seed: ObjectMapReference;
-  nodes: Array<ObjectMapNode>;
-  edges: Array<ObjectMapEdge>;
+  nodes: Array<ObjectMapNode> | null;
+  edges: Array<ObjectMapEdge> | null;
   maxDepth: number;
   maxNodes: number;
   truncated: boolean;
@@ -1211,10 +1220,10 @@ export interface PodSnapshotPayload {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
-  rows: Array<PodSnapshotEntry>;
+  rows: Array<PodSnapshotEntry> | null;
   metrics: PodMetricsInfo;
   totalCount: number;
-  healthCounts: Record<string, number>;
+  healthCounts: Record<string, number> | null;
 }
 
 export interface QuotaStatus {
@@ -1248,7 +1257,7 @@ export interface RefreshPermissionDeniedStatus {
   apiVersion: string;
   message: string;
   reason: string;
-  details?: RefreshPermissionDeniedDetails;
+  details: RefreshPermissionDeniedDetails;
   code: number;
 }
 
@@ -1265,15 +1274,15 @@ export interface ResourceLink {
 export interface ResourceMetadata {
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
-  creationTimestamp?: string;
+  creationTimestamp: string | null;
   resourceVersion?: string;
   finalizers?: Array<string>;
 }
 
 export interface ResourceModel {
   ref: ResourceRef;
-  source: string;
-  scope: string;
+  source: ResourceSource;
+  scope: ResourceScope;
   metadata: ResourceMetadata;
   status: ResourceStatusPresentation;
   facts: Record<string, unknown>;
@@ -1389,7 +1398,7 @@ export interface ResourceStatusPresentation {
 }
 
 export interface ResourceStatusSignal {
-  type: string;
+  type: ResourceStatusSignalType;
   name: string;
   status: string;
   reason?: string;
@@ -1480,7 +1489,7 @@ export interface TelemetrySnapshotStatus {
   scope?: string;
   clusterId?: string;
   clusterName?: string;
-  lastStatus: string;
+  lastStatus: TelemetrySnapshotLastStatus;
   lastError?: string;
   lastWarning?: string;
   lastDurationMs: number;
@@ -1520,9 +1529,9 @@ export interface TelemetryStreamStatus {
 }
 
 export interface TelemetrySummary {
-  snapshots: Array<TelemetrySnapshotStatus>;
+  snapshots: Array<TelemetrySnapshotStatus> | null;
   metrics: TelemetryMetricsStatus;
-  streams: Array<TelemetryStreamStatus>;
+  streams: Array<TelemetryStreamStatus> | null;
   catalog?: TelemetryCatalogStatus;
   connection: TelemetryConnectionStats;
 }
@@ -1557,40 +1566,148 @@ export type ClusterNodeRow = ClusterNodeSnapshotEntry;
 export const REFRESH_DOMAINS = [
   'namespaces',
   'cluster-overview',
+  'catalog',
+  'catalog-diff',
   'nodes',
-  'object-maintenance',
-  'pods',
-  'object-details',
-  'object-events',
-  'object-map',
-  'object-yaml',
-  'object-helm-manifest',
-  'object-helm-values',
-  'container-logs',
-  'cluster-rbac',
-  'cluster-storage',
   'cluster-config',
   'cluster-crds',
   'cluster-custom',
   'cluster-events',
-  'catalog',
-  'catalog-diff',
+  'cluster-rbac',
+  'cluster-storage',
   'namespace-workloads',
+  'namespace-autoscaling',
   'namespace-config',
+  'namespace-custom',
+  'namespace-events',
+  'namespace-helm',
   'namespace-network',
+  'namespace-quotas',
   'namespace-rbac',
   'namespace-storage',
-  'namespace-autoscaling',
-  'namespace-quotas',
-  'namespace-events',
-  'namespace-custom',
-  'namespace-helm',
+  'pods',
+  'object-details',
+  'object-yaml',
+  'object-helm-manifest',
+  'object-helm-values',
+  'object-events',
+  'object-map',
+  'object-maintenance',
+  'container-logs',
 ] as const;
 
 export type RefreshDomain = (typeof REFRESH_DOMAINS)[number];
 
+type RefreshContractSchema =
+  | { kind: 'unknown'; nullable?: boolean }
+  | { kind: 'boolean' | 'number' | 'string'; nullable?: boolean }
+  | { kind: 'enum'; values: ReadonlyArray<string>; nullable?: boolean }
+  | { kind: 'array'; items: RefreshContractSchema; nullable?: boolean }
+  | { kind: 'record'; values: RefreshContractSchema; nullable?: boolean }
+  | {
+      kind: 'object';
+      fields: Readonly<Record<string, { optional: boolean; schema: RefreshContractSchema }>>;
+      nullable?: boolean;
+    };
+
 const isRefreshRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const refreshContractPath = (base: string, field: string): string =>
+  base.length > 0 ? `${base}.${field}` : field;
+
+const validateRefreshContract = (
+  value: unknown,
+  schema: RefreshContractSchema,
+  path: string
+): string | null => {
+  if (value === null) {
+    return schema.nullable ? null : `invalid ${path || 'value'}`;
+  }
+  switch (schema.kind) {
+    case 'unknown':
+      return null;
+    case 'boolean':
+    case 'string':
+      return typeof value === schema.kind ? null : `invalid ${path || 'value'}`;
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+        ? null
+        : `invalid ${path || 'value'}`;
+    case 'enum':
+      return typeof value === 'string' && schema.values.includes(value)
+        ? null
+        : `invalid ${path || 'value'}`;
+    case 'array': {
+      if (!Array.isArray(value)) {
+        return `invalid ${path || 'value'}`;
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        const reason = validateRefreshContract(value[index], schema.items, `${path}[${index}]`);
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+    case 'record': {
+      if (!isRefreshRecord(value)) {
+        return `invalid ${path || 'value'}`;
+      }
+      for (const [key, item] of Object.entries(value)) {
+        const reason = validateRefreshContract(item, schema.values, refreshContractPath(path, key));
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+    case 'object': {
+      if (!isRefreshRecord(value)) {
+        return `invalid ${path || 'value'}`;
+      }
+      for (const [field, descriptor] of Object.entries(schema.fields)) {
+        const fieldPath = refreshContractPath(path, field);
+        if (!(field in value)) {
+          if (descriptor.optional) {
+            continue;
+          }
+          return `missing ${fieldPath}`;
+        }
+        const reason = validateRefreshContract(value[field], descriptor.schema, fieldPath);
+        if (reason) {
+          return reason;
+        }
+      }
+      return null;
+    }
+  }
+};
+
+const refreshSnapshotSchema: RefreshContractSchema = { kind: 'object', fields: {
+  domain: { optional: false, schema: { kind: 'string' } },
+  scope: { optional: true, schema: { kind: 'string' } },
+  version: { optional: false, schema: { kind: 'number' } },
+  sourceVersion: { optional: true, schema: { kind: 'string' } },
+  sourceVersions: { optional: true, schema: { kind: 'record', values: { kind: 'string' } } },
+  checksum: { optional: false, schema: { kind: 'string' } },
+  generatedAt: { optional: false, schema: { kind: 'number' } },
+  sequence: { optional: false, schema: { kind: 'number' } },
+  payload: { optional: false, schema: { kind: 'unknown' } },
+  stats: { optional: false, schema: { kind: 'object', fields: {
+    itemCount: { optional: false, schema: { kind: 'number' } },
+    buildDurationMs: { optional: false, schema: { kind: 'number' } },
+    totalItems: { optional: true, schema: { kind: 'number' } },
+    truncated: { optional: true, schema: { kind: 'boolean' } },
+    warnings: { optional: true, schema: { kind: 'array', items: { kind: 'string' } } },
+    batchIndex: { optional: true, schema: { kind: 'number' } },
+    batchSize: { optional: true, schema: { kind: 'number' } },
+    totalBatches: { optional: true, schema: { kind: 'number' } },
+    isFinalBatch: { optional: true, schema: { kind: 'boolean' } },
+    timeToFirstRowMs: { optional: true, schema: { kind: 'number' } },
+    buildStartedAtUnix: { optional: true, schema: { kind: 'number' } },
+  } } },
+} };
 
 export function assertRefreshSnapshotEnvelope<TPayload>(
   value: unknown,
@@ -1604,98 +1721,133 @@ export function assertRefreshSnapshotEnvelope<TPayload>(
   if (value.domain !== expectedDomain) {
     throw invalid(`received domain ${String(value.domain)}`);
   }
-  for (const field of ['version', 'generatedAt', 'sequence'] as const) {
-    if (typeof value[field] !== 'number' || !Number.isFinite(value[field])) {
-      throw invalid(`invalid ${field}`);
-    }
-  }
-  if (typeof value.checksum !== 'string') {
-    throw invalid('invalid checksum');
-  }
-  if (!('payload' in value)) {
-    throw invalid('missing payload');
-  }
-  if (!isRefreshRecord(value.stats)) {
-    throw invalid('invalid stats');
-  }
-  for (const field of ['itemCount', 'buildDurationMs'] as const) {
-    if (typeof value.stats[field] !== 'number' || !Number.isFinite(value.stats[field])) {
-      throw invalid(`invalid stats.${field}`);
-    }
+  const reason = validateRefreshContract(value, refreshSnapshotSchema, '');
+  if (reason) {
+    throw invalid(reason);
   }
 }
+
+const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: {
+  snapshots: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
+    domain: { optional: false, schema: { kind: 'string' } },
+    scope: { optional: true, schema: { kind: 'string' } },
+    clusterId: { optional: true, schema: { kind: 'string' } },
+    clusterName: { optional: true, schema: { kind: 'string' } },
+    lastStatus: { optional: false, schema: { kind: 'enum', values: ['success', 'error'] } },
+    lastError: { optional: true, schema: { kind: 'string' } },
+    lastWarning: { optional: true, schema: { kind: 'string' } },
+    lastDurationMs: { optional: false, schema: { kind: 'number' } },
+    lastUpdated: { optional: false, schema: { kind: 'number' } },
+    successCount: { optional: false, schema: { kind: 'number' } },
+    failureCount: { optional: false, schema: { kind: 'number' } },
+    totalDurationMs: { optional: true, schema: { kind: 'number' } },
+    averageDurationMs: { optional: true, schema: { kind: 'number' } },
+    truncated: { optional: true, schema: { kind: 'boolean' } },
+    totalItems: { optional: true, schema: { kind: 'number' } },
+    warnings: { optional: true, schema: { kind: 'array', items: { kind: 'string' } } },
+    fallbackCount: { optional: true, schema: { kind: 'number' } },
+    hydrationCount: { optional: true, schema: { kind: 'number' } },
+    lastBatchIndex: { optional: true, schema: { kind: 'number' } },
+    totalBatches: { optional: true, schema: { kind: 'number' } },
+    lastBatchSize: { optional: true, schema: { kind: 'number' } },
+    isFinalBatch: { optional: true, schema: { kind: 'boolean' } },
+    timeToFirstBatchMs: { optional: true, schema: { kind: 'number' } },
+    maxInformerSyncWaitMs: { optional: true, schema: { kind: 'number' } },
+  } }, nullable: true } },
+  metrics: { optional: false, schema: { kind: 'object', fields: {
+    lastCollected: { optional: false, schema: { kind: 'number' } },
+    lastDurationMs: { optional: false, schema: { kind: 'number' } },
+    consecutiveFailures: { optional: false, schema: { kind: 'number' } },
+    lastError: { optional: true, schema: { kind: 'string' } },
+    successCount: { optional: false, schema: { kind: 'number' } },
+    failureCount: { optional: false, schema: { kind: 'number' } },
+    active: { optional: false, schema: { kind: 'boolean' } },
+  } } },
+  streams: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
+    name: { optional: false, schema: { kind: 'string' } },
+    domain: { optional: true, schema: { kind: 'string' } },
+    clusterId: { optional: true, schema: { kind: 'string' } },
+    clusterName: { optional: true, schema: { kind: 'string' } },
+    activeSessions: { optional: false, schema: { kind: 'number' } },
+    totalMessages: { optional: false, schema: { kind: 'number' } },
+    droppedMessages: { optional: false, schema: { kind: 'number' } },
+    skippedTargets: { optional: false, schema: { kind: 'number' } },
+    errorCount: { optional: false, schema: { kind: 'number' } },
+    lastConnect: { optional: false, schema: { kind: 'number' } },
+    lastEvent: { optional: false, schema: { kind: 'number' } },
+    lastError: { optional: true, schema: { kind: 'string' } },
+    lastErrorAt: { optional: true, schema: { kind: 'number' } },
+    lastSkipReason: { optional: true, schema: { kind: 'string' } },
+  } }, nullable: true } },
+  catalog: { optional: true, schema: { kind: 'object', fields: {
+    enabled: { optional: false, schema: { kind: 'boolean' } },
+    status: { optional: true, schema: { kind: 'string' } },
+    clusterId: { optional: true, schema: { kind: 'string' } },
+    clusterName: { optional: true, schema: { kind: 'string' } },
+    lastSyncMs: { optional: false, schema: { kind: 'number' } },
+    lastError: { optional: true, schema: { kind: 'string' } },
+    itemCount: { optional: false, schema: { kind: 'number' } },
+    resourceCount: { optional: false, schema: { kind: 'number' } },
+    lastUpdated: { optional: false, schema: { kind: 'number' } },
+    lastSuccess: { optional: true, schema: { kind: 'number' } },
+    consecutiveFailures: { optional: true, schema: { kind: 'number' } },
+    stale: { optional: true, schema: { kind: 'boolean' } },
+    failedResourceCount: { optional: true, schema: { kind: 'number' } },
+  } } },
+  connection: { optional: false, schema: { kind: 'object', fields: {
+    retryAttempts: { optional: false, schema: { kind: 'number' } },
+    retrySuccesses: { optional: false, schema: { kind: 'number' } },
+    retryExhausted: { optional: false, schema: { kind: 'number' } },
+    transportRebuilds: { optional: false, schema: { kind: 'number' } },
+    lastTransportReason: { optional: true, schema: { kind: 'string' } },
+    lastRetryError: { optional: true, schema: { kind: 'string' } },
+    state: { optional: true, schema: { kind: 'string' } },
+    stateLabel: { optional: true, schema: { kind: 'string' } },
+    stateMessage: { optional: true, schema: { kind: 'string' } },
+    nextRetryMs: { optional: true, schema: { kind: 'number' } },
+    lastUpdated: { optional: true, schema: { kind: 'number' } },
+  } } },
+} };
 
 export function assertTelemetrySummary(value: unknown): asserts value is TelemetrySummary {
   const invalid = (reason: string): Error => new Error(`Invalid telemetry summary: ${reason}`);
   if (!isRefreshRecord(value)) {
     throw invalid('expected an object');
   }
-  if (!Array.isArray(value.snapshots)) {
-    throw invalid('invalid snapshots');
-  }
-  if (!Array.isArray(value.streams)) {
-    throw invalid('invalid streams');
-  }
-  if (!isRefreshRecord(value.metrics)) {
-    throw invalid('invalid metrics');
-  }
-  for (const field of [
-    'lastCollected',
-    'lastDurationMs',
-    'consecutiveFailures',
-    'successCount',
-    'failureCount',
-  ] as const) {
-    if (typeof value.metrics[field] !== 'number' || !Number.isFinite(value.metrics[field])) {
-      throw invalid(`invalid metrics.${field}`);
-    }
-  }
-  if (typeof value.metrics.active !== 'boolean') {
-    throw invalid('invalid metrics.active');
-  }
-  if (!isRefreshRecord(value.connection)) {
-    throw invalid('invalid connection');
-  }
-  for (const field of [
-    'retryAttempts',
-    'retrySuccesses',
-    'retryExhausted',
-    'transportRebuilds',
-  ] as const) {
-    if (typeof value.connection[field] !== 'number' || !Number.isFinite(value.connection[field])) {
-      throw invalid(`invalid connection.${field}`);
-    }
+  const reason = validateRefreshContract(value, telemetrySummarySchema, '');
+  if (reason) {
+    throw invalid(reason);
   }
 }
 
 export interface BackendDomainPayloadMap {
   namespaces: NamespaceSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
+  catalog: CatalogSnapshotPayload;
+  'catalog-diff': CatalogSnapshotPayload;
   nodes: ClusterNodeSnapshotPayload;
-  'object-maintenance': NodeMaintenanceSnapshotPayload;
-  pods: PodSnapshotPayload;
-  'object-details': ObjectDetailsSnapshotPayload;
-  'object-events': ObjectEventsSnapshotPayload;
-  'object-map': ObjectMapSnapshotPayload;
-  'object-yaml': ObjectYAMLSnapshotPayload;
-  'object-helm-manifest': ObjectHelmManifestSnapshotPayload;
-  'object-helm-values': ObjectHelmValuesSnapshotPayload;
-  'cluster-rbac': ClusterRBACSnapshotPayload;
-  'cluster-storage': ClusterStorageSnapshotPayload;
   'cluster-config': ClusterConfigSnapshotPayload;
   'cluster-crds': ClusterCRDSnapshotPayload;
   'cluster-custom': ClusterCustomSnapshotPayload;
   'cluster-events': ClusterEventsSnapshotPayload;
-  catalog: CatalogSnapshotPayload;
-  'catalog-diff': CatalogSnapshotPayload;
+  'cluster-rbac': ClusterRBACSnapshotPayload;
+  'cluster-storage': ClusterStorageSnapshotPayload;
   'namespace-workloads': NamespaceWorkloadSnapshotPayload;
+  'namespace-autoscaling': NamespaceAutoscalingSnapshotPayload;
   'namespace-config': NamespaceConfigSnapshotPayload;
+  'namespace-custom': NamespaceCustomSnapshotPayload;
+  'namespace-events': NamespaceEventsSnapshotPayload;
+  'namespace-helm': NamespaceHelmSnapshotPayload;
   'namespace-network': NamespaceNetworkSnapshotPayload;
+  'namespace-quotas': NamespaceQuotasSnapshotPayload;
   'namespace-rbac': NamespaceRBACSnapshotPayload;
   'namespace-storage': NamespaceStorageSnapshotPayload;
-  'namespace-autoscaling': NamespaceAutoscalingSnapshotPayload;
-  'namespace-quotas': NamespaceQuotasSnapshotPayload;
-  'namespace-events': NamespaceEventsSnapshotPayload;
-  'namespace-custom': NamespaceCustomSnapshotPayload;
-  'namespace-helm': NamespaceHelmSnapshotPayload;
+  pods: PodSnapshotPayload;
+  'object-details': ObjectDetailsSnapshotPayload;
+  'object-yaml': ObjectYAMLSnapshotPayload;
+  'object-helm-manifest': ObjectHelmManifestSnapshotPayload;
+  'object-helm-values': ObjectHelmValuesSnapshotPayload;
+  'object-events': ObjectEventsSnapshotPayload;
+  'object-map': ObjectMapSnapshotPayload;
+  'object-maintenance': NodeMaintenanceSnapshotPayload;
 }

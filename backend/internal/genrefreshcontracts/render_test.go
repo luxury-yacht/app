@@ -57,9 +57,11 @@ func TestContractDomainsMatchAuthoredDomainInventory(t *testing.T) {
 	for domain := range authored.DomainInventory {
 		want = append(want, domain)
 	}
-	got := make([]string, 0, len(contractDomains))
+	domains, err := loadContractDomains()
+	require.NoError(t, err)
+	got := make([]string, 0, len(domains))
 	frontendOwned := make([]string, 0, 1)
-	for _, domain := range contractDomains {
+	for _, domain := range domains {
 		got = append(got, domain.domain)
 		if domain.frontendOwned {
 			frontendOwned = append(frontendOwned, domain.domain)
@@ -69,4 +71,58 @@ func TestContractDomainsMatchAuthoredDomainInventory(t *testing.T) {
 	sort.Strings(got)
 	require.Equal(t, want, got)
 	require.Equal(t, []string{"container-logs"}, frontendOwned)
+}
+
+func TestDomainPayloadMappingsRejectUnregisteredTypes(t *testing.T) {
+	err := validateDomainPayloadTypes([]domainSpec{{domain: "nodes", payload: "MissingPayload"}}, nil)
+	require.EqualError(t, err, `refresh domain "nodes" references unregistered payload type "MissingPayload"`)
+}
+
+func TestAuthoredDomainInventoryOwnsRefreshPayloadMappings(t *testing.T) {
+	contents, err := os.ReadFile("../../refresh/domain/refresh-domain-contract.json")
+	require.NoError(t, err)
+
+	var authored struct {
+		DomainInventory map[string]struct {
+			RefreshPayloadType json.RawMessage `json:"refreshPayloadType"`
+		} `json:"domainInventory"`
+	}
+	require.NoError(t, json.Unmarshal(contents, &authored))
+	for domain, inventory := range authored.DomainInventory {
+		require.NotEmptyf(t, inventory.RefreshPayloadType, "domain %q refreshPayloadType", domain)
+		if domain == "container-logs" {
+			require.JSONEq(t, "null", string(inventory.RefreshPayloadType))
+			continue
+		}
+		var payloadType string
+		require.NoErrorf(t, json.Unmarshal(inventory.RefreshPayloadType, &payloadType), "domain %q refreshPayloadType", domain)
+		require.NotEmptyf(t, payloadType, "domain %q refreshPayloadType", domain)
+	}
+}
+
+func TestRenderMatchesEncodingJSONOptionalityAndNullability(t *testing.T) {
+	generated, err := Render()
+	require.NoError(t, err)
+	contract := string(generated)
+
+	require.Contains(t, contract, "export interface NodeMaintenanceSnapshotPayload {\n  clusterId: string;")
+	require.Contains(t, contract, "recentEvents: Array<RecentEventEntry> | null;")
+	require.Contains(t, contract, "values: Record<string, unknown> | null;")
+	require.Contains(t, contract, "events?: Array<NodeMaintenanceDrainEvent>;")
+	require.Contains(t, contract, "warnings?: Array<string> | null;")
+	require.Contains(t, contract, "lastTransitionTime: string | null;")
+	require.Contains(t, contract, "creationTimestamp: string | null;")
+}
+
+func TestRenderPreservesEveryNamedWireEnum(t *testing.T) {
+	generated, err := Render()
+	require.NoError(t, err)
+	contract := string(generated)
+
+	require.Contains(t, contract, "export type ResourceSource = 'kubernetes' | 'synthetic';")
+	require.Contains(t, contract, "export type ResourceScope = 'cluster' | 'namespaced';")
+	require.Contains(t, contract, "export type ResourceStatusSignalType =")
+	require.Contains(t, contract, "type: ResourceStatusSignalType;")
+	require.Contains(t, contract, "export type TelemetrySnapshotLastStatus = 'success' | 'error';")
+	require.Contains(t, contract, "lastStatus: TelemetrySnapshotLastStatus;")
 }
