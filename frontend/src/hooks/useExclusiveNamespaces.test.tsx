@@ -6,7 +6,7 @@
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';
 import {
@@ -40,10 +40,6 @@ const renderHookComponent = async () => {
 };
 
 describe('useExclusiveNamespaces', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
   });

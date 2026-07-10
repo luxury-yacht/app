@@ -9,7 +9,7 @@ import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActi
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -203,10 +203,6 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
 describe('NsViewEvents', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

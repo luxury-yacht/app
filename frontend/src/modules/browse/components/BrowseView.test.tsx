@@ -9,7 +9,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import BrowseView from '@/modules/browse/components/BrowseView';
@@ -262,10 +262,6 @@ const catalogPayload = (
 describe('BrowseView', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

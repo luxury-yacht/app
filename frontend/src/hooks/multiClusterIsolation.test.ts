@@ -9,13 +9,14 @@
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthErrorProvider,
   type ClusterAuthState,
   useActiveClusterAuthState,
   useAuthError,
 } from '@/core/contexts/AuthErrorContext';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   type ClusterHealthStatus,
   useClusterHealthListener,
@@ -59,9 +60,9 @@ type EventHandler = (...args: unknown[]) => void;
 /**
  * Mock runtime interface matching Wails runtime structure.
  */
-interface MockRuntime {
-  EventsOn: ReturnType<typeof vi.fn>;
-  EventsOff: ReturnType<typeof vi.fn>;
+interface MockRuntime extends WailsRuntime {
+  EventsOn: ReturnType<typeof vi.fn<NonNullable<WailsRuntime['EventsOn']>>>;
+  EventsOff: ReturnType<typeof vi.fn<NonNullable<WailsRuntime['EventsOff']>>>;
   handlers: Map<string, EventHandler>;
   emit: (event: string, payload: unknown) => void;
 }
@@ -72,20 +73,22 @@ interface MockRuntime {
  */
 function createMockRuntime(): MockRuntime {
   const handlers = new Map<string, EventHandler>();
+  const EventsOn = vi.fn<NonNullable<WailsRuntime['EventsOn']>>((event, handler) => {
+    handlers.set(event, handler);
+    return () => {
+      if (handlers.get(event) === handler) {
+        handlers.delete(event);
+      }
+    };
+  });
+  const EventsOff = vi.fn<NonNullable<WailsRuntime['EventsOff']>>((event) => {
+    handlers.delete(event);
+  });
 
   return {
     handlers,
-    EventsOn: vi.fn((event: string, handler: EventHandler) => {
-      handlers.set(event, handler);
-      return () => {
-        if (handlers.get(event) === handler) {
-          handlers.delete(event);
-        }
-      };
-    }),
-    EventsOff: vi.fn((event: string) => {
-      handlers.delete(event);
-    }),
+    EventsOn,
+    EventsOff,
     emit: (event: string, payload: unknown) => {
       const handler = handlers.get(event);
       if (handler) {
@@ -97,21 +100,17 @@ function createMockRuntime(): MockRuntime {
 
 describe('Wails Runtime Event Listener Cleanup', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: unknown;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
+  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = (window as any).runtime;
-    (window as any).runtime = mockRuntime;
+    originalRuntime = window.runtime;
+    window.runtime = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    (window as any).runtime = originalRuntime;
+    window.runtime = originalRuntime;
     document.body.textContent = '';
   });
 
@@ -177,21 +176,17 @@ describe('Pods Filter Isolation', () => {
 // Tests for auth error tracking per cluster
 describe('Auth Error Context Isolation', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: unknown;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
+  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = (window as any).runtime;
-    (window as any).runtime = mockRuntime;
+    originalRuntime = window.runtime;
+    window.runtime = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    (window as any).runtime = originalRuntime;
+    window.runtime = originalRuntime;
     // Clear document body using textContent (safe DOM method)
     document.body.textContent = '';
   });
@@ -227,7 +222,7 @@ describe('Auth Error Context Isolation', () => {
     });
 
     return {
-      getResult: () => hookResult!,
+      getResult: () => requireValue(hookResult, 'Expected the health hook result after render'),
       unmount: () =>
         act(() => {
           root.unmount();
@@ -401,21 +396,17 @@ describe('Auth Error Context Isolation', () => {
 // Tests for cluster health tracking
 describe('Cluster Health Listener Isolation', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: unknown;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
+  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = (window as any).runtime;
-    (window as any).runtime = mockRuntime;
+    originalRuntime = window.runtime;
+    window.runtime = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    (window as any).runtime = originalRuntime;
+    window.runtime = originalRuntime;
     // Clear document body using textContent (safe DOM method)
     document.body.textContent = '';
   });
@@ -447,7 +438,7 @@ describe('Cluster Health Listener Isolation', () => {
     });
 
     return {
-      getResult: () => hookResult!,
+      getResult: () => requireValue(hookResult, 'Expected the auth hook result after render'),
       unmount: () =>
         act(() => {
           root.unmount();

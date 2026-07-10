@@ -9,7 +9,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -71,10 +71,6 @@ const renderHarness = async (panelState: any, options: any) => {
 describe('useWindowBoundsConstraint', () => {
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.useFakeTimers();

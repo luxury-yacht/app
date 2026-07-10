@@ -8,7 +8,7 @@
 
 import React, { act, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogViewerAction } from '../logViewerReducer';
 
 // --- Mocks ---
@@ -110,12 +110,6 @@ function defaultProps(overrides: Partial<HarnessProps> = {}): HarnessProps {
     ...overrides,
   };
 }
-
-// --- Tests ---
-
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
 describe('isLogDataUnavailable', () => {
   it('returns false for null/empty messages', () => {

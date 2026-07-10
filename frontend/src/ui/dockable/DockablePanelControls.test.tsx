@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DockablePanelControls } from './DockablePanelControls';
 
@@ -35,10 +35,6 @@ const renderControls = async (ui: React.ReactElement) => {
 };
 
 describe('DockablePanelControls', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   afterEach(() => {
     document.body.innerHTML = '';
   });

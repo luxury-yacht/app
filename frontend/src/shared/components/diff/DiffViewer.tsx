@@ -586,7 +586,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     .join(' ');
 
   return (
-    // biome-ignore lint/a11y: this scroll region is intentionally keyboard-focusable and implements its own scrolling keys.
+    // biome-ignore lint/a11y/noStaticElementInteractions: this scroll region is keyboard-focusable and implements its own scrolling keys.
     <div
       className={rootClassName}
       ref={diffTableRef}

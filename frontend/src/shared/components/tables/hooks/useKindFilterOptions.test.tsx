@@ -1,7 +1,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { useKindFilterOptions } from './useKindFilterOptions';
 
 const renderHook = <T,>(hook: () => T) => {
@@ -37,10 +37,6 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useKindFilterOptions', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   it('deduplicates, trims, and sorts kind values from row payloads', () => {
     const hook = renderHook(() =>
       useKindFilterOptions([

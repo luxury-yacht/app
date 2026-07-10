@@ -8,7 +8,7 @@
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const openWithObject = vi.fn();
 const navigateToView = vi.fn();
@@ -28,10 +28,6 @@ const hostRef = { kind: 'Pod', name: 'web-5', namespace: 'shop', clusterId: 'c1'
 describe('ObjectPanelLink', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

@@ -9,7 +9,7 @@ import type { ErrorNotification } from '@contexts/ErrorContext';
 import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorsRef: { current: ErrorNotification[] } = { current: [] };
 
@@ -46,10 +46,6 @@ describe('ErrorNotificationSystem copy button', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let writeText: ReturnType<typeof vi.fn>;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -118,10 +114,6 @@ describe('ErrorNotificationSystem copy button', () => {
 describe('ErrorNotificationSystem header label', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

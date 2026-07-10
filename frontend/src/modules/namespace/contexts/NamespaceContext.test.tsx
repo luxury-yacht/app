@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
@@ -93,10 +93,6 @@ const Harness: React.FC = () => {
 };
 
 describe('NamespaceProvider selection behaviour', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     vi.useFakeTimers();
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);

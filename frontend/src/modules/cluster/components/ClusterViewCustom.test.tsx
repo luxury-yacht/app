@@ -10,7 +10,7 @@ import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -241,10 +241,6 @@ const catalogItemToClusterCustomData = (item: CatalogItem) => catalogItemToFallb
 describe('ClusterViewCustom', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

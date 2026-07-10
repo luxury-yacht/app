@@ -9,7 +9,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
@@ -107,10 +107,6 @@ const renderPanel = async (element: React.ReactElement) => {
 describe('DockablePanel behaviour (real hook)', () => {
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     setActivePanelLayoutStore(createPanelLayoutStore());

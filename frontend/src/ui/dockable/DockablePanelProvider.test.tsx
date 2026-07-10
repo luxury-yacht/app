@@ -15,7 +15,7 @@ import {
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
@@ -129,10 +129,6 @@ function seedPayload(dataTransfer: DataTransfer, payload: TabDragPayload) {
 }
 
 describe('DockablePanelProvider', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     // Create the content shell used by the real app layout.
     const contentEl = document.createElement('div');

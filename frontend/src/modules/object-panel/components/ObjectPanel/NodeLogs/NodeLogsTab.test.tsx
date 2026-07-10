@@ -35,7 +35,6 @@ describe('NodeLogsTab', () => {
   ];
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     if (!Element.prototype.scrollIntoView) {
       Element.prototype.scrollIntoView = vi.fn();
     }

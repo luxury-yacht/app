@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   applyAccentBg,
   applyAccentColor,
@@ -138,9 +139,18 @@ describe('generateAccentShades', () => {
   it('produces darker shades for negative offsets', () => {
     const shades = generateAccentShades('#3b82f6', 'light');
     // 700 (offset -8) should be darker than 600 (offset 0)
-    const shade700 = shades.find((s) => s.token === '--color-accent-light-700')!;
-    const shade600 = shades.find((s) => s.token === '--color-accent-light-600')!;
-    const shade300 = shades.find((s) => s.token === '--color-accent-light-300')!;
+    const shade700 = requireValue(
+      shades.find((s) => s.token === '--color-accent-light-700'),
+      'Expected the generated 700 accent shade'
+    );
+    const shade600 = requireValue(
+      shades.find((s) => s.token === '--color-accent-light-600'),
+      'Expected the generated 600 accent shade'
+    );
+    const shade300 = requireValue(
+      shades.find((s) => s.token === '--color-accent-light-300'),
+      'Expected the generated 300 accent shade'
+    );
     const l700 = hexToHsl(shade700.value).l;
     const l600 = hexToHsl(shade600.value).l;
     const l300 = hexToHsl(shade300.value).l;

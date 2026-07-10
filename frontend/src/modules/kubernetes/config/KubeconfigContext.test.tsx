@@ -12,7 +12,7 @@ import {
 import type { types } from '@wailsjs/go/models';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 
@@ -91,10 +91,6 @@ const renderProvider = async () => {
 };
 
 describe('KubeconfigContext', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     mocks.refreshOrchestrator.updateContext.mockReset();
     getKubeconfigsMock.mockReset();

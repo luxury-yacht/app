@@ -9,7 +9,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 
 // ---------------------------------------------------------------------------
@@ -191,10 +191,6 @@ describe('FavMenuDropdown', () => {
       await Promise.resolve();
     });
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     // Reset favorites to empty by default; individual tests override via splice.

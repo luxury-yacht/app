@@ -15,7 +15,7 @@ import GridTable, { type GridColumnDefinition } from '@shared/components/tables/
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks required by ContextMenu / GridTable internals
@@ -222,10 +222,6 @@ const cleanBody = () => {
 // ---------------------------------------------------------------------------
 
 describe('header context menu integration', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     vi.useRealTimers();
   });

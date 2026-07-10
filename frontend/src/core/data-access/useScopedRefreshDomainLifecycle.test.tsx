@@ -7,7 +7,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 
@@ -71,10 +71,6 @@ const renderHook = (initialProps: HookProps) => {
 };
 
 describe('useScopedRefreshDomainLifecycle', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     mocks.acquireScopedDomainLease.mockClear();
     mocks.releaseScopedDomainLease.mockClear();

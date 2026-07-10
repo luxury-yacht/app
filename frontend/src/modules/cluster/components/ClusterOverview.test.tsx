@@ -8,7 +8,7 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { act, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import ClusterOverview from './ClusterOverview';
@@ -240,10 +240,6 @@ vi.mock('@/core/settings/appPreferences', () => ({
 
 describe('ClusterOverview', () => {
   let cleanupRoot: (() => void) | null = null;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     domainStateRef.current = createDomainState('loading');

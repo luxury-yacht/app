@@ -9,7 +9,7 @@
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PodSnapshotEntry } from '@/core/refresh/types';
 
 const {
@@ -236,10 +236,6 @@ const mockQueryRows = (rows: PodSnapshotEntry[]) => {
 describe('PodsTab (query-backed)', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

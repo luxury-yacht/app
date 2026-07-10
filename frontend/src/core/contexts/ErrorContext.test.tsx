@@ -8,7 +8,7 @@
 import { ErrorCategory, type ErrorDetails, ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorProvider, useErrorContext } from './ErrorContext';
 
 // Stable factory for creating test error details
@@ -32,10 +32,6 @@ describe('ErrorContext', () => {
     stateRef.current = useErrorContext();
     return null;
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.useFakeTimers();

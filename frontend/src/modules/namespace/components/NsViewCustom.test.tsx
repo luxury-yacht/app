@@ -23,8 +23,6 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
 
 import NsViewCustom, { type CustomResourceData } from '@modules/namespace/components/NsViewCustom';
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
 const gridTableMock = vi.fn();

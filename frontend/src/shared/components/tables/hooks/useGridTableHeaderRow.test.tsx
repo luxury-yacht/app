@@ -9,7 +9,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const renderSortIndicator = vi.fn((key: string) => <span data-testid={`sort-${key}`} />);
 const handleHeaderClick = vi.fn();
@@ -64,10 +64,6 @@ const HeaderHarness: React.FC<{
 describe('useGridTableHeaderRow', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

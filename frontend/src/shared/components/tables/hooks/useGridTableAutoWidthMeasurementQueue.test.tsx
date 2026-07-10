@@ -31,10 +31,6 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
@@ -132,7 +128,6 @@ describe('useDirtyQueue debounce and retry', () => {
   let root: ReactDOM.Root;
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     vi.useFakeTimers();
   });
 

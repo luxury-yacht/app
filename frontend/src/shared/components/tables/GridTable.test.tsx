@@ -32,7 +32,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 // import React, { act } from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 const runtimeMocks = vi.hoisted(() => ({
@@ -135,10 +135,6 @@ const flushAsync = async () => {
 describe('GridTable virtualization', () => {
   let originalClientHeightDescriptor: PropertyDescriptor | undefined;
   let originalScrollTo: typeof Element.prototype.scrollTo | undefined;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.useRealTimers();

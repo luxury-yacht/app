@@ -13,7 +13,7 @@ import { useGridTableColumnVirtualization } from '@shared/components/tables/hook
 import type React from 'react';
 import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 type Row = { id: string };
 
@@ -29,10 +29,6 @@ const createColumn = (key: string, width: number, className = '') =>
 describe('useGridTableColumnVirtualization', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

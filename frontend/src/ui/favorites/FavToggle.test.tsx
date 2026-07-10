@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 
 // ---------------------------------------------------------------------------
@@ -227,10 +227,6 @@ describe('useFavToggle', () => {
       await Promise.resolve();
     });
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     mockFavorites = [];

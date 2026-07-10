@@ -8,7 +8,7 @@
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RollbackModal from './RollbackModal';
 
 // Hoisted mock for the Wails backend bindings.
@@ -52,10 +52,6 @@ describe('RollbackModal', () => {
     name: 'my-deploy',
     kind: 'Deployment',
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

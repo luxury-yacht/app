@@ -9,7 +9,7 @@ import type { IconBarAction } from '@shared/components/IconBar/IconBar';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGridTableCsvFileExportAction } from './useGridTableCsvFileExportAction';
 
 const saveCsvFileMock = vi.hoisted(() => vi.fn());
@@ -30,10 +30,6 @@ describe('useGridTableCsvFileExportAction', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let item: IconBarAction | undefined;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     saveCsvFileMock.mockReset();

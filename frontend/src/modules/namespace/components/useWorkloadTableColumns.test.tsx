@@ -7,7 +7,7 @@
 
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -53,10 +53,6 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useWorkloadTableColumns', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   const workload: WorkloadData = {
     clusterId: 'cluster-a',
     kind: 'Deployment',

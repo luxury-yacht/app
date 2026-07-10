@@ -66,7 +66,6 @@ describe('DiffViewer', () => {
   const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {

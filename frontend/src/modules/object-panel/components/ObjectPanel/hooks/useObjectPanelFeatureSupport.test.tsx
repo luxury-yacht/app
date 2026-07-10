@@ -9,7 +9,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ResourceCapability } from '../types';
 import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
@@ -39,10 +39,6 @@ describe('useObjectPanelFeatureSupport', () => {
 
     return resultRef.current!;
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

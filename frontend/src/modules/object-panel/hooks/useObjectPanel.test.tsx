@@ -39,10 +39,6 @@ vi.mock('@ui/dockable/useDockablePanelState', () => ({
   handoffLayoutBeforeClose: vi.fn(),
 }));
 
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
-
 describe('useObjectPanel', () => {
   type UseObjectPanelExports = typeof import('./useObjectPanel');
   let useObjectPanel: UseObjectPanelExports['useObjectPanel'];

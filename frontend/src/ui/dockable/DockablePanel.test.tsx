@@ -10,7 +10,7 @@ import { getTabbableElements } from '@shared/components/modals/getTabbableElemen
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 
@@ -83,10 +83,6 @@ const getVisiblePanelSection = (selector: string) =>
   }) ?? null;
 
 describe('DockablePanel', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   afterEach(() => {
     document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
       node.remove();

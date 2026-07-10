@@ -9,7 +9,7 @@ import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import type { types } from '@wailsjs/go/models';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -155,10 +155,6 @@ const renderHook = () => {
 };
 
 describe('CommandPaletteCommands', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];

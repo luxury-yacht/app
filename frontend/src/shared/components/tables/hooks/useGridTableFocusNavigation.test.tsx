@@ -7,7 +7,7 @@
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
 import React, { act, forwardRef, useImperativeHandle, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string };
 
@@ -49,7 +49,7 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
     }));
 
     return (
-      // biome-ignore lint/a11y: this harness mirrors GridTable's div-based focus and row DOM contract.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: this harness mirrors GridTable's programmatically focusable div-based DOM contract.
       <div ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           // Mirrors useGridTableRowRenderer: both .gridtable-row and
@@ -66,10 +66,6 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
 describe('useGridTableFocusNavigation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -183,7 +179,7 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
     }));
 
     return (
-      // biome-ignore lint/a11y: this harness mirrors GridTable's div-based focus and row DOM contract.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: this harness mirrors GridTable's programmatically focusable div-based DOM contract.
       <div ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           <div key={row.id} className="gridtable-row" data-row-key={row.id}>
@@ -198,10 +194,6 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
 describe('useGridTableFocusNavigation – pointer vs keyboard activation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -317,10 +309,6 @@ describe('useGridTableFocusNavigation – shortcut suppression', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -394,10 +382,6 @@ describe('useGridTableFocusNavigation – shortcut suppression', () => {
 describe('useGridTableFocusNavigation – data-shrink clamping', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -473,10 +457,6 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
 describe('useGridTableFocusNavigation – key-based focus stability', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

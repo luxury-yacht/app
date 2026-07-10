@@ -1,0 +1,247 @@
+{
+  "overrides": [
+    {
+      "includes": ["src/core/backend-api/**"],
+      "rules": ["style.noRestrictedImports"],
+      "reason": "The approved Wails backend facade must import the generated binding it isolates from application code."
+    },
+    {
+      "includes": ["src/**/*.test.{ts,tsx}"],
+      "rules": ["style.noNonNullAssertion", "suspicious.noExplicitAny"],
+      "reason": "Legacy tests still require typed factory and assertion-helper migration; tracked in docs/plans/biome-tech-debt.md."
+    },
+    {
+      "includes": [
+        "src/modules/port-forward/PortForwardModal.tsx",
+        "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+        "src/shared/components/inputs/SearchInput.tsx",
+        "src/shared/components/modals/ConfirmationModal.tsx",
+        "src/ui/favorites/FavSaveModal.tsx",
+        "src/ui/settings/sections/AppearanceSection.tsx"
+      ],
+      "rules": ["a11y.noAutofocus"],
+      "reason": "These focus-managed workflows intentionally move focus to their primary control when opened."
+    },
+    {
+      "includes": [
+        "src/modules/browse/components/BrowseView.stories.tsx",
+        "src/modules/object-map/ObjectMap.tsx",
+        "src/shared/components/tables/GridTableBody.tsx",
+        "src/shared/components/tables/columnFactories.tsx",
+        "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+        "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+        "src/ui/dockable/DockablePanel.tsx",
+        "src/ui/dockable/DockablePanelHeader.tsx",
+        "src/ui/panels/app-logs/AppLogsPanel.tsx"
+      ],
+      "rules": [
+        "a11y.noStaticElementInteractions",
+        "a11y.useFocusableInteractive",
+        "a11y.useKeyWithClickEvents",
+        "a11y.useSemanticElements"
+      ],
+      "reason": "Grid, map, and dockable composite widgets implement focus and keyboard behavior across multiple coordinated elements."
+    },
+    {
+      "includes": [
+        "src/shared/components/ContextMenu.tsx",
+        "src/shared/components/kubernetes/ActionsMenu.tsx",
+        "src/ui/command-palette/CommandPalette.tsx",
+        "src/ui/favorites/FavMenuDropdown.tsx",
+        "src/ui/layout/Sidebar.tsx"
+      ],
+      "rules": [
+        "a11y.noStaticElementInteractions",
+        "a11y.useFocusableInteractive",
+        "a11y.useKeyWithClickEvents",
+        "a11y.useSemanticElements"
+      ],
+      "reason": "Menu, palette, and sidebar composites use roving focus and delegated keyboard ownership."
+    },
+    {
+      "includes": ["src/shared/components/dropdowns/Dropdown/Dropdown.tsx"],
+      "rules": [
+        "a11y.noStaticElementInteractions",
+        "a11y.useAriaPropsSupportedByRole",
+        "a11y.useKeyWithClickEvents"
+      ],
+      "reason": "The custom combobox coordinates trigger, listbox, search, and option interactions across a composite widget."
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+        "src/shared/components/Tooltip.tsx",
+        "src/shared/components/modals/ModalSurface.tsx",
+        "src/ui/dockable/DockablePanelControls.tsx",
+        "src/ui/dockable/DockableTabBar.tsx",
+        "src/ui/layout/AppHeader.tsx",
+        "src/ui/layout/AppLayout.tsx",
+        "src/ui/settings/sections/AppearanceSection.tsx"
+      ],
+      "rules": ["a11y.noStaticElementInteractions", "a11y.useKeyWithClickEvents"],
+      "reason": "Pointer boundaries, drag surfaces, and delegated shell interactions are coordinated with keyboard owners elsewhere in the composite."
+    },
+    {
+      "includes": ["src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx"],
+      "rules": ["a11y.useSemanticElements"],
+      "reason": "The log viewer uses ARIA grouping around a virtualized, filterable log surface that has no equivalent native structure."
+    },
+    {
+      "includes": ["src/shared/components/diff/DiffViewer.tsx"],
+      "rules": ["a11y.noNoninteractiveTabindex"],
+      "reason": "The diff scroll region is programmatically focusable and owns keyboard scrolling and selection behavior."
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
+        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
+        "src/shared/components/KubeconfigSelector.css",
+        "src/shared/components/ResourceBar.css",
+        "src/ui/command-palette/CommandPalette.css",
+        "src/ui/dockable/DockablePanel.css",
+        "src/ui/layout/DebugOverlay.css",
+        "src/ui/layout/Sidebar.css",
+        "src/ui/panels/app-logs/AppLogsPanel.css",
+        "styles/components/gridtables.css",
+        "styles/utilities/display.css",
+        "styles/utilities/motion.css"
+      ],
+      "rules": ["complexity.noImportantStyles"],
+      "reason": "Legacy cascade contracts include global state, reduced-motion, visibility, selection, and embedded-widget overrides; tracked for isolation and removal."
+    },
+    {
+      "includes": [
+        "src/core/refresh/components/DiagnosticsPanel.css",
+        "src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.css",
+        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
+        "src/shared/components/ResourceBar.css",
+        "src/shared/components/diff/DiffViewer.css",
+        "src/shared/components/errors/ErrorNotificationSystem.css",
+        "src/ui/command-palette/CommandPalette.css",
+        "src/ui/dockable/DockablePanel.css",
+        "src/ui/layout/Sidebar.css",
+        "src/ui/modals/ObjectDiffModal.css",
+        "src/ui/panels/app-logs/AppLogsPanel.css",
+        "styles/base/scrollbars.css",
+        "styles/components/dropdowns.css",
+        "styles/components/gridtables.css",
+        "styles/components/tabs.css",
+        "styles/utilities/motion.css"
+      ],
+      "rules": ["style.noDescendingSpecificity"],
+      "reason": "Legacy cross-specificity component and state selectors require cascade refactoring before this rule can be restored file by file."
+    },
+    {
+      "includes": ["src/shared/components/icons/**"],
+      "rules": ["a11y.noSvgWithoutTitle"],
+      "reason": "Shared icon components have not yet standardized decorative versus meaningful SVG semantics."
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
+      ],
+      "rules": ["suspicious.noControlCharactersInRegex"],
+      "reason": "ANSI terminal parsing intentionally matches escape and control sequences."
+    },
+    {
+      "includes": ["index.html"],
+      "rules": ["correctness.noInnerDeclarations"],
+      "reason": "The appearance bootstrap must execute inline before the React bundle to establish first-paint theme state."
+    }
+  ],
+  "suppressions": [
+    {
+      "file": "src/core/contexts/ErrorContext.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/core/events/useEventBus.ts",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/modules/browse/hooks/useBrowseCatalog.test.tsx",
+      "rule": "lint/correctness/useHookAtTopLevel",
+      "count": 1
+    },
+    {
+      "file": "src/modules/cluster/components/ClusterOverview.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableFocusNavigation.test.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableVirtualization.ts",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/yaml/YamlEditor.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/appFocusRegions.test.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 3
+    },
+    {
+      "file": "src/ui/settings/sections/KubeconfigsSection.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/ui/shortcuts/context.test.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 4
+    }
+  ]
+}

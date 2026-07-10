@@ -127,7 +127,7 @@
       }
     },
     {
-      "includes": ["src/**/*.test.{ts,tsx}", ".storybook/mocks/**"],
+      "includes": ["src/**/*.test.{ts,tsx}"],
       "linter": {
         "rules": {
           "style": {
@@ -331,6 +331,23 @@
         "rules": {
           "correctness": {
             "noInnerDeclarations": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/hooks/**/*.test.{ts,tsx}",
+        "src/shared/utils/**/*.test.{ts,tsx}",
+        "src/utils/**/*.test.{ts,tsx}"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "error"
+          },
+          "suspicious": {
+            "noExplicitAny": "error"
           }
         }
       }

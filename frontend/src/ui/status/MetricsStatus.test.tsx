@@ -10,7 +10,7 @@ import type { MetricsAvailability, MetricsBannerInfo } from '@shared/utils/metri
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let mockMetricsInfo: MetricsAvailability | null = null;
 let mockBannerInfo: MetricsBannerInfo | null = null;
@@ -37,10 +37,6 @@ import MetricsStatus from './MetricsStatus';
 describe('MetricsStatus', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

@@ -16,8 +16,6 @@ import { useRefreshContext } from './useRefreshContext';
 import { useRefreshManager } from './useRefreshManager';
 import { useRefreshWatcher } from './useRefreshWatcher';
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-
 type RefreshManagerLike = {
   register: (refresher: Refresher) => void;
   unregister: (name: RefresherName) => void;

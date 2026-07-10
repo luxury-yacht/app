@@ -9,7 +9,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const searchShortcutMock = vi.hoisted(() => ({
   register: vi.fn(),
@@ -59,10 +59,6 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
 describe('GridTableFiltersBar', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

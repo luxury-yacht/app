@@ -7,7 +7,7 @@
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DisplaySection from './DisplaySection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
@@ -65,10 +65,6 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
 }));
 
 describe('DisplaySection', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 

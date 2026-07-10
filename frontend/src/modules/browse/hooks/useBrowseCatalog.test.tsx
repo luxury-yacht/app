@@ -158,10 +158,6 @@ describe('useBrowseCatalog', () => {
     return null;
   };
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

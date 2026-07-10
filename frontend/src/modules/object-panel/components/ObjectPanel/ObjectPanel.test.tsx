@@ -264,7 +264,6 @@ mockUseUserPermission.mockImplementation(() => currentLogPermission);
 mockUseRefreshScopedDomain.mockImplementation(() => currentScopedDomain);
 
 beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   return import('./ObjectPanel').then((module) => {
     ObjectPanel = module.default;
   });

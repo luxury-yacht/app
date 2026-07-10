@@ -8,7 +8,7 @@
 import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyCodes } from '../constants';
 import { GlobalShortcuts } from './GlobalShortcuts';
 
@@ -135,10 +135,6 @@ describe('GlobalShortcuts', () => {
       `Shortcut for key "${key}"${modifiers ? ` with modifiers ${JSON.stringify(modifiers)}` : ''} not registered`
     );
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     registeredShortcuts.length = 0;

@@ -9,7 +9,7 @@
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import { DrainProgressCard } from './DrainProgressCard';
@@ -33,10 +33,6 @@ const buildJob = (status: NodeMaintenanceDrainJob['status']): NodeMaintenanceDra
 describe('DrainProgressCard status pill', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

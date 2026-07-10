@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 vi.mock('../RefreshManager', () => {
   const pause = vi.fn();
@@ -26,10 +26,6 @@ import { RefreshManagerProvider, useRefreshManagerContext } from './RefreshManag
 
 describe('RefreshManagerContext', () => {
   let originalHiddenDescriptor: PropertyDescriptor | undefined;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();

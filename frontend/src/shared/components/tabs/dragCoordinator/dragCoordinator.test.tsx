@@ -4,7 +4,7 @@
 import type * as React from 'react';
 import { act, useContext } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TabDragContext, TabDragProvider } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE } from './types';
@@ -14,10 +14,6 @@ import { useTabDropTarget } from './useTabDropTarget';
 describe('TabDragProvider', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

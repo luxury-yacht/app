@@ -188,7 +188,6 @@ let getPermissionKeyRef: typeof import('@/core/capabilities')['getPermissionKey'
 
 beforeAll(async () => {
   ({ getPermissionKey: getPermissionKeyRef } = await import('@/core/capabilities'));
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 const getPermissionKeySafe = (

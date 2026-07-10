@@ -7,7 +7,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
@@ -76,10 +76,6 @@ vi.mock('@/core/refresh/RefreshManager', () => ({
 describe('SettingsModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset();

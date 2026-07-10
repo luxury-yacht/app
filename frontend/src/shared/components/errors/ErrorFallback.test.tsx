@@ -7,7 +7,7 @@
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorFallback } from './ErrorFallback';
 
@@ -15,10 +15,6 @@ describe('ErrorFallback', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   const originalEnv = import.meta.env.DEV;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

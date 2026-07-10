@@ -11,7 +11,7 @@ import {
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTableSort } from './useTableSort';
 
 type Row = {
@@ -47,10 +47,6 @@ const TestHarness = ({ data }: { data: Row[] }) => {
 describe('useTableSort', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

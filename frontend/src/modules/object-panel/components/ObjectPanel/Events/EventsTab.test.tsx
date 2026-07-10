@@ -159,10 +159,6 @@ function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSumm
   };
 }
 
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
-
 describe('EventsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;

@@ -8,7 +8,7 @@
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act, type Ref } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the Wails backend
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
@@ -132,10 +132,6 @@ describe('PortForwardsPanel', () => {
     listPortForwardsMock.mockResolvedValue(sessions);
     listRuntimeOperationsMock.mockResolvedValue(runtimeOperationsFor(sessions));
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

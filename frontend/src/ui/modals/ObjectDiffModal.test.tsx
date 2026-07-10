@@ -8,7 +8,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ObjectDiffModal from './ObjectDiffModal';
 
 const refreshMocks = vi.hoisted(() => ({
@@ -289,10 +289,6 @@ const getRefreshState = (domain: string, scope: string) => {
 describe('ObjectDiffModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset();

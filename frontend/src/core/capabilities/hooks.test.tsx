@@ -10,8 +10,6 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-
 import { eventBus } from '@/core/events';
 import { type UseCapabilitiesOptions, useCapabilities, useCapabilityDiagnostics } from './hooks';
 import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';

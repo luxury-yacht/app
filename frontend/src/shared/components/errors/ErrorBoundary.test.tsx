@@ -9,7 +9,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import type { MockInstance } from 'vitest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { handleMock } = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -29,10 +29,6 @@ describe('ErrorBoundary', () => {
   let consoleErrorSpy: MockInstance | undefined;
   let consoleGroupSpy: MockInstance | undefined;
   let consoleGroupEndSpy: MockInstance | undefined;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

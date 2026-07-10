@@ -8,7 +8,7 @@
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AuthErrorProvider,
@@ -44,10 +44,6 @@ describe('AuthErrorContext', () => {
     stateRef.current = useAuthError();
     return null;
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     listeners = new Map();

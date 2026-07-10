@@ -8,7 +8,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
@@ -87,10 +87,6 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
 };
 
 describe('useDockablePanelState', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
 

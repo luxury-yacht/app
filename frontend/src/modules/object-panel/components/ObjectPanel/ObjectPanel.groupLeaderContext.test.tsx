@@ -14,7 +14,7 @@
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { act, createContext, useContext, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { capturedChildrenRef, probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } =
   vi.hoisted(() => ({
@@ -205,10 +205,6 @@ const LeaderHost = () => <>{capturedChildrenRef.current}</>;
 describe('ObjectPanel content under a tab-group leader', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     capturedChildrenRef.current = null;

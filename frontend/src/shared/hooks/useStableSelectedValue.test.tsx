@@ -1,7 +1,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { useStableSelectedValue } from './useStableSelectedValue';
 
@@ -43,10 +43,6 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useStableSelectedValue', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   it('reuses a previous array reference when the next array contains the same item references', () => {
     const sharedRows = [{ name: 'one' }, { name: 'two' }];
     let nextValue = [...sharedRows];

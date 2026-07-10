@@ -14,7 +14,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requestRefreshDomainMock = vi.hoisted(() =>
   vi.fn(() => Promise.resolve({ status: 'executed' as const }))
@@ -35,10 +35,6 @@ const Harness: React.FC<{ scopes: string[] }> = ({ scopes }) => {
 };
 
 describe('useStreamSignalRefetch', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   let root: ReactDOM.Root;
   let container: HTMLElement;
 

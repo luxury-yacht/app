@@ -10,7 +10,7 @@ import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/use
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string };
 
@@ -23,10 +23,6 @@ const columns: GridColumnDefinition<Row>[] = [
 describe('useGridTableColumnsDropdown', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

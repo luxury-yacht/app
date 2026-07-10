@@ -8,7 +8,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PortForwardTarget } from './PortForwardModal';
 import PortForwardModal from './PortForwardModal';
 
@@ -41,10 +41,6 @@ describe('PortForwardModal', () => {
 
   const mockOnClose = vi.fn();
   const mockOnStarted = vi.fn();
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

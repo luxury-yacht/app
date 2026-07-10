@@ -7,7 +7,7 @@ import { buildObjectDetailModel } from '@modules/object-panel/components/ObjectP
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoistedRefs = vi.hoisted(() => ({
   detailsTabProps: { current: null as DetailsTabProps | null },
@@ -146,10 +146,6 @@ describe('ObjectPanelContent', () => {
     onRefreshDetails: vi.fn(),
     panelId: 'obj:test:deployment:team-a:api',
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

@@ -2,7 +2,7 @@ import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   makeClusterNodeSnapshotEntry,
   makeClusterNodeSnapshotPayload,
@@ -75,10 +75,6 @@ const renderUtilizationHook = async (initialProps: HookProps) => {
 };
 
 describe('useUtilizationData', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     refreshMocks.acquireScopedDomainLease.mockClear();
     refreshMocks.releaseScopedDomainLease.mockClear();
