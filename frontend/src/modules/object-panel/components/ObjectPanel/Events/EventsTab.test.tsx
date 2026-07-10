@@ -129,7 +129,11 @@ const EVENT_CLUSTER_NAME = 'Event Cluster';
 function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSummary {
   return {
     clusterId: PARENT_CLUSTER_ID,
+    clusterName: PARENT_CLUSTER_NAME,
     kind: 'Event',
+    name: 'event-a',
+    uid: 'event-a-uid',
+    resourceVersion: '1',
     eventType: 'Normal',
     reason: 'Created',
     message: 'test event',
@@ -140,6 +144,8 @@ function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSumm
     involvedObjectName: 'related-pod',
     involvedObjectKind: 'Pod',
     involvedObjectNamespace: 'default',
+    involvedObjectUid: 'related-pod-uid',
+    involvedObjectApiVersion: 'v1',
     namespace: 'default',
     ...overrides,
   };

@@ -337,6 +337,7 @@ describe('ContainerLogsStreamManager', () => {
           pod: 'pod-a',
           container: 'sidecar',
           line: 'manual line',
+          isInit: false,
         },
       ],
     };
@@ -350,6 +351,45 @@ describe('ContainerLogsStreamManager', () => {
     expect(state.data?.sequence).toBe(10);
     expect(state.isManual).toBe(true);
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+  });
+
+  test('rejects a stream payload whose log entry is missing backend-required fields', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      constructor() {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+    await manager.startStream(SCOPE);
+
+    MockEventSource.instances[0]?.emit('log', {
+      data: JSON.stringify({
+        domain: 'container-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        entries: [{ pod: 'pod-a', container: 'app' }],
+      }),
+    });
+
+    const state = getScopedDomainState('container-logs', SCOPE);
+    expect(state.data).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith('Invalid container logs stream payload structure');
+    consoleError.mockRestore();
   });
 
   test('startStream appends cluster-prefixed scope and cached selection filters to the stream URL', async () => {
@@ -447,8 +487,8 @@ describe('ContainerLogsStreamManager', () => {
         generatedAt: Date.now(),
         reset: true,
         entries: [
-          { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1' },
-          { timestamp: 't2', pod: 'pod-1', container: 'app', line: 'line 2' },
+          { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1', isInit: false },
+          { timestamp: 't2', pod: 'pod-1', container: 'app', line: 'line 2', isInit: false },
         ],
       },
       'stream'
@@ -493,7 +533,9 @@ describe('ContainerLogsStreamManager', () => {
         sequence: 2,
         generatedAt: Date.now(),
         reset: true,
-        entries: [{ timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1' }],
+        entries: [
+          { timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1', isInit: false },
+        ],
       },
       'stream'
     );
@@ -517,6 +559,7 @@ describe('ContainerLogsStreamManager', () => {
       pod: `pod-${Math.floor(index / 10)}`,
       container: 'app',
       line: `line-${index}`,
+      isInit: false,
     }));
 
     manager.applyPayload(

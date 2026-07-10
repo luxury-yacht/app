@@ -30,6 +30,9 @@ Use the lightest enforceable form:
 
 - Refresh domain metadata:
   `backend/refresh/domain/refresh-domain-contract.json`
+- Backend-owned refresh HTTP/stream DTOs and snapshot envelope:
+  `backend/internal/genrefreshcontracts/registry.go`, generated as
+  `frontend/src/core/refresh/types.generated.ts`
 - Backend-owned resource identities:
   `backend/resourcecontract/builtin-resource-identities.json`
 - Wails DTOs:
@@ -42,3 +45,6 @@ Use the lightest enforceable form:
 
 When adding a cross-layer contract, add a test that fails when one side changes
 without the other. Documentation alone is not validation.
+
+For refresh DTO changes, run `go generate ./backend`. The backend stale-artifact
+test and generator domain-inventory parity test enforce the generated output.

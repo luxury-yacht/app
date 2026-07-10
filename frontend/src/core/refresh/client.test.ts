@@ -94,6 +94,7 @@ describe('fetchSnapshot', () => {
     const responseBody = {
       domain: 'namespace-workloads',
       version: 2,
+      checksum: 'abc123',
       generatedAt: 1700000000000,
       sequence: 5,
       payload: { items: ['pod-a'] },
@@ -131,6 +132,53 @@ describe('fetchSnapshot', () => {
       etag: 'W/"abc123"',
       notModified: false,
     });
+  });
+
+  test('rejects a successful response without a snapshot payload', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        domain: 'catalog',
+        version: 1,
+        checksum: 'abc123',
+        generatedAt: 1700000000000,
+        sequence: 1,
+        stats: { itemCount: 0, buildDurationMs: 1 },
+      }),
+      headers: new Headers(),
+    });
+
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(fetchSnapshot('catalog')).rejects.toThrow(
+      'Invalid refresh snapshot for catalog: missing payload'
+    );
+  });
+
+  test('rejects a snapshot returned for a different domain', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        domain: 'nodes',
+        version: 1,
+        checksum: 'abc123',
+        generatedAt: 1700000000000,
+        sequence: 1,
+        payload: {},
+        stats: { itemCount: 0, buildDurationMs: 1 },
+      }),
+      headers: new Headers(),
+    });
+
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(fetchSnapshot('catalog')).rejects.toThrow(
+      'Invalid refresh snapshot for catalog: received domain nodes'
+    );
   });
 
   test('returns notModified when server responds with 304', async () => {
@@ -224,7 +272,24 @@ describe('fetchTelemetrySummary', () => {
   test('returns parsed telemetry summary payload', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
 
-    const summary = { refreshCount: 10, failureCount: 1, uptimeSeconds: 120 };
+    const summary = {
+      snapshots: [],
+      metrics: {
+        lastCollected: 1,
+        lastDurationMs: 2,
+        consecutiveFailures: 0,
+        successCount: 10,
+        failureCount: 1,
+        active: true,
+      },
+      streams: [],
+      connection: {
+        retryAttempts: 0,
+        retrySuccesses: 0,
+        retryExhausted: 0,
+        transportRebuilds: 0,
+      },
+    };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -240,6 +305,23 @@ describe('fetchTelemetrySummary', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://127.0.0.1:0/api/v2/telemetry/summary');
     expect(init).toBeUndefined();
+  });
+
+  test('rejects a successful response that does not match the telemetry contract', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({ refreshCount: 10 }),
+      headers: new Headers(),
+    });
+
+    const { fetchTelemetrySummary } = await import('./client');
+
+    await expect(fetchTelemetrySummary()).rejects.toThrow(
+      'Invalid telemetry summary: invalid snapshots'
+    );
   });
 
   test('throws when telemetry request fails', async () => {

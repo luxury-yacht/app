@@ -61,16 +61,18 @@ type NamespaceBuilder struct {
 // GET returning 404 is definitive ("not-found"); a 403 stays honest — a
 // restricted identity cannot distinguish a missing namespace from a denied
 // one ("no-access").
+type NamespaceScopeStatus string
+
 const (
-	scopeStatusNotFound = "not-found"
-	scopeStatusNoAccess = "no-access"
+	NamespaceScopeStatusNotFound NamespaceScopeStatus = "not-found"
+	NamespaceScopeStatusNoAccess NamespaceScopeStatus = "no-access"
 )
 
 // namespaceProbe caches one configured name's GET outcome: the real object
 // when it exists and is readable, else the flag; checkedAt drives the TTL.
 type namespaceProbe struct {
 	ns        *corev1.Namespace
-	status    string
+	status    NamespaceScopeStatus
 	checkedAt time.Time
 }
 
@@ -78,7 +80,7 @@ type namespaceProbe struct {
 // object (row enrichment) or a flag. Results are TTL-cached so builds do not
 // issue one GET per name per refresh tick; a transient error serves the
 // previous result (or nothing) rather than flapping a flag.
-func (b *NamespaceBuilder) probeScopedNamespace(ctx context.Context, name string) (*corev1.Namespace, string) {
+func (b *NamespaceBuilder) probeScopedNamespace(ctx context.Context, name string) (*corev1.Namespace, NamespaceScopeStatus) {
 	if b.client == nil {
 		return nil, ""
 	}
@@ -103,9 +105,9 @@ func (b *NamespaceBuilder) probeScopedNamespace(ctx context.Context, name string
 	case err == nil:
 		probe = namespaceProbe{ns: got}
 	case apimachineryerrors.IsNotFound(err):
-		probe = namespaceProbe{status: scopeStatusNotFound}
+		probe = namespaceProbe{status: NamespaceScopeStatusNotFound}
 	case apimachineryerrors.IsForbidden(err):
-		probe = namespaceProbe{status: scopeStatusNoAccess}
+		probe = namespaceProbe{status: NamespaceScopeStatusNoAccess}
 	default:
 		b.probeMu.Lock()
 		previous, ok := b.probes[name]
@@ -128,7 +130,7 @@ func (b *NamespaceBuilder) probeScopedNamespace(ctx context.Context, name string
 // scopeProbeSignature fingerprints the per-name probe flags so a flag
 // transition (a namespace created, deleted, or newly accessible) changes the
 // snapshot's cache validator — synthesized rows carry no RV clock to do it.
-func scopeProbeSignature(statuses map[string]string) string {
+func scopeProbeSignature(statuses map[string]NamespaceScopeStatus) string {
 	names := make([]string, 0, len(statuses))
 	for name := range statuses {
 		names = append(names, name)
@@ -185,7 +187,7 @@ type NamespaceSummary struct {
 	// ScopeStatus flags a configured scope entry the identity cannot reach:
 	// "not-found" (definitive) or "no-access" (may not exist). Empty for
 	// reachable namespaces and for every unscoped row.
-	ScopeStatus string `json:"scopeStatus,omitempty"`
+	ScopeStatus NamespaceScopeStatus `json:"scopeStatus,omitempty"`
 }
 
 // RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
@@ -289,7 +291,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		err        error
 	)
 
-	scopeStatuses := make(map[string]string)
+	scopeStatuses := make(map[string]NamespaceScopeStatus)
 	switch {
 	case len(b.scope) > 0:
 		// Scoped cluster: rows come from the configured scope. A

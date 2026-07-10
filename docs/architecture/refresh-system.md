@@ -10,6 +10,10 @@ then stored by the frontend under cluster-aware scopes.
 - Cross-cluster displays read multiple per-cluster entries and derive summaries
   above refresh state.
 - `backend/refresh/snapshot` owns list/table snapshot payloads.
+- Backend refresh HTTP/stream DTOs, the generic snapshot envelope,
+  refresh-domain union, and backend domain-to-payload map are generated into
+  `frontend/src/core/refresh/types.generated.ts`. The generator registry lives
+  in `backend/internal/genrefreshcontracts/registry.go`.
 - `backend/refresh/resourcestream` owns change signals for streamed table
   domains; rows are served by the snapshot/query path.
 - `backend/resources` owns rich detail payloads and imperative helpers, not
@@ -46,6 +50,12 @@ The domain id is the join key for:
 
 Do not add parallel aliases for renamed domains. Rename through the contract,
 registrations, and tests together.
+
+`frontend/src/core/refresh/types.ts` is the handwritten boundary module. It
+re-exports generated backend contracts and owns only frontend state that is not
+a backend wire payload. `container-logs` is the current exception: its stored
+snapshot is reducer-owned stream state, while its individual wire entries are
+generated from the backend type.
 
 ## Scope Rules
 
@@ -211,6 +221,9 @@ the capability conformance table.
 When adding or changing a domain:
 
 1. Update the shared domain contract and both backend/frontend registrations.
+   Register its backend payload mapping in
+   `backend/internal/genrefreshcontracts/registry.go`, then run
+   `go generate ./backend`.
 2. Define the scope shape and whether multiple active scopes are allowed.
 3. Decide snapshot, stream, cache, permission, diagnostics, and row-merge
    behavior explicitly.

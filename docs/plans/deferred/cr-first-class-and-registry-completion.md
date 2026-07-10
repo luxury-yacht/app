@@ -180,7 +180,7 @@ and Browse — sortable and filterable server-side, like built-ins.
       coverage** per `docs/architecture/refresh-system.md:96` — the provider's
       dynamic informer supplies resource-stream change signals; authored poll
       timing is the stream-down fallback only — frontend counterparts
-      (`types.ts` RefreshDomain union + payload map, `refresherTypes.ts`,
+      (generator registry + `go generate ./backend`, `refresherTypes.ts`,
       `domainRegistrations.ts`), diagnostics stream metadata, and the
       backend+frontend contract tests that lock both sides to the JSON
       (`.agents/skills/refresh-subsystem/SKILL.md:39-64`).

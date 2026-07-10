@@ -40,6 +40,11 @@ vi.mock('@/core/logging/appLogsClient', () => ({
 import { buildClusterScope } from '../clusterScope';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import { ResourceStreamManager, normalizeResourceScope } from './resourceStreamManager';
+import {
+  makeNamespaceAutoscalingSnapshotPayload,
+  makeNamespaceConfigSnapshotPayload,
+  makePodSnapshotPayload,
+} from '../refreshContractTestBuilders';
 
 class FakeWebSocket {
   static OPEN = 1;
@@ -234,6 +239,7 @@ describe('ResourceStreamManager', () => {
 
     const existing = {
       clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
       name: 'pod-a',
       namespace: 'default',
       node: 'node-a',
@@ -243,6 +249,7 @@ describe('ResourceStreamManager', () => {
       age: '1m',
       ownerKind: 'Deployment',
       ownerName: 'web',
+      portForwardAvailable: false,
       cpuRequest: '10m',
       cpuLimit: '20m',
       cpuUsage: '50m',
@@ -253,7 +260,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
-      data: { rows: [existing], clusterId: 'test-cluster' },
+      data: makePodSnapshotPayload({ rows: [existing], clusterId: 'test-cluster' }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -570,7 +577,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
-      data: { rows: [], clusterId: 'cluster-a' },
+      data: makePodSnapshotPayload({ rows: [], clusterId: 'cluster-a' }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -665,7 +672,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { rows: [], clusterId: 'cluster-a' },
+      data: makeNamespaceConfigSnapshotPayload({ rows: [], clusterId: 'cluster-a' }),
       stats: null,
       version: 7,
       checksum: 'abc',
@@ -729,7 +736,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ rows: [], clusterId: 'test-cluster' }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -781,7 +788,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { rows: [], clusterId: 'test-cluster' },
+      data: makeNamespaceConfigSnapshotPayload({ rows: [], clusterId: 'test-cluster' }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -845,7 +852,10 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
-      data: { rows: [sharedRow], clusterId: 'cluster-a' },
+      data: makeNamespaceAutoscalingSnapshotPayload({
+        rows: [sharedRow],
+        clusterId: 'cluster-a',
+      }),
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,

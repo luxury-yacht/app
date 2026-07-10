@@ -7,17 +7,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { CatalogStreamMergeQueue } from './catalogStreamMerge';
+import { makeCatalogSnapshotPayload } from '../refreshContractTestBuilders';
 
-const createSnapshot = () => ({
-  items: [],
-  total: 0,
-  resourceCount: 0,
-  batchIndex: 0,
-  batchSize: 0,
-  totalBatches: 0,
-  isFinal: false,
-  clusterId: 'test-cluster',
-});
+const createSnapshot = () =>
+  makeCatalogSnapshotPayload({
+    items: [],
+    total: 0,
+    resourceCount: 0,
+    batchIndex: 0,
+    batchSize: 0,
+    totalBatches: 0,
+    isFinal: false,
+    clusterId: 'test-cluster',
+  });
 
 const createEvent = (sequence: number) => ({
   reset: false,

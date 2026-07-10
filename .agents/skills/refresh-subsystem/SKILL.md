@@ -58,7 +58,8 @@ Frontend counterpart (all must stay synchronized through the contract tests):
 
 | File | What to update |
 | --- | --- |
-| `frontend/src/core/refresh/types.ts` | `RefreshDomain` union + `DomainPayloadMap` |
+| `backend/internal/genrefreshcontracts/registry.go` | Backend-owned DTOs + domain payload mapping; run `go generate ./backend` |
+| `frontend/src/core/refresh/types.ts` | Frontend-owned reducer state only; never hand-edit `types.generated.ts` |
 | `frontend/src/core/refresh/refresherTypes.ts` | Refresher name + view mapping |
 | `frontend/src/core/refresh/domainRegistrations.ts` | Orchestrator/stream wiring |
 | `refresh-domain-contract.json` | Shared metadata |

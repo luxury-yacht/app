@@ -351,9 +351,9 @@ func anchorResultFromOutcome(outcome querypage.AnchorOutcome) *ResourceQueryAnch
 	if outcome.Found {
 		return &ResourceQueryAnchorResult{Found: true, Rank: outcome.Rank}
 	}
-	reason := "not-found"
+	reason := ResourceQueryAnchorNotFound
 	if outcome.Filtered {
-		reason = "filtered"
+		reason = ResourceQueryAnchorFiltered
 	}
 	return &ResourceQueryAnchorResult{Found: false, Rank: -1, Reason: reason}
 }

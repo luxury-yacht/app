@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import {
   acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
@@ -27,21 +28,14 @@ const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   ...overrides,
 });
 
-const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  items: [],
-  continue: '',
-  total: 0,
-  resourceCount: 0,
-  kinds: [],
-  namespaces: [],
-  batchIndex: 0,
-  batchSize: 0,
-  totalBatches: 1,
-  isFinal: true,
-  ...overrides,
-});
+const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload =>
+  makeCatalogSnapshotPayload({
+    clusterId: 'cluster-1',
+    clusterName: 'Cluster 1',
+    kinds: [],
+    namespaces: [],
+    ...overrides,
+  });
 
 describe('browseCatalogData', () => {
   it('plans base, metadata, and page scopes for pinned namespace Browse', () => {

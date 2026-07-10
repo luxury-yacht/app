@@ -68,7 +68,6 @@ const mergeSnapshotMeta = (
     kinds: incoming.kinds ?? previous.kinds,
     namespaces: incoming.namespaces ?? previous.namespaces,
     namespaceGroups: incoming.namespaceGroups ?? previous.namespaceGroups,
-    parity: incoming.parity ?? previous.parity,
   };
 };
 

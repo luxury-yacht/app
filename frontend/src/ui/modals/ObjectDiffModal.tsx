@@ -191,7 +191,7 @@ const buildCatalogItemFromSelectionSeed = (
     creationTimestamp: '',
     scope: selection.namespace ? 'Namespace' : 'Cluster',
     clusterId: selection.clusterId,
-    clusterName: selection.clusterName,
+    clusterName: selection.clusterName ?? '',
   };
 };
 

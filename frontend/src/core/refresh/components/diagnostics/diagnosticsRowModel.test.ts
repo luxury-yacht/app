@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
 import type { PermissionQueryDiagnostics, PermissionStatus } from '@/core/capabilities';
 import type { TelemetrySummary } from '../../types';
+import { makeTelemetrySummary } from '../../refreshContractTestBuilders';
 import type { DiagnosticsRow, DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import {
   buildCapabilityBatchRows,
@@ -26,17 +27,8 @@ import {
   buildOrchestratorSummary,
 } from './diagnosticsRowModel';
 
-const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary => ({
-  snapshots: [],
-  metrics: {
-    lastCollected: 0,
-    lastDurationMs: 0,
-    consecutiveFailures: 0,
-    successCount: 0,
-    failureCount: 0,
-  },
-  streams,
-});
+const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary =>
+  makeTelemetrySummary({ streams });
 
 describe('diagnosticsRowModel', () => {
   afterEach(() => {
