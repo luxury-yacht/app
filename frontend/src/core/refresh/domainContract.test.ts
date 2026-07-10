@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
+  REFRESH_DOMAIN_DESCRIPTORS,
   refreshDomainContract,
   refreshDomainDescriptors,
 } from './domainRegistry';

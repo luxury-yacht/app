@@ -612,7 +612,6 @@
   color: var(--color-text);
   width: 100%;
   min-width: 0;
-  border: none;
   border: 1px solid var(--color-border);
   padding: 0.15rem 0.4rem;
   background: transparent;

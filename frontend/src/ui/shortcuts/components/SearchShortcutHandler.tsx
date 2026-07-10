@@ -6,9 +6,9 @@
  */
 
 import { useCallback } from 'react';
+import { isMacPlatform } from '@/utils/platform';
 import { useShortcut } from '../hooks';
 import { focusRegisteredSearchShortcutTarget } from '../searchShortcutRegistry';
-import { isMacPlatform } from '@/utils/platform';
 
 const SearchShortcutHandler: React.FC = () => {
   const macPlatform = isMacPlatform();

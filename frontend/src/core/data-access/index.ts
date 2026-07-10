@@ -13,12 +13,10 @@ export {
   resetRefreshDomain,
   setRefreshDomainEnabled,
 } from './dataAccess';
-export { useRefreshDomainHandle } from './useRefreshDomainHandle';
-export { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 export * from './readers';
 export type {
-  DataAccessAdapter,
   ContextRefreshRequest,
+  DataAccessAdapter,
   DataBlockedReason,
   DataReadRequest,
   DataReadResult,
@@ -28,3 +26,5 @@ export type {
   RefreshDomainStateRequest,
   RefreshDomainStateResult,
 } from './types';
+export { useRefreshDomainHandle } from './useRefreshDomainHandle';
+export { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';

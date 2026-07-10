@@ -1,7 +1,7 @@
 import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
 import type { ResourceStreamServerMessage } from '../types';
-import { normalizeResourceScope, type DoorbellDomain } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
+import { type DoorbellDomain, normalizeResourceScope } from './resourceStreamDomains';
 export type ResourceStreamUpdateMessage = Partial<ResourceStreamServerMessage> & {
   domain: DoorbellDomain;
   scope: string;

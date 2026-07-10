@@ -1,10 +1,9 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts';
-
-import NodeLogsTab from './NodeLogsTab';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
+import NodeLogsTab from './NodeLogsTab';
 
 const mockFetchNodeLogs = vi.fn();
 

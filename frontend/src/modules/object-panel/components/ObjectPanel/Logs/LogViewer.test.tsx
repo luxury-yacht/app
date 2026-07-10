@@ -5,33 +5,32 @@
  * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import LogViewer from './LogViewer';
-import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   getScopedDomainState,
   resetScopedDomainState,
   setScopedDomainState,
 } from '@/core/refresh/store';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
-import { GetContainerLogsScopeContainers, FetchContainerLogs } from '@wailsjs/go/backend/App';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
+import {
+  getContainerLogsStreamScopeParams,
+  resetContainerLogsStreamScopeParamsCacheForTesting,
+} from './containerLogsStreamScopeParamsCache';
+import LogViewer from './LogViewer';
 import {
   getLogViewerPrefs,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
-import {
-  getContainerLogsStreamScopeParams,
-  resetContainerLogsStreamScopeParamsCacheForTesting,
-} from './containerLogsStreamScopeParamsCache';
 
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;

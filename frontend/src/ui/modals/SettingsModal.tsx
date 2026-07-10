@@ -6,30 +6,31 @@
  * @ui/settings/sections/.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { backend } from '@wailsjs/go/models';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import { CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { FloatPanelIcon } from '@shared/components/icons/DockableIcons';
 import {
-  AppearanceModeIcon,
-  KubeconfigsIcon,
-  DisplayIcon,
   AdvancedIcon,
+  AppearanceModeIcon,
+  DisplayIcon,
+  KubeconfigsIcon,
 } from '@shared/components/icons/SettingsIcons';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
-import AppearanceSection from '@ui/settings/sections/AppearanceSection';
-import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
-import DisplaySection from '@ui/settings/sections/DisplaySection';
-import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
+import { CloseIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import AdvancedSection from '@ui/settings/sections/AdvancedSection';
+import AppearanceSection from '@ui/settings/sections/AppearanceSection';
+import DisplaySection from '@ui/settings/sections/DisplaySection';
+import KubeconfigsSection from '@ui/settings/sections/KubeconfigsSection';
+import ObjectPanelSection from '@ui/settings/sections/ObjectPanelSection';
 import {
   DEFAULT_SETTINGS_TAB,
   getLastSettingsTab,
-  setLastSettingsTab,
   type SettingsTabId,
+  setLastSettingsTab,
 } from '@ui/settings/settingsTabPreference';
+import type { backend } from '@wailsjs/go/models';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import '@ui/settings/Settings.css';
 import './SettingsModal.css';
 
@@ -145,6 +146,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
           <span className="settings-modal-breadcrumb-leaf">{activeTabDef.label}</span>
         </div>
         <button
+          type="button"
           className="modal-close settings-modal-close"
           onClick={onClose}
           aria-label="Close Settings"

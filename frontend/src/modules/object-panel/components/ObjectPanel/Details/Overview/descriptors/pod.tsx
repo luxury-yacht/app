@@ -4,19 +4,19 @@
  * Pod Overview descriptor (X1). Presentation ported verbatim from PodOverview.tsx.
  */
 
-import React from 'react';
-import { types } from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { types } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import {
   DEFAULT_TOLERATION_RE,
-  parseToleration,
   type ParsedToleration,
+  parseToleration,
 } from '../shared/tolerations';
 import '../shared/OverviewBlocks.css';
 
@@ -109,8 +109,8 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
           if (!d.ready) return null;
           const parts = d.ready.split('/');
           if (parts.length === 2) {
-            const readyCount = parseInt(parts[0]);
-            const totalCount = parseInt(parts[1]);
+            const readyCount = parseInt(parts[0], 10);
+            const totalCount = parseInt(parts[1], 10);
             if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
               return <span className="status-text warning">{d.ready}</span>;
             }

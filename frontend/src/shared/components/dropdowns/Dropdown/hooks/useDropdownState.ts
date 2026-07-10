@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function useDropdownState(
   value: string | string[],

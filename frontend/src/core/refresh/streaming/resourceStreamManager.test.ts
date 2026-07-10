@@ -38,14 +38,14 @@ vi.mock('@/core/logging/appLogsClient', () => ({
 }));
 
 import { buildClusterScope } from '../clusterScope';
-import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
-import { ResourceStreamManager, normalizeResourceScope } from './resourceStreamManager';
 import {
   makeNamespaceAutoscalingSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '../refreshContractTestBuilders';
+import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
+import { normalizeResourceScope, ResourceStreamManager } from './resourceStreamManager';
 
 class FakeWebSocket {
   static OPEN = 1;
@@ -977,7 +977,7 @@ describe('ResourceStreamManager', () => {
         type: 'ADDED',
         domain: 'cluster-rbac',
         scope: '',
-        resourceVersion: String(Number.MAX_SAFE_INTEGER) + '2',
+        resourceVersion: `${String(Number.MAX_SAFE_INTEGER)}2`,
         ref: resourceRef({ kind: 'ClusterRole', name: 'role-a' }),
         row: { name: 'role-a', status: 'Ready', clusterId: 'cluster-a' },
       })

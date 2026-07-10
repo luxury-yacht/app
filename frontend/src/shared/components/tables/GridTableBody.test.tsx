@@ -5,13 +5,11 @@
  * Covers key behaviors and edge cases for GridTableBody.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import GridTableBody from '@shared/components/tables/GridTableBody';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 

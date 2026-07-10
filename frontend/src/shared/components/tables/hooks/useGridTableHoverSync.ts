@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 // Keeps the header/body hover overlay aligned with the current row, while
 // throttling updates to avoid jank and honoring hover suppression flags.

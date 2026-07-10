@@ -5,9 +5,10 @@
  * Provides context for whether each modal is open or closed,
  * along with functions to update their states.
  */
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
-import { eventBus } from '@/core/events';
+
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { eventBus } from '@/core/events';
 
 interface ModalStateContextType {
   isSettingsOpen: boolean;

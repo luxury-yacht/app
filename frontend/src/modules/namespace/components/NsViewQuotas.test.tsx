@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for NsViewQuotas.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({

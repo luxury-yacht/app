@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for ConfirmationModal.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ConfirmationModal from './ConfirmationModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ConfirmationModal from './ConfirmationModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

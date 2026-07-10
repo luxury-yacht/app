@@ -3,14 +3,13 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-
+import type { LogViewerPrefs } from '../types';
 import {
   clearLogViewerPrefs,
   getLogViewerPrefs,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
-import type { LogViewerPrefs } from '../types';
 
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
   selectedContainer: 'app',

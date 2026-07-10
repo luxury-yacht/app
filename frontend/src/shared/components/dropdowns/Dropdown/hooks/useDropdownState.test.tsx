@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useDropdownState.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useDropdownState } from '@shared/components/dropdowns/Dropdown/hooks/useDropdownState';
+import type React from 'react';
+import { act, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type HookProps = Parameters<typeof useDropdownState>;
 type HookResult = ReturnType<typeof useDropdownState>;

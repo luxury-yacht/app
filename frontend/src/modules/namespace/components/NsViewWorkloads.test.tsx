@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for NsViewWorkloads.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(

@@ -16,7 +16,7 @@
       // Set the resolved appearance mode and replay precomputed CSS variables
       // immediately to prevent FOUC. Color math lives in TypeScript utilities;
       // this startup path only applies the cached result.
-      (function () {
+      (() => {
         var preference = localStorage.getItem('app-appearance-mode-preference');
         // Migration from localStorage written before the appearance-mode rename.
         // The old key stored the light/dark/system mode preference.
@@ -58,7 +58,7 @@
           var root = document.documentElement;
           for (var token in variables) {
             if (
-              Object.prototype.hasOwnProperty.call(variables, token) &&
+              Object.hasOwn(variables, token) &&
               token.indexOf('--') === 0 &&
               typeof variables[token] === 'string'
             ) {

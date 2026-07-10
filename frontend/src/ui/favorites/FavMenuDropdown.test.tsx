@@ -6,10 +6,10 @@
  * and hover action visibility.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 
 // ---------------------------------------------------------------------------

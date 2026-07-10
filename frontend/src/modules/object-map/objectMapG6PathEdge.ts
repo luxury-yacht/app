@@ -4,9 +4,9 @@
  * Custom G6 edge implementation that draws precomputed object-map paths.
  */
 
-import { BaseEdge, ExtensionCategory, register } from '@antv/g6';
 import type { DisplayObjectConfig } from '@antv/g';
 import type { BaseEdgeStyleProps, PathArray } from '@antv/g6';
+import { BaseEdge, ExtensionCategory, register } from '@antv/g6';
 import { OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 
 interface ObjectMapG6PathEdgeStyleProps extends BaseEdgeStyleProps {

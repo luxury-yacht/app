@@ -226,7 +226,8 @@
 .scrollbar-virtual--vertical.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
   right: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
   width: calc(
-    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) *
+    var(--scrollbar-hover-scale)
   );
 }
 
@@ -234,7 +235,8 @@
 .scrollbar-virtual--horizontal.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
   bottom: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
   height: calc(
-    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) *
+    var(--scrollbar-hover-scale)
   );
 }
 

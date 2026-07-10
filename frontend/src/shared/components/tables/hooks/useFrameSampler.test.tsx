@@ -5,14 +5,13 @@
  * Covers key behaviors and edge cases for useFrameSampler.
  */
 
+import {
+  type FrameSamplerSample,
+  useFrameSampler,
+} from '@shared/components/tables/hooks/useFrameSampler';
 import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import {
-  useFrameSampler,
-  type FrameSamplerSample,
-} from '@shared/components/tables/hooks/useFrameSampler';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

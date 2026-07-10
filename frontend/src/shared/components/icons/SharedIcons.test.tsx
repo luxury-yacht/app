@@ -5,37 +5,36 @@
  */
 
 import ReactDOMServer from 'react-dom/server';
-import { describe, it, expect } from 'vitest';
-
+import { describe, expect, it } from 'vitest';
 import {
-  CordonIcon,
-  DrainIcon,
-  DeleteIcon,
-  ScaleIcon,
-  ForceDeleteIcon,
-  ExpandIcon,
-  CollapseIcon,
-  ExpandAllIcon,
-  CollapseAllIcon,
-  SortAscIcon,
-  SortDescIcon,
-  RestartIcon,
-  NamespaceIcon,
-  NamespaceOpenIcon,
-  SettingsIcon,
-  CollapseSidebarIcon,
-  ExpandSidebarIcon,
-  ClusterOverviewIcon,
-  ClusterResourcesIcon,
-  CategoryIcon,
-} from './SharedIcons';
-import {
-  DockRightIcon,
   DockBottomIcon,
+  DockRightIcon,
   FloatPanelIcon,
   MaximizePanelIcon,
   RestorePanelIcon,
 } from './DockableIcons';
+import {
+  CategoryIcon,
+  ClusterOverviewIcon,
+  ClusterResourcesIcon,
+  CollapseAllIcon,
+  CollapseIcon,
+  CollapseSidebarIcon,
+  CordonIcon,
+  DeleteIcon,
+  DrainIcon,
+  ExpandAllIcon,
+  ExpandIcon,
+  ExpandSidebarIcon,
+  ForceDeleteIcon,
+  NamespaceIcon,
+  NamespaceOpenIcon,
+  RestartIcon,
+  ScaleIcon,
+  SettingsIcon,
+  SortAscIcon,
+  SortDescIcon,
+} from './SharedIcons';
 
 const ALL_ICONS = [
   CordonIcon,

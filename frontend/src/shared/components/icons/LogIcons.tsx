@@ -4,7 +4,7 @@
  * SVG icons for log viewer toggle buttons.
  */
 
-import React from 'react';
+import type React from 'react';
 
 interface IconProps {
   width?: number;

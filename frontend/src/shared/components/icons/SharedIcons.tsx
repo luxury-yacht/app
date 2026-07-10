@@ -4,7 +4,7 @@
  * Shared SVG icon components used across multiple UI areas.
  */
 
-import React from 'react';
+import type React from 'react';
 
 export interface IconProps {
   width?: number | string;

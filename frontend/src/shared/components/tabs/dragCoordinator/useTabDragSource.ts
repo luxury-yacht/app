@@ -16,7 +16,7 @@
  *
  * Both entry points ultimately delegate to the same pure factory.
  */
-import { useContext, type DragEventHandler } from 'react';
+import { type DragEventHandler, useContext } from 'react';
 
 import { TabDragContext } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';

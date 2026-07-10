@@ -1,13 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import {
   buildGridTableReferenceChurnSignal,
+  type GridTablePerformanceSignal,
   getGridTableModeLabel,
   getGridTableModeTitle,
   getGridTableRowCountLabel,
   getGridTableRowCountTitle,
-  type GridTablePerformanceSignal,
 } from '@shared/components/tables/performance/gridTableDiagnosticsMode';
+import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import type React from 'react';
+import { useMemo, useState } from 'react';
 
 interface GridTablePerformanceProps {
   rows: GridTablePerformanceEntry[];

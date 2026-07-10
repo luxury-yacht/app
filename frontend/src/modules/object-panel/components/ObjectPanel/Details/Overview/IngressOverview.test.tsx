@@ -2,12 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ingress } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ingressDescriptor } from './descriptors/ingress';
+import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (

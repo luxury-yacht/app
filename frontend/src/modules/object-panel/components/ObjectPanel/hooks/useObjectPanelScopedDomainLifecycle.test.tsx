@@ -2,16 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type ObjectPanelScopedDomainRef,
   resetObjectPanelScopedDomain,
   useObjectPanelScopedDomainCleanups,
   useObjectPanelScopedDomainLifecycle,
-  type ObjectPanelScopedDomainRef,
 } from './useObjectPanelScopedDomainLifecycle';
 
 const mocks = vi.hoisted(() => ({

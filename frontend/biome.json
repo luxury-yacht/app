@@ -1,75 +1,75 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "root": "..",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
-      "src/**/*.{js,jsx,ts,tsx,css,json}",
-      "biome.json",
-      "vite.config.ts",
-      "vitest.setup.ts",
-      "!!src/core/refresh/types.generated.ts",
+      "**/*.{js,jsx,ts,tsx,css,json,jsonc,html}",
       "!!dist",
-      "!!wailsjs"
+      "!!wailsjs",
+      "!!package-lock.json"
     ]
   },
   "formatter": {
     "enabled": true,
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
     "indentStyle": "space",
     "indentWidth": 2,
     "lineEnding": "lf",
     "lineWidth": 100
   },
   "assist": {
-    "enabled": false
+    "enabled": true,
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "actions": {
+      "preset": "recommended"
+    }
   },
   "linter": {
     "enabled": true,
-    "includes": ["src/**/*.{ts,tsx}", "vite.config.ts", "vitest.setup.ts"],
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
     "rules": {
-      "preset": "none",
+      "preset": "recommended",
+      "a11y": {
+        "noAutofocus": "warn",
+        "noLabelWithoutControl": "warn",
+        "noNoninteractiveTabindex": "warn",
+        "noStaticElementInteractions": "warn",
+        "useAriaPropsForRole": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "useFocusableInteractive": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useSemanticElements": "warn",
+        "useValidAnchor": "warn"
+      },
       "correctness": {
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
             "reportUnnecessaryDependencies": false
           }
-        },
-        "useHookAtTopLevel": "error"
+        }
+      },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noPrototypeBuiltins": "off",
+        "useIterableCallbackReturn": {
+          "level": "error",
+          "options": {
+            "checkForEach": false
+          }
+        }
       },
       "style": {
         "noRestrictedImports": {
           "level": "error",
           "options": {
             "paths": {
-              "@wailsjs/go/backend/App": {
-                "importNames": [
-                  "FindCatalogObjectByUID",
-                  "FindCatalogObjectMatch",
-                  "GetAllClusterAuthStates",
-                  "GetAllClusterLifecycleStates",
-                  "GetAppInfo",
-                  "GetAppSettings",
-                  "GetClusterPortForwardCount",
-                  "GetKubeconfigSearchPaths",
-                  "GetKubeconfigs",
-                  "GetLogScopeContainers",
-                  "GetLogs",
-                  "GetObjectYAMLByGVK",
-                  "GetPodContainers",
-                  "GetRefreshBaseURL",
-                  "GetRevisionHistory",
-                  "GetSelectedKubeconfigs",
-                  "GetSelectionDiagnostics",
-                  "GetShellSessionBacklog",
-                  "GetTargetPorts",
-                  "GetAppearanceModeInfo",
-                  "GetThemes",
-                  "GetZoomLevel",
-                  "IsWorkloadHPAManaged",
-                  "ListPortForwards",
-                  "ListShellSessions"
-                ],
-                "message": "Route read-only backend bindings through appStateAccess/dataAccess adapters instead of importing them directly."
-              }
+              "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api."
             }
           }
         }
@@ -86,21 +86,87 @@
       "trailingCommas": "es5"
     }
   },
-  "plugins": ["./biome-plugins/data-access-boundaries.grit"],
+  "html": {
+    "experimentalFullSupportEnabled": true
+  },
+  "plugins": [
+    {
+      "path": "./biome-plugins/no-direct-fetch.grit",
+      "includes": ["src/**/*.{ts,tsx}", "!src/core/refresh/**", "!src/core/data-access/**"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-lifecycle-read.grit",
+      "includes": ["src/**/*.{ts,tsx}", "!src/core/app-state-access/readers.ts"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-permission-read.grit",
+      "includes": ["src/**/*.{ts,tsx}", "!src/core/data-access/readers.ts"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
+      "includes": ["src/**/*.{ts,tsx}", "!src/core/refresh/**", "!src/core/data-access/**"]
+    }
+  ],
   "overrides": [
     {
-      "includes": [
-        "src/core/app-state-access/readers.ts",
-        "src/core/data-access/readers.ts",
-        "src/core/refresh/client.ts",
-        "src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts",
-        "src/**/*.test.ts",
-        "src/**/*.test.tsx"
-      ],
+      "includes": ["src/core/backend-api/**"],
       "linter": {
         "rules": {
           "style": {
             "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.test.{ts,tsx}", ".storybook/mocks/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "preset": "none"
+          },
+          "correctness": {
+            "noChildrenProp": "off"
+          },
+          "style": {
+            "noNonNullAssertion": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/components/icons/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noControlCharactersInRegex": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["index.html"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noInnerDeclarations": "off"
           }
         }
       }

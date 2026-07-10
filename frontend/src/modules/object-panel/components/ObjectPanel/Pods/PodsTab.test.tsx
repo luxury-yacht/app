@@ -6,11 +6,10 @@
  * using the panel-scoped clusterId — never the global sidebar selection.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PodSnapshotEntry } from '@/core/refresh/types';
 
 const {

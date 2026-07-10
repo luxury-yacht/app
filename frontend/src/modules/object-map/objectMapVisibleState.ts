@@ -13,13 +13,13 @@ import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMa
 import {
   computeObjectMapBounds,
   computeObjectMapLayout,
-  routeObjectMapEdges,
   type ObjectMapLayout,
   type PositionedEdge,
   type PositionedNode,
+  routeObjectMapEdges,
 } from './objectMapLayout';
-import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
+import { computeObjectMapSelectionState } from './objectMapSelection';
 
 export interface ObjectMapVisibleStateInput {
   layout: ObjectMapLayout;

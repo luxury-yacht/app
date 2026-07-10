@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode, type RefObject } from 'react';
+import { type ReactNode, type RefObject, useCallback } from 'react';
 import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
 
 export interface RenderedLogRow {

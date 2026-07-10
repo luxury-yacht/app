@@ -5,12 +5,12 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import SettingsModal from './SettingsModal';
-import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { AppearanceModeProviderDecorator } from '../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { KubeconfigProviderDecorator } from '../../../.storybook/decorators/KubeconfigProviderDecorator';
 import { ZoomProviderDecorator } from '../../../.storybook/decorators/ZoomProviderDecorator';
 import { setMockSettingsBackend } from '../../../.storybook/mocks/wailsBackendSettings';
+import SettingsModal from './SettingsModal';
 
 const meta: Meta<typeof SettingsModal> = {
   title: 'Modals/SettingsModal',

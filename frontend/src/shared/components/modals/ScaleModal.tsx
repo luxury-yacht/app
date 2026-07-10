@@ -5,11 +5,11 @@
  * Used by both the workloads table context menu and the object panel actions menu.
  */
 
-import { useState, useEffect, useRef } from 'react';
-import ModalSurface from './ModalSurface';
-import ModalHeader from './ModalHeader';
-import { useModalFocusTrap } from './useModalFocusTrap';
 import { ScaleIcon } from '@shared/components/icons/SharedIcons';
+import { useEffect, useRef, useState } from 'react';
+import ModalHeader from './ModalHeader';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './ScaleModal.css';
 
 interface ScaleModalProps {
@@ -143,11 +143,12 @@ const ScaleModal = ({
       </div>
       {error && <div className="scale-modal-error">{error}</div>}
       <div className="scale-modal-footer">
-        <button className="button cancel" onClick={onCancel} disabled={loading}>
+        <button type="button" className="button cancel" onClick={onCancel} disabled={loading}>
           Cancel
         </button>
         {onScaleToZero && (
           <button
+            type="button"
             className="button generic"
             onClick={onScaleToZero}
             disabled={loading || value === 0}
@@ -155,7 +156,12 @@ const ScaleModal = ({
             Scale to 0
           </button>
         )}
-        <button className="button warning" onClick={onApply} disabled={loading || unchanged}>
+        <button
+          type="button"
+          className="button warning"
+          onClick={onApply}
+          disabled={loading || unchanged}
+        >
           {loading ? 'Scaling…' : 'Scale'}
         </button>
       </div>

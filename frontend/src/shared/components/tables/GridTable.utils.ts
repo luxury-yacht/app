@@ -5,13 +5,13 @@
  * Provides shared helper functions for the shared components.
  */
 
-import React from 'react';
 import type {
   ColumnWidthInput,
   ColumnWidthUnit,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
+import React from 'react';
 
 export const DEFAULT_COLUMN_WIDTH = 150;
 export const DEFAULT_COLUMN_MIN_WIDTH = 72;
@@ -98,10 +98,7 @@ export const buildClusterScopedKey = (row: any, baseKey: string): string => {
 // Hex-encodes characters outside [a-zA-Z0-9_-] so distinct keys always
 // produce distinct IDs — unlike the old lossy replace-with-underscore approach.
 export const getStableRowId = (rowKey: string): string => {
-  const safe = rowKey.replace(
-    /[^a-zA-Z0-9_-]/g,
-    (ch) => '_x' + ch.charCodeAt(0).toString(16) + '_'
-  );
+  const safe = rowKey.replace(/[^a-zA-Z0-9_-]/g, (ch) => `_x${ch.charCodeAt(0).toString(16)}_`);
   return `gridtable-row-${safe}`;
 };
 

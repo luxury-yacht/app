@@ -5,41 +5,41 @@
  * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
  */
 
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import React, {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
-  useCallback,
-  memo,
-  useMemo,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { DockablePanelControls } from './DockablePanelControls';
+import { DockablePanelHeader } from './DockablePanelHeader';
+import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
+import type { TabInfo } from './DockableTabBar';
+import type { PanelSizeConstraints } from './dockablePanelLayout';
+import { getContentBounds, getPanelSizeConstraints, PANEL_DEFAULTS } from './dockablePanelLayout';
+import { getGroupForPanel, getGroupTabs } from './tabGroupState';
+import type { GroupKey } from './tabGroupTypes';
+import { useDockablePanelDragResize } from './useDockablePanelDragResize';
+import { useDockablePanelMaximize } from './useDockablePanelMaximize';
+import type { DockPosition } from './useDockablePanelState';
 import {
-  copyPanelLayoutState,
   clearGroupLeader,
+  copyPanelLayoutState,
+  type PanelCloseReason,
   registerPanelCloseHandler,
   setGroupLeader,
   unregisterPanelCloseHandler,
   useDockablePanelState,
-  PanelCloseReason,
 } from './useDockablePanelState';
-import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
-import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
-import { DockablePanelControls } from './DockablePanelControls';
-import { DockablePanelHeader } from './DockablePanelHeader';
-import { useDockablePanelDragResize } from './useDockablePanelDragResize';
-import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getPanelSizeConstraints, getContentBounds } from './dockablePanelLayout';
-import { getGroupForPanel, getGroupTabs } from './tabGroupState';
-import type { PanelSizeConstraints } from './dockablePanelLayout';
-import type { TabInfo } from './DockableTabBar';
-import type { GroupKey } from './tabGroupTypes';
-import type { DockPosition } from './useDockablePanelState';
-import { useKeyboardSurface } from '@ui/shortcuts';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
-import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import './DockablePanel.css';
 
 export type { DockPosition };

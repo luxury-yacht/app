@@ -5,12 +5,13 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
-import Tooltip from './Tooltip';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   USAGE_CRITICAL_THRESHOLD_PERCENT,
   USAGE_HIGH_THRESHOLD_PERCENT,
 } from './resourceBarThresholds';
+import Tooltip from './Tooltip';
 import './ResourceBar.css';
 
 interface ResourceBarProps {

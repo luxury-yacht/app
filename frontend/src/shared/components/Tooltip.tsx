@@ -14,10 +14,11 @@
  *  - Default circled "i" icon when no children are provided
  */
 
-import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { TooltipInfoIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
 export interface TooltipProps {

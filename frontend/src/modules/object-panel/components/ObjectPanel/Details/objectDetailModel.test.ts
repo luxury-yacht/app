@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import {
+import type {
   configmap,
   cronjob,
   deployment,
@@ -13,6 +12,7 @@ import {
   statefulset,
   types,
 } from '@wailsjs/go/models';
+import { describe, expect, it } from 'vitest';
 import { buildObjectDetailModel } from './objectDetailModel';
 
 const container = (

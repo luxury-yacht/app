@@ -5,7 +5,7 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import { ErrorInfo, ReactNode } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 
 export interface ErrorBoundaryProps {
   children: ReactNode;

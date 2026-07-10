@@ -5,24 +5,23 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
-
-import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type {
+  GridColumnDefinition,
+  GridTableFilterConfig,
+} from '@shared/components/tables/GridTable.types';
 import {
   defaultGetKind,
   defaultGetNamespace,
   defaultGetSearchText,
 } from '@shared/components/tables/GridTable.utils';
-import type {
-  GridColumnDefinition,
-  GridTableFilterConfig,
-} from '@shared/components/tables/GridTable.types';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import { useGridTableCsvExport } from '@shared/components/tables/hooks/useGridTableCsvExport';
 import { useGridTableCsvFileExportAction } from '@shared/components/tables/hooks/useGridTableCsvFileExportAction';
+import { useGridTableFilters } from '@shared/components/tables/useGridTableFilters';
+import type { ComponentProps, ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 
 // Bundles all filter-bar wiring for GridTable: resolves filter state, builds
 // dropdown IDs and renderers, manages focus refs, and returns a ready-to-render

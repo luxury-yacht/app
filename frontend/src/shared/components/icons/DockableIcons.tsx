@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const DockRightIcon: React.FC<IconProps> = ({

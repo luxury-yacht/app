@@ -1,7 +1,6 @@
-import { describe, expect, it } from 'vitest';
-
-import { parseAnsiTextSegments } from './ansi';
 import { DEFAULT_TERMINAL_THEME } from '@shared/terminal/terminalTheme';
+import { describe, expect, it } from 'vitest';
+import { parseAnsiTextSegments } from './ansi';
 
 describe('parseAnsiTextSegments', () => {
   it('uses the shared iTerm2 ANSI palette for base colors', () => {

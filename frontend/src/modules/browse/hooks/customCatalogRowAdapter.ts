@@ -1,9 +1,9 @@
-import type { CatalogItem } from '@/core/refresh/types';
 import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { CatalogItem } from '@/core/refresh/types';
 
 export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
   kind: string;

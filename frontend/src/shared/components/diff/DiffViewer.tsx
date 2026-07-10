@@ -5,10 +5,11 @@
  * Renders merged diff lines with expand/collapse, selection, and truncation detection.
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import type { DisplayDiffLine, TruncationMap } from '@shared/components/diff/diffUtils';
 import { areTruncationMapsEqual } from '@shared/components/diff/diffUtils';
+import type React from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import './DiffViewer.css';
 
 export interface DiffViewerProps {

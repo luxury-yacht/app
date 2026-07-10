@@ -7,14 +7,14 @@
  * hidden) are unrepresentable. Also covers the prefs round-trip.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  logViewerReducer,
+  applyLogViewerPrefs,
+  extractLogViewerPrefs,
   initialLogViewerState,
   LIVE_MODE,
-  extractLogViewerPrefs,
-  applyLogViewerPrefs,
   type LogViewerState,
+  logViewerReducer,
 } from './logViewerReducer';
 
 const base = (overrides: Partial<LogViewerState> = {}): LogViewerState => ({

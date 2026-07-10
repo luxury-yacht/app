@@ -4,13 +4,13 @@
  * Lightweight external store for object-map debug overlay snapshots.
  */
 
-import { useSyncExternalStore } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
-import type { ObjectMapLayout } from './objectMapLayout';
+import { useSyncExternalStore } from 'react';
 import type {
   ObjectMapG6CardDetailLevel,
   ObjectMapG6EdgeDetailLevel,
 } from './objectMapG6Constants';
+import type { ObjectMapLayout } from './objectMapLayout';
 
 export interface ObjectMapRendererDebugSnapshot {
   graphReady: boolean;

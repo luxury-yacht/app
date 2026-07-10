@@ -5,11 +5,10 @@
  * Covers key behaviors and edge cases for GridTableLayout.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
-
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 

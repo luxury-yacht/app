@@ -4,7 +4,7 @@
  * Hook for useShortNames.
  * Listens to changes in the "use short resource names" setting and triggers re-renders when the setting changes.
  */
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { eventBus } from '@/core/events';
 import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 

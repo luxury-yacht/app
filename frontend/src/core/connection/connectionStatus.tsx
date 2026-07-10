@@ -5,7 +5,7 @@
  * the application's connection state.
  */
 
-import { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
 
 export type ConnectionState = 'healthy' | 'retrying' | 'offline' | 'auth_failed' | 'rebuilding';
 

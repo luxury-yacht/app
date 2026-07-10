@@ -5,14 +5,13 @@
  * Covers key behaviors and edge cases for Dropdown.
  */
 
-import React, { useState } from 'react';
+import { KeyboardProvider } from '@ui/shortcuts';
+import type React from 'react';
+import { act, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import Dropdown from './Dropdown';
 import type { DropdownOption } from './types';
-import { KeyboardProvider } from '@ui/shortcuts';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

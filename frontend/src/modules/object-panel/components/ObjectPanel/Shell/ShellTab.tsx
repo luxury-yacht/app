@@ -2,13 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
+import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
 import {
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type MouseEvent,
   type WheelEvent,
 } from 'react';
 import {
@@ -17,31 +20,28 @@ import {
   requestAppState,
 } from '@/core/app-state-access';
 import { readPodContainers, requestData } from '@/core/data-access';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
-import ContextMenu from '@shared/components/ContextMenu';
+import {
+  buildObjectActionTarget,
+  runCreateDebugContainer,
+} from '@shared/actions/objectActionClient';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
+import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
+import { useDockablePanelState } from '@ui/dockable';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type { types } from '@wailsjs/go/models';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
   ResizeShellSession,
   SendShellInput,
   StartShellSession,
-} from '@wailsjs/go/backend/App';
-import {
-  buildObjectActionTarget,
-  runCreateDebugContainer,
-} from '@shared/actions/objectActionClient';
-import { types } from '@wailsjs/go/models';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
-import { useDockablePanelState } from '@ui/dockable';
-import { useKeyboardSurface } from '@ui/shortcuts';
+} from '@/core/backend-api';
 import './ShellTab.css';
 
 interface ShellTabProps {

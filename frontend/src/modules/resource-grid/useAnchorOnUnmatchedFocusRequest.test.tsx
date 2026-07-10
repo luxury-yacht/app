@@ -7,10 +7,10 @@
  * global focus request and issue a spurious anchor / false not-found.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const peek = vi.fn();
 

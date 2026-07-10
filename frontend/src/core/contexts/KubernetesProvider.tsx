@@ -4,15 +4,16 @@
  * Composite provider for Kubernetes-related contexts.
  * Replaces the monolithic KubernetesDataContext with smaller, focused contexts.
  */
-import React, { ReactNode } from 'react';
+
 import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext';
-import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
-import { ViewStateProvider, useViewState } from './ViewStateContext';
-import { AppearanceModeProvider } from './AppearanceModeContext';
-import { ClusterLifecycleProvider } from './ClusterLifecycleContext';
+import { NamespaceProvider, useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import type { ReactNode } from 'react';
 import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
 import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { AppearanceModeProvider } from './AppearanceModeContext';
+import { ClusterLifecycleProvider } from './ClusterLifecycleContext';
+import { useViewState, ViewStateProvider } from './ViewStateContext';
 
 interface KubernetesProviderProps {
   children: ReactNode;

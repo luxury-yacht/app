@@ -2,17 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
 import type {
+  ComputedCapabilities,
   PanelObjectData,
   ViewType,
-  ComputedCapabilities,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoistedShortcuts = vi.hoisted(() => ({
   useShortcut: vi.fn(),

@@ -5,14 +5,36 @@
  * clusters, namespaces, kinds, and catalog matches.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
+import { useRefreshScopedDomain } from '@core/refresh';
+import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
+import type { DomainStatus } from '@core/refresh/store';
+import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import {
+  CLUSTER_SCOPE,
+  INACTIVE_SCOPE,
+} from '@modules/object-panel/components/ObjectPanel/constants';
+import DiffViewer from '@shared/components/diff/DiffViewer';
+import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
+import {
+  countVisibleDiffRows,
+  formatTooLargeDiffMessage,
+  mergeDiffLines,
+} from '@shared/components/diff/diffUtils';
+import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
+import type {
+  ObjectDiffOpenRequest,
+  ObjectDiffSelectionSeed,
+} from '@shared/components/diff/objectDiffSelection';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
-import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import ModalSurface from '@shared/components/modals/ModalSurface';
+import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import {
   readCatalogObjectMatchForRef,
   requestData,
@@ -20,35 +42,14 @@ import {
   resetRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
-import { useRefreshScopedDomain } from '@core/refresh';
-import type { DomainStatus } from '@core/refresh/store';
-import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
-import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
-import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
-import {
-  countVisibleDiffRows,
-  formatTooLargeDiffMessage,
-  mergeDiffLines,
-} from '@shared/components/diff/diffUtils';
-import DiffViewer from '@shared/components/diff/DiffViewer';
+import { useShortNames } from '@/hooks/useShortNames';
+import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import {
   buildIgnoredMetadataLineSet,
   maskMutedMetadataLines,
   sanitizeYamlForDiff,
 } from './objectDiffUtils';
-import {
-  CLUSTER_SCOPE,
-  INACTIVE_SCOPE,
-} from '@modules/object-panel/components/ObjectPanel/constants';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { useShortNames } from '@/hooks/useShortNames';
-import type {
-  ObjectDiffOpenRequest,
-  ObjectDiffSelectionSeed,
-} from '@shared/components/diff/objectDiffSelection';
 
 interface ObjectDiffModalProps {
   isOpen: boolean;

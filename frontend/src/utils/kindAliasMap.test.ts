@@ -6,11 +6,11 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getDisplayKind, getTypeAlias } from './kindAliasMap';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { getDisplayKind, getTypeAlias } from './kindAliasMap';
 
 describe('kindAliasMap utility', () => {
   beforeEach(() => {

@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for GridTable.utils.
  */
 
-import { describe, expect, it } from 'vitest';
+import type { ColumnWidthInput } from '@shared/components/tables/GridTable.types';
 
 import {
   buildClusterScopedKey,
@@ -21,7 +21,7 @@ import {
   normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
-import type { ColumnWidthInput } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 
 describe('GridTable utils', () => {
   it('returns a hash-based color slot class for known kinds', () => {

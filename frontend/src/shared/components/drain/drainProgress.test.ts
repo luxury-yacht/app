@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { deriveDrainProgress, parsePlanCount } from './drainProgress';
 import type { NodeMaintenanceDrainEvent, NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import { deriveDrainProgress, parsePlanCount } from './drainProgress';
 
 const baseOptions = {
   ignoreDaemonSets: true,

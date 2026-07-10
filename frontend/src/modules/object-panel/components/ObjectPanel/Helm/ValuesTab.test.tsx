@@ -7,8 +7,8 @@
 
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import * as YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as YAML from 'yaml';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks

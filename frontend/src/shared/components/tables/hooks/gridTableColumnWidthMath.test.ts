@@ -1,5 +1,3 @@
-import { describe, expect, it, vi } from 'vitest';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   buildInitialMeasuredColumnWidthPlan,
@@ -7,6 +5,7 @@ import {
   reconcileColumnWidthsToContainer,
   resolveColumnWidth,
 } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import { describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string };
 

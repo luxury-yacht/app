@@ -8,10 +8,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildObjectScope,
   buildClusterScope,
-  parseClusterScopeList,
+  buildObjectScope,
   parseClusterScope,
+  parseClusterScopeList,
   stripClusterScope,
 } from './clusterScope';
 

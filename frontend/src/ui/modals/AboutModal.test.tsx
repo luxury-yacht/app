@@ -5,10 +5,11 @@
  * Covers key behaviors and edge cases for AboutModal.
  */
 
-import React, { act } from 'react';
+import { KeyboardProvider } from '@ui/shortcuts';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts';
 
 const appInfoMock = vi.hoisted(() => ({
   GetAppInfo: vi.fn(),

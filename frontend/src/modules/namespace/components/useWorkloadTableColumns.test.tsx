@@ -5,9 +5,8 @@
  * Covers key behaviors and edge cases for useWorkloadTableColumns.
  */
 
-import React from 'react';
+import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -18,8 +17,8 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   }),
 }));
 
-import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };

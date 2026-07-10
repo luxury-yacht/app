@@ -4,13 +4,13 @@
  * Integration-style tests for the object-map shell with a mocked renderer.
  */
 
-import ReactDOMClient from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOMClient from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
-import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 

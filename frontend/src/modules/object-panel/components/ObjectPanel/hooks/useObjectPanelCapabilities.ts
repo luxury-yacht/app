@@ -6,14 +6,14 @@
  * - Handles dynamic capability evaluation based on object data and feature support.
  * - Returns structured capability states, computed capabilities, and reasons for capability restrictions.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';
 import {
   buildObjectActionCapabilityDescriptor,
-  OBJECT_ACTION_IDS,
   type MutatingObjectActionId,
+  OBJECT_ACTION_IDS,
 } from '@shared/actions/objectActionContract';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type CapabilityDescriptor, useCapabilities, useUserPermission } from '@/core/capabilities';
 import {
   discoverNodeLogs,
   getCachedNodeLogDiscovery,
@@ -21,14 +21,14 @@ import {
 } from '../NodeLogs/nodeLogsApi';
 
 import {
-  CapabilityReasons,
-  CapabilityState,
-  CapabilityStates,
-  ComputedCapabilities,
-  FeatureSupport,
-  NodeLogsState,
-  PanelObjectData,
+  type CapabilityReasons,
+  type CapabilityState,
+  type CapabilityStates,
+  type ComputedCapabilities,
   createEmptyCapabilityIdMap,
+  type FeatureSupport,
+  type NodeLogsState,
+  type PanelObjectData,
 } from '../types';
 
 interface UseObjectPanelCapabilitiesOptions {

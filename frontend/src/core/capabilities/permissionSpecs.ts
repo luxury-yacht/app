@@ -5,8 +5,8 @@
  * and the capability catalog.
  */
 
-import type { PermissionSpec } from './permissionTypes';
 import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
+import type { PermissionSpec } from './permissionTypes';
 
 export interface PermissionSpecList {
   feature: PermissionFeatureKey;

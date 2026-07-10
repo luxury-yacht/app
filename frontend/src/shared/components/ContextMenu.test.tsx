@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for ContextMenu.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ContextMenu from './ContextMenu';
-import { KeyboardProvider } from '@ui/shortcuts';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ContextMenu from './ContextMenu';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

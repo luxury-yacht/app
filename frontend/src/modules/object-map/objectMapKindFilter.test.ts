@@ -4,8 +4,8 @@
  * Tests kind filtering and transitive filtered-path reconstruction.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';
 
 const ref = (kind: string, name: string): ObjectMapReference => ({

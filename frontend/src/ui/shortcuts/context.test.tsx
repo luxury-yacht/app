@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for context.
  */
 
-import { useEffect } from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { KeyboardProvider, useKeyboardContext, deriveCopyText, applySelectAll } from './context';
+import { applySelectAll, deriveCopyText, KeyboardProvider, useKeyboardContext } from './context';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

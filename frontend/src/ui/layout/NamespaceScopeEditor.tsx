@@ -8,12 +8,12 @@
  * affordances are also the only "scope active" signal the design needs.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   addNamespaceToScope,
   loadNamespaceScope,
+  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   removeNamespaceFromScope,
   saveNamespaceScope,
 } from './namespaceScope';

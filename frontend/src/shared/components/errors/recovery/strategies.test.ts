@@ -6,14 +6,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
+import { RecoveryStrategy } from '../types';
 import {
   canAutoRecover,
   getRecoveryMessage,
   getRecoveryStrategy,
   shouldLogToServer,
 } from './strategies';
-import { RecoveryStrategy } from '../types';
 
 describe('error recovery strategies', () => {
   it('classifies common failure patterns', () => {

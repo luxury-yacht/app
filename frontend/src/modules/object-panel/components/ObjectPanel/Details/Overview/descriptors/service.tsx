@@ -4,9 +4,9 @@
  * Service Overview descriptor (X1 P2). Presentation ported verbatim from ServiceOverview.tsx.
  */
 
-import React from 'react';
-import { service } from '@wailsjs/go/models';
 import { StatusChip } from '@shared/components/StatusChip';
+import { service } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 

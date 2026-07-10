@@ -7,11 +7,11 @@
  * a save the namespaces domain re-serves the synthesized list.
  */
 
+import { logAppLogsError, logAppLogsInfo } from '@/core/logging/appLogsClient';
 import {
   getClusterAllowedNamespaces,
   setClusterAllowedNamespaces,
 } from '@/core/settings/clusterAllowedNamespaces';
-import { logAppLogsError, logAppLogsInfo } from '@/core/logging/appLogsClient';
 
 /**
  * Above this many namespaces the editor shows a soft performance note:

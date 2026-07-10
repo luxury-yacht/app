@@ -7,8 +7,8 @@
  * - Action: fires once on click, optionally shows brief feedback (success/error)
  */
 
-import React from 'react';
 import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
 
 /** A toggle button that switches between on and off states. */
 export interface IconBarToggle {

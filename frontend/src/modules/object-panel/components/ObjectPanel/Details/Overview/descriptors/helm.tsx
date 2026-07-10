@@ -4,12 +4,12 @@
  * HelmRelease Overview descriptor (X1). Presentation ported verbatim from HelmOverview.tsx.
  */
 
-import React from 'react';
-import { helm } from '@wailsjs/go/models';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { helm } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '../shared/LabelsAndAnnotations.css';
 import '../HelmOverview.css';

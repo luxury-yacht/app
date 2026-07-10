@@ -5,11 +5,12 @@
  * Covers key behaviors and edge cases for NsViewConfig.
  */
 
-import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -140,8 +141,12 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
     }
     return (
       <div data-testid="confirmation-modal">
-        <button onClick={() => (props as any).onConfirm?.()}>Confirm</button>
-        <button onClick={() => (props as any).onCancel?.()}>Cancel</button>
+        <button type="button" onClick={() => (props as any).onConfirm?.()}>
+          Confirm
+        </button>
+        <button type="button" onClick={() => (props as any).onCancel?.()}>
+          Cancel
+        </button>
       </div>
     );
   },

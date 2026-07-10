@@ -5,7 +5,7 @@
  * Every function returns a new TabGroupState; none mutate the input.
  */
 
-import type { TabGroupState, FloatingTabGroup, GroupKey } from './tabGroupTypes';
+import type { FloatingTabGroup, GroupKey, TabGroupState } from './tabGroupTypes';
 
 export type AdjacentTabActivationPreference = 'left' | 'right';
 

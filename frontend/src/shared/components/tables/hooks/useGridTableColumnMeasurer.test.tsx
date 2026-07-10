@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableColumnMeasurer.
  */
 
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -142,7 +141,7 @@ describe('useGridTableColumnMeasurer', () => {
         return headerWidths.length ? headerWidths.shift()! : 0;
       },
     });
-    HTMLElement.prototype.getBoundingClientRect = function () {
+    HTMLElement.prototype.getBoundingClientRect = () => {
       const width = cellWidths.length ? cellWidths.shift()! : 0;
       return {
         width,

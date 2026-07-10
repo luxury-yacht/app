@@ -4,12 +4,14 @@
  * Store implementation for dockable panel runtime layout state.
  */
 
-import { getContentBounds } from './dockablePanelLayout';
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
-import { createInitialTabGroupState } from './tabGroupState';
-import { getGroupForPanel } from './tabGroupState';
-import { getGroupTabs } from './tabGroupState';
-import { removePanelFromGroup } from './tabGroupState';
+import { getContentBounds } from './dockablePanelLayout';
+import {
+  createInitialTabGroupState,
+  getGroupForPanel,
+  getGroupTabs,
+  removePanelFromGroup,
+} from './tabGroupState';
 import type { TabGroupState } from './tabGroupTypes';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';

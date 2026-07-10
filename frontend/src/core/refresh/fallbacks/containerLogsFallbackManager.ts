@@ -5,9 +5,9 @@
  * Implements containerLogsFallbackManager logic for the core layer.
  */
 
+import { eventBus } from '@/core/events';
 import { refreshManager } from '../RefreshManager';
 import { SYSTEM_REFRESHERS } from '../refresherTypes';
-import { eventBus } from '@/core/events';
 
 type Fetcher = (isManual?: boolean) => Promise<void> | void;
 

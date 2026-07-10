@@ -10,8 +10,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CLUSTER_LIFECYCLE_STATES,
-  parseClusterLifecycleState,
   type ClusterLifecycleState,
+  parseClusterLifecycleState,
 } from './clusterLifecycleState';
 
 describe('parseClusterLifecycleState', () => {

@@ -5,23 +5,23 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   GridTableFilterConfig,
   GridTableFilterState,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
-import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import {
-  areGridTableFilterStatesEqual,
-  DEFAULT_GRID_TABLE_FILTER_STATE,
-  normalizeGridTableFilterState,
-} from '@shared/components/tables/gridTableFilterState';
 import {
   applyGridTableFilters,
   buildGridTableFilterOptions,
   resolveGridTableFilterAccessors,
 } from '@shared/components/tables/gridTableFilterEngine';
+import {
+  areGridTableFilterStatesEqual,
+  DEFAULT_GRID_TABLE_FILTER_STATE,
+  normalizeGridTableFilterState,
+} from '@shared/components/tables/gridTableFilterState';
+import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface UseGridTableFiltersParams<T> {
   data: T[];

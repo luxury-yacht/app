@@ -5,9 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
-import type { DiagnosticsRow } from './diagnosticsPanelTypes';
-import type { SummaryCardData } from './diagnosticsPanelTypes';
+import type React from 'react';
+import type { DiagnosticsRow, SummaryCardData } from './diagnosticsPanelTypes';
 
 interface DiagnosticsTableProps {
   rows: DiagnosticsRow[];

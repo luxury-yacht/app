@@ -5,10 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
+import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import type React from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface HoverState {
   visible: boolean;

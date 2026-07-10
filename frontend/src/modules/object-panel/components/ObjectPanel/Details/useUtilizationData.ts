@@ -5,10 +5,10 @@
  * falling back to the active detail DTO while those domains load.
  */
 
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { useMemo } from 'react';
 import { useResourceMetrics } from '@/core/resource-metrics';
 import type { UtilizationData } from './detailsTabTypes';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 
 const UTILIZATION_KINDS = new Set([
   'pod',

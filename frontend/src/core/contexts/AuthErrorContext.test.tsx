@@ -5,8 +5,9 @@
  * Validates that Wails event listeners use per-listener disposers for cleanup,
  * preventing duplicate handlers on StrictMode remount.
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -14,9 +15,9 @@ import {
   applyAuthFailedEvent,
   applyAuthProgressEvent,
   applyAuthRecoveringEvent,
+  type ClusterAuthState,
   isConfirmedAuthFailure,
   useAuthError,
-  type ClusterAuthState,
 } from './AuthErrorContext';
 
 // Mock @wailsjs/go/backend/App — provider calls these on mount

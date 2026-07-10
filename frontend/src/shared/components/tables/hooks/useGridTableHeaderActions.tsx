@@ -4,14 +4,14 @@
  * Header sorting and context-menu actions for GridTable.
  */
 
-import { useCallback, useMemo, useState } from 'react';
-import type React from 'react';
-import type { MutableRefObject } from 'react';
-import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import ContextMenu from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import type React from 'react';
+import type { MutableRefObject } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 type SortDirection = 'asc' | 'desc' | null;
 type SortConfig = { key: string; direction: SortDirection };

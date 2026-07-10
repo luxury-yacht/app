@@ -5,89 +5,90 @@
  * lifecycle, fallback reads, filtering, parsing, keyboard shortcuts, and viewer
  * preference persistence.
  */
-import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import {
+  AnsiColorIcon,
+  AutoRefreshIcon,
+  CopyIcon,
+  HighlightSearchIcon,
+  InverseSearchIcon,
+  ParseJsonIcon,
+  PrettyJsonIcon,
+  PreviousLogsIcon,
+  RegexSearchIcon,
+  TimestampIcon,
+  WrapTextIcon,
+} from '@shared/components/icons/LogIcons';
+import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import {
   readContainerLogs,
   readContainerLogsScopeContainers,
   requestData,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
-import { useLogFiltering } from './hooks/useLogFiltering';
 import {
-  useContainerLogsStreamFallback,
-  isLogDataUnavailable,
   getLogDataUnavailableMessage,
+  isLogDataUnavailable,
+  useContainerLogsStreamFallback,
 } from './hooks/useContainerLogsStreamFallback';
-import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import {
-  AutoRefreshIcon,
-  PreviousLogsIcon,
-  TimestampIcon,
-  WrapTextIcon,
-  AnsiColorIcon,
-  CopyIcon,
-  ParseJsonIcon,
-  PrettyJsonIcon,
-  HighlightSearchIcon,
-  InverseSearchIcon,
-  RegexSearchIcon,
-} from '@shared/components/icons/LogIcons';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import { useLogFiltering } from './hooks/useLogFiltering';
+import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import './LogViewer.css';
-import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
+import type { ContainerLogsEntry } from '@/core/refresh/types';
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
-import type { ContainerLogsEntry } from '@/core/refresh/types';
-import type { types } from '@wailsjs/go/models';
 import {
-  ALL_CONTAINERS,
-  logViewerReducer,
-  initialLogViewerState,
-  applyLogViewerPrefs,
-  extractLogViewerPrefs,
-  type ParsedLogEntry,
-} from './logViewerReducer';
+  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  formatDefaultObjPanelLogsApiTimestamp,
+  formatObjPanelLogsApiTimestamp,
+} from '@/utils/objPanelLogsApiTimestampFormat';
+import { INACTIVE_SCOPE } from '../constants';
+import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
+import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
+import { useTerminalTheme } from './hooks/useTerminalTheme';
+import { buildCsv } from './logExport';
+import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
 import {
   getLogViewerPrefs,
   getLogViewerScrollTop,
   setLogViewerPrefs,
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
-import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import {
+  ALL_CONTAINERS,
+  applyLogViewerPrefs,
+  extractLogViewerPrefs,
+  initialLogViewerState,
+  logViewerReducer,
+  type ParsedLogEntry,
+} from './logViewerReducer';
+import ParsedLogTable from './ParsedLogTable';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
   formatRawOrPrettyJsonLine,
 } from './parsedLogUtils';
-import { buildCsv } from './logExport';
-import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
-import ParsedLogTable from './ParsedLogTable';
-import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { buildStablePodColorMap } from './podColors';
-import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
-import { INACTIVE_SCOPE } from '../constants';
-import {
-  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
-  formatDefaultObjPanelLogsApiTimestamp,
-  formatObjPanelLogsApiTimestamp,
-} from '@/utils/objPanelLogsApiTimestampFormat';
-import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
-import { useKeyboardSurface } from '@ui/shortcuts';
+import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
-import { useTerminalTheme } from './hooks/useTerminalTheme';
-import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 
 interface LogViewerProps {
   namespace: string;
@@ -211,7 +212,7 @@ const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
 const TARGET_LIMIT_WARNING_PATTERN =
   /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
-const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^\/]+)\/([^\]]+)\]\s*(.*)/;
+const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^/]+)\/([^\]]+)\]\s*(.*)/;
 const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
 
 const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
@@ -260,6 +261,8 @@ const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
 const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
+const getActualContainerName = (displayName: string): string =>
+  displayName.replace(' (init)', '').replace(' (debug)', '');
 
 const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
 const toInitContainerFilterValue = (container: string): string =>
@@ -344,7 +347,7 @@ type LogEmptyState =
   | 'unavailable';
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
-  resourceKind: resourceKind,
+  resourceKind,
   containerLogsScope,
   isActive = false,
   activePodNames = null,
@@ -998,11 +1001,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [isWorkload, logEntries, normalizedActivePods]);
 
-  const getActualContainerName = (displayName: string) => {
-    return displayName.replace(' (init)', '').replace(' (debug)', '');
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: getActualContainerName is a render-local pure helper with stable behavior
   const selectorOptions = useMemo(() => {
     const options: DropdownOption[] = [];
 
@@ -2047,6 +2045,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   />
                   {textFilter && (
                     <button
+                      type="button"
                       className="logs-viewer-filter-clear"
                       onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
                       title="Clear filter"

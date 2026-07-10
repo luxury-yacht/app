@@ -11,7 +11,8 @@
  * doubled (echo) fetch per doorbell, observed live.
  */
 
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,8 +78,8 @@ describe('useStreamSignalRefetch', () => {
         data: { clusterId: 'cluster-a', namespaces: [] } as never,
         sourceVersion: validator,
         sourceVersions: {
-          object: 'watermark-' + validator,
-          workloads: 'sig-' + validator,
+          object: `watermark-${validator}`,
+          workloads: `sig-${validator}`,
         } as never,
         scope,
       }));

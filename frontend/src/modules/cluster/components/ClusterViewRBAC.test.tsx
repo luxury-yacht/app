@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for ClusterViewRBAC.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({

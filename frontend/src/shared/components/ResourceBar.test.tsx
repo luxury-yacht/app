@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for ResourceBar.
  */
 
-import React from 'react';
-import ReactDOMClient from 'react-dom/client';
-import * as ReactDOM from 'react-dom';
+import type React from 'react';
 import { act } from 'react';
+import * as ReactDOM from 'react-dom';
+import ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-dom', async () => {

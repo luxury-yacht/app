@@ -8,17 +8,18 @@
  *
  * See docs/frontend/tabs.md for the shared tab contract.
  */
+
+import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
   type CSSProperties,
+  Fragment,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  useEffect,
+  useRef,
+  useState,
 } from 'react';
-import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 
 export interface TabDescriptor {
   id: string;
@@ -236,7 +237,7 @@ export function Tabs({
     const step = (now: number) => {
       const progress = Math.min(1, (now - startTime) / DURATION_MS);
       // easeOutCubic
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = 1 - (1 - progress) ** 3;
       bar.scrollLeft = startScroll + delta * eased;
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(step);

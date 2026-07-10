@@ -6,53 +6,53 @@
  */
 
 import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-  type CSSProperties,
-  type ReactElement,
-  type RefObject,
-} from 'react';
-import { types } from '@wailsjs/go/models';
-import { errorHandler } from '@utils/errorHandler';
-import { changeAppearanceMode } from '@/utils/appearanceMode';
-import {
-  getIntegerPreferenceMetadata,
-  getPreferenceMetadata,
-  hydrateAppPreferences,
-  normalizeIntegerPreferenceValue,
-  createPaletteTintPreferenceWorkflow,
-  getPaletteTint,
-  getAccentColor,
-  createAccentColorPreferenceWorkflow,
-  getLinkColor,
-  createLinkColorPreferenceWorkflow,
-  type AppearanceMode,
-} from '@/core/settings/appPreferences';
-import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
-import {
-  applyTintedPalette,
-  isPaletteActive,
-  MAX_SATURATION,
-  MAX_BRIGHTNESS_OFFSET,
-} from '@utils/paletteTint';
-import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
-import { applyLinkColor } from '@utils/linkColor';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import {
-  EditIcon,
-  DeleteIcon,
-  CheckIcon,
-  CloseIcon,
-  PlusIcon,
-} from '@shared/components/icons/SharedIcons';
-import {
   AppearanceModeIcon,
   DarkModeIcon,
   LightModeIcon,
 } from '@shared/components/icons/SettingsIcons';
+import {
+  CheckIcon,
+  CloseIcon,
+  DeleteIcon,
+  EditIcon,
+  PlusIcon,
+} from '@shared/components/icons/SharedIcons';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { applyAccentBg, applyAccentColor } from '@utils/accentColor';
+import { errorHandler } from '@utils/errorHandler';
+import { applyLinkColor } from '@utils/linkColor';
+import {
+  applyTintedPalette,
+  isPaletteActive,
+  MAX_BRIGHTNESS_OFFSET,
+  MAX_SATURATION,
+} from '@utils/paletteTint';
+import { types } from '@wailsjs/go/models';
+import {
+  type CSSProperties,
+  type ReactElement,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
+import {
+  type AppearanceMode,
+  createAccentColorPreferenceWorkflow,
+  createLinkColorPreferenceWorkflow,
+  createPaletteTintPreferenceWorkflow,
+  getAccentColor,
+  getIntegerPreferenceMetadata,
+  getLinkColor,
+  getPaletteTint,
+  getPreferenceMetadata,
+  hydrateAppPreferences,
+  normalizeIntegerPreferenceValue,
+} from '@/core/settings/appPreferences';
+import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { useThemes } from './useThemes';
 
 const DEFAULT_THEME_ID = 'default';
@@ -538,9 +538,9 @@ function AppearanceSection() {
 
   const handleAccentHexCommit = () => {
     let trimmed = accentHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
     if (validHexRe.test(trimmed)) {
       handleAccentColorChange(trimmed);
@@ -581,9 +581,9 @@ function AppearanceSection() {
 
   const handleLinkHexCommit = () => {
     let trimmed = linkHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
     if (validHexRe.test(trimmed)) {
       handleLinkColorChange(trimmed);

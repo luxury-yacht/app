@@ -4,11 +4,11 @@
  * Tests object-map connection tooltip layout, truncation, and badge rows.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { computeObjectMapTooltipLayout, MAX_FILTERED_TOOLTIP_OBJECTS } from './objectMapG6Tooltip';
 import type { ObjectMapHoverEdge } from './objectMapRendererTypes';
-import { MAX_FILTERED_TOOLTIP_OBJECTS, computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
 
 const palette: ObjectMapG6Palette = {
   accent: '#60a5fa',

@@ -6,17 +6,17 @@
  * Click action: refresh cluster connection or retry auth.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import StatusIndicator from '@shared/components/status/StatusIndicator';
-import { requestContextRefresh } from '@/core/data-access';
-import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
-import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import StatusIndicator from '@shared/components/status/StatusIndicator';
+import React, { useCallback, useEffect, useState } from 'react';
+import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
+import { useActiveClusterAuthState, useAuthError } from '@/core/contexts/AuthErrorContext';
+import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
+import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 
 const ConnectivityStatus: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);

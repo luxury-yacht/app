@@ -6,11 +6,13 @@
  * Hydrates from the backend on mount, then keeps state in sync via Wails
  * runtime events. Cleans up entries when clusters are deselected.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { requestAppState, readAllClusterLifecycleStates } from '@/core/app-state-access';
-import { eventBus } from '@/core/events';
+
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { parseClusterLifecycleState, type ClusterLifecycleState } from './clusterLifecycleState';
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { readAllClusterLifecycleStates, requestAppState } from '@/core/app-state-access';
+import { eventBus } from '@/core/events';
+import { type ClusterLifecycleState, parseClusterLifecycleState } from './clusterLifecycleState';
 
 // ---------- Types ----------
 

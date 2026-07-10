@@ -1,0 +1,19 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+  `$receiver.fetchScopedDomain($...)` as $call where {
+    register_diagnostic(
+      span = $call,
+      message = "Route read requests through dataAccess instead of calling fetchScopedDomain directly.",
+      severity = "error"
+    )
+  },
+  `$receiver.triggerManualRefreshForContext($...)` as $call where {
+    register_diagnostic(
+      span = $call,
+      message = "Route contextual refreshes through dataAccess instead of calling triggerManualRefreshForContext directly.",
+      severity = "error"
+    )
+  }
+}

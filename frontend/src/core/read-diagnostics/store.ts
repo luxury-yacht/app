@@ -161,7 +161,8 @@ export const beginBrokerRead = (options: BeginBrokerReadOptions): string => {
   entry.lastBlockedReason = null;
   entry.lastError = null;
 
-  const token = `broker-read-${(requestSequence += 1)}`;
+  requestSequence += 1;
+  const token = `broker-read-${requestSequence}`;
   pendingReads.set(token, {
     ...options,
     startedAt,

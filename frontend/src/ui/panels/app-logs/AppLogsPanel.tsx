@@ -5,29 +5,29 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  useLayoutEffect,
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-} from 'react';
-import { ClearAppLogs, SetAppLogsPanelVisible } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
-import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { DockablePanel } from '@ui/dockable';
+import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
+import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { errorHandler } from '@utils/errorHandler';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
-import { subscribeAppLogsAdded, type AppLogsAddedEvent } from '@/core/logging/appLogsClient';
+import { ClearAppLogs, SetAppLogsPanelVisible } from '@/core/backend-api';
+import { type AppLogsAddedEvent, subscribeAppLogsAdded } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 
 interface LogEntry {
@@ -919,6 +919,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             />
             {textFilter && (
               <button
+                type="button"
                 className="app-logs-filter-clear"
                 onClick={() => setTextFilter('')}
                 title="Clear filter"

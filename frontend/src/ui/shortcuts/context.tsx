@@ -5,17 +5,18 @@
  * Implements context logic for the UI layer.
  */
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import {
-  ShortcutDefinition,
+import { EventsOff, EventsOn } from '@wailsjs/runtime/runtime';
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type {
   RegisteredShortcut,
-  ShortcutMap,
+  ShortcutDefinition,
   ShortcutGroup,
+  ShortcutMap,
   ShortcutModifiers,
 } from '@/types/shortcuts';
-import { getShortcutKey, modifiersMatch, isInputElement, resolveEventElement } from './utils';
-import { EventsOn, EventsOff } from '@wailsjs/runtime/runtime';
 import SearchShortcutHandler from './components/SearchShortcutHandler';
+import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
 interface KeyboardProviderValue {
   // Registration

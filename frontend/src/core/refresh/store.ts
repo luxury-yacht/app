@@ -6,10 +6,9 @@
  */
 
 import { useSyncExternalStore } from 'react';
-
-import type { DomainPayloadMap, RefreshDomain } from './types';
 import type { SnapshotStats } from './client';
 import type { RefreshSourceClock } from './domainRegistry';
+import type { DomainPayloadMap, RefreshDomain } from './types';
 
 export type DomainStatus = 'idle' | 'loading' | 'initialising' | 'updating' | 'ready' | 'error';
 

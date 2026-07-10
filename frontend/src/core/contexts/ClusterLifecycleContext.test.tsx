@@ -5,8 +5,9 @@
  * Validates hydration from backend RPC, Wails event subscription,
  * cleanup of stale cluster entries, and accessor behavior.
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { eventBus } from '@/core/events';

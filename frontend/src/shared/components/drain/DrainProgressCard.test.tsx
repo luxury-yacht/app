@@ -6,9 +6,10 @@
  * and a value outside the union must throw instead of silently rendering as
  * success (the pre-typed helpers fell through to the green 'success' class).
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
-import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import { DrainProgressCard } from './DrainProgressCard';

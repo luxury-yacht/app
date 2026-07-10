@@ -4,11 +4,11 @@
  * Wraps backend RunObjectAction calls with full object identity payloads.
  */
 
-import { RunObjectAction } from '@wailsjs/go/backend/App';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceRef } from '@core/refresh/types';
-import { OBJECT_ACTIONS } from './objectActionContract';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { RunObjectAction } from '@/core/backend-api';
 import type { ObjectActionName } from './objectActionContract';
+import { OBJECT_ACTIONS } from './objectActionContract';
 
 export type { ObjectActionName } from './objectActionContract';
 

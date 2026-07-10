@@ -10,10 +10,10 @@
 import { useEffect, useRef } from 'react';
 
 import {
+  type DataRequestReason,
   requestRefreshDomain,
   resetRefreshDomain,
   setRefreshDomainEnabled,
-  type DataRequestReason,
 } from '@/core/data-access';
 import type { RefreshDomain } from '@/core/refresh/types';
 

@@ -2,14 +2,13 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.test.tsx
  */
 
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { act, createContext, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
-import { createContext, useSyncExternalStore } from 'react';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 type CapabilityState = {
   allowed: boolean;

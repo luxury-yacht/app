@@ -6,7 +6,7 @@
  * listed in `coveredElsewhere`. A new backend field that nobody places fails this test by name.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { registeredDescriptors } from './descriptorRegistry';
 import { coverageKeys } from './schema';
 

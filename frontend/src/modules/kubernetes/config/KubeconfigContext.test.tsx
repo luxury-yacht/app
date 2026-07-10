@@ -5,16 +5,16 @@
  * Covers key behaviors and edge cases for KubeconfigContext.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
-import type { types } from '@wailsjs/go/models';
-import { eventBus } from '@/core/events';
 import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import type { types } from '@wailsjs/go/models';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
+import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 
 const { getKubeconfigsMock, getSelectedKubeconfigsMock, setSelectedKubeconfigsMock, mocks } =
   vi.hoisted(() => ({

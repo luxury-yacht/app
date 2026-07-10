@@ -1,15 +1,15 @@
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import {
   buildCatalogScope,
   filterClusterScopedItems,
   filterNamespaceScopedItems,
   normalizeCatalogScope,
   parseContinueToken,
-  reconcileByUID,
   rebuildIndexByUID,
+  reconcileByUID,
   splitClusterScope,
 } from '@modules/browse/utils/browseUtils';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 
 export interface BrowseFilters {
   search: string;

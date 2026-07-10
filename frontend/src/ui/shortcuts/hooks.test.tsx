@@ -5,14 +5,13 @@
  * Covers key behaviors and edge cases for hooks.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
 import type { Mock } from 'vitest';
-
-import { useShortcut, useShortcuts } from './hooks';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as shortcutContextModule from './context';
+import { useShortcut, useShortcuts } from './hooks';
 
 type RegisterArgs = {
   key: string;

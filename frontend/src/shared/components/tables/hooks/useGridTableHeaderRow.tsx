@@ -5,9 +5,9 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import type React from 'react';
 
 export interface UseGridTableHeaderRowParams<T> {
   renderedColumns: GridColumnDefinition<T>[];

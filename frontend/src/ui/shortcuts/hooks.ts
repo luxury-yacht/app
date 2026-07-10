@@ -6,8 +6,8 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
+import type { ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from './context';
-import { ShortcutModifiers } from '@/types/shortcuts';
 
 const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | undefined => {
   if (!modifiers) {

@@ -5,10 +5,10 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useState } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import { useCallback, useState } from 'react';
 
 // Encapsulates the bare context menu state/actions (open/close, position, source),
 // leaving item construction to callers. Used by GridTable context menu wiring.

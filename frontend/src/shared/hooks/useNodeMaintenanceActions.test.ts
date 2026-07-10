@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-
+import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import {
   buildNodeMaintenanceAggregateScope,
   collectNodeMaintenanceDrains,
 } from './useNodeMaintenanceActions';
-import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 
 const drainJob = (overrides: Partial<NodeMaintenanceDrainJob>): NodeMaintenanceDrainJob => ({
   id: overrides.id ?? 'job-1',

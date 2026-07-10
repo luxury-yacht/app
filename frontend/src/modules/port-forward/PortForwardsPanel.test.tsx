@@ -5,10 +5,10 @@
  * Covers session listing, status updates, stop functionality, and event handling.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act, type Ref } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act, type Ref } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the Wails backend
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
@@ -180,7 +180,9 @@ describe('PortForwardsPanel', () => {
       root.render(
         <KeyboardProvider>
           <PortForwardsPanel />
-          <button id="outside-panel">Outside</button>
+          <button type="button" id="outside-panel">
+            Outside
+          </button>
         </KeyboardProvider>
       );
       await Promise.resolve();

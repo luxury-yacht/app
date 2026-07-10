@@ -5,13 +5,11 @@
  * Covers key behaviors and edge cases for GridTableFiltersBar.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const searchShortcutMock = vi.hoisted(() => ({
   register: vi.fn(),

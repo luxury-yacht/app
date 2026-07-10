@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for connectionStatus.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  type ConnectionStatusEvent,
   getDefaultConnectionStatus,
   mapConnectionStatusEvent,
-  ConnectionStatusEvent,
 } from './connectionStatus';
 
 describe('connectionStatus helpers', () => {

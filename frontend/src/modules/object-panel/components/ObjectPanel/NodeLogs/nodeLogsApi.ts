@@ -1,10 +1,10 @@
+import type { types } from '@wailsjs/go/models';
 import {
+  type DataRequestReason,
   readNodeLogDiscovery,
   readNodeLogs,
   requestData,
-  type DataRequestReason,
 } from '@/core/data-access';
-import type { types } from '@wailsjs/go/models';
 
 export interface NodeLogSource {
   id: string;

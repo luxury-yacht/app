@@ -22,12 +22,11 @@
  * `maxTabWidth: 240` truncates overlong labels.
  */
 
-import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-
-import { Tabs, type TabDescriptor } from './';
-import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
+import { useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { type TabDescriptor, Tabs } from './';
+import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
 import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,

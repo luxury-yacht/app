@@ -5,52 +5,48 @@
  * Composes top-level providers, routes, and layout.
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import '@styles/index.css';
 import './App.css';
-import { errorHandler } from '@utils/errorHandler';
-import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
-import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { eventBus } from '@/core/events';
-import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
-import { setActivePermissionCluster } from '@/core/capabilities';
-import { requestContextRefresh } from '@/core/data-access';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import {
-  hydrateAppPreferences,
-  getPaletteTint,
-  getAccentColor,
-  getLinkColor,
-  matchThemeForCluster,
-  applyTheme,
-} from '@/core/settings/appPreferences';
-import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
-import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
-import { applyLinkColor } from '@utils/linkColor';
-import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
-
+import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
+import { ErrorProvider } from '@core/contexts/ErrorContext';
+import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
-import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { ErrorProvider } from '@core/contexts/ErrorContext';
-import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
-
-// App components
-import { AppLayout } from '@ui/layout/AppLayout';
-import { DockablePanelProvider } from '@ui/dockable';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-
+import { DockablePanelProvider } from '@ui/dockable';
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
-
+// App components
+import { AppLayout } from '@ui/layout/AppLayout';
+import { GlobalShortcuts, KeyboardProvider } from '@ui/shortcuts';
+import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
+import { applyAccentBg, applyAccentColor } from '@utils/accentColor';
+import { errorHandler } from '@utils/errorHandler';
+import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
+import { applyLinkColor } from '@utils/linkColor';
+import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
+import { setActivePermissionCluster } from '@/core/capabilities';
+import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
+import { requestContextRefresh } from '@/core/data-access';
+import { eventBus } from '@/core/events';
+import {
+  applyTheme,
+  getAccentColor,
+  getLinkColor,
+  getPaletteTint,
+  hydrateAppPreferences,
+  matchThemeForCluster,
+} from '@/core/settings/appPreferences';
+import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 // Custom hooks
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
-import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
-import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
+import { useConnectionStatusListener, useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
 
 // Resolve the current active appearance mode from the document attribute.
 const resolveAppearanceMode = (): 'light' | 'dark' => {

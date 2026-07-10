@@ -7,9 +7,10 @@
  * the rest of the app.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './DebugOverlay.css';
 
 interface DebugOverlayProps {

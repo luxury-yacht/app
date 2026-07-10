@@ -1,10 +1,9 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
-
-import { EffectivePermissionsTable } from './TableEffectivePermissions';
-import type { PermissionRow } from './diagnosticsPanelTypes';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
+import type { PermissionRow } from './diagnosticsPanelTypes';
+import { EffectivePermissionsTable } from './TableEffectivePermissions';
 
 const setSearchValue = (input: HTMLInputElement, value: string): void => {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;

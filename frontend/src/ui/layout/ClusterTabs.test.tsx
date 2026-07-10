@@ -4,16 +4,16 @@
  * Test suite for ClusterTabs.
  * Covers tab rendering, ordering, and close/select behaviors.
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ClusterTabs from '@ui/layout/ClusterTabs';
 import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import ClusterTabs from '@ui/layout/ClusterTabs';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type MockState = {
   selectedKubeconfigs: string[];

@@ -12,10 +12,10 @@
  * mounts — the module-level buffer ensures the request isn't lost.
  */
 
-import { useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-import { eventBus } from '@/core/events';
 import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import type { RefObject } from 'react';
+import { useEffect, useRef } from 'react';
+import { eventBus } from '@/core/events';
 import { type GridTableFocusRequest, matchesGridTableFocusRequest } from './gridTableFocusRequest';
 
 interface UseGridTableExternalFocusOptions<T> {

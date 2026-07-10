@@ -5,9 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useState, useEffect } from 'react';
-import { errorHandler, ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
 import { useErrorContext } from '@contexts/ErrorContext';
+import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useEffect, useState } from 'react';
 
 // Component that throws an error during render
 const ThrowOnRender: React.FC<{ error: Error }> = ({ error }) => {
@@ -147,6 +148,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </div>
 
         <button
+          type="button"
           onClick={() => setErrorType('sync')}
           style={{
             padding: '4px 8px',
@@ -163,6 +165,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={() => setErrorType('network')}
           style={{
             padding: '4px 8px',
@@ -179,6 +182,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={() => setErrorType('chunk')}
           style={{
             padding: '4px 8px',
@@ -195,6 +199,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={() => setErrorType('effect')}
           style={{
             padding: '4px 8px',
@@ -211,6 +216,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={() => setShowAsyncError(true)}
           style={{
             padding: '4px 8px',
@@ -231,6 +237,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </div>
 
         <button
+          type="button"
           onClick={() => {
             // This won't be caught by error boundary, only by global handler
             setTimeout(() => {
@@ -253,6 +260,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={() => {
             // Event handler errors are not caught by error boundaries
             throw new Error('Event handler error - not caught by boundary!');
@@ -272,6 +280,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
         </button>
 
         <button
+          type="button"
           onClick={async () => {
             // Promise rejection
             await Promise.reject(new Error('Unhandled promise rejection!'));
@@ -296,6 +305,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
 
         {severityTests.map(({ severity, label, bg, fg }) => (
           <button
+            type="button"
             key={severity}
             onClick={() => fireSeverityToast(severity, label)}
             style={{
@@ -316,6 +326,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
 
         {errorType && (
           <button
+            type="button"
             onClick={handleReset}
             style={{
               marginTop: '10px',

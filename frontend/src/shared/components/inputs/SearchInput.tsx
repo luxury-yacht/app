@@ -4,7 +4,8 @@
  * Reusable search/filter text input.
  */
 
-import React, { useState, useCallback } from 'react';
+import type React from 'react';
+import { useCallback, useState } from 'react';
 
 export interface SearchInputProps {
   /** Current input value (controlled). */

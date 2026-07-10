@@ -5,16 +5,15 @@
  * Covers key behaviors and edge cases for useShortNames.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-
-import { useShortNames } from './useShortNames';
 import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { useShortNames } from './useShortNames';
 
 const renderHookComponent = async () => {
   const container = document.createElement('div');

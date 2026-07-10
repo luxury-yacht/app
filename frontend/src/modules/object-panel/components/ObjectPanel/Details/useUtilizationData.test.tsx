@@ -1,18 +1,17 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import {
   makeClusterNodeSnapshotEntry,
   makeClusterNodeSnapshotPayload,
-  makeNamespaceWorkloadSummary,
   makeNamespaceWorkloadSnapshotPayload,
+  makeNamespaceWorkloadSummary,
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import type { UtilizationData } from './detailsTabTypes';
 import { useUtilizationData } from './useUtilizationData';
 

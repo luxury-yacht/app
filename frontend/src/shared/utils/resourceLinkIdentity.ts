@@ -6,17 +6,17 @@
  * information is available.
  */
 
-import {
-  readCatalogObjectByUID,
-  readCatalogObjectMatchForRef,
-  requestData,
-} from '@/core/data-access';
 import type { DisplayRef, ResourceLink, ResourceRef } from '@core/refresh/types';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
+import {
+  readCatalogObjectByUID,
+  readCatalogObjectMatchForRef,
+  requestData,
+} from '@/core/data-access';
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';

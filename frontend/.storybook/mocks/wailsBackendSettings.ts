@@ -22,8 +22,8 @@ const defaultOptions: Required<SettingsMockOptions> = {
  */
 export function setMockSettingsBackend(options: SettingsMockOptions = {}): void {
   const merged = { ...defaultOptions, ...options };
-  const overrides = ((window as any).__storybookGoOverrides =
-    (window as any).__storybookGoOverrides || {});
+  const overrides = (window as any).__storybookGoOverrides || {};
+  (window as any).__storybookGoOverrides = overrides;
 
   overrides['GetAppSettings'] = () =>
     Promise.resolve({

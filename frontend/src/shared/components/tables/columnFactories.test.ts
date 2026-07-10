@@ -5,22 +5,20 @@
  * Covers key behaviors and edge cases for columnFactories.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
+  type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
   createResourceBarColumn,
   createTextColumn,
   upsertNamespaceColumn,
-  type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,

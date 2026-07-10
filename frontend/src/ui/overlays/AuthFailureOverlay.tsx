@@ -6,14 +6,15 @@
  * has an authentication failure. Shows retry status and a manual retry button.
  */
 
-import React, { useCallback } from 'react';
-import {
-  useAuthError,
-  useActiveClusterAuthState,
-  isConfirmedAuthFailure,
-  ClusterAuthState,
-} from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type React from 'react';
+import { useCallback } from 'react';
+import {
+  type ClusterAuthState,
+  isConfirmedAuthFailure,
+  useActiveClusterAuthState,
+  useAuthError,
+} from '@/core/contexts/AuthErrorContext';
 import './AuthFailureOverlay.css';
 
 interface AuthFailureOverlayContentProps {
@@ -71,7 +72,7 @@ export const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps>
         </>
       )}
       <p className="auth-failure-message">{recheckMessage}</p>
-      <button className="button generic" onClick={onRetry}>
+      <button type="button" className="button generic" onClick={onRetry}>
         Retry Now
       </button>
     </div>

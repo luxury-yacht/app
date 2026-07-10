@@ -5,7 +5,6 @@
  * object names, namespaces, and collapse/expand badges.
  */
 
-import { Circle as GCircle, Rect as GRect, Text as GText } from '@antv/g';
 import type {
   CircleStyleProps,
   DisplayObjectConfig,
@@ -13,8 +12,9 @@ import type {
   RectStyleProps,
   TextStyleProps,
 } from '@antv/g';
-import { BaseNode, ExtensionCategory, register } from '@antv/g6';
+import { Circle as GCircle, Rect as GRect, Text as GText } from '@antv/g';
 import type { BaseNodeStyleProps } from '@antv/g6';
+import { BaseNode, ExtensionCategory, register } from '@antv/g6';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, type ObjectMapG6CardDetailLevel } from './objectMapG6Constants';
 

@@ -5,14 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
-import {
-  type ColumnWidthInput,
-  type GridColumnDefinition,
-} from '@shared/components/tables/GridTable';
-import ResourceBar from '@shared/components/ResourceBar';
-import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
+import ResourceBar from '@shared/components/ResourceBar';
+import type { ColumnWidthInput, GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type React from 'react';
+import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
 /**
  * Column factory functions for GridTable

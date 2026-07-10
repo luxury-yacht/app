@@ -4,8 +4,6 @@
  * Defines shared contracts for resource-grid table adapters and state.
  */
 
-import type React from 'react';
-import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type {
@@ -18,6 +16,8 @@ import type {
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
+import type React from 'react';
+import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
 import type { ResourceGridObjectIdentityAdapter } from './useResourceGridObjectIdentity';
 
 export interface GridTableBindingProps<T> {

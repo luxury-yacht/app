@@ -6,7 +6,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
+import {
+  RefreshManagerProvider as RawProvider,
+  useRefreshManagerContext as rawUseManagerContext,
+} from './contexts/RefreshManagerContext';
+import { useRefreshContext as rawUseContext } from './hooks/useRefreshContext';
+import { useRefreshManager as rawUseManager } from './hooks/useRefreshManager';
+import { useRefreshWatcher as rawUseWatcher } from './hooks/useRefreshWatcher';
 import {
   RefreshManagerProvider,
   refreshManager,
@@ -18,19 +24,12 @@ import {
   useRefreshScopedDomainStates,
   useRefreshWatcher,
 } from './index';
-import { refreshManager as rawRefreshManager } from './RefreshManager';
 import { refreshOrchestrator as rawOrchestrator } from './orchestrator';
+import { refreshManager as rawRefreshManager } from './RefreshManager';
 import {
   useRefreshScopedDomain as rawUseScopedDomain,
   useRefreshScopedDomainStates as rawUseScopedStates,
 } from './store';
-import {
-  RefreshManagerProvider as RawProvider,
-  useRefreshManagerContext as rawUseManagerContext,
-} from './contexts/RefreshManagerContext';
-import { useRefreshManager as rawUseManager } from './hooks/useRefreshManager';
-import { useRefreshWatcher as rawUseWatcher } from './hooks/useRefreshWatcher';
-import { useRefreshContext as rawUseContext } from './hooks/useRefreshContext';
 
 describe('core/refresh index exports', () => {
   it('re-exports manager primitives and hooks', () => {

@@ -15,21 +15,21 @@ import {
   initialRuntimeOperationStatusState,
   normalizePortForwardSession,
   normalizePortForwardStatusEvent,
-  runtimeOperationStatusReducer,
-  selectRuntimeOperationRows,
   type RawPortForwardSession,
   type RawPortForwardStatusEvent,
   type RuntimeOperation,
+  runtimeOperationStatusReducer,
   type ShellSessionInfo,
+  selectRuntimeOperationRows,
 } from './runtimeOperationStatusAdapter';
 
-export {
-  type PortForwardSession,
-  type PortForwardStatus,
-  type PortForwardStatusEvent,
-  type RuntimeOperation,
-  type RuntimeOperationStatusState,
-  type ShellSessionInfo,
+export type {
+  PortForwardSession,
+  PortForwardStatus,
+  PortForwardStatusEvent,
+  RuntimeOperation,
+  RuntimeOperationStatusState,
+  ShellSessionInfo,
 } from './runtimeOperationStatusAdapter';
 
 type RuntimeOperationStatusReadResource =

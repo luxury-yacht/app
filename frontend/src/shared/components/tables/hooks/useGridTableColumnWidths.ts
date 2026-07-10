@@ -5,14 +5,17 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useRef, useState } from 'react';
-import type { RefObject } from 'react';
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
   detectWidthUnit,
   isFixedColumnKey,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import { reconcileColumnWidthsToContainer } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import {
+  type ManualResizeEvent,
+  useDirtyQueue,
+} from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
 import {
   useColumnWidthState,
   useExternalWidthsSync,
@@ -21,11 +24,8 @@ import {
   useWatchTableData,
   useWidthsChangeNotifier,
 } from '@shared/components/tables/hooks/useGridTableColumnWidths.helpers';
-import {
-  useDirtyQueue,
-  type ManualResizeEvent,
-} from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
-import { reconcileColumnWidthsToContainer } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import type { RefObject } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 // Column width lifecycle phase. Replaces the three coupled boolean refs
 // (initializedColumnsRef, isAutoSizingEnabledRef, isManualResizeActiveRef)

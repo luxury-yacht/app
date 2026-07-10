@@ -5,12 +5,11 @@
  * Covers basic modal behavior and shortcut handling.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ObjectDiffModal from './ObjectDiffModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ObjectDiffModal from './ObjectDiffModal';
 
 const refreshMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),

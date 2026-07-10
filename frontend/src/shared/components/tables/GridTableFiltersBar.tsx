@@ -5,22 +5,23 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef, useMemo } from 'react';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
-import { useSearchShortcutTarget } from '@ui/shortcuts';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import {
   hasNarrowingGridTableFilters,
   hasNonDefaultGridTableFilters,
 } from '@shared/components/tables/gridTableFilterState';
+import { useSearchShortcutTarget } from '@ui/shortcuts';
+import type React from 'react';
+import { useMemo, useRef } from 'react';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;

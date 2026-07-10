@@ -7,9 +7,9 @@
  * value is present — a latent throw on a row the user never sees.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewDescriptor } from './schema';
 

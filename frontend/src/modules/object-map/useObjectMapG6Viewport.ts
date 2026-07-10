@@ -6,8 +6,8 @@
  */
 
 import type { Graph, GraphData } from '@antv/g6';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { fitObjectMapG6GraphToView, resetObjectMapG6GraphZoom } from './objectMapG6Viewport';
 import type {

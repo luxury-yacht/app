@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableHoverSync.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };

@@ -5,12 +5,6 @@
  * Covers key behaviors and edge cases for useGridTableColumnWidths.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type {
   ColumnWidthInput,
   ColumnWidthState,
@@ -20,6 +14,11 @@ import {
   DEFAULT_COLUMN_MIN_WIDTH,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import type React from 'react';
+import { act, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string; name: string };
 

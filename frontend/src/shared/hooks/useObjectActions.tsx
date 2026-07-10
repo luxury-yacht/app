@@ -5,8 +5,21 @@
  * Production callers should use useObjectActionController instead of calling this directly.
  */
 
-import { eventBus } from '@/core/events';
+import {
+  OBJECT_ACTION_IDS,
+  objectActionInvolvedObjectLabel,
+  objectActionLabel,
+} from '@shared/actions/objectActionContract';
+import {
+  normalizeKind,
+  type ObjectActionData,
+  type PermissionStatus,
+  resolveObjectActionPolicy,
+  SCALABLE_KINDS,
+} from '@shared/actions/objectActionPolicy';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
+import { ObjectMapIcon } from '@shared/components/icons/ObjectMapIcons';
 import {
   CordonIcon,
   DeleteIcon,
@@ -18,21 +31,8 @@ import {
   RollbackIcon,
   ScaleIcon,
 } from '@shared/components/icons/SharedIcons';
-import { ObjectMapIcon } from '@shared/components/icons/ObjectMapIcons';
-import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
-import {
-  OBJECT_ACTION_IDS,
-  objectActionInvolvedObjectLabel,
-  objectActionLabel,
-} from '@shared/actions/objectActionContract';
-import {
-  normalizeKind,
-  resolveObjectActionPolicy,
-  SCALABLE_KINDS,
-  type ObjectActionData,
-  type PermissionStatus,
-} from '@shared/actions/objectActionPolicy';
 import { resourceLinkDisplayKind } from '@shared/utils/resourceLinkIdentity';
+import { eventBus } from '@/core/events';
 
 // Action handlers
 export interface ObjectActionHandlers {
@@ -62,8 +62,8 @@ export interface ObjectActionHandlers {
 
 let nextObjectDiffRequestId = 1;
 
-export { normalizeKind, SCALABLE_KINDS };
 export type { ObjectActionData, PermissionStatus };
+export { normalizeKind, SCALABLE_KINDS };
 
 // Options for building action items
 export interface BuildObjectActionsOptions {

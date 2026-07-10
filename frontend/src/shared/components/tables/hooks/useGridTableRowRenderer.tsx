@@ -5,11 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback } from 'react';
-import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
+import type React from 'react';
+import { useCallback } from 'react';
 
 // Returns row/cell render callbacks for GridTable, wiring hover handlers,
 // context menus, and slotting for virtualization measurements.

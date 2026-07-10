@@ -12,18 +12,18 @@
  * from the renderer context (`context.hpaManaged`).
  */
 
-import React from 'react';
-import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
+import type React from 'react';
+import type { OverviewContext, OverviewDescriptor, OverviewItemSpec } from '../schema';
 import { OverviewItem } from '../shared/OverviewItem';
 import {
   DEFAULT_TOLERATION_RE,
-  parseToleration,
   type ParsedToleration,
+  parseToleration,
 } from '../shared/tolerations';
-import type { OverviewContext, OverviewDescriptor, OverviewItemSpec } from '../schema';
 import '../shared/OverviewBlocks.css';
 import '../WorkloadOverview.css';
 

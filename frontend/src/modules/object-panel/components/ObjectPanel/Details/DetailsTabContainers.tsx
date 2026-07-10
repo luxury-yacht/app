@@ -11,8 +11,8 @@
  * spec/shell view.
  */
 
-import React from 'react';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import type React from 'react';
 import '../shared.css';
 import './DetailsTabContainers.css';
 

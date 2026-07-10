@@ -6,7 +6,7 @@
  */
 
 import { useEffect } from 'react';
-import { eventBus, type AppEvents } from './eventBus';
+import { type AppEvents, eventBus } from './eventBus';
 
 type EventCallback<T> = (payload: T) => void;
 

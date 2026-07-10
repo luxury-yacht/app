@@ -12,16 +12,16 @@
  * - onClose: Callback to close the panel.
  */
 
-import React from 'react';
-import type { DockPosition } from './useDockablePanelState';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import {
-  DockRightIcon,
   DockBottomIcon,
+  DockRightIcon,
   FloatPanelIcon,
   MaximizePanelIcon,
   RestorePanelIcon,
 } from '@shared/components/icons/DockableIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import type { DockPosition } from './useDockablePanelState';
 
 interface DockablePanelControlsProps {
   position: DockPosition;
@@ -101,6 +101,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
       {!isMaximized &&
         dockActions.map((action) => (
           <button
+            type="button"
             key={`${position}-${action.target}`}
             className="dockable-panel__control-btn"
             onClick={() => onDock(action.target)}
@@ -112,6 +113,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
         ))}
       {allowMaximize && (
         <button
+          type="button"
           className="dockable-panel__control-btn"
           onClick={onToggleMaximize}
           title={isMaximized ? 'Restore panel' : 'Maximize panel'}
@@ -125,6 +127,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
         </button>
       )}
       <button
+        type="button"
         className="dockable-panel__control-btn dockable-panel__control-btn--close"
         onClick={onClose}
         title="Close all tabs in this panel"

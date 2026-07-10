@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect } from 'react';
 import type { RefObject } from 'react';
+import { useEffect } from 'react';
 
 // When the hovered row is unmounted (e.g., virtualization window shifts),
 // find a focused/selected row in the DOM and restore the hover overlay to it.

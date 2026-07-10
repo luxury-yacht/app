@@ -6,20 +6,20 @@
  * independently per cluster without leaking between clusters.
  */
 
-import ReactDOM from 'react-dom/client';
-import React, { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthErrorProvider,
+  type ClusterAuthState,
   useActiveClusterAuthState,
   useAuthError,
-  type ClusterAuthState,
 } from '@/core/contexts/AuthErrorContext';
 import {
+  type ClusterHealthStatus,
   useClusterHealthListener,
   useWailsRuntimeEvents,
-  ClusterHealthStatus,
 } from './useWailsRuntimeEvents';
 
 vi.mock('@wailsjs/go/backend/App', () => ({

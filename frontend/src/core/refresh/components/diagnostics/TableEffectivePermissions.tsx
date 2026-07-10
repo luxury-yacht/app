@@ -5,7 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
 
 interface PermissionsTableProps {

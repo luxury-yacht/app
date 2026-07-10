@@ -1,20 +1,20 @@
 import {
   GetAllClusterAuthStates,
   GetAppInfo,
+  GetAppLogs,
+  GetAppLogsSince,
   GetAppSettings,
   GetAppSettingsSchema,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
-  GetAppLogs,
-  GetAppLogsSince,
   GetSelectedKubeconfigs,
   GetShellSessionBacklog,
   GetThemes,
   GetZoomLevel,
-  ListRuntimeOperations,
   ListPortForwards,
+  ListRuntimeOperations,
   ListShellSessions,
-} from '@wailsjs/go/backend/App';
+} from '@/core/backend-api';
 
 export const readKubeconfigs = () => GetKubeconfigs();
 export const readSelectedKubeconfigs = () => GetSelectedKubeconfigs();

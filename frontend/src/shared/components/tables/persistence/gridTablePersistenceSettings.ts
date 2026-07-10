@@ -7,9 +7,9 @@
 
 import { eventBus } from '@/core/events';
 import {
+  type GridTablePersistenceMode,
   getGridTablePersistenceMode as getCachedGridTablePersistenceMode,
   setGridTablePersistenceMode as updateGridTablePersistenceMode,
-  type GridTablePersistenceMode,
 } from '@/core/settings/appPreferences';
 
 export type { GridTablePersistenceMode };

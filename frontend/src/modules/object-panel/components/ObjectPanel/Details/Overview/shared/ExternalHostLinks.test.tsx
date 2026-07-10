@@ -4,8 +4,8 @@
  * Test suite for ExternalHostLinks.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The global setup mock omits BrowserOpenURL; supply it locally so clicks work.

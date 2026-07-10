@@ -2,13 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { buildObjectDetailModel } from '@modules/object-panel/components/ObjectPanel/Details/objectDetailModel';
+import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoistedRefs = vi.hoisted(() => ({
   detailsTabProps: { current: null as DetailsTabProps | null },

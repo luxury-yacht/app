@@ -7,11 +7,11 @@
  * rather than from useObjectPanel — ObjectPanelLink itself still uses the hook for navigation.
  */
 
-import React from 'react';
-import { endpointslice } from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { endpointslice } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 import '../EndpointsOverview.css';

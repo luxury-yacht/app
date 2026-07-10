@@ -5,7 +5,7 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 export interface DropdownOption {
   value: string;

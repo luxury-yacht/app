@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 // Observes the GridTable wrapper width and reports changes so callers can
 // reconcile column widths to the available space. Supports custom containers

@@ -5,8 +5,8 @@
  * Mirrors the pattern established in clusterTabOrder.ts.
  */
 
-import { eventBus } from '@/core/events';
 import { requestAppState } from '@/core/app-state-access';
+import { eventBus } from '@/core/events';
 
 // ---------- Types ----------
 

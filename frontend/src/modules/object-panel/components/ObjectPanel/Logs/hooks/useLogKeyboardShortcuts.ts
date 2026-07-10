@@ -4,8 +4,9 @@
  * Keyboard shortcuts for the Log Viewer.
  * Extracts shortcut registration from the main component for clarity.
  */
-import { useCallback, type RefObject } from 'react';
-import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
+
+import { useSearchShortcutTarget, useShortcut } from '@ui/shortcuts';
+import { type RefObject, useCallback } from 'react';
 import type { LogViewerAction } from '../logViewerReducer';
 
 interface UseLogKeyboardShortcutsParams {

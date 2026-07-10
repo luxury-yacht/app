@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GenericOverview.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GenericOverview } from './GenericOverview';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({

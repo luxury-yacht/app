@@ -6,11 +6,11 @@ import type {
   WorkloadResourceUsage,
 } from '@/core/refresh/types';
 import type {
-  ResourceMetricValues,
   ResourceMetricsData,
   ResourceMetricsFreshness,
   ResourceMetricsFreshnessInput,
   ResourceMetricsSource,
+  ResourceMetricValues,
   ResourcePodsMetricValues,
 } from './types';
 

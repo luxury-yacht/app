@@ -5,14 +5,13 @@
  * Covers key behaviors and edge cases for NsViewPods.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
 
 const {
   gridTablePropsRef,

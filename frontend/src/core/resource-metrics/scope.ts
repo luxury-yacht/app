@@ -1,11 +1,11 @@
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { KubernetesObjectReference } from '@/types/view-state';
 import {
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
-import { resourceMetricsSourceFromKind } from './valueAdapters';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ResourceMetricsResolution } from './types';
+import { resourceMetricsSourceFromKind } from './valueAdapters';
 
 const workloadMetricKinds = new Set(['deployment', 'daemonset', 'statefulset']);
 

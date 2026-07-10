@@ -5,10 +5,10 @@
  * Handles debouncing, dock positions, and respects user resize operations.
  */
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { getZoomAwareViewport, useZoom } from '@core/contexts/ZoomContext';
+import { type RefObject, useEffect, useRef } from 'react';
+import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getContentBounds } from './dockablePanelLayout';
-import { useZoom, getZoomAwareViewport } from '@core/contexts/ZoomContext';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -77,8 +77,8 @@ export function useWindowBoundsConstraint(
         const currentSize = currentPanelState.size;
         const currentPosition = currentPanelState.floatingPosition;
         let needsUpdate = false;
-        let newSize = { ...currentSize };
-        let newPosition = { ...currentPosition };
+        const newSize = { ...currentSize };
+        const newPosition = { ...currentPosition };
 
         // Use content bounds instead of viewport dimensions.
         const viewport = getZoomAwareViewport(zoomLevelRef.current);

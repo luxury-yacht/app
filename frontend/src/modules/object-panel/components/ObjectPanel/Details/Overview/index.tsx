@@ -5,16 +5,17 @@
  * Kubernetes resource, including workload-specific HPA management detection.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { overviewRegistry } from './registry';
+import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
+import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { normalizeKind, SCALABLE_KINDS } from '@shared/hooks/useObjectActions';
+import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { getOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
-import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
-import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
+import { overviewRegistry } from './registry';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies

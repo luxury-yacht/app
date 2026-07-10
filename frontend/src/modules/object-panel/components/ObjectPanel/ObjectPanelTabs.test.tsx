@@ -2,11 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('ObjectPanelTabs', () => {
   let container: HTMLDivElement;

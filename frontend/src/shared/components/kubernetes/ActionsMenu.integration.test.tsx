@@ -8,8 +8,8 @@
  * missing Port Forward / Delete" regressions.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/core/capabilities/permissionRead', () => ({
@@ -50,10 +50,10 @@ vi.mock('@ui/shortcuts', () => ({
   }),
 }));
 
-import { ActionsMenu } from './ActionsMenu';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { __resetForTests } from '@/core/capabilities/permissionStore';
+import { ActionsMenu } from './ActionsMenu';
 
 const flush = async () => {
   await act(async () => {

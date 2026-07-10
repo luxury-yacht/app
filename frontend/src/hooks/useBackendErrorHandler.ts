@@ -5,12 +5,13 @@
  * Listens for backend error events from Wails runtime and forwards them to the error handler
  * with deduplication to avoid flooding.
  */
-import { useEffect, useRef } from 'react';
+
 import { errorHandler } from '@utils/errorHandler';
+import { useEffect, useRef } from 'react';
 import {
-  isBackendErrorPayload,
-  getBackendErrorMessage,
   getBackendErrorKey,
+  getBackendErrorMessage,
+  isBackendErrorPayload,
 } from '@/types/backend-events';
 
 /**

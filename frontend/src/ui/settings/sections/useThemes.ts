@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
+import { types } from '@wailsjs/go/models';
+import { useCallback, useEffect, useState } from 'react';
 import {
   applyTheme as applyThemeApi,
   deleteTheme as deleteThemeApi,

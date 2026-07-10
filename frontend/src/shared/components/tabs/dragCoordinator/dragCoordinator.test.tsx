@@ -1,15 +1,15 @@
 /**
  * frontend/src/shared/components/tabs/dragCoordinator/dragCoordinator.test.tsx
  */
-import * as React from 'react';
-import ReactDOM from 'react-dom/client';
+import type * as React from 'react';
 import { act, useContext } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TabDragProvider, TabDragContext } from './TabDragProvider';
+import { TabDragContext, TabDragProvider } from './TabDragProvider';
+import { TAB_DRAG_DATA_TYPE } from './types';
 import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
-import { TAB_DRAG_DATA_TYPE } from './types';
 
 describe('TabDragProvider', () => {
   let container: HTMLDivElement;

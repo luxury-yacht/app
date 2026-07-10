@@ -6,11 +6,12 @@
  * Tooltip. Owns the app-info fetch and the `app-update` runtime event (previously
  * embedded in ClusterOverview).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+
 import Tooltip from '@shared/components/Tooltip';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
+import type { backend } from '@wailsjs/go/models';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { backend } from '@wailsjs/go/models';
+import React, { useCallback, useEffect, useState } from 'react';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { toPlainReleaseNotes } from './releaseNotesText';
 import './UpdateStatus.css';
 

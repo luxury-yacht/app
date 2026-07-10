@@ -1,8 +1,7 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts/context';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocusTrap';
 
 const TestModal: React.FC<{
@@ -20,7 +19,7 @@ const TestModal: React.FC<{
   return (
     <div ref={ref} className="modal-container" role="dialog" aria-modal="true" tabIndex={-1}>
       <input aria-label="First input" />
-      <button>Second</button>
+      <button type="button">Second</button>
     </div>
   );
 };

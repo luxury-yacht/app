@@ -9,14 +9,13 @@
  * setTimeout per mounted consumer; no polling (live-age contract).
  */
 
-import { useEffect, useState } from 'react';
-
 import {
   getMetricsBannerInfo,
-  metricsStaleDeadlineMs,
   type MetricsAvailability,
   type MetricsBannerInfo,
+  metricsStaleDeadlineMs,
 } from '@shared/utils/metricsAvailability';
+import { useEffect, useState } from 'react';
 
 // Fire just past the boundary so the recompute's Date.now() is unambiguously
 // at-or-after the deadline.

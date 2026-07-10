@@ -8,12 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
-import { toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { toObjectMapG6Data } from './objectMapG6Data';
 import { computeObjectMapLayout, routeObjectMapEdges } from './objectMapLayout';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
-import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
+import { computeObjectMapSelectionState } from './objectMapSelection';
 
 const EMPTY_SELECTION: ObjectMapSelectionState = {
   activeId: null,

@@ -10,13 +10,12 @@
  *   - non-sortable + hideable
  */
 
+import { ZoomProvider } from '@core/contexts/ZoomContext';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { KeyboardProvider } from '@ui/shortcuts';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 // ---------------------------------------------------------------------------
 // Mocks required by ContextMenu / GridTable internals

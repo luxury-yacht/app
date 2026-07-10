@@ -5,10 +5,11 @@
  * Handles mouse events, updates panel size/position, and manages cursor styles.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getContentBounds } from './dockablePanelLayout';
+
 // Note: clientX/clientY and getBoundingClientRect() are already in CSS coordinates,
 // so no zoom conversion is needed for drag/resize (see ZoomContext docs).
 

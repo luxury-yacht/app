@@ -17,34 +17,35 @@
  * This keeps Browse stable without modifying the shared GridTable component.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import type React from 'react';
+import { useCallback, useMemo } from 'react';
 import './BrowseView.css';
-import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import {
+  type BrowseTableRow,
+  toTableRows,
+  useBrowseColumns,
+} from '@modules/browse/hooks/useBrowseColumns';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
-import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
-import {
-  useBrowseColumns,
-  toTableRows,
-  type BrowseTableRow,
-} from '@modules/browse/hooks/useBrowseColumns';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useShortNames } from '@/hooks/useShortNames';
+import type { BrowseScope, BrowseViewProps } from './BrowseView.types';
 import CatalogPaginationFooter, { catalogPaginationPageKeyProps } from './CatalogPaginationFooter';
 
 const VIRTUALIZATION_THRESHOLD = 80;

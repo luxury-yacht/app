@@ -9,13 +9,13 @@ import { eventBus } from '@/core/events';
 import {
   addFavorite,
   deleteFavorite,
+  type Favorite,
   getFavorites,
   hydrateFavorites,
   resetFavoritesCacheForTesting,
+  setFavoriteOrder,
   subscribeFavorites,
   updateFavorite,
-  setFavoriteOrder,
-  type Favorite,
 } from './favorites';
 
 const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({

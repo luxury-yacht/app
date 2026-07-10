@@ -4,12 +4,10 @@
  * Targeted regression tests for focused-row lookup and activation behavior.
  */
 
-import React, { useRef, useImperativeHandle, forwardRef } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
+import React, { act, forwardRef, useImperativeHandle, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string };
 

@@ -4,8 +4,8 @@
  * Tests object-map directional traversal filtering rules.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 
 const node = (id: string, kind: string, name: string): ObjectMapNode => ({

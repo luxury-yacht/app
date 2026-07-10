@@ -5,17 +5,15 @@
  * Covers key behaviors and edge cases for useGridTableContextMenu.
  */
 
-import React, { forwardRef, useImperativeHandle } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
-  useGridTableContextMenu,
   type GridTableContextMenuState,
+  useGridTableContextMenu,
 } from '@shared/components/tables/hooks/useGridTableContextMenu';
+import React, { act, forwardRef, useImperativeHandle } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -7,29 +7,28 @@
  */
 
 import React, {
+  type HTMLAttributes,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type HTMLAttributes,
 } from 'react';
 import './DiagnosticsPanel.css';
+import {
+  resetGridTablePerformanceDiagnostics,
+  useGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { DockablePanel } from '@ui/dockable';
-import { useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
-import type {
-  RefreshDomain,
-  NodeMetricsInfo,
-  PodSnapshotPayload,
-  ContainerLogsSnapshotPayload,
-  TelemetryStreamStatus,
-} from '../types';
-import { refreshManager } from '../RefreshManager';
-import { resourceStreamManager } from '../streaming/resourceStreamManager';
-import { refreshOrchestrator } from '../orchestrator';
-import { resolveModeDetails } from './diagnostics/modeDetails';
-import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
+import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
+import { useViewState } from '@/core/contexts/ViewStateContext';
+import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
+import { parseClusterScopeList, stripClusterScope } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import {
   fetchKubernetesAPIClientDiagnostics,
   fetchSelectionDiagnostics,
@@ -38,18 +37,20 @@ import {
   type NormalizedTelemetrySummary,
   type SelectionDiagnostics,
 } from '../client';
-import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
-import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
-import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
-import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
-import { useViewState } from '@/core/contexts/ViewStateContext';
-import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
+import { refreshOrchestrator } from '../orchestrator';
+import { refreshManager } from '../RefreshManager';
+import { type DomainSnapshotState, useRefreshScopedDomainEntries, useRefreshState } from '../store';
+import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import type {
+  ContainerLogsSnapshotPayload,
+  NodeMetricsInfo,
+  PodSnapshotPayload,
+  RefreshDomain,
+  TelemetryStreamStatus,
+} from '../types';
 
 // Import from extracted modules
 import {
-  type DiagnosticsRow,
-  type DiagnosticsPanelProps,
   buildBrokerReadRows,
   buildBrokerReadsSummary,
   buildCapabilityBatchRows,
@@ -63,31 +64,30 @@ import {
   buildMetricsSummary,
   buildOrchestratorSummary,
   buildPermissionRows,
+  CLUSTER_SCOPE,
+  type DiagnosticsPanelProps,
+  type DiagnosticsRow,
+  DOMAIN_REFRESHER_MAP,
+  DOMAIN_STREAM_MAP,
   dedupeDiagnosticsRows,
   formatInterval,
   formatLastUpdated,
-  STALE_THRESHOLD_MS,
-  CLUSTER_SCOPE,
-  DOMAIN_REFRESHER_MAP,
-  DOMAIN_STREAM_MAP,
+  getScopedFeaturesForView,
   PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
   PRIORITY_DOMAINS,
+  resolveDomainNamespace,
+  STALE_THRESHOLD_MS,
   STREAM_MODE_BY_NAME,
   STREAM_ONLY_DOMAINS,
-  getScopedFeaturesForView,
-  resolveDomainNamespace,
 } from './diagnostics';
-import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
-import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
-import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
+import { GridTablePerformance } from './diagnostics/GridTablePerformance';
+import { resolveModeDetails } from './diagnostics/modeDetails';
 import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
-import { GridTablePerformance } from './diagnostics/GridTablePerformance';
-import {
-  resetGridTablePerformanceDiagnostics,
-  useGridTablePerformanceDiagnostics,
-} from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
+import { DiagnosticsSummaryCards, DiagnosticsTable } from './diagnostics/TableRefreshDomains';
+import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';

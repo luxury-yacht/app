@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for useKeyboardNavigation.
  */
 
-import React, { useEffect } from 'react';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useKeyboardNavigation } from './useKeyboardNavigation';
 import type { DropdownOption } from '../types';
+import { useKeyboardNavigation } from './useKeyboardNavigation';
 
 type HookConfig = Parameters<typeof useKeyboardNavigation>[0];
 

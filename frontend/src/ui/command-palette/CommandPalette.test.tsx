@@ -5,13 +5,13 @@
  * Covers key behaviors and edge cases for CommandPalette.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogItem } from '@/core/refresh/types';
-import type { Command } from './CommandPaletteCommands';
 import { eventBus } from '@/core/events';
-import { CommandPalette, buildCatalogDisplayEntries, parseQueryTokens } from './CommandPalette';
+import type { CatalogItem } from '@/core/refresh/types';
+import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
+import type { Command } from './CommandPaletteCommands';
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
 

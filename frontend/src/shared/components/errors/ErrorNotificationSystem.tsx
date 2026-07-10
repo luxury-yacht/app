@@ -5,10 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useErrorContext, ErrorNotification } from '@contexts/ErrorContext';
-import { ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { type ErrorNotification, useErrorContext } from '@contexts/ErrorContext';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { type ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatErrorForClipboard } from './formatErrorForClipboard';
 import './ErrorNotificationSystem.css';
 
@@ -89,6 +90,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           </span>
         )}
         <button
+          type="button"
           className={`error-notification-copy${
             copyFeedback === 'copied' ? ' error-notification-copy--copied' : ''
           }${copyFeedback === 'error' ? ' error-notification-copy--error' : ''}`}
@@ -105,6 +107,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           <CopyIcon width={16} height={16} />
         </button>
         <button
+          type="button"
           className="error-notification-dismiss"
           onClick={() => onDismiss(error.id)}
           title="Dismiss"
@@ -141,6 +144,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
       {error.retryable && (
         <div className="error-notification-actions">
           <button
+            type="button"
             className="error-notification-retry"
             onClick={() => {
               if (onRetry && error.context?.retryFn) {
@@ -184,7 +188,7 @@ export const ErrorNotificationSystem: React.FC = () => {
       </div>
 
       <div className="error-notification-header-actions">
-        <button className="dismiss-all-btn" onClick={dismissAllErrors}>
+        <button type="button" className="dismiss-all-btn" onClick={dismissAllErrors}>
           {errors.length > 1 ? `Dismiss All (${errors.length})` : 'Dismiss'}
         </button>
       </div>

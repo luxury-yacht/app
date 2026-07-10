@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useMemo } from 'react';
 import type { ColumnWidthState } from '@shared/components/tables/GridTable.types';
+import { useMemo } from 'react';
 
 export function useGridTableExternalWidths(
   controlledColumnWidths: Record<string, ColumnWidthState> | null

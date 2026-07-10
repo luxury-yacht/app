@@ -7,35 +7,37 @@
  * - Includes error handling and integration with the refresh orchestrator.
  * - Exposes a custom hook `useNamespace` for easy access to the context.
  */
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  ReactNode,
-} from 'react';
-import { formatAge } from '@utils/ageFormatter';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { errorHandler } from '@utils/errorHandler';
-import { queryNamespacePermissions } from '@/core/capabilities';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { eventBus } from '@/core/events';
-import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
-  ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_DETAILS,
+  ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_RESOURCE_VERSION,
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
-import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import { formatAge } from '@utils/ageFormatter';
+import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { queryNamespacePermissions } from '@/core/capabilities';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { eventBus } from '@/core/events';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 
 export interface NamespaceListItem {
   name: string;

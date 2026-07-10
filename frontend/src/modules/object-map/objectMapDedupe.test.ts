@@ -4,8 +4,8 @@
  * Tests duplicate relationship pruning for object-map graph inputs.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { dedupeServiceEdges } from './objectMapDedupe';
 
 const node = (id: string, kind: string, name: string): ObjectMapNode => ({

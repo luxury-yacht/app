@@ -5,10 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import { useZoom } from '@core/contexts/ZoomContext';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type React from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './ContextMenu.css';
 
 export interface ContextMenuItem {

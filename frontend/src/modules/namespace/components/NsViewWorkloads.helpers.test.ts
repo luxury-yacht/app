@@ -5,16 +5,16 @@
  * Covers key behaviors and edge cases for NsViewWorkloads.helpers.
  */
 
-import { describe, expect, it } from 'vitest';
 import {
-  normalizeWorkloadKind,
+  appendWorkloadTokens,
+  buildWorkloadKey,
   clampReplicas,
   extractDesiredReplicas,
-  buildWorkloadKey,
+  normalizeWorkloadKind,
   parseWorkloadKeyValue,
-  appendWorkloadTokens,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import { describe, expect, it } from 'vitest';
 
 describe('NsViewWorkloads helpers', () => {
   it('normalizes workload kinds with canonical casing', () => {

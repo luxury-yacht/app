@@ -94,17 +94,17 @@ function findObjectLiteralsAfter(
     let depth = 0;
     let i = openBrace;
     let inString: '"' | "'" | '`' | null = null;
-    let escape = false;
+    let isEscaped = false;
     let closeBrace = -1;
     for (; i < source.length; i++) {
       const ch = source[i];
-      if (escape) {
-        escape = false;
+      if (isEscaped) {
+        isEscaped = false;
         continue;
       }
       if (inString) {
         if (ch === '\\') {
-          escape = true;
+          isEscaped = true;
           continue;
         }
         if (ch === inString) {

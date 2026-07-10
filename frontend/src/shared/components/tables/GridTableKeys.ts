@@ -5,10 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useCallback } from 'react';
-import type { RefObject } from 'react';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import type { RefObject } from 'react';
+import { useCallback } from 'react';
 
 interface GridTableKeyboardOptions {
   filteringEnabled: boolean;

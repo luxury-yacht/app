@@ -7,17 +7,17 @@
  */
 
 import type { ResourceLink } from '@core/refresh/types';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   canResolveEventObjectReference,
-  resolveEventObjectReference,
   type EventObjectReferenceInput,
+  resolveEventObjectReference,
 } from '@shared/utils/eventObjectIdentity';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 export interface EventGridRowIdentity {
   kind?: string;

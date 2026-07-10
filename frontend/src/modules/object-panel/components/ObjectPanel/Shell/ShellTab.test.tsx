@@ -2,14 +2,13 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ShellTab from './ShellTab';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import { KeyboardProvider } from '@ui/shortcuts/context';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ShellTab from './ShellTab';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),

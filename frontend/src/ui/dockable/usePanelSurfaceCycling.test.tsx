@@ -1,11 +1,11 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
   __resetTopLevelAppRegionTrackingForTests,
   useTopLevelAppRegionTracking,
 } from '@ui/layout/appFocusRegions';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePanelSurfaceCycling } from './usePanelSurfaceCycling';
 
 const dispatchShortcut = (target: HTMLElement, key: string) => {

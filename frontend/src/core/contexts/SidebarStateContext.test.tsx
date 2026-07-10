@@ -4,8 +4,9 @@
  * Test suite for SidebarStateContext.
  * Ensures sidebar selection is scoped per cluster tab.
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';

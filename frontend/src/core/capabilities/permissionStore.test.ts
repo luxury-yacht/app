@@ -16,10 +16,13 @@ vi.mock('@/core/data-access', () => ({
   requestData: (...args: unknown[]) => hoisted.requestData(...args),
 }));
 
+import { eventBus } from '@/core/events';
+import { PERMISSION_FEATURES } from './permissionFeatures';
+import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
 import {
   __resetForTests,
-  getUserPermissionMap,
   getPermissionKey,
+  getUserPermissionMap,
   initializePermissionStore,
   makePermissionStatus,
   queryClusterPermissions,
@@ -28,9 +31,6 @@ import {
   setActivePermissionCluster,
   subscribeUserPermissions,
 } from './permissionStore';
-import { eventBus } from '@/core/events';
-import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
-import { PERMISSION_FEATURES } from './permissionFeatures';
 import type { PermissionEntry } from './permissionTypes';
 
 afterEach(() => {

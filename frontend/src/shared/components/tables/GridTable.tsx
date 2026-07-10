@@ -8,30 +8,31 @@
  * a thin render shell.
  */
 
-import React, { memo } from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import type React from 'react';
+import { memo } from 'react';
 import '@styles/components/gridtables.css';
+import type { GridTableProps } from '@shared/components/tables/GridTable.types';
 import GridTableBody from '@shared/components/tables/GridTableBody';
-import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import GridTableHeader from '@shared/components/tables/GridTableHeader';
 import GridTableInitialLoading from '@shared/components/tables/GridTableInitialLoading';
-import type { GridTableProps } from '@shared/components/tables/GridTable.types';
+import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import { useGridTableController } from '@shared/components/tables/hooks/useGridTableController';
 
-export { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable.types';
 export type {
+  ColumnWidthInput,
+  ColumnWidthState,
   GridColumnDefinition,
+  GridTableDiagnosticsMode,
   GridTableFilterAccessors,
   GridTableFilterConfig,
   GridTableFilterOptions,
   GridTableFilterState,
-  GridTableDiagnosticsMode,
   GridTableProps,
   GridTableVirtualizationOptions,
   InternalFilterOptions,
-  ColumnWidthInput,
-  ColumnWidthState,
 } from '@shared/components/tables/GridTable.types';
+export { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable.types';
 
 const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
   const {

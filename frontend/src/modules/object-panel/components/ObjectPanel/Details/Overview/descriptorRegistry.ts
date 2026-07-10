@@ -7,31 +7,31 @@
  * overviewRegistry/GenericOverview path.
  */
 
-import type { OverviewDescriptor } from './schema';
-import { configMapDescriptor } from './descriptors/configmap';
-import { serviceDescriptor } from './descriptors/service';
-import { secretDescriptor } from './descriptors/secret';
-import { networkPolicyDescriptor } from './descriptors/networkpolicy';
-import { ingressDescriptor } from './descriptors/ingress';
-import { helmReleaseDescriptor } from './descriptors/helm';
-import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 import {
   crdDescriptor,
   ingressClassDescriptor,
-  namespaceDescriptor,
   mutatingWebhookDescriptor,
+  namespaceDescriptor,
   validatingWebhookDescriptor,
 } from './descriptors/clusterresource';
-import { podDescriptor } from './descriptors/pod';
+import { configMapDescriptor } from './descriptors/configmap';
 import { endpointSliceDescriptor } from './descriptors/endpointslice';
-import { nodeDescriptor } from './descriptors/node';
 import {
-  serviceAccountDescriptor,
-  roleDescriptor,
-  roleBindingDescriptor,
-  clusterRoleDescriptor,
-  clusterRoleBindingDescriptor,
-} from './descriptors/rbac';
+  backendTLSPolicyDescriptor,
+  gatewayClassDescriptor,
+  gatewayDescriptor,
+  grpcRouteDescriptor,
+  httpRouteDescriptor,
+  listenerSetDescriptor,
+  referenceGrantDescriptor,
+  tlsRouteDescriptor,
+} from './descriptors/gateway';
+import { helmReleaseDescriptor } from './descriptors/helm';
+import { ingressDescriptor } from './descriptors/ingress';
+import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
+import { networkPolicyDescriptor } from './descriptors/networkpolicy';
+import { nodeDescriptor } from './descriptors/node';
+import { podDescriptor } from './descriptors/pod';
 import {
   hpaDescriptor,
   limitRangeDescriptor,
@@ -39,22 +39,22 @@ import {
   resourceQuotaDescriptor,
 } from './descriptors/policy';
 import {
-  deploymentDescriptor,
-  daemonSetDescriptor,
-  statefulSetDescriptor,
-  replicaSetDescriptor,
-} from './descriptors/workload';
-import { jobDescriptor, cronJobDescriptor } from './descriptors/job';
+  clusterRoleBindingDescriptor,
+  clusterRoleDescriptor,
+  roleBindingDescriptor,
+  roleDescriptor,
+  serviceAccountDescriptor,
+} from './descriptors/rbac';
+import { secretDescriptor } from './descriptors/secret';
+import { serviceDescriptor } from './descriptors/service';
+import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 import {
-  gatewayDescriptor,
-  gatewayClassDescriptor,
-  listenerSetDescriptor,
-  httpRouteDescriptor,
-  grpcRouteDescriptor,
-  tlsRouteDescriptor,
-  referenceGrantDescriptor,
-  backendTLSPolicyDescriptor,
-} from './descriptors/gateway';
+  daemonSetDescriptor,
+  deploymentDescriptor,
+  replicaSetDescriptor,
+  statefulSetDescriptor,
+} from './descriptors/workload';
+import type { OverviewDescriptor } from './schema';
 
 interface Registration {
   kinds: string[];

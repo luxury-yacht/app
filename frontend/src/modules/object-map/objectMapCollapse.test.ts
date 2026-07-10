@@ -4,8 +4,8 @@
  * Tests ReplicaSet collapse grouping and expansion behavior for object maps.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 
 const node = (id: string, kind: string, name: string): ObjectMapNode => ({

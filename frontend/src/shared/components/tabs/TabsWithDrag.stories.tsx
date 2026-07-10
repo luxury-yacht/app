@@ -22,13 +22,12 @@
  * but fully compliant with the rules of hooks.
  */
 
-import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-
-import { Tabs, type TabDescriptor } from './Tabs';
-import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
-import type { TabDragPayload } from './dragCoordinator';
+import { useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import type { TabDragPayload } from './dragCoordinator';
+import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
+import { type TabDescriptor, Tabs } from './Tabs';
 import './stories.css';
 
 // Lightweight action logger — mirrors Tabs.stories.tsx since the project

@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for search.
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const viewMocks = vi.hoisted(() => ({
   keymapOf: vi.fn((bindings: unknown) => bindings),

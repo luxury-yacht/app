@@ -9,32 +9,9 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import Tooltip from '@shared/components/Tooltip';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
-import type { EdgeKindMeta } from './objectMapEdgeStyle';
-import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
-import type { ObjectMapViewportControls } from './objectMapRendererTypes';
-import { useObjectMapModel } from './useObjectMapModel';
-import {
-  createObjectMapDebugId,
-  publishObjectMapDebugSnapshot,
-  removeObjectMapDebugSnapshot,
-  useObjectMapDebugOverlayVisible,
-} from './objectMapDebugStore';
-import {
-  deriveObjectMapVisibleState,
-  pruneObjectMapEnabledEdgeTypes,
-  pruneObjectMapSelectedKinds,
-} from './objectMapVisibleState';
-import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
-import { normalizeObjectMapPayload } from './objectMapPayload';
-import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
   AutoFitIcon,
   FitToViewIcon,
@@ -45,6 +22,31 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '@shared/components/icons/ObjectMapIcons';
+import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import Tooltip from '@shared/components/Tooltip';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { useShortNames } from '@/hooks/useShortNames';
+import {
+  createObjectMapDebugId,
+  publishObjectMapDebugSnapshot,
+  removeObjectMapDebugSnapshot,
+  useObjectMapDebugOverlayVisible,
+} from './objectMapDebugStore';
+import type { EdgeKindMeta } from './objectMapEdgeStyle';
+import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
+import { normalizeObjectMapPayload } from './objectMapPayload';
+import type {
+  ObjectMapContextMenuRequest,
+  ObjectMapViewportControls,
+} from './objectMapRendererTypes';
+import {
+  deriveObjectMapVisibleState,
+  pruneObjectMapEnabledEdgeTypes,
+  pruneObjectMapSelectedKinds,
+} from './objectMapVisibleState';
+import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
+import { useObjectMapModel } from './useObjectMapModel';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 

@@ -4,10 +4,10 @@
  * Shared render helpers reused across Overview descriptors.
  */
 
-import React from 'react';
-import { resourcemodel } from '@wailsjs/go/models';
-import { StatusChip } from '@shared/components/StatusChip';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip } from '@shared/components/StatusChip';
+import type { resourcemodel } from '@wailsjs/go/models';
+import type React from 'react';
 
 /**
  * Renders a "Used By" value: a "Not in use" chip when empty, else a list of links to the

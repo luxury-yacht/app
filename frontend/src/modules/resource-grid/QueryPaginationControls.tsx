@@ -4,10 +4,11 @@
  * Shared cursor pagination controls for query-backed resource tables.
  */
 
-import React, { useMemo } from 'react';
+import type React from 'react';
+import { useMemo } from 'react';
 import './QueryPaginationControls.css';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 
 interface QueryPaginationControlsProps {
   idPrefix: string;

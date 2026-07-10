@@ -6,8 +6,9 @@
  * permissions renders this notice in the same place and style, so the reasons
  * read consistently, draw attention, and never truncate.
  */
-import React from 'react';
+
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
 
 export interface OverviewRestriction {
   /** Stable key for list rendering. */

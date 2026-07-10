@@ -1,8 +1,8 @@
-import ReactDOM from 'react-dom/client';
+import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import CatalogPaginationFooter from './CatalogPaginationFooter';
-import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 
 const pagination = (overrides: Partial<BrowseCatalogPagination> = {}): BrowseCatalogPagination => ({
   pageIndex: 1,

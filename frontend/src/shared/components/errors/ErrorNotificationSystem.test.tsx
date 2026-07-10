@@ -5,12 +5,11 @@
  * Covers the "Copy error" button wiring on error notifications.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import type { ErrorNotification } from '@contexts/ErrorContext';
+import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorsRef: { current: ErrorNotification[] } = { current: [] };
 

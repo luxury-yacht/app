@@ -4,12 +4,11 @@
  * Test suite for DisplaySection.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import DisplaySection from './DisplaySection';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import DisplaySection from './DisplaySection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
   hydrateAppPreferences: vi.fn(),

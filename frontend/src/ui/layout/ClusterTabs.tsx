@@ -3,15 +3,7 @@
  *
  * Cluster tab strip for multi-cluster navigation.
  */
-import React, {
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  type HTMLAttributes,
-} from 'react';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
@@ -19,9 +11,18 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import React, {
+  type HTMLAttributes,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>

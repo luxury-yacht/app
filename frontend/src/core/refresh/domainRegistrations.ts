@@ -1,7 +1,7 @@
 import { getRefreshDomainDescriptor } from './domainRegistry';
+import type { RefreshDomainRegistrar, StreamingRegistration } from './refreshRegistration';
 import { containerLogsStreamManager } from './streaming/containerLogsStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
-import type { RefreshDomainRegistrar, StreamingRegistration } from './refreshRegistration';
 import type { RefreshDomain } from './types';
 
 // Helper for the common resource-stream domain pattern. Registry metadata

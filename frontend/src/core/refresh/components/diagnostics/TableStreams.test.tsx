@@ -1,9 +1,8 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
-
-import { DiagnosticsStreamsTable } from './TableStreams';
 import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
+import { DiagnosticsStreamsTable } from './TableStreams';
 
 describe('DiagnosticsStreamsTable', () => {
   it('only colours an actual Last Error (warning class); the "—" placeholder stays plain', async () => {

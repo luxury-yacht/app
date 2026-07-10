@@ -6,33 +6,33 @@
  */
 
 import './ClusterViewCustom.css';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useCallback } from 'react';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import CatalogPaginationFooter, {
   catalogPaginationPageKeyProps,
 } from '@modules/browse/components/CatalogPaginationFooter';
-import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
-import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
+  type CatalogBackedCustomResourceRow,
   customCatalogCRDReference,
   customCatalogObjectReference,
   customCatalogRowKey,
-  type CatalogBackedCustomResourceRow,
 } from '@modules/browse/hooks/customCatalogRowAdapter';
+import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import React, { useCallback, useMemo } from 'react';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Define the data structure for cluster custom resources
 type ClusterCustomData = CatalogBackedCustomResourceRow;

@@ -5,16 +5,16 @@
  * Covers key behaviors and edge cases for CommandPaletteCommands.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useCommandPaletteCommands, type Command } from './CommandPaletteCommands';
-import type { types } from '@wailsjs/go/models';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
+import type { types } from '@wailsjs/go/models';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {

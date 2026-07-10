@@ -5,12 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
-import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import type React from 'react';
 
 interface ResourceHeaderProps {
   kind: string;

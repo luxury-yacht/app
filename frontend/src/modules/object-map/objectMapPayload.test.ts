@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { normalizeObjectMapPayload } from './objectMapPayload';
 
 describe('normalizeObjectMapPayload', () => {

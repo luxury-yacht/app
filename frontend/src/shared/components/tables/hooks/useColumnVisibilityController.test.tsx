@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useColumnVisibilityController.
  */
 
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

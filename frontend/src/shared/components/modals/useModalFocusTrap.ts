@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-import { getTabbableElements } from './getTabbableElements';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type { KeyboardSurfaceKeyResult } from '@ui/shortcuts/context';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { getTabbableElements } from './getTabbableElements';
 
 interface UseModalFocusTrapOptions {
   ref: RefObject<HTMLElement | null>;

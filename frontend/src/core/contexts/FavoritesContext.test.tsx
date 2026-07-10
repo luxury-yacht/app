@@ -4,9 +4,9 @@
  * Test suite for FavoritesContext.
  * Validates provider hydration, hook guard, and currentFavoriteMatch logic.
  */
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 

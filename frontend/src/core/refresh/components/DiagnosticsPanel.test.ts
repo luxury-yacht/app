@@ -5,23 +5,22 @@
  * Covers key behaviors and edge cases for DiagnosticsPanel.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, expect, test, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts';
-import type { ViewType } from '@/types/navigation/views';
-import type { KubernetesAPIClientDiagnostics } from '../client';
-import type { TelemetrySummary } from '../types';
-import { makeTelemetrySummary } from '../refreshContractTestBuilders';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { PERMISSION_FEATURES } from '@/core/capabilities';
 import type {
   PermissionQueryDiagnostics,
   PermissionStatus,
 } from '@/core/capabilities/permissionTypes';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { ViewType } from '@/types/navigation/views';
+import type { KubernetesAPIClientDiagnostics } from '../client';
+import { makeTelemetrySummary } from '../refreshContractTestBuilders';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { PERMISSION_FEATURES } from '@/core/capabilities';
+import type { TelemetrySummary } from '../types';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {

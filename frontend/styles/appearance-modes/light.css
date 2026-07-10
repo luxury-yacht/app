@@ -150,7 +150,7 @@
   --code-token-comment: var(--color-base-400);
   --code-token-punctuation: var(--color-base-400);
   --code-token-property: #2563eb;
-  --code-token-tag: #326ce5.;
+  --code-token-tag: #326ce5;
   --code-token-operator: var(--color-base-600);
   --code-token-invalid: rgba(220, 53, 69, 0.6);
 

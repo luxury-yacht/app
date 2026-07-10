@@ -5,12 +5,11 @@
  * Covers loading, error, empty, auto-select, and title rendering behaviors.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import RollbackModal from './RollbackModal';
 import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import RollbackModal from './RollbackModal';
 
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({

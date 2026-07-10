@@ -7,15 +7,15 @@
  * overview's Resource Usage block.
  */
 
-import React from 'react';
-import ResourceBar from '@shared/components/ResourceBar';
 import ResourceBarErrorBoundary from '@shared/components/errors/ResourceBarErrorBoundary';
+import ResourceBar from '@shared/components/ResourceBar';
 import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
   formatCpuValue,
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
+import type React from 'react';
 import '../shared.css';
 import './DetailsTabUtilization.css';
 

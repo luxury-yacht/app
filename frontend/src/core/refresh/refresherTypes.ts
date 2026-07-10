@@ -102,4 +102,4 @@ export const clusterViewToRefresher: Record<ClusterViewType, ClusterRefresherNam
   browse: CLUSTER_REFRESHERS.browse,
 };
 
-export { NAMESPACE_REFRESHERS, CLUSTER_REFRESHERS, SYSTEM_REFRESHERS };
+export { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS };

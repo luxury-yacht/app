@@ -6,9 +6,9 @@
  * save-disabled-when-unchanged, and view dropdown scope changes.
  */
 
-import ReactDOM from 'react-dom/client';
-import React from 'react';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 
@@ -137,10 +137,10 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
     if (!props.isOpen) return null;
     return (
       <div data-testid="confirmation-modal">
-        <button data-testid="confirm-delete" onClick={props.onConfirm}>
+        <button type="button" data-testid="confirm-delete" onClick={props.onConfirm}>
           {props.confirmText}
         </button>
-        <button data-testid="cancel-delete" onClick={props.onCancel}>
+        <button type="button" data-testid="cancel-delete" onClick={props.onCancel}>
           {props.cancelText}
         </button>
       </div>
@@ -157,9 +157,9 @@ vi.mock('react-dom', async (importOriginal) => {
   };
 });
 
+import type { FavSaveModalProps } from './FavSaveModal';
 // Import after all mocks are established.
 import FavSaveModal from './FavSaveModal';
-import type { FavSaveModalProps } from './FavSaveModal';
 
 // ---------------------------------------------------------------------------
 // Test helpers

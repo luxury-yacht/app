@@ -1,0 +1,13 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+  `fetch($...)`,
+  `$receiver.fetch($...)`
+} as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Use the refresh orchestrator client instead of direct fetch calls.",
+    severity = "error"
+  )
+}

@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useColumnResizeController.
  */
 
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
 import React, { act, forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

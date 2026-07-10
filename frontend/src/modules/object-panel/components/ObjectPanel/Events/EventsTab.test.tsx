@@ -5,8 +5,8 @@
  * openRelatedObject, preferring it over the parent panel's cluster.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 
@@ -110,7 +110,7 @@ vi.mock('@shared/components/tables/GridTable', () => ({
     return (
       <div data-testid="grid-table">
         {data.map((item: any, i: number) => (
-          <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
+          <button type="button" key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
         ))}
       </div>
     );

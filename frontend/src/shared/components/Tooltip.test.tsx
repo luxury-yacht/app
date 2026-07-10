@@ -5,10 +5,9 @@
  * Covers trigger modes, placement, delay, variants, disabled state, and portal rendering.
  */
 
-import React from 'react';
-import ReactDOMClient from 'react-dom/client';
+import React, { act } from 'react';
 import * as ReactDOM from 'react-dom';
-import { act } from 'react';
+import ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock createPortal so tooltip content renders inline for assertions
@@ -107,7 +106,11 @@ describe('Tooltip', () => {
   it('renders children as the trigger element', async () => {
     const { container, cleanup } = await renderTooltip({
       content: 'Tip',
-      children: <button data-testid="btn">Hover me</button>,
+      children: (
+        <button type="button" data-testid="btn">
+          Hover me
+        </button>
+      ),
     });
 
     const trigger = container.querySelector('.tooltip-trigger');

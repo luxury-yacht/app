@@ -10,16 +10,16 @@
  * Unmeasured rows fall back to estimateRowHeight.
  */
 
+import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
 import {
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type RefObject,
 } from 'react';
-import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
 
 // Drives row virtualization: determines visible window, manages scroll offsets,
 // and coordinates hover/header sync during virtual scroll.

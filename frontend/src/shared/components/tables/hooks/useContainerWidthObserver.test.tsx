@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for useContainerWidthObserver.
  */
 
-import React, { act, useEffect, useRef } from 'react';
+import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
+import type React from 'react';
+import { act, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

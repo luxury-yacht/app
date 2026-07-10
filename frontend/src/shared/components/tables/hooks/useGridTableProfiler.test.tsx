@@ -5,11 +5,10 @@
  * Covers key behaviors and edge cases for useGridTableProfiler.
  */
 
-import React, { Profiler, act, useImperativeHandle } from 'react';
+import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
+import React, { act, Profiler, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 
 const startMock = vi.fn();
 const stopMock = vi.fn();

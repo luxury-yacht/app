@@ -1,5 +1,5 @@
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { IconDebugOverlay } from './IconDebugOverlay';

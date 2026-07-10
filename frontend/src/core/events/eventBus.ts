@@ -8,10 +8,10 @@
  * Includes error handling in event callbacks to prevent crashes.
  */
 
-import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
-import type { RefresherState } from '@/core/refresh/RefreshManager';
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
+import type { RefresherState } from '@/core/refresh/RefreshManager';
 
 type ResourceStreamDomain =
   | 'pods'

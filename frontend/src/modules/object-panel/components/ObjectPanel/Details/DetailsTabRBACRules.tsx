@@ -10,8 +10,8 @@
  * own top-level section.
  */
 
-import React from 'react';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import React from 'react';
 import '../shared.css';
 import './DetailsTabRBACRules.css';
 

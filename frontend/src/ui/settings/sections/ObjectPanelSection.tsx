@@ -5,25 +5,25 @@
  * detail panel.
  */
 
-import { useState, useMemo, type FC } from 'react';
 import {
+  type AppPreferenceKey,
   getDefaultObjectPanelPosition,
   getIntegerPreferenceMetadata,
-  setDefaultObjectPanelPosition,
   getObjectPanelLayoutDefaults,
   normalizeIntegerPreferenceValue,
-  setObjectPanelLayoutDefaults,
-  type AppPreferenceKey,
-  type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
+  type ObjectPanelPosition,
+  setDefaultObjectPanelPosition,
+  setObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
-import { useDockablePanelContext } from '@ui/dockable';
-import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
 import {
   DockBottomIcon,
   DockRightIcon,
   FloatPanelIcon,
 } from '@shared/components/icons/DockableIcons';
+import { useDockablePanelContext } from '@ui/dockable';
+import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
+import { type FC, useMemo, useState } from 'react';
 
 const objectPanelPositionOptions = [
   { value: 'right', label: 'Right', icon: DockRightIcon },

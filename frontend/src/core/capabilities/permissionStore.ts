@@ -8,29 +8,29 @@
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
-import type {
-  PermissionEntry,
-  PermissionKey,
-  PermissionMap,
-  PermissionSpec,
-  PermissionStatus,
-  PermissionQueryDiagnostics,
-} from './permissionTypes';
 import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
+import {
+  type QueryPayloadItem,
+  type QueryResponseResult,
+  queryPermissions,
+} from './permissionRead';
 import {
   ALL_NAMESPACE_PERMISSIONS,
   CLUSTER_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
+import type {
+  PermissionEntry,
+  PermissionKey,
+  PermissionMap,
+  PermissionQueryDiagnostics,
+  PermissionSpec,
+  PermissionStatus,
+} from './permissionTypes';
 import {
   getPermissionResultErrorMessage,
   isTransientPermissionResultError,
 } from './transientPermissionErrors';
-import {
-  queryPermissions,
-  type QueryPayloadItem,
-  type QueryResponseResult,
-} from './permissionRead';
 
 /**
  * Resolve GVK for a permission lookup. When the caller supplied explicit

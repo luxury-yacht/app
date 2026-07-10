@@ -4,10 +4,10 @@
  * Tests for Appearance settings interactions and preference workflow wiring.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { types } from '@wailsjs/go/models';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppearanceSection from './AppearanceSection';
 
 const setInputValue = (input: HTMLInputElement, value: string): void => {

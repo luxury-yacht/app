@@ -7,41 +7,41 @@
  * table. The query is gated to the active pods tab.
  */
 
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useViewState } from '@core/contexts/ViewStateContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
   applyColumnSizing,
+  type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
   createResourceBarColumn,
   createTextColumn,
   upsertNamespaceColumn,
-  type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
-import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
-import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
-import { useViewState } from '@core/contexts/ViewStateContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
+  type PermissionSpecList,
   POD_PERMISSIONS,
   queryNamespacesPermissions,
-  type PermissionSpecList,
 } from '@/core/capabilities';
+import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
+import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
 import '../shared.css';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
 interface PodsTabProps {

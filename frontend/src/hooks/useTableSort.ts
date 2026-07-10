@@ -5,8 +5,9 @@
  * Provides sorting functionality for tables, including special handling for age and timestamp columns.
  * Supports both controlled and uncontrolled sorting states.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -34,6 +35,37 @@ const getNow = (): number =>
     : Date.now();
 
 const areSortValuesEqual = (a: unknown, b: unknown): boolean => Object.is(a, b);
+
+// Parse Kubernetes-style age strings into seconds for sorting.
+const parseAge = (ageStr: string): number => {
+  if (!ageStr || ageStr === '-') return 0;
+
+  const units: Record<string, number> = {
+    y: 365 * 86400,
+    mo: 30 * 86400,
+    d: 86400,
+    h: 3600,
+    m: 60,
+    s: 1,
+  };
+
+  let totalSeconds = 0;
+  const matches = ageStr.match(/(\d+)(y|mo|d|h|m|s)/g);
+
+  if (matches) {
+    for (const match of matches) {
+      const matchResult = match.match(/(\d+)(y|mo|d|h|m|s)/);
+      if (matchResult) {
+        const [, num, unit] = matchResult;
+        if (num && unit && units[unit]) {
+          totalSeconds += Number.parseInt(num, 10) * units[unit];
+        }
+      }
+    }
+  }
+
+  return totalSeconds;
+};
 
 interface SortCacheEntry<T> {
   key: string;
@@ -91,41 +123,6 @@ export function useTableSort<T>(
     setSortConfig((prevConfig) => computeNext(prevConfig));
   };
 
-  // Helper function to parse age strings to seconds for sorting
-  const parseAge = (ageStr: string): number => {
-    if (!ageStr || ageStr === '-') return 0;
-
-    // Parse age strings like "2y", "3mo", "2d", "5h", "30m", "45s", "2d5h", etc.
-    // Note: Kubernetes uses 'y' for years, 'mo' for months, 'd' for days, 'h' for hours, 'm' for minutes, 's' for seconds
-    const units: Record<string, number> = {
-      y: 365 * 86400, // years (approximate: 365 days)
-      mo: 30 * 86400, // months (approximate: 30 days)
-      d: 86400, // days
-      h: 3600, // hours
-      m: 60, // minutes
-      s: 1, // seconds
-    };
-
-    let totalSeconds = 0;
-
-    // Updated regex to handle 'mo' for months and 'y' for years
-    const matches = ageStr.match(/(\d+)(y|mo|d|h|m|s)/g);
-
-    if (matches) {
-      matches.forEach((match) => {
-        const matchResult = match.match(/(\d+)(y|mo|d|h|m|s)/);
-        if (matchResult) {
-          const [, num, unit] = matchResult;
-          if (num && unit && units[unit]) {
-            totalSeconds += parseInt(num) * units[unit];
-          }
-        }
-      });
-    }
-
-    return totalSeconds;
-  };
-
   // Build a lookup from column key → sortValue extractor. When a column
   // defines sortValue, that function is used instead of row[key].
   const sortValueExtractors = useMemo(() => {
@@ -139,7 +136,6 @@ export function useTableSort<T>(
     return Object.keys(map).length > 0 ? map : null;
   }, [columns]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: parseAge is a module-level pure function with stable identity
   const sortedData = useMemo(() => {
     const startedAt = getNow();
 

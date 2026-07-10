@@ -6,10 +6,11 @@
  * hover tooltip. The shared Tooltip is mocked to expose its `content` so the
  * test asserts THIS component's wiring, not Tooltip's hover/portal internals.
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ReactNode } from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { readAppInfoMock, browserOpenURLMock } = vi.hoisted(() => ({
   readAppInfoMock: vi.fn(),

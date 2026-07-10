@@ -5,18 +5,19 @@
  * Covers key behaviors and edge cases for useGridTablePersistence.integration.
  */
 
-import React, { act, useEffect } from 'react';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { useGridTablePersistence } from './useGridTablePersistence';
-import { clearAllGridTableState } from './gridTablePersistenceReset';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import {
   getGridTablePersistenceSnapshot,
   resetGridTablePersistenceCacheForTesting,
 } from './gridTablePersistence';
+import { clearAllGridTableState } from './gridTablePersistenceReset';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { useGridTablePersistence } from './useGridTablePersistence';
 
 type Row = { id: string };
 

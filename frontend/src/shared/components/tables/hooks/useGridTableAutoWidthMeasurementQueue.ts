@@ -5,12 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // Auto-width measurement queue for GridTable.
 // - When a column is marked autoWidth, we keep an eye on its rendered text/content.

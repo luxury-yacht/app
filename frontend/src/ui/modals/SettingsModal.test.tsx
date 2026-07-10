@@ -4,12 +4,11 @@
  * Test suite for SettingsModal — tabbed shell behavior + section switching.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import SettingsModal from './SettingsModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

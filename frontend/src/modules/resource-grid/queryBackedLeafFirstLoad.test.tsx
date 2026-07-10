@@ -1,8 +1,7 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { gridTablePropsRef, persistedSortRef, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
@@ -220,6 +219,12 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
   WarningTriangleIcon: () => <span>warning</span>,
 }));
 
+import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
+import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
+import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
+import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
@@ -230,12 +235,6 @@ import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
-import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
-import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
-import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
-import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
-import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 
 const typedQueryPayload = (data: Record<string, unknown>) => ({
   status: 'executed',

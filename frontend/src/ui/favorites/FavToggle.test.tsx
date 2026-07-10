@@ -5,9 +5,9 @@
  * Covers: outline/filled heart states, popover choices for add/update/remove.
  */
 
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 
@@ -107,6 +107,7 @@ vi.mock('./FavSaveModal', () => ({
     return (
       <div data-testid="fav-save-modal">
         <button
+          type="button"
           data-testid="modal-save"
           onClick={() => {
             onSave({
@@ -125,11 +126,12 @@ vi.mock('./FavSaveModal', () => ({
         >
           Save
         </button>
-        <button data-testid="modal-cancel" onClick={onClose}>
+        <button type="button" data-testid="modal-cancel" onClick={onClose}>
           Cancel
         </button>
         {existingFavorite && (
           <button
+            type="button"
             data-testid="modal-delete"
             onClick={() => {
               onDelete(existingFavorite.id);

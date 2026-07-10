@@ -1,10 +1,9 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
-
-import { CapabilityChecksTable } from './TableCapabilitesChecks';
-import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
+import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+import { CapabilityChecksTable } from './TableCapabilitesChecks';
 
 const setSearchValue = (input: HTMLInputElement, value: string): void => {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;

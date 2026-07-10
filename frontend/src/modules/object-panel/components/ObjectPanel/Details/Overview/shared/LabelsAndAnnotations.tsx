@@ -2,8 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.tsx
  */
 
-import React, { useState } from 'react';
 import { StatusChip } from '@shared/components/StatusChip';
+import type React from 'react';
+import { useState } from 'react';
 import './LabelsAndAnnotations.css';
 
 interface LabelsAndAnnotationsProps {
@@ -52,7 +53,7 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
 
             let displayValue = value;
             if (shouldTruncate) {
-              displayValue = value.substring(0, TRUNCATE_LENGTH) + '... (click to expand)';
+              displayValue = `${value.substring(0, TRUNCATE_LENGTH)}... (click to expand)`;
             }
 
             const isSelector =

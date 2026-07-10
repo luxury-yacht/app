@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, KeyboardEvent } from 'react';
-import { DropdownOption } from '../types';
+import { type KeyboardEvent, useCallback } from 'react';
+import type { DropdownOption } from '../types';
 
 interface UseKeyboardNavigationProps {
   options: DropdownOption[];

@@ -24,12 +24,16 @@ func TestRefreshTypeScriptContractHasSingleFormattingOwner(t *testing.T) {
 	require.NoError(t, err)
 
 	var biomeConfig struct {
-		Files struct {
+		Formatter struct {
 			Includes []string `json:"includes"`
-		} `json:"files"`
+		} `json:"formatter"`
+		Linter struct {
+			Includes []string `json:"includes"`
+		} `json:"linter"`
 	}
 	require.NoError(t, json.Unmarshal(biomeConfigJSON, &biomeConfig))
-	require.Contains(t, biomeConfig.Files.Includes, "!!src/core/refresh/types.generated.ts")
+	require.Contains(t, biomeConfig.Formatter.Includes, "!src/core/refresh/types.generated.ts")
+	require.Contains(t, biomeConfig.Linter.Includes, "!src/core/refresh/types.generated.ts")
 
 	gitAttributes, err := os.ReadFile("../.gitattributes")
 	require.NoError(t, err)

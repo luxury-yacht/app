@@ -1,18 +1,17 @@
-import { useCallback, useLayoutEffect } from 'react';
-import type React from 'react';
-import type { ReactNode, RefObject } from 'react';
-
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/useGridTableContextMenuWiring';
+import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
+import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
 import type {
   HoverState,
   UpdateHoverOptions,
 } from '@shared/components/tables/hooks/useGridTableHoverSync';
-import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
-import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
-import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/useGridTableContextMenuWiring';
-import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
+import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import type React from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { useCallback, useLayoutEffect } from 'react';
 
 const GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR = '[data-gridtable-shortcut-optout="true"]';
 const GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR = '[data-gridtable-rowclick="suppress"]';

@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableRowRenderer.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };

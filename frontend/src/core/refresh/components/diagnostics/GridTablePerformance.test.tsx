@@ -1,15 +1,14 @@
+import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-
 import {
-  GridTablePerformance,
   buildDominantTimingMetric,
   buildTablePerformanceOverview,
   buildTablePerformanceSignals,
+  GridTablePerformance,
 } from './GridTablePerformance';
-import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 
 const createTimingStats = (samples = 0, averageMs = 0, maxMs = 0, latestMs = 0) => ({
   samples,

@@ -5,13 +5,14 @@
  * Verifies that sort, visibility, and filters are scoped per cluster.
  */
 
-import React, { act, useEffect } from 'react';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGridTablePersistence } from './useGridTablePersistence';
-import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
+import { useGridTablePersistence } from './useGridTablePersistence';
 
 const stateMap: Record<string, any> = {};
 

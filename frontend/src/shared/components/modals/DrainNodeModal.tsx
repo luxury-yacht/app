@@ -7,27 +7,27 @@
  * runs — users reattach via the drain icon next to the node's status.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ModalSurface from './ModalSurface';
-import ModalHeader from './ModalHeader';
-import { useModalFocusTrap } from './useModalFocusTrap';
-import Tooltip from '@shared/components/Tooltip';
-import { DrainIcon } from '@shared/components/icons/SharedIcons';
-import { CancelDrainNodeJob } from '@wailsjs/go/backend/App';
 import { buildObjectActionTarget, runStartDrain } from '@shared/actions/objectActionClient';
-import { types } from '@wailsjs/go/models';
-import { errorHandler } from '@/utils/errorHandler';
+import { DrainProgressCard } from '@shared/components/drain/DrainProgressCard';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
+import Tooltip from '@shared/components/Tooltip';
+import {
+  type NodeDrainOperationPermissions,
+  resolveDrainStartPermissionStatus,
+} from '@shared/hooks/nodeActionPermissions';
+import type { types } from '@wailsjs/go/models';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CancelDrainNodeJob } from '@/core/backend-api';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
-import { DrainProgressCard } from '@shared/components/drain/DrainProgressCard';
-import {
-  resolveDrainStartPermissionStatus,
-  type NodeDrainOperationPermissions,
-} from '@shared/hooks/nodeActionPermissions';
+import { errorHandler } from '@/utils/errorHandler';
+import ModalHeader from './ModalHeader';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './DrainNodeModal.css';
 
 const NODE_SCOPE_PREFIX = 'node:';

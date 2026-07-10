@@ -5,17 +5,17 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './AboutModal.css';
-import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { backend } from '@wailsjs/go/models';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import ModalHeader from '@shared/components/modals/ModalHeader';
+import logo from '@assets/luxury-yacht-logo.png';
 import { InfoIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import type { backend } from '@wailsjs/go/models';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 
 interface AboutModalProps {
   isOpen: boolean;

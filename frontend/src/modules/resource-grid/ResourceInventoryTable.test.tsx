@@ -6,8 +6,8 @@
  * table (which is indistinguishable from a healthy empty result).
  */
 import type React from 'react';
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gridTablePropsRef: { current: any } = { current: null };
@@ -33,8 +33,8 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 
 import ResourceInventoryTable from './ResourceInventoryTable';
 import {
-  resetResourceInventoryRowCache,
   type ResourceInventorySourceState,
+  resetResourceInventoryRowCache,
 } from './useResourceInventoryTable';
 
 interface Row {

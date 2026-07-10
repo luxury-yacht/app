@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { DropdownOption } from '../types';
+import type { DropdownOption } from '../types';
 
 interface UseAriaAnnouncementsProps {
   value: string | string[];

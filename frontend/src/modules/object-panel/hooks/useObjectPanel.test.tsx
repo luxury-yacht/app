@@ -4,14 +4,14 @@
  * Covers key behaviors for the multi-tab object panel system.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ObjectPanelStateProvider,
   objectPanelId,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();

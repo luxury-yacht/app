@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import ModalHeader from '@shared/components/modals/ModalHeader';
-import { LogsIcon } from '@shared/components/icons/SharedIcons';
 import ObjPanelLogsSettings from '@modules/object-panel/components/ObjectPanel/Logs/ObjPanelLogsSettings';
+import { LogsIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './ObjPanelLogsSettingsModal.css';
 
 interface ObjPanelLogsSettingsModalProps {

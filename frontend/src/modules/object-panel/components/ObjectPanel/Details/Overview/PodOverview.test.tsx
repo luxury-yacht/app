@@ -4,12 +4,12 @@
  * Exercises the Pod Overview through the descriptor-driven renderer (X1).
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { types } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { podDescriptor } from './descriptors/pod';
+import { OverviewRenderer } from './OverviewRenderer';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';

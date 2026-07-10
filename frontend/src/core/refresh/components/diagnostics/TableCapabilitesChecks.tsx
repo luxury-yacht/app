@@ -5,9 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
+import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];

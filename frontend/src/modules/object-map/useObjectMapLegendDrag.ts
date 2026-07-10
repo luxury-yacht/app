@@ -4,8 +4,8 @@
  * Pointer-state helper for dragging the object-map legend within the canvas.
  */
 
-import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 export interface ObjectMapLegendPosition {
   left: number;

@@ -5,13 +5,13 @@
  * Implements refresherConfig logic for the core layer.
  */
 
+import { REFRESHER_TIMING_BY_NAME, type RefresherTiming } from './domainRegistry';
 import type {
   ClusterRefresherName,
   NamespaceRefresherName,
   StaticRefresherName,
   SystemRefresherName,
 } from './refresherTypes';
-import { REFRESHER_TIMING_BY_NAME, type RefresherTiming } from './domainRegistry';
 
 export type { RefresherTiming };
 

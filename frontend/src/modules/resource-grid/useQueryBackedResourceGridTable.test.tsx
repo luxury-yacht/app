@@ -1,17 +1,16 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { createAgeColumn } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TypedQueryPayload } from './typedResourceQueryScope';
 import {
   useQueryBackedClusterResourceGridTable,
   useQueryBackedNamespaceResourceGridTable,
 } from './useQueryBackedResourceGridTable';
-import type { TypedQueryPayload } from './typedResourceQueryScope';
 
 const {
   liveDomainStateRef,
@@ -437,7 +436,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: 'object: metric:' + doorbellRevision,
+        liveDataVersion: `object: metric:${doorbellRevision}`,
       })
     );
   });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { type RefObject, useCallback, useEffect, useRef } from 'react';
 
 interface LogScrollRestorationOptions {
   rootRef: RefObject<HTMLElement | null>;

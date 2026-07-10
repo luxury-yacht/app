@@ -7,15 +7,15 @@
  * just-finished historical job.
  */
 
+import { assertNever } from '@shared/utils/assertNever';
 import { useEffect, useMemo, useState } from 'react';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
-import { assertNever } from '@shared/utils/assertNever';
 import {
-  deriveDrainProgress,
   type DrainPhase,
   type DrainPodProgress,
   type DrainPodStatus,
   type DrainProgress,
+  deriveDrainProgress,
 } from './drainProgress';
 import './DrainProgressCard.css';
 

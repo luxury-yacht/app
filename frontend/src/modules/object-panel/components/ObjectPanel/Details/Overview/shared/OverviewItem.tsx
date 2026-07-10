@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem.tsx
  */
 
-import React from 'react';
+import type React from 'react';
 
 interface OverviewItemProps {
   label: string;

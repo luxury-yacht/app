@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for useDockablePanelWindowBounds.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),

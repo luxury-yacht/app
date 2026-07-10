@@ -5,8 +5,8 @@
  * Guards provider ordering for KubeconfigContext usage.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, it, vi } from 'vitest';
 import { KubernetesProvider } from './KubernetesProvider';
 

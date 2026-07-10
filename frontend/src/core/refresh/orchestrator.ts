@@ -5,18 +5,37 @@
  * Implements orchestrator logic for the core layer.
  */
 
+import { type AppEvents, eventBus } from '@/core/events';
+import {
+  APP_LOG_SOURCES,
+  type AppLogsClusterMeta,
+  logAppLogsInfo,
+  logAppLogsWarn,
+} from '@/core/logging/appLogsClient';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
-  isSnapshotPermissionDenied,
   invalidateRefreshBaseURL,
-  setMetricsActive,
+  isSnapshotPermissionDenied,
   type Snapshot,
+  setMetricsActive,
 } from './client';
-import { eventBus, type AppEvents } from '@/core/events';
-import { refreshManager, type RefreshContext } from './RefreshManager';
+import { clusterReadiness } from './clusterReadiness';
+import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
+import { registerDefaultRefreshDomains } from './domainRegistrations';
+import { type RefreshContext, refreshManager } from './RefreshManager';
+import { RefreshErrorNotifier } from './refreshErrorNotifier';
+import { type RefresherTiming, refresherConfig } from './refresherConfig';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
-import { refresherConfig, type RefresherTiming } from './refresherConfig';
+import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
+import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
+import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
+import {
+  normalizeNamespaceScope as normalizeNamespaceScopeValue,
+  normalizeRefreshDomainScope,
+} from './scopeNormalization';
+import { mergePollingListPayload } from './snapshotMerge';
 import {
   getRefreshState,
   getScopedDomainState,
@@ -26,31 +45,12 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
 } from './store';
-import type { DomainPayloadMap, RefreshDomain } from './types';
-import { resourceStreamManager } from './streaming/resourceStreamManager';
 import {
   doorbellPollingContinues,
   isSupportedDomain as isDoorbellStreamDomain,
 } from './streaming/resourceStreamDomains';
-import {
-  APP_LOG_SOURCES,
-  logAppLogsInfo,
-  logAppLogsWarn,
-  type AppLogsClusterMeta,
-} from '@/core/logging/appLogsClient';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
-import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
-import { clusterReadiness } from './clusterReadiness';
-import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
-import { mergePollingListPayload } from './snapshotMerge';
-import { registerDefaultRefreshDomains } from './domainRegistrations';
-import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
-import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
-import {
-  normalizeNamespaceScope as normalizeNamespaceScopeValue,
-  normalizeRefreshDomainScope,
-} from './scopeNormalization';
-import { RefreshErrorNotifier } from './refreshErrorNotifier';
+import { resourceStreamManager } from './streaming/resourceStreamManager';
+import type { DomainPayloadMap, RefreshDomain } from './types';
 
 type DomainFetchOptions = {
   isManual: boolean;

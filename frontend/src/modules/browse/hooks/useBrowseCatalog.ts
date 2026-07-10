@@ -6,37 +6,38 @@
  * refresh behavior.
  */
 
+import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
+import {
+  TABLE_PAGE_SIZE_OPTIONS,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type DataRequestReason,
   requestRefreshDomainState,
   useRefreshDomainHandle,
-  type DataRequestReason,
 } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
-import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
-import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import {
   acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
   applyCatalogPage,
+  type BrowseFilterOptions,
+  type BrowseFilters,
   buildBrowseCatalogPageScope,
   buildBrowseCatalogPlan,
   deriveBrowseFilterOptions,
   emptyBrowseCatalogCollection,
   filterBrowseCatalogItems,
   namespacesChanged,
-  type BrowseFilterOptions,
-  type BrowseFilters,
 } from './browseCatalogData';
-import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
-import {
-  TABLE_PAGE_SIZE_OPTIONS,
-  type TablePageSize,
-} from '@shared/components/tables/pageSizeOptions';
+
 export type { BrowseFilterOptions, BrowseFilters } from './browseCatalogData';
 
 const BROWSE_SEARCH_DEBOUNCE_MS = 250;

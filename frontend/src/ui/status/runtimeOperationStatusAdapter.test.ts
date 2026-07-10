@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   normalizePortForwardSession,
   normalizePortForwardStatusEvent,
-  parsePortForwardStatus,
   type PortForwardStatus,
+  parsePortForwardStatus,
 } from './runtimeOperationStatusAdapter';
 
 afterEach(() => {

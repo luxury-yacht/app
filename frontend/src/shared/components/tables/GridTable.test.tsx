@@ -5,6 +5,17 @@
  * Covers key behaviors and edge cases for GridTable.
  */
 
+import { ZoomProvider } from '@core/contexts/ZoomContext';
+import {
+  createResourceBarColumn,
+  createTextColumn,
+} from '@shared/components/tables/columnFactories';
+import GridTable, {
+  GRIDTABLE_VIRTUALIZATION_DEFAULT,
+  type GridColumnDefinition,
+  type GridTableFilterConfig,
+} from '@shared/components/tables/GridTable';
+import { KeyboardProvider } from '@ui/shortcuts';
 // GridTable Tests
 //
 // MOCKING STRATEGY: useKeyboardContext is mocked to return no-op functions.
@@ -23,18 +34,6 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
-
-import GridTable, {
-  GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-  type GridTableFilterConfig,
-} from '@shared/components/tables/GridTable';
-import {
-  createResourceBarColumn,
-  createTextColumn,
-} from '@shared/components/tables/columnFactories';
-import { KeyboardProvider } from '@ui/shortcuts';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),

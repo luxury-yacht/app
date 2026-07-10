@@ -5,20 +5,20 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useShortcut } from '../hooks';
-import { ShortcutHelpModal } from './ShortcutHelpModal';
-import { KeyCodes } from '../constants';
-import { isMacPlatform } from '@/utils/platform';
 import { useZoom } from '@core/contexts/ZoomContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
   mergeClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { EventsOn, EventsOff } from '@wailsjs/runtime/runtime';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { EventsOff, EventsOn } from '@wailsjs/runtime/runtime';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isMacPlatform } from '@/utils/platform';
+import { KeyCodes } from '../constants';
+import { useShortcut } from '../hooks';
+import { ShortcutHelpModal } from './ShortcutHelpModal';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;

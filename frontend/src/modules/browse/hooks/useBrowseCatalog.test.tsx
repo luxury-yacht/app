@@ -5,14 +5,12 @@
  * catalog paging, metadata loading, and filter-driven scope changes.
  */
 
-import React from 'react';
+import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useBrowseCatalog, type UseBrowseCatalogResult } from './useBrowseCatalog';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
 
 const mocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),

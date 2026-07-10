@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for ClusterOverview.
  */
 
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { act, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import ClusterOverview from './ClusterOverview';
 
 const {

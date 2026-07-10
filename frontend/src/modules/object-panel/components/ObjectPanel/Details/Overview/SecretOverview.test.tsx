@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { secretDescriptor } from './descriptors/secret';
+import { OverviewRenderer } from './OverviewRenderer';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';

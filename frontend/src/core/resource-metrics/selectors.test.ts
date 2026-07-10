@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
-
+import {
+  makeClusterNodeSnapshotEntry,
+  makeClusterNodeSnapshotPayload,
+  makeNamespaceWorkloadSnapshotPayload,
+  makeNamespaceWorkloadSummary,
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
 import type {
   ClusterNodeSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
   PodSnapshotPayload,
 } from '@/core/refresh/types';
-import {
-  makeClusterNodeSnapshotEntry,
-  makeClusterNodeSnapshotPayload,
-  makeNamespaceWorkloadSummary,
-  makeNamespaceWorkloadSnapshotPayload,
-  makePodSnapshotEntry,
-  makePodSnapshotPayload,
-} from '@/core/refresh/refreshContractTestBuilders';
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
 
 // Base payload rows arrive with live usage joined at serve; payload.metrics

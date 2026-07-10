@@ -7,21 +7,22 @@
  * each table fetches its own page and surfaces its own error/empty states,
  * so there is no shared resource context to read here.
  */
-import React from 'react';
-import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
-import NsViewConfig from '@modules/namespace/components/NsViewConfig';
+
+import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
+import NsViewConfig from '@modules/namespace/components/NsViewConfig';
+import NsViewCustom from '@modules/namespace/components/NsViewCustom';
+import NsViewEvents from '@modules/namespace/components/NsViewEvents';
+import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
+import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
-import NsViewCustom from '@modules/namespace/components/NsViewCustom';
-import NsViewHelm from '@modules/namespace/components/NsViewHelm';
-import NsViewEvents from '@modules/namespace/components/NsViewEvents';
-import BrowseView from '@modules/browse/components/BrowseView';
-import type { NamespaceViewType } from '@/types/navigation/views';
+import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type React from 'react';
+import type { NamespaceViewType } from '@/types/navigation/views';
 
 interface AllNamespacesViewProps {
   activeTab: NamespaceViewType;

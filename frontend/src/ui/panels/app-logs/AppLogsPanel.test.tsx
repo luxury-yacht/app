@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for AppLogsPanel.
  */
 
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { act } from 'react';
-import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getAppLogsMock = vi.hoisted(() => vi.fn());
 const getAppLogsSinceMock = vi.hoisted(() => vi.fn());

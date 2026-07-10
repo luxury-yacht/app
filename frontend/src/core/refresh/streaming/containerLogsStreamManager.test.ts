@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for containerLogsStreamManager.
  */
 
-import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRefreshBaseURL: vi.fn(async () => 'http://127.0.0.1:0'),
@@ -25,11 +25,11 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-import { getScopedDomainState, resetScopedDomainState } from '../store';
 import {
   resetContainerLogsStreamScopeParamsCacheForTesting,
   setContainerLogsStreamScopeParams,
 } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import { getScopedDomainState, resetScopedDomainState } from '../store';
 
 const SCOPE = 'default:pod:example';
 

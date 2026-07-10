@@ -5,9 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const areVisibilityMapsEqual = (
   a: Record<string, boolean>,

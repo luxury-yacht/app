@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for ClusterViewEvents.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
   persistedSortRef: { current: null as any },

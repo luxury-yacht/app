@@ -6,8 +6,8 @@
  */
 
 import { useCallback } from 'react';
-import type { RefreshContext } from '../RefreshManager';
 import { refreshOrchestrator } from '../orchestrator';
+import type { RefreshContext } from '../RefreshManager';
 
 /**
  * Hook to update the refresh context

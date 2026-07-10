@@ -7,10 +7,10 @@
  * (ResourceHeader / ResourceMetadata).
  */
 
-import React from 'react';
-import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../PolicyOverview.css';
 

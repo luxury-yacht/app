@@ -5,10 +5,10 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import type React from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type React from 'react';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
 export type ColumnWidthInput =

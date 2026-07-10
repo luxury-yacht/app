@@ -6,15 +6,16 @@
  * per-kind UI, so they ride along as `widget` items reusing the existing JobTimeline component.
  */
 
-import React, { useCallback } from 'react';
-import { job, cronjob } from '@wailsjs/go/models';
-import { OverviewItem } from '../shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import type { OverviewContext, OverviewDescriptor } from '../schema';
+import { cronjob, job } from '@wailsjs/go/models';
+import type React from 'react';
+import { useCallback } from 'react';
 import { JobTimeline } from '../JobTimeline';
+import type { OverviewContext, OverviewDescriptor } from '../schema';
+import { OverviewItem } from '../shared/OverviewItem';
 import '../shared/OverviewBlocks.css';
 import '../JobOverview.css';
 

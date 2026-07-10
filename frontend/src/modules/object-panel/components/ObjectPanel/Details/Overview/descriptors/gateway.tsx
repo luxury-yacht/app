@@ -14,22 +14,22 @@
  * `{kind:'status'}` item — conditions render as a field and `summary` is not surfaced.
  */
 
-import React from 'react';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import {
   backendtlspolicy,
   gateway,
   gatewayclass,
   listenerset,
   referencegrant,
-  resourcemodel,
+  type resourcemodel,
   types,
 } from '@wailsjs/go/models';
+import type React from 'react';
+import type { OverviewDescriptor } from '../schema';
 import { ExternalHostLinks } from '../shared/ExternalHostLinks';
 import { listenerScheme } from '../shared/hostLink';
-import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import type { OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 
 type GatewayDetails = gateway.GatewayDetails;

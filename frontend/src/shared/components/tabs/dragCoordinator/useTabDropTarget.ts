@@ -40,9 +40,9 @@
  * browser silently rejects the drop — drag-and-drop appears "broken" in
  * production with no errors or warnings.
  */
-import { useCallback, useContext, useEffect, useRef, useState, type RefCallback } from 'react';
+import { type RefCallback, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
-import { TabDragContext, type DropTargetRegistration } from './TabDragProvider';
+import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {

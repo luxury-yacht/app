@@ -6,8 +6,8 @@
  * so alt-click reveals the HOST object instead of the Namespace kind.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const openWithObject = vi.fn();

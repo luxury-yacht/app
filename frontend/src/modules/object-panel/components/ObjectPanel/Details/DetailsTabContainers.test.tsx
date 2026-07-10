@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
 import Containers from './DetailsTabContainers';
 
 vi.mock('@shared/components/Tooltip', () => ({

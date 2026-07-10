@@ -5,16 +5,17 @@
  * Covers key behaviors and edge cases for NamespaceContext.
  */
 
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
-import { NamespaceProvider, useNamespace } from './NamespaceContext';
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { NamespaceProvider, useNamespace } from './NamespaceContext';
 
 let mockClusterId = 'cluster-a';
 let mockClusterIds = ['cluster-a'];

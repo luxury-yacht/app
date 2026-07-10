@@ -6,28 +6,28 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { NormalizedObjectMapPayload } from './objectMapPayload';
 import {
   computeCollapseInfo,
-  filterByCollapseInfo,
   type DeploymentGroup,
+  filterByCollapseInfo,
 } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import {
   computeObjectMapBounds,
   computeObjectMapLayout,
-  routeObjectMapEdges,
   type ObjectMapLayout,
   type PositionedNode,
+  routeObjectMapEdges,
 } from './objectMapLayout';
-import { computeObjectMapSelectionState } from './objectMapSelection';
+import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
+import type { NormalizedObjectMapPayload } from './objectMapPayload';
 import type {
   ObjectMapHoverEdge,
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
-import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
+import { computeObjectMapSelectionState } from './objectMapSelection';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 

@@ -5,7 +5,7 @@
  * Re-exports public APIs for the shared components.
  */
 
+export * from './diagnosticsPanelConfig';
 export * from './diagnosticsPanelTypes';
 export * from './diagnosticsPanelUtils';
-export * from './diagnosticsPanelConfig';
 export * from './diagnosticsRowModel';

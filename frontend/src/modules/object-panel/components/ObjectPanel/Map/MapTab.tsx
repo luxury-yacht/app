@@ -10,19 +10,20 @@
  * The object-map scoped domain stays enabled while the tab is active,
  * so the shared refresh manager polls it on the configured cadence.
  */
-import React, { useCallback } from 'react';
+import type React from 'react';
+import { useCallback } from 'react';
 import './MapTab.css';
-import { errorHandler } from '@/utils/errorHandler';
-import { useRefreshDomainHandle } from '@/core/data-access';
-import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
-import ObjectMap from '@modules/object-map/ObjectMap';
-import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import {
   isMapSnapshotLoading,
   isMapSnapshotRefreshing,
 } from '@modules/object-map/mapSnapshotStatus';
+import ObjectMap from '@modules/object-map/ObjectMap';
+import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useRefreshDomainHandle } from '@/core/data-access';
+import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
+import { errorHandler } from '@/utils/errorHandler';
 import type { PanelObjectData } from '../types';
 
 interface MapTabProps {

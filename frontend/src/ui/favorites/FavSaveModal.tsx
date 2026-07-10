@@ -6,17 +6,18 @@
  * namespace, and filter settings.
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import Tooltip from '@shared/components/Tooltip';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import ModalHeader from '@shared/components/modals/ModalHeader';
-import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import Tooltip from '@shared/components/Tooltip';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
@@ -103,7 +104,7 @@ export interface FavSaveModalProps {
 /** Resolve view tab id from a view label (e.g. "Pods" -> "pods"). */
 /** Resolve a view label (e.g. "Pods") to a view ID (e.g. "pods") for the given scope. */
 const resolveViewId = (label: string, viewType: string): string => {
-  const prefix = viewType + ':';
+  const prefix = `${viewType}:`;
   const scopedViews = ALL_VIEWS.filter((v) => v.value.startsWith(prefix));
   const lower = label.toLowerCase();
   const match = scopedViews.find(
@@ -569,15 +570,16 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
         <div className="modal-footer">
           {isEditing && (
-            <button className="button danger" onClick={handleDelete}>
+            <button type="button" className="button danger" onClick={handleDelete}>
               Delete
             </button>
           )}
           <div className="fav-save-footer-spacer" />
-          <button className="button cancel" onClick={onClose}>
+          <button type="button" className="button cancel" onClick={onClose}>
             Cancel
           </button>
           <button
+            type="button"
             className="button save"
             onClick={handleSave}
             disabled={isEditing && !changesDetected}

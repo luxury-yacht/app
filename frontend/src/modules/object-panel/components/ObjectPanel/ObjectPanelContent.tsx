@@ -5,26 +5,23 @@
  * tab-level cleanup for scoped refresh domains that should pause and preserve
  * cached state when panel content is torn down.
  */
-import { useMemo } from 'react';
-import type { types } from '@wailsjs/go/models';
-import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
+
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
+import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import EventsTab from '@modules/object-panel/components/ObjectPanel/Events/EventsTab';
-import MapTab from '@modules/object-panel/components/ObjectPanel/Map/MapTab';
-import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
 import ManifestTab from '@modules/object-panel/components/ObjectPanel/Helm/ManifestTab';
 import ValuesTab from '@modules/object-panel/components/ObjectPanel/Helm/ValuesTab';
-import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTab';
-import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab';
-import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
-import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
 import {
-  useObjectPanelScopedDomainCleanups,
   type ObjectPanelScopedDomainRef,
+  useObjectPanelScopedDomainCleanups,
 } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle';
-import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
-
+import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
+import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
+import MapTab from '@modules/object-panel/components/ObjectPanel/Map/MapTab';
+import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab';
+import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
+import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
+import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTab';
 import type {
   CapabilityReasons,
   CapabilityState,
@@ -32,14 +29,17 @@ import type {
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
-import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
+import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import type { types } from '@wailsjs/go/models';
+import { useMemo } from 'react';
 
 const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
   <div className="object-panel-tab-content">
     <div className="object-panel-tab-error">
       <h4>Failed to load {tabName}</h4>
       <p>An error occurred while rendering this tab.</p>
-      <button className="button generic" onClick={reset}>
+      <button type="button" className="button generic" onClick={reset}>
         Retry
       </button>
     </div>

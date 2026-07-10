@@ -4,7 +4,6 @@
  * Coordinates shared resource-grid table state, identity, and context menus.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import {
@@ -17,7 +16,7 @@ import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSe
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { useGridTableBinding } from './useGridTableBinding';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   normalizeQueryBackedNamespaceFilters,
   queryBackedFacetFilterOptions,
@@ -33,6 +32,7 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
+import { useGridTableBinding } from './useGridTableBinding';
 
 const resourceGridPartialDataLabel = (tableMode: ResourceGridTableMode) =>
   tableMode === 'Local Partial'

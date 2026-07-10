@@ -5,7 +5,7 @@
  * Renders stream telemetry details for the diagnostics panel.
  */
 
-import React from 'react';
+import type React from 'react';
 import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import { formatLastUpdated } from './diagnosticsPanelUtils';
 

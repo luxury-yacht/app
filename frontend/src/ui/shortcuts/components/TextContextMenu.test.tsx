@@ -6,8 +6,8 @@
  * elements and provides the correct items based on editability.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TextContextMenu from './TextContextMenu';
 

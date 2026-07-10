@@ -5,8 +5,8 @@
  * Covers key behaviors and edge cases for SegmentedButton.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SegmentedButton from './SegmentedButton';

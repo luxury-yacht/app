@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for ClusterViewNodes.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   latestTableRowsRef,

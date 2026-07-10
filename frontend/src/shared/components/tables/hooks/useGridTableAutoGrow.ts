@@ -5,9 +5,9 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect } from 'react';
-import type { RefObject } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type { RefObject } from 'react';
+import { useEffect } from 'react';
 
 // Ensures kind/type columns stay fully readable: when kind columns are present,
 // measure them after render and grow widths (and the table) to fit their labels.

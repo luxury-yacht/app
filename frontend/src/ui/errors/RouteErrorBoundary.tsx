@@ -5,8 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { ReactNode } from 'react';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import type React from 'react';
+import type { ReactNode } from 'react';
 
 interface RouteErrorBoundaryProps {
   children: ReactNode;
@@ -21,10 +22,10 @@ export const RouteErrorBoundary: React.FC<RouteErrorBoundaryProps> = ({ children
         <h1>Page Error</h1>
         <p>The {routeName} page encountered an error and cannot be displayed.</p>
         <div className="route-error-actions">
-          <button onClick={reset} className="btn-reset">
+          <button type="button" onClick={reset} className="btn-reset">
             Try Again
           </button>
-          <button onClick={() => window.history.back()} className="btn-reload">
+          <button type="button" onClick={() => window.history.back()} className="btn-reload">
             Go Back
           </button>
           <a href="/">Go to Home</a>

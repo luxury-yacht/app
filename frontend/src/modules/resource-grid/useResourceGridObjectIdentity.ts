@@ -4,14 +4,14 @@
  * Builds stable resource-grid row keys and full Kubernetes object identity.
  */
 
-import { useCallback } from 'react';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { OpenWithObjectOptions } from '@modules/object-panel/hooks/useObjectPanel';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { OpenWithObjectOptions } from '@modules/object-panel/hooks/useObjectPanel';
+import { useCallback } from 'react';
+import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface ResourceGridObjectIdentityInput {
   kind?: string | null;

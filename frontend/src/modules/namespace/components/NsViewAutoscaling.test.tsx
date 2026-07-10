@@ -4,13 +4,13 @@
  * Focused coverage for autoscaling context-menu actions.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import NsViewAutoscaling, {
   type AutoscalingData,
 } from '@modules/namespace/components/NsViewAutoscaling';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({

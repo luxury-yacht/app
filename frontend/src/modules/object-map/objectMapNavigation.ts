@@ -4,12 +4,12 @@
  * Converts object-map references into view navigation targets.
  */
 
-import { errorHandler } from '@/utils/errorHandler';
-import type { ObjectMapReference } from '@/core/refresh/types';
 import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { ObjectMapReference } from '@/core/refresh/types';
+import { errorHandler } from '@/utils/errorHandler';
 
 export const buildResolvedFromMapRef = (
   ref: ObjectMapReference

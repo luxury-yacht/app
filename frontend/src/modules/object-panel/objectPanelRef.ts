@@ -6,16 +6,16 @@
  * checks from one shared object reference contract.
  */
 
-import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
 import { buildObjectPanelPodsScope } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildObjectReference,
   buildRequiredObjectReference,
   type ClusterObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
+import type { KubernetesObjectReference } from '@/types/view-state';
 
 /**
  * The panel system's reference currency: a cluster-complete object reference.

@@ -1,14 +1,13 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts/context';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import type { Command } from './CommandPaletteCommands';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { CommandPalette } from './CommandPalette';
+import type { Command } from './CommandPaletteCommands';
 
 const openWithObjectMock = vi.fn();
 
@@ -103,7 +102,7 @@ function SharedModalHarness() {
         <h2 id="blocking-modal-title">Blocking modal</h2>
       </div>
       <div className="modal-content">
-        <button>Inside modal</button>
+        <button type="button">Inside modal</button>
       </div>
     </ModalSurface>
   );

@@ -8,9 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import { OBJECT_ACTION_IDS } from './objectActionContract';
 import {
+  type ObjectActionData,
   objectActionPolicyIds,
   resolveObjectActionPolicy,
-  type ObjectActionData,
 } from './objectActionPolicy';
 
 const allowed = { allowed: true, pending: false };

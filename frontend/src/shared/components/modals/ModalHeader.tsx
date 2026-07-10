@@ -1,5 +1,5 @@
-import React from 'react';
 import { CategoryIcon, CloseIcon, type IconProps } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
 
 interface ModalHeaderProps {
   title: React.ReactNode;
@@ -28,6 +28,7 @@ const ModalHeader: React.FC<ModalHeaderProps> = ({
       <h2>{title}</h2>
     </div>
     <button
+      type="button"
       className={['modal-close', closeClassName].filter(Boolean).join(' ')}
       onClick={onClose}
       disabled={closeDisabled}

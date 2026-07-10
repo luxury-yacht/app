@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$receiver.QueryPermissions($...)` as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Route permission reads through dataAccess instead of calling runtime methods directly.",
+    severity = "error"
+  )
+}

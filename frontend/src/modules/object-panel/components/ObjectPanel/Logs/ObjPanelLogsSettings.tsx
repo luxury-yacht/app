@@ -1,17 +1,9 @@
-import { useMemo, useState } from 'react';
-import Tooltip from '@shared/components/Tooltip';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
   getObjPanelLogsTargetGlobalLimit,
   getObjPanelLogsTargetPerScopeLimit,
-  setObjPanelLogsApiTimestampFormat,
-  setObjPanelLogsApiTimestampUseLocalTimeZone,
-  setObjPanelLogsBufferMaxSize,
-  setObjPanelLogsTargetGlobalLimit,
-  setObjPanelLogsTargetPerScopeLimit,
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
@@ -21,7 +13,15 @@ import {
   OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT,
   OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX,
   OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN,
+  setObjPanelLogsApiTimestampFormat,
+  setObjPanelLogsApiTimestampUseLocalTimeZone,
+  setObjPanelLogsBufferMaxSize,
+  setObjPanelLogsTargetGlobalLimit,
+  setObjPanelLogsTargetPerScopeLimit,
 } from '@core/settings/appPreferences';
+import Tooltip from '@shared/components/Tooltip';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { useMemo, useState } from 'react';
 import {
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,

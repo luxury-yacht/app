@@ -6,12 +6,12 @@
  * between. No per-kind logic lives here.
  */
 
-import React from 'react';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
-import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { OverviewItem } from './shared/OverviewItem';
+import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
+import React from 'react';
 import type { OverviewContext, OverviewDescriptor, OverviewField, OverviewWidget } from './schema';
+import { OverviewItem } from './shared/OverviewItem';
 
 /** Frame fields read off any DTO (optional so T is not over-constrained). */
 interface FrameAccess {

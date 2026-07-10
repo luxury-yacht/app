@@ -6,35 +6,36 @@
  * in yamlTransaction.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as YAML from 'yaml';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 import './YamlTab.css';
-import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
-import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
-import { prepareDraftYaml } from './yamlTabUtils';
-import {
-  buildYamlTransactionDiff,
-  useYamlTransaction,
-  type YamlTransactionDiffResult,
-} from './yamlTransaction';
-import type { YamlTabProps } from './yamlTabTypes';
 import {
   YamlCancelIcon,
   YamlEditIcon,
   YamlManagedFieldsIcon,
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
+import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
+import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
+import type { YamlTabProps } from './yamlTabTypes';
+import { prepareDraftYaml } from './yamlTabUtils';
+import {
+  buildYamlTransactionDiff,
+  useYamlTransaction,
+  type YamlTransactionDiffResult,
+} from './yamlTransaction';
 
 export type { YamlTabProps } from './yamlTabTypes';
 

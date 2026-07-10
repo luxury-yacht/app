@@ -18,9 +18,9 @@
  *   })
  */
 
-import { useCallback } from 'react';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useCallback } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export function useObjectLink() {

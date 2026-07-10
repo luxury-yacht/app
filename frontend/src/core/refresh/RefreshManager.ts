@@ -71,18 +71,14 @@ interface RefresherInstance {
   isEnabled: boolean;
 }
 
-// Import types from navigation
-import type {
-  ViewType,
-  NamespaceViewType as NamespaceViewType,
-  ClusterViewType as ClusterViewType,
-} from '@/types/navigation/views';
 import { eventBus } from '@/core/events';
+// Import types from navigation
+import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 import {
-  SYSTEM_REFRESHERS,
-  namespaceViewToRefresher,
   clusterViewToRefresher,
+  namespaceViewToRefresher,
   type RefresherName,
+  SYSTEM_REFRESHERS,
 } from './refresherTypes';
 
 class RefreshManager {
@@ -833,7 +829,7 @@ class RefreshManager {
     // First error uses base cooldown, subsequent errors double each time, capped at 60s
     const MAX_BACKOFF_MS = 60_000;
     const errorCount = instance.state.consecutiveErrors;
-    const backoffMultiplier = errorCount > 1 ? Math.pow(2, errorCount - 1) : 1;
+    const backoffMultiplier = errorCount > 1 ? 2 ** (errorCount - 1) : 1;
     const cooldownMs = Math.min(MAX_BACKOFF_MS, instance.config.cooldown * backoffMultiplier);
 
     // Set cooldown timer

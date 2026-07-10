@@ -4,13 +4,13 @@
  * Kubeconfigs tab content: directories scanned for kubeconfig files.
  */
 
-import { useState, useEffect } from 'react';
-import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { KubeconfigFolderIcon } from '@shared/components/icons/SettingsIcons';
+import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
+import { errorHandler } from '@utils/errorHandler';
+import { useEffect, useState } from 'react';
+import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
+import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@/core/backend-api';
 
 function KubeconfigsSection() {
   const { loadKubeconfigs } = useKubeconfig();

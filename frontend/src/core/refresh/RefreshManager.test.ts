@@ -6,11 +6,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { eventBus } from '@/core/events';
+import type { RefreshCallback, RefreshContext, Refresher } from '@/core/refresh';
 import { refreshManager } from '@/core/refresh';
 import type { RefresherName } from '@/core/refresh/refresherTypes';
-import type { RefreshCallback, RefreshContext, Refresher } from '@/core/refresh';
-import { eventBus } from '@/core/events';
 
 const TEST_REFRESHER = 'object-test' as RefresherName;
 

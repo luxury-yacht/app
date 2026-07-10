@@ -6,14 +6,12 @@
  * GridTableFiltersBar.tsx. Prevents selector / attribute drift.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const registeredSurfaces: Array<{
   kind: string;

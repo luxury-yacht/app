@@ -15,10 +15,10 @@
  * `TABS` constant. If the constants change, update this file to match.
  */
 
-import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { Tabs, type TabDescriptor, type TabsProps } from './';
+import { useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { type TabDescriptor, Tabs, type TabsProps } from './';
 import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,

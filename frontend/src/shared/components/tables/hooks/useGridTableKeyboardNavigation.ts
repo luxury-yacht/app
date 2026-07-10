@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
 import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 type NavigationMethodRef = RefObject<'pointer' | 'keyboard'>;
 

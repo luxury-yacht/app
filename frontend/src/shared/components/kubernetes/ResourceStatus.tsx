@@ -5,9 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { backendStatusClass } from '@shared/utils/backendStatusPresentation';
+import React from 'react';
 
 interface ResourceStatusProps {
   status?: string;
@@ -50,8 +50,8 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
               // Parse ready string if it's in "X/Y" format
               const parts = ready.split('/');
               if (parts.length === 2) {
-                const readyCount = parseInt(parts[0]);
-                const totalCount = parseInt(parts[1]);
+                const readyCount = parseInt(parts[0], 10);
+                const totalCount = parseInt(parts[1], 10);
                 if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
                   return <span className="status-text warning">{ready}</span>;
                 }

@@ -5,7 +5,9 @@
  * Displays an overview of the connected Kubernetes cluster, including resource usage,
  * node and workload summaries, and pod status with navigation links.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import captainK8s from '@assets/captain-k8s-color.png';
+import logo from '@assets/luxury-yacht-color-vert.png';
 import ResourceBar from '@shared/components/ResourceBar';
 import {
   USAGE_CRITICAL_THRESHOLD_PERCENT,
@@ -17,50 +19,49 @@ import {
   formatCpuValue,
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   canActivateClusterOverviewRefresh,
   shouldSuppressClusterOverviewUnavailableError,
 } from '@/core/refresh/clusterOverviewLifecycle';
-import { eventBus } from '@/core/events';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
-import logo from '@assets/luxury-yacht-color-vert.png';
-import captainK8s from '@assets/captain-k8s-color.png';
 import './ClusterOverview.css';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useViewState } from '@/core/contexts/ViewStateContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   emitPodsUnhealthySignal,
   type PodsFilterMode,
 } from '@modules/namespace/components/podsFilterSignals';
-import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
-import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
-import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
-import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { LiveAgeText } from '@shared/components/LiveAgeText';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
   objectPanelId,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import type { RecentEventEntry } from '@/core/refresh/types';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { LiveAgeText } from '@shared/components/LiveAgeText';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
 } from '@shared/utils/eventObjectIdentity';
+import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
+import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import { useViewState } from '@/core/contexts/ViewStateContext';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import type { RecentEventEntry } from '@/core/refresh/types';
 import {
   clusterOverviewCpuValue,
   clusterOverviewMemoryValue,
   clusterOverviewResourceMetrics,
   clusterWorkloadUsageValue,
 } from '@/core/resource-metrics';
+import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import ClusterOverviewRestrictionNotice, {
   type OverviewRestriction,
 } from './ClusterOverviewRestrictionNotice';

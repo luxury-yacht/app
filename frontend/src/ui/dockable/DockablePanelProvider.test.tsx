@@ -6,21 +6,20 @@
  * and the container-level empty-space drop target.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-import { DockableTabBar } from './DockableTabBar';
-import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
-import { clearPanelState } from './useDockablePanelState';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
-  TabDragProvider,
   TAB_DRAG_DATA_TYPE,
   type TabDragPayload,
+  TabDragProvider,
 } from '@shared/components/tabs/dragCoordinator';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
+import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+import { DockableTabBar } from './DockableTabBar';
+import { clearPanelState } from './useDockablePanelState';
 
 // Per-cluster panel state work added cluster awareness to the provider.
 // Tests that don't care about clusters can leave selectedClusterId at

@@ -5,19 +5,19 @@
  * Implements search logic for the core layer.
  */
 
-import { keymap, EditorView } from '@codemirror/view';
-import type { KeyBinding } from '@codemirror/view';
 import {
-  SearchQuery,
   closeSearchPanel as cmCloseSearchPanel,
+  openSearchPanel as cmOpenSearchPanel,
   getSearchQuery,
   highlightSelectionMatches,
-  openSearchPanel as cmOpenSearchPanel,
+  SearchQuery,
   search,
   searchKeymap,
   setSearchQuery,
 } from '@codemirror/search';
 import type { Extension } from '@codemirror/state';
+import type { KeyBinding } from '@codemirror/view';
+import { type EditorView, keymap } from '@codemirror/view';
 
 export interface SearchExtensionOptions {
   // When true, show the search panel at the top of the editor.

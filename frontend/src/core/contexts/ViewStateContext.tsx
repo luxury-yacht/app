@@ -15,33 +15,34 @@
  * - useObjectPanelState() - object panel, navigation history
  * - useModalState() - settings and about modals
  */
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useMemo,
-  useEffect,
-  useRef,
-} from 'react';
-import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
-import { requestContextRefresh } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh';
-import { eventBus } from '@/core/events';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
-// Import specialized contexts
-import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   ObjectPanelStateProvider,
   useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import type React from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { requestContextRefresh } from '@/core/data-access';
+import { eventBus } from '@/core/events';
+import { refreshOrchestrator } from '@/core/refresh';
+import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 import { ModalStateProvider, useModalState } from './ModalStateContext';
+// Import specialized contexts
+import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
 
-// Re-export types for backwards compatibility
-export type { ViewType, NamespaceViewType, ClusterViewType };
 export type { KubernetesObjectReference } from '@/types/view-state';
 export type { SidebarSelectionType } from './SidebarStateContext';
+// Re-export types for backwards compatibility
+export type { ClusterViewType, NamespaceViewType, ViewType };
 
 /**
  * Navigation state - core view type and tab management

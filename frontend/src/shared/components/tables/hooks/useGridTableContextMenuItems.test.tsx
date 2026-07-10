@@ -5,18 +5,17 @@
  * Covers key behaviors and edge cases for useGridTableContextMenuItems.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   type ContextMenuSource,
   type UseGridTableContextMenuItemsParams,
   useGridTableContextMenuItems,
 } from '@shared/components/tables/hooks/useGridTableContextMenuItems';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type React from 'react';
+import { act, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = {
   id: string;

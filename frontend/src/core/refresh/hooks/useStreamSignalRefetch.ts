@@ -27,8 +27,8 @@
 import { useEffect, useRef } from 'react';
 
 import { requestRefreshDomain } from '@/core/data-access';
-import { doorbellSourceClocks } from '../streaming/resourceStreamDomains';
 import { useRefreshScopedDomainStates } from '../store';
+import { doorbellSourceClocks } from '../streaming/resourceStreamDomains';
 import type { RefreshDomain } from '../types';
 
 export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly string[]): void => {
@@ -49,7 +49,7 @@ export const useStreamSignalRefetch = (domain: RefreshDomain, scopes: readonly s
       // which the backend back-fills with an object clock on EVERY snapshot)
       // is what makes a fetch response invisible here — no echo refetch.
       const signalVersions = domainStates[scope]?.signalVersions;
-      const key = clocks.map((clock) => clock + ':' + (signalVersions?.[clock] ?? '')).join(' ');
+      const key = clocks.map((clock) => `${clock}:${signalVersions?.[clock] ?? ''}`).join(' ');
       const hasSignal = clocks.some((clock) => Boolean(signalVersions?.[clock]));
       const consumed = consumedKeysRef.current;
       if (!consumed.has(scope)) {

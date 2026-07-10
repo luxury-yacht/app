@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for useSearchShortcutTarget.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSearchShortcutTarget } from './useSearchShortcutTarget';
 

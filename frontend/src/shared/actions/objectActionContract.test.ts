@@ -7,10 +7,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  MUTATING_OBJECT_ACTION_IDS,
-  OBJECT_ACTIONS,
-  OBJECT_ACTION_IDS,
   buildObjectActionPermissionDescriptor,
+  MUTATING_OBJECT_ACTION_IDS,
+  OBJECT_ACTION_IDS,
+  OBJECT_ACTIONS,
   objectActionBackendAction,
   objectActionContract,
   objectActionPayloadFields,

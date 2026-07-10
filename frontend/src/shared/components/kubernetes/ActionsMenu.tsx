@@ -9,10 +9,10 @@
  * and the Node cordon/drain openers.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { type ObjectActionData } from '@shared/hooks/useObjectActions';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
@@ -148,6 +148,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       <>
         <div className="actions-menu" ref={menuRef}>
           <button
+            type="button"
             className="actions-menu-button"
             onClick={() => setIsOpen(!isOpen)}
             disabled={actionLoading}

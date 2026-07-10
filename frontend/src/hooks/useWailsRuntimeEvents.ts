@@ -5,9 +5,9 @@
  * Subscribes to Wails runtime events for UI actions (menu items, etc.), connection status updates,
  * and per-cluster health events.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ConnectionStatusEvent,
+  type ConnectionStatusEvent,
   useConnectionStatusActions,
 } from '@/core/connection/connectionStatus';
 

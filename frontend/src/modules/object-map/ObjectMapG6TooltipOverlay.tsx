@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { objectMapG6EdgeStroke, type ObjectMapG6Palette } from './objectMapG6Data';
+import { type ObjectMapG6Palette, objectMapG6EdgeStroke } from './objectMapG6Data';
 import type { ObjectMapTooltipEndpoint, ObjectMapTooltipLayout } from './objectMapG6Tooltip';
 
 export interface ObjectMapG6TooltipOverlayProps {

@@ -5,9 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import React, { useCallback, useEffect, useRef } from 'react';
 
 // Caches rendered cell content per column/value so virtualization and hover
 // syncing don't force expensive rerenders. Separates object/primitive caches and

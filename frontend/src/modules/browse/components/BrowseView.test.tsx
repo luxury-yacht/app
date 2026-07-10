@@ -5,14 +5,14 @@
  * Covers cluster scope, namespace scope, and all-namespaces scope scenarios.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import BrowseView from '@/modules/browse/components/BrowseView';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({

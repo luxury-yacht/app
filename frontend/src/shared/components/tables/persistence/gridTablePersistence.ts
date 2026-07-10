@@ -10,13 +10,13 @@ import type {
   GridColumnDefinition,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable.types';
-import { requestAppState } from '@/core/app-state-access';
+import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import {
   hasNonDefaultGridTableFilters,
   normalizeGridTableFilterArray,
   normalizeGridTableFilterState,
 } from '@shared/components/tables/gridTableFilterState';
-import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import { requestAppState } from '@/core/app-state-access';
 
 export interface GridTablePersistedState {
   version: 1;

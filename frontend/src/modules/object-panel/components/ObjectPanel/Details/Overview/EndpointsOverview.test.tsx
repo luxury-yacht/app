@@ -7,12 +7,12 @@
  * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { endpointslice } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { endpointSliceDescriptor } from './descriptors/endpointslice';
+import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (

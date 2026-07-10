@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -67,7 +67,7 @@ describe('LabelsAndAnnotations', () => {
     expect(annotationValue).toBeTruthy();
     expect(annotationValue?.title).toBe('Click to expand');
     expect(annotationValue?.textContent).toBe(
-      longValue.substring(0, 150) + '... (click to expand)'
+      `${longValue.substring(0, 150)}... (click to expand)`
     );
 
     await act(async () => {
@@ -84,7 +84,7 @@ describe('LabelsAndAnnotations', () => {
     });
 
     expect(annotationValue?.textContent).toBe(
-      longValue.substring(0, 150) + '... (click to expand)'
+      `${longValue.substring(0, 150)}... (click to expand)`
     );
 
     const selectorChip = container.querySelector('.status-chip--info');

@@ -8,9 +8,9 @@
  * here — this suite only exercises the dockable-specific glue.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -20,9 +20,9 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
-import { DockableTabBar, TabInfo } from './DockableTabBar';
-import { DockablePanelProvider } from './DockablePanelProvider';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import { DockablePanelProvider } from './DockablePanelProvider';
+import { DockableTabBar, type TabInfo } from './DockableTabBar';
 
 /** Helper to render a React element into a fresh DOM host. */
 const renderTabBar = async (ui: React.ReactElement) => {

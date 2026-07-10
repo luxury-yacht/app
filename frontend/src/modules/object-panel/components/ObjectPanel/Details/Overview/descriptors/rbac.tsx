@@ -10,19 +10,19 @@
  * functions read `context.clusterId`/`context.clusterName`.
  */
 
-import React from 'react';
-import {
-  clusterrole,
-  clusterrolebinding,
-  resourcemodel,
-  role,
-  rolebinding,
-  serviceaccount,
-  types,
-} from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import {
+  clusterrole,
+  clusterrolebinding,
+  type resourcemodel,
+  role,
+  rolebinding,
+  serviceaccount,
+  type types,
+} from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import { renderUsedByLinks } from './shared';
 import '../shared/OverviewBlocks.css';

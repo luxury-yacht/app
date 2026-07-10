@@ -5,7 +5,7 @@
  * Provides shared helper functions for the UI layer.
  */
 
-import { ShortcutModifiers } from '@/types/shortcuts';
+import type { ShortcutModifiers } from '@/types/shortcuts';
 
 // Helper to format shortcuts for display
 export function formatShortcut(key: string, modifiers?: ShortcutModifiers): string {

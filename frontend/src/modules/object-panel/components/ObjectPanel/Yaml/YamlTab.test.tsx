@@ -1902,7 +1902,7 @@ describe('YamlTab', () => {
     expect(render.container.textContent).toContain('No YAML content available');
     await render.unmount();
 
-    const largeYaml = 'kind: Pod\nmetadata:\n  name: demo\n' + 'a'.repeat(160000);
+    const largeYaml = `kind: Pod\nmetadata:\n  name: demo\n${'a'.repeat(160000)}`;
     snapshotState.current = { status: 'ready', data: { yaml: largeYaml }, error: null };
     render = await renderYamlTab();
     expect(render.container.textContent).toContain('Large manifest detected');

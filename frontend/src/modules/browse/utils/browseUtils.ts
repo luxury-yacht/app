@@ -5,8 +5,8 @@
  * Handles catalog scope building, normalization, and item management.
  */
 
-import type { CatalogItem } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { CatalogItem } from '@/core/refresh/types';
 
 /**
  * Parses a continue token from an unknown value.

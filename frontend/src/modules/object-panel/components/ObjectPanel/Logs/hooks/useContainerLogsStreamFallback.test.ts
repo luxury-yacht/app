@@ -6,8 +6,8 @@
  * backoff recovery, and initial log priming.
  */
 
-import ReactDOM from 'react-dom/client';
 import React, { act, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogViewerAction } from '../logViewerReducer';
 
@@ -47,9 +47,9 @@ vi.mock('@/core/refresh/store', () => ({
 
 // Import after mocks
 import {
-  useContainerLogsStreamFallback,
-  isLogDataUnavailable,
   getLogDataUnavailableMessage,
+  isLogDataUnavailable,
+  useContainerLogsStreamFallback,
 } from './useContainerLogsStreamFallback';
 
 // --- Test infrastructure ---

@@ -5,18 +5,18 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { DropdownProps } from './types';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
+import type { DropdownProps } from './types';
 import '@styles/components/dropdowns.css';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import {
   DropdownArrowIcon,
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
+import { useKeyboardSurface } from '@ui/shortcuts';
 
 const Dropdown: React.FC<DropdownProps> = ({
   options,
@@ -373,6 +373,7 @@ const Dropdown: React.FC<DropdownProps> = ({
 
         {clearable && !multiple && value && !disabled && (
           <button
+            type="button"
             className="clear-button"
             onClick={(e) => {
               e.stopPropagation();

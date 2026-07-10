@@ -6,12 +6,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  GRAY_STEPS,
-  MAX_SATURATION,
-  generateTintedPalette,
   applyTintedPalette,
   clearTintedPalette,
+  GRAY_STEPS,
+  generateTintedPalette,
   isPaletteActive,
+  MAX_SATURATION,
 } from './paletteTint';
 
 describe('paletteTint', () => {

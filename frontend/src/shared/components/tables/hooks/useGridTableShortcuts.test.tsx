@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableShortcuts.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Capture useShortcuts args so we can verify the registered shortcut keys and options.
 const capturedShortcuts: { shortcuts: any[]; options: any } = { shortcuts: [], options: undefined };

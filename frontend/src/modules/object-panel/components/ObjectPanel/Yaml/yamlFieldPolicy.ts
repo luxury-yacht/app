@@ -1,6 +1,6 @@
-import * as YAML from 'yaml';
-import fieldPolicyContract from '@yaml-field-policy-contract';
 import type { ProtectedYamlRange } from '@shared/components/yaml';
+import fieldPolicyContract from '@yaml-field-policy-contract';
+import * as YAML from 'yaml';
 import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 
 export type YAMLFieldBackendBehavior = 'reject' | 'strip' | 'preserve' | 'allow';

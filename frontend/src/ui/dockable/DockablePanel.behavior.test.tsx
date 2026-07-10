@@ -5,17 +5,15 @@
  * Covers key behaviors and edge cases for DockablePanel.behavior.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
-
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
-import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { type DockPosition, getAllPanelStates, restorePanelStates } from './useDockablePanelState';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),

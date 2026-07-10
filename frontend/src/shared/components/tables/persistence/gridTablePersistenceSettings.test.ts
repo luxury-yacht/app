@@ -6,13 +6,13 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import {
+  type GridTablePersistenceMode,
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
   subscribeGridTablePersistenceMode,
-  type GridTablePersistenceMode,
 } from './gridTablePersistenceSettings';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 describe('gridTablePersistenceSettings', () => {
   beforeEach(() => {

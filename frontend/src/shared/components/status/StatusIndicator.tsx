@@ -6,8 +6,8 @@
  * Header indicators (Connectivity, Metrics, Sessions) use this.
  */
 
-import React from 'react';
 import Tooltip from '@shared/components/Tooltip';
+import React from 'react';
 import './StatusIndicator.css';
 
 /** The five shared status states. */
@@ -69,6 +69,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         <div className="status-popover-actions">
           {actionItems.map((action) => (
             <button
+              type="button"
               key={action.label}
               onClick={(e) => {
                 e.stopPropagation();

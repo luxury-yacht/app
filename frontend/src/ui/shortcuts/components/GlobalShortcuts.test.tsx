@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for GlobalShortcuts.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { GlobalShortcuts } from './GlobalShortcuts';
-import { KeyCodes } from '../constants';
 import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyCodes } from '../constants';
+import { GlobalShortcuts } from './GlobalShortcuts';
 
 // Capture event handlers registered via EventsOn so tests can invoke them.
 const wailsEventHandlers: Record<string, (...args: any[]) => void> = {};

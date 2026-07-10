@@ -1,25 +1,26 @@
+import type { SortConfig } from '@hooks/useTableSort';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable';
+import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
+import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import type {
-  GridTableFilterState,
-  GridTableFilterOptions,
-} from '@shared/components/tables/GridTable';
-import type { SortConfig } from '@hooks/useTableSort';
-import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
 import type {
   RefreshDomain,
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,
   ResourceQueryDynamicRef,
 } from '@/core/refresh/types';
-import { errorHandler } from '@utils/errorHandler';
 import { walkQueryCursorPages } from './cursorPageWalk';
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
-  typedResourceQueryLifecycleIdentity,
   type TypedQueryPayload,
+  typedResourceQueryLifecycleIdentity,
 } from './typedResourceQueryScope';
+
 export type { TypedQueryPayload } from './typedResourceQueryScope';
 
 export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload, TRow> {

@@ -2,9 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 import { useShortcut } from '@ui/shortcuts';
+import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 import '../shared.css';
 import './DetailsTabData.css';
 
@@ -95,6 +96,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
         <div className="object-panel-section-title">Data</div>
         {isSecret && (
           <button
+            type="button"
             className="button generic small"
             onClick={() => setShowDecoded(!showDecoded)}
             title={showDecoded ? 'Show encoded values' : 'Show decoded values'}

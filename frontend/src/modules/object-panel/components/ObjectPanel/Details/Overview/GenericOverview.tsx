@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GenericOverview.tsx
  */
 
-import React from 'react';
-import { OverviewItem } from './shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import type React from 'react';
+import { OverviewItem } from './shared/OverviewItem';
 
 interface GenericOverviewProps {
   group?: string;

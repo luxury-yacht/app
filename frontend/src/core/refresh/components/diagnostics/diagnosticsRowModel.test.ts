@@ -6,25 +6,25 @@
  */
 
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
 import type { PermissionQueryDiagnostics, PermissionStatus } from '@/core/capabilities';
-import type { TelemetrySummary } from '../../types';
+import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
 import { makeTelemetrySummary } from '../../refreshContractTestBuilders';
+import type { TelemetrySummary } from '../../types';
 import type { DiagnosticsRow, DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import {
-  buildCapabilityBatchRows,
-  dedupeDiagnosticsRows,
-  buildDiagnosticsStreamRows,
-  buildDiagnosticsStreamSummary,
   buildBrokerReadRows,
   buildBrokerReadsSummary,
+  buildCapabilityBatchRows,
+  buildContainerLogsSummary,
+  buildDiagnosticsStreamRows,
+  buildDiagnosticsStreamSummary,
+  buildEventStreamSummary,
   buildKubernetesAPIClientRows,
   buildKubernetesAPISummary,
-  buildPermissionRows,
-  buildContainerLogsSummary,
-  buildEventStreamSummary,
   buildMetricsSummary,
   buildOrchestratorSummary,
+  buildPermissionRows,
+  dedupeDiagnosticsRows,
 } from './diagnosticsRowModel';
 
 const telemetry = (streams: TelemetrySummary['streams']): TelemetrySummary =>

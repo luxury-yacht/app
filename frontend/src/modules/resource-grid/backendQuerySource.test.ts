@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { backendQuerySource, type BackendQuerySourceInput } from './backendQuerySource';
+import { type BackendQuerySourceInput, backendQuerySource } from './backendQuerySource';
 import { deriveResourceInventoryRenderState } from './useResourceInventoryTable';
 
 interface Row {

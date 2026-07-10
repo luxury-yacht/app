@@ -7,9 +7,9 @@
  * Otherwise renders the title as a simple span.
  */
 
-import React from 'react';
-import { DockableTabBar } from './DockableTabBar';
+import type React from 'react';
 import type { TabInfo } from './DockableTabBar';
+import { DockableTabBar } from './DockableTabBar';
 
 interface DockablePanelHeaderProps {
   title: string;

@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 

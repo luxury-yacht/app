@@ -1,10 +1,10 @@
+import type { ResourceRef } from '@core/refresh/types';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   parseApiVersion,
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import type { ResourceRef } from '@core/refresh/types';
 
 // NOTE: `ResourceRef` (the backend wire contract) requires clusterId + GVK; the
 // reference types below re-establish those guarantees on the frontend side,

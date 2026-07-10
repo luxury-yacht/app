@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for ErrorBoundary.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
 import type { MockInstance } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { handleMock } = vi.hoisted(() => ({
   handleMock: vi.fn(),

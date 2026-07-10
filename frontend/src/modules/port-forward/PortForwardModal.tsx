@@ -6,13 +6,13 @@
  * container/local port mapping.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
 import { buildObjectActionTarget, runStartPortForward } from '@shared/actions/objectActionClient';
-import { readTargetPortsForRef, requestData } from '@/core/data-access';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import ModalHeader from '@shared/components/modals/ModalHeader';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { readTargetPortsForRef, requestData } from '@/core/data-access';
 import './PortForwardModal.css';
 
 /**
@@ -376,10 +376,11 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
       {/* Footer */}
       <div className="port-forward-footer">
-        <button className="button cancel" onClick={onClose} disabled={isLoading}>
+        <button type="button" className="button cancel" onClick={onClose} disabled={isLoading}>
           Cancel
         </button>
         <button
+          type="button"
           className="button save"
           onClick={handleSubmit}
           disabled={

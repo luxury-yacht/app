@@ -6,9 +6,9 @@
  * single contract instead of positional string lists.
  */
 
+import type { types } from '@wailsjs/go/models';
 import {
   DiscoverNodeLogs,
-  SaveCsvFile,
   FetchContainerLogs,
   FetchNodeLogs,
   FindCatalogObjectByUID,
@@ -20,8 +20,8 @@ import {
   GetTargetPorts,
   HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
-} from '@wailsjs/go/backend/App';
-import type { types } from '@wailsjs/go/models';
+  SaveCsvFile,
+} from '@/core/backend-api';
 
 export interface ObjectReadTarget {
   clusterId: string;

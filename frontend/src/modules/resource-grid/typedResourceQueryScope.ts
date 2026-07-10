@@ -1,9 +1,9 @@
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { SortConfig } from '@hooks/useTableSort';
 import type {
   GridTableFilterOptions,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
-import type { SortConfig } from '@hooks/useTableSort';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type {
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,

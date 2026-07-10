@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLUSTER_SCOPE,
-  INACTIVE_SCOPE,
-  RESOURCE_CAPABILITIES,
   getObjectDetailsRefresherName,
   getObjectEventsRefresherName,
+  INACTIVE_SCOPE,
+  RESOURCE_CAPABILITIES,
 } from './constants';
 
 const PANEL_ID = 'obj:cluster-a:apps/v1/deployment:team-a:api';

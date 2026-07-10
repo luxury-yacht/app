@@ -6,10 +6,11 @@
  * capture the `filters` it is called with. Driving the filter bar's onChange must
  * propagate the new kind into the catalog query.
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gridTablePropsRef: { current: any } = { current: null };
 const useBrowseCatalogMock = vi.hoisted(() => vi.fn());

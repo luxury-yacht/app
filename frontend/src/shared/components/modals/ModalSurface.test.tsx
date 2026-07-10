@@ -1,6 +1,6 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import type { RefObject } from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ModalSurface from './ModalSurface';
 

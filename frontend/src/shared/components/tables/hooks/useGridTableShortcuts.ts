@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect, useRef } from 'react';
 import { useShortcuts } from '@ui/shortcuts';
+import { useEffect, useRef } from 'react';
 
 // Coordinates all keyboard shortcuts for GridTable, disables hover when
 // shortcuts/context menu are active, and registers the navigation/open/

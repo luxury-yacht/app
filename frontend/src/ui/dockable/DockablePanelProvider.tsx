@@ -7,18 +7,35 @@
  * Manages the host DOM node for rendering floating panels.
  */
 
-import React, {
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type React from 'react';
+import {
   createContext,
-  useContext,
-  useState,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
-  useRef,
   useMemo,
+  useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
-import type { TabGroupState, GroupKey, PanelRegistration } from './tabGroupTypes';
+import { getContentBounds } from './dockablePanelLayout';
+import type { PanelLayoutStore } from './panelLayoutStore';
+import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
+import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
+import type { AdjacentTabActivationPreference } from './tabGroupState';
+import {
+  addPanelToFloatingGroup,
+  addPanelToGroup,
+  getGroupForPanel,
+  getGroupTabs,
+  movePanelToGroup,
+  removePanelFromGroup,
+  reorderTab,
+  setActiveTab,
+} from './tabGroupState';
+import type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import {
   focusPanelById,
@@ -26,22 +43,6 @@ import {
   setPanelOpenById,
   setPanelPositionById,
 } from './useDockablePanelState';
-import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
-import type { PanelLayoutStore } from './panelLayoutStore';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { getContentBounds } from './dockablePanelLayout';
-import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
-import {
-  addPanelToGroup,
-  removePanelFromGroup,
-  setActiveTab,
-  reorderTab,
-  movePanelToGroup,
-  addPanelToFloatingGroup,
-  getGroupForPanel,
-  getGroupTabs,
-} from './tabGroupState';
-import type { AdjacentTabActivationPreference } from './tabGroupState';
 
 interface DockablePanelContextValue {
   // Tab group state

@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configMapDescriptor } from './descriptors/configmap';
+import { OverviewRenderer } from './OverviewRenderer';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';

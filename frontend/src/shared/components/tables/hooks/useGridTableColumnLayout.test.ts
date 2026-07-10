@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
 import { getVisibleAutoColumnKeys } from '@shared/components/tables/hooks/useGridTableColumnLayout';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 
 interface Row {
   name: string;

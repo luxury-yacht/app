@@ -6,17 +6,16 @@
  * proceeds, and subsequent data-driven updates are not permanently suppressed.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
-  useDirtyQueue,
   type DirtyQueueResult,
+  useDirtyQueue,
 } from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Row = { id: string; name: string };
 

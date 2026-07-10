@@ -5,12 +5,12 @@
  * panel-scoped clusterId to useGridTablePersistence.
  */
 
-import ReactDOM from 'react-dom/client';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { types } from '@wailsjs/go/models';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobsTab } from './JobsTab';
-import { types } from '@wailsjs/go/models';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
 const gridTablePropsRef: { current: any } = { current: null };

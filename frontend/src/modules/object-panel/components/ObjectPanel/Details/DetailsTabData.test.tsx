@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DataSection from './DetailsTabData';
 
 vi.mock('@ui/shortcuts', () => ({

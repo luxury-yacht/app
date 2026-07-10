@@ -4,23 +4,22 @@
  * Registers G6 canvas, node, and edge events for the object-map renderer.
  */
 
-import { CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { Graph } from '@antv/g6';
+import { CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { MutableRefObject } from 'react';
-import type { ObjectMapLayout, PositionedEdge } from './objectMapLayout';
-import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import {
+  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6Drag,
   handleObjectMapG6DragEnd,
-  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
   handleObjectMapG6PointerUp,
-  objectMapG6TooltipPoint,
   type ObjectMapG6ElementPointerEvent,
   type ObjectMapG6NodeInteractionHandlers,
+  objectMapG6TooltipPoint,
 } from './objectMapG6Interactions';
 import {
   findObjectMapG6Edge,
@@ -29,6 +28,7 @@ import {
   objectMapG6EndpointLabel,
 } from './objectMapG6RendererOptions';
 import { isObjectMapZoomWheelEvent, objectMapWheelZoomRatio } from './objectMapG6Viewport';
+import type { ObjectMapLayout, PositionedEdge } from './objectMapLayout';
 import type { ObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type { ObjectMapHoverEdge, ObjectMapSelectionState } from './objectMapRendererTypes';
 

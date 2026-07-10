@@ -19,10 +19,10 @@
  * component; no custom DOM measurement or scroll math lives in this file.
  */
 
-import React, { type HTMLAttributes } from 'react';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
-import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
+import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import React, { type HTMLAttributes } from 'react';
 import { useDockablePanelContext } from './DockablePanelProvider';
 
 /** Describes a single tab in the bar. */

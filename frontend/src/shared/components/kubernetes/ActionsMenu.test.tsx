@@ -7,15 +7,14 @@
  * the panel lifecycle callbacks (onAfterDelete / onAfterAction).
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ActionsMenu } from './ActionsMenu';
-import { eventBus } from '@/core/events';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
+import { ActionsMenu } from './ActionsMenu';
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 

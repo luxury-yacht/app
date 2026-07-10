@@ -10,7 +10,8 @@
  * get a minimum visible width so a one-second job is still findable.
  */
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './JobTimeline.css';
 
 interface JobLike {

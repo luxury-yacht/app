@@ -6,16 +6,16 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  hexToHsl,
-  hslToHex,
-  hexToRgb,
-  generateAccentShades,
-  generateAccentBg,
-  applyAccentColor,
   applyAccentBg,
+  applyAccentColor,
   clearAccentColor,
-  LIGHT_OFFSETS,
   DARK_OFFSETS,
+  generateAccentBg,
+  generateAccentShades,
+  hexToHsl,
+  hexToRgb,
+  hslToHex,
+  LIGHT_OFFSETS,
 } from './accentColor';
 
 describe('hexToHsl', () => {

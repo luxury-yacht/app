@@ -8,12 +8,11 @@
  * nobody rendered).
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NamespaceViewType } from '@/types/navigation/views';
 
 const clientMocks = vi.hoisted(() => ({

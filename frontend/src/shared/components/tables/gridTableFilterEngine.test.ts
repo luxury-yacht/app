@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
 
 import {
   applyGridTableFilters,
   buildGridTableFilterOptions,
   resolveGridTableFilterAccessors,
 } from '@shared/components/tables/gridTableFilterEngine';
-import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 
 interface Row {
   id: string;

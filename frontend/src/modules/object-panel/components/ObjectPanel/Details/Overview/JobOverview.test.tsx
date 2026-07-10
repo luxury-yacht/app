@@ -4,12 +4,12 @@
  * Exercises the Job and CronJob Overviews through the descriptor-driven renderer (X1).
  */
 
-import ReactDOM from 'react-dom/client';
+import { cronjob, job } from '@wailsjs/go/models';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { job, cronjob } from '@wailsjs/go/models';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
 import { OverviewRenderer } from './OverviewRenderer';
-import { jobDescriptor, cronJobDescriptor } from './descriptors/job';
 
 const defaultClusterId = 'alpha:ctx';
 const defaultClusterName = 'alpha';

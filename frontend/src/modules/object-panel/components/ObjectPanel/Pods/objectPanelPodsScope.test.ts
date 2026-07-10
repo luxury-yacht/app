@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 import type { PanelObjectData } from '../types';
+import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
 
 describe('buildObjectPanelPodsScope', () => {
   it('returns null when the object name is missing', () => {

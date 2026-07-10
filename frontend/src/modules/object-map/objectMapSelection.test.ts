@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { PositionedEdge } from './objectMapLayout';
+import { computeObjectMapSelectionState } from './objectMapSelection';
 
 const edge = (id: string, sourceId: string, targetId: string): PositionedEdge => ({
   id,

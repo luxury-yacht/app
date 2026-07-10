@@ -5,21 +5,20 @@
  * shared GridTable binding instead of requiring each view to thread it again.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
+import type { ResourceGridTableResult, ResourceGridTableRow } from './resourceGridTableTypes';
 import {
   useNamespaceResourceGridTable,
   useObjectPanelResourceGridTable,
 } from './useResourceGridTable';
-import type { ResourceGridTableResult, ResourceGridTableRow } from './resourceGridTableTypes';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({

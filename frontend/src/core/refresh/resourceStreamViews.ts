@@ -1,6 +1,6 @@
+import { stripClusterScope } from './clusterScope';
 import type { RefreshContext } from './RefreshManager';
 import type { RefreshDomain } from './types';
-import { stripClusterScope } from './clusterScope';
 
 export type ResourceStreamRefreshDomain =
   | 'pods'

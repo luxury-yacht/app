@@ -5,10 +5,10 @@
  * Encapsulates state and side effects for the core layer.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { refreshManager } from '../RefreshManager';
+import { useCallback, useEffect, useState } from 'react';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { refreshManager } from '../RefreshManager';
 
 /**
  * Hook for managing auto-refresh state.

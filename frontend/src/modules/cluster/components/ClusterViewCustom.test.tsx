@@ -5,13 +5,13 @@
  * Covers key behaviors and edge cases for ClusterViewCustom.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
-import type { CatalogItem } from '@/core/refresh/types';
 import { catalogItemToFallbackCustomRow } from '@modules/browse/hooks/customCatalogRowAdapter';
+import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CatalogItem } from '@/core/refresh/types';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({

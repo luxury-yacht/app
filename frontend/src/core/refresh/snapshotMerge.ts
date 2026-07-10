@@ -6,11 +6,11 @@
  * stream and table surfaces.
  */
 
-import { getScopedDomainState } from './store';
 import {
   buildCatalogResourceRowKey,
   buildClusterNameRowKey,
 } from '@shared/utils/resourceRowIdentity';
+import { getScopedDomainState } from './store';
 import type {
   CatalogSnapshotPayload,
   DomainPayloadMap,

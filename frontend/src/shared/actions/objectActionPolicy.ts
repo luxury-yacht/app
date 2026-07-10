@@ -5,12 +5,12 @@
  * tests share one policy for supported kinds, permission state, and row facts.
  */
 
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceLink } from '@core/refresh/types';
 import {
   isPortForwardTargetGVKSupported,
   lookupPortForwardTargetCapability,
 } from '@modules/port-forward/targetCapabilities';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionContract';
 
 const WORKLOAD_KIND_MAP: Record<string, string> = {
@@ -218,7 +218,7 @@ export const resolveObjectActionPolicy = ({
   const triggerDisabled = object.status === 'Suspended' || actionLoading;
 
   const suspendActionId =
-    isCronJob && Boolean(handlers.suspendToggle) && permissionAllows(permissions.suspend)
+    isCronJob && handlers.suspendToggle && permissionAllows(permissions.suspend)
       ? object.status === 'Suspended'
         ? OBJECT_ACTION_IDS.resume
         : OBJECT_ACTION_IDS.suspend
@@ -253,7 +253,7 @@ export const resolveObjectActionPolicy = ({
 
   const cordonActionId =
     includesKind(CORDONABLE_KINDS, normalizedKind) &&
-    Boolean(handlers.cordon) &&
+    handlers.cordon &&
     permissionAllows(permissions.cordon)
       ? object.unschedulable
         ? OBJECT_ACTION_IDS.uncordon

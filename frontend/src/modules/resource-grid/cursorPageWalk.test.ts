@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { walkQueryCursorPages, type CursorWalkPage } from './cursorPageWalk';
+import { type CursorWalkPage, walkQueryCursorPages } from './cursorPageWalk';
 
 type Item = string;
 

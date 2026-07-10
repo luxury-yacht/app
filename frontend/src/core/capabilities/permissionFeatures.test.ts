@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-
-import { CLUSTER_CAPABILITIES } from './catalog';
-import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
-import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
 import { getScopedFeaturesForView } from '@/core/refresh/components/diagnostics';
+import { CLUSTER_CAPABILITIES } from './catalog';
+import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
+import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
 
 describe('permission feature contract', () => {
   it('uses stable feature keys with labels for every static permission spec', () => {

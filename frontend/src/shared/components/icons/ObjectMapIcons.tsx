@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const ObjectMapIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (

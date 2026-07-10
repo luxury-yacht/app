@@ -7,15 +7,16 @@
  * update, or delete the favorite.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/FavoriteIcons';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useFavorites } from '@core/contexts/FavoritesContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import FavSaveModal from './FavSaveModal';
 
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.

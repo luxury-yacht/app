@@ -5,9 +5,9 @@
  * Tracks maximized state, target bounds, and handles state restoration.
  */
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import type { DockPosition } from './useDockablePanelState';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { getContentBounds } from './dockablePanelLayout';
+import type { DockPosition } from './useDockablePanelState';
 
 interface DockablePanelState {
   position: DockPosition;

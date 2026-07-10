@@ -5,11 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef } from 'react';
-import { useModalFocusTrap } from './useModalFocusTrap';
-import ModalSurface from './ModalSurface';
-import ModalHeader from './ModalHeader';
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import { useRef } from 'react';
+import ModalHeader from './ModalHeader';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './ConfirmationModal.css';
 
 export interface ConfirmationModalTableColumn {
@@ -116,16 +117,22 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
       <div className="confirmation-modal-footer">
         {secondaryActionText && onSecondaryAction && (
           <button
+            type="button"
             className={`button ${secondaryActionButtonClass} confirmation-modal-secondary-action`}
             onClick={onSecondaryAction}
           >
             {secondaryActionText}
           </button>
         )}
-        <button className="button cancel" onClick={onCancel}>
+        <button type="button" className="button cancel" onClick={onCancel}>
           {cancelText}
         </button>
-        <button className={`button ${confirmButtonClass}`} onClick={onConfirm} autoFocus>
+        <button
+          type="button"
+          className={`button ${confirmButtonClass}`}
+          onClick={onConfirm}
+          autoFocus
+        >
           {confirmText}
         </button>
       </div>

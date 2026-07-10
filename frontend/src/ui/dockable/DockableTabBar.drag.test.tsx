@@ -7,9 +7,9 @@
  * drop zone, and assert against `ctx.tabGroups`.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -19,9 +19,9 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
-import { DockableTabBar } from './DockableTabBar';
+import { TAB_DRAG_DATA_TYPE, TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-import { TabDragProvider, TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
+import { DockableTabBar } from './DockableTabBar';
 
 const renderWithProvider = async (ui: React.ReactElement) => {
   const host = document.createElement('div');

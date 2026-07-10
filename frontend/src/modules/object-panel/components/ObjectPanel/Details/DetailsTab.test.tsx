@@ -8,9 +8,9 @@
  * sections appear.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DetailsTabProps } from './DetailsTab';
 import { buildObjectDetailModel } from './objectDetailModel';
 

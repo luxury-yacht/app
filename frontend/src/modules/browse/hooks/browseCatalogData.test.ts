@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import {
   acceptsCatalogSnapshotScope,
   applyCatalogBaseline,

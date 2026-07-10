@@ -6,8 +6,10 @@
  * Clicking a favorite navigates to the saved view state.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { DeleteIcon } from '@shared/components/icons/SharedIcons';
+import { useFavorites } from '@core/contexts/FavoritesContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { isAllNamespaces } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -15,11 +17,9 @@ import {
   FavoriteGenericIcon,
   FavoritePinIcon,
 } from '@shared/components/icons/FavoriteIcons';
-import { useFavorites } from '@core/contexts/FavoritesContext';
+import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { isAllNamespaces } from '@modules/namespace/constants';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Favorite } from '@/core/persistence/favorites';
 import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
@@ -182,7 +182,7 @@ const FavMenuDropdown: React.FC = () => {
                 return (
                   <div
                     key={fav.id}
-                    className={'fav-dropdown-row' + (disabled ? ' disabled' : '')}
+                    className={`fav-dropdown-row${disabled ? ' disabled' : ''}`}
                     role="menuitem"
                     onClick={() => {
                       if (!disabled) handleNavigate(fav);
@@ -193,6 +193,7 @@ const FavMenuDropdown: React.FC = () => {
 
                     <span className="fav-dropdown-hover-actions">
                       <button
+                        type="button"
                         className={`fav-dropdown-action-btn${idx === 0 ? ' disabled' : ''}`}
                         title="Move up"
                         onClick={(e) => {
@@ -203,6 +204,7 @@ const FavMenuDropdown: React.FC = () => {
                         <ChevronUpIcon width={14} height={14} />
                       </button>
                       <button
+                        type="button"
                         className={`fav-dropdown-action-btn${idx === favorites.length - 1 ? ' disabled' : ''}`}
                         title="Move down"
                         onClick={(e) => {
@@ -213,6 +215,7 @@ const FavMenuDropdown: React.FC = () => {
                         <ChevronDownIcon width={14} height={14} />
                       </button>
                       <button
+                        type="button"
                         className="fav-dropdown-action-btn danger"
                         title="Delete favorite"
                         onClick={(e) => {

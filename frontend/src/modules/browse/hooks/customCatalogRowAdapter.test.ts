@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-
+import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 import {
   catalogItemToFallbackCustomRow,
   customCatalogObjectReference,
   customCatalogRowKey,
   normalizeHydratedCustomRow,
 } from './customCatalogRowAdapter';
-import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
 const row = (group: string): CatalogBackedCustomResourceRow => ({
   clusterId: 'cluster-a',

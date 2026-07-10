@@ -1,10 +1,9 @@
-import { useRef, useEffect, useState } from 'react';
+import { act, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider, useKeyboardContext } from './context';
-import { useKeyboardSurface } from './surfaces';
 import { useShortcut } from './hooks';
+import { useKeyboardSurface } from './surfaces';
 
 describe('keyboard surfaces', () => {
   let container: HTMLDivElement;
@@ -57,9 +56,13 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={surfaceRef}>
-            <button id="inside-surface">Inside</button>
+            <button type="button" id="inside-surface">
+              Inside
+            </button>
           </div>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -107,9 +110,11 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={surfaceRef}>
-            <button>Inside</button>
+            <button type="button">Inside</button>
           </div>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -156,9 +161,11 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={surfaceRef}>
-            <button>Inside</button>
+            <button type="button">Inside</button>
           </div>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -220,12 +227,14 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={regionRef}>
-            <button>Region</button>
+            <button type="button">Region</button>
           </div>
           <div ref={panelRef}>
-            <button>Panel</button>
+            <button type="button">Panel</button>
           </div>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -290,12 +299,14 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={panelRef}>
-            <button>Panel</button>
+            <button type="button">Panel</button>
           </div>
           <div ref={modalRef}>
-            <button>Modal</button>
+            <button type="button">Modal</button>
           </div>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -362,7 +373,9 @@ describe('keyboard surfaces', () => {
       return (
         <div ref={modalRef}>
           <div ref={dropdownRef}>
-            <button id="inside-dropdown">Inside dropdown</button>
+            <button type="button" id="inside-dropdown">
+              Inside dropdown
+            </button>
           </div>
         </div>
       );
@@ -433,7 +446,9 @@ describe('keyboard surfaces', () => {
       return (
         <div ref={regionRef}>
           <div ref={dropdownRef}>
-            <button id="inside-dropdown">Inside dropdown</button>
+            <button type="button" id="inside-dropdown">
+              Inside dropdown
+            </button>
           </div>
         </div>
       );
@@ -497,7 +512,9 @@ describe('keyboard surfaces', () => {
       return (
         <div ref={panelRef}>
           <div ref={editorRef}>
-            <button id="inside-editor">Inside editor</button>
+            <button type="button" id="inside-editor">
+              Inside editor
+            </button>
           </div>
         </div>
       );
@@ -564,15 +581,21 @@ describe('keyboard surfaces', () => {
       return (
         <>
           <div ref={firstRef}>
-            <button id="first-surface">First</button>
+            <button type="button" id="first-surface">
+              First
+            </button>
           </div>
           <div ref={secondRef}>
-            <button id="second-surface">Second</button>
+            <button type="button" id="second-surface">
+              Second
+            </button>
           </div>
-          <button id="rerender" onClick={() => setVersion((current) => current + 1)}>
+          <button type="button" id="rerender" onClick={() => setVersion((current) => current + 1)}>
             Rerender
           </button>
-          <button id="outside-surface">Outside</button>
+          <button type="button" id="outside-surface">
+            Outside
+          </button>
         </>
       );
     };
@@ -646,7 +669,9 @@ describe('keyboard surfaces', () => {
 
       return (
         <div ref={surfaceRef}>
-          <button id="inside-surface">Inside</button>
+          <button type="button" id="inside-surface">
+            Inside
+          </button>
         </div>
       );
     };
@@ -714,7 +739,9 @@ describe('keyboard surfaces', () => {
       return (
         <div ref={panelRef}>
           <div ref={editorRef}>
-            <button id="inside-editor">Inside editor</button>
+            <button type="button" id="inside-editor">
+              Inside editor
+            </button>
           </div>
         </div>
       );
@@ -764,7 +791,9 @@ describe('keyboard surfaces', () => {
 
       return (
         <div ref={surfaceRef}>
-          <button id="inside-surface">Inside</button>
+          <button type="button" id="inside-surface">
+            Inside
+          </button>
         </div>
       );
     };
@@ -828,7 +857,9 @@ describe('keyboard surfaces', () => {
 
       return (
         <div ref={surfaceRef}>
-          <button id="inside-surface">Inside</button>
+          <button type="button" id="inside-surface">
+            Inside
+          </button>
         </div>
       );
     };

@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$receiver.GetAllClusterLifecycleStates($...)` as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Route lifecycle state reads through appStateAccess instead of calling runtime methods directly.",
+    severity = "error"
+  )
+}

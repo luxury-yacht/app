@@ -8,7 +8,7 @@
  * Returns null for unknown kinds — callers should fall back to browse.
  */
 
-import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 
 export interface ViewDestination {
   viewType: ViewType;

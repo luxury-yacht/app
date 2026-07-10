@@ -820,7 +820,7 @@ const animateScrollbarOpacity = (
   const startedAt = window.performance.now();
   const step = (now: number) => {
     const progress = Math.min(1, (now - startedAt) / duration);
-    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const easedProgress = 1 - (1 - progress) ** 3;
     const value = startOpacity + (targetOpacity - startOpacity) * easedProgress;
     setScrollbarOpacity(element, value);
 

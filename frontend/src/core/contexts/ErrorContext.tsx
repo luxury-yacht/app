@@ -4,8 +4,15 @@
  * Error notification context and actions.
  * Provides a way to manage and display error notifications across the application.
  */
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { ErrorDetails, ErrorSeverity, errorHandler, subscribeToErrors } from '@utils/errorHandler';
+
+import {
+  type ErrorDetails,
+  ErrorSeverity,
+  errorHandler,
+  subscribeToErrors,
+} from '@utils/errorHandler';
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 export interface ErrorNotification extends ErrorDetails {
   id: string;

@@ -6,10 +6,11 @@
  * so the wrapper must not inject it a second time.
  */
 
-import React, { act } from 'react';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
 // Capture the params passed to useGridTablePersistence.
 const capturedParams: any[] = [];

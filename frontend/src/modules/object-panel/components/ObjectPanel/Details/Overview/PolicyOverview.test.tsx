@@ -5,16 +5,16 @@
  * LimitRange) rendered through the generic OverviewRenderer.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hpaDescriptor,
   limitRangeDescriptor,
   pdbDescriptor,
   resourceQuotaDescriptor,
 } from './descriptors/policy';
+import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
 
 const openWithObjectMock = vi.fn();

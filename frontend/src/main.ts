@@ -5,12 +5,12 @@
  * Implements main logic for the frontend.
  */
 
+import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
 import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
-import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
+import App from './App.tsx';
 
 const appElement = document.getElementById('app');
 if (appElement) {

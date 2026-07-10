@@ -2,19 +2,19 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
  */
 
-import React from 'react';
-import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
-import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
-import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
 import DataSection from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabData';
+import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
+import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
+import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
 import './DetailsTab.css';
 import './DetailsTabData.css';
 
 // Import from extracted modules
 import type { DetailsTabProps } from './detailsTabTypes';
-import { useUtilizationData, useHasUtilization } from './useUtilizationData';
+import { useHasUtilization, useUtilizationData } from './useUtilizationData';
 
 // Action-relevant fields read off the active detail DTO for the Overview/ActionsMenu.
 interface ActionDetail {

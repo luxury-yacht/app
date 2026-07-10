@@ -5,12 +5,12 @@
  * Covers key behaviors and edge cases for NsViewCustom.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({

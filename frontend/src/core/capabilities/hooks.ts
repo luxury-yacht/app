@@ -7,17 +7,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { eventBus } from '@/core/events';
 import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
-
-import type { CapabilityDescriptor, CapabilityState } from './types';
-import { normalizeDescriptor } from './utils';
+import { eventBus } from '@/core/events';
+import { type QueryPayloadItem, queryPermissions } from './permissionRead';
 import {
   getPermissionKey,
+  getPermissionQueryDiagnosticsSnapshot,
   getUserPermissionMap,
   subscribeDiagnostics,
   subscribeUserPermissions,
-  getPermissionQueryDiagnosticsSnapshot,
 } from './permissionStore';
 import type {
   PermissionMap,
@@ -29,7 +27,8 @@ import {
   isTransientClusterInactivePermissionError,
   isTransientPermissionResultError,
 } from './transientPermissionErrors';
-import { queryPermissions, type QueryPayloadItem } from './permissionRead';
+import type { CapabilityDescriptor, CapabilityState } from './types';
+import { normalizeDescriptor } from './utils';
 
 // ---------------------------------------------------------------------------
 // Public types

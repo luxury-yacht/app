@@ -2,13 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 import type { PanelObjectData } from '../types';
+import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
 const hoistedMocks = vi.hoisted(() => ({
   refreshManager: {

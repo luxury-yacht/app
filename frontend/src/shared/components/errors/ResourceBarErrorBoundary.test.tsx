@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for ResourceBarErrorBoundary.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ResourceBarErrorBoundary from './ResourceBarErrorBoundary';
 

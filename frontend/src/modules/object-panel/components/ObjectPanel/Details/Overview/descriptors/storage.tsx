@@ -7,11 +7,11 @@
  * and the shared status block.
  */
 
-import React from 'react';
-import { persistentvolume, persistentvolumeclaim, storageclass } from '@wailsjs/go/models';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { persistentvolume, persistentvolumeclaim, storageclass } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 
@@ -167,7 +167,7 @@ export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
           const ds = d.dataSource;
           if (!ds) return undefined;
           const label = `${ds.kind}/${ds.name}`;
-          let ref;
+          let ref: ReturnType<typeof buildRequiredObjectReference> | null;
           try {
             ref = buildRequiredObjectReference({
               kind: ds.kind.toLowerCase(),

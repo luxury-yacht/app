@@ -4,8 +4,8 @@
  * Tests object-map layout columns, ordering, lane splitting, and edge routing.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import {
   computeObjectMapLayout,
   OBJECT_MAP_COLUMN_GAP,

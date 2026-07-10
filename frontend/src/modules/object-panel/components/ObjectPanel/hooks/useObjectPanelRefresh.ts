@@ -7,14 +7,14 @@
  */
 import { useCallback, useEffect, useMemo } from 'react';
 
-import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
+import { type DataRequestReason, requestRefreshDomain } from '@/core/data-access';
 import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 
-import { INACTIVE_SCOPE, getObjectDetailsRefresherName } from '../constants';
+import { getObjectDetailsRefresherName, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
 import { useObjectPanelScopedDomainLifecycle } from './useObjectPanelScopedDomainLifecycle';
 

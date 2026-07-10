@@ -5,12 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef, useState, useEffect } from 'react';
-import { useKeyboardContext } from '../context';
 import { CategoryIcon, ShortcutArrowIcon } from '@shared/components/icons/SharedIcons';
-import ModalSurface from '@shared/components/modals/ModalSurface';
 import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import React, { useEffect, useRef, useState } from 'react';
+import { useKeyboardContext } from '../context';
 import './ShortcutHelpModal.css';
 
 interface ShortcutHelpModalProps {

@@ -5,35 +5,35 @@
  * Implements Sidebar logic for the UI layer.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
-import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import {
-  ExpandSidebarIcon,
-  CollapseSidebarIcon,
-  ClusterOverviewIcon,
-  ClusterResourcesIcon,
   CategoryIcon,
   CloseIcon,
-  SearchIcon,
-  WarningIcon,
+  ClusterOverviewIcon,
+  ClusterResourcesIcon,
+  CollapseSidebarIcon,
+  ExpandSidebarIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
+  SearchIcon,
+  WarningIcon,
 } from '@shared/components/icons/SharedIcons';
-import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
-import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
-import { isMacPlatform } from '@/utils/platform';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { eventBus } from '@/core/events';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
-import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
+import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
+import { isMacPlatform } from '@/utils/platform';
+import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
+import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
 const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
@@ -335,6 +335,7 @@ function Sidebar() {
     >
       <div className="sidebar-content">
         <button
+          type="button"
           className="sidebar-toggle"
           onClick={viewState.toggleSidebar}
           title={

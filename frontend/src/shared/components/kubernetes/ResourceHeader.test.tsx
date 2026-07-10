@@ -5,8 +5,8 @@
  * creationTimestamp in panel context) and the Last Modified row.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatAge } from '@/utils/ageFormatter';

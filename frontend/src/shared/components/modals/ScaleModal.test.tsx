@@ -1,8 +1,8 @@
-import ReactDOM from 'react-dom/client';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ScaleModal from './ScaleModal';
-import { KeyboardProvider } from '@ui/shortcuts';
 
 describe('ScaleModal', () => {
   let container: HTMLDivElement;

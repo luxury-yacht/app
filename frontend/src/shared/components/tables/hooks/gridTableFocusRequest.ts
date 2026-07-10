@@ -1,6 +1,6 @@
-import type { KubernetesObjectReference } from '@/types/view-state';
-import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
+import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface GridTableFocusRequest {
   kind: string;

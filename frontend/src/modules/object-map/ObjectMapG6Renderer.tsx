@@ -6,36 +6,34 @@
  * rendering to focused helpers.
  */
 
-import { GraphEvent } from '@antv/g6';
 import type { Graph, GraphData } from '@antv/g6';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GraphEvent } from '@antv/g6';
 import { useZoom } from '@core/contexts/ZoomContext';
-import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock';
-import type { ObjectMapLayout } from './objectMapLayout';
-import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
-import { toObjectMapG6Data } from './objectMapG6Data';
-import {
-  publishObjectMapRendererDebugSnapshot,
-  type ObjectMapRendererDebugSnapshot,
-} from './objectMapDebugStore';
+import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
+import {
+  type ObjectMapRendererDebugSnapshot,
+  publishObjectMapRendererDebugSnapshot,
+} from './objectMapDebugStore';
+import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
+import {
+  type ObjectMapG6CardDetailLevel,
+  type ObjectMapG6EdgeDetailLevel,
+  objectMapG6CardDetailLevelForZoom,
+} from './objectMapG6Constants';
+import { toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
 import { computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
+import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
-import { useObjectMapG6GraphLifecycle } from './useObjectMapG6GraphLifecycle';
-import { useObjectMapG6Palette } from './useObjectMapG6Palette';
-import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';
-import {
-  objectMapG6CardDetailLevelForZoom,
-  type ObjectMapG6CardDetailLevel,
-  type ObjectMapG6EdgeDetailLevel,
-} from './objectMapG6Constants';
 import type {
-  ObjectMapHoverEdge,
-  ObjectMapContextMenuAction,
   ObjectMapCanvasContextMenuAction,
+  ObjectMapContextMenuAction,
+  ObjectMapHoverEdge,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,
@@ -45,6 +43,9 @@ import type {
   ObjectMapViewportChangeAction,
   ObjectMapViewportControls,
 } from './objectMapRendererTypes';
+import { useObjectMapG6GraphLifecycle } from './useObjectMapG6GraphLifecycle';
+import { useObjectMapG6Palette } from './useObjectMapG6Palette';
+import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';
 
 const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,

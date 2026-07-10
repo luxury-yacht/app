@@ -6,9 +6,9 @@
 
 import type { GraphData } from '@antv/g6';
 import { describe, expect, it, vi } from 'vitest';
+import { applyGraphData, createObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
-import { applyGraphData, createObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 
 const layout = (ids: string[] = ['deploy']): ObjectMapLayout => ({
   nodes: ids.map((id, index) => ({

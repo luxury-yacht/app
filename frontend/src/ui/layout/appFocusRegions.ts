@@ -1,7 +1,7 @@
-import { type RefObject, useEffect } from 'react';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
+import { type RefObject, useEffect } from 'react';
 
 export type TopLevelAppRegion = 'header' | 'sidebar' | 'content';
 

@@ -8,28 +8,29 @@
  * - Implements a fallback UI for view rendering errors
  * - Each view component is imported and rendered based on the active tab
  */
-import React from 'react';
-import { NamespaceViewType } from '@/types/navigation/views';
+
+import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
-import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewMap from '@modules/namespace/components/NsViewMap';
+import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import React from 'react';
+import type { NamespaceViewType } from '@/types/navigation/views';
 
 const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () => void }) => (
   <div className="namespace-view-error">
     <h4>Failed to load {viewName}</h4>
     <p>An error occurred while rendering this view.</p>
-    <button className="button generic" onClick={reset}>
+    <button type="button" className="button generic" onClick={reset}>
       Retry
     </button>
   </div>

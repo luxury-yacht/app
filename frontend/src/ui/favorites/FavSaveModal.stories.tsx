@@ -7,9 +7,9 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import FavSaveModal from './FavSaveModal';
-import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
+import FavSaveModal from './FavSaveModal';
 
 // ---------------------------------------------------------------------------
 // Mock data

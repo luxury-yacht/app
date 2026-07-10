@@ -10,16 +10,16 @@
  * story navigations within the shared iframe.
  */
 
-import type { Decorator } from '@storybook/react';
+import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
+import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
+import { FavoritesProvider } from '@core/contexts/FavoritesContext';
+import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import type { Decorator } from '@storybook/react';
+import { DockablePanelProvider } from '@ui/dockable';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { ConnectionStatusProvider } from '@/core/connection/connectionStatus';
-import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
-import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
-import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
-import { FavoritesProvider } from '@core/contexts/FavoritesContext';
-import { DockablePanelProvider } from '@ui/dockable';
 
 let mountCounter = 0;
 
@@ -37,13 +37,13 @@ export const SidebarProvidersDecorator: Decorator = (Story) => {
             <AuthErrorProvider>
               <KubernetesProvider>
                 <ClusterLifecycleProvider>
-                <FavoritesProvider>
-                <DockablePanelProvider>
-                  <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-                    <Story />
-                  </div>
-                </DockablePanelProvider>
-                </FavoritesProvider>
+                  <FavoritesProvider>
+                    <DockablePanelProvider>
+                      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+                        <Story />
+                      </div>
+                    </DockablePanelProvider>
+                  </FavoritesProvider>
                 </ClusterLifecycleProvider>
               </KubernetesProvider>
             </AuthErrorProvider>

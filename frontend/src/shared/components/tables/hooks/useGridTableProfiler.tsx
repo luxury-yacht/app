@@ -5,12 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { Profiler, useCallback, useMemo, useRef } from 'react';
-
 import {
-  useFrameSampler,
   type FrameSamplerSample,
+  useFrameSampler,
 } from '@shared/components/tables/hooks/useFrameSampler';
+import { Profiler, useCallback, useMemo, useRef } from 'react';
 
 // Optional perf helper for GridTable: wraps content in React Profiler, samples
 // frame timings, and surfaces one-time dev warnings when thresholds are hit.

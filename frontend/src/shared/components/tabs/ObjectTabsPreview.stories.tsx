@@ -34,12 +34,11 @@
  * could theoretically end up in one strip after drags).
  */
 
-import { useCallback, useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-
-import { Tabs, type TabDescriptor } from './';
-import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
+import { useCallback, useRef, useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { type TabDescriptor, Tabs } from './';
+import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
 // Import the real dockable panel CSS so the preview renders each tab's
 // kind indicator via the production `.dockable-tab__kind-indicator.kind-badge`
 // rules AND the custom drag image via the real `.dockable-tab-drag-preview`

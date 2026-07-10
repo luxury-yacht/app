@@ -5,15 +5,14 @@
  * Covers key behaviors and edge cases for useTableSort.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useTableSort } from './useTableSort';
 import {
   getGridTablePerformanceSnapshot,
   resetGridTablePerformanceDiagnostics,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useTableSort } from './useTableSort';
 
 type Row = {
   name: string;
@@ -32,10 +31,10 @@ const TestHarness = ({ data }: { data: Row[] }) => {
 
   return (
     <div>
-      <button data-testid="sort-name" onClick={() => handleSort('name')}>
+      <button type="button" data-testid="sort-name" onClick={() => handleSort('name')}>
         sort-name
       </button>
-      <button data-testid="sort-age" onClick={() => handleSort('age')}>
+      <button type="button" data-testid="sort-age" onClick={() => handleSort('age')}>
         sort-age
       </button>
       <div data-testid="names">{sortedData.map((item) => item.name).join(',')}</div>
@@ -141,7 +140,7 @@ describe('useTableSort', () => {
       });
       return (
         <div>
-          <button data-testid="sort-score" onClick={() => handleSort('score')}>
+          <button type="button" data-testid="sort-score" onClick={() => handleSort('score')}>
             sort-score
           </button>
           <div data-testid="ids">{sortedData.map((r) => r.id).join(',')}</div>
@@ -187,7 +186,7 @@ describe('useTableSort', () => {
       });
       return (
         <div>
-          <button data-testid="sort-score" onClick={() => handleSort('score')}>
+          <button type="button" data-testid="sort-score" onClick={() => handleSort('score')}>
             sort-score
           </button>
           <div data-testid="ids">{sortedData.map((r) => r.id).join(',')}</div>

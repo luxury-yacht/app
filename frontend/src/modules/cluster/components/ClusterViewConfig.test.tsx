@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for ClusterViewConfig.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requestRefreshDomainStateMock = vi.hoisted(() => vi.fn());
 

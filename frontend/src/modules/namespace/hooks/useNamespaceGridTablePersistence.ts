@@ -8,21 +8,22 @@
  * - Exposes a reset function to clear persisted state.
  * - Utilizes useGridTablePersistence for core persistence logic.
  */
-import { useMemo, useState } from 'react';
+
+import type { SortConfig } from '@hooks/useTableSort';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type {
+  ResourceGridPersistence,
+  ResourceGridTableRow,
+} from '@modules/resource-grid/resourceGridTableTypes';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable.types';
-import type { SortConfig } from '@hooks/useTableSort';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import type {
-  ResourceGridPersistence,
-  ResourceGridTableRow,
-} from '@modules/resource-grid/resourceGridTableTypes';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useMemo, useState } from 'react';
 
 export interface NamespaceGridTablePersistenceParams<T> {
   viewId: string;

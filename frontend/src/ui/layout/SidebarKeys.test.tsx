@@ -5,16 +5,15 @@
  * Covers key behaviors and edge cases for SidebarKeys.
  */
 
-import React from 'react';
-import { act } from 'react';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
-  useSidebarKeyboardControls,
-  targetsAreEqual,
   describeElementTarget,
   type SidebarCursorTarget,
+  targetsAreEqual,
+  useSidebarKeyboardControls,
 } from './SidebarKeys';
 
 const buildTargetElement = (attrs: Record<string, string>) => {

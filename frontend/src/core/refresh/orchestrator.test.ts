@@ -6,30 +6,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
   setAutoRefreshEnabled,
 } from '@/core/settings/appPreferences';
-import type { RefreshDomain } from './types';
-import {
-  getRefreshState,
-  getScopedDomainState,
-  markPendingRequest,
-  resetAllScopedDomainStates,
-  setScopedDomainState,
-} from './store';
-import { refreshOrchestrator } from './orchestrator';
-import {
-  CLUSTER_REFRESHERS,
-  NAMESPACE_REFRESHERS,
-  SYSTEM_REFRESHERS,
-  type SystemRefresherName,
-} from './refresherTypes';
-import { buildClusterScope } from './clusterScope';
 import { clusterReadiness } from './clusterReadiness';
-import { eventBus } from '@/core/events';
+import { buildClusterScope } from './clusterScope';
+import { refreshOrchestrator } from './orchestrator';
 import {
   makeCatalogSnapshotPayload,
   makeClusterConfigSnapshotPayload,
@@ -37,6 +22,20 @@ import {
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from './refreshContractTestBuilders';
+import {
+  CLUSTER_REFRESHERS,
+  NAMESPACE_REFRESHERS,
+  SYSTEM_REFRESHERS,
+  type SystemRefresherName,
+} from './refresherTypes';
+import {
+  getRefreshState,
+  getScopedDomainState,
+  markPendingRequest,
+  resetAllScopedDomainStates,
+  setScopedDomainState,
+} from './store';
+import type { RefreshDomain } from './types';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),

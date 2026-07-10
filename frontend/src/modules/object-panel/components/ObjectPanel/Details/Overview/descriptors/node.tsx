@@ -8,10 +8,10 @@
  * `drainInProgress`/`onOpenDrain` from the OverviewContext the renderer threads through.
  */
 
-import React from 'react';
-import { nodes } from '@wailsjs/go/models';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { nodes } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 import '../NodeOverview.css';

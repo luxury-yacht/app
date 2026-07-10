@@ -6,16 +6,16 @@
  * the cluster identity threaded via `context`.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
-import type { OverviewContext, OverviewDescriptor } from './schema';
 import {
   gatewayDescriptor,
   httpRouteDescriptor,
   referenceGrantDescriptor,
 } from './descriptors/gateway';
+import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewContext, OverviewDescriptor } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
