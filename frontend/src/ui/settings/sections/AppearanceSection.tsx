@@ -29,6 +29,7 @@ import {
   createAccentColorPreferenceWorkflow,
   getLinkColor,
   createLinkColorPreferenceWorkflow,
+  type AppearanceMode,
 } from '@/core/settings/appPreferences';
 import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
 import {
@@ -78,9 +79,9 @@ function AppearanceModeSelector({
   options,
   onChange,
 }: {
-  mode: string;
+  mode: AppearanceMode;
   options: ReadonlyArray<(typeof appearanceModeOptions)[number]>;
-  onChange: (mode: string) => void;
+  onChange: (mode: AppearanceMode) => void;
 }) {
   return (
     <div className="settings-row">
@@ -418,11 +419,8 @@ function AppearanceSection() {
     };
   }, [accentColorPreferenceWorkflow, linkColorPreferenceWorkflow, palettePreferenceWorkflow]);
 
-  const handleAppearanceModeChange = async (nextMode: string) => {
+  const handleAppearanceModeChange = async (nextMode: AppearanceMode) => {
     try {
-      if (nextMode !== 'light' && nextMode !== 'dark' && nextMode !== 'system') {
-        return;
-      }
       await changeAppearanceMode(nextMode);
     } catch (error) {
       errorHandler.handle(error, { action: 'setAppearanceMode', mode: nextMode });

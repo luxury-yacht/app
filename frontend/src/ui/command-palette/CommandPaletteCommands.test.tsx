@@ -184,6 +184,28 @@ describe('CommandPaletteCommands', () => {
     document.body.innerHTML = '';
   });
 
+  it('shows the direct-open shortcut on the select-namespace command', () => {
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'select-namespace');
+
+    expect(command).toBeTruthy();
+    const isMac = /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
+    expect(command?.shortcut).toEqual(isMac ? ['⇧', '⌘', 'N'] : ['Ctrl', 'Shift', 'N']);
+
+    unmount();
+  });
+
+  it('shows the Open Cluster shortcut on the select-kubeconfig command', () => {
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'select-kubeconfig');
+
+    expect(command).toBeTruthy();
+    const isMac = /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
+    expect(command?.shortcut).toEqual(isMac ? ['⌘', 'O'] : ['Ctrl', 'O']);
+
+    unmount();
+  });
+
   it('opens a cluster tab when the kubeconfig is inactive', () => {
     mocks.kubeconfig.kubeconfigs = [
       {

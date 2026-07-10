@@ -15,17 +15,22 @@
  * its not-ready error as warm-up. Holding unknown clusters would risk freezing
  * healthy ones.
  */
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus } from '@/core/events';
 
-const SERVICEABLE_STATES = new Set(['loading', 'loading_slow', 'ready']);
+const SERVICEABLE_STATES: ReadonlySet<ClusterLifecycleState> = new Set<ClusterLifecycleState>([
+  'loading',
+  'loading_slow',
+  'ready',
+]);
 
 class ClusterReadinessTracker {
-  private states = new Map<string, string>();
+  private states = new Map<string, ClusterLifecycleState>();
   private listeners = new Set<(clusterId: string) => void>();
 
   constructor() {
     eventBus.on('cluster:lifecycle', ({ clusterId, state }) => {
-      if (!clusterId || !state) {
+      if (!clusterId) {
         return;
       }
       const wasServiceable = this.isServiceable(clusterId);
@@ -42,7 +47,7 @@ class ClusterReadinessTracker {
       return true;
     }
     const state = this.states.get(clusterId);
-    if (state === undefined || state === '') {
+    if (state === undefined) {
       return true;
     }
     return SERVICEABLE_STATES.has(state);

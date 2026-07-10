@@ -136,7 +136,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const authState = useActiveClusterAuthState(selectedClusterId);
   const { namespaceReady, setSelectedNamespace } = useNamespace();
   const { isPaused, suppressPassiveLoading } = useAutoRefreshLoadingState();
-  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : undefined;
 
   // Cluster Overview is a foreground per-cluster page, so it must never
   // reuse a multi-cluster overview scope from other selected tabs.
@@ -293,7 +293,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       isLoading ||
       overviewDomain.status === 'idle' ||
       suppressUnavailableError ||
-      lifecycleState === '' ||
+      lifecycleState === undefined ||
       lifecycleState === 'connecting' ||
       lifecycleState === 'connected');
 

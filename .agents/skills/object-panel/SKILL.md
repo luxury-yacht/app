@@ -64,6 +64,16 @@ Frontend object-panel work must use backend-provided `statusPresentation` and
 `ResourceLink.ref` where available. Do not reconstruct object identity from kind
 and name when a full backend reference should be carried.
 
+Past `useObjectPanel.openWithObject`, the panel chain carries the
+cluster-complete `ObjectPanelRef`
+(`frontend/src/modules/object-panel/objectPanelRef.ts`, an alias of
+`ClusterObjectReference`): `openWithObject` accepts the loose
+`KubernetesObjectReference` and `assertObjectRefHasRequiredIdentity` narrows it
+at that single chokepoint. Keep panel-internal types (openPanels,
+`CurrentObjectPanelContext`, detail/utilization props) on `ObjectPanelRef`; do
+not re-widen them to the nullable shape. See
+`docs/architecture/shared-resource-model.md` → Frontend Reference Types.
+
 Log viewer presentation shared by container logs and node logs lives under
 `frontend/src/modules/object-panel/components/ObjectPanel/Logs`. Keep
 transport-specific wiring in the container or node shell, and put shared search,

@@ -128,6 +128,16 @@ export function useCommandPaletteCommands() {
 
   const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
   const diffObjectsShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'D'] : ['Ctrl', 'D']), []);
+  const selectNamespaceShortcut = useMemo(
+    () => (isMacPlatform() ? ['⇧', '⌘', 'N'] : ['Ctrl', 'Shift', 'N']),
+    []
+  );
+  // The same accelerator as File → Open Cluster (backend/menu.go), which opens
+  // the palette in kubeconfig selection.
+  const selectKubeconfigShortcut = useMemo(
+    () => (isMacPlatform() ? ['⌘', 'O'] : ['Ctrl', 'O']),
+    []
+  );
 
   const commands = useMemo(
     () => [
@@ -401,6 +411,7 @@ export function useCommandPaletteCommands() {
           // Will be handled specially in CommandPalette component
         },
         keywords: ['kubeconfig', 'context', 'cluster', 'switch'],
+        shortcut: selectKubeconfigShortcut,
       },
       {
         id: 'select-namespace',
@@ -412,6 +423,7 @@ export function useCommandPaletteCommands() {
           // Handled specially in CommandPalette component
         },
         keywords: ['namespace', 'change', 'select'],
+        shortcut: selectNamespaceShortcut,
       },
       {
         id: 'cluster-browse',
@@ -492,6 +504,8 @@ export function useCommandPaletteCommands() {
       openClusterTab,
       closeCurrentClusterTab,
       closeTabShortcut,
+      selectNamespaceShortcut,
+      selectKubeconfigShortcut,
       toggleAutoRefresh,
       diffObjectsShortcut,
       autoRefreshEnabled,

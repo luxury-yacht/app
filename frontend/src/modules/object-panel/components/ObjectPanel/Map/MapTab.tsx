@@ -17,6 +17,10 @@ import { useRefreshDomainHandle } from '@/core/data-access';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import ObjectMap from '@modules/object-map/ObjectMap';
 import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
+import {
+  isMapSnapshotLoading,
+  isMapSnapshotRefreshing,
+} from '@modules/object-map/mapSnapshotStatus';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import type { PanelObjectData } from '../types';
@@ -29,11 +33,6 @@ interface MapTabProps {
   // cannot drift apart.
   mapScope: string | null;
 }
-
-const isLoadingState = (status: string): boolean =>
-  status === 'idle' || status === 'loading' || status === 'initialising' || status === 'updating';
-const isRefreshingState = (status: string): boolean =>
-  status === 'loading' || status === 'initialising' || status === 'updating';
 
 const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const { openWithObject } = useObjectPanel();
@@ -62,8 +61,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading =
-    Boolean(isActive && objectData && mapScope && isLoadingState(snapshot.status)) && !payload;
-  const refreshing = isRefreshingState(snapshot.status) && snapshot.isManual === true;
+    Boolean(isActive && objectData && mapScope && isMapSnapshotLoading(snapshot.status)) &&
+    !payload;
+  const refreshing = isMapSnapshotRefreshing(snapshot.status) && snapshot.isManual === true;
   const handleRefresh = useCallback(() => fetchMap('user'), [fetchMap]);
   // ObjectMap renders the Refresh button; only expose it when we
   // have a scope to fetch against.

@@ -18,6 +18,10 @@ import {
   OBJECT_MAP_MAX_NODES,
 } from '@modules/object-map/objectMapScope';
 import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
+import {
+  isMapSnapshotLoading,
+  isMapSnapshotRefreshing,
+} from '@modules/object-map/mapSnapshotStatus';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { errorHandler } from '@/utils/errorHandler';
@@ -25,11 +29,6 @@ import { errorHandler } from '@/utils/errorHandler';
 interface NsViewMapProps {
   namespace: string;
 }
-
-const isLoadingState = (status: string): boolean =>
-  status === 'idle' || status === 'loading' || status === 'initialising' || status === 'updating';
-const isRefreshingState = (status: string): boolean =>
-  status === 'loading' || status === 'initialising' || status === 'updating';
 
 const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   const { selectedClusterId } = useKubeconfig();
@@ -108,8 +107,8 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   );
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
-  const loading = isLoadingState(snapshot.status) && !payload;
-  const refreshing = isRefreshingState(snapshot.status) && snapshot.isManual === true;
+  const loading = isMapSnapshotLoading(snapshot.status) && !payload;
+  const refreshing = isMapSnapshotRefreshing(snapshot.status) && snapshot.isManual === true;
 
   if (namespace === ALL_NAMESPACES_SCOPE) {
     return (

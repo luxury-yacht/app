@@ -195,6 +195,38 @@ describe('FavoritesContext', () => {
     expect(stateRef.current?.favorites).toEqual(favorites);
   });
 
+  it('does not apply an unrecognized persisted view as a tab', async () => {
+    // Favorites are persisted strings: a favorite saved before a tab rename
+    // (or corrupted) must not blind-cast into the view unions and set a bogus
+    // tab. Navigation still happens; the tab falls back to the default that
+    // onNamespaceSelect / setActiveClusterView(null) provide.
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(makeFavorite({ view: 'wrokloads' }));
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('namespace');
+    expect(mockOnNamespaceSelect).toHaveBeenCalledWith('default');
+    expect(mockSetActiveNamespaceTab).not.toHaveBeenCalled();
+
+    mockSetViewType.mockReset();
+    mockSetActiveClusterView.mockReset();
+    act(() => {
+      // Clear first: the apply-once guard only resets when the pending
+      // favorite goes null.
+      stateRef.current?.setPendingFavorite(null);
+    });
+    act(() => {
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({ id: 'fav-2', viewType: 'cluster', view: 'nodess', namespace: '' })
+      );
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('cluster');
+    expect(mockSetActiveClusterView).toHaveBeenCalledWith(null);
+  });
+
   it('waits for namespaces before applying namespace favorite navigation', async () => {
     mockNamespaceReady = false;
     await renderProvider();

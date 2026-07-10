@@ -1,5 +1,6 @@
 import type { StatusState } from '@shared/components/status/StatusIndicator';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import type { ClusterHealthStatus } from '@/hooks/useWailsRuntimeEvents';
 
 export interface ConnectivityPresentation {
@@ -12,7 +13,8 @@ export interface ConnectivityPresentation {
 export interface ConnectivityPresentationInput {
   clusterId?: string;
   clusterName?: string;
-  lifecycleState: string;
+  /** Current lifecycle state; undefined when no cluster is selected/tracked. */
+  lifecycleState: ClusterLifecycleState | undefined;
   namespaceReady: boolean;
   // The backend refused the namespace list for lack of RBAC permission — a
   // settled, by-design state (checked once per session), NOT a loading state.

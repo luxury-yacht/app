@@ -23,7 +23,7 @@ import { isMacPlatform } from '@/utils/platform';
 import AppHeader from '@ui/layout/AppHeader';
 import ClusterTabs from '@ui/layout/ClusterTabs';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
-import type { ClusterViewType, NamespaceViewType } from '@ui/navigation/types';
+import type { NamespaceViewType } from '@ui/navigation/types';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -169,9 +169,7 @@ export const AppLayout: React.FC = () => {
                     <RouteErrorBoundary routeName="cluster">
                       <ClusterResourcesManager
                         activeTab={viewState.activeClusterTab}
-                        onTabChange={(tab: string) =>
-                          viewState.setActiveClusterView(tab as ClusterViewType)
-                        }
+                        onTabChange={viewState.setActiveClusterView}
                       />
                     </RouteErrorBoundary>
                   )

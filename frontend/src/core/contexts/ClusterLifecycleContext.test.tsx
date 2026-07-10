@@ -118,10 +118,10 @@ describe('ClusterLifecycleContext', () => {
     spy.mockRestore();
   });
 
-  it('getClusterState() returns empty string for unknown cluster', async () => {
+  it('getClusterState() returns undefined for unknown cluster — absence is not a state', async () => {
     await renderProvider();
 
-    expect(stateRef.current?.getClusterState('nonexistent')).toBe('');
+    expect(stateRef.current?.getClusterState('nonexistent')).toBeUndefined();
   });
 
   it('isClusterReady() returns true when state is ready', async () => {
@@ -273,7 +273,6 @@ describe('ClusterLifecycleContext', () => {
     expect(frontendListener).toHaveBeenCalledWith({
       clusterId: 'cluster-a',
       state: 'ready',
-      previousState: 'loading',
     });
 
     unsubscribe();
@@ -302,12 +301,60 @@ describe('ClusterLifecycleContext', () => {
     act(() => {
       listeners.get('cluster:lifecycle')![0]({ state: 'ready' });
     });
-    expect(stateRef.current?.getClusterState('')).toBe('');
+    expect(stateRef.current?.getClusterState('')).toBeUndefined();
 
     // No state
     act(() => {
       listeners.get('cluster:lifecycle')![0]({ clusterId: 'cluster-a' });
     });
-    expect(stateRef.current?.getClusterState('cluster-a')).toBe('');
+    expect(stateRef.current?.getClusterState('cluster-a')).toBeUndefined();
+  });
+
+  it('drops live events carrying an unknown state instead of relaying them', async () => {
+    // The union is closed at the ingestion boundary: an unrecognized state
+    // (backend/frontend version skew) must not reach the map or the eventBus
+    // consumers — gates comparing against known literals would silently hold
+    // dispatch forever. Dropping keeps the previous state, matching the
+    // documented fail-open handling of unknown clusters in clusterReadiness.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const frontendListener = vi.fn();
+    const unsubscribe = eventBus.on('cluster:lifecycle', frontendListener);
+
+    await renderProvider();
+
+    act(() => {
+      listeners.get('cluster:lifecycle')![0]({
+        clusterId: 'cluster-a',
+        state: 'context-test-bogus-live',
+        previousState: 'loading',
+      });
+    });
+
+    expect(stateRef.current?.getClusterState('cluster-a')).toBeUndefined();
+    expect(frontendListener).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    warn.mockRestore();
+  });
+
+  it('drops unknown states during hydration but keeps the valid entries', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetAllStates.mockResolvedValue({
+      'cluster-a': 'context-test-bogus-hydrate',
+      'cluster-b': 'ready',
+    });
+    const received: Array<{ clusterId: string; state: string }> = [];
+    eventBus.on('cluster:lifecycle', (payload) => {
+      received.push({ clusterId: payload.clusterId, state: payload.state });
+    });
+
+    await renderProvider();
+
+    expect(stateRef.current?.getClusterState('cluster-a')).toBeUndefined();
+    expect(stateRef.current?.getClusterState('cluster-b')).toBe('ready');
+    expect(received).toEqual([{ clusterId: 'cluster-b', state: 'ready' }]);
+
+    warn.mockRestore();
   });
 });

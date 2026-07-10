@@ -2,7 +2,7 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import {
   buildRequiredObjectReference,
-  type ResolvedObjectReference,
+  type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
 import { resourceMetricsSourceFromKind } from './valueAdapters';
 import type { ResourceMetricsResolution } from './types';
@@ -14,7 +14,7 @@ const namespaceScope = (clusterId: string | undefined, namespace: string | undef
 
 export const buildResourceMetricsReference = (
   objectData: KubernetesObjectReference | null | undefined
-): ResolvedObjectReference | null => {
+): ClusterObjectReference | null => {
   if (!objectData) {
     return null;
   }
@@ -24,7 +24,7 @@ export const buildResourceMetricsReference = (
 export const resolveResourceMetricsScope = (
   objectData: KubernetesObjectReference | null | undefined
 ): ResourceMetricsResolution => {
-  let ref: ResolvedObjectReference | null = null;
+  let ref: ClusterObjectReference | null = null;
   try {
     ref = buildResourceMetricsReference(objectData);
   } catch (error) {

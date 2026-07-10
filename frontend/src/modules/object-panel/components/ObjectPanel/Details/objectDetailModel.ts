@@ -1,4 +1,4 @@
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 
 type DetailContainer = {
   name: string;
@@ -35,7 +35,7 @@ export interface DetailContainerSection {
 }
 
 export interface ObjectDetailModel {
-  objectData: KubernetesObjectReference | null;
+  objectData: ObjectPanelRef | null;
   objectKind: string | null;
   /** The raw active-kind detail DTO (the backend-emitted payload), fed to the descriptor renderer. */
   activeDetail: unknown;
@@ -125,7 +125,7 @@ const extractPodNames = (pods?: Array<{ name?: string | null }> | null): string[
 };
 
 export function buildObjectDetailModel(
-  objectData: KubernetesObjectReference | null,
+  objectData: ObjectPanelRef | null,
   objectKind: string | null,
   detailPayload: unknown
 ): ObjectDetailModel {

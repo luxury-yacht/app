@@ -366,7 +366,6 @@ describe('queryNamespacesPermissions transient errors', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-1',
       state: 'ready',
-      previousState: 'loading',
     });
 
     await vi.waitFor(() =>
@@ -441,7 +440,6 @@ describe('queryClusterPermissions', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-1',
       state: 'ready',
-      previousState: 'loading',
     });
 
     await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2));

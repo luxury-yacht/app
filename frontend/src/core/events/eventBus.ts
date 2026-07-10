@@ -8,6 +8,7 @@
  * Includes error handling in event callbacks to prevent crashes.
  */
 
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
@@ -53,6 +54,11 @@ export interface AppEvents {
   // points for opening a cluster (the "+" in the cluster tab bar, ⌘O, and
   // File → Open Cluster).
   'command-palette:open-kubeconfigs': void;
+
+  // Open the command palette directly in namespace-select mode — the search
+  // button in the sidebar's Namespaces header (⇧⌘N reaches the same mode via
+  // the frontend shortcut system).
+  'command-palette:open-namespaces': void;
 
   // Open the command palette in its normal (search) mode — the header search
   // button.
@@ -149,8 +155,9 @@ export interface AppEvents {
   // finds and focuses a specific row matching the given resource fields.
   'gridtable:focus-request': GridTableFocusRequest;
 
-  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext.
-  'cluster:lifecycle': { clusterId: string; state: string; previousState: string };
+  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext,
+  // which closes the state union at the ingestion boundary.
+  'cluster:lifecycle': { clusterId: string; state: ClusterLifecycleState };
 
   // App visibility events
   'app:visibility-hidden': void;

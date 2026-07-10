@@ -1,10 +1,12 @@
 /**
  * View State Type Definitions
  *
- * Types for objects managed by ViewStateContext, including selected objects
- * and navigation history.
+ * The LOOSE, pre-validation object-reference shapes: raw Kubernetes payloads
+ * and heterogeneous link/row inputs before they reach a validation boundary.
+ * Past that boundary, carry `ClusterObjectReference` (or a builder result)
+ * from `@shared/utils/objectIdentity` instead — the compiler then enforces
+ * full identity, and these nullable shapes must not leak further downstream.
  */
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { ResourceRef } from '@core/refresh/types';
 
 type NullableResourceRefFields = {
@@ -45,60 +47,4 @@ export interface KubernetesObjectReference extends NullableResourceRefFields {
   // Kept for backwards compatibility — new callers should prefer the typed
   // fields above.
   [key: string]: unknown;
-}
-
-const normalizeIdentityField = (value: string | null | undefined): string => value?.trim() ?? '';
-
-/**
- * Validates that a KubernetesObjectReference carries enough object identity to
- * round-trip through the panel and the strict backend resolvers.
- *
- * This is the runtime defense for incomplete object refs, sitting at the
- * single chokepoint where every object reference flows into the panel system
- * (useObjectPanel.openWithObject). It catches construction shapes the
- * literal-walking audit can't see: helpers that build refs, mappers that
- * return refs, destructure-and-rebuild patterns, and any future programmatic
- * construction.
- *
- * @throws Error with stack trace pointing at the construction site if
- *   the ref is missing clusterId, kind, name, or complete GVK identity.
- */
-export function assertObjectRefHasRequiredIdentity(ref: KubernetesObjectReference): void {
-  const clusterId = normalizeIdentityField(ref.clusterId);
-  const kind = normalizeIdentityField(ref.kind);
-  const name = normalizeIdentityField(ref.name);
-
-  if (!clusterId) {
-    throw new Error(`KubernetesObjectReference is missing required field "clusterId"`);
-  }
-  if (!kind) {
-    throw new Error(`KubernetesObjectReference is missing required field "kind"`);
-  }
-  if (!name) {
-    throw new Error(`KubernetesObjectReference for kind=${kind} is missing required field "name"`);
-  }
-  const version = normalizeIdentityField(ref.version);
-  if (!version) {
-    throw new Error(
-      `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
-        `is missing version. This is the kind-only-objects bug — the ` +
-        `panel and backend resolvers cannot disambiguate two CRDs sharing ` +
-        `a Kind without group+version. Spread ` +
-        `\`...resolveBuiltinGroupVersion(kind)\` for built-ins, or thread ` +
-        `the parsed version from a wire-form apiVersion via \`parseApiVersion(...)\`.`
-    );
-  }
-
-  const groupWasCarried = ref.group !== undefined && ref.group !== null;
-  const group = normalizeIdentityField(ref.group);
-  const builtinGVK = resolveBuiltinGroupVersion(kind);
-  const isKnownBuiltin = Boolean(builtinGVK.version);
-  if (!groupWasCarried || (!group && (!isKnownBuiltin || builtinGVK.group))) {
-    throw new Error(
-      `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
-        `is missing group. Include \`group: ''\` for core/v1 built-ins, ` +
-        `spread \`...resolveBuiltinGroupVersion(kind)\` for other built-ins, ` +
-        `or thread group from the catalog/discovery source for custom resources.`
-    );
-  }
 }

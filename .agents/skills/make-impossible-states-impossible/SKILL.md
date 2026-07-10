@@ -28,9 +28,11 @@ For each impossible state, choose where to make it impossible:
    `[key: string]: unknown` for raw K8s objects and backwards-compat. There, the
    project keeps **one** validating chokepoint, not scattered checks. The canonical
    example is `assertObjectRefHasRequiredIdentity` in
-   `frontend/src/types/view-state.ts`, called once at
-   `useObjectPanel.openWithObject`. Match that pattern; never sprinkle per-caller
-   `if (!ref.clusterId)` checks.
+   `frontend/src/shared/utils/objectIdentity.ts`, called once at
+   `useObjectPanel.openWithObject` — it is an assertion function that narrows the
+   loose ref to `ClusterObjectReference` in place, so everything past the
+   chokepoint carries the required-identity type. Match that pattern; never
+   sprinkle per-caller `if (!ref.clusterId)` checks.
 
 Prefer the difficult-but-correct type-level fix over a new local guard
 (AGENTS.md). Centralize at a chokepoint only when a true boundary makes the type
@@ -42,7 +44,7 @@ genuinely un-tightenable.
 |-------|---------------------|-----|
 | **Flag soup** — booleans encoding one state | `port-forward/*` uses `isError`/`isStopping`/`isLoading` together | One `status` discriminated union. Good model already in repo: `useResourceInventoryTable.ts` derives `isEmpty` from `status === 'empty'`; `permissionTypes.ts` uses `status: 'loading' \| 'ready' \| 'error'`. |
 | **Optional pair that must co-occur** | `{ error?; data? }` where exactly one is set | Variants: `{ status: 'error'; error }` \| `{ status: 'ready'; data }`. |
-| **Nullable identity** | `KubernetesObjectReference extends NullableResourceRefFields` (every GVK field `?\| null`) | Narrow at a parse boundary into a **resolved** type with required fields — see `ResolvedObjectReference` in `shared/utils/objectIdentity.ts`. Downstream code takes the resolved type, not the nullable one. |
+| **Nullable identity** | `KubernetesObjectReference extends NullableResourceRefFields` (every GVK field `?\| null`) | Narrow at a parse boundary into a **resolved** type with required fields — `ResolvedObjectReference` (GVK+name required) or, past a cluster-identity boundary, `ClusterObjectReference` (clusterId also required) in `shared/utils/objectIdentity.ts`. Downstream code takes the resolved type, not the nullable one. |
 | **Stringly-typed state** | `status: string`, `phase: string` | Literal union; exhaustive `switch` with a `never` default. |
 | **`[key: string]: unknown` escape hatch** | view-state raw-object shapes | Acceptable only at the external boundary; convert to a typed value immediately after, and don't let the loose type leak downstream. |
 

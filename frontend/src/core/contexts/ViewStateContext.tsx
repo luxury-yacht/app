@@ -217,7 +217,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   );
 
   const onClusterObjectsClick = useCallback(() => {
-    navigateToClusterView('cluster' as ViewType);
+    navigateToClusterView('cluster');
     setSidebarSelection({ type: 'cluster', value: 'cluster' });
   }, [navigateToClusterView, setSidebarSelection]);
 

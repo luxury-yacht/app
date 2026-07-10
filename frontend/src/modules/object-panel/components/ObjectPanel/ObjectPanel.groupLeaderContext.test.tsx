@@ -15,7 +15,7 @@ import ReactDOM from 'react-dom/client';
 import { createContext, useContext, useSyncExternalStore } from 'react';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 
 const { capturedChildrenRef, probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } =
   vi.hoisted(() => ({
@@ -178,7 +178,7 @@ const ContextProbe = () => {
   return null;
 };
 
-const POD_REF: KubernetesObjectReference = {
+const POD_REF: ObjectPanelRef = {
   kind: 'Pod',
   name: 'api-123',
   namespace: 'argo-sandbox',
@@ -187,7 +187,7 @@ const POD_REF: KubernetesObjectReference = {
   version: 'v1',
 };
 
-const WORKLOAD_REF: KubernetesObjectReference = {
+const WORKLOAD_REF: ObjectPanelRef = {
   kind: 'Deployment',
   name: 'api',
   namespace: 'argo-sandbox',

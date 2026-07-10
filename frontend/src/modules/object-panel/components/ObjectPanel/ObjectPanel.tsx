@@ -36,7 +36,7 @@ import {
   RESOURCE_CAPABILITIES,
 } from '@modules/object-panel/components/ObjectPanel/constants';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { DockPosition } from '@ui/dockable';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
@@ -48,8 +48,8 @@ import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomain
 interface ObjectPanelProps {
   /** Unique panel ID derived from the object identity. */
   panelId: string;
-  /** The Kubernetes object reference this panel displays. */
-  objectRef: KubernetesObjectReference;
+  /** The cluster-complete object reference this panel displays. */
+  objectRef: ObjectPanelRef;
 }
 
 // ============================================================================

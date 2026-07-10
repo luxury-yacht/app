@@ -204,8 +204,11 @@ describe('CommandPalette component behaviour', () => {
     expected: Record<string, boolean>
   ) => modifierKeys.every((mod) => (actual?.[mod] ?? false) === (expected[mod] ?? false));
 
-  const findGlobalShortcut = (expected: Record<string, boolean>) =>
-    registeredGlobalShortcuts.find((shortcut) => modifiersEqual(shortcut.modifiers, expected));
+  const findGlobalShortcut = (expected: Record<string, boolean>, key = 'p') =>
+    registeredGlobalShortcuts.find(
+      (shortcut) =>
+        shortcut.key.toLowerCase() === key && modifiersEqual(shortcut.modifiers, expected)
+    );
 
   const macPlatform =
     typeof navigator !== 'undefined' &&
@@ -311,6 +314,116 @@ describe('CommandPalette component behaviour', () => {
     const labels = queryItems().map((el) => el.textContent ?? '');
     expect(labels.some((label) => label.includes('cluster-a'))).toBe(true);
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+  });
+
+  it('opens in namespaces mode when command-palette:open-namespaces fires', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    await act(async () => {
+      eventBus.emit('command-palette:open-namespaces');
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.command-palette')).not.toBeNull();
+    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input!.placeholder).toBe('Select a namespace...');
+    const labels = queryItems().map((el) => el.textContent ?? '');
+    expect(labels.some((label) => label.includes('prod'))).toBe(true);
+    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+  });
+
+  it('opens directly in namespaces mode via the global namespace shortcut', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    expect(container.querySelector('.command-palette')).toBeNull();
+
+    const shortcut = findGlobalShortcut(defaultOpenShortcut, 'n');
+    expect(shortcut).toBeTruthy();
+    await act(async () => {
+      shortcut?.handler();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.command-palette')).not.toBeNull();
+    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input!.placeholder).toBe('Select a namespace...');
+    const labels = queryItems().map((el) => el.textContent ?? '');
+    expect(labels.some((label) => label.includes('prod'))).toBe(true);
+    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+
+    // Opened straight into the mode, so the first Escape closes the palette
+    // instead of backing out to the general palette.
+    await triggerShortcut('Escape');
+    expect(container.querySelector('.command-palette')).toBeNull();
+  });
+
+  it('leaves namespace mode fully when kubeconfig mode opens over it', async () => {
+    const commands: Command[] = [
+      {
+        id: 'select-namespace',
+        label: 'Select namespace...',
+        category: 'Navigation',
+        action: vi.fn(),
+      },
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+    await openPalette();
+
+    // Enter namespace mode via the "Select namespace..." command (index 0:
+    // Navigation sorts before Namespaces/Kubeconfigs).
+    await triggerShortcut('Enter');
+    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input!.placeholder).toBe('Select a namespace...');
+
+    // The Open Cluster surface (⌘O / "+") fires while namespace mode is active.
+    await act(async () => {
+      eventBus.emit('command-palette:open-kubeconfigs');
+      await Promise.resolve();
+    });
+
+    expect(input!.placeholder).toBe('Select a kubeconfig...');
+    const headers = Array.from(
+      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+    ).map((el) => el.textContent);
+    expect(headers).toEqual(['Kubeconfigs']);
+  });
+
+  it('switches to namespaces mode when the shortcut fires while open in kubeconfig mode', async () => {
+    const commands: Command[] = [
+      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
+      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
+    ];
+    await renderPalette(commands);
+
+    await act(async () => {
+      eventBus.emit('command-palette:open-kubeconfigs');
+      await Promise.resolve();
+    });
+    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input!.placeholder).toBe('Select a kubeconfig...');
+
+    const shortcut = findGlobalShortcut(defaultOpenShortcut, 'n');
+    expect(shortcut).toBeTruthy();
+    await act(async () => {
+      shortcut?.handler();
+      await Promise.resolve();
+    });
+
+    expect(input!.placeholder).toBe('Select a namespace...');
+    const headers = Array.from(
+      container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
+    ).map((el) => el.textContent);
+    expect(headers).toEqual(['Namespaces']);
   });
 
   it('opens in normal (search) mode when command-palette:open fires', async () => {

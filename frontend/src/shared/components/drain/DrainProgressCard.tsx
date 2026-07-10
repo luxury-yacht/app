@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import { assertNever } from '@shared/utils/assertNever';
 import {
   deriveDrainProgress,
   type DrainPhase,
@@ -18,6 +19,8 @@ import {
 } from './drainProgress';
 import './DrainProgressCard.css';
 
+type DrainJobStatus = NodeMaintenanceDrainJob['status'];
+
 interface DrainProgressCardProps {
   job: NodeMaintenanceDrainJob;
   isActive: boolean;
@@ -26,7 +29,10 @@ interface DrainProgressCardProps {
   cancelDisabledReason?: string | null;
 }
 
-const ACTIVE_STATUSES = new Set(['running', 'canceling']);
+const ACTIVE_STATUSES: ReadonlySet<DrainJobStatus> = new Set<DrainJobStatus>([
+  'running',
+  'canceling',
+]);
 
 export function DrainProgressCard({
   job,
@@ -216,14 +222,23 @@ function summaryLine(progress: DrainProgress, usingDelete: boolean): string {
   return parts.join(' · ');
 }
 
-function getStatusClass(status: string): string {
-  if (status === 'running') return 'info';
-  if (status === 'canceling' || status === 'cancelled') return 'warning';
-  if (status === 'failed') return 'error';
-  return 'success';
+function getStatusClass(status: DrainJobStatus): string {
+  switch (status) {
+    case 'running':
+      return 'info';
+    case 'canceling':
+    case 'cancelled':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    case 'succeeded':
+      return 'success';
+    default:
+      return assertNever(status, 'drain job status');
+  }
 }
 
-function getStatusLabel(status: string): string {
+function getStatusLabel(status: DrainJobStatus): string {
   switch (status) {
     case 'running':
       return 'Running';
@@ -236,7 +251,7 @@ function getStatusLabel(status: string): string {
     case 'succeeded':
       return 'Completed';
     default:
-      return status;
+      return assertNever(status, 'drain job status');
   }
 }
 

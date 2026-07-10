@@ -105,6 +105,11 @@ export const parseQueryTokens = (query: string): ParsedQueryTokens => {
   return { kindTokens, otherTokens };
 };
 
+// The palette is either a general search or a single-category picker; one
+// union (instead of a boolean per picker) makes overlapping modes
+// unrepresentable, so switching pickers can never leave a stale mode behind.
+type PaletteSelectMode = 'none' | 'namespaces' | 'kubeconfigs';
+
 type PaletteItem =
   | {
       type: 'command';
@@ -203,8 +208,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [namespaceSelectMode, setNamespaceSelectMode] = useState(false);
-  const [kubeconfigSelectMode, setKubeconfigSelectMode] = useState(false);
+  const [selectMode, setSelectMode] = useState<PaletteSelectMode>('none');
   const [hideCursor, setHideCursor] = useState(false);
   const [mouseSelectionArmed, setMouseSelectionArmed] = useState(false);
   const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
@@ -244,13 +248,11 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const filteredCommands = useMemo(() => {
     let filteredList = commands;
 
-    // If in namespace select mode, only show namespace commands
-    if (namespaceSelectMode) {
+    // A selection sub-mode narrows the palette to that single category.
+    if (selectMode === 'namespaces') {
       filteredList = commands.filter((cmd) => cmd.category === 'Namespaces');
     }
-
-    // If in kubeconfig select mode, only show kubeconfig commands
-    if (kubeconfigSelectMode) {
+    if (selectMode === 'kubeconfigs') {
       filteredList = commands.filter((cmd) => cmd.category === 'Kubeconfigs');
     }
 
@@ -269,7 +271,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
 
       return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
     });
-  }, [commands, searchQuery, namespaceSelectMode, kubeconfigSelectMode]);
+  }, [commands, searchQuery, selectMode]);
 
   // Group commands by category
   const groupedCommands = useMemo(() => {
@@ -301,8 +303,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   }, [filteredCommands]);
 
   const showCatalogSearch = useMemo(
-    () => isOpen && !namespaceSelectMode && !kubeconfigSelectMode && searchQuery.trim().length > 0,
-    [isOpen, namespaceSelectMode, kubeconfigSelectMode, searchQuery]
+    () => isOpen && selectMode === 'none' && searchQuery.trim().length > 0,
+    [isOpen, selectMode, searchQuery]
   );
 
   useEffect(() => {
@@ -461,8 +463,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     selectedIndexRef.current = 0;
     mouseSelectionArmedRef.current = false;
     setMouseSelectionArmed(false);
-    setNamespaceSelectMode(false);
-    setKubeconfigSelectMode(false);
+    setSelectMode('none');
     openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
@@ -478,13 +479,21 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     selectedIndexRef.current = 0;
     mouseSelectionArmedRef.current = false;
     setMouseSelectionArmed(false);
-    setNamespaceSelectMode(false);
-    setKubeconfigSelectMode(false);
+    setSelectMode('none');
     openedDirectlyRef.current = false;
     setHideCursor(false);
     setCatalogResults([]);
     setCatalogStats(null);
     setCatalogLoading(false);
+  }, []);
+
+  // Switch the open palette into a selection sub-mode with a clean query and
+  // selection.
+  const enterSelectMode = useCallback((mode: PaletteSelectMode) => {
+    setSelectMode(mode);
+    setSearchQuery('');
+    setSelectedIndex(0);
+    selectedIndexRef.current = 0;
   }, []);
 
   // Execute selected item (command or catalog object)
@@ -494,18 +503,12 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
         const command = item.command;
 
         if (command.id === 'select-namespace') {
-          setNamespaceSelectMode(true);
-          setSearchQuery('');
-          setSelectedIndex(0);
-          selectedIndexRef.current = 0;
+          enterSelectMode('namespaces');
           return;
         }
 
         if (command.id === 'select-kubeconfig') {
-          setKubeconfigSelectMode(true);
-          setSearchQuery('');
-          setSelectedIndex(0);
-          selectedIndexRef.current = 0;
+          enterSelectMode('kubeconfigs');
           return;
         }
 
@@ -522,7 +525,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
         openWithObject(buildRequiredObjectReference(catalogItem));
       }, 100);
     },
-    [close, openWithObject]
+    [close, enterSelectMode, openWithObject]
   );
 
   const updateSelection = useCallback((index: number) => {
@@ -625,15 +628,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     if (!isOpen) {
       return false;
     }
-    if (namespaceSelectMode || kubeconfigSelectMode) {
+    if (selectMode !== 'none') {
       // If the palette was opened straight into this sub-mode, Escape closes it;
       // otherwise it backs out to the general palette it was navigated from.
       if (openedDirectlyRef.current) {
         close();
         return true;
       }
-      setNamespaceSelectMode(false);
-      setKubeconfigSelectMode(false);
+      setSelectMode('none');
       setSearchQuery('');
       updateSelection(0);
       setHideCursor(false);
@@ -641,7 +643,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     }
     close();
     return true;
-  }, [isOpen, namespaceSelectMode, kubeconfigSelectMode, close, updateSelection]);
+  }, [isOpen, selectMode, close, updateSelection]);
 
   useKeyboardSurface({
     kind: 'palette',
@@ -774,25 +776,44 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     return dispose;
   }, []);
 
-  // Open the palette directly in kubeconfig-select mode. This is the "Open
-  // Cluster" surface: the "+" in the cluster tab bar, ⌘O, and File → Open Cluster
-  // all emit this event. open() resets the mode, so set it after.
+  // Open the palette directly in a selection sub-mode: kubeconfigs is the
+  // "Open Cluster" surface (the "+" in the cluster tab bar, ⌘O, and File →
+  // Open Cluster all emit that event); namespaces is the ⇧⌘N shortcut below.
+  // open() resets the mode, so set it after.
+  const openInSelectMode = useCallback(
+    (mode: PaletteSelectMode) => {
+      if (isOpen) {
+        enterSelectMode(mode);
+        return true;
+      }
+      if (hasActiveBlockingSurface()) {
+        return false;
+      }
+      open();
+      setSelectMode(mode);
+      openedDirectlyRef.current = true;
+      return true;
+    },
+    [enterSelectMode, hasActiveBlockingSurface, isOpen, open]
+  );
   const openInKubeconfigMode = useCallback(() => {
-    if (isOpen) {
-      setKubeconfigSelectMode(true);
-      setSearchQuery('');
-      setSelectedIndex(0);
-      selectedIndexRef.current = 0;
-      return;
-    }
-    if (hasActiveBlockingSurface()) {
-      return;
-    }
-    open();
-    setKubeconfigSelectMode(true);
-    openedDirectlyRef.current = true;
-  }, [hasActiveBlockingSurface, isOpen, open]);
+    openInSelectMode('kubeconfigs');
+  }, [openInSelectMode]);
   useEventBus('command-palette:open-kubeconfigs', openInKubeconfigMode, [openInKubeconfigMode]);
+  const openInNamespaceMode = useCallback(() => openInSelectMode('namespaces'), [openInSelectMode]);
+  // The search button in the sidebar's Namespaces header emits this event.
+  useEventBus('command-palette:open-namespaces', openInNamespaceMode, [openInNamespaceMode]);
+  // Open the palette straight into namespace selection. Registered in the
+  // frontend shortcut system (not the native menu), like ⌘⇧P above.
+  useShortcut({
+    key: 'n',
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    handler: openInNamespaceMode,
+    description: 'Select namespace',
+    category: 'Global',
+    enabled: true,
+    priority: 100,
+  });
   // The header search button opens the palette in its normal (search) mode via
   // the same guarded open path as the keyboard shortcut.
   useEventBus('command-palette:open', () => openShortcutRef.current(), []);
@@ -904,9 +925,9 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
             type="text"
             className="command-palette-input"
             placeholder={
-              namespaceSelectMode
+              selectMode === 'namespaces'
                 ? 'Select a namespace...'
-                : kubeconfigSelectMode
+                : selectMode === 'kubeconfigs'
                   ? 'Select a kubeconfig...'
                   : 'Type a command or search...'
             }

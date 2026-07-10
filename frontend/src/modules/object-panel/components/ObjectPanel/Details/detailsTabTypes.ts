@@ -5,11 +5,11 @@
  * Defines shared interfaces and payload shapes for the object panel feature.
  */
 
-import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { ObjectDetailModel } from './objectDetailModel';
 
 export interface DetailsTabProps {
-  objectData?: KubernetesObjectReference | null;
+  objectData?: ObjectPanelRef | null;
   detailModel: ObjectDetailModel;
   isActive?: boolean;
   detailsLoading: boolean;

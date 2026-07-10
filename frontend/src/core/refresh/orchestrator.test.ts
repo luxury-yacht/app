@@ -312,7 +312,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-init',
       state: 'connecting',
-      previousState: '',
     });
 
     await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
@@ -337,7 +336,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-init',
       state: 'loading',
-      previousState: 'connected',
     });
 
     await vi.waitFor(() => {
@@ -372,7 +370,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
     // Applied data + healthy stream: the exact state where table-domain polls
     // are skipped.
@@ -413,7 +410,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
     clientMocks.fetchSnapshotMock.mockClear();
 
@@ -456,7 +452,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
     clientMocks.fetchSnapshotMock.mockClear();
 
@@ -564,7 +559,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
 
     // After the initial page load, the catalog doorbell stream is healthy.
@@ -602,7 +596,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
     resourceStreamMocks.isHealthy.mockReturnValue(true);
 
@@ -643,7 +636,6 @@ describe('refreshOrchestrator', () => {
     eventBus.emit('cluster:lifecycle', {
       clusterId: 'cluster-a',
       state: 'loading',
-      previousState: 'connected',
     });
     resourceStreamMocks.isHealthy.mockReturnValue(true);
 

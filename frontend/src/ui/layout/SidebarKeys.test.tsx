@@ -86,6 +86,28 @@ describe('Sidebar keyboard helpers', () => {
       )
     ).toEqual({ kind: 'cluster-toggle', id: 'resources' });
   });
+
+  it('yields no target for dataset view values outside the view unions', () => {
+    // The dataset round-trips through the DOM as strings; a value that is not
+    // a member of the view unions must not become a cursor target.
+    expect(
+      describeElementTarget(
+        buildTargetElement({
+          'data-sidebar-target-kind': 'cluster-view',
+          'data-sidebar-target-view': 'not-a-view',
+        })
+      )
+    ).toBeNull();
+    expect(
+      describeElementTarget(
+        buildTargetElement({
+          'data-sidebar-target-kind': 'namespace-view',
+          'data-sidebar-target-namespace': 'dev',
+          'data-sidebar-target-view': 'not-a-view',
+        })
+      )
+    ).toBeNull();
+  });
 });
 
 type HarnessHandle = ReturnType<typeof useSidebarKeyboardControls> & {

@@ -38,11 +38,14 @@ const beforeCloseSelectionFlushTimeout = 2 * time.Second
 func (a *App) Startup(ctx context.Context) {
 	a.Ctx = ctx
 	a.eventEmitter = runtimeEventsEmit
-	a.clusterLifecycle = newClusterLifecycle(func(clusterId, state, previousState string) {
+	a.clusterLifecycle = newClusterLifecycle(func(clusterId string, state, previousState ClusterLifecycleState) {
+		// The wire payload is stringly (Wails flattens defined string types);
+		// the frontend re-closes the union at its ingestion boundary. An empty
+		// previousState means "no previous state" (first transition).
 		a.emitEvent("cluster:lifecycle", map[string]string{
 			"clusterId":     clusterId,
-			"state":         state,
-			"previousState": previousState,
+			"state":         string(state),
+			"previousState": string(previousState),
 		})
 	})
 	a.logger.Info("Application startup initiated", logsources.App)

@@ -12,16 +12,19 @@ import (
 // emittedEvent records a single state-transition event for test assertions.
 type emittedEvent struct {
 	clusterId     string
-	state         string
-	previousState string
+	state         ClusterLifecycleState
+	previousState ClusterLifecycleState
 }
 
 // collectingEmitter returns an emitter callback and a thread-safe accessor
 // for the events it has collected.
-func collectingEmitter() (func(string, string, string), func() []emittedEvent) {
+func collectingEmitter() (
+	func(string, ClusterLifecycleState, ClusterLifecycleState),
+	func() []emittedEvent,
+) {
 	var mu sync.Mutex
 	var events []emittedEvent
-	emitter := func(clusterId, state, previousState string) {
+	emitter := func(clusterId string, state, previousState ClusterLifecycleState) {
 		mu.Lock()
 		events = append(events, emittedEvent{clusterId, state, previousState})
 		mu.Unlock()

@@ -6,6 +6,10 @@ import {
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ResourceRef } from '@core/refresh/types';
 
+// NOTE: `ResourceRef` (the backend wire contract) requires clusterId + GVK; the
+// reference types below re-establish those guarantees on the frontend side,
+// from the loose boundary shape up to the cluster-complete shape.
+
 export interface ObjectIdentityInput {
   kind?: string | null;
   kindAlias?: string | null;
@@ -30,6 +34,21 @@ export interface ResolvedObjectReference extends KubernetesObjectReference {
   clusterName?: string;
   resource?: string;
   uid?: string;
+}
+
+/**
+ * An object reference whose cluster identity is required by the type — the
+ * shape the multi-cluster identity rule (AGENTS.md) demands past a validation
+ * boundary. Carrying this type means the compiler, not a scattered runtime
+ * guard, enforces clusterId. Construct via {@link buildRequiredObjectReference}
+ * or narrow in place via {@link assertObjectRefHasRequiredIdentity}.
+ *
+ * Nullability caveat: when narrowed in place by the assert (rather than built
+ * by a builder, which normalizes), the OPTIONAL fields may still hold null at
+ * runtime; the verified required fields are genuine non-empty strings.
+ */
+export interface ClusterObjectReference extends ResolvedObjectReference {
+  clusterId: string;
 }
 
 export interface ResolvedSyntheticObjectReference extends Omit<ResourceRef, 'name'> {
@@ -103,7 +122,7 @@ export const buildRequiredObjectReference = <TExtras extends object = {}>(
   input: ObjectIdentityInput,
   options?: RequiredObjectIdentityOptions,
   extras?: TExtras
-): ResolvedObjectReference & TExtras => {
+): ClusterObjectReference & TExtras => {
   const clusterId =
     normalizeOptional(input.clusterId) ?? normalizeOptional(options?.fallbackClusterId);
   const kind = normalizeRequired(input.kind, 'kind');
@@ -113,6 +132,8 @@ export const buildRequiredObjectReference = <TExtras extends object = {}>(
     throw new Error(`Object identity for ${kind}/${name} is missing required field "clusterId"`);
   }
 
+  // The verified clusterId is threaded into the build, so the result satisfies
+  // the cluster-required shape.
   return buildObjectReference(
     {
       ...input,
@@ -121,7 +142,7 @@ export const buildRequiredObjectReference = <TExtras extends object = {}>(
       clusterId,
     },
     extras
-  );
+  ) as ClusterObjectReference & TExtras;
 };
 
 export const buildRelatedObjectReference = <TExtras extends object = {}>(
@@ -146,7 +167,7 @@ export const buildRequiredRelatedObjectReference = <TExtras extends object = {}>
   input: RelatedObjectReferenceInput,
   options?: RequiredObjectIdentityOptions,
   extras?: TExtras
-): ResolvedObjectReference & TExtras => {
+): ClusterObjectReference & TExtras => {
   const parsedApiVersion = normalizeOptional(input.apiVersion)
     ? parseApiVersion(input.apiVersion!)
     : undefined;
@@ -191,6 +212,66 @@ export const buildSyntheticObjectReference = <TExtras extends object = {}>(
     ...extras,
   } as ResolvedSyntheticObjectReference & TExtras;
 };
+
+const normalizeIdentityField = (value: string | null | undefined): string => value?.trim() ?? '';
+
+/**
+ * Validates that a KubernetesObjectReference carries enough object identity to
+ * round-trip through the panel and the strict backend resolvers, narrowing it
+ * to {@link ClusterObjectReference} in place (the original object — including
+ * raw K8s payload fields — is preserved, unlike the builders).
+ *
+ * This is the runtime defense for incomplete object refs, sitting at the
+ * single chokepoint where every object reference flows into the panel system
+ * (useObjectPanel.openWithObject). It catches construction shapes the
+ * literal-walking audit can't see: helpers that build refs, mappers that
+ * return refs, destructure-and-rebuild patterns, and any future programmatic
+ * construction.
+ *
+ * @throws Error with stack trace pointing at the construction site if
+ *   the ref is missing clusterId, kind, name, or complete GVK identity.
+ */
+export function assertObjectRefHasRequiredIdentity(
+  ref: KubernetesObjectReference
+): asserts ref is ClusterObjectReference {
+  const clusterId = normalizeIdentityField(ref.clusterId);
+  const kind = normalizeIdentityField(ref.kind);
+  const name = normalizeIdentityField(ref.name);
+
+  if (!clusterId) {
+    throw new Error(`KubernetesObjectReference is missing required field "clusterId"`);
+  }
+  if (!kind) {
+    throw new Error(`KubernetesObjectReference is missing required field "kind"`);
+  }
+  if (!name) {
+    throw new Error(`KubernetesObjectReference for kind=${kind} is missing required field "name"`);
+  }
+  const version = normalizeIdentityField(ref.version);
+  if (!version) {
+    throw new Error(
+      `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
+        `is missing version. This is the kind-only-objects bug — the ` +
+        `panel and backend resolvers cannot disambiguate two CRDs sharing ` +
+        `a Kind without group+version. Spread ` +
+        `\`...resolveBuiltinGroupVersion(kind)\` for built-ins, or thread ` +
+        `the parsed version from a wire-form apiVersion via \`parseApiVersion(...)\`.`
+    );
+  }
+
+  const groupWasCarried = ref.group !== undefined && ref.group !== null;
+  const group = normalizeIdentityField(ref.group);
+  const builtinGVK = resolveBuiltinGroupVersion(kind);
+  const isKnownBuiltin = Boolean(builtinGVK.version);
+  if (!groupWasCarried || (!group && (!isKnownBuiltin || builtinGVK.group))) {
+    throw new Error(
+      `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
+        `is missing group. Include \`group: ''\` for core/v1 built-ins, ` +
+        `spread \`...resolveBuiltinGroupVersion(kind)\` for other built-ins, ` +
+        `or thread group from the catalog/discovery source for custom resources.`
+    );
+  }
+}
 
 export const buildCanonicalObjectRowKey = (input: ObjectIdentityInput): string => {
   const ref = buildObjectReference(input);

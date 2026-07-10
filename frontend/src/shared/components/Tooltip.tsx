@@ -256,6 +256,17 @@ const Tooltip: React.FC<TooltipProps> = ({
       }
       hide();
     };
+    // Page/container scrolls detach the fixed-positioned tooltip from its
+    // trigger, so they dismiss it — but a scroll originating INSIDE an
+    // interactive tooltip (scrollable content, e.g. capped release notes)
+    // must not, or that content is unreachable. Capture-phase listeners see
+    // non-bubbling scroll events from every descendant, including our own.
+    const handleScroll = (event: Event) => {
+      if (interactive && isWithinInteractiveRegion(event.target)) {
+        return;
+      }
+      hide();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         hide();
@@ -264,7 +275,7 @@ const Tooltip: React.FC<TooltipProps> = ({
 
     document.addEventListener('mousedown', handlePointerDown, true);
     document.addEventListener('touchstart', handlePointerDown, true);
-    document.addEventListener('scroll', hide, true);
+    document.addEventListener('scroll', handleScroll, true);
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
@@ -272,7 +283,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     return () => {
       document.removeEventListener('mousedown', handlePointerDown, true);
       document.removeEventListener('touchstart', handlePointerDown, true);
-      document.removeEventListener('scroll', hide, true);
+      document.removeEventListener('scroll', handleScroll, true);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', hide);
       window.removeEventListener('blur', hide);

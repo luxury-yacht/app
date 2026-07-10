@@ -34,15 +34,46 @@ const (
 	EventKindError DrainEventKind = "error"
 )
 
+// DrainEventPhase is the closed set of drain event phases. The frontend
+// mirrors this vocabulary (`DrainEventPhase` in frontend/src/core/refresh/types.ts)
+// and derives progress counts from it — add new phases in both places.
+type DrainEventPhase string
+
+const (
+	// Job lifecycle phases (emitted by the store).
+	DrainPhaseScheduled       DrainEventPhase = "scheduled"
+	DrainPhaseCancelRequested DrainEventPhase = "cancel-requested"
+	DrainPhaseCancelled       DrainEventPhase = "cancelled"
+	DrainPhaseCompleted       DrainEventPhase = "completed"
+
+	// Drain step phases (emitted by the node drainer).
+	DrainPhaseCordon         DrainEventPhase = "cordon"
+	DrainPhaseCordonRetained DrainEventPhase = "cordon-retained"
+	DrainPhaseError          DrainEventPhase = "error"
+	DrainPhaseWarning        DrainEventPhase = "warning"
+	DrainPhasePlan           DrainEventPhase = "plan"
+	DrainPhaseSkipWait       DrainEventPhase = "skip-wait"
+	DrainPhaseWait           DrainEventPhase = "wait"
+	DrainPhaseWaitComplete   DrainEventPhase = "wait-complete"
+
+	// Per-pod phases (eviction vs deletion variants).
+	DrainPhaseEvicting    DrainEventPhase = "evicting"
+	DrainPhaseDeleting    DrainEventPhase = "deleting"
+	DrainPhaseEvicted     DrainEventPhase = "evicted"
+	DrainPhaseDeleted     DrainEventPhase = "deleted"
+	DrainPhaseEvictError  DrainEventPhase = "evict-error"
+	DrainPhaseDeleteError DrainEventPhase = "delete-error"
+)
+
 // DrainEvent captures discrete milestones or pod updates for a drain job.
 type DrainEvent struct {
-	ID           string         `json:"id"`
-	Timestamp    int64          `json:"timestamp"`
-	Kind         DrainEventKind `json:"kind"`
-	Phase        string         `json:"phase,omitempty"`
-	Message      string         `json:"message,omitempty"`
-	PodNamespace string         `json:"podNamespace,omitempty"`
-	PodName      string         `json:"podName,omitempty"`
+	ID           string          `json:"id"`
+	Timestamp    int64           `json:"timestamp"`
+	Kind         DrainEventKind  `json:"kind"`
+	Phase        DrainEventPhase `json:"phase,omitempty"`
+	Message      string          `json:"message,omitempty"`
+	PodNamespace string          `json:"podNamespace,omitempty"`
+	PodName      string          `json:"podName,omitempty"`
 }
 
 // DrainJob summarises the lifecycle of a single drain invocation.
@@ -147,7 +178,7 @@ func (s *Store) startDrainForClusterLocked(nodeName string, opts restypes.DrainN
 			ID:        uuid.NewString(),
 			Timestamp: time.Now().UnixMilli(),
 			Kind:      EventKindInfo,
-			Phase:     "scheduled",
+			Phase:     DrainPhaseScheduled,
 			Message:   "Drain initiated",
 		}},
 	}
@@ -207,7 +238,7 @@ func (s *Store) CancelDrainForCluster(jobID, clusterID string) error {
 		ID:        uuid.NewString(),
 		Timestamp: time.Now().UnixMilli(),
 		Kind:      EventKindInfo,
-		Phase:     "cancel-requested",
+		Phase:     DrainPhaseCancelRequested,
 		Message:   "Cancellation requested",
 	})
 	cancel = s.cancels[trimmedID]
@@ -249,7 +280,7 @@ func (s *Store) CancelActiveDrainsForClusterLifecycle(clusterID, message string)
 			ID:        uuid.NewString(),
 			Timestamp: job.CompletedAt,
 			Kind:      EventKindInfo,
-			Phase:     "cancelled",
+			Phase:     DrainPhaseCancelled,
 			Message:   message,
 		})
 		if cancel := s.cancels[job.ID]; cancel != nil {
@@ -300,7 +331,7 @@ func (s *Store) CancelDrainForClusterLifecycle(jobID, clusterID, message string)
 		ID:        uuid.NewString(),
 		Timestamp: job.CompletedAt,
 		Kind:      EventKindInfo,
-		Phase:     "cancelled",
+		Phase:     DrainPhaseCancelled,
 		Message:   message,
 	})
 	if storedCancel := s.cancels[job.ID]; storedCancel != nil {
@@ -317,12 +348,12 @@ func (s *Store) CancelDrainForClusterLifecycle(jobID, clusterID, message string)
 }
 
 // AddInfo records a descriptive event.
-func (j *DrainJob) AddInfo(phase, message string) {
+func (j *DrainJob) AddInfo(phase DrainEventPhase, message string) {
 	j.addEvent(EventKindInfo, phase, message, "", "")
 }
 
 // AddPodEvent records a pod-specific event.
-func (j *DrainJob) AddPodEvent(phase, namespace, name, message string, isError bool) {
+func (j *DrainJob) AddPodEvent(phase DrainEventPhase, namespace, name, message string, isError bool) {
 	kind := EventKindPod
 	if isError {
 		kind = EventKindError
@@ -352,13 +383,13 @@ func (j *DrainJob) Complete(status DrainStatus, message string) {
 		ID:        uuid.NewString(),
 		Timestamp: job.CompletedAt,
 		Kind:      EventKindInfo,
-		Phase:     "completed",
+		Phase:     DrainPhaseCompleted,
 		Message:   message,
 	})
 	j.store.version++
 }
 
-func (j *DrainJob) addEvent(kind DrainEventKind, phase, message, namespace, name string) {
+func (j *DrainJob) addEvent(kind DrainEventKind, phase DrainEventPhase, message, namespace, name string) {
 	if j == nil || j.store == nil {
 		return
 	}
