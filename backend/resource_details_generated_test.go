@@ -2,11 +2,22 @@ package backend
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/genappbindings"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
 )
+
+func TestGeneratedGoBindingsUseLFLineEndings(t *testing.T) {
+	gitAttributes, err := os.ReadFile("../.gitattributes")
+	if err != nil {
+		t.Fatalf("read .gitattributes: %v", err)
+	}
+	if !strings.Contains(string(gitAttributes), "* text=auto eol=lf") {
+		t.Fatal("generated Go bindings require LF line endings for byte-exact drift tests")
+	}
+}
 
 // TestAppBindingsGeneratedInSync fails if resource_details_generated.go drifts from what
 // the generator produces — i.e. it was hand-edited, or the binding table changed

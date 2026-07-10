@@ -26,7 +26,7 @@ func TestRefreshTypeScriptContractHasSingleFormattingOwner(t *testing.T) {
 	gitAttributes, err := os.ReadFile("../.gitattributes")
 	require.NoError(t, err)
 	require.True(t,
-		strings.Contains(string(gitAttributes), "frontend/src/core/refresh/types.generated.ts text eol=lf"),
+		strings.Contains(string(gitAttributes), "* text=auto eol=lf"),
 		"generated refresh contract must retain LF line endings",
 	)
 }

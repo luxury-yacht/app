@@ -1,1 +1,2 @@
-frontend/src/core/refresh/types.generated.ts text eol=lf
+# Always check-out / check-in files with LF line endings.
+* text=auto eol=lf
