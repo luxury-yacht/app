@@ -38,7 +38,7 @@ export interface QuotaData {
   details?: string;
   hard?: Record<string, string | number>;
   used?: Record<string, string | number>;
-  limits?: any;
+  limits?: unknown;
   // PDB values can be absolute numbers or percentage strings.
   minAvailable?: string | number;
   maxUnavailable?: string | number;
@@ -51,7 +51,6 @@ export interface QuotaData {
   };
   scopes?: string[];
   age?: string;
-  [key: string]: any; // Allow additional fields for flexibility
 }
 
 interface QuotasViewProps {

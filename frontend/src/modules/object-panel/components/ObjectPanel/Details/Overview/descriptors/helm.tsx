@@ -48,7 +48,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
           <div className="metadata-pairs">
             {data.resources
               .sort((a: helm.HelmResource, b: helm.HelmResource) => a.kind.localeCompare(b.kind))
-              .map((resource: helm.HelmResource, idx: number) => {
+              .map((resource: helm.HelmResource) => {
                 const resourceRef = (() => {
                   const scope = (resource.scope ?? '').trim().toLowerCase();
                   if (scope !== 'cluster' && scope !== 'namespaced') {
@@ -71,7 +71,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
 
                 return (
                   <div
-                    key={`${resource.kind}-${resource.namespace ?? ''}-${resource.name}-${idx}`}
+                    key={`${resource.kind}:${resource.namespace ?? ''}:${resource.name}`}
                     className="metadata-pair"
                   >
                     <span className="metadata-key">{resource.kind}:</span>

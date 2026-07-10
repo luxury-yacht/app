@@ -6,6 +6,7 @@
  */
 
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { useRef } from 'react';
 import ModalHeader from './ModalHeader';
@@ -94,20 +95,22 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
                 </tr>
               </thead>
               <tbody>
-                {detailsTable.rows.map((row, rowIndex) => (
-                  <tr key={`${rowIndex}-${row.join('|')}`}>
-                    {row.map((cell, columnIndex) => (
-                      <td
-                        key={detailsTable.columns[columnIndex]?.header ?? columnIndex}
-                        className={
-                          detailsTable.columns[columnIndex]?.monospace ? 'monospace' : undefined
-                        }
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {withStableListKeys(detailsTable.rows, (row) => row.join('|')).map(
+                  ({ key, value: row }) => (
+                    <tr key={key}>
+                      {row.map((cell, columnIndex) => (
+                        <td
+                          key={detailsTable.columns[columnIndex]?.header ?? columnIndex}
+                          className={
+                            detailsTable.columns[columnIndex]?.monospace ? 'monospace' : undefined
+                          }
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>

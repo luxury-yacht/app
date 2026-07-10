@@ -92,7 +92,7 @@ function AppearanceModeSelector({
         </div>
       </div>
       <div className="settings-row-control">
-        <div className="settings-choice-buttons" role="group" aria-label="Appearance mode">
+        <fieldset className="settings-choice-buttons" aria-label="Appearance mode">
           {options.map((option) => {
             const Icon = option.icon;
             const isSelected = mode === option.value;
@@ -109,7 +109,7 @@ function AppearanceModeSelector({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       </div>
     </div>
   );
@@ -298,13 +298,14 @@ function ColorControl({
               maxLength={7}
             />
           ) : (
-            <span
+            <button
+              type="button"
               className="color-swatch-value palette-hex-clickable"
               onClick={onHexClick}
               title="Click to edit hex value"
             >
               {value || defaultColor}
-            </span>
+            </button>
           )}
           <button
             type="button"
@@ -603,7 +604,7 @@ function AppearanceSection() {
   const handlePaletteValueCommit = () => {
     if (!editingPaletteField) return;
     const parsed = parseInt(paletteDraft, 10);
-    if (isNaN(parsed)) {
+    if (Number.isNaN(parsed)) {
       setEditingPaletteField(null);
       return;
     }
@@ -940,7 +941,8 @@ function AppearanceSection() {
       );
     }
     return (
-      <span
+      <button
+        type="button"
         className="palette-slider-value palette-hex-clickable"
         onClick={() => handlePaletteValueClick(field)}
         title="Click to edit value"
@@ -948,7 +950,7 @@ function AppearanceSection() {
         {value > 0 && field === 'brightness' ? '+' : ''}
         {value}
         {suffix}
-      </span>
+      </button>
     );
   };
 

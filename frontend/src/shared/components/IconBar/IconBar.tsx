@@ -8,6 +8,7 @@
  */
 
 import { IconBarSeparatorIcon } from '@shared/components/icons/SharedIcons';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 
 /** A toggle button that switches between on and off states. */
@@ -66,45 +67,47 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
 
   return (
     <div className={wrapperClass}>
-      {items.map((item, index) => {
-        if (item.type === 'separator') {
-          return <IconBarSeparatorIcon key={`sep-${index}`} />;
-        }
+      {withStableListKeys(items, (item) => (item.type === 'separator' ? 'separator' : item.id)).map(
+        ({ key, value: item }) => {
+          if (item.type === 'separator') {
+            return <IconBarSeparatorIcon key={key} />;
+          }
 
-        if (item.type === 'toggle') {
+          if (item.type === 'toggle') {
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`icon-bar-button${item.active ? ' active' : ''}`}
+                onClick={item.onClick}
+                disabled={item.disabled}
+                title={item.title}
+                aria-label={item.ariaLabel ?? item.title}
+                aria-pressed={item.active}
+              >
+                {item.icon}
+              </button>
+            );
+          }
+
+          // Action button
+          const feedbackClass = item.feedback ? ` feedback-${item.feedback}` : '';
+
           return (
             <button
               key={item.id}
               type="button"
-              className={`icon-bar-button${item.active ? ' active' : ''}`}
+              className={`icon-bar-button${feedbackClass}`}
               onClick={item.onClick}
               disabled={item.disabled}
               title={item.title}
               aria-label={item.ariaLabel ?? item.title}
-              aria-pressed={item.active}
             >
               {item.icon}
             </button>
           );
         }
-
-        // Action button
-        const feedbackClass = item.feedback ? ` feedback-${item.feedback}` : '';
-
-        return (
-          <button
-            key={item.id}
-            type="button"
-            className={`icon-bar-button${feedbackClass}`}
-            onClick={item.onClick}
-            disabled={item.disabled}
-            title={item.title}
-            aria-label={item.ariaLabel ?? item.title}
-          >
-            {item.icon}
-          </button>
-        );
-      })}
+      )}
     </div>
   );
 };

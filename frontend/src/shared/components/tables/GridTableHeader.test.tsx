@@ -54,17 +54,15 @@ describe('GridTableHeader', () => {
 
     await act(async () => {
       root.render(
-        <>
-          <GridTableHeader
-            headerInnerRef={headerRef}
-            tableClassName="table"
-            useShortNames={false}
-            scrollbarWidth={0}
-            headerRow={<div>Hidden</div>}
-            hideHeader
-            trailingBoundaryOffset={null}
-          />
-        </>
+        <GridTableHeader
+          headerInnerRef={headerRef}
+          tableClassName="table"
+          useShortNames={false}
+          scrollbarWidth={0}
+          headerRow={<div>Hidden</div>}
+          hideHeader
+          trailingBoundaryOffset={null}
+        />
       );
     });
 

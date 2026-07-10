@@ -5,6 +5,7 @@
  * openRelatedObject, preferring it over the parent panel's cluster.
  */
 
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,9 +110,16 @@ vi.mock('@shared/components/tables/GridTable', () => ({
     const { data, onRowClick } = props;
     return (
       <div data-testid="grid-table">
-        {data.map((item: any, i: number) => (
-          <button type="button" key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
-        ))}
+        {withStableListKeys(data, (item: any) => JSON.stringify(item)).map(
+          ({ key, value: item }, i) => (
+            <button
+              type="button"
+              key={key}
+              data-testid={`row-${i}`}
+              onClick={() => onRowClick(item)}
+            />
+          )
+        )}
       </div>
     );
   },

@@ -131,6 +131,7 @@ describe('ObjectMapG6TooltipOverlay', () => {
   it('renders tooltip background, arrow, relationship text, and kind badges', () => {
     const html = renderToStaticMarkup(
       <svg>
+        <title>Object map tooltip</title>
         <ObjectMapG6TooltipOverlay
           palette={palette}
           tooltipLayout={tooltipLayout}

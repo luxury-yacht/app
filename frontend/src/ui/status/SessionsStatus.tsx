@@ -255,7 +255,7 @@ const SessionsStatus: React.FC = () => {
                   ) : (
                     filteredShellSessions.map((session) => {
                       const status = session.status || 'active';
-                      const shellPath = (session.command && session.command[0]) || '/bin/sh';
+                      const shellPath = session.command?.[0] || '/bin/sh';
                       const fields = [
                         {
                           label: 'cluster',

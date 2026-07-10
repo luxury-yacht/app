@@ -296,7 +296,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
         {/* Container Port Selection */}
         <div className="port-forward-field">
-          <label>Container Port</label>
+          <span className="port-forward-field-label">Container Port</span>
           {isLoadingPorts ? (
             // Loading indicator while fetching ports
             <div className="port-forward-loading">Loading available ports...</div>
@@ -334,6 +334,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
             // Manual input for container port
             <div className="port-forward-input-group">
               <input
+                aria-label="Container port"
                 type="number"
                 className="port-forward-input"
                 min={1}

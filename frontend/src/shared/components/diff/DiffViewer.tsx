@@ -167,7 +167,9 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
   useEffect(
     () => () => {
-      rowObserverMapRef.current.forEach((observer) => observer.disconnect());
+      rowObserverMapRef.current.forEach((observer) => {
+        observer.disconnect();
+      });
       rowObserverMapRef.current.clear();
     },
     []
@@ -584,6 +586,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     .join(' ');
 
   return (
+    // biome-ignore lint/a11y: this scroll region is intentionally keyboard-focusable and implements its own scrolling keys.
     <div
       className={rootClassName}
       ref={diffTableRef}

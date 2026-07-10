@@ -293,9 +293,13 @@ export const reconcileColumnWidthsToContainer = <T>({
 
   const lockedKeys = new Set<string>();
   if (!enableColumnResizing && externalColumnWidths) {
-    Object.keys(externalColumnWidths).forEach((key) => lockedKeys.add(key));
+    Object.keys(externalColumnWidths).forEach((key) => {
+      lockedKeys.add(key);
+    });
   }
-  manuallyResizedColumnKeys.forEach((key) => lockedKeys.add(key));
+  manuallyResizedColumnKeys.forEach((key) => {
+    lockedKeys.add(key);
+  });
 
   const fixedColumns = renderedColumns.filter(
     (column) => isFixedColumnKey(column.key) || lockedKeys.has(column.key)

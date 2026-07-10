@@ -7,6 +7,7 @@
 
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { backendStatusClass } from '@shared/utils/backendStatusPresentation';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import React from 'react';
 
 interface ResourceStatusProps {
@@ -52,7 +53,11 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
               if (parts.length === 2) {
                 const readyCount = parseInt(parts[0], 10);
                 const totalCount = parseInt(parts[1], 10);
-                if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
+                if (
+                  !Number.isNaN(readyCount) &&
+                  !Number.isNaN(totalCount) &&
+                  readyCount !== totalCount
+                ) {
                   return <span className="status-text warning">{ready}</span>;
                 }
               }
@@ -66,8 +71,11 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
             label="Conditions"
             value={
               <div className="conditions-list">
-                {conditions.map((condition, index) => (
-                  <div key={index} className="condition-item">
+                {withStableListKeys(
+                  conditions,
+                  (condition) => `${condition.type}:${condition.status}:${condition.reason ?? ''}`
+                ).map(({ key, value: condition }) => (
+                  <div key={key} className="condition-item">
                     <span
                       className={`condition-type ${condition.status === 'True' ? 'true' : 'false'}`}
                     >

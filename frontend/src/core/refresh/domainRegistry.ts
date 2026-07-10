@@ -221,8 +221,11 @@ export const DOMAIN_STREAM_MAP = Object.fromEntries(
 ) as Partial<Record<RefreshDomain, StreamTelemetryName>>;
 
 export const PRIORITY_DOMAINS = refreshDomainDescriptors
-  .filter((descriptor) => descriptor.priority !== undefined)
-  .sort((left, right) => left.priority! - right.priority!)
+  .filter(
+    (descriptor): descriptor is typeof descriptor & { priority: number } =>
+      descriptor.priority !== undefined
+  )
+  .sort((left, right) => left.priority - right.priority)
   .map((descriptor) => descriptor.domain);
 
 export const REFRESHER_TIMING_BY_NAME = Object.fromEntries(

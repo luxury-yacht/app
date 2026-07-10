@@ -10,6 +10,7 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { endpointslice } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -105,14 +106,11 @@ const AddressList: React.FC<{
   clusterMeta: ClusterMeta;
 }> = ({ addresses, limit, namespace, clusterMeta }) => (
   <div className="addresses-list">
-    {addresses.slice(0, limit).map((addr, addrIndex) => (
-      <AddressRow
-        key={`${addr.ip}-${addrIndex}`}
-        address={addr}
-        namespace={namespace}
-        clusterMeta={clusterMeta}
-      />
-    ))}
+    {withStableListKeys(addresses.slice(0, limit), (address) => address.ip).map(
+      ({ key, value: addr }) => (
+        <AddressRow key={key} address={addr} namespace={namespace} clusterMeta={clusterMeta} />
+      )
+    )}
     {addresses.length > limit && (
       <div className="addresses-more">... and {addresses.length - limit} more</div>
     )}
@@ -200,12 +198,14 @@ export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> =
         hidden: (d) => (d.ports ?? []).length === 0,
         render: (d) => (
           <div className="overview-row-list">
-            {(d.ports ?? []).map((port, portIndex) => (
-              <div key={`${port.port}-${portIndex}`} className="overview-row">
-                <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
-                <span className="overview-row-value">{formatPortValue(port)}</span>
-              </div>
-            ))}
+            {withStableListKeys(d.ports ?? [], (port) => JSON.stringify(port)).map(
+              ({ key, value: port }) => (
+                <div key={key} className="overview-row">
+                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
+                  <span className="overview-row-value">{formatPortValue(port)}</span>
+                </div>
+              )
+            )}
           </div>
         ),
       },

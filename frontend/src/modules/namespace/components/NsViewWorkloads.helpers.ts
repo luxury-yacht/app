@@ -10,6 +10,8 @@ export interface WorkloadData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId: string;
+  clusterName?: string;
   status: string;
   statusState?: string;
   statusPresentation?: string;
@@ -26,7 +28,6 @@ export interface WorkloadData {
   hpaManaged?: boolean | null;
   desiredReplicas?: number;
   age?: string;
-  [key: string]: any;
 }
 
 export const normalizeWorkloadKind = (rawKind: string) => {

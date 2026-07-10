@@ -26,7 +26,7 @@ const hasSameShallowObjectShape = (
     previousKeys.length === nextKeys.length &&
     previousKeys.every(
       (key) =>
-        Object.prototype.hasOwnProperty.call(next, key) &&
+        Object.getOwnPropertyDescriptor(next, key) !== undefined &&
         areEquivalentValues(previous[key], next[key])
     )
   );

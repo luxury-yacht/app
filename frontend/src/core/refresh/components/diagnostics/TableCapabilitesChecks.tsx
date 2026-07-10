@@ -72,7 +72,8 @@ const CapabilityRow: React.FC<{
     <td>{row.ssarFallbackCount ?? '—'}</td>
     <td>
       {row.descriptorsByFeature && row.descriptorsByFeature.length > 0 ? (
-        <span
+        <button
+          type="button"
           className={
             `diagnostics-table-descriptor` +
             (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
@@ -93,7 +94,7 @@ const CapabilityRow: React.FC<{
                 </div>
               ))
             : 'Click to expand'}
-        </span>
+        </button>
       ) : (
         <span className="diagnostics-table-descriptor">—</span>
       )}

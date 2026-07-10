@@ -24,6 +24,9 @@
 }
 
 .data-value {
+  display: block;
+  width: 100%;
+  text-align: left;
   margin-top: 0.5rem;
   padding: var(--spacing-sm);
   background: var(--color-bg);

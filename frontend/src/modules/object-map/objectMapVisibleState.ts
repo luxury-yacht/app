@@ -66,7 +66,9 @@ const toLayoutEdgeInput = (
 
 const computeRealEdgeTypes = (edges: PositionedEdge[]): Set<string> => {
   const types = new Set<string>();
-  edges.forEach((edge) => types.add(edge.type.trim().toLowerCase()));
+  edges.forEach((edge) => {
+    types.add(edge.type.trim().toLowerCase());
+  });
   return types;
 };
 

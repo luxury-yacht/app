@@ -91,10 +91,10 @@ const renderRoles = (d: NodeDetails): React.ReactNode => (
 
 const renderTaints = (d: NodeDetails): React.ReactNode => (
   <div className="overview-condition-list">
-    {(d.taints ?? []).map((taint, index) => {
+    {(d.taints ?? []).map((taint) => {
       const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
       return (
-        <StatusChip key={`${label}-${index}`} variant="warning">
+        <StatusChip key={label} variant="warning">
           {label}
         </StatusChip>
       );

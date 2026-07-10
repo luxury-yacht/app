@@ -82,7 +82,7 @@ const resolveActionGVK = (
 
   if (suppliedVersion) {
     if (builtinGVK) {
-      const group = groupWasCarried ? suppliedGroup! : builtinGVK.group;
+      const group = groupWasCarried ? (suppliedGroup ?? '') : builtinGVK.group;
       if (group !== builtinGVK.group || suppliedVersion !== builtinGVK.version) {
         throw new Error(`Cannot ${action} ${kind}: unsupported group/version`);
       }

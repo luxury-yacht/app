@@ -285,7 +285,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
           refresh?: (start: number, end: number) => void;
         })
       | null;
-    if (!terminal || !terminal.options) {
+    if (!terminal?.options) {
       return;
     }
 
@@ -1155,9 +1155,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       )}
       {startDebugContainer && !hasActiveSession && debugDisabledReason && (
         <div className="shell-tab__debug-warning">
-          <>
-            Debug unavailable: <span>{debugDisabledReason}</span>
-          </>
+          Debug unavailable: <span>{debugDisabledReason}</span>
         </div>
       )}
       {connectionErrorMessage && (
@@ -1184,6 +1182,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}
+          role="application"
           aria-label="Shell terminal"
           data-tab-native="true"
         />

@@ -147,11 +147,7 @@ function ObjectPanelSection() {
           </div>
         </div>
         <div className="settings-row-control">
-          <div
-            className="settings-choice-buttons"
-            role="group"
-            aria-label="Default Object Panel position"
-          >
+          <fieldset className="settings-choice-buttons" aria-label="Default Object Panel position">
             {objectPanelPositionOptions.map((option) => {
               const Icon = option.icon;
               const isSelected = objectPanelPosition === option.value;
@@ -168,7 +164,7 @@ function ObjectPanelSection() {
                 </button>
               );
             })}
-          </div>
+          </fieldset>
         </div>
       </div>
 

@@ -540,7 +540,7 @@ describe('RefreshManager global controls', () => {
   it('maps cluster context to the appropriate refreshers', async () => {
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')
-      .mockResolvedValue(undefined as unknown as void);
+      .mockResolvedValue(undefined as unknown as undefined);
 
     await refreshManager.triggerManualRefreshForContext({
       currentView: 'cluster',
@@ -971,7 +971,7 @@ describe('RefreshManager guard paths and helpers', () => {
   it('skips manual refreshes when the cluster view is cleared', () => {
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')
-      .mockResolvedValue(undefined as unknown as void);
+      .mockResolvedValue(undefined as unknown as undefined);
 
     refreshManager.updateContext({
       currentView: 'cluster',
@@ -1036,7 +1036,7 @@ describe('RefreshManager guard paths and helpers', () => {
   it('filters namespace aborts when switching views with object panel changes', async () => {
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')
-      .mockResolvedValue(undefined as unknown as void);
+      .mockResolvedValue(undefined as unknown as undefined);
     const abortSpy = vi.spyOn(unsafeRefreshManager, 'abortRefresher');
 
     refreshManager.updateContext({
@@ -1131,7 +1131,7 @@ describe('RefreshManager guard paths and helpers', () => {
     });
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')
-      .mockResolvedValue(undefined as unknown as void);
+      .mockResolvedValue(undefined as unknown as undefined);
 
     await refreshManager.triggerManualRefreshForContext();
 

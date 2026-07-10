@@ -53,7 +53,9 @@ export const useAppDebugShortcuts = ({
     });
 
     return () => {
-      disposers.forEach((dispose) => dispose());
+      disposers.forEach((dispose) => {
+        dispose();
+      });
     };
   }, [
     onToggleErrorDebug,

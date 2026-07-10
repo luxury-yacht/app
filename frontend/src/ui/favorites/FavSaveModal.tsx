@@ -275,7 +275,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Kind filter dropdown: merge available kinds with any saved kinds not in the list.
   const kindDropdownOptions = useMemo(() => {
     const all = new Set(availableKinds ?? []);
-    filterKinds.forEach((k) => all.add(k));
+    filterKinds.forEach((k) => {
+      all.add(k);
+    });
     return Array.from(all)
       .sort()
       .map((k) => ({ value: k, label: k }));
@@ -284,7 +286,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Namespace filter dropdown: merge available filter namespaces with saved ones.
   const nsFilterDropdownOptions = useMemo(() => {
     const all = new Set(availableFilterNamespaces ?? []);
-    filterNamespaces.forEach((ns) => all.add(ns));
+    filterNamespaces.forEach((ns) => {
+      all.add(ns);
+    });
     return Array.from(all)
       .sort()
       .map((ns) => ({ value: ns, label: ns }));
@@ -308,22 +312,23 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const isNamespaceScope = scope === 'namespace';
 
   // Detect whether Save should be enabled when editing.
-  const changesDetected = isEditing
-    ? hasFormChanges(
-        existingFavorite!,
-        name.trim() || defaultName,
-        clusterSpecific,
-        clusterSelection,
-        scope,
-        activeView,
-        selectedNamespace,
-        filterText,
-        filterKinds,
-        filterNamespaces,
-        caseSensitive,
-        includeMetadataState
-      )
-    : true;
+  const changesDetected =
+    isEditing && existingFavorite
+      ? hasFormChanges(
+          existingFavorite,
+          name.trim() || defaultName,
+          clusterSpecific,
+          clusterSelection,
+          scope,
+          activeView,
+          selectedNamespace,
+          filterText,
+          filterKinds,
+          filterNamespaces,
+          caseSensitive,
+          includeMetadataState
+        )
+      : true;
 
   // ----- Handlers -----
 
@@ -465,8 +470,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <h3>View</h3>
             <div className="modal-form-items">
               <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                <label>View</label>
+                <label htmlFor="favorite-view">View</label>
                 <Dropdown
+                  id="favorite-view"
                   options={ALL_VIEWS}
                   value={selectedView}
                   onChange={(val) => setSelectedView(val as string)}
@@ -475,8 +481,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               </div>
               {isNamespaceScope && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label>Namespace</label>
+                  <label htmlFor="favorite-namespace">Namespace</label>
                   <Dropdown
+                    id="favorite-namespace"
                     options={namespaceOptions}
                     value={selectedNamespace}
                     onChange={(val) => setSelectedNamespace(val as string)}
@@ -492,8 +499,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <div className="modal-form-items">
               {kindDropdownOptions.length > 0 && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label>Kinds</label>
+                  <label htmlFor="favorite-kinds">Kinds</label>
                   <Dropdown
+                    id="favorite-kinds"
                     options={kindDropdownOptions}
                     value={filterKinds}
                     onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
@@ -510,8 +518,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               )}
               {nsFilterDropdownOptions.length > 0 && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label>Namespaces</label>
+                  <label htmlFor="favorite-filter-namespaces">Namespaces</label>
                   <Dropdown
+                    id="favorite-filter-namespaces"
                     options={nsFilterDropdownOptions}
                     value={filterNamespaces}
                     onChange={(val) =>

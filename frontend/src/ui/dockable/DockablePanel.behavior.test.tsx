@@ -28,7 +28,9 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 const removePanelLayers = () => {
-  document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
+  document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
+    node.remove();
+  });
 };
 
 const ensureContentElement = () => {

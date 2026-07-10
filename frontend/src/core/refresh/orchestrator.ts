@@ -239,7 +239,7 @@ class RefreshOrchestrator {
     this.context = { ...this.context, ...context };
     refreshManager.updateContext(context);
 
-    if (Object.prototype.hasOwnProperty.call(context, 'allConnectedClusterIds')) {
+    if (Object.getOwnPropertyDescriptor(context, 'allConnectedClusterIds') !== undefined) {
       this.pruneRemovedClusterRuntimes(context.allConnectedClusterIds ?? []);
     }
 
@@ -346,7 +346,9 @@ class RefreshOrchestrator {
   private getKnownScopes(domain: RefreshDomain): string[] {
     const scopes = new Set<string>();
     this.getAllRuntimes().forEach((runtime) => {
-      runtime.getKnownScopes(domain).forEach((scope) => scopes.add(scope));
+      runtime.getKnownScopes(domain).forEach((scope) => {
+        scopes.add(scope);
+      });
     });
     return Array.from(scopes);
   }
@@ -1576,7 +1578,8 @@ class RefreshOrchestrator {
   // Re-evaluate streaming for all scoped domains when the orchestrator context changes.
   private handleStreamingScopeChanges(): void {
     this.configs.forEach((config, domain) => {
-      if (!config.streaming) {
+      const streaming = config.streaming;
+      if (!streaming) {
         return;
       }
 
@@ -1588,11 +1591,11 @@ class RefreshOrchestrator {
 
           if (shouldStream && !alreadyStreaming) {
             // Context now allows streaming for this scope — start it.
-            this.scheduleStreamingStart(domain, scope, config.streaming!);
+            this.scheduleStreamingStart(domain, scope, streaming);
           } else if (!shouldStream && alreadyStreaming) {
             // Context no longer allows streaming — stop it.
             scopeRuntime.clearStreamingReady(domain, scope);
-            this.stopStreamingScope(domain, scope, config.streaming!, false);
+            this.stopStreamingScope(domain, scope, streaming, false);
           }
         });
       });

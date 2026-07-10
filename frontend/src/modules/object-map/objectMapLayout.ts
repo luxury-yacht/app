@@ -165,7 +165,9 @@ const computeNodeColumns = (
   const validIds = new Set(nodes.map((n) => n.id));
   const out = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
-  nodes.forEach((n) => inDegree.set(n.id, 0));
+  nodes.forEach((n) => {
+    inDegree.set(n.id, 0);
+  });
 
   edges.forEach((edge) => {
     if (!validIds.has(edge.source) || !validIds.has(edge.target)) return;
@@ -192,7 +194,9 @@ const computeNodeColumns = (
   });
   for (let head = 0; head < queue.length; head += 1) {
     const u = queue[head];
-    const cu = column.get(u)!;
+    if (u === undefined) continue;
+    const cu = column.get(u);
+    if (cu === undefined) continue;
     const outs = out.get(u);
     if (!outs) continue;
     for (const v of outs) {
@@ -201,7 +205,9 @@ const computeNodeColumns = (
       if (cv === undefined || candidate > cv) {
         column.set(v, candidate);
       }
-      const newRemaining = remaining.get(v)! - 1;
+      const priorRemaining = remaining.get(v);
+      if (priorRemaining === undefined) continue;
+      const newRemaining = priorRemaining - 1;
       remaining.set(v, newRemaining);
       if (newRemaining === 0) {
         queue.push(v);
@@ -220,7 +226,9 @@ const computeNodeColumns = (
   // Step 2: anchor the seed at column 0.
   const seedColumn = column.get(seedId);
   if (seedColumn !== undefined && seedColumn !== 0) {
-    column.forEach((value, id) => column.set(id, value - seedColumn));
+    column.forEach((value, id) => {
+      column.set(id, value - seedColumn);
+    });
   }
 
   // Step 3: pull each true source (in-degree zero, not the seed) right
@@ -314,14 +322,14 @@ const orderColumnsByBarycenter = (
   // Initial ordering: deterministic kind/namespace/name sort. Provides
   // a stable baseline so barycenter ties resolve the same way each run.
   sortedColumns.forEach((col) => {
-    columns.get(col)!.sort(compareForColumn);
+    columns.get(col)?.sort(compareForColumn);
   });
 
   // Index lookup is recomputed each pass because column orderings mutate.
   const indexOf = (nodeId: string): number => {
     const col = columnOf.get(nodeId);
     if (col === undefined) return -1;
-    return columns.get(col)!.findIndex((n) => n.id === nodeId);
+    return columns.get(col)?.findIndex((n) => n.id === nodeId) ?? -1;
   };
 
   const barycenter = (node: ObjectMapNode, neighborColumn: number): number => {
@@ -344,8 +352,11 @@ const orderColumnsByBarycenter = (
     if (forward) {
       // Left-to-right: each column ordered by barycenter of its left neighbours.
       for (let i = 1; i < sortedColumns.length; i += 1) {
-        const col = columns.get(sortedColumns[i])!;
+        const columnKey = sortedColumns[i];
         const neighborColumn = sortedColumns[i - 1];
+        if (columnKey === undefined || neighborColumn === undefined) continue;
+        const col = columns.get(columnKey);
+        if (!col) continue;
         col.sort((a, b) => {
           // Kind is the outermost sort key so same-kind nodes cluster
           // into a contiguous band; the position pass below adds an
@@ -368,9 +379,13 @@ const orderColumnsByBarycenter = (
       // only contains the seed (plus any unrelated nodes that happen to
       // share its column).
       for (let i = sortedColumns.length - 2; i >= 0; i -= 1) {
-        if (sortedColumns[i] === seedColumn) continue;
-        const col = columns.get(sortedColumns[i])!;
+        const columnKey = sortedColumns[i];
         const neighborColumn = sortedColumns[i + 1];
+        if (columnKey === undefined || neighborColumn === undefined || columnKey === seedColumn) {
+          continue;
+        }
+        const col = columns.get(columnKey);
+        if (!col) continue;
         col.sort((a, b) => {
           // Kind is the outermost sort key so same-kind nodes cluster
           // into a contiguous band; the position pass below adds an
@@ -509,14 +524,18 @@ export const computeObjectMapLayout = (
   const columnLanes = new Map<number, ObjectMapNode[][]>();
   const laneCounts = new Map<number, number>();
   sortedColumns.forEach((column) => {
-    const lanes = splitColumnIntoKindAwareLanes(columns.get(column)!);
+    const nodes = columns.get(column);
+    if (!nodes) return;
+    const lanes = splitColumnIntoKindAwareLanes(nodes);
     columnLanes.set(column, lanes);
     laneCounts.set(column, lanes.length);
   });
   const columnStartX = computeColumnStartX(sortedColumns, laneCounts, seedColumn);
 
   sortedColumns.forEach((column) => {
-    const lanes = columnLanes.get(column) ?? [columns.get(column)!];
+    const nodes = columns.get(column);
+    if (!nodes) return;
+    const lanes = columnLanes.get(column) ?? [nodes];
     const columnX = columnStartX.get(column) ?? column * COLUMN_STRIDE;
 
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {

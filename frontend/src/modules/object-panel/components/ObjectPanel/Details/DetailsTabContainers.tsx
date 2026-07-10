@@ -135,8 +135,8 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
 
 const ContainerList: React.FC<{ containers: Container[] }> = ({ containers }) => (
   <div className="containers-card-list">
-    {containers.map((c, i) => (
-      <ContainerCard key={`${c.name}-${i}`} container={c} />
+    {containers.map((c) => (
+      <ContainerCard key={c.name} container={c} />
     ))}
   </div>
 );

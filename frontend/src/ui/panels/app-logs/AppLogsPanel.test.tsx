@@ -438,7 +438,7 @@ describe('AppLogsPanel', () => {
     ]);
 
     const renderedClusterOption = renderToStaticMarkup(
-      <>{clustersDropdown?.renderOption(clustersDropdown.options[0], true)}</>
+      clustersDropdown?.renderOption(clustersDropdown.options[0], true)
     );
     expect(renderedClusterOption).toContain('app-logs-cluster-file');
     expect(renderedClusterOption).toContain('kube-alpha');
@@ -646,7 +646,7 @@ describe('AppLogsPanel', () => {
     const surfaceConfig = surfaceCall?.[0] as {
       captureWhenActive?: boolean;
       active?: boolean;
-      onKeyDown?: (event: KeyboardEvent) => boolean | void;
+      onKeyDown?: (event: KeyboardEvent) => boolean | undefined;
     };
 
     expect(surfaceConfig.active).toBe(true);

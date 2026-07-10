@@ -190,17 +190,22 @@ const resolvePodStateCounts = (
     Number.isFinite(podCount) &&
     typeof readyPodCount === 'number' &&
     Number.isFinite(readyPodCount);
-  const usePodSummary = hasPodSummary && (podCount > 0 || desiredCount === 0);
+  const normalizedPodCount = hasPodSummary ? podCount : null;
+  const normalizedReadyPodCount = hasPodSummary ? readyPodCount : null;
+  const usePodSummary =
+    normalizedPodCount !== null &&
+    normalizedReadyPodCount !== null &&
+    (normalizedPodCount > 0 || desiredCount === 0);
 
-  const readyCount = usePodSummary ? readyPodCount! : parseLeadingCount(ready);
+  const readyCount = usePodSummary ? normalizedReadyPodCount : parseLeadingCount(ready);
   if (usePodSummary) {
-    createdCount = podCount!;
+    createdCount = normalizedPodCount;
     if (desiredCount !== null) {
-      desiredCount = Math.max(desiredCount, podCount!);
+      desiredCount = Math.max(desiredCount, normalizedPodCount);
     }
   }
   const availableCount = usePodSummary
-    ? readyPodCount!
+    ? normalizedReadyPodCount
     : typeof available === 'number'
       ? available
       : null;
@@ -390,23 +395,24 @@ const nonDefaultTolerations = (tolerations: string[] | undefined): ParsedTolerat
 
 const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React.ReactNode => {
   const tolerations = nonDefaultTolerations(d.tolerations);
-  const showSvcAccount = Boolean(d.serviceAccount && d.serviceAccount !== 'default');
-  const showNodeSelector = Boolean(d.nodeSelector && Object.keys(d.nodeSelector).length > 0);
-  if (!showSvcAccount && !showNodeSelector && tolerations.length === 0) return null;
+  const serviceAccount = d.serviceAccount !== 'default' ? d.serviceAccount : undefined;
+  const nodeSelector =
+    d.nodeSelector && Object.keys(d.nodeSelector).length > 0 ? d.nodeSelector : undefined;
+  if (!serviceAccount && !nodeSelector && tolerations.length === 0) return null;
 
   return (
     <>
       <div className="metadata-section-separator" />
       {/* ServiceAccount — only when explicitly set to a non-default SA. The
           implicit `default` SA is noise. */}
-      {showSvcAccount && (
+      {serviceAccount && (
         <OverviewItem
           label="Svc Account"
           value={
             <ObjectPanelLink
               objectRef={buildRequiredObjectReference({
                 kind: 'ServiceAccount',
-                name: d.serviceAccount!,
+                name: serviceAccount,
                 namespace: d.namespace,
                 ...clusterMeta(context),
               })}
@@ -418,13 +424,13 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
       )}
       {/* Pod placement constraints — surfaced here (not in metadata) because
           they directly determine which nodes pods can land on. */}
-      {showNodeSelector && (
+      {nodeSelector && (
         <OverviewItem
           label="Node Selector"
           fullWidth
           value={
             <div className="overview-condition-list">
-              {Object.entries(d.nodeSelector!).map(([k, v]) => (
+              {Object.entries(nodeSelector).map(([k, v]) => (
                 <StatusChip key={k} variant="info">
                   {`${k}=${v}`}
                 </StatusChip>
@@ -439,8 +445,8 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
           fullWidth
           value={
             <div className="overview-condition-list">
-              {tolerations.map((p, i) => (
-                <StatusChip key={`${p.label}-${i}`} variant="info" tooltip={p.tooltip}>
+              {tolerations.map((p) => (
+                <StatusChip key={`${p.label}:${p.tooltip}`} variant="info" tooltip={p.tooltip}>
                   {p.label}
                 </StatusChip>
               ))}
@@ -526,7 +532,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     label: 'Availability',
     render: (d) => {
       const c = findCondition(d.conditions, 'Available');
-      if (!c || c.status !== 'False') return null;
+      if (c?.status !== 'False') return null;
       const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
       return (
         <StatusChip variant="unhealthy" tooltip={tip}>
@@ -540,7 +546,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     label: 'Replica Failure',
     render: (d) => {
       const c = findCondition(d.conditions, 'ReplicaFailure');
-      if (!c || c.status !== 'True') return null;
+      if (c?.status !== 'True') return null;
       const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
       return (
         <StatusChip variant="unhealthy" tooltip={tip}>

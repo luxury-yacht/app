@@ -69,10 +69,9 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
   const combinedClassName = ['object-panel-link', className].filter(Boolean).join(' ');
 
   return (
-    <span
+    <button
+      type="button"
       className={combinedClassName}
-      role="button"
-      tabIndex={0}
       title={title}
       data-gridtable-shortcut-optout="true"
       data-gridtable-rowclick="allow"
@@ -80,6 +79,6 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
       onKeyDown={handleKeyDown}
     >
       {children}
-    </span>
+    </button>
   );
 };

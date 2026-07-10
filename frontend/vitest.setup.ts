@@ -18,7 +18,7 @@ const buildStorageShim = (): Storage => {
       store.clear();
     },
     getItem(name: string) {
-      return store.has(name) ? store.get(name)! : null;
+      return store.get(name) ?? null;
     },
     key(index: number) {
       return Array.from(store.keys())[index] ?? null;
@@ -45,7 +45,7 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
     return;
   }
 
-  const existing = (globalThis as any)[key];
+  const existing = globalThis[key];
   if (
     existing &&
     typeof existing.setItem === 'function' &&
@@ -89,7 +89,7 @@ afterEach(async () => {
 });
 
 // Ensure React testing utilities run without extra warnings
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOnMultiple: () => undefined,

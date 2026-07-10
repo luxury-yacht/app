@@ -49,6 +49,7 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
     }));
 
     return (
+      // biome-ignore lint/a11y: this harness mirrors GridTable's div-based focus and row DOM contract.
       <div ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           // Mirrors useGridTableRowRenderer: both .gridtable-row and
@@ -182,6 +183,7 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
     }));
 
     return (
+      // biome-ignore lint/a11y: this harness mirrors GridTable's div-based focus and row DOM contract.
       <div ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           <div key={row.id} className="gridtable-row" data-row-key={row.id}>

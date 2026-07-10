@@ -100,4 +100,25 @@ describe('customCatalogRowAdapter', () => {
     expect(normalized).not.toHaveProperty('apiGroup');
     expect(normalized).not.toHaveProperty('apiVersion');
   });
+
+  it.each([
+    'clusterId',
+    'group',
+    'version',
+    'kind',
+    'name',
+  ])('rejects hydrated rows missing required identity field %s', (field) => {
+    const hydrated: Record<string, unknown> = {
+      clusterId: 'cluster-a',
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      kind: 'DBInstance',
+      name: 'primary',
+    };
+    delete hydrated[field];
+
+    expect(() => normalizeHydratedCustomRow(hydrated)).toThrow(
+      `Hydrated catalog row is missing string field "${field}".`
+    );
+  });
 });

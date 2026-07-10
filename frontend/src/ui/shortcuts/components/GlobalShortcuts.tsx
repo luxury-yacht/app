@@ -73,15 +73,18 @@ export function GlobalShortcuts({
     if (!isSettingsOpen && !isModalAnimating) {
       setIsHelpOpen((prev) => !prev);
     }
+    return undefined;
   }, [isSettingsOpen, isModalAnimating]);
 
   // Memoize all handlers to prevent re-registration
   const handleToggleSidebar = useCallback(() => {
     onToggleSidebar?.();
+    return undefined;
   }, [onToggleSidebar]);
 
   const handleToggleAppLogsPanel = useCallback(() => {
     onToggleAppLogsPanel?.();
+    return undefined;
   }, [onToggleAppLogsPanel]);
 
   const handleToggleSettings = useCallback(() => {
@@ -89,16 +92,19 @@ export function GlobalShortcuts({
     if (!isHelpOpen && !isModalAnimating) {
       onToggleSettings?.();
     }
+    return undefined;
   }, [onToggleSettings, isHelpOpen, isModalAnimating]);
 
   const handleToggleObjectDiff = useCallback(() => {
     if (!isHelpOpen && !isModalAnimating) {
       onToggleObjectDiff?.();
     }
+    return undefined;
   }, [onToggleObjectDiff, isHelpOpen, isModalAnimating]);
 
   const handleToggleDiagnostics = useCallback(() => {
     onToggleDiagnostics?.();
+    return undefined;
   }, [onToggleDiagnostics]);
 
   const handleRefresh = useCallback(
@@ -199,6 +205,7 @@ export function GlobalShortcuts({
     } else if (isObjectPanelOpenRef.current) {
       // Object panel has its own ESC handler now
     }
+    return undefined;
   }, [onToggleSettings, onToggleAppLogsPanel]);
 
   // Register all shortcuts individually to avoid hooks in loops
@@ -270,7 +277,10 @@ export function GlobalShortcuts({
   useShortcut({
     key: '=',
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: zoomIn,
+    handler: () => {
+      zoomIn();
+      return undefined;
+    },
     description: 'Zoom in',
     category: 'View',
   });
@@ -278,7 +288,10 @@ export function GlobalShortcuts({
   useShortcut({
     key: '-',
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: zoomOut,
+    handler: () => {
+      zoomOut();
+      return undefined;
+    },
     description: 'Zoom out',
     category: 'View',
   });
@@ -286,7 +299,10 @@ export function GlobalShortcuts({
   useShortcut({
     key: '0',
     modifiers: macPlatform ? { meta: true } : { ctrl: true },
-    handler: resetZoom,
+    handler: () => {
+      resetZoom();
+      return undefined;
+    },
     description: 'Reset zoom',
     category: 'View',
   });
@@ -309,7 +325,10 @@ export function GlobalShortcuts({
   useShortcut({
     key: KeyCodes.ARROW_LEFT,
     modifiers: macPlatform ? { meta: true, alt: true } : { ctrl: true, alt: true },
-    handler: () => handleSwitchClusterTab('prev'),
+    handler: () => {
+      handleSwitchClusterTab('prev');
+      return undefined;
+    },
     description: 'Switch to previous cluster tab',
     category: 'Navigation',
     enabled: selectedKubeconfigs.length > 1,
@@ -318,7 +337,10 @@ export function GlobalShortcuts({
   useShortcut({
     key: KeyCodes.ARROW_RIGHT,
     modifiers: macPlatform ? { meta: true, alt: true } : { ctrl: true, alt: true },
-    handler: () => handleSwitchClusterTab('next'),
+    handler: () => {
+      handleSwitchClusterTab('next');
+      return undefined;
+    },
     description: 'Switch to next cluster tab',
     category: 'Navigation',
     enabled: selectedKubeconfigs.length > 1,

@@ -103,8 +103,8 @@ const renderRules = (d: IngressDetails, context: OverviewContext): React.ReactNo
   const tlsHosts = tlsHostsOf(d);
   return (
     <div className="overview-card-list">
-      {(d.rules ?? []).map((rule: ingress.IngressRuleDetails, ruleIndex: number) => (
-        <div key={`rule-${ruleIndex}-${rule.host ?? 'default'}`} className="overview-card">
+      {(d.rules ?? []).map((rule: ingress.IngressRuleDetails) => (
+        <div key={JSON.stringify(rule)} className="overview-card">
           <div className="overview-card-header">
             <span className="overview-card-title">
               {rule.host ? (
@@ -121,8 +121,8 @@ const renderRules = (d: IngressDetails, context: OverviewContext): React.ReactNo
           </div>
           {rule.paths && rule.paths.length > 0 && (
             <div className="overview-card-rows">
-              {rule.paths.map((path: ingress.IngressPathDetails, pathIndex: number) => (
-                <div key={`path-${pathIndex}-${path.path ?? '/'}`} className="overview-row">
+              {rule.paths.map((path: ingress.IngressPathDetails) => (
+                <div key={JSON.stringify(path)} className="overview-row">
                   <span className="overview-row-label">{path.path || '/'}</span>
                   <span className="overview-row-value">
                     {path.pathType && (
@@ -149,8 +149,8 @@ const renderTls = (d: IngressDetails, context: OverviewContext): React.ReactNode
   const clusterMeta = clusterMetaOf(context);
   return (
     <div className="overview-card-list">
-      {(d.tls ?? []).map((tls: ingress.IngressTLSDetails, index: number) => (
-        <div key={`tls-${index}-${tls.secretName ?? 'no-secret'}`} className="overview-card">
+      {(d.tls ?? []).map((tls: ingress.IngressTLSDetails) => (
+        <div key={JSON.stringify(tls)} className="overview-card">
           <div className="overview-card-rows">
             {tls.hosts && tls.hosts.length > 0 && (
               <div className="overview-row">

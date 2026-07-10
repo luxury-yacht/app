@@ -29,8 +29,8 @@ const renderEndpoints = (d: ServiceDetails): React.ReactNode => {
   if (endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT) {
     return (
       <div className="overview-ref-list">
-        {endpoints.map((ep, index) => (
-          <div key={`${ep}-${index}`} className="overview-ref-item">
+        {endpoints.map((ep) => (
+          <div key={ep} className="overview-ref-item">
             {ep}
           </div>
         ))}
@@ -90,11 +90,8 @@ export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
         hidden: (d) => (d.ports ?? []).length === 0,
         render: (d) => (
           <div className="overview-row-list">
-            {(d.ports ?? []).map((port, index) => (
-              <div
-                key={`${port.port}-${port.targetPort ?? 'target'}-${index}`}
-                className="overview-row"
-              >
+            {(d.ports ?? []).map((port) => (
+              <div key={JSON.stringify(port)} className="overview-row">
                 <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
                 <span className="overview-row-value">
                   {port.port}/{port.protocol}

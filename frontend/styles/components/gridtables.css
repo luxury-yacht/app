@@ -496,6 +496,10 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 .gridtable-empty-filter-hint__link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
   color: var(--color-accent);
   text-decoration: none;
   cursor: pointer;

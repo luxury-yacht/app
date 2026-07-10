@@ -6,6 +6,7 @@
 
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOMClient from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -75,10 +76,13 @@ vi.mock('@shared/components/ContextMenu', () => ({
     }>;
   }) => (
     <div data-testid="mock-context-menu">
-      {items.map((item, index) =>
+      {withStableListKeys(
+        items,
+        (item) => item.actionId ?? item.label ?? (item.divider ? 'divider' : 'header')
+      ).map(({ key, value: item }) =>
         item.divider || item.header ? null : (
           <button
-            key={index}
+            key={key}
             type="button"
             data-context-action-id={item.actionId}
             onClick={item.onClick}

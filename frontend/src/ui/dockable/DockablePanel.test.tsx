@@ -88,7 +88,9 @@ describe('DockablePanel', () => {
   });
 
   afterEach(() => {
-    document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
+    document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
+      node.remove();
+    });
   });
 
   it('invokes onClose and removes the panel when the close control is clicked', async () => {
@@ -461,7 +463,7 @@ describe('DockablePanel', () => {
         <div className="object-panel-header">
           <span>{title} header</span>
         </div>
-        <div aria-label="Object Panel Tabs">
+        <div role="tablist" aria-label="Object Panel Tabs">
           <div role="tab" tabIndex={-1}>
             {tabPrefix} Details
           </div>

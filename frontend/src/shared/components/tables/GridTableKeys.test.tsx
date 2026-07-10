@@ -15,7 +15,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 const registeredSurfaces: Array<{
   kind: string;
-  onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | void;
+  onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | undefined;
 }> = [];
 
 // Mock the keyboard shortcuts hooks — we only need the rendered DOM.
@@ -40,7 +40,7 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     useShortcuts: () => {},
     useKeyboardSurface: (surface: {
       kind: string;
-      onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | void;
+      onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | undefined;
     }) => {
       registeredSurfaces.push(surface);
     },

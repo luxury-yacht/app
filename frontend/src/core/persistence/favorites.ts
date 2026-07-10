@@ -5,6 +5,7 @@
  * Mirrors the pattern established in clusterTabOrder.ts.
  */
 
+import { backend } from '@wailsjs/go/models';
 import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 
@@ -38,6 +39,27 @@ export interface Favorite {
   order: number;
 }
 
+const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
+  id: favorite.id,
+  name: favorite.name,
+  clusterSelection: favorite.clusterSelection,
+  clusterId: favorite.clusterId,
+  clusterName: favorite.clusterName,
+  viewType: favorite.viewType,
+  view: favorite.view,
+  namespace: favorite.namespace,
+  filters: favorite.filters ?? null,
+  tableState: favorite.tableState ?? null,
+  order: favorite.order,
+});
+
+const toBackendFavorite = (favorite: Favorite): backend.Favorite =>
+  new backend.Favorite({
+    ...favorite,
+    filters: favorite.filters ?? undefined,
+    tableState: favorite.tableState ?? undefined,
+  });
+
 // ---------- Internal state ----------
 
 let cachedFavorites: Favorite[] = [];
@@ -48,7 +70,7 @@ const getRuntimeApp = () => {
   if (typeof window === 'undefined') {
     return undefined;
   }
-  return (window as any)?.go?.backend?.App;
+  return window.go?.backend?.App;
 };
 
 const emitChanged = () => {
@@ -82,7 +104,7 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
         adapter: 'persistence-read',
         read: () => runtimeApp.GetFavorites(),
       });
-      cachedFavorites = Array.isArray(result) ? result : [];
+      cachedFavorites = Array.isArray(result) ? result.map(fromBackendFavorite) : [];
     } catch (error) {
       console.error('Failed to hydrate favorites:', error);
     } finally {
@@ -108,7 +130,7 @@ export const addFavorite = async (fav: Favorite): Promise<Favorite> => {
   if (!runtimeApp || typeof runtimeApp.AddFavorite !== 'function') {
     throw new Error('Backend not available');
   }
-  const created: Favorite = await runtimeApp.AddFavorite(fav);
+  const created = fromBackendFavorite(await runtimeApp.AddFavorite(toBackendFavorite(fav)));
   cachedFavorites = [...cachedFavorites, created];
   hydrated = true;
   emitChanged();
@@ -121,7 +143,7 @@ export const updateFavorite = async (fav: Favorite): Promise<void> => {
   if (!runtimeApp || typeof runtimeApp.UpdateFavorite !== 'function') {
     throw new Error('Backend not available');
   }
-  await runtimeApp.UpdateFavorite(fav);
+  await runtimeApp.UpdateFavorite(toBackendFavorite(fav));
   cachedFavorites = cachedFavorites.map((existing) => (existing.id === fav.id ? fav : existing));
   emitChanged();
 };

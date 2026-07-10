@@ -45,5 +45,7 @@ export const listRegisteredGridTableViews = (): string[] => Array.from(VIEW_IDS)
 
 export const resetGridTableViewRegistryForTests = (viewIds?: string[]): void => {
   VIEW_IDS.clear();
-  (viewIds ?? []).forEach((id) => VIEW_IDS.add(id));
+  (viewIds ?? []).forEach((id) => {
+    VIEW_IDS.add(id);
+  });
 };

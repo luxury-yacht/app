@@ -44,7 +44,7 @@ interface JobRow {
   succeeded: number;
   failed: number;
   active: number;
-  startTime?: any;
+  startTime?: unknown;
   duration?: string;
   age: string;
   ageTimestamp?: number;

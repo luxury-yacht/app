@@ -250,7 +250,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
       }
       if (typeof col.render === 'function') {
         const element = col.render(resource) as any;
-        if (element && element.props) {
+        if (element?.props) {
           element.props.onClick?.({ stopPropagation() {} } as any);
           element.props.onKeyDown?.({ key: 'Enter', preventDefault: vi.fn() } as any);
         }

@@ -564,7 +564,7 @@ describe('useTabDropTarget', () => {
       return (
         <div ref={outerRef as (el: HTMLDivElement | null) => void} data-testid="outer">
           <div ref={innerRef as (el: HTMLDivElement | null) => void} data-testid="inner">
-            <div role="tab" style={{ width: 100, height: 20 }} />
+            <div role="tab" tabIndex={-1} style={{ width: 100, height: 20 }} />
           </div>
         </div>
       );

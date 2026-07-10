@@ -30,7 +30,7 @@ interface UseRefreshWatcherOptions {
   /**
    * Dependencies that trigger re-subscription
    */
-  dependencies?: any[];
+  dependencies?: unknown[];
 }
 
 /**

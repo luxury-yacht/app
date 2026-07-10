@@ -111,13 +111,13 @@ const ScaleModal = ({
         <div className="scale-modal-fields">
           {namespace && (
             <>
-              <label className="scale-modal-label">Namespace:</label>
+              <span className="scale-modal-label">Namespace:</span>
               <span className="scale-modal-value">{namespace}</span>
             </>
           )}
           {name && (
             <>
-              <label className="scale-modal-label">{kind || 'Workload'}:</label>
+              <span className="scale-modal-label">{kind || 'Workload'}:</span>
               <span className="scale-modal-value">{name}</span>
             </>
           )}

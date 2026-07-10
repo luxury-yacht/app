@@ -10,10 +10,10 @@ export function formatAge(
   if (!timestamp) return '-';
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (isNaN(date.getTime())) return '-';
+  if (Number.isNaN(date.getTime())) return '-';
 
   const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
-  if (isNaN(now.getTime())) return '-';
+  if (Number.isNaN(now.getTime())) return '-';
   const diffMs = now.getTime() - date.getTime();
 
   if (diffMs < 0) return 'future';
@@ -44,7 +44,7 @@ export function formatFullDate(timestamp: Date | string | number | null | undefi
   if (!timestamp) return '-';
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (isNaN(date.getTime())) return '-';
+  if (Number.isNaN(date.getTime())) return '-';
 
   return date.toLocaleString();
 }

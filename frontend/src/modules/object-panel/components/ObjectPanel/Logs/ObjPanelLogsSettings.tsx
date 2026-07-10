@@ -297,9 +297,9 @@ function ObjPanelLogsSettings() {
                   aria-invalid={objPanelLogsApiTimestampFormatError ? 'true' : 'false'}
                   data-obj-panel-logs-settings-focusable="true"
                 />
-                <a
+                <button
+                  type="button"
                   className="obj-panel-logs-settings-format-link"
-                  href="https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens"
                   tabIndex={-1}
                   data-focus-trap-ignore="true"
                   onClick={(e) => {
@@ -310,7 +310,7 @@ function ObjPanelLogsSettings() {
                   }}
                 >
                   Formatting reference
-                </a>
+                </button>
               </div>
               {objPanelLogsApiTimestampPreview ? (
                 <>

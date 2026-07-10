@@ -847,7 +847,7 @@ export const buildEventStreamSummary = (params: {
 };
 
 export const buildCatalogSummary = (params: {
-  catalogState: DomainSnapshotState<any>;
+  catalogState: DomainSnapshotState<unknown>;
   catalogStreamTelemetry?: TelemetryStreamStatus;
   telemetrySummary: TelemetrySummary | null;
   telemetryError: string | null;
@@ -906,7 +906,7 @@ export const buildCatalogSummary = (params: {
 };
 
 export const buildContainerLogsSummary = (params: {
-  containerLogsScopeEntries: Array<[string, DomainSnapshotState<any>]>;
+  containerLogsScopeEntries: Array<[string, DomainSnapshotState<unknown>]>;
   containerLogsStreamTelemetry?: TelemetryStreamStatus;
 }): SummaryCardData => {
   const { containerLogsScopeEntries, containerLogsStreamTelemetry } = params;

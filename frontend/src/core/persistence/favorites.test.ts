@@ -4,6 +4,7 @@
  * Test suite for favorites persistence helpers.
  */
 
+import { backend } from '@wailsjs/go/models';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {
@@ -116,7 +117,9 @@ describe('favorites persistence', () => {
 
     const result = await addFavorite(input);
 
-    expect(mockApp.AddFavorite).toHaveBeenCalledWith(input);
+    expect(mockApp.AddFavorite).toHaveBeenCalledWith(
+      new backend.Favorite({ ...input, filters: undefined, tableState: undefined })
+    );
     expect(result).toEqual(created);
     expect(getFavorites()).toEqual([created]);
   });
@@ -146,7 +149,9 @@ describe('favorites persistence', () => {
 
     await updateFavorite(updated);
 
-    expect(mockApp.UpdateFavorite).toHaveBeenCalledWith(updated);
+    expect(mockApp.UpdateFavorite).toHaveBeenCalledWith(
+      new backend.Favorite({ ...updated, filters: undefined, tableState: undefined })
+    );
     expect(getFavorites()[0].name).toBe('New Name');
   });
 

@@ -104,7 +104,7 @@ function KubeconfigsSection() {
                   return (
                     <div
                       className="setting-item setting-item-surface kubeconfig-path-row"
-                      key={`kubeconfig-path-${index}`}
+                      key={path}
                     >
                       <span className="kubeconfig-path-icon" aria-hidden="true">
                         <KubeconfigFolderIcon width={16} height={16} />

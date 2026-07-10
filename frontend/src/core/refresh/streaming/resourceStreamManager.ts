@@ -253,7 +253,9 @@ export class ResourceStreamManager {
       resyncCount: 0,
       fallbackCount: 0,
     };
-    this.streamTelemetry.forEach((stats) => accumulateStreamTelemetry(summary, stats));
+    this.streamTelemetry.forEach((stats) => {
+      accumulateStreamTelemetry(summary, stats);
+    });
     return summary;
   }
 
@@ -298,7 +300,9 @@ export class ResourceStreamManager {
     if (subscriptions.length === 0) {
       return;
     }
-    subscriptions.forEach((subscription) => this.scheduleUnsubscribe(subscription, reset));
+    subscriptions.forEach((subscription) => {
+      this.scheduleUnsubscribe(subscription, reset);
+    });
   }
 
   async refreshOnce(domain: DoorbellDomain, scope: string): Promise<void> {
@@ -523,7 +527,9 @@ export class ResourceStreamManager {
 
   private ensureSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const subscriptions = this.subscriptions.ensure(domain, scope);
-    subscriptions.forEach((subscription) => this.updateHealthForSubscription(subscription));
+    subscriptions.forEach((subscription) => {
+      this.updateHealthForSubscription(subscription);
+    });
     return subscriptions;
   }
 
@@ -714,7 +720,9 @@ export class ResourceStreamManager {
         }
       });
     });
-    targets.forEach(({ domain, scope }) => this.updateHealthForScope(domain, scope));
+    targets.forEach(({ domain, scope }) => {
+      this.updateHealthForScope(domain, scope);
+    });
   }
 
   private markConnectionOpen(): void {
@@ -1004,7 +1012,9 @@ export class ResourceStreamManager {
 
   private stopAll(reset: boolean): void {
     const subscriptions = Array.from(this.subscriptions.values());
-    subscriptions.forEach((subscription) => this.unsubscribe(subscription, reset));
+    subscriptions.forEach((subscription) => {
+      this.unsubscribe(subscription, reset);
+    });
     this.subscriptions.clear();
     this.connection?.close();
     this.connection = null;

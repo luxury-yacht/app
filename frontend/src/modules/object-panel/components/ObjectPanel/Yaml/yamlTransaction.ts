@@ -312,7 +312,7 @@ export const useYamlTransaction = ({
   ]);
 
   useEffect(() => {
-    if (!postApplyNotice || postApplyNotice.kind !== 'warning' || manualYamlOverride) {
+    if (postApplyNotice?.kind !== 'warning' || manualYamlOverride) {
       return;
     }
     setPostApplyNotice(null);

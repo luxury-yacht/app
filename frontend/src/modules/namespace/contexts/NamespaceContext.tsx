@@ -532,7 +532,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unsubChanging();
       unsubChanged();
       unsubScopeChanged();
-      scopeRefetchTimers.forEach((timer) => window.clearTimeout(timer));
+      scopeRefetchTimers.forEach((timer) => {
+        window.clearTimeout(timer);
+      });
     };
   }, [clearSelection, namespaceScopes, namespacesScope, updateNamespaces]);
 

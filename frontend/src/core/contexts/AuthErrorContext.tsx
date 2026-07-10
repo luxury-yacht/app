@@ -363,7 +363,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ];
 
     return () => {
-      disposers.forEach((dispose) => dispose());
+      disposers.forEach((dispose) => {
+        dispose();
+      });
     };
   }, []);
 

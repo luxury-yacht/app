@@ -47,9 +47,7 @@ export function useGridTableProfiler({
     navigator.userAgent.toLowerCase().includes('jsdom');
 
   const profilerEnabled = import.meta.env.DEV && !isJSDOM;
-  const profilerLoggingEnabled = Boolean(
-    (import.meta as any)?.env?.VITE_GRIDTABLE_PROFILE_LOGS === 'true'
-  );
+  const profilerLoggingEnabled = import.meta.env.VITE_GRIDTABLE_PROFILE_LOGS === 'true';
 
   const warnedMessagesRef = useRef<Set<string>>(new Set());
   const warnDevOnce = useCallback((message: string) => {

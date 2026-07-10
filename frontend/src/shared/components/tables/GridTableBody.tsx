@@ -123,8 +123,8 @@ function GridTableBody<T>({
           {hasActiveFilters && (
             <div className="gridtable-empty-filter-hint">
               Filters are enabled that may be hiding objects.{' '}
-              <a
-                href="#"
+              <button
+                type="button"
                 className="gridtable-empty-filter-hint__link"
                 onClick={(e) => {
                   e.preventDefault();
@@ -132,7 +132,7 @@ function GridTableBody<T>({
                 }}
               >
                 Clear filters
-              </a>
+              </button>
             </div>
           )}
         </div>

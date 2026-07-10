@@ -826,7 +826,9 @@ describe('Tabs', () => {
 
     // Trigger the observer callback.
     act(() => {
-      observers.forEach((cb) => cb());
+      observers.forEach((cb) => {
+        cb();
+      });
     });
 
     expect(container.querySelector('.tab-strip__overflow-indicator')).toBeTruthy();
@@ -900,7 +902,11 @@ describe('Tabs', () => {
       Object.defineProperty(btn, 'offsetWidth', { value: 100, configurable: true });
     });
 
-    act(() => observers.forEach((cb) => cb()));
+    act(() =>
+      observers.forEach((cb) => {
+        cb();
+      })
+    );
 
     const rightButton = container.querySelector<HTMLButtonElement>(
       '.tab-strip__overflow-indicator--right'
@@ -1042,7 +1048,11 @@ describe('Tabs', () => {
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 500, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 300, configurable: true });
 
-    act(() => observers.forEach((cb) => cb()));
+    act(() =>
+      observers.forEach((cb) => {
+        cb();
+      })
+    );
 
     // Both indicators render together whenever the strip overflows, even
     // at scrollLeft = 0. No per-side conditional rendering, no count badge.

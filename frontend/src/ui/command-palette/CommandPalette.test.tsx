@@ -123,11 +123,11 @@ const fetchSnapshotMock = vi.fn();
 let registeredGlobalShortcuts: Array<{
   key: string;
   modifiers?: Record<string, boolean>;
-  handler: () => boolean | void;
+  handler: () => boolean | undefined;
 }> = [];
 let registeredPaletteShortcuts: Array<{
   key: string;
-  handler: () => boolean | void;
+  handler: () => boolean | undefined;
   enabled?: boolean;
 }> = [];
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -166,12 +166,12 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (options: {
     key: string;
     modifiers?: Record<string, boolean>;
-    handler: () => boolean | void;
+    handler: () => boolean | undefined;
   }) => {
     registeredGlobalShortcuts.push(options);
   },
   useShortcuts: (
-    shortcuts: Array<{ key: string; handler: () => boolean | void; enabled?: boolean }>,
+    shortcuts: Array<{ key: string; handler: () => boolean | undefined; enabled?: boolean }>,
     _config: Record<string, unknown> = {}
   ) => {
     registeredPaletteShortcuts = shortcuts;

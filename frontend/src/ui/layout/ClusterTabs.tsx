@@ -106,7 +106,9 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   const tabsById = useMemo(() => {
     const map = new Map<string, ClusterTab>();
-    tabs.forEach((tab) => map.set(tab.id, tab));
+    tabs.forEach((tab) => {
+      map.set(tab.id, tab);
+    });
     return map;
   }, [tabs]);
 

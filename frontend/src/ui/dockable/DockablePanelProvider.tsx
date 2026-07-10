@@ -676,15 +676,18 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     if (!listeners) {
       return;
     }
-    listeners.forEach((fn) => fn());
+    listeners.forEach((fn) => {
+      fn();
+    });
   }, []);
 
   const subscribeContentChange = useCallback((groupKey: GroupKey, fn: () => void) => {
     const listenersByGroup = contentChangeListeners.current;
-    if (!listenersByGroup.has(groupKey)) {
-      listenersByGroup.set(groupKey, new Set());
+    let listeners = listenersByGroup.get(groupKey);
+    if (!listeners) {
+      listeners = new Set();
+      listenersByGroup.set(groupKey, listeners);
     }
-    const listeners = listenersByGroup.get(groupKey)!;
     listeners.add(fn);
     return () => {
       listeners.delete(fn);

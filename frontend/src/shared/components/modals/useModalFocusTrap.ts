@@ -10,7 +10,7 @@ interface UseModalFocusTrapOptions {
   disabled?: boolean;
   suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
-  onEscape?: (event: KeyboardEvent) => boolean | void;
+  onEscape?: (event: KeyboardEvent) => boolean | undefined;
 }
 
 interface OpenModalEntry {
@@ -31,7 +31,7 @@ const getTrackedBodyChildren = () =>
 const pruneDisconnectedModalEntries = () => {
   for (let i = openModalStack.length - 1; i >= 0; i -= 1) {
     const surface = openModalStack[i]?.surface;
-    if (!surface || !surface.isConnected) {
+    if (!surface?.isConnected) {
       openModalStack.splice(i, 1);
     }
   }
@@ -157,7 +157,7 @@ export const useModalFocusTrap = ({
 
       const previous = previouslyFocusedRef.current;
       previouslyFocusedRef.current = null;
-      if (!previous || !previous.isConnected) {
+      if (!previous?.isConnected) {
         return;
       }
 

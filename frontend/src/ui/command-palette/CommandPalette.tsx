@@ -10,6 +10,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
@@ -913,8 +914,9 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
             setHideCursor(false);
           }
           const targetElement = event.target instanceof HTMLElement ? event.target : null;
-          const targetItem = targetElement?.closest('.command-palette-item');
-          const targetIndex = itemRefs.current.findIndex((item) => item === targetItem);
+          const targetItem =
+            targetElement?.closest<HTMLDivElement>('.command-palette-item') ?? null;
+          const targetIndex = itemRefs.current.indexOf(targetItem);
           if (targetIndex !== -1 && targetIndex !== selectedIndexRef.current) {
             updateSelection(targetIndex);
           }
@@ -988,7 +990,11 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                           {command.shortcut && (
                             <div className="keycap">
                               {Array.isArray(command.shortcut) ? (
-                                command.shortcut.map((key, idx) => <kbd key={idx}>{key}</kbd>)
+                                withStableListKeys(command.shortcut, (key) => key).map(
+                                  ({ key: stableKey, value: shortcutKey }) => (
+                                    <kbd key={stableKey}>{shortcutKey}</kbd>
+                                  )
+                                )
                               ) : (
                                 <kbd>{command.shortcut}</kbd>
                               )}

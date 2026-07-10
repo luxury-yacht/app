@@ -265,10 +265,10 @@ export const pvDescriptor: OverviewDescriptor<PersistentVolumeDetails> = {
         field: 'volumeSource',
         label: 'Source',
         fullWidth: true,
-        hidden: (d) => !(d.volumeSource && d.volumeSource.type),
+        hidden: (d) => !d.volumeSource?.type,
         render: (d) => {
           const source = d.volumeSource;
-          if (!source || !source.type) return undefined;
+          if (!source?.type) return undefined;
           return (
             <div className="overview-stacked">
               <div>
@@ -295,8 +295,8 @@ export const pvDescriptor: OverviewDescriptor<PersistentVolumeDetails> = {
         hidden: (d) => !(d.nodeAffinity && d.nodeAffinity.length > 0),
         render: (d) => (
           <div className="overview-stacked">
-            {(d.nodeAffinity ?? []).map((entry, i) => (
-              <span key={i}>{entry}</span>
+            {(d.nodeAffinity ?? []).map((entry) => (
+              <span key={entry}>{entry}</span>
             ))}
           </div>
         ),
@@ -395,10 +395,10 @@ export const storageClassDescriptor: OverviewDescriptor<StorageClassDetails> = {
         hidden: (d) => !(d.allowedTopologies && d.allowedTopologies.length > 0),
         render: (d) => (
           <div className="overview-stacked">
-            {(d.allowedTopologies ?? []).map((selector, si) => (
-              <div key={si} className="overview-condition-list">
-                {selector.matchLabelExpressions.map((req, ri) => (
-                  <StatusChip key={`${si}-${ri}`} variant="info">
+            {(d.allowedTopologies ?? []).map((selector) => (
+              <div key={JSON.stringify(selector)} className="overview-condition-list">
+                {selector.matchLabelExpressions.map((req) => (
+                  <StatusChip key={`${req.key}:${req.values.join(',')}`} variant="info">
                     {req.key}: {req.values.join(', ')}
                   </StatusChip>
                 ))}

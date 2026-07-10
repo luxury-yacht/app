@@ -6,7 +6,7 @@ import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocus
 
 const TestModal: React.FC<{
   disabled?: boolean;
-  onEscape?: (event: KeyboardEvent) => boolean | void;
+  onEscape?: (event: KeyboardEvent) => boolean | undefined;
 }> = ({ disabled = false, onEscape }) => {
   const ref = React.useRef<HTMLDivElement>(null);
 

@@ -264,11 +264,7 @@ describe('useObjectPanelRefresh', () => {
 
     // Unmounting one panel must only unregister ITS refresher.
     await act(async () => {
-      root.render(
-        <>
-          <PanelHarness key="api" panelId={basePanelId} name="api" />
-        </>
-      );
+      root.render(<PanelHarness key="api" panelId={basePanelId} name="api" />);
       await Promise.resolve();
     });
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith(`object-deployment:${otherPanelId}`);

@@ -5,13 +5,7 @@
  * object names, namespaces, and collapse/expand badges.
  */
 
-import type {
-  CircleStyleProps,
-  DisplayObjectConfig,
-  Group,
-  RectStyleProps,
-  TextStyleProps,
-} from '@antv/g';
+import type { CircleStyleProps, Group, RectStyleProps, TextStyleProps } from '@antv/g';
 import { Circle as GCircle, Rect as GRect, Text as GText } from '@antv/g';
 import type { BaseNodeStyleProps } from '@antv/g6';
 import { BaseNode, ExtensionCategory, register } from '@antv/g6';
@@ -73,10 +67,6 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
 }
 
 class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
-  constructor(options: DisplayObjectConfig<ObjectMapG6CardNodeStyleProps>) {
-    super(options);
-  }
-
   private getBackgroundOpacity(attributes: Required<ObjectMapG6CardNodeStyleProps>): number {
     return attributes.cardBackgroundOpacity ?? 1;
   }

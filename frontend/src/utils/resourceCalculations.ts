@@ -19,7 +19,7 @@ export const parseCpuToMillicores = (val: string | undefined): number => {
 export const parseMemToMB = (val: string | undefined): number => {
   if (!val || val === '-' || val === 'not set') return 0;
   const num = parseFloat(val);
-  if (isNaN(num)) return 0;
+  if (Number.isNaN(num)) return 0;
   if (val.endsWith('Ki')) return num / 1024; // Convert Ki to Mi
   if (val.endsWith('Mi')) return num;
   if (val.endsWith('Gi')) return num * 1024; // Convert Gi to Mi

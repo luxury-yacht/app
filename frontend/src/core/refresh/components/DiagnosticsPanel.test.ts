@@ -212,8 +212,12 @@ const setScopedEntries = (domain: string, entries: Array<[string, DomainSnapshot
 };
 
 const resetDomainStates = () => {
-  Object.keys(domainStateMap).forEach((key) => delete domainStateMap[key]);
-  Object.keys(scopedEntriesMap).forEach((key) => delete scopedEntriesMap[key]);
+  Object.keys(domainStateMap).forEach((key) => {
+    delete domainStateMap[key];
+  });
+  Object.keys(scopedEntriesMap).forEach((key) => {
+    delete scopedEntriesMap[key];
+  });
   refreshState = { pendingRequests: 0 };
 };
 
@@ -264,14 +268,16 @@ const renderDiagnosticsPanel = async (
     onClose: () => undefined,
     ...props,
   };
+  const renderTree = () => {
+    const providerProps: React.ComponentProps<typeof KeyboardProvider> = {
+      disabled: keyboardDisabled,
+      children: React.createElement(DiagnosticsPanelComponent, currentProps),
+    };
+    return React.createElement(KeyboardProvider, providerProps);
+  };
 
   await act(async () => {
-    root.render(
-      React.createElement(KeyboardProvider, {
-        disabled: keyboardDisabled,
-        children: React.createElement(DiagnosticsPanelComponent, currentProps),
-      })
-    );
+    root.render(renderTree());
     await Promise.resolve();
   });
 
@@ -280,12 +286,7 @@ const renderDiagnosticsPanel = async (
     rerender: async (nextProps: Partial<{ isOpen: boolean; onClose: () => void }> = {}) => {
       currentProps = { ...currentProps, ...nextProps };
       await act(async () => {
-        root.render(
-          React.createElement(KeyboardProvider, {
-            disabled: keyboardDisabled,
-            children: React.createElement(DiagnosticsPanelComponent, currentProps),
-          })
-        );
+        root.render(renderTree());
         await Promise.resolve();
       });
     },
@@ -547,7 +548,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ]);
 
-    scopedEntriesMap['pods'] = [
+    scopedEntriesMap.pods = [
       [
         'node:worker-1',
         {
@@ -706,7 +707,7 @@ describe('DiagnosticsPanel component', () => {
     seedBaseDomainStates();
     const now = Date.now();
 
-    scopedEntriesMap['pods'] = [
+    scopedEntriesMap.pods = [
       [
         'namespace:team-a',
         {
@@ -743,7 +744,7 @@ describe('DiagnosticsPanel component', () => {
     seedBaseDomainStates();
     const now = Date.now();
 
-    scopedEntriesMap['pods'] = [
+    scopedEntriesMap.pods = [
       [
         'cluster-a|namespace:team-a',
         {

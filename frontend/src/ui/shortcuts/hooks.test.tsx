@@ -120,7 +120,7 @@ describe('useShortcut hooks', () => {
     const unregisterShortcut = vi.fn();
     const mockContext = buildKeyboardContext({ registerShortcut, unregisterShortcut });
 
-    const TestComponent: React.FC<{ enabled: boolean; handler: () => void }> = ({
+    const TestComponent: React.FC<{ enabled: boolean; handler: () => undefined }> = ({
       enabled,
       handler,
     }) => {

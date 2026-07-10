@@ -651,9 +651,9 @@ describe('refreshOrchestrator', () => {
 
   it('refreshes namespaces domain alongside context targets during manual refresh', async () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
-      undefined as unknown as void
+      undefined as unknown as undefined
     );
-    scopedFetch.mockResolvedValue(undefined as unknown as void);
+    scopedFetch.mockResolvedValue(undefined as unknown as undefined);
 
     // Register namespaces as scoped and enable a scope so refreshEnabledScopes fires.
     refreshOrchestrator.registerDomain({
@@ -679,9 +679,9 @@ describe('refreshOrchestrator', () => {
 
   it('refreshes pods scope when namespace pods view is active during manual refresh', async () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
-      undefined as unknown as void
+      undefined as unknown as undefined
     );
-    scopedFetch.mockResolvedValue(undefined as unknown as void);
+    scopedFetch.mockResolvedValue(undefined as unknown as undefined);
 
     registerPodsDomain();
     refreshOrchestrator.updateContext({

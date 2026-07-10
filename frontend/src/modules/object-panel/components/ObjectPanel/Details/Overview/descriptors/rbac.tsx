@@ -98,7 +98,7 @@ const SubjectGroups: React.FC<{
         <div key={heading} className="rbac-subjects-group">
           <div className="rbac-subjects-group-heading">{heading}</div>
           <div className="rbac-subjects-names">
-            {items.map((subject, index) => {
+            {items.map((subject) => {
               const isSA = subject.kind === 'ServiceAccount';
               const displayName =
                 isSA && subject.namespace ? `${subject.namespace}/${subject.name}` : subject.name;
@@ -118,7 +118,7 @@ const SubjectGroups: React.FC<{
                   displayName
                 );
               return (
-                <div key={`${subject.name}-${index}`} className="rbac-subjects-name-row">
+                <div key={JSON.stringify(subject)} className="rbac-subjects-name-row">
                   <span className="rbac-subjects-name">{nameNode}</span>
                   {isSystemSA(subject) && (
                     <StatusChip
@@ -194,10 +194,10 @@ const renderAggregation = (aggregationRule: clusterrole.AggregationRule): React.
   }
   return (
     <div className="overview-stacked">
-      {selectors.map((selector, si) => (
-        <div key={si} className="overview-condition-list">
+      {selectors.map((selector) => (
+        <div key={JSON.stringify(selector)} className="overview-condition-list">
           {Object.entries(selector).map(([k, v]) => (
-            <StatusChip key={`${si}-${k}`} variant="info">
+            <StatusChip key={`${k}:${v}`} variant="info">
               {k}={v}
             </StatusChip>
           ))}

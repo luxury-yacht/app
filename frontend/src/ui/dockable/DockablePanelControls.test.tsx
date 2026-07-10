@@ -87,7 +87,7 @@ describe('DockablePanelControls', () => {
     const parentMouseDown = vi.fn();
 
     const { host, unmount } = await renderControls(
-      <div onMouseDown={parentMouseDown}>
+      <form aria-label="Panel controls propagation harness" onMouseDown={parentMouseDown}>
         <DockablePanelControls
           position="right"
           isMaximized={false}
@@ -96,7 +96,7 @@ describe('DockablePanelControls', () => {
           onToggleMaximize={onToggleMaximize}
           onClose={onClose}
         />
-      </div>
+      </form>
     );
 
     // Ensure the controls container intercepts mouse down events.

@@ -10,6 +10,7 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
 import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
@@ -402,13 +403,14 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const formatTimestamp = useCallback((timestamp: string) => {
     try {
-      const formatter = new Intl.DateTimeFormat('en-US', {
+      const options: Intl.DateTimeFormatOptions & { fractionalSecondDigits: number } = {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
         hour12: false,
         fractionalSecondDigits: 3,
-      } as any);
+      };
+      const formatter = new Intl.DateTimeFormat('en-US', options);
 
       return formatter.format(new Date(timestamp));
     } catch {
@@ -965,8 +967,10 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         ) : filteredLogs.length === 0 ? (
           <div className="app-logs-empty">No logs match the selected filter</div>
         ) : (
-          filteredLogs.map((log, index) => (
-            <div key={index} className={`log-entry ${getLevelClass(log.level)}`}>
+          withStableListKeys(filteredLogs, (log) =>
+            String(log.sequence ?? `${log.timestamp}:${log.source ?? ''}:${log.message}`)
+          ).map(({ key, value: log }) => (
+            <div key={key} className={`log-entry ${getLevelClass(log.level)}`}>
               <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
               <span className={`log-level ${log.level.toUpperCase()}`}>{log.level}</span>
               <span className="log-source">{log.source ? `[${log.source}]` : ''}</span>

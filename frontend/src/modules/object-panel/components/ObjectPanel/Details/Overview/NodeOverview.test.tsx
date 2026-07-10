@@ -110,7 +110,9 @@ describe('NodeOverview', () => {
     expect(rolesValue?.textContent).toContain('master');
     const roleChips = rolesValue?.querySelectorAll('.status-chip');
     expect(roleChips?.length).toBe(2);
-    roleChips?.forEach((chip) => expect(chip.className).toContain('status-chip--info'));
+    roleChips?.forEach((chip) => {
+      expect(chip.className).toContain('status-chip--info');
+    });
     expect(getValueForLabel(container, 'Internal IP')?.textContent).toBe('10.0.0.10');
     expect(getValueForLabel(container, 'Pods')?.textContent).toContain('80/100');
     expect(getValueForLabel(container, 'OS')?.textContent).toContain('linux/amd64');

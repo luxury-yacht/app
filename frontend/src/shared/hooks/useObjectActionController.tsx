@@ -317,10 +317,10 @@ export const useObjectActionController = ({
             (useDefaultHandlers ? () => setDeleteTarget(object) : undefined),
           onCordon:
             handlerOverrides?.onCordon ??
-            (perObjectHandlers?.onCordon ? () => perObjectHandlers.onCordon!(object) : undefined),
+            (perObjectHandlers?.onCordon ? () => perObjectHandlers.onCordon?.(object) : undefined),
           onDrain:
             handlerOverrides?.onDrain ??
-            (perObjectHandlers?.onDrain ? () => perObjectHandlers.onDrain!(object) : undefined),
+            (perObjectHandlers?.onDrain ? () => perObjectHandlers.onDrain?.(object) : undefined),
           onPortForward:
             handlerOverrides?.onPortForward ??
             (useDefaultHandlers

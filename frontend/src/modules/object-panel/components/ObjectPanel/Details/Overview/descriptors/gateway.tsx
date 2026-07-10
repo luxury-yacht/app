@@ -201,8 +201,8 @@ const RefList: React.FC<{
   }
   return (
     <div className="overview-ref-list">
-      {refs.map((ref, index) => (
-        <div key={`ref-${index}`} className="overview-ref-item">
+      {refs.map((ref) => (
+        <div key={JSON.stringify(ref)} className="overview-ref-item">
           <RefLink value={ref} clusterName={clusterName} />
         </div>
       ))}
@@ -223,7 +223,7 @@ const RouteRulesList: React.FC<{
         const hasMatches = Boolean(rule.matches?.length);
         const hasBackends = Boolean(rule.backendRefs?.length);
         return (
-          <div key={`rule-${index}`} className="overview-card">
+          <div key={JSON.stringify(rule)} className="overview-card">
             <div className="overview-card-header">
               <span className="overview-card-title">Rule {index + 1}</span>
             </div>
@@ -266,9 +266,9 @@ const groupFromByNamespace = (
       order.push(ns);
       map.set(ns, []);
     }
-    map.get(ns)!.push(entry);
+    map.get(ns)?.push(entry);
   }
-  return order.map((namespace) => ({ namespace, entries: map.get(namespace)! }));
+  return order.map((namespace) => ({ namespace, entries: map.get(namespace) ?? [] }));
 };
 
 const groupRefsByNamespace = (
@@ -286,9 +286,9 @@ const groupRefsByNamespace = (
       order.push(ns);
       map.set(ns, []);
     }
-    map.get(ns)!.push(ref);
+    map.get(ns)?.push(ref);
   }
-  return order.map((namespace) => ({ namespace, refs: map.get(namespace)! }));
+  return order.map((namespace) => ({ namespace, refs: map.get(namespace) ?? [] }));
 };
 
 const ReferenceGrantDiagram: React.FC<{
@@ -322,11 +322,17 @@ const ReferenceGrantDiagram: React.FC<{
         →
       </div>
       <div className="reference-grant-side-stack">
-        {toGroups.map((group, groupIndex) => (
-          <div className="reference-grant-side" key={`to-ns-${group.namespace || groupIndex}`}>
+        {toGroups.map((group) => (
+          <div
+            className="reference-grant-side"
+            key={`to-ns-${group.namespace}:${JSON.stringify(group.refs)}`}
+          >
             {group.namespace && <div className="reference-grant-namespace">{group.namespace}</div>}
-            {group.refs.map((ref, refIndex) => (
-              <div key={`to-${group.namespace}-${refIndex}`} className="reference-grant-item">
+            {group.refs.map((ref) => (
+              <div
+                key={`to-${group.namespace}:${JSON.stringify(ref)}`}
+                className="reference-grant-item"
+              >
                 <RefLink value={ref} clusterName={clusterName} omitNamespace />
               </div>
             ))}

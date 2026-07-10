@@ -5,6 +5,7 @@
  * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
  */
 
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -201,11 +202,13 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           );
         }}
       >
-        {options?.map((opt, index) => (
-          <option key={index} value={opt?.value} disabled={Boolean((opt as any)?.disabled)}>
-            {opt?.label ?? opt?.value}
-          </option>
-        ))}
+        {withStableListKeys(options ?? [], (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`).map(
+          ({ key, value: opt }) => (
+            <option key={key} value={opt?.value} disabled={Boolean((opt as any)?.disabled)}>
+              {opt?.label ?? opt?.value}
+            </option>
+          )
+        )}
       </select>
     );
   },

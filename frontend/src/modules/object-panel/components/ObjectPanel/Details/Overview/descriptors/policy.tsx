@@ -74,7 +74,7 @@ const renderBehaviorRules = (
         <div className="policy-detail-row">
           <span className="policy-detail-label">Rules:</span>
           {policies.map((p, i) => (
-            <span key={i}>
+            <span key={formatPolicy(p)}>
               {i > 0 && ', '}
               {formatPolicy(p)}
             </span>
@@ -167,7 +167,6 @@ const findCurrentMetric = (
 // Render a single metric with detailed target information.
 const renderMetric = (
   metric: hpa.MetricSpec,
-  index: number,
   currentMetrics: hpa.MetricStatus[]
 ): React.ReactNode => {
   const kind = metric.kind?.toLowerCase();
@@ -226,7 +225,7 @@ const renderMetric = (
   }
 
   return (
-    <div key={`metric-${index}`} className="policy-metric-block">
+    <div key={`metric:${metricName}`} className="policy-metric-block">
       <div className="policy-metric-name">
         {metricName}
         {containerName && (
@@ -264,7 +263,7 @@ const renderMetricsWidget = (d: HorizontalPodAutoscalerDetails): React.ReactNode
       <span className="overview-value">
         {d.metrics && d.metrics.length > 0 ? (
           <div className="policy-detail-rows">
-            {d.metrics.map((metric, index) => renderMetric(metric, index, currentMetrics))}
+            {d.metrics.map((metric) => renderMetric(metric, currentMetrics))}
           </div>
         ) : (
           <span className="policy-detail-muted">(none configured)</span>

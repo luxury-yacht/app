@@ -946,6 +946,7 @@ const NodeLogsTab = ({
 
             <span
               className="logs-viewer-count"
+              role="status"
               aria-label="Selected node log source"
               title={selectedSource?.path || '/'}
             >

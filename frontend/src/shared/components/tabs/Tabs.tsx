@@ -341,7 +341,7 @@ export function Tabs({
     measure();
     // ResizeObserver is a global in browsers; in environments without it
     // (e.g. jsdom without a mock) fall back to a one-shot measurement.
-    const RO: typeof ResizeObserver | undefined = (globalThis as any).ResizeObserver;
+    const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
     const observer = RO ? new RO(measure) : null;
     observer?.observe(el);
     el.addEventListener('scroll', measure);

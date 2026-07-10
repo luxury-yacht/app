@@ -41,6 +41,7 @@ vi.mock('@shared/components/status/StatusIndicator', () => ({
   }) => (
     <div
       data-testid="indicator"
+      role="status"
       data-status={status}
       data-action-label={actionLabel ?? ''}
       data-actions={(actions ?? []).map((action) => action.label).join('|')}

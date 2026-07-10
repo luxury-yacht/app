@@ -214,13 +214,12 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
       setAutoFit(false);
     }
     if (!drag.didDrag) return;
-    const hasLayoutCoordinates =
-      drag.originLayoutX !== undefined &&
-      drag.originLayoutY !== undefined &&
-      pointer.layoutX !== undefined &&
-      pointer.layoutY !== undefined;
-    const dxLayout = hasLayoutCoordinates ? pointer.layoutX! - drag.originLayoutX! : dxScreen;
-    const dyLayout = hasLayoutCoordinates ? pointer.layoutY! - drag.originLayoutY! : dyScreen;
+    const { originLayoutX, originLayoutY } = drag;
+    const { layoutX, layoutY } = pointer;
+    const dxLayout =
+      originLayoutX !== undefined && layoutX !== undefined ? layoutX - originLayoutX : dxScreen;
+    const dyLayout =
+      originLayoutY !== undefined && layoutY !== undefined ? layoutY - originLayoutY : dyScreen;
     const nextX = drag.startX + dxLayout;
     const nextY = drag.startY + dyLayout;
     setNodePositionOverrides((prev) => {

@@ -14,7 +14,7 @@ const SearchShortcutHandler: React.FC = () => {
   const macPlatform = isMacPlatform();
   const handler = useCallback(() => {
     const handled = focusRegisteredSearchShortcutTarget();
-    return handled ? true : false;
+    return !!handled;
   }, []);
 
   useShortcut({

@@ -136,7 +136,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: history is intentionally replayed once when the provider mounts
   useEffect(() => {
     const history = errorHandler.getHistory();
-    history.forEach((error) => addError(error));
+    history.forEach((error) => {
+      addError(error);
+    });
   }, []);
 
   // Subscribe to future errors from the global handler
@@ -150,7 +152,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     return () => {
       unsubscribe();
       // Clear auto-dismiss timers when subscription resets
-      timers.forEach((timer) => clearTimeout(timer));
+      timers.forEach((timer) => {
+        clearTimeout(timer);
+      });
     };
   }, [addError]);
 
@@ -160,7 +164,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   useEffect(() => {
     const animTimers = animationTimers.current;
     return () => {
-      animTimers.forEach((timer) => clearTimeout(timer));
+      animTimers.forEach((timer) => {
+        clearTimeout(timer);
+      });
     };
   }, []);
 
@@ -168,7 +174,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     setErrors((prev) => prev.map((error) => ({ ...error, dismissed: true })));
 
     // Clear all timers
-    dismissTimers.current.forEach((timer) => clearTimeout(timer));
+    dismissTimers.current.forEach((timer) => {
+      clearTimeout(timer);
+    });
     dismissTimers.current.clear();
 
     // Remove all errors after animation
@@ -181,7 +189,9 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
 
   const clearErrors = useCallback(() => {
     // Clear all timers
-    dismissTimers.current.forEach((timer) => clearTimeout(timer));
+    dismissTimers.current.forEach((timer) => {
+      clearTimeout(timer);
+    });
     dismissTimers.current.clear();
     setErrors([]);
   }, []);

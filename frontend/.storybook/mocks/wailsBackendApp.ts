@@ -23,8 +23,8 @@ const defaultAppInfo = new backend.AppInfo({
 
 /** Override the AppInfo returned by the Go backend's GetAppInfo RPC. */
 export function setMockAppInfo(info: backend.AppInfo): void {
-  (window as any).__storybookGoOverrides = (window as any).__storybookGoOverrides || {};
-  (window as any).__storybookGoOverrides['GetAppInfo'] = () => Promise.resolve(info);
+  window.__storybookGoOverrides ||= {};
+  window.__storybookGoOverrides.GetAppInfo = () => Promise.resolve(info);
 }
 
 // Install the default immediately so GetAppInfo works even without an explicit setMockAppInfo call.

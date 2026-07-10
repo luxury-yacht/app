@@ -212,6 +212,10 @@
 
 /* Settings choice buttons */
 .settings-choice-buttons {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
@@ -333,6 +337,11 @@
 }
 
 .palette-hex-clickable {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   border-bottom: 1px dashed var(--color-border);
 }

@@ -105,7 +105,7 @@ const renderRules = (
   <div className="overview-card-list">
     {rules.map((rule, ruleIndex) => (
       <RuleCard
-        key={`${direction}-rule-${ruleIndex}`}
+        key={`${direction}:${JSON.stringify(rule)}`}
         rule={rule}
         index={ruleIndex}
         direction={direction}

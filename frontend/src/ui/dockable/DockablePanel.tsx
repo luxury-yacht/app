@@ -903,6 +903,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize panel width"
+              aria-valuemin={constraints.right.minWidth}
+              aria-valuenow={panelState.size.width}
               tabIndex={0}
             />
           )}
@@ -913,6 +915,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
               role="separator"
               aria-orientation="horizontal"
               aria-label="Resize panel height"
+              aria-valuemin={constraints.bottom.minHeight}
+              aria-valuenow={panelState.size.height}
               tabIndex={0}
             />
           )}

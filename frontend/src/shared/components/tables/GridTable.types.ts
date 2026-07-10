@@ -31,7 +31,7 @@ export interface GridColumnDefinition<T> {
   header: string;
   render: (item: T) => React.ReactNode;
   sortable?: boolean;
-  sortValue?: (item: T) => any;
+  sortValue?: (item: T) => unknown;
   className?: string;
   width?: ColumnWidthInput;
   minWidth?: ColumnWidthInput;

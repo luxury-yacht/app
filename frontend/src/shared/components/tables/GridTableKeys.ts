@@ -65,7 +65,9 @@ export const useGridTableKeyboardScopes = ({
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
     container
       .querySelectorAll<HTMLElement>('.gridtable-filter-actions .icon-bar-button')
-      .forEach((element) => addTarget(element));
+      .forEach((element) => {
+        addTarget(element);
+      });
     addTarget(
       container.querySelector<HTMLElement>(
         '[data-gridtable-filter-role="columns"] .dropdown-trigger'

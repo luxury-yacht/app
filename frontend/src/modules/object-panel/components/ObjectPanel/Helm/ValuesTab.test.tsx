@@ -140,6 +140,7 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
+  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
   EditorView: class {
     static contentAttributes = {
       of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),

@@ -233,11 +233,11 @@ class RefreshManager {
    * Subscribe to refresh events for a specific refresher
    */
   public subscribe(name: RefresherName, callback: RefreshCallback): () => void {
-    if (!this.subscribers.has(name)) {
-      this.subscribers.set(name, new Set());
+    let callbacks = this.subscribers.get(name);
+    if (!callbacks) {
+      callbacks = new Set();
+      this.subscribers.set(name, callbacks);
     }
-
-    const callbacks = this.subscribers.get(name)!;
     callbacks.add(callback);
 
     // Return unsubscribe function
@@ -264,11 +264,15 @@ class RefreshManager {
 
     if (manualTargets.length > 0) {
       if (namespaceChanged) {
-        manualTargets.forEach((name) => this.abortRefresher(name));
+        manualTargets.forEach((name) => {
+          this.abortRefresher(name);
+        });
       } else if (previousContext.currentView !== this.context.currentView) {
         manualTargets
           .filter((name) => name.startsWith('namespace-'))
-          .forEach((name) => this.abortRefresher(name));
+          .forEach((name) => {
+            this.abortRefresher(name);
+          });
       }
 
       void this.triggerManualRefreshMany(manualTargets);
@@ -373,9 +377,9 @@ class RefreshManager {
       }
     } else {
       this.isGloballyPaused = true;
-      this.refreshers.forEach((instance, refresherName) =>
-        this.pauseRefresher(refresherName, instance)
-      );
+      this.refreshers.forEach((instance, refresherName) => {
+        this.pauseRefresher(refresherName, instance);
+      });
     }
   }
 
@@ -385,7 +389,7 @@ class RefreshManager {
   public resume(name?: RefresherName): void {
     if (name) {
       const instance = this.refreshers.get(name);
-      if (instance && instance.isEnabled && instance.state.status === 'paused') {
+      if (instance?.isEnabled && instance.state.status === 'paused') {
         this.resumeRefresher(name, instance);
       }
     } else {

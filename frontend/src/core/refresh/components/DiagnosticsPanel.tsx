@@ -104,6 +104,9 @@ type StreamHealthSummary = {
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+
 type DiagnosticsTabId =
   | 'refresh-domains'
   | 'streams'
@@ -437,9 +440,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   // active cluster before falling back to generic "first populated" selection.
   const pickPreferredScopeState = useCallback(
     (
-      entries: Array<[string, DomainSnapshotState<any>]>,
+      entries: Array<[string, DomainSnapshotState<unknown>]>,
       preferredClusterId: string | undefined
-    ): DomainSnapshotState<any> => {
+    ): DomainSnapshotState<unknown> => {
       if (entries.length === 0) {
         return { status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0 };
       }
@@ -479,7 +482,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         candidates[0];
 
       const [scopeKey, scopedState] = selected;
-      if (scopedState.scope && scopedState.scope.trim()) {
+      if (scopedState.scope?.trim()) {
         return scopedState;
       }
       return { ...scopedState, scope: scopeKey };
@@ -887,7 +890,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           if (!hasMetricsFlag) {
             return undefined;
           }
-          return (state.data as any)?.metrics;
+          const metrics = asRecord(state.data)?.metrics;
+          return asRecord(metrics) ? (metrics as NodeMetricsInfo) : undefined;
         })();
         const telemetryLastUpdatedInfo = (() => {
           if (streamLastEvent && streamLastEvent > 0) {
@@ -1010,7 +1014,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             : hasMetricsFlag
               ? 'No metrics available'
               : 'Not applicable';
-        const data = state.data as any;
+        const data = asRecord(state.data);
         let count = (() => {
           if (!data) {
             return 0;
@@ -1021,8 +1025,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
                 return 0;
               }
               return data.namespaces.length;
-            case 'cluster-overview':
-              return data.overview?.totalNodes ?? 0;
+            case 'cluster-overview': {
+              const totalNodes = asRecord(data.overview)?.totalNodes;
+              return typeof totalNodes === 'number' ? totalNodes : 0;
+            }
             case 'nodes':
               return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'object-maintenance':
@@ -1074,9 +1080,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const stats = state.stats;
         let truncated = Boolean(stats?.truncated);
         let totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-        let warnings = (stats?.warnings ?? []).filter(
-          (warning) => warning && warning.trim().length
-        );
+        let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
         if (domain === 'catalog') {
           const catalogTotal =
             stats?.totalItems ??
@@ -1190,7 +1194,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning && warning.trim().length);
+      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
       if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
         warnings = [`Showing most recent ${count} of ${totalItems} pods`];
       }
@@ -1346,7 +1350,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning && warning.trim().length);
+      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
       if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
         warnings = [`Showing most recent ${count} of ${totalItems} entries`];
       }
@@ -1414,7 +1418,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const buildObjectPanelRows = (
       domain: RefreshDomain,
       tabName: string,
-      entries: Array<[string, DomainSnapshotState<any>]>
+      entries: Array<[string, DomainSnapshotState<unknown>]>
     ): DiagnosticsRow[] => {
       return entries.map(([scope, state]) => {
         const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -1799,7 +1803,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
       const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
-      if (target && target.closest('.diagnostics-content')) {
+      if (target?.closest('.diagnostics-content')) {
         return false;
       }
 

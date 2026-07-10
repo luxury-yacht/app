@@ -6,6 +6,7 @@
  */
 
 import { useZoom } from '@core/contexts/ZoomContext';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import type React from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -53,7 +54,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     if (selectableIndexes.length === 0) {
       return;
     }
-    const currentPosition = selectableIndexes.findIndex((idx) => idx === focusedIndex);
+    const currentPosition = selectableIndexes.indexOf(focusedIndex);
     const fallbackPosition = currentPosition === -1 ? 0 : currentPosition;
     const nextPosition =
       (fallbackPosition + direction + selectableIndexes.length) % selectableIndexes.length;
@@ -179,14 +180,18 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
       role="menu"
       tabIndex={-1}
     >
-      {items.map((item, index) => {
+      {withStableListKeys(items, (item) =>
+        item.divider
+          ? 'divider'
+          : item.actionId || `${item.header ? 'header' : 'item'}:${item.label}`
+      ).map(({ key, value: item }, index) => {
         if (item.divider) {
-          return <div key={index} className="context-menu-divider" />;
+          return <div key={key} className="context-menu-divider" />;
         }
         // Render non-interactive headers (e.g., permission pending state).
         if (item.header) {
           return (
-            <div key={index} className="context-menu-header" role="presentation">
+            <div key={key} className="context-menu-header" role="presentation">
               {item.label}
             </div>
           );
@@ -197,7 +202,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
 
         return (
           <div
-            key={index}
+            key={key}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
               item.danger ? 'danger' : ''
             } ${isFocused ? 'is-focused' : ''}`}

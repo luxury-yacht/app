@@ -69,7 +69,9 @@ describe('AllNamespacesView', () => {
 
   beforeEach(() => {
     clientMocks.fetchSnapshotMock.mockReset();
-    Object.values(viewRenderers).forEach((mock) => mock.mockReset());
+    Object.values(viewRenderers).forEach((mock) => {
+      mock.mockReset();
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

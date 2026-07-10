@@ -58,6 +58,7 @@ describe('useWorkloadTableColumns', () => {
   });
 
   const workload: WorkloadData = {
+    clusterId: 'cluster-a',
     kind: 'Deployment',
     name: 'api',
     namespace: 'team-a',

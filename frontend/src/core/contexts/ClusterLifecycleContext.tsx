@@ -53,7 +53,7 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
   // emitted between the hydration RPC call and its response aren't lost.
   useEffect(() => {
     let active = true;
-    const runtime = (window as any).runtime;
+    const runtime = window.runtime;
     // Clusters whose state arrived via a LIVE event. Hydration backfills the
     // rest — and must backfill eventBus consumers too (clusterReadiness,
     // capability hooks), or the refresh layer stays split-brained from the UI
@@ -115,7 +115,9 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
         setStates((prev) => {
           const merged = new Map(hydrated);
           // Events received after the RPC was sent take precedence.
-          prev.forEach((state, id) => merged.set(id, state));
+          prev.forEach((state, id) => {
+            merged.set(id, state);
+          });
           return merged;
         });
         // Backfill eventBus consumers for clusters the relay hasn't spoken

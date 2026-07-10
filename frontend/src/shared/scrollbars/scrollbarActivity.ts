@@ -223,7 +223,9 @@ const getOverlayResizeObserver = (): ResizeObserver | undefined => {
   }
 
   overlayResizeObserver ??= new ResizeObserver((entries) => {
-    entries.forEach((entry) => scheduleOverlayGeometryUpdate(entry.target));
+    entries.forEach((entry) => {
+      scheduleOverlayGeometryUpdate(entry.target);
+    });
   });
   return overlayResizeObserver;
 };
@@ -1110,9 +1112,9 @@ export const initializeScrollbarActivityTracking = (): void => {
     'pointerup',
     (event) => {
       const draggedElement = activeDrag?.element;
-      document
-        .querySelectorAll('.scrollbar-overlay-thumb--dragging')
-        .forEach((element) => element.classList.remove('scrollbar-overlay-thumb--dragging'));
+      document.querySelectorAll('.scrollbar-overlay-thumb--dragging').forEach((element) => {
+        element.classList.remove('scrollbar-overlay-thumb--dragging');
+      });
       activeDrag = undefined;
       if (draggedElement) {
         updateOverlayHoverFromPointer(event);

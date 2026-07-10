@@ -52,11 +52,15 @@ const tabStore = vi.hoisted(() => {
       const next = new Map(tabs);
       next.set(panelId, tab);
       tabs = next;
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
     reset: () => {
       tabs = new Map();
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
   };
 });

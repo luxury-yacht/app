@@ -184,8 +184,9 @@ const TestHarness = React.forwardRef<
       extra: Record<string, string>,
       onClick?: () => void
     ) => (
-      <div
+      <button
         key={JSON.stringify(target)}
+        type="button"
         tabIndex={-1}
         data-sidebar-focusable="true"
         {...extra}
@@ -193,7 +194,7 @@ const TestHarness = React.forwardRef<
         onClick={onClick}
       >
         {JSON.stringify(target)}
-      </div>
+      </button>
     );
 
     return (

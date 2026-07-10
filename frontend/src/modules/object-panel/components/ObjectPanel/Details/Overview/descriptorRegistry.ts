@@ -58,54 +58,58 @@ import type { OverviewDescriptor } from './schema';
 
 interface Registration {
   kinds: string[];
-
-  descriptor: OverviewDescriptor<any>;
+  descriptor: OverviewDescriptor<never>;
 }
 
+const registration = <T>(kinds: string[], descriptor: OverviewDescriptor<T>): Registration => ({
+  kinds,
+  descriptor: descriptor as unknown as OverviewDescriptor<never>,
+});
+
 const registrations: Registration[] = [
-  { kinds: ['configmap'], descriptor: configMapDescriptor },
-  { kinds: ['service'], descriptor: serviceDescriptor },
-  { kinds: ['secret'], descriptor: secretDescriptor },
-  { kinds: ['networkpolicy'], descriptor: networkPolicyDescriptor },
-  { kinds: ['ingress'], descriptor: ingressDescriptor },
-  { kinds: ['helmrelease'], descriptor: helmReleaseDescriptor },
-  { kinds: ['persistentvolumeclaim'], descriptor: pvcDescriptor },
-  { kinds: ['persistentvolume'], descriptor: pvDescriptor },
-  { kinds: ['storageclass'], descriptor: storageClassDescriptor },
-  { kinds: ['customresourcedefinition'], descriptor: crdDescriptor },
-  { kinds: ['ingressclass'], descriptor: ingressClassDescriptor },
-  { kinds: ['namespace'], descriptor: namespaceDescriptor },
-  { kinds: ['mutatingwebhookconfiguration'], descriptor: mutatingWebhookDescriptor },
-  { kinds: ['validatingwebhookconfiguration'], descriptor: validatingWebhookDescriptor },
-  { kinds: ['pod'], descriptor: podDescriptor },
-  { kinds: ['endpointslice'], descriptor: endpointSliceDescriptor },
-  { kinds: ['node'], descriptor: nodeDescriptor },
-  { kinds: ['serviceaccount'], descriptor: serviceAccountDescriptor },
-  { kinds: ['role'], descriptor: roleDescriptor },
-  { kinds: ['rolebinding'], descriptor: roleBindingDescriptor },
-  { kinds: ['clusterrole'], descriptor: clusterRoleDescriptor },
-  { kinds: ['clusterrolebinding'], descriptor: clusterRoleBindingDescriptor },
-  { kinds: ['horizontalpodautoscaler'], descriptor: hpaDescriptor },
-  { kinds: ['limitrange'], descriptor: limitRangeDescriptor },
-  { kinds: ['poddisruptionbudget'], descriptor: pdbDescriptor },
-  { kinds: ['resourcequota'], descriptor: resourceQuotaDescriptor },
-  { kinds: ['deployment'], descriptor: deploymentDescriptor },
-  { kinds: ['daemonset'], descriptor: daemonSetDescriptor },
-  { kinds: ['statefulset'], descriptor: statefulSetDescriptor },
-  { kinds: ['replicaset'], descriptor: replicaSetDescriptor },
-  { kinds: ['job'], descriptor: jobDescriptor },
-  { kinds: ['cronjob'], descriptor: cronJobDescriptor },
-  { kinds: ['gateway'], descriptor: gatewayDescriptor },
-  { kinds: ['gatewayclass'], descriptor: gatewayClassDescriptor },
-  { kinds: ['listenerset'], descriptor: listenerSetDescriptor },
-  { kinds: ['httproute'], descriptor: httpRouteDescriptor },
-  { kinds: ['grpcroute'], descriptor: grpcRouteDescriptor },
-  { kinds: ['tlsroute'], descriptor: tlsRouteDescriptor },
-  { kinds: ['referencegrant'], descriptor: referenceGrantDescriptor },
-  { kinds: ['backendtlspolicy'], descriptor: backendTLSPolicyDescriptor },
+  registration(['configmap'], configMapDescriptor),
+  registration(['service'], serviceDescriptor),
+  registration(['secret'], secretDescriptor),
+  registration(['networkpolicy'], networkPolicyDescriptor),
+  registration(['ingress'], ingressDescriptor),
+  registration(['helmrelease'], helmReleaseDescriptor),
+  registration(['persistentvolumeclaim'], pvcDescriptor),
+  registration(['persistentvolume'], pvDescriptor),
+  registration(['storageclass'], storageClassDescriptor),
+  registration(['customresourcedefinition'], crdDescriptor),
+  registration(['ingressclass'], ingressClassDescriptor),
+  registration(['namespace'], namespaceDescriptor),
+  registration(['mutatingwebhookconfiguration'], mutatingWebhookDescriptor),
+  registration(['validatingwebhookconfiguration'], validatingWebhookDescriptor),
+  registration(['pod'], podDescriptor),
+  registration(['endpointslice'], endpointSliceDescriptor),
+  registration(['node'], nodeDescriptor),
+  registration(['serviceaccount'], serviceAccountDescriptor),
+  registration(['role'], roleDescriptor),
+  registration(['rolebinding'], roleBindingDescriptor),
+  registration(['clusterrole'], clusterRoleDescriptor),
+  registration(['clusterrolebinding'], clusterRoleBindingDescriptor),
+  registration(['horizontalpodautoscaler'], hpaDescriptor),
+  registration(['limitrange'], limitRangeDescriptor),
+  registration(['poddisruptionbudget'], pdbDescriptor),
+  registration(['resourcequota'], resourceQuotaDescriptor),
+  registration(['deployment'], deploymentDescriptor),
+  registration(['daemonset'], daemonSetDescriptor),
+  registration(['statefulset'], statefulSetDescriptor),
+  registration(['replicaset'], replicaSetDescriptor),
+  registration(['job'], jobDescriptor),
+  registration(['cronjob'], cronJobDescriptor),
+  registration(['gateway'], gatewayDescriptor),
+  registration(['gatewayclass'], gatewayClassDescriptor),
+  registration(['listenerset'], listenerSetDescriptor),
+  registration(['httproute'], httpRouteDescriptor),
+  registration(['grpcroute'], grpcRouteDescriptor),
+  registration(['tlsroute'], tlsRouteDescriptor),
+  registration(['referencegrant'], referenceGrantDescriptor),
+  registration(['backendtlspolicy'], backendTLSPolicyDescriptor),
 ];
 
-const byKind = new Map<string, OverviewDescriptor<any>>();
+const byKind = new Map<string, OverviewDescriptor<never>>();
 for (const reg of registrations) {
   for (const kind of reg.kinds) {
     byKind.set(kind.toLowerCase(), reg.descriptor);
@@ -114,7 +118,7 @@ for (const reg of registrations) {
 
 export function getOverviewDescriptor(
   kind: string | null | undefined
-): OverviewDescriptor<any> | undefined {
+): OverviewDescriptor<never> | undefined {
   if (!kind) return undefined;
   return byKind.get(kind.toLowerCase());
 }

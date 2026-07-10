@@ -70,26 +70,28 @@ export function useGridTableCellCache<T>({
         entry = { render: column.render };
         columnRenderCacheRef.current.set(column.key, entry);
       }
+      const cacheEntry = entry;
 
       const storeResult = (result: { content: React.ReactNode; text: string }) => {
         if (typeof item === 'object' && item !== null) {
-          if (!entry!.objectCache) {
-            entry!.objectCache = new WeakMap();
+          if (!cacheEntry.objectCache) {
+            cacheEntry.objectCache = new WeakMap();
           }
-          entry!.objectCache.set(item as object, result);
+          cacheEntry.objectCache.set(item as object, result);
         } else {
-          if (!entry!.primitiveCache) {
-            entry!.primitiveCache = new Map();
+          if (!cacheEntry.primitiveCache) {
+            cacheEntry.primitiveCache = new Map();
           }
+          const primitiveCache = cacheEntry.primitiveCache;
           // Evict oldest entries if cache exceeds size limit
-          if (entry!.primitiveCache.size >= PRIMITIVE_CACHE_MAX_SIZE) {
+          if (primitiveCache.size >= PRIMITIVE_CACHE_MAX_SIZE) {
             // Map iterates in insertion order, so first key is oldest
-            const firstKey = entry!.primitiveCache.keys().next().value;
+            const firstKey = primitiveCache.keys().next().value;
             if (firstKey !== undefined) {
-              entry!.primitiveCache.delete(firstKey);
+              primitiveCache.delete(firstKey);
             }
           }
-          entry!.primitiveCache.set(item as unknown, result);
+          primitiveCache.set(item, result);
         }
         return result;
       };
@@ -120,8 +122,8 @@ export function useGridTableCellCache<T>({
         let canonicalKind: string | undefined;
         let isInteractiveElement = false;
 
-        if (React.isValidElement(rawContent)) {
-          const props = rawContent.props as Record<string, any>;
+        if (React.isValidElement<Record<string, unknown>>(rawContent)) {
+          const props = rawContent.props;
           const explicitKindValue = props?.['data-kind-value'];
           if (typeof explicitKindValue === 'string' && explicitKindValue.trim().length > 0) {
             canonicalKind = explicitKindValue;
@@ -138,9 +140,9 @@ export function useGridTableCellCache<T>({
           canonicalKind && canonicalKind.length > 0 ? canonicalKind : trimmedDisplay
         );
 
-        if (React.isValidElement(rawContent)) {
-          const props = rawContent.props as Record<string, any>;
-          const existingClassName: string = props?.className ?? '';
+        if (React.isValidElement<Record<string, unknown>>(rawContent)) {
+          const props = rawContent.props;
+          const existingClassName = typeof props.className === 'string' ? props.className : '';
           const classTokens = existingClassName
             .split(/\s+/)
             .map((token) => token.trim())
@@ -158,7 +160,7 @@ export function useGridTableCellCache<T>({
 
           content = React.cloneElement(rawContent, {
             className: classTokens.join(' '),
-          } as any);
+          });
         } else if (trimmedDisplay.length > 0) {
           const badgeClasses = ['kind-badge'];
           if (normalizedClass) {

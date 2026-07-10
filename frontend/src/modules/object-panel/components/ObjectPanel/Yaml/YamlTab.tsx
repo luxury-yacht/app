@@ -12,6 +12,7 @@ import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
@@ -474,9 +475,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
               {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
               {actionDetails.length > 0 && (
                 <ul className="yaml-error-details">
-                  {actionDetails.map((detail, index) => (
-                    <li key={`detail-${index}`}>{detail}</li>
-                  ))}
+                  {withStableListKeys(actionDetails, (detail) => detail).map(
+                    ({ key, value: detail }) => (
+                      <li key={key}>{detail}</li>
+                    )
+                  )}
                 </ul>
               )}
             </div>

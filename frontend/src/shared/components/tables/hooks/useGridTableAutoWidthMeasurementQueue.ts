@@ -145,7 +145,7 @@ export function useDirtyQueue<T>({
       for (const key of keys) {
         if (!key) continue;
         const column = columns.find((col) => col.key === key);
-        if (!column || !column.autoWidth) {
+        if (!column?.autoWidth) {
           continue;
         }
         if (manuallyResizedColumnsRef.current.has(key)) {
@@ -271,7 +271,7 @@ export function useDirtyQueue<T>({
 
     dirtyKeys.forEach((key) => {
       const column = renderedColumnsRef.current.find((col) => col.key === key);
-      if (!column || !column.autoWidth) {
+      if (!column?.autoWidth) {
         columnHashesRef.current.delete(key);
         allowShrinkColumnsRef.current.delete(key);
         return;
@@ -311,7 +311,9 @@ export function useDirtyQueue<T>({
 
     // If cells are not yet rendered, retry a moment later.
     if (retryKeys.length > 0) {
-      retryKeys.forEach((key) => dirtyColumnsRef.current.add(key));
+      retryKeys.forEach((key) => {
+        dirtyColumnsRef.current.add(key);
+      });
       pendingRetryRef.current = true;
       scheduleDirtyFlush(50);
     } else {

@@ -50,7 +50,7 @@ export interface KeyboardSurfaceNativeActionContext {
   text?: string;
 }
 
-export type KeyboardSurfaceKeyResult = boolean | 'handled-no-prevent' | void;
+export type KeyboardSurfaceKeyResult = boolean | 'handled-no-prevent' | undefined;
 
 export interface KeyboardSurfaceOptions {
   kind: 'modal' | 'palette' | 'menu' | 'dropdown' | 'panel' | 'region' | 'editor';
@@ -62,7 +62,7 @@ export interface KeyboardSurfaceOptions {
   suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onEscape?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
-  onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | void;
+  onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | undefined;
 }
 
 interface RegisteredKeyboardSurface extends KeyboardSurfaceOptions {

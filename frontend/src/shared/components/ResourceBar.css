@@ -372,7 +372,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--color-text-secondary);
-  margin-bottom: 0.25rem !important;
+  margin-bottom: 0.25rem;
 }
 
 .metric-legend {

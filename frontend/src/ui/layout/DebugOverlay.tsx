@@ -283,8 +283,6 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
         <div
           className="debug-overlay__resize-handle"
           onPointerDown={(event) => startInteraction(event, 'resize')}
-          role="separator"
-          aria-label="Resize debug overlay"
         />
       </div>
     </div>,

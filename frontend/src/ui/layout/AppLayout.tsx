@@ -477,7 +477,7 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
     const handlePointerDown = (event: PointerEvent) => {
       const overlayElement = overlayRef.current;
       overlayPointerInteractionRef.current = Boolean(
-        overlayElement && overlayElement.contains(event.target as Node)
+        overlayElement?.contains(event.target as Node)
       );
     };
 
@@ -625,12 +625,16 @@ const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   }, []);
 
   const assignedGroupsByPanelId = new Map<string, string>();
-  tabGroups.right.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'right'));
-  tabGroups.bottom.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'bottom'));
+  tabGroups.right.tabs.forEach((panelId) => {
+    assignedGroupsByPanelId.set(panelId, 'right');
+  });
+  tabGroups.bottom.tabs.forEach((panelId) => {
+    assignedGroupsByPanelId.set(panelId, 'bottom');
+  });
   tabGroups.floating.forEach((group) => {
-    group.tabs.forEach((panelId) =>
-      assignedGroupsByPanelId.set(panelId, `floating:${group.groupId}`)
-    );
+    group.tabs.forEach((panelId) => {
+      assignedGroupsByPanelId.set(panelId, `floating:${group.groupId}`);
+    });
   });
 
   const registeredPanels = Array.from(panelRegistrations.values()).sort((a, b) =>

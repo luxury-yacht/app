@@ -458,6 +458,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     const clickable = item.clickable !== false && item.value > 0;
     const itemClass = `pod-status-card pod-status-card--${item.variant}${clickable ? ' pod-status-card--clickable' : ''}`;
     return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: the card is conditionally interactive and supplies role, focus, and keyboard activation together.
       <div
         key={item.key}
         className={itemClass}
@@ -1255,6 +1256,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 }`;
                 return (
                   <li key={event.eventUid}>
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: interactive event rows supply role, focus, and keyboard activation when navigation is available. */}
                     <div
                       className={rowClass}
                       role={clickable ? 'button' : undefined}

@@ -73,17 +73,19 @@ const createInitialDomainState = <TPayload>(): DomainSnapshotState<TPayload> => 
   scope: undefined,
 });
 
-const EMPTY_SCOPED_STATE: DomainSnapshotState<any> = Object.freeze({
+const EMPTY_SCOPED_STATE: DomainSnapshotState<unknown> = Object.freeze({
   status: 'idle',
   data: null,
   stats: null,
   error: null,
   droppedAutoRefreshes: 0,
   scope: undefined,
-}) as DomainSnapshotState<any>;
+}) as DomainSnapshotState<unknown>;
 
-const EMPTY_SCOPED_MAP: Record<string, DomainSnapshotState<any>> = Object.freeze({});
-const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<any>]> = Object.freeze([]);
+const EMPTY_SCOPED_MAP: Record<string, DomainSnapshotState<unknown>> = Object.freeze({});
+const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<unknown>]> = Object.freeze(
+  []
+);
 
 const state: RefreshStoreState = {
   domains: {

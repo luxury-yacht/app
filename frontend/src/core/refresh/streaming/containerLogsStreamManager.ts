@@ -401,7 +401,9 @@ export class ContainerLogsStreamManager {
 
   stopAll(reset = false): void {
     const scopes = Array.from(this.connections.keys());
-    scopes.forEach((scope) => this.stop(scope, reset));
+    scopes.forEach((scope) => {
+      this.stop(scope, reset);
+    });
     if (reset) {
       this.buffers.clear();
       this.bufferMeta.clear();

@@ -39,6 +39,16 @@ type SearchShortcutConfig = {
   priority?: number;
 };
 
+const isActionOption = (option: DropdownOption): boolean => {
+  const metadata = option.metadata;
+  return (
+    metadata !== null &&
+    typeof metadata === 'object' &&
+    'isAction' in metadata &&
+    metadata.isAction === true
+  );
+};
+
 type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
   totalDataCount?: number;
@@ -135,11 +145,11 @@ export function useGridTableFiltersWiring<T>({
     (option: DropdownOption, isSelected: boolean): ReactNode => (
       <span
         className={`dropdown-filter-option${
-          option.metadata?.isAction ? ' dropdown-filter-option--action' : ''
+          isActionOption(option) ? ' dropdown-filter-option--action' : ''
         }`}
       >
         <span className="dropdown-filter-check">
-          {option.metadata?.isAction ? '' : isSelected ? '✓' : ''}
+          {isActionOption(option) ? '' : isSelected ? '✓' : ''}
         </span>
         <span className="dropdown-filter-label">{option.label}</span>
       </span>

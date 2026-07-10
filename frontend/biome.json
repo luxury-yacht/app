@@ -35,16 +35,20 @@
     "rules": {
       "preset": "recommended",
       "a11y": {
-        "noAutofocus": "warn",
-        "noLabelWithoutControl": "warn",
-        "noNoninteractiveTabindex": "warn",
-        "noStaticElementInteractions": "warn",
-        "useAriaPropsForRole": "warn",
-        "useAriaPropsSupportedByRole": "warn",
-        "useFocusableInteractive": "warn",
-        "useKeyWithClickEvents": "warn",
-        "useSemanticElements": "warn",
-        "useValidAnchor": "warn"
+        "noAutofocus": "error",
+        "noLabelWithoutControl": "error",
+        "noNoninteractiveTabindex": "error",
+        "noStaticElementInteractions": "error",
+        "useAriaPropsForRole": "error",
+        "useAriaPropsSupportedByRole": "error",
+        "useFocusableInteractive": "error",
+        "useKeyWithClickEvents": "error",
+        "useSemanticElements": "error",
+        "useValidAnchor": "error"
+      },
+      "complexity": {
+        "noImportantStyles": "error",
+        "noStaticOnlyClass": "error"
       },
       "correctness": {
         "useExhaustiveDependencies": {
@@ -55,16 +59,20 @@
         }
       },
       "suspicious": {
-        "noArrayIndexKey": "warn",
-        "noPrototypeBuiltins": "off",
+        "noArrayIndexKey": "error",
+        "noConfusingVoidType": "error",
+        "noExplicitAny": "error",
+        "noPrototypeBuiltins": "error",
         "useIterableCallbackReturn": {
           "level": "error",
           "options": {
-            "checkForEach": false
+            "checkForEach": true
           }
         }
       },
       "style": {
+        "noDescendingSpecificity": "error",
+        "noNonNullAssertion": "error",
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -122,18 +130,174 @@
       "includes": ["src/**/*.test.{ts,tsx}", ".storybook/mocks/**"],
       "linter": {
         "rules": {
-          "a11y": {
-            "preset": "none"
-          },
-          "correctness": {
-            "noChildrenProp": "off"
-          },
           "style": {
             "noNonNullAssertion": "off"
           },
           "suspicious": {
-            "noArrayIndexKey": "off",
             "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/port-forward/PortForwardModal.tsx",
+        "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+        "src/shared/components/inputs/SearchInput.tsx",
+        "src/shared/components/modals/ConfirmationModal.tsx",
+        "src/ui/favorites/FavSaveModal.tsx",
+        "src/ui/settings/sections/AppearanceSection.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noAutofocus": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/browse/components/BrowseView.stories.tsx",
+        "src/modules/object-map/ObjectMap.tsx",
+        "src/shared/components/tables/GridTableBody.tsx",
+        "src/shared/components/tables/columnFactories.tsx",
+        "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+        "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+        "src/ui/dockable/DockablePanel.tsx",
+        "src/ui/dockable/DockablePanelHeader.tsx",
+        "src/ui/panels/app-logs/AppLogsPanel.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noStaticElementInteractions": "off",
+            "useFocusableInteractive": "off",
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/shared/components/ContextMenu.tsx",
+        "src/shared/components/kubernetes/ActionsMenu.tsx",
+        "src/ui/command-palette/CommandPalette.tsx",
+        "src/ui/favorites/FavMenuDropdown.tsx",
+        "src/ui/layout/Sidebar.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noStaticElementInteractions": "off",
+            "useFocusableInteractive": "off",
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/components/dropdowns/Dropdown/Dropdown.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noStaticElementInteractions": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+        "src/shared/components/Tooltip.tsx",
+        "src/shared/components/modals/ModalSurface.tsx",
+        "src/ui/dockable/DockablePanelControls.tsx",
+        "src/ui/dockable/DockableTabBar.tsx",
+        "src/ui/layout/AppHeader.tsx",
+        "src/ui/layout/AppLayout.tsx",
+        "src/ui/settings/sections/AppearanceSection.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noStaticElementInteractions": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/components/diff/DiffViewer.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noNoninteractiveTabindex": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
+        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
+        "src/shared/components/KubeconfigSelector.css",
+        "src/shared/components/ResourceBar.css",
+        "src/ui/command-palette/CommandPalette.css",
+        "src/ui/dockable/DockablePanel.css",
+        "src/ui/layout/DebugOverlay.css",
+        "src/ui/layout/Sidebar.css",
+        "src/ui/panels/app-logs/AppLogsPanel.css",
+        "styles/components/gridtables.css",
+        "styles/utilities/display.css",
+        "styles/utilities/motion.css"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/core/refresh/components/DiagnosticsPanel.css",
+        "src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.css",
+        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
+        "src/shared/components/ResourceBar.css",
+        "src/shared/components/diff/DiffViewer.css",
+        "src/shared/components/errors/ErrorNotificationSystem.css",
+        "src/ui/command-palette/CommandPalette.css",
+        "src/ui/dockable/DockablePanel.css",
+        "src/ui/layout/Sidebar.css",
+        "src/ui/modals/ObjectDiffModal.css",
+        "src/ui/panels/app-logs/AppLogsPanel.css",
+        "styles/base/scrollbars.css",
+        "styles/components/dropdowns.css",
+        "styles/components/gridtables.css",
+        "styles/components/tabs.css",
+        "styles/utilities/motion.css"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
           }
         }
       }

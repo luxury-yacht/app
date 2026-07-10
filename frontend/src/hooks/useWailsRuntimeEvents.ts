@@ -92,7 +92,9 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     );
 
     return () => {
-      disposers.forEach((dispose) => dispose());
+      disposers.forEach((dispose) => {
+        dispose();
+      });
     };
   }, [
     onOpenSettings,
@@ -158,10 +160,11 @@ export function useClusterHealthListener(
         console.warn('[ClusterHealthListener] Received health:healthy without clusterId');
         return;
       }
+      const clusterId = payload.clusterId;
 
       setClusterHealth((prev) => {
         const next = new Map(prev);
-        next.set(payload.clusterId!, 'healthy');
+        next.set(clusterId, 'healthy');
         return next;
       });
     };
@@ -173,10 +176,11 @@ export function useClusterHealthListener(
         console.warn('[ClusterHealthListener] Received health:degraded without clusterId');
         return;
       }
+      const clusterId = payload.clusterId;
 
       setClusterHealth((prev) => {
         const next = new Map(prev);
-        next.set(payload.clusterId!, 'degraded');
+        next.set(clusterId, 'degraded');
         return next;
       });
     };

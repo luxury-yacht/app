@@ -92,7 +92,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
             <div key={group.category} className="shortcut-group">
               <h3>{group.category}</h3>
               <div className="shortcut-list">
-                {group.shortcuts.map((shortcut, index) => {
+                {group.shortcuts.map((shortcut) => {
                   // Build key combination display
                   const keyParts = [];
                   const isMac = navigator.userAgent.includes('Mac');
@@ -128,10 +128,10 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
                   keyParts.push(<kbd key="key">{keyContent}</kbd>);
 
                   return (
-                    <div key={`${shortcut.key}-${index}`} className="shortcut-item">
+                    <div key={`${shortcut.key}:${shortcut.description}`} className="shortcut-item">
                       <span className="keycap">
                         {keyParts.map((part, i) => (
-                          <React.Fragment key={i}>
+                          <React.Fragment key={String(part.key)}>
                             {i > 0 && <span className="key-separator">+</span>}
                             {part}
                           </React.Fragment>

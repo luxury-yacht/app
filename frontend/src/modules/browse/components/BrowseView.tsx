@@ -75,7 +75,6 @@ const getBrowsePersistenceViewId = (scope: BrowseScope): string => {
       return BROWSE_PERSISTENCE_VIEW_IDS.namespace.viewId;
     case 'all-namespaces':
       return BROWSE_PERSISTENCE_VIEW_IDS.allNamespaces.viewId;
-    case 'cluster':
     default:
       return BROWSE_PERSISTENCE_VIEW_IDS.cluster.viewId;
   }

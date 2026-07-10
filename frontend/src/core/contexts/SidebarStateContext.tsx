@@ -48,7 +48,7 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
 };
 
 const canUpdateSidebarVisible = () =>
-  typeof window !== 'undefined' && Boolean((window as any).go?.backend?.App?.SetSidebarVisible);
+  typeof window !== 'undefined' && Boolean(window.go?.backend?.App?.SetSidebarVisible);
 
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();

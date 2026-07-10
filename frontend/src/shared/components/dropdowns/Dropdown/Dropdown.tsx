@@ -18,7 +18,7 @@ import {
 } from '@shared/components/icons/DropdownIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
-const Dropdown: React.FC<DropdownProps> = ({
+const Dropdown = <TMetadata,>({
   options,
   value,
   onChange,
@@ -47,7 +47,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   id,
   onOpen,
   onClose,
-}) => {
+}: DropdownProps<TMetadata>) => {
   const {
     isOpen,
     highlightedIndex,
@@ -316,7 +316,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       return false;
     }
     const active = document.activeElement as HTMLElement | null;
-    return Boolean(active && active.classList.contains('search-input'));
+    return Boolean(active?.classList.contains('search-input'));
   };
 
   useKeyboardSurface({
@@ -491,8 +491,8 @@ const Dropdown: React.FC<DropdownProps> = ({
                     !option.disabled && !isGroupHeader && setHighlightedIndex(index)
                   }
                   role={isGroupHeader ? 'presentation' : 'option'}
-                  aria-selected={optionIsSelected}
-                  aria-disabled={option.disabled}
+                  aria-selected={isGroupHeader ? undefined : optionIsSelected}
+                  aria-disabled={isGroupHeader ? undefined : option.disabled}
                 >
                   {renderOption ? (
                     renderOption(option, optionIsSelected)

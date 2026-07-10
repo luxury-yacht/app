@@ -163,13 +163,13 @@ export function ObjectPanelContent({
 
   return (
     <div className="object-panel-content">
-      {showDetails && (
+      {showDetails && detailTabProps && (
         <ErrorBoundary
           scope="panel-details"
           resetKeys={detailScope ? [detailScope] : undefined}
           fallback={(_, reset) => <TabErrorFallback tabName="Details" reset={reset} />}
         >
-          <DetailsTab {...detailTabProps!} />
+          <DetailsTab {...detailTabProps} />
         </ErrorBoundary>
       )}
 

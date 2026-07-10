@@ -30,7 +30,7 @@ interface GenericOverviewProps {
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction?: () => void;
   portForwardAvailable?: boolean;
-  [key: string]: any; // Allow any additional fields for generic resources
+  [key: string]: unknown; // Allow any additional fields for generic resources
 }
 
 // Union type using generic props for all resources
@@ -67,11 +67,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const [hpaManaged, setHpaManaged] = useState<boolean | null>(null);
   const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
   useEffect(() => {
+    const namespace = props.namespace;
     if (!isScalable) {
       setHpaManaged(false);
       return;
     }
-    if (!clusterId || !props.namespace || !props.name || !objectVersion) {
+    if (!clusterId || !namespace || !props.name || !objectVersion) {
       setHpaManaged(null);
       return;
     }
@@ -82,7 +83,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       read: () =>
         readWorkloadHPAManagedForRef({
           clusterId,
-          namespace: props.namespace!,
+          namespace,
           group: objectGroup,
           version: objectVersion,
           kind: props.kind,
@@ -130,9 +131,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
     const descriptor = getOverviewDescriptor(props.kind);
     if (descriptor) {
       return (
-        <OverviewRenderer
+        <OverviewRenderer<never>
           descriptor={descriptor}
-          data={props.activeDetail}
+          data={props.activeDetail as never}
           context={{
             hpaManaged: hpaManaged === true,
             drainInProgress: Boolean(activeDrainJob),
@@ -188,11 +189,16 @@ const Overview: React.FC<OverviewProps> = (props) => {
       clusterName,
       group: objectGroup || undefined,
       version: objectVersion || undefined,
-      status: props.suspend ? 'Suspended' : props.status,
+      status:
+        props.suspend === true
+          ? 'Suspended'
+          : typeof props.status === 'string'
+            ? props.status
+            : undefined,
       ready: props.ready !== undefined && props.ready !== null ? String(props.ready) : undefined,
       desiredReplicas: currentScaleReplicas,
       hpaManaged,
-      unschedulable: props.unschedulable,
+      unschedulable: typeof props.unschedulable === 'boolean' ? props.unschedulable : undefined,
       portForwardAvailable: props.portForwardAvailable,
     }),
     [

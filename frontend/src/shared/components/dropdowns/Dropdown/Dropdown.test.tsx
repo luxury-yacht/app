@@ -130,7 +130,10 @@ describe('Dropdown', () => {
       const [firstValue, setFirstValue] = useState<string[]>([]);
       const [secondValue, setSecondValue] = useState<string[]>([]);
       return (
-        <div onMouseDown={(event) => event.stopPropagation()}>
+        <form
+          aria-label="Dropdown propagation harness"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <Dropdown
             options={OPTIONS}
             value={firstValue}
@@ -147,7 +150,7 @@ describe('Dropdown', () => {
             showBulkActions
             renderValue={() => 'Second'}
           />
-        </div>
+        </form>
       );
     };
 

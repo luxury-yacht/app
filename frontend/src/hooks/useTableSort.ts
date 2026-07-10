@@ -16,17 +16,17 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export interface UseTableSortOptions {
+export interface UseTableSortOptions<T> {
   controlledSort?: SortConfig | null;
   onChange?: (config: SortConfig) => void;
   diagnosticsLabel?: string;
   disableLocalSort?: boolean;
   // When provided, columns with a `sortValue` accessor are used to extract
   // comparison values instead of direct property access on the row.
-  columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
+  columns?: ReadonlyArray<{ key: string; sortValue?: (item: T) => unknown }>;
   // Optional stable row identity used to skip full resorting when a live table
   // rerenders but the active sort values and row set are unchanged.
-  rowIdentity?: (item: any, index: number) => string;
+  rowIdentity?: (item: T, index: number) => string;
 }
 
 const getNow = (): number =>
@@ -79,7 +79,7 @@ export function useTableSort<T>(
   data: T[],
   defaultSortKey?: string,
   defaultDirection: SortDirection = 'asc',
-  options?: UseTableSortOptions
+  options?: UseTableSortOptions<T>
 ) {
   const controlledSort = options?.controlledSort;
   const onChange = options?.onChange;
@@ -127,10 +127,10 @@ export function useTableSort<T>(
   // defines sortValue, that function is used instead of row[key].
   const sortValueExtractors = useMemo(() => {
     if (!columns) return null;
-    const map: Record<string, (item: T) => any> = {};
+    const map: Record<string, (item: T) => unknown> = {};
     for (const col of columns) {
       if (col.sortValue) {
-        map[col.key] = col.sortValue as (item: T) => any;
+        map[col.key] = col.sortValue as (item: T) => unknown;
       }
     }
     return Object.keys(map).length > 0 ? map : null;
@@ -166,7 +166,9 @@ export function useTableSort<T>(
     const directionMultiplier = effectiveSort.direction === 'asc' ? 1 : -1;
     const keyByItem = new Map<T, string>();
     const decorated = data.map((item, index) => {
-      const rawValue = extractor ? extractor(item) : (item as any)[effectiveSort.key];
+      const rawValue = extractor
+        ? extractor(item)
+        : (item as Record<string, unknown>)[effectiveSort.key];
       const normalizedValue =
         effectiveSort.key.toLowerCase() === 'age' && typeof rawValue === 'string'
           ? parseAge(rawValue)

@@ -42,6 +42,7 @@ describe('NsViewWorkloads helpers', () => {
 
   it('builds and parses workload keys with namespace context', () => {
     const workload: WorkloadData = {
+      clusterId: 'cluster-a',
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -66,6 +67,7 @@ describe('NsViewWorkloads helpers', () => {
   it('appends workload tokens for search filtering', () => {
     const tokens: string[] = [];
     appendWorkloadTokens(tokens, {
+      clusterId: 'cluster-a',
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',

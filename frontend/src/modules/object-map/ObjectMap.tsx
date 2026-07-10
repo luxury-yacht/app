@@ -26,6 +26,7 @@ import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/ico
 import Tooltip from '@shared/components/Tooltip';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortNames } from '@/hooks/useShortNames';
 import {
   createObjectMapDebugId,
@@ -721,7 +722,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               </div>
             )}
             <div className="object-map__legend-separator" aria-hidden="true" />
-            <div className="object-map__legend-counts" aria-label="Visible map totals">
+            <div
+              className="object-map__legend-counts"
+              role="status"
+              aria-label="Visible map totals"
+            >
               <span className="object-map__legend-count">
                 <span className="object-map__legend-count-value">
                   {visibleState.visibleLayout.nodes.length}
@@ -757,9 +762,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             {payload.warnings.length} warning{payload.warnings.length === 1 ? '' : 's'}
           </summary>
           <ul>
-            {payload.warnings.map((warning, index) => (
-              <li key={index}>{warning}</li>
-            ))}
+            {withStableListKeys(payload.warnings, (warning) => warning).map(
+              ({ key, value: warning }) => (
+                <li key={key}>{warning}</li>
+              )
+            )}
           </ul>
         </details>
       )}

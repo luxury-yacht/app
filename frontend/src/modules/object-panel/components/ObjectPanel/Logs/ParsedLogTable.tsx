@@ -39,6 +39,7 @@ const ParsedLogTable = ({ rows, columns, expandedRows, onToggleRow }: ParsedLogT
   );
 
   return (
+    // biome-ignore lint/a11y: click delegation preserves GridTable row behavior; GridTable supplies its own keyboard row activation.
     <div onClick={handleTableClick} style={{ height: '100%' }}>
       <GridTable
         data={rows}

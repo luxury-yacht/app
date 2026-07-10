@@ -35,7 +35,7 @@ const normalizeTime = (t: unknown): string | undefined => {
  *  locale conventions. */
 const formatLocalDateTime = (iso: string): string => {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) return '-';
   const pad = (n: number) => n.toString().padStart(2, '0');
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
@@ -70,7 +70,7 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
   const iso = normalizeTime(value);
   if (!iso) return <>{missing}</>;
   const t = new Date(iso).getTime();
-  if (isNaN(t)) return <>{missing}</>;
+  if (Number.isNaN(t)) return <>{missing}</>;
   const elapsed = Date.now() - t;
   const label = elapsed <= 0 ? 'just now' : `${formatDuration(elapsed)} ago`;
   return <span title={formatLocalDateTime(iso)}>{label}</span>;
@@ -82,7 +82,7 @@ const formatRelative = (raw: unknown): string => {
   const iso = normalizeTime(raw);
   if (!iso) return '—';
   const t = new Date(iso).getTime();
-  if (isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '—';
   const ms = t - Date.now();
   if (ms > 0) return `in ${formatDuration(ms)}`;
   if (ms === 0) return 'just now';

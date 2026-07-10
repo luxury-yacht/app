@@ -131,7 +131,9 @@ describe('computeObjectMapLayout', () => {
     const svc = layout.nodes.find((n) => n.id === 'svc')!;
     const es = layout.nodes.find((n) => n.id === 'es')!;
     expect(svc.column).not.toBe(es.column);
-    layout.edges.forEach((e) => expect(e.sameColumn).toBe(false));
+    layout.edges.forEach((e) => {
+      expect(e.sameColumn).toBe(false);
+    });
   });
 
   it('falls back to deterministic kind/name order when no edges constrain barycenters', () => {
@@ -264,7 +266,9 @@ describe('computeObjectMapLayout', () => {
       const laneSize = podRows.filter((row) => row.x === x).length;
       expect(laneSize).toBeLessThanOrEqual(OBJECT_MAP_MAX_NODES_PER_LANE);
     });
-    podRows.forEach((row) => expect(row.column).toBe(1));
+    podRows.forEach((row) => {
+      expect(row.column).toBe(1);
+    });
   });
 
   it('keeps same-kind groups together when overloaded columns split into lanes', () => {

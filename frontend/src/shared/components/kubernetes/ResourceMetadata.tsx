@@ -31,11 +31,11 @@ export const ResourceMetadata = React.memo<ResourceMetadataProps>(
         });
         combinedLabels = derived;
       } else {
-        Object.entries(selectorEntries).forEach(([key, value]) => {
-          if (!(key in combinedLabels!)) {
-            combinedLabels![key] = value;
+        for (const [key, value] of Object.entries(selectorEntries)) {
+          if (!(key in combinedLabels)) {
+            combinedLabels[key] = value;
           }
-        });
+        }
       }
     }
 

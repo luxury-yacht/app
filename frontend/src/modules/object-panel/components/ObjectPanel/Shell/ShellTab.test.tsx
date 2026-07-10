@@ -225,7 +225,9 @@ describe('ShellTab', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(eventRegistry.handlers).forEach((key) => delete eventRegistry.handlers[key]);
+    Object.keys(eventRegistry.handlers).forEach((key) => {
+      delete eventRegistry.handlers[key];
+    });
     terminalMocks.instances.length = 0;
     clipboardAddonMocks.instances.length = 0;
     container = document.createElement('div');

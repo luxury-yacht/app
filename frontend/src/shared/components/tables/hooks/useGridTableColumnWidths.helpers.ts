@@ -214,7 +214,9 @@ export function useSyncRenderedColumns<T>({
         currentManual.delete(key);
       }
     });
-    controlledManualKeys.forEach((key) => currentManual.add(key));
+    controlledManualKeys.forEach((key) => {
+      currentManual.add(key);
+    });
 
     const currentHashes = columnHashesRef.current;
     Array.from(currentHashes.keys()).forEach((key) => {

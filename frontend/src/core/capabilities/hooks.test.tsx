@@ -40,7 +40,9 @@ const setDiagnosticsSnapshot = (next: PermissionQueryDiagnostics[]) => {
   diagnosticsSnapshot = next;
 };
 const emitDiagnosticsUpdate = () => {
-  diagnosticListeners.forEach((listener) => listener());
+  diagnosticListeners.forEach((listener) => {
+    listener();
+  });
 };
 
 vi.mock('./permissionStore', () => {

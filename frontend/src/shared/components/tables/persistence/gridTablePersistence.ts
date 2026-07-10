@@ -134,7 +134,7 @@ const getRuntimeApp = () => {
   if (typeof window === 'undefined') {
     return undefined;
   }
-  return (window as any)?.go?.backend?.App;
+  return window.go?.backend?.App;
 };
 
 const normalizePersistenceMap = (entries: Record<string, unknown>): GridTablePersistenceMap => {
@@ -327,7 +327,9 @@ export const prunePersistedState = <T>(
 
   const pruned: GridTablePersistedState = { version: STORAGE_VERSION };
   const columnMap = new Map<string, GridColumnDefinition<T>>();
-  context.columns.forEach((column) => columnMap.set(column.key, column));
+  context.columns.forEach((column) => {
+    columnMap.set(column.key, column);
+  });
 
   if (persisted.columnVisibility) {
     const visibility: Record<string, boolean> = {};
@@ -359,7 +361,7 @@ export const prunePersistedState = <T>(
     }
   }
 
-  if (persisted.sort && persisted.sort.key) {
+  if (persisted.sort?.key) {
     const column = columnMap.get(persisted.sort.key);
     if (isSortableColumn(column)) {
       pruned.sort = {
@@ -447,9 +449,9 @@ export const buildPersistedStateForSave = <T>(
     }
   }
 
-  if (context.sort && context.sort.key && columnKeys.has(context.sort.key)) {
+  if (context.sort?.key && columnKeys.has(context.sort.key)) {
     const sortable = context.columns.find(
-      (column) => column.key === context.sort!.key && isSortableColumn(column)
+      (column) => column.key === context.sort?.key && isSortableColumn(column)
     );
     if (sortable) {
       state.sort = {

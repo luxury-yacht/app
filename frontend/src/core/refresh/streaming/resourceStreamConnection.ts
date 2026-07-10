@@ -97,7 +97,9 @@ export class ResourceStreamConnection {
     this.delegate.handleConnectionOpen('');
     const pending = [...this.pendingMessages];
     this.pendingMessages = [];
-    pending.forEach((message) => this.send(message));
+    pending.forEach((message) => {
+      this.send(message);
+    });
   }
 
   private handleMessage(event: MessageEvent): void {

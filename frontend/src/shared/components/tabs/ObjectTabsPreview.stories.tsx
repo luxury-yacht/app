@@ -392,7 +392,7 @@ function ObjectTabsPreviewHarness() {
     <div className="tabs-story-drag-harness">
       {rows.map((row, rowIndex) => (
         <div
-          key={rowIndex}
+          key={row.map((group) => group.id).join(':')}
           className={`tabs-story-drag-row${rowIndex > 0 ? ' tabs-story-drag-row--below' : ''}`}
         >
           {row.map((group) => (

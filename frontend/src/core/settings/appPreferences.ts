@@ -746,7 +746,7 @@ const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
 };
 
 const wailsRuntimeAvailable = (): boolean => {
-  return Boolean((window as any)?.go?.backend?.App);
+  return Boolean(window.go?.backend?.App);
 };
 
 interface LocalStorageSnapshot {

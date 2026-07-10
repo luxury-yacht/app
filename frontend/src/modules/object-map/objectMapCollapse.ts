@@ -133,7 +133,9 @@ export const computeCollapseInfo = (
   expandedDeploymentIds: ReadonlySet<string>
 ): CollapseInfo => {
   const nodesById = new Map<string, ObjectMapNode>();
-  nodes.forEach((n) => nodesById.set(n.id, n));
+  nodes.forEach((n) => {
+    nodesById.set(n.id, n);
+  });
 
   const replicaSetIds = new Set<string>();
   nodes.forEach((n) => {
@@ -192,7 +194,9 @@ export const computeCollapseInfo = (
     });
 
     if (!expandedDeploymentIds.has(deploymentId)) {
-      collapsibleRsIds.forEach((rsId) => hiddenRsIds.add(rsId));
+      collapsibleRsIds.forEach((rsId) => {
+        hiddenRsIds.add(rsId);
+      });
     }
   });
 

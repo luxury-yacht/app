@@ -1,4 +1,5 @@
 import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { FC, RefObject } from 'react';
 import { act, useLayoutEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -84,13 +85,18 @@ const KeyboardNavigationHarness: FC<HarnessProps> = ({
 
   onCapture(capture);
 
+  const rows = withStableListKeys(
+    Array.from({ length: tableDataLength }, (_, index) => rowKeys?.[index] ?? `row-${index}`),
+    (rowKey) => rowKey
+  );
+
   return (
     <div ref={wrapperRef}>
-      {Array.from({ length: tableDataLength }, (_, index) => (
+      {rows.map(({ key, value: rowKey }, index) => (
         <div
-          key={index}
+          key={key}
           className="gridtable-row"
-          data-row-key={rowKeys?.[index] ?? `row-${index}`}
+          data-row-key={rowKey}
           data-testid={`row-${index}`}
         />
       ))}

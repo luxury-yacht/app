@@ -33,7 +33,7 @@ export const readShellSessions = () => ListShellSessions();
 export const readShellSessionBacklog = (sessionId: string) => GetShellSessionBacklog(sessionId);
 
 export const readAllClusterLifecycleStates = async (): Promise<Record<string, string> | null> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
+  const runtimeApp = window.go?.backend?.App;
   if (typeof runtimeApp?.GetAllClusterLifecycleStates !== 'function') {
     return null;
   }

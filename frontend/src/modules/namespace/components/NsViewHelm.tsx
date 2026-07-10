@@ -31,6 +31,8 @@ export interface HelmData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId: string;
+  clusterName?: string;
   chart?:
     | {
         name?: string;
@@ -56,7 +58,6 @@ export interface HelmData {
   description?: string;
   age?: string;
   ageTimestamp?: number;
-  [key: string]: any; // Allow additional fields
 }
 
 interface HelmViewProps {

@@ -97,7 +97,7 @@ export function useGridTableFilters<T>({
     if (!filteringEnabled) {
       return DEFAULT_GRID_TABLE_FILTER_STATE;
     }
-    return normalizeGridTableFilterState(isControlled ? controlledValue! : internalFilters);
+    return normalizeGridTableFilterState(isControlled ? controlledValue : internalFilters);
   }, [filteringEnabled, isControlled, controlledValue, internalFilters]);
 
   const filterSignature = useMemo(

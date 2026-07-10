@@ -7,6 +7,10 @@
 }
 
 .obj-panel-logs-settings-format-link {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
   color: var(--color-accent);
   text-decoration-color: var(--color-accent);
   white-space: nowrap;

@@ -7,6 +7,7 @@
 
 import { type ErrorNotification, useErrorContext } from '@contexts/ErrorContext';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { type ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -123,9 +124,11 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           <div className="error-notification-suggestions">
             <p className="suggestions-label">Suggestions:</p>
             <ul>
-              {error.suggestions.map((suggestion, index) => (
-                <li key={index}>{suggestion}</li>
-              ))}
+              {withStableListKeys(error.suggestions, (suggestion) => suggestion).map(
+                ({ key, value: suggestion }) => (
+                  <li key={key}>{suggestion}</li>
+                )
+              )}
             </ul>
           </div>
         )}

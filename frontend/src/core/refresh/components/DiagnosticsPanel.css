@@ -492,6 +492,11 @@
 }
 
 .diagnostics-table-descriptor {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

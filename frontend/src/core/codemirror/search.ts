@@ -157,7 +157,9 @@ const getSearchPanel = (view: EditorView): HTMLElement | null => {
 };
 
 const layoutSearchPanel = (panel: HTMLElement): void => {
-  panel.querySelectorAll('br').forEach((br) => br.remove());
+  panel.querySelectorAll('br').forEach((br) => {
+    br.remove();
+  });
 
   const mode = (panel.dataset.mode as PanelMode | undefined) ?? 'find';
   panel.querySelector<HTMLButtonElement>('button[name="close"]')?.remove();

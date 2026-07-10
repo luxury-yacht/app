@@ -190,7 +190,9 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
     .map((kind) => kind.trim())
     .filter(Boolean)
     .sort()
-    .forEach((kind) => query.append('kind', kind));
+    .forEach((kind) => {
+      query.append('kind', kind);
+    });
 
   params.namespaces
     .map((namespace) => namespace.trim())

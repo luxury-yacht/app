@@ -56,7 +56,7 @@ export interface RBACData {
   // ServiceAccount-specific fields
   secrets?: Array<{ name: string }>;
   automountServiceAccountToken?: boolean;
-  roleBindings?: any[];
+  roleBindings?: unknown[];
   labels?: Record<string, string>;
   age?: string;
 }

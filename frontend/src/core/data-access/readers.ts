@@ -6,7 +6,7 @@
  * single contract instead of positional string lists.
  */
 
-import type { types } from '@wailsjs/go/models';
+import type { capabilities, types } from '@wailsjs/go/models';
 import {
   DiscoverNodeLogs,
   FetchContainerLogs,
@@ -155,8 +155,10 @@ export const readWorkloadHPAManagedForRef = (target: ObjectReadTarget) =>
     target.name
   );
 
-export const readQueryPermissions = async <T>(queries: unknown[]): Promise<T> => {
-  const runtimeApp = (window as any)?.go?.backend?.App;
+export const readQueryPermissions = async <T>(
+  queries: capabilities.PermissionQuery[]
+): Promise<T> => {
+  const runtimeApp = window.go?.backend?.App;
   if (typeof runtimeApp?.QueryPermissions !== 'function') {
     throw new Error('QueryPermissions unavailable');
   }

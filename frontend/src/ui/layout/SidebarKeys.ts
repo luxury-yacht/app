@@ -267,7 +267,7 @@ export const useSidebarKeyboardControls = ({
       }
 
       const container = sidebarRef.current;
-      if (!container || !container.contains(document.activeElement)) {
+      if (!container?.contains(document.activeElement)) {
         return false;
       }
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {

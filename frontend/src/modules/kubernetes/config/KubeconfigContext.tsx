@@ -609,7 +609,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           identities.add(`${config.name}:${config.context}`);
         }
       });
-      selectedClusterIds.forEach((id) => identities.add(id));
+      selectedClusterIds.forEach((id) => {
+        identities.add(id);
+      });
       const hashes = await computeClusterHashes(Array.from(identities));
       await runGridTableGC({ activeClusterHashes: hashes });
     };

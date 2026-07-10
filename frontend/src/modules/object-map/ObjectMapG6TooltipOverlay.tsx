@@ -4,6 +4,7 @@
  * SVG overlay renderer for object-map connection tooltips.
  */
 
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import React from 'react';
 import { type ObjectMapG6Palette, objectMapG6EdgeStroke } from './objectMapG6Data';
 import type { ObjectMapTooltipEndpoint, ObjectMapTooltipLayout } from './objectMapG6Tooltip';
@@ -92,36 +93,38 @@ export const ObjectMapG6TooltipOverlay: React.FC<ObjectMapG6TooltipOverlayProps>
         rx={palette.tooltipRadius}
         ry={palette.tooltipRadius}
       />
-      {tooltipLayout.rows.map((row, index) => {
-        const y =
-          tooltipTop +
-          (tooltipLayout.rowOffsets?.[index] ??
-            tooltipLayout.firstRowOffset + tooltipLayout.rowGap * index);
-        if (row.type === 'object') {
+      {withStableListKeys(tooltipLayout.rows, (row) => JSON.stringify(row)).map(
+        ({ key, value: row }, index) => {
+          const y =
+            tooltipTop +
+            (tooltipLayout.rowOffsets?.[index] ??
+              tooltipLayout.firstRowOffset + tooltipLayout.rowGap * index);
+          if (row.type === 'object') {
+            return (
+              <React.Fragment key={key}>
+                {renderTooltipEndpoint(
+                  palette,
+                  row.endpoint,
+                  y,
+                  `object-map__edge-tooltip-object-${index}`
+                )}
+              </React.Fragment>
+            );
+          }
           return (
-            <React.Fragment key={`object-${index}`}>
-              {renderTooltipEndpoint(
-                palette,
-                row.endpoint,
-                y,
-                `object-map__edge-tooltip-object-${index}`
-              )}
-            </React.Fragment>
+            <text
+              key={key}
+              className="object-map__edge-tooltip-relationship"
+              x={0}
+              y={y}
+              textAnchor="middle"
+              fill={objectMapG6EdgeStroke(row.edgeType, palette)}
+            >
+              {row.text}
+            </text>
           );
         }
-        return (
-          <text
-            key={`relationship-${index}`}
-            className="object-map__edge-tooltip-relationship"
-            x={0}
-            y={y}
-            textAnchor="middle"
-            fill={objectMapG6EdgeStroke(row.edgeType, palette)}
-          >
-            {row.text}
-          </text>
-        );
-      })}
+      )}
     </g>
   );
 };

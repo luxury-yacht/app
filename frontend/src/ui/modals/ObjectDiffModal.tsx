@@ -1383,6 +1383,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 <div className="object-diff-viewer-title">Diff Viewer</div>
                 <span
                   className="object-diff-info-indicator"
+                  role="img"
                   title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
                   aria-label="Diff metadata field info"
                 >

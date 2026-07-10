@@ -59,7 +59,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
       try {
         // Convert string to base64, handling null/undefined
         encoded[key] = value ? btoa(String(value)) : '';
-      } catch (e) {
+      } catch {
         // If encoding fails, use the original value
         encoded[key] = String(value || '');
       }
@@ -106,25 +106,24 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
         )}
       </div>
       <div className="object-panel-section-grid">
-        {displayData && dataCount > 0 && (
-          <>
-            {Object.entries(displayData).map(([key, value]) => (
-              <div key={key} className="data-item">
-                <span className="data-label">{key}</span>
-                <div className="data-value-container">
-                  <pre
-                    className={`data-value ${copiedKey === key ? 'copied' : ''}`}
-                    onClick={() => handleCopyValue(key, value)}
-                    title="Click to copy"
-                  >
-                    {value}
-                  </pre>
-                  {copiedKey === key && <span className="copy-feedback">Copied</span>}
-                </div>
+        {displayData &&
+          dataCount > 0 &&
+          Object.entries(displayData).map(([key, value]) => (
+            <div key={key} className="data-item">
+              <span className="data-label">{key}</span>
+              <div className="data-value-container">
+                <button
+                  type="button"
+                  className={`data-value ${copiedKey === key ? 'copied' : ''}`}
+                  onClick={() => handleCopyValue(key, value)}
+                  title="Click to copy"
+                >
+                  {value}
+                </button>
+                {copiedKey === key && <span className="copy-feedback">Copied</span>}
               </div>
-            ))}
-          </>
-        )}
+            </div>
+          ))}
         {binaryData && binaryCount > 0 && (
           <>
             {dataCount > 0 && <div className="data-section-divider">Binary Data</div>}
@@ -132,13 +131,14 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
               <div key={`binary-${key}`} className="data-item">
                 <span className="data-label">{key}</span>
                 <div className="data-value-container">
-                  <pre
+                  <button
+                    type="button"
                     className={`data-value binary-data ${copiedKey === `binary-${key}` ? 'copied' : ''}`}
                     onClick={() => handleCopyValue(`binary-${key}`, value)}
                     title="Click to copy"
                   >
                     {value}
-                  </pre>
+                  </button>
                   {copiedKey === `binary-${key}` && <span className="copy-feedback">Copied!</span>}
                 </div>
               </div>

@@ -66,7 +66,7 @@ export interface CreateResourceBarColumnOptions<T> {
   getShowEmptyState?: (item: T) => boolean;
   className?: string;
   sortable?: boolean;
-  sortValue?: (item: T) => any;
+  sortValue?: (item: T) => unknown;
 }
 
 export function createResourceBarColumn<T>(

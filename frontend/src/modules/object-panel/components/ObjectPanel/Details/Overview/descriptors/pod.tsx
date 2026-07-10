@@ -111,7 +111,11 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
           if (parts.length === 2) {
             const readyCount = parseInt(parts[0], 10);
             const totalCount = parseInt(parts[1], 10);
-            if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
+            if (
+              !Number.isNaN(readyCount) &&
+              !Number.isNaN(totalCount) &&
+              readyCount !== totalCount
+            ) {
               return <span className="status-text warning">{d.ready}</span>;
             }
           }
@@ -173,8 +177,8 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         hidden: (d) => parsedTolerations(d).length === 0,
         render: (d) => (
           <div className="overview-condition-list">
-            {parsedTolerations(d).map((p, i) => (
-              <StatusChip key={`${p.label}-${i}`} variant="info" tooltip={p.tooltip}>
+            {parsedTolerations(d).map((p) => (
+              <StatusChip key={`${p.label}:${p.tooltip}`} variant="info" tooltip={p.tooltip}>
                 {p.label}
               </StatusChip>
             ))}

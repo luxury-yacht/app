@@ -39,7 +39,7 @@
         // If system mode is selected, detect the actual mode to use.
         if (preference === 'system') {
           mode =
-            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            window.matchMedia?.('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light';
         }

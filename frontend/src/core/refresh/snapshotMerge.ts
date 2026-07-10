@@ -106,7 +106,9 @@ const mergePollingPayloadWithDescriptor = <P extends object, R extends object>(
 const pollingListMergeDescriptors = {
   namespaces: {
     previous: (scope?: string) =>
-      getScopedDomainState('namespaces', scope!).data as NamespaceSnapshotPayload | null,
+      scope
+        ? (getScopedDomainState('namespaces', scope).data as NamespaceSnapshotPayload | null)
+        : null,
     rows: (payload: NamespaceSnapshotPayload) => payload.namespaces ?? [],
     withRows: (payload: NamespaceSnapshotPayload, rows: NamespaceRow[]) => ({
       ...payload,

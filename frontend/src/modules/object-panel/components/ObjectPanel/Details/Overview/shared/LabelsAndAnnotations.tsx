@@ -64,21 +64,18 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
                 className={`metadata-pair${isSelector ? ' metadata-pair--selector' : ''}`}
               >
                 <span className="metadata-key">{key}:</span>
-                <span
-                  className={`metadata-value ${isAnnotation && isLongValue ? 'clickable' : ''}`}
-                  onClick={
-                    isAnnotation && isLongValue ? () => toggleAnnotationExpanded(key) : undefined
-                  }
-                  title={
-                    shouldTruncate
-                      ? 'Click to expand'
-                      : isExpanded
-                        ? 'Click to collapse'
-                        : undefined
-                  }
-                >
-                  {displayValue}
-                </span>
+                {isAnnotation && isLongValue ? (
+                  <button
+                    type="button"
+                    className="metadata-value clickable"
+                    onClick={() => toggleAnnotationExpanded(key)}
+                    title={shouldTruncate ? 'Click to expand' : 'Click to collapse'}
+                  >
+                    {displayValue}
+                  </button>
+                ) : (
+                  <span className="metadata-value">{displayValue}</span>
+                )}
                 {isSelector && (
                   <StatusChip
                     variant="info"

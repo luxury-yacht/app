@@ -124,8 +124,8 @@ describe('columnFactories', () => {
         title?: string;
         onClick?: (event: unknown) => void;
         onKeyDown?: (event: unknown) => void;
-        ['data-gridtable-shortcut-optout']?: string;
-        ['data-gridtable-rowclick']?: string;
+        'data-gridtable-shortcut-optout'?: string;
+        'data-gridtable-rowclick'?: string;
       }>;
 
       expect(span.props.className.includes('gridtable-link')).toBe(true);
@@ -186,12 +186,12 @@ describe('columnFactories', () => {
       const element = column.render({ id: 'pod', kind: 'Pod', alias: 'P' });
       expect(React.isValidElement(element)).toBe(true);
       const badge = element as React.ReactElement<{
-        ['data-kind-value']: string;
+        'data-kind-value': string;
         children: React.ReactNode;
         onClick?: (event: unknown) => void;
         onKeyDown?: (event: unknown) => void;
-        ['data-gridtable-shortcut-optout']?: string;
-        ['data-gridtable-rowclick']?: string;
+        'data-gridtable-shortcut-optout'?: string;
+        'data-gridtable-rowclick'?: string;
       }>;
       expect(badge.props['data-kind-value']).toBe('Pod');
       expect(badge.props.children).toBe('P');

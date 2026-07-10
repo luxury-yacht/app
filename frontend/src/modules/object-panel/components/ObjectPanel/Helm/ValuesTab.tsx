@@ -203,7 +203,6 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       case 'overrides':
         content = getActualOverrides(userValues, allValues);
         break;
-      case 'merged':
       default:
         content = markOverriddenValues(allValues, userValues);
         break;

@@ -40,7 +40,9 @@ const createWindowStub = (): WindowStub => {
   const dispatchEvent = vi.fn((event: Event) => {
     const set = listeners.get(event.type);
     if (set) {
-      set.forEach((listener) => listener(event));
+      set.forEach((listener) => {
+        listener(event);
+      });
     }
     return true;
   });

@@ -151,7 +151,7 @@ describe('GridTable virtualization', () => {
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
       configurable: true,
       get(this: HTMLElement) {
-        if (this.classList && this.classList.contains('gridtable-wrapper')) {
+        if (this.classList?.contains('gridtable-wrapper')) {
           return 400;
         }
         return originalClientHeightDescriptor?.get

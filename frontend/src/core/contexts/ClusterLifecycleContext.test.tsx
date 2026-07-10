@@ -186,11 +186,9 @@ describe('ClusterLifecycleContext', () => {
 
     await renderProvider();
     await act(async () => {
-      listeners
-        .get('cluster:lifecycle')
-        ?.forEach((cb) =>
-          cb({ clusterId: 'cluster-a', state: 'loading', previousState: 'connected' })
-        );
+      listeners.get('cluster:lifecycle')?.forEach((cb) => {
+        cb({ clusterId: 'cluster-a', state: 'loading', previousState: 'connected' });
+      });
       await Promise.resolve();
     });
     await act(async () => {

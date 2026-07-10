@@ -41,7 +41,9 @@ vi.mock('./gridTablePersistence', () => {
 
 describe('useGridTablePersistence', () => {
   beforeEach(() => {
-    Object.keys(stateMap).forEach((key) => delete stateMap[key]);
+    Object.keys(stateMap).forEach((key) => {
+      delete stateMap[key];
+    });
     resetAppPreferencesCacheForTesting();
     setGridTablePersistenceMode('namespaced');
   });

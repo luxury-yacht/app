@@ -129,7 +129,7 @@ function AdvancedSection() {
       clearAccentColor();
       clearLinkColor();
 
-      const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
+      const clearAppState = window.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
         throw new Error('ClearAppState is not available');
       }

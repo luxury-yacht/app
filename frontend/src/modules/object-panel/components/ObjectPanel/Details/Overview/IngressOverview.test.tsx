@@ -28,7 +28,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: any) => <a href="#">{children}</a>,
+  ObjectPanelLink: ({ children }: any) => <a href="/object">{children}</a>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
@@ -122,7 +122,7 @@ describe('IngressOverview', () => {
     // Service-backed rule paths are linkable.
     const rulesValue = getValueForLabel(container, 'Rules');
     const rulesLinks = rulesValue?.querySelectorAll('a');
-    expect(rulesLinks && rulesLinks.length).toBeGreaterThan(0);
+    expect(rulesLinks?.length).toBeGreaterThan(0);
     // TLS secret is now linkable.
     const tlsValue = getValueForLabel(container, 'TLS');
     expect(tlsValue?.textContent).toContain('tls-secret');

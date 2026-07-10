@@ -58,10 +58,10 @@ const normalizeHex = (hex: string): [number, number, number, number] | null => {
 
   const rawHex = match[1];
   if (rawHex.length === 3 || rawHex.length === 4) {
-    const red = Number.parseInt(rawHex[0]!.repeat(2), 16);
-    const green = Number.parseInt(rawHex[1]!.repeat(2), 16);
-    const blue = Number.parseInt(rawHex[2]!.repeat(2), 16);
-    const alpha = rawHex.length === 4 ? Number.parseInt(rawHex[3]!.repeat(2), 16) / 255 : 1;
+    const red = Number.parseInt(rawHex[0]?.repeat(2), 16);
+    const green = Number.parseInt(rawHex[1]?.repeat(2), 16);
+    const blue = Number.parseInt(rawHex[2]?.repeat(2), 16);
+    const alpha = rawHex.length === 4 ? Number.parseInt(rawHex[3]?.repeat(2), 16) / 255 : 1;
     return [red, green, blue, alpha];
   }
 

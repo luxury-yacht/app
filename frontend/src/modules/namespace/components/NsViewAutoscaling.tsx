@@ -70,7 +70,7 @@ export interface AutoscalingData {
   status?: string;
   age?: string;
   ageTimestamp?: number;
-  [key: string]: any; // Allow additional fields
+  [key: string]: unknown; // Allow additional fields
 }
 
 interface AutoscalingViewProps {

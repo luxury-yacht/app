@@ -98,7 +98,9 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
         openWrapperMenu(opts) {
           const target = document.createElement('div');
           target.classList.add('gridtable-wrapper');
-          opts?.classList?.forEach((cls) => target.classList.add(cls));
+          opts?.classList?.forEach((cls) => {
+            target.classList.add(cls);
+          });
           const event = buildMouseEvent({
             ctrlKey: opts?.enable === false,
             clientX: 16,

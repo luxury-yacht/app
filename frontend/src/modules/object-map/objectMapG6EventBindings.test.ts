@@ -29,7 +29,9 @@ class FakeGraph {
   }
 
   emit(eventName: string, event: unknown) {
-    this.listeners.get(eventName)?.forEach((handler) => handler(event));
+    this.listeners.get(eventName)?.forEach((handler) => {
+      handler(event);
+    });
   }
 }
 

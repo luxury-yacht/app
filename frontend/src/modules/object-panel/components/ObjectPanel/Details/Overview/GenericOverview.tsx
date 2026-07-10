@@ -4,19 +4,33 @@
 
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { OverviewItem } from './shared/OverviewItem';
 
-interface GenericOverviewProps {
+interface GenericPort {
+  name?: string;
+  port?: string | number;
+  protocol?: string;
+  targetPort?: string | number;
+}
+
+interface GenericSubject {
+  kind?: string;
+  namespace?: string;
+  name?: string;
+}
+
+export interface GenericOverviewProps {
   group?: string;
   automountServiceAccountToken?: boolean;
   clusterIP?: string;
-  clusterRoleBindings?: any[];
-  egressRules?: any[];
+  clusterRoleBindings?: unknown[];
+  egressRules?: unknown[];
   externalIPs?: string[];
-  imagePullSecrets?: any[];
+  imagePullSecrets?: unknown[];
   ingressClassName?: string;
-  ingressRules?: any[];
+  ingressRules?: unknown[];
   kind?: string;
   labels?: Record<string, string>;
   loadBalancerStatus?: string[];
@@ -24,14 +38,14 @@ interface GenericOverviewProps {
   namespace?: string;
   podSelector?: Record<string, string>;
   policyTypes?: string[];
-  ports?: any[];
-  roleBindings?: any[];
-  roleRef?: any;
-  rules?: any[];
-  secrets?: any[];
+  ports?: GenericPort[];
+  roleBindings?: unknown[];
+  roleRef?: { kind?: string; name?: string };
+  rules?: unknown[];
+  secrets?: unknown[];
   sessionAffinity?: string;
-  subjects?: any[];
-  tls?: any[];
+  subjects?: GenericSubject[];
+  tls?: unknown[];
   totalAddresses?: number;
   totalNotReady?: number;
   totalPorts?: number;
@@ -92,8 +106,12 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
       {ports && ports.length > 0 && (
         <OverviewItem
           label="Ports"
-          value={ports.map((port: any, index: number) => (
-            <div key={index}>
+          value={withStableListKeys(
+            ports,
+            (port) =>
+              `${port.name ?? ''}:${port.port ?? ''}:${port.protocol ?? ''}:${port.targetPort ?? ''}`
+          ).map(({ key, value: port }) => (
+            <div key={key}>
               {port.name && `${port.name}: `}
               {port.port}/{port.protocol}
               {port.targetPort && ` → ${port.targetPort}`}
@@ -164,8 +182,11 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
       {subjects && subjects.length > 0 && (
         <OverviewItem
           label="Subjects"
-          value={subjects.map((subject: any, index: number) => (
-            <div key={index}>
+          value={withStableListKeys(
+            subjects,
+            (subject) => `${subject.kind ?? ''}:${subject.namespace ?? ''}:${subject.name ?? ''}`
+          ).map(({ key, value: subject }) => (
+            <div key={key}>
               {subject.kind}: {subject.namespace ? `${subject.namespace}/` : ''}
               {subject.name}
             </div>

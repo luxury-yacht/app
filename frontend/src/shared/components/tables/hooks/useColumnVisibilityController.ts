@@ -66,7 +66,9 @@ export function useColumnVisibilityController<T>({
 
   const lockedColumns = useMemo(() => {
     const set = new Set<string>(['kind', 'type', 'name']);
-    nonHideableColumns.forEach((key) => set.add(key));
+    nonHideableColumns.forEach((key) => {
+      set.add(key);
+    });
     return set;
   }, [nonHideableColumns]);
 

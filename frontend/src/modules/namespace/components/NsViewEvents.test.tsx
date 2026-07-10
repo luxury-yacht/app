@@ -6,6 +6,7 @@
  */
 
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -83,11 +84,13 @@ vi.mock('@shared/components/tables/GridTable', async () => {
       return (
         <table data-testid="grid-table">
           <tbody>
-            {props.data.map((row: any, index: number) => (
-              <tr key={index}>
-                <td>{row.reason}</td>
-              </tr>
-            ))}
+            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+              ({ key, value: row }) => (
+                <tr key={key}>
+                  <td>{row.reason}</td>
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       );

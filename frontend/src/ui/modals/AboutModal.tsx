@@ -103,7 +103,10 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                     href={appInfo.update.releaseUrl}
                     onClick={(e) => {
                       e.preventDefault();
-                      BrowserOpenURL(appInfo.update!.releaseUrl);
+                      const releaseUrl = appInfo.update?.releaseUrl;
+                      if (releaseUrl) {
+                        BrowserOpenURL(releaseUrl);
+                      }
                     }}
                   >
                     {appInfo.update.latestVersion}

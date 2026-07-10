@@ -96,7 +96,7 @@ type RegisteredDomain = {
   category: DomainCategory;
   refresherName: string;
   streaming?: {
-    start?: (scope: string) => Promise<(() => void) | void> | (() => void);
+    start?: (scope: string) => Promise<(() => void) | undefined> | (() => void);
   };
 };
 

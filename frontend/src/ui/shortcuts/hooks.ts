@@ -28,7 +28,7 @@ const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | 
 
 interface UseShortcutOptions {
   key: string;
-  handler: (event?: KeyboardEvent) => void | boolean;
+  handler: (event?: KeyboardEvent) => undefined | boolean;
   modifiers?: ShortcutModifiers;
   description?: string;
   category?: string;
@@ -189,7 +189,9 @@ export function useShortcuts(
     shortcutIdsRef.current = registeredIds;
 
     return () => {
-      registeredIds.forEach((id) => unregisterShortcut(id));
+      registeredIds.forEach((id) => {
+        unregisterShortcut(id);
+      });
       shortcutIdsRef.current = [];
     };
   }, [structuralSignature, commonSignature, registerShortcut, unregisterShortcut]);
