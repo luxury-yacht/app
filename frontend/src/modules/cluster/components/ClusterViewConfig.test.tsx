@@ -36,8 +36,8 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
-const loadingBoundaryPropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
+const loadingBoundaryPropsRef: { current: unknown } = { current: null };
 const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -46,7 +46,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },

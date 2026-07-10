@@ -84,7 +84,7 @@ describe('useWorkloadTableColumns', () => {
     expect(kindColumn).toBeDefined();
     kindColumn?.render(workload);
     const nameColumn = columns.find((column) => column.key === 'name');
-    const nameElement = nameColumn?.render(workload) as React.ReactElement<any>;
+    const nameElement = nameColumn?.render(workload) as React.ReactElement<unknown>;
     nameElement.props.onClick?.({ stopPropagation() {} });
     expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
     hook.cleanup();
@@ -103,7 +103,7 @@ describe('useWorkloadTableColumns', () => {
     const statusColumn = columns.find((column) => column.key === 'status');
     const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-text warning');
+    expect((cell as React.ReactElement<unknown>).props.className).toBe('status-text warning');
     hook.cleanup();
   });
 
@@ -124,7 +124,7 @@ describe('useWorkloadTableColumns', () => {
       statusPresentation: undefined,
     });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-text unknown');
+    expect((cell as React.ReactElement<unknown>).props.className).toBe('status-text unknown');
     hook.cleanup();
   });
 });

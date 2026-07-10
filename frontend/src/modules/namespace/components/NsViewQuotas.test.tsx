@@ -33,8 +33,8 @@ const {
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
+  confirmationPropsRef: { current: null as unknown },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<
@@ -73,12 +73,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -101,7 +101,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -139,7 +139,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -211,7 +211,7 @@ describe('NsViewQuotas', () => {
   };
 
   const getColumn = (key: string) =>
-    gridTablePropsRef.current.columns.find((column: any) => column.key === key);
+    gridTablePropsRef.current.columns.find((column: unknown) => column.key === key);
 
   it('opens quota resources through context menu', async () => {
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
@@ -219,7 +219,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
 
     const items = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = items.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -258,7 +258,7 @@ describe('NsViewQuotas', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -290,7 +290,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -318,7 +318,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
     const deleteItem = props
       .getCustomContextMenuItems(baseQuota(), 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
 
     expect(deleteItem).toBeUndefined();
   });

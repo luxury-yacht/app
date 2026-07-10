@@ -9,6 +9,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import { useSearchShortcutTarget } from './useSearchShortcutTarget';
 
@@ -79,7 +80,7 @@ describe('useSearchShortcutTarget', () => {
     const focusSpy = vi.fn();
     harness = renderHookHarness();
 
-    await harness!.render({
+    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
       isActive: true,
       focus: focusSpy,
       priority: 5,
@@ -95,7 +96,7 @@ describe('useSearchShortcutTarget', () => {
     expect(config.isActive()).toBe(true);
     expect(config.getPriority()).toBe(5);
 
-    await harness!.render({
+    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
       isActive: false,
       focus: focusSpy,
       priority: 10,
@@ -108,7 +109,10 @@ describe('useSearchShortcutTarget', () => {
     });
     expect(focusSpy).toHaveBeenCalledTimes(1);
 
-    await harness!.cleanup();
+    await requireValue(
+      harness,
+      'expected test value in useSearchShortcutTarget.test.tsx'
+    ).cleanup();
     harness = null;
     expect(registryMocks.unregister).toHaveBeenCalled();
   });
@@ -118,12 +122,18 @@ describe('useSearchShortcutTarget', () => {
     const focusB = vi.fn();
     harness = renderHookHarness();
 
-    await harness!.render({ isActive: true, focus: focusA });
+    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
+      isActive: true,
+      focus: focusA,
+    });
     const config = registryMocks.register.mock.calls[0][0] as { focus: () => void };
     act(() => config.focus());
     expect(focusA).toHaveBeenCalledTimes(1);
 
-    await harness!.render({ isActive: true, focus: focusB });
+    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
+      isActive: true,
+      focus: focusB,
+    });
     act(() => config.focus());
     expect(focusB).toHaveBeenCalledTimes(1);
   });

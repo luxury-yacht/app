@@ -12,7 +12,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -36,7 +36,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },

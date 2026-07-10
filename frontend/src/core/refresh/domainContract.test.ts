@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import {
   DOMAIN_REFRESHER_MAP,
@@ -213,7 +214,9 @@ const enforcedCoverageProofs = (): Record<string, Set<RefreshDomain>> => {
     expect(inventory.coverageContract, `${domain} coverage contract`).toBe(
       family?.coverageContract
     );
-    proofs[family!.coverageContract].add(domain as RefreshDomain);
+    proofs[
+      requireValue(family, 'expected test value in domainContract.test.ts').coverageContract
+    ].add(domain as RefreshDomain);
   }
 
   return proofs;

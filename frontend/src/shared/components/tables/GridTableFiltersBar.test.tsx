@@ -10,6 +10,7 @@ import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const searchShortcutMock = vi.hoisted(() => ({
   register: vi.fn(),
@@ -293,7 +294,10 @@ describe('GridTableFiltersBar', () => {
 
     await act(async () => {
       input?.focus();
-      setInputValue(input!, 'p');
+      setInputValue(
+        requireValue(input, 'expected test value in GridTableFiltersBar.test.tsx'),
+        'p'
+      );
       await Promise.resolve();
     });
 
@@ -302,7 +306,10 @@ describe('GridTableFiltersBar', () => {
     expect(updatedInput?.value).toBe('p');
 
     await act(async () => {
-      setInputValue(updatedInput!, 'po');
+      setInputValue(
+        requireValue(updatedInput, 'expected test value in GridTableFiltersBar.test.tsx'),
+        'po'
+      );
       await Promise.resolve();
     });
 

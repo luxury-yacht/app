@@ -8,6 +8,7 @@ import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptio
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import DisplaySection from './DisplaySection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
@@ -133,13 +134,13 @@ describe('DisplaySection', () => {
   });
 
   it('persists exclusive namespaces changes', async () => {
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Exclusive namespaces"]'
+    const toggle = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Exclusive namespaces"]'),
+      'expected the Exclusive namespaces toggle'
     );
-    expect(toggle).not.toBeNull();
 
     await act(async () => {
-      toggle!.click();
+      toggle.click();
       await Promise.resolve();
     });
 
@@ -158,26 +159,26 @@ describe('DisplaySection', () => {
 
     // The dropdown derives its options from the shared page-size list — the
     // same source as every pagination footer.
-    const dropdown = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Default page size"]'
+    const dropdown = requireValue(
+      container.querySelector<HTMLSelectElement>('select[aria-label="Default page size"]'),
+      'expected the Default page size dropdown'
     );
-    expect(dropdown).not.toBeNull();
-    const optionValues = Array.from(dropdown!.querySelectorAll('option')).map(
+    const optionValues = Array.from(dropdown.querySelectorAll('option')).map(
       (option) => option.value
     );
     expect(optionValues).toEqual(TABLE_PAGE_SIZE_OPTIONS.map((value) => String(value)));
-    expect(dropdown!.value).toBe('50');
+    expect(dropdown.value).toBe('50');
   });
 
   it('persists default page size changes', async () => {
-    const dropdown = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Default page size"]'
+    const dropdown = requireValue(
+      container.querySelector<HTMLSelectElement>('select[aria-label="Default page size"]'),
+      'expected the Default page size dropdown'
     );
-    expect(dropdown).not.toBeNull();
 
     await act(async () => {
-      dropdown!.value = '250';
-      dropdown!.dispatchEvent(new Event('change', { bubbles: true }));
+      dropdown.value = '250';
+      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -185,13 +186,13 @@ describe('DisplaySection', () => {
   });
 
   it('persists dim inactive namespaces changes', async () => {
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Dim inactive namespaces"]'
+    const toggle = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Dim inactive namespaces"]'),
+      'expected the Dim inactive namespaces toggle'
     );
-    expect(toggle).not.toBeNull();
 
     await act(async () => {
-      toggle!.click();
+      toggle.click();
       await Promise.resolve();
     });
 

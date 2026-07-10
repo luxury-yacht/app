@@ -32,7 +32,7 @@ const hoistedMocks = vi.hoisted(() => {
     renderers[id] = renderer;
     return {
       __esModule: true,
-      default: (props: any) => {
+      default: (props: unknown) => {
         renderer(props);
         return null;
       },

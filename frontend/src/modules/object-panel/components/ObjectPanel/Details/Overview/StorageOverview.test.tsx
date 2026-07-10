@@ -33,11 +33,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -45,7 +45,7 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) =>
+  ResourceStatus: (props: unknown) =>
     props.status ? (
       <div>
         <span className="overview-label">Status</span>
@@ -83,21 +83,21 @@ describe('StorageOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderPvc = async (data: any) => {
+  const renderPvc = async (data: unknown) => {
     await act(async () => {
       root.render(<OverviewRenderer descriptor={pvcDescriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
 
-  const renderPv = async (data: any) => {
+  const renderPv = async (data: unknown) => {
     await act(async () => {
       root.render(<OverviewRenderer descriptor={pvDescriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
 
-  const renderStorageClass = async (data: any) => {
+  const renderStorageClass = async (data: unknown) => {
     await act(async () => {
       root.render(
         <OverviewRenderer descriptor={storageClassDescriptor} data={data} context={context} />

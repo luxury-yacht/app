@@ -9,6 +9,7 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act, type Ref } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 // Mock the Wails backend
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
@@ -419,8 +420,11 @@ describe('PortForwardsPanel', () => {
       const runtimeHandler = eventsOnMock.mock.calls.find(
         (call) => call[0] === 'runtime-operations:list'
       )?.[1] as ((...args: unknown[]) => void) | undefined;
-      runtimeHandler!(runtimeOperationsFor(mockSessions));
-      listHandler!(mockSessions);
+      requireValue(
+        runtimeHandler,
+        'expected test value in PortForwardsPanel.test.tsx'
+      )(runtimeOperationsFor(mockSessions));
+      requireValue(listHandler, 'expected test value in PortForwardsPanel.test.tsx')(mockSessions);
       await Promise.resolve();
     });
 
@@ -447,7 +451,10 @@ describe('PortForwardsPanel', () => {
 
     // Simulate status change to reconnecting
     await act(async () => {
-      statusHandler!({
+      requireValue(
+        statusHandler,
+        'expected test value in PortForwardsPanel.test.tsx'
+      )({
         sessionId: 'session-1',
         status: 'reconnecting',
         statusReason: 'Pod restarted',
@@ -529,8 +536,14 @@ describe('PortForwardsPanel', () => {
       const runtimeHandler = eventsOnMock.mock.calls.find(
         (call) => call[0] === 'runtime-operations:list'
       )?.[1] as ((...args: unknown[]) => void) | undefined;
-      runtimeHandler!(runtimeOperationsFor([mockSessions[0]]));
-      listHandler!([mockSessions[0]]);
+      requireValue(
+        runtimeHandler,
+        'expected test value in PortForwardsPanel.test.tsx'
+      )(runtimeOperationsFor([mockSessions[0]]));
+      requireValue(
+        listHandler,
+        'expected test value in PortForwardsPanel.test.tsx'
+      )([mockSessions[0]]);
       await Promise.resolve();
     });
 

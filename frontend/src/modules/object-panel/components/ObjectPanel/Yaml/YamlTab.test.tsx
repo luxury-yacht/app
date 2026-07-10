@@ -27,7 +27,7 @@ const refreshStoreMocks = vi.hoisted(() => ({
 }));
 
 const codeMirrorState = {
-  latestProps: { current: null as any },
+  latestProps: { current: null as unknown },
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -42,18 +42,18 @@ const codeMirrorState = {
   selectionText: '',
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
+const CodeMirrorMock = React.forwardRef((_props: unknown, ref) => {
   const props = _props;
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView as unknown,
     };
   }
   React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView as any);
+    onCreateEditor?.(codeMirrorState.editorView as unknown);
   }, [onCreateEditor]);
   return (
     <div data-testid="code-mirror" data-value={props.value}>
@@ -459,7 +459,10 @@ describe('YamlTab', () => {
     codeMirrorState.selectionText = '';
     codeMirrorState.value = '';
     codeMirrorState.latestProps.current = null;
-    codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] } as any;
+    codeMirrorState.editorView.state.selection = {
+      main: { from: 0, to: 0 },
+      ranges: [],
+    } as unknown;
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     (navigator.clipboard.writeText as unknown as ReturnType<typeof vi.fn>).mockClear();
@@ -578,11 +581,11 @@ describe('YamlTab', () => {
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 10 },
       ranges: [{ from: 0, to: 10 }],
-    } as any;
+    } as unknown;
     codeMirrorState.selectionText = 'apiVersion';
 
     const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
       .filter((config) => typeof config.onNativeAction === 'function')
       .pop();
 
@@ -609,7 +612,7 @@ describe('YamlTab', () => {
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 10 },
       ranges: [{ from: 0, to: 10 }],
-    } as any;
+    } as unknown;
     codeMirrorState.selectionText = 'apiVersion';
 
     const contextMenuExtension = (codeMirrorState.latestProps.current.extensions as unknown[]).find(
@@ -627,7 +630,7 @@ describe('YamlTab', () => {
           bubbles: true,
           cancelable: true,
         }),
-        codeMirrorState.editorView as any
+        codeMirrorState.editorView as unknown
       );
       await Promise.resolve();
     });
@@ -671,10 +674,10 @@ describe('YamlTab', () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 } as any;
+    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 } as unknown;
 
     const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
       .filter((config) => typeof config.onNativeAction === 'function')
       .pop();
 
@@ -1460,7 +1463,7 @@ describe('YamlTab', () => {
     codeMirrorState.selectionText = 'demo';
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 4 },
-    } as any;
+    } as unknown;
     const searchRegistration = searchShortcutMocks.useSearchShortcutTarget.mock.calls[
       searchShortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
     ]?.[0] as { focus: () => void; isActive: boolean } | undefined;
@@ -1640,7 +1643,7 @@ describe('YamlTab', () => {
     expect(blurSpy).toHaveBeenCalled();
 
     const selectSpy = vi.fn();
-    input.select = selectSpy as any;
+    input.select = selectSpy as unknown;
     const selectEvent = new KeyboardEvent('keydown', {
       key: 'a',
       metaKey: false,

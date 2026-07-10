@@ -18,7 +18,7 @@ import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -30,7 +30,7 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: (props: any) => (
+  ObjectPanelLink: (props: unknown) => (
     <span
       data-testid="object-panel-link"
       data-kind={props.objectRef.kind}
@@ -43,7 +43,7 @@ vi.mock('@shared/components/ObjectPanelLink', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 const context: OverviewContext = {
@@ -108,7 +108,7 @@ describe('GatewayAPIOverview', () => {
       conditions: [{ type: 'Accepted', status: 'True', reason: 'Accepted' }],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Gateway Class')?.textContent).toContain(
       'GatewayClass shared'
@@ -157,7 +157,7 @@ describe('GatewayAPIOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     const listenersValue = getValueForLabel(container, 'Listeners');
     const linkTitles = Array.from(
@@ -227,7 +227,7 @@ describe('GatewayAPIOverview', () => {
       conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Hostnames')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Parent Refs')?.textContent).toContain('Gateway prod/edge');
@@ -257,7 +257,7 @@ describe('GatewayAPIOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     // Grant renders the from→to diagram; query it directly.
     const diagram = container.querySelector('.reference-grant-diagram');

@@ -16,10 +16,21 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
 import { clearPanelState } from './useDockablePanelState';
+
+type DockablePanelContextValue = ReturnType<typeof useDockablePanelContext>;
+
+const requireDockableContext = (
+  value: DockablePanelContextValue | null
+): DockablePanelContextValue =>
+  requireValue<DockablePanelContextValue | null>(
+    value,
+    'expected the dockable-panel context after rendering the probe'
+  );
 
 // Per-cluster panel state work added cluster awareness to the provider.
 // Tests that don't care about clusters can leave selectedClusterId at
@@ -197,51 +208,99 @@ describe('DockablePanelProvider', () => {
     );
 
     // Initially empty.
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual([]);
-    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
-    expect(contextRef.current!.tabGroups.floating).toEqual([]);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual([]);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).toEqual([]);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toEqual([]);
 
     // Register a right panel.
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'logs',
         title: 'Logs',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('logs', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('logs', 'right');
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs']);
-    expect(contextRef.current!.tabGroups.right.activeTab).toBe('logs');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['logs']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.activeTab
+    ).toBe('logs');
 
     // Register a second right panel.
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'details',
         title: 'Details',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('details', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('details', 'right');
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs', 'details']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['logs', 'details']);
     // Most recently added panel becomes active.
-    expect(contextRef.current!.tabGroups.right.activeTab).toBe('details');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.activeTab
+    ).toBe('details');
 
     // switchTab to logs.
     await act(async () => {
-      contextRef.current!.switchTab('right', 'logs');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).switchTab('right', 'logs');
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.activeTab).toBe('logs');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.activeTab
+    ).toBe('logs');
 
     // Unregister details.
     await act(async () => {
-      contextRef.current!.removePanelFromGroups('details');
-      contextRef.current!.unregisterPanel('details');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).removePanelFromGroups('details');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).unregisterPanel('details');
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['logs']);
 
     await unmount();
   });
@@ -263,26 +322,47 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'panel-a',
         title: 'Panel A',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('panel-a', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('panel-a', 'right');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.right.tabs).toContain('panel-a');
-    expect(contextRef.current!.tabGroups.bottom.tabs).not.toContain('panel-a');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toContain('panel-a');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).not.toContain('panel-a');
 
     await act(async () => {
       // Preferred group should be ignored after the panel is already grouped.
-      contextRef.current!.syncPanelGroup('panel-a', 'right', 'bottom');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('panel-a', 'right', 'bottom');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.right.tabs).toContain('panel-a');
-    expect(contextRef.current!.tabGroups.bottom.tabs).not.toContain('panel-a');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toContain('panel-a');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).not.toContain('panel-a');
 
     await unmount();
   });
@@ -304,32 +384,62 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'float-a',
         title: 'Float A',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-a', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['float-a']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['float-a']);
 
     await act(async () => {
-      contextRef.current!.setLastFocusedGroupKey('floating-1');
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey('floating-1');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'float-b',
         title: 'Float B',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('float-b', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-b', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['float-a', 'float-b']);
-    expect(contextRef.current!.tabGroups.floating[0].activeTab).toBe('float-b');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['float-a', 'float-b']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].activeTab
+    ).toBe('float-b');
 
     await unmount();
   });
@@ -351,39 +461,63 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'float-a',
         title: 'Float A',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-a', 'floating');
       await Promise.resolve();
     });
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'right-b',
         title: 'Right B',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('right-b', 'right');
-      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('right-b', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey('floating-1');
       await Promise.resolve();
     });
 
     await act(async () => {
-      contextRef.current!.movePanelBetweenGroups('right-b', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroups('right-b', 'floating');
       await Promise.resolve();
     });
 
     // Existing floating panel should remain in floating-1 even after another
     // tab is moved to a new floating group and this panel re-syncs.
     await act(async () => {
-      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-a', 'floating');
       await Promise.resolve();
     });
 
-    const floatingGroups = contextRef.current!.tabGroups.floating;
+    const floatingGroups = requireValue(
+      contextRef.current,
+      'expected test value in DockablePanelProvider.test.tsx'
+    ).tabGroups.floating;
     expect(floatingGroups).toHaveLength(2);
     expect(floatingGroups[0].groupId).toBe('floating-1');
     expect(floatingGroups[0].tabs).toEqual(['float-a']);
@@ -410,23 +544,42 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'float-a',
         title: 'Float A',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-a', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.getLastFocusedPosition()).toBe('right');
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getLastFocusedPosition()
+    ).toBe('right');
 
     await act(async () => {
-      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey('floating-1');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getLastFocusedPosition()
+    ).toBe('floating');
 
     await unmount();
   });
@@ -447,20 +600,39 @@ describe('DockablePanelProvider', () => {
       </DockablePanelProvider>
     );
 
-    expect(contextRef.current!.getPreferredOpenGroupKey('bottom')).toBe('bottom');
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getPreferredOpenGroupKey('bottom')
+    ).toBe('bottom');
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'float-a',
         title: 'Float A',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('float-a', 'floating');
-      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('float-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey('floating-1');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.getPreferredOpenGroupKey('right')).toBe('floating-1');
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getPreferredOpenGroupKey('right')
+    ).toBe('floating-1');
 
     await unmount();
   });
@@ -482,36 +654,77 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'obj-a',
         title: 'Object A',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('obj-a', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('obj-a', 'right');
       await Promise.resolve();
     });
 
     await act(async () => {
-      contextRef.current!.movePanelBetweenGroups('obj-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroups('obj-a', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a']);
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getLastFocusedPosition()
+    ).toBe('floating');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['obj-a']);
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'obj-b',
         title: 'Object B',
-        position: contextRef.current!.getLastFocusedPosition(),
+        position: requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).getLastFocusedPosition(),
       });
-      contextRef.current!.syncPanelGroup('obj-b', contextRef.current!.getLastFocusedPosition());
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup(
+        'obj-b',
+        requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).getLastFocusedPosition()
+      );
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a', 'obj-b']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['obj-a', 'obj-b']);
 
     await unmount();
   });
@@ -533,31 +746,55 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'right-panel',
         title: 'Right Panel',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('right-panel', 'right');
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('right-panel', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'floating-panel',
         title: 'Floating Panel',
         position: 'floating',
       });
-      contextRef.current!.syncPanelGroup('floating-panel', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('floating-panel', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating[0].groupId).toBe('floating-1');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].groupId
+    ).toBe('floating-1');
 
     await act(async () => {
-      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey('floating-1');
       clearPanelState('floating-panel');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(0);
-    expect(contextRef.current!.lastFocusedGroupKey).toBe('right');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(0);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .lastFocusedGroupKey
+    ).toBe('right');
 
     await unmount();
   });
@@ -579,23 +816,43 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'obj-a',
         title: 'Object A',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('obj-a', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('obj-a', 'right');
       await Promise.resolve();
     });
 
     await act(async () => {
-      contextRef.current!.movePanelBetweenGroupsAndFocus('obj-a', 'floating');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroupsAndFocus('obj-a', 'floating');
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a']);
-    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['obj-a']);
+    expect(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).getLastFocusedPosition()
+    ).toBe('floating');
 
     await unmount();
   });
@@ -617,35 +874,62 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'bottom-a',
         title: 'Bottom A',
         position: 'bottom',
       });
-      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('bottom-a', 'bottom');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'bottom-b',
         title: 'Bottom B',
         position: 'bottom',
       });
-      contextRef.current!.syncPanelGroup('bottom-b', 'bottom');
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('bottom-b', 'bottom');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'right-a',
         title: 'Right A',
         position: 'right',
       });
-      contextRef.current!.syncPanelGroup('right-a', 'right');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('right-a', 'right');
       await Promise.resolve();
     });
 
     // Simulate a cross-group drop via the movePanel adapter directly.
     await act(async () => {
-      contextRef.current!.movePanel('bottom-a', 'bottom', 'right', 1);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanel('bottom-a', 'bottom', 'right', 1);
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual(['bottom-b']);
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['right-a', 'bottom-a']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).toEqual(['bottom-b']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['right-a', 'bottom-a']);
 
     await unmount();
   });
@@ -668,12 +952,18 @@ describe('DockablePanelProvider', () => {
 
     await act(async () => {
       for (const id of ['a', 'b', 'c', 'd']) {
-        contextRef.current!.registerPanel({
+        requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).registerPanel({
           panelId: id,
           title: id.toUpperCase(),
           position: 'right',
         });
-        contextRef.current!.syncPanelGroup(id, 'right');
+        requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).syncPanelGroup(id, 'right');
       }
       await Promise.resolve();
     });
@@ -682,26 +972,44 @@ describe('DockablePanelProvider', () => {
     // adjustedInsert = 2, reorderTab removes 'a' then splices at 2.
     // Expected: ['b','c','a','d']
     await act(async () => {
-      contextRef.current!.movePanel('a', 'right', 'right', 3);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanel('a', 'right', 'right', 3);
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'c', 'a', 'd']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['b', 'c', 'a', 'd']);
 
     // Drop at end (insertIndex = 4): source 'c' at index 1, sourceIdx <
     // insertIndex → adjustedInsert = 3. Remove 'c' → ['b','a','d'],
     // splice at 3 → ['b','a','d','c'].
     await act(async () => {
-      contextRef.current!.movePanel('c', 'right', 'right', 4);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanel('c', 'right', 'right', 4);
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'a', 'd', 'c']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['b', 'a', 'd', 'c']);
 
     // No-op drop onto self.
     await act(async () => {
-      contextRef.current!.movePanel('a', 'right', 'right', 1);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanel('a', 'right', 'right', 1);
       await Promise.resolve();
     });
-    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'a', 'd', 'c']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.right.tabs
+    ).toEqual(['b', 'a', 'd', 'c']);
 
     await unmount();
   });
@@ -730,21 +1038,33 @@ describe('DockablePanelProvider', () => {
     // Build a single floating group containing four tabs.
     await act(async () => {
       for (const id of ['a', 'b', 'c', 'd']) {
-        contextRef.current!.registerPanel({
+        requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).registerPanel({
           panelId: id,
           title: id.toUpperCase(),
           position: 'floating',
         });
-        contextRef.current!.syncPanelGroup(id, 'floating');
+        requireValue(
+          contextRef.current,
+          'expected test value in DockablePanelProvider.test.tsx'
+        ).syncPanelGroup(id, 'floating');
       }
       await Promise.resolve();
     });
 
     // Collapse them into one group (floating-1) by moving b, c, d into
     // floating-1 (the group created by the first call).
-    const floatingId = contextRef.current!.tabGroups.floating[0].groupId;
+    const floatingId = requireValue(
+      contextRef.current,
+      'expected test value in DockablePanelProvider.test.tsx'
+    ).tabGroups.floating[0].groupId;
     await act(async () => {
-      contextRef.current!.setLastFocusedGroupKey(floatingId);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).setLastFocusedGroupKey(floatingId);
       await Promise.resolve();
     });
 
@@ -752,14 +1072,29 @@ describe('DockablePanelProvider', () => {
     // movePanelBetweenGroups with the specific floating group id as the
     // target.
     await act(async () => {
-      contextRef.current!.movePanelBetweenGroups('b', floatingId);
-      contextRef.current!.movePanelBetweenGroups('c', floatingId);
-      contextRef.current!.movePanelBetweenGroups('d', floatingId);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroups('b', floatingId);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroups('c', floatingId);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanelBetweenGroups('d', floatingId);
       await Promise.resolve();
     });
 
     // Now the floating group should contain all four tabs.
-    const group = contextRef.current!.tabGroups.floating.find((g) => g.groupId === floatingId)!;
+    const group = requireValue(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).tabGroups.floating.find((g) => g.groupId === floatingId),
+      'expected test value in DockablePanelProvider.test.tsx'
+    );
     expect(group.tabs).toEqual(['a', 'b', 'c', 'd']);
 
     // Forward reorder: move 'a' to insertIndex = 2. Shift compensation:
@@ -767,13 +1102,20 @@ describe('DockablePanelProvider', () => {
     // ['b','a','c','d']. Without getGroupTabs handling floating ids, the
     // compensation is skipped and the result would be ['b','c','a','d'].
     await act(async () => {
-      contextRef.current!.movePanel('a', floatingId, floatingId, 2);
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).movePanel('a', floatingId, floatingId, 2);
       await Promise.resolve();
     });
 
-    const afterReorder = contextRef.current!.tabGroups.floating.find(
-      (g) => g.groupId === floatingId
-    )!;
+    const afterReorder = requireValue(
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).tabGroups.floating.find((g) => g.groupId === floatingId),
+      'expected test value in DockablePanelProvider.test.tsx'
+    );
     expect(afterReorder.tabs).toEqual(['b', 'a', 'c', 'd']);
 
     await unmount();
@@ -796,23 +1138,41 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'bottom-a',
         title: 'Bottom A',
         position: 'bottom',
       });
-      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('bottom-a', 'bottom');
       await Promise.resolve();
     });
 
     await act(async () => {
-      contextRef.current!.createFloatingGroupWithPanel('bottom-a', 'bottom', { x: 220, y: 220 });
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).createFloatingGroupWithPanel('bottom-a', 'bottom', { x: 220, y: 220 });
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).toEqual([]);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['bottom-a']);
 
     await unmount();
   });
@@ -855,12 +1215,18 @@ describe('DockablePanelProvider', () => {
     );
 
     await act(async () => {
-      contextRef.current!.registerPanel({
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).registerPanel({
         panelId: 'bottom-a',
         title: 'Bottom A',
         position: 'bottom',
       });
-      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
+      requireValue(
+        contextRef.current,
+        'expected test value in DockablePanelProvider.test.tsx'
+      ).syncPanelGroup('bottom-a', 'bottom');
       await Promise.resolve();
     });
 
@@ -882,9 +1248,18 @@ describe('DockablePanelProvider', () => {
       await Promise.resolve();
     });
 
-    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
-    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
-    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.bottom.tabs
+    ).toEqual([]);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating
+    ).toHaveLength(1);
+    expect(
+      requireValue(contextRef.current, 'expected test value in DockablePanelProvider.test.tsx')
+        .tabGroups.floating[0].tabs
+    ).toEqual(['bottom-a']);
 
     await unmount();
   });
@@ -930,14 +1305,14 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       );
     });
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'panel-a',
         title: 'Panel A',
         position: 'right',
       });
-      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('panel-a', 'right', undefined);
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['panel-a']);
 
     // Switch to cluster-b.
     setMockedKubeconfig({
@@ -951,7 +1326,7 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual([]);
 
     // Switch back to cluster-a.
     setMockedKubeconfig({
@@ -965,7 +1340,7 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['panel-a']);
   });
 
   // === Task 8 ===
@@ -984,14 +1359,14 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       );
     });
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'panel-a',
         title: 'Panel A',
         position: 'right',
       });
-      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('panel-a', 'right', undefined);
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['panel-a']);
 
     setMockedKubeconfig({
       selectedClusterId: 'cluster-b',
@@ -1004,7 +1379,7 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual([]);
 
     // Re-open cluster-a — fresh state expected.
     setMockedKubeconfig({
@@ -1018,7 +1393,7 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual([]);
   });
 
   // === Task 9 ===
@@ -1042,14 +1417,14 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       );
     });
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'diagnostics',
         title: 'Diagnostics',
         position: 'right',
       });
-      capturedCtx!.syncPanelGroup('diagnostics', 'right', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('diagnostics', 'right', undefined);
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['diagnostics']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['diagnostics']);
 
     // Cluster-b: empty.
     setMockedKubeconfig({
@@ -1063,19 +1438,19 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
-    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.bottom.tabs).toEqual([]);
 
     // Open diagnostics on cluster-b in the bottom dock.
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'diagnostics',
         title: 'Diagnostics',
         position: 'bottom',
       });
-      capturedCtx!.syncPanelGroup('diagnostics', 'bottom', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('diagnostics', 'bottom', undefined);
     });
-    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual(['diagnostics']);
+    expect(requireDockableContext(capturedCtx).tabGroups.bottom.tabs).toEqual(['diagnostics']);
 
     // Switch back to cluster-a.
     setMockedKubeconfig({
@@ -1089,8 +1464,8 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['diagnostics']);
-    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['diagnostics']);
+    expect(requireDockableContext(capturedCtx).tabGroups.bottom.tabs).toEqual([]);
 
     // And cluster-b still has it in the bottom dock.
     setMockedKubeconfig({
@@ -1104,8 +1479,8 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         </DockablePanelProvider>
       );
     });
-    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual(['diagnostics']);
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+    expect(requireDockableContext(capturedCtx).tabGroups.bottom.tabs).toEqual(['diagnostics']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual([]);
   });
 
   // === Task 10 ===
@@ -1124,22 +1499,22 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       );
     });
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'panel-a',
         title: 'Panel A',
         position: 'right',
       });
-      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('panel-a', 'right', undefined);
     });
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['panel-a']);
 
     // Simulate the panel unregistering WITHOUT calling any close path.
     act(() => {
-      capturedCtx!.unregisterPanel('panel-a');
+      requireDockableContext(capturedCtx).unregisterPanel('panel-a');
     });
 
     // tabGroups should still contain panel-a.
-    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+    expect(requireDockableContext(capturedCtx).tabGroups.right.tabs).toEqual(['panel-a']);
   });
 
   // === Task 11 ===
@@ -1170,30 +1545,33 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
     // floating group as the target. Without this hint, syncPanelGroup
     // would create a fresh floating group for panel-b.
     act(() => {
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'panel-a',
         title: 'Panel A',
         position: 'floating',
       });
-      capturedCtx!.syncPanelGroup('panel-a', 'floating', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('panel-a', 'floating', undefined);
     });
     act(() => {
-      capturedCtx!.setLastFocusedGroupKey('floating-1');
-      capturedCtx!.registerPanel({
+      requireDockableContext(capturedCtx).setLastFocusedGroupKey('floating-1');
+      requireDockableContext(capturedCtx).registerPanel({
         panelId: 'panel-b',
         title: 'Panel B',
         position: 'floating',
       });
-      capturedCtx!.syncPanelGroup('panel-b', 'floating', undefined);
+      requireDockableContext(capturedCtx).syncPanelGroup('panel-b', 'floating', undefined);
     });
 
-    const floatingBefore = capturedCtx!.tabGroups.floating;
+    const floatingBefore = requireDockableContext(capturedCtx).tabGroups.floating;
     expect(floatingBefore.length).toBeGreaterThanOrEqual(1);
     const groupContaining = floatingBefore.find(
       (g) => g.tabs.includes('panel-a') && g.tabs.includes('panel-b')
     );
     expect(groupContaining).toBeDefined();
-    const originalGroupId = groupContaining!.groupId;
+    const originalGroupId = requireValue(
+      groupContaining,
+      'expected test value in DockablePanelProvider.test.tsx'
+    ).groupId;
 
     // Switch to cluster-b and back.
     setMockedKubeconfig({
@@ -1219,9 +1597,11 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       );
     });
 
-    const floatingAfter = capturedCtx!.tabGroups.floating;
+    const floatingAfter = requireDockableContext(capturedCtx).tabGroups.floating;
     const restoredGroup = floatingAfter.find((g) => g.groupId === originalGroupId);
     expect(restoredGroup).toBeDefined();
-    expect(restoredGroup!.tabs).toEqual(expect.arrayContaining(['panel-a', 'panel-b']));
+    expect(
+      requireValue(restoredGroup, 'expected test value in DockablePanelProvider.test.tsx').tabs
+    ).toEqual(expect.arrayContaining(['panel-a', 'panel-b']));
   });
 });

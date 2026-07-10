@@ -14,6 +14,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
 import { ActionsMenu } from './ActionsMenu';
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
@@ -268,12 +269,12 @@ describe('ActionsMenu', () => {
         return undefined;
       }
       const fiberKey = Object.keys(input).find((key) => key.startsWith('__reactFiber$'));
-      return fiberKey ? (input as any)[fiberKey]?.memoizedProps?.onChange : undefined;
+      return fiberKey ? (input as unknown)[fiberKey]?.memoizedProps?.onChange : undefined;
     })();
     expect(typeof onChange).toBe('function');
 
     await act(async () => {
-      input!.value = '7';
+      requireValue(input, 'expected test value in ActionsMenu.test.tsx').value = '7';
       onChange?.({ target: { value: '7' } });
       await Promise.resolve();
     });

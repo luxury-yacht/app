@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
+import { requireValue } from '@/test-utils/requireValue';
 import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
@@ -240,14 +241,22 @@ describe('CommandPalette component behaviour', () => {
   const queryItems = () =>
     Array.from(container.querySelectorAll<HTMLDivElement>('.command-palette-item'));
 
+  const queryInput = () =>
+    requireValue(
+      container.querySelector<HTMLInputElement>('.command-palette-input'),
+      'expected the command-palette input'
+    );
+
   const triggerShortcut = async (key: string) => {
-    const shortcut = registeredPaletteShortcuts.find((entry) => entry.key === key);
-    expect(shortcut).toBeTruthy();
-    if (shortcut?.enabled === false) {
+    const shortcut = requireValue(
+      registeredPaletteShortcuts.find((entry) => entry.key === key),
+      `expected the ${key} command-palette shortcut`
+    );
+    if (shortcut.enabled === false) {
       throw new Error(`Shortcut ${key} is not enabled`);
     }
     await act(async () => {
-      shortcut!.handler();
+      shortcut.handler();
       await Promise.resolve();
     });
   };
@@ -329,8 +338,8 @@ describe('CommandPalette component behaviour', () => {
     });
 
     expect(container.querySelector('.command-palette')).not.toBeNull();
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input!.placeholder).toBe('Select a namespace...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Select a namespace...');
     const labels = queryItems().map((el) => el.textContent ?? '');
     expect(labels.some((label) => label.includes('prod'))).toBe(true);
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
@@ -352,8 +361,8 @@ describe('CommandPalette component behaviour', () => {
     });
 
     expect(container.querySelector('.command-palette')).not.toBeNull();
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input!.placeholder).toBe('Select a namespace...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Select a namespace...');
     const labels = queryItems().map((el) => el.textContent ?? '');
     expect(labels.some((label) => label.includes('prod'))).toBe(true);
     expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
@@ -381,8 +390,8 @@ describe('CommandPalette component behaviour', () => {
     // Enter namespace mode via the "Select namespace..." command (index 0:
     // Navigation sorts before Namespaces/Kubeconfigs).
     await triggerShortcut('Enter');
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input!.placeholder).toBe('Select a namespace...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Select a namespace...');
 
     // The Open Cluster surface (⌘O / "+") fires while namespace mode is active.
     await act(async () => {
@@ -390,7 +399,7 @@ describe('CommandPalette component behaviour', () => {
       await Promise.resolve();
     });
 
-    expect(input!.placeholder).toBe('Select a kubeconfig...');
+    expect(input.placeholder).toBe('Select a kubeconfig...');
     const headers = Array.from(
       container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
@@ -408,8 +417,8 @@ describe('CommandPalette component behaviour', () => {
       eventBus.emit('command-palette:open-kubeconfigs');
       await Promise.resolve();
     });
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input!.placeholder).toBe('Select a kubeconfig...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Select a kubeconfig...');
 
     const shortcut = findGlobalShortcut(defaultOpenShortcut, 'n');
     expect(shortcut).toBeTruthy();
@@ -418,7 +427,7 @@ describe('CommandPalette component behaviour', () => {
       await Promise.resolve();
     });
 
-    expect(input!.placeholder).toBe('Select a namespace...');
+    expect(input.placeholder).toBe('Select a namespace...');
     const headers = Array.from(
       container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
@@ -545,13 +554,12 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(input!.placeholder).toBe('Type a command or search...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Type a command or search...');
 
     await triggerShortcut('Enter');
 
-    expect(input!.placeholder).toBe('Select a namespace...');
+    expect(input.placeholder).toBe('Select a namespace...');
     const headers = Array.from(
       container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
@@ -564,7 +572,7 @@ describe('CommandPalette component behaviour', () => {
 
     await triggerShortcut('Escape');
 
-    expect(input!.placeholder).toBe('Type a command or search...');
+    expect(input.placeholder).toBe('Type a command or search...');
     expect(container.querySelector('.command-palette')).not.toBeNull();
   });
 
@@ -580,9 +588,6 @@ describe('CommandPalette component behaviour', () => {
 
     await renderPalette(commands);
     await openPalette();
-
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
 
     await triggerShortcut('Escape');
 
@@ -609,13 +614,12 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(input!.placeholder).toBe('Type a command or search...');
+    const input = queryInput();
+    expect(input.placeholder).toBe('Type a command or search...');
 
     await triggerShortcut('Enter');
 
-    expect(input!.placeholder).toBe('Select a kubeconfig...');
+    expect(input.placeholder).toBe('Select a kubeconfig...');
     const headers = Array.from(
       container.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
     ).map((el) => el.textContent);
@@ -639,28 +643,29 @@ describe('CommandPalette component behaviour', () => {
       resource: 'pods',
     });
 
-    fetchSnapshotMock.mockImplementation((domain: unknown, options: any) => {
-      expect(domain).toBe('catalog');
-      expect(options?.scope).toContain('alpha:ctx|');
-      expect(options?.scope).toContain('limit=20');
-      expect(options?.scope).toContain('kind=pod');
-      expect(options?.scope).toContain('search=metrics');
-      expect(options?.signal).toBeInstanceOf(AbortSignal);
-      return Promise.resolve({
-        snapshot: {
-          payload: {
-            items: [catalogItem],
-            total: 4,
+    fetchSnapshotMock.mockImplementation(
+      (domain: unknown, options: { scope?: string; signal?: AbortSignal }) => {
+        expect(domain).toBe('catalog');
+        expect(options?.scope).toContain('alpha:ctx|');
+        expect(options?.scope).toContain('limit=20');
+        expect(options?.scope).toContain('kind=pod');
+        expect(options?.scope).toContain('search=metrics');
+        expect(options?.signal).toBeInstanceOf(AbortSignal);
+        return Promise.resolve({
+          snapshot: {
+            payload: {
+              items: [catalogItem],
+              total: 4,
+            },
           },
-        },
-      });
-    });
+        });
+      }
+    );
 
     await renderPalette([]);
     await openPalette();
 
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
+    const input = queryInput();
 
     await act(async () => {
       const setInputValue = Object.getOwnPropertyDescriptor(
@@ -668,7 +673,7 @@ describe('CommandPalette component behaviour', () => {
         'value'
       )?.set;
       setInputValue?.call(input, 'pod metrics');
-      input!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -824,12 +829,12 @@ describe('CommandPalette component behaviour', () => {
     if (originalClientHeight) {
       Object.defineProperty(results, 'clientHeight', originalClientHeight);
     } else {
-      delete (results as any).clientHeight;
+      Reflect.deleteProperty(results, 'clientHeight');
     }
     if (originalOffsetHeight) {
       Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);
     } else {
-      delete (HTMLElement.prototype as any).offsetHeight;
+      Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
     }
   });
 
@@ -840,9 +845,8 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette([]);
     await openPalette();
 
-    const input = container.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    const selectSpy = vi.spyOn(input!, 'select');
+    const input = queryInput();
+    const selectSpy = vi.spyOn(input, 'select');
 
     const event = new KeyboardEvent('keydown', {
       key: 'a',
@@ -850,7 +854,7 @@ describe('CommandPalette component behaviour', () => {
       bubbles: true,
       cancelable: true,
     });
-    const dispatchResult = input!.dispatchEvent(event);
+    const dispatchResult = input.dispatchEvent(event);
     expect(dispatchResult).toBe(false);
     expect(selectSpy).toHaveBeenCalled();
 
@@ -860,7 +864,7 @@ describe('CommandPalette component behaviour', () => {
         'value'
       )?.set;
       setInputValue?.call(input, 'svc metrics');
-      input!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
       await Promise.resolve();
     });
 

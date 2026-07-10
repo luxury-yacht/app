@@ -86,7 +86,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[], defaultKey?: string, defaultDir?: string, opts?: any) => ({
+  useTableSort: (data: unknown[], defaultKey?: string, defaultDir?: string, opts?: unknown) => ({
     sortedData: data,
     sortConfig: opts?.controlledSort ?? {
       key: defaultKey ?? 'name',

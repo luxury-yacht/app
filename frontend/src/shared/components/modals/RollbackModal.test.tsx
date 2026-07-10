@@ -97,7 +97,7 @@ describe('RollbackModal', () => {
 
   it('renders loading state then revision list', async () => {
     // Create a deferred promise so we can assert the loading state.
-    let resolveRevisions!: (value: any) => void;
+    let resolveRevisions!: (value: unknown) => void;
     const pending = new Promise((resolve) => {
       resolveRevisions = resolve;
     });

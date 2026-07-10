@@ -37,13 +37,13 @@ const {
   manifestTabPropsRef,
   valuesTabPropsRef,
 } = vi.hoisted(() => ({
-  detailsTabPropsRef: { current: null as any },
-  logViewerPropsRef: { current: null as any },
-  shellTabPropsRef: { current: null as any },
-  eventsTabPropsRef: { current: null as any },
-  yamlTabPropsRef: { current: null as any },
-  manifestTabPropsRef: { current: null as any },
-  valuesTabPropsRef: { current: null as any },
+  detailsTabPropsRef: { current: null as unknown },
+  logViewerPropsRef: { current: null as unknown },
+  shellTabPropsRef: { current: null as unknown },
+  eventsTabPropsRef: { current: null as unknown },
+  yamlTabPropsRef: { current: null as unknown },
+  manifestTabPropsRef: { current: null as unknown },
+  valuesTabPropsRef: { current: null as unknown },
 }));
 
 const mockClosePanel = vi.fn();
@@ -120,7 +120,7 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     onRowClick: vi.fn(),
     onCloseObjectPanel: vi.fn(),
     setShowObjectPanel: vi.fn(),
-    hydrateClusterMeta: vi.fn((d: any) => d),
+    hydrateClusterMeta: vi.fn((d: unknown) => d),
     setObjectPanelActiveTab: tabStore.set,
   }),
   useObjectPanelActiveTab: (panelId: string) =>
@@ -129,7 +129,7 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: any) => (
+  DockablePanel: ({ children, panelRef }: unknown) => (
     <div ref={panelRef}>
       <div data-testid="dockable-body">{children}</div>
     </div>
@@ -157,49 +157,49 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     detailsTabPropsRef.current = props;
     return <div data-testid="details-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     logViewerPropsRef.current = props;
     return <div data-testid="logs-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     shellTabPropsRef.current = props;
     return <div data-testid="shell-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     eventsTabPropsRef.current = props;
     return <div data-testid="events-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     yamlTabPropsRef.current = props;
     return <div data-testid="yaml-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ManifestTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     manifestTabPropsRef.current = props;
     return <div data-testid="manifest-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     valuesTabPropsRef.current = props;
     return <div data-testid="values-tab" />;
   },

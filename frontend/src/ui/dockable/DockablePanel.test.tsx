@@ -11,6 +11,7 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 
@@ -114,9 +115,10 @@ describe('DockablePanel', () => {
     const layer = document.querySelector('.dockable-panel-layer');
     expect(layer).toBeTruthy();
 
-    const closeButton = layer!.querySelector(
-      '[aria-label="Close all tabs in this panel"]'
-    ) as HTMLButtonElement;
+    const closeButton = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('[aria-label="Close all tabs in this panel"]') as HTMLButtonElement;
     expect(closeButton).toBeTruthy();
 
     act(() => {
@@ -259,9 +261,10 @@ describe('DockablePanel', () => {
     const layer = document.querySelector('.dockable-panel-layer');
     expect(layer).toBeTruthy();
 
-    const dockRightButton = layer!.querySelector(
-      '[aria-label="Dock panel to right side"]'
-    ) as HTMLButtonElement;
+    const dockRightButton = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('[aria-label="Dock panel to right side"]') as HTMLButtonElement;
     expect(dockRightButton).toBeTruthy();
 
     act(() => {
@@ -270,9 +273,14 @@ describe('DockablePanel', () => {
 
     expect(onPositionChange).toHaveBeenCalledWith('right');
 
-    const panelElement = layer!.querySelector('.dockable-panel');
+    const panelElement = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('.dockable-panel');
     expect(panelElement).toBeTruthy();
-    expect(panelElement!.className).toMatch(/dockable-panel--right/);
+    expect(
+      requireValue(panelElement, 'expected test value in DockablePanel.test.tsx').className
+    ).toMatch(/dockable-panel--right/);
 
     const maximizeButton = layer
       ?.querySelector('.dockable-panel__control-btn')

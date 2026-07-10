@@ -9,6 +9,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const getAppLogsMock = vi.hoisted(() => vi.fn());
 const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
@@ -17,8 +18,8 @@ const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(un
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
-const dropdownInstances = vi.hoisted(() => [] as Array<any>);
-const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: any[]) => void>());
+const dropdownInstances = vi.hoisted(() => [] as Array<unknown>);
+const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
 const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 
 // AppLogsPanel no longer calls useDockablePanelState — its open/close
@@ -27,7 +28,7 @@ const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 // transparent container so the tests can inspect the rendered children
 // directly without exercising the dockable layout system.
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: any) => (
+  DockablePanel: ({ children, panelRef }: unknown) => (
     <div data-testid="dockable-panel" ref={panelRef}>
       <div data-testid="body">{children}</div>
     </div>
@@ -35,7 +36,7 @@ vi.mock('@ui/dockable', () => ({
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: (props: any) => {
+  Dropdown: (props: unknown) => {
     dropdownInstances.push(props);
     return <div data-testid={`dropdown-${props.renderValue()}`}></div>;
   },
@@ -121,15 +122,15 @@ beforeEach(() => {
   dropdownInstances.length = 0;
   runtimeEventHandlers.clear();
   runtimeDisposerMock.mockReset();
-  (window as any).runtime = {
-    EventsOn: vi.fn((eventName: string, handler: (...args: any[]) => void) => {
+  (window as unknown).runtime = {
+    EventsOn: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
       runtimeEventHandlers.set(eventName, handler);
       return runtimeDisposerMock;
     }),
     EventsOff: vi.fn(),
   };
   if (!navigator.clipboard) {
-    (navigator as any).clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    (navigator as unknown).clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
   }
 });
 
@@ -138,7 +139,7 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  delete (window as any).runtime;
+  delete (window as unknown).runtime;
 });
 
 describe('AppLogsPanel', () => {
@@ -204,7 +205,11 @@ describe('AppLogsPanel', () => {
     const header = container.querySelector('.app-logs-header');
     expect(header).not.toBeNull();
     expect(
-      Array.from(header!.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)
+      Array.from(
+        requireValue(header, 'expected test value in AppLogsPanel.test.tsx').querySelectorAll(
+          '[role="columnheader"]'
+        )
+      ).map((cell) => cell.textContent)
     ).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
 
     cleanup();
@@ -234,7 +239,7 @@ describe('AppLogsPanel', () => {
     expect(clusterResizer).not.toBeNull();
 
     await act(async () => {
-      clusterResizer!.dispatchEvent(
+      requireValue(clusterResizer, 'expected test value in AppLogsPanel.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
       );
       await Promise.resolve();
@@ -432,7 +437,7 @@ describe('AppLogsPanel', () => {
 
     const clustersDropdown = latestDropdown('Clusters');
     expect(clustersDropdown).toBeTruthy();
-    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+    expect(clustersDropdown?.options.map((option: unknown) => option.label)).toEqual([
       'kube-alpha:alpha',
       'kube-bravo:bravo',
     ]);
@@ -487,7 +492,7 @@ describe('AppLogsPanel', () => {
     expect(clusters).toEqual(['[Global]', '[alpha]']);
 
     const clustersDropdown = latestDropdown('Clusters');
-    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+    expect(clustersDropdown?.options.map((option: unknown) => option.label)).toEqual([
       'Global',
       'kube-alpha:alpha',
     ]);
@@ -538,17 +543,17 @@ describe('AppLogsPanel', () => {
     expect(componentsDropdown?.showBulkActions).toBe(true);
     expect(clustersDropdown?.showBulkActions).toBe(true);
 
-    expect(logLevelsDropdown?.options.map((option: any) => option.value)).toEqual([
+    expect(logLevelsDropdown?.options.map((option: unknown) => option.value)).toEqual([
       'info',
       'warn',
       'error',
       'debug',
     ]);
-    expect(componentsDropdown?.options.map((option: any) => option.value)).toEqual([
+    expect(componentsDropdown?.options.map((option: unknown) => option.value)).toEqual([
       'Auth',
       'Refresh',
     ]);
-    expect(clustersDropdown?.options.map((option: any) => option.value)).toEqual([
+    expect(clustersDropdown?.options.map((option: unknown) => option.value)).toEqual([
       'kube-alpha:alpha',
       'kube-bravo:bravo',
     ]);
@@ -658,7 +663,7 @@ describe('AppLogsPanel', () => {
     expect(textFilterInput).not.toBeNull();
 
     act(() => {
-      logsContainer!.focus();
+      requireValue(logsContainer, 'expected test value in AppLogsPanel.test.tsx').focus();
     });
     expect(document.activeElement).toBe(logsContainer);
 
@@ -702,7 +707,7 @@ describe('AppLogsPanel', () => {
   it('reports clipboard failures when copying logs', async () => {
     vi.useFakeTimers();
     const clipboardError = new Error('clipboard blocked');
-    (navigator as any).clipboard.writeText.mockRejectedValueOnce(clipboardError);
+    (navigator as unknown).clipboard.writeText.mockRejectedValueOnce(clipboardError);
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);

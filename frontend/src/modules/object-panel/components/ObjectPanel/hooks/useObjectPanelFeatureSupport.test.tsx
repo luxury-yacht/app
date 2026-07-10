@@ -10,6 +10,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import type { ResourceCapability } from '../types';
 import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
@@ -37,7 +38,10 @@ describe('useObjectPanelFeatureSupport', () => {
       await Promise.resolve();
     });
 
-    return resultRef.current!;
+    return requireValue(
+      resultRef.current,
+      'expected test value in useObjectPanelFeatureSupport.test.tsx'
+    );
   };
 
   beforeEach(() => {

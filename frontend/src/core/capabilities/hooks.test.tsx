@@ -385,8 +385,8 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    (globalThis as unknown).window = globalThis.window ?? {};
+    (window as unknown).go = {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
@@ -422,7 +422,7 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
-    delete (window as any).go;
+    delete (window as unknown).go;
   });
 
   it('waits for cluster readiness before querying named-resource descriptors', async () => {
@@ -447,8 +447,8 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    (globalThis as unknown).window = globalThis.window ?? {};
+    (window as unknown).go = {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
@@ -501,7 +501,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as any).go;
+    delete (window as unknown).go;
   });
 
   it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
@@ -543,8 +543,8 @@ describe('useCapabilities', () => {
         ],
       });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    (globalThis as unknown).window = globalThis.window ?? {};
+    (window as unknown).go = {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
@@ -593,7 +593,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as any).go;
+    delete (window as unknown).go;
   });
 });
 

@@ -23,11 +23,11 @@ const context: OverviewContext = { clusterId: defaultClusterId, clusterName: 'al
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -115,7 +115,7 @@ describe('Policy Overview descriptors', () => {
           stabilizationWindowSeconds: 60,
         },
       },
-    } as any);
+    } as unknown);
 
     const targetLink = getValueForLabel(container, 'Target')?.querySelector('.object-panel-link');
     expect(targetLink).toBeTruthy();
@@ -152,7 +152,7 @@ describe('Policy Overview descriptors', () => {
       desiredHealthy: 5,
       disruptionsAllowed: 2,
       selector: { app: 'web' },
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Min Available')?.textContent).toBe('50%');
     expect(getValueForLabel(container, 'Disruptions Allowed')?.textContent).toBe('2');
@@ -165,7 +165,7 @@ describe('Policy Overview descriptors', () => {
       kind: 'ResourceQuota',
       hard: { cpu: '4', memory: '8Gi' },
       used: { cpu: '2', memory: '4Gi' },
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('cpu: 4');
     expect(getValueForLabel(container, 'Used')?.textContent).toContain('memory: 4Gi');
@@ -175,7 +175,7 @@ describe('Policy Overview descriptors', () => {
     await renderDescriptor(limitRangeDescriptor, {
       kind: 'LimitRange',
       limits: [{}, {}, {}],
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Limits')?.textContent).toBe('3 limit(s)');
   });
@@ -209,7 +209,7 @@ describe('Policy Overview descriptors', () => {
           policies: ['invalid-policy-entry'],
         },
       },
-    } as any);
+    } as unknown);
 
     expect(container.querySelector('.object-panel-link')).toBeNull();
     const metricsContent = getValueForLabel(container, 'Metrics');
@@ -229,7 +229,7 @@ describe('Policy Overview descriptors', () => {
     await renderDescriptor(resourceQuotaDescriptor, {
       kind: 'ResourceQuota',
       hard: { pods: '10' },
-    } as any);
+    } as unknown);
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('pods: 10');
     expect(getValueForLabel(container, 'Used')).toBeNull();

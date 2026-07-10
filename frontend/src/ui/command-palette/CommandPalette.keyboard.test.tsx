@@ -6,6 +6,7 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
 import { CommandPalette } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
@@ -272,9 +273,11 @@ describe('CommandPalette keyboard integration', () => {
       await Promise.resolve();
     });
 
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(input!.placeholder).toBe('Select a namespace...');
+    const input = requireValue(
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
+      'expected the command-palette input'
+    );
+    expect(input.placeholder).toBe('Select a namespace...');
     const labels = Array.from(
       document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
     ).map((el) => el.textContent);

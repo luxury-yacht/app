@@ -27,8 +27,8 @@ import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewR
 
 const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, runObjectActionMock } =
   vi.hoisted(() => ({
-    gridTablePropsRef: { current: null as any },
-    confirmationPropsRef: { current: null as any },
+    gridTablePropsRef: { current: null as unknown },
+    confirmationPropsRef: { current: null as unknown },
     openWithObjectMock: vi.fn(),
     runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   }));
@@ -62,12 +62,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -90,7 +90,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -128,7 +128,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -180,7 +180,7 @@ describe('NsViewRBAC', () => {
     ...overrides,
   });
 
-  const renderRBACView = async (options: { stats?: any; namespace?: string } = {}) => {
+  const renderRBACView = async (options: { stats?: unknown; namespace?: string } = {}) => {
     await act(async () => {
       root.render(
         <NsViewRBAC namespace={options.namespace ?? 'team-a'} showNamespaceColumn={true} />
@@ -195,7 +195,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const openItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -217,7 +217,7 @@ describe('NsViewRBAC', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -247,7 +247,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -94,7 +94,7 @@ describe('useGridTableProfiler', () => {
       value: 'chrome',
       configurable: true,
     });
-    (import.meta as any).env.VITE_GRIDTABLE_PROFILE_LOGS = 'true';
+    (import.meta as unknown).env.VITE_GRIDTABLE_PROFILE_LOGS = 'true';
     const harness = await createHarness();
     const wrapped = harness.handle().wrap(<div data-testid="content" />);
     expect(wrapped.type).toBe(Profiler);

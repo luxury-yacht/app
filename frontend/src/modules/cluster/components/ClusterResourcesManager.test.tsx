@@ -14,7 +14,7 @@ import { ClusterResourcesManager } from './ClusterResourcesManager';
 type ClusterKey = 'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
 
 const { viewPropsRef, permissionState } = vi.hoisted(() => ({
-  viewPropsRef: { current: null as any },
+  viewPropsRef: { current: null as unknown },
   permissionState: new Map<
     string,
     { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
@@ -23,7 +23,7 @@ const { viewPropsRef, permissionState } = vi.hoisted(() => ({
 
 vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: unknown) => {
     viewPropsRef.current = props;
     return <div data-testid="cluster-resources-view" />;
   },

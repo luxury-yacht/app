@@ -9,6 +9,7 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
+import { requireValue } from '@/test-utils/requireValue';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -38,7 +39,7 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
 }));
 
 const codeMirrorState = {
-  latestProps: { current: null as any },
+  latestProps: { current: null as unknown },
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -50,18 +51,18 @@ const codeMirrorState = {
   value: '',
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
+const CodeMirrorMock = React.forwardRef((_props: unknown, ref) => {
   const props = _props;
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView as unknown,
     };
   }
   React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView as any);
+    onCreateEditor?.(codeMirrorState.editorView as unknown);
   }, [onCreateEditor]);
   return (
     <div data-testid="code-mirror" data-value={props.value}>
@@ -267,7 +268,9 @@ const clickSegmentedOption = async (container: HTMLElement, label: string) => {
   );
   expect(btn).toBeTruthy();
   await act(async () => {
-    btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(btn, 'expected test value in ValuesTab.test.tsx').dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
   await waitForUpdates();
 };

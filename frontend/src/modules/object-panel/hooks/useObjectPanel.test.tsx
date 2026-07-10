@@ -12,6 +12,7 @@ import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();
@@ -48,7 +49,7 @@ describe('useObjectPanel', () => {
   let hookResult: ReturnType<UseObjectPanelExports['useObjectPanel']>;
 
   function TestComponent() {
-    hookResult = useObjectPanel!();
+    hookResult = requireValue(useObjectPanel, 'expected test value in useObjectPanel.test.tsx')();
     return null;
   }
 

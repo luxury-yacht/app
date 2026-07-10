@@ -35,7 +35,7 @@ const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef 
         updateContext: vi.fn(),
       },
       namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
-      namespaceDomainsByScopeRef: { current: {} as Record<string, any> },
+      namespaceDomainsByScopeRef: { current: {} as Record<string, unknown> },
     };
   }
 );
@@ -654,7 +654,7 @@ describe('NamespaceProvider selection behaviour', () => {
       status: 'idle',
       data: null,
       error: null,
-    } as any;
+    } as unknown;
 
     const { cleanup } = renderWithProvider();
     act(() => {

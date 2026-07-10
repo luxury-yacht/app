@@ -8,6 +8,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
@@ -192,7 +193,7 @@ describe('SettingsModal', () => {
     expect(kubeconfigTab).toBeTruthy();
 
     await act(async () => {
-      kubeconfigTab!.click();
+      requireValue(kubeconfigTab, 'expected test value in SettingsModal.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -219,7 +220,7 @@ describe('SettingsModal', () => {
     ) as HTMLButtonElement[];
     const displayTab = tabs.find((t) => t.textContent?.includes('Display'));
     await act(async () => {
-      displayTab!.click();
+      requireValue(displayTab, 'expected test value in SettingsModal.test.tsx').click();
       await Promise.resolve();
     });
     expect(localStorage.getItem('app-settings-last-tab')).toBe('display');

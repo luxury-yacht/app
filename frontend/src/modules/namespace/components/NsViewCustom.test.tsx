@@ -26,7 +26,7 @@ import NsViewCustom, { type CustomResourceData } from '@modules/namespace/compon
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
 const gridTableMock = vi.fn();
-const modalProps: { current: any } = { current: null };
+const modalProps: { current: unknown } = { current: null };
 const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
@@ -60,7 +60,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 vi.mock('@shared/components/tables/GridTable', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: unknown) => {
     gridTableMock(props);
     return <div data-testid="grid-table" />;
   },
@@ -74,7 +74,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: unknown) => {
     modalProps.current = props;
     return <div data-testid="confirmation-modal" />;
   },
@@ -437,7 +437,7 @@ describe('NsViewCustom', () => {
     expect(typeof gridProps.fetchAllRows).toBe('function');
     expect(
       (gridProps.filters.options.postActions ?? []).some(
-        (item: any) => item.id === 'copy-namespace-custom-query-csv'
+        (item: unknown) => item.id === 'copy-namespace-custom-query-csv'
       )
     ).toBe(false);
   });
@@ -797,8 +797,8 @@ describe('NsViewCustom', () => {
   // tests drive the behavior by inspecting / calling the rendered
   // element's `onClick` prop directly.
   describe('CRD column', () => {
-    const findColumn = (props: any, key: string) =>
-      props.columns.find((col: any) => col.key === key);
+    const findColumn = (props: unknown, key: string) =>
+      props.columns.find((col: unknown) => col.key === key);
 
     it('adds a CRD column that renders the row crdName', async () => {
       const resource: CustomResourceData = {
@@ -818,12 +818,12 @@ describe('NsViewCustom', () => {
 
       // Interactive cells render as a `<span role="button">` with the
       // CRD name as their child text.
-      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+      const rendered = crdCol.render(resource) as React.ReactElement<unknown>;
       expect(rendered).toBeTruthy();
-      expect((rendered as any).type).toBe('span');
-      expect((rendered as any).props.role).toBe('button');
-      expect((rendered as any).props.children).toBe('dbinstances.rds.services.k8s.aws');
-      expect((rendered as any).props.title).toBe('Open dbinstances.rds.services.k8s.aws');
+      expect((rendered as unknown).type).toBe('span');
+      expect((rendered as unknown).props.role).toBe('button');
+      expect((rendered as unknown).props.children).toBe('dbinstances.rds.services.k8s.aws');
+      expect((rendered as unknown).props.title).toBe('Open dbinstances.rds.services.k8s.aws');
     });
 
     it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
@@ -839,13 +839,13 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
-      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+      const rendered = crdCol.render(resource) as React.ReactElement<unknown>;
 
       // The rendered span carries the click handler. Drive it directly
       // with a synthetic event that doesn't have altKey set (so the
       // primary onClick fires, not onAltClick).
       openWithObjectMock.mockClear();
-      const onClick = (rendered as any).props.onClick as (e: any) => void;
+      const onClick = (rendered as unknown).props.onClick as (e: unknown) => void;
       expect(onClick).toBeTypeOf('function');
       onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
 
@@ -896,8 +896,8 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const sortableKeys = gridProps.columns
-        .filter((column: any) => column.sortable !== false)
-        .map((column: any) => column.key)
+        .filter((column: unknown) => column.sortable !== false)
+        .map((column: unknown) => column.key)
         .sort((left: string, right: string) => left.localeCompare(right));
 
       expect(sortableKeys).toEqual(['age', 'kind', 'name', 'namespace']);
@@ -943,10 +943,10 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const statusCol = findColumn(gridProps, 'status');
-      const rendered = statusCol.render(resource) as React.ReactElement<any>;
+      const rendered = statusCol.render(resource) as React.ReactElement<unknown>;
 
-      expect((rendered as any).props.children).toBe('Not Ready');
-      expect((rendered as any).props.className).toBe('status-text warning');
+      expect((rendered as unknown).props.children).toBe('Not Ready');
+      expect((rendered as unknown).props.className).toBe('status-text warning');
     });
   });
 });

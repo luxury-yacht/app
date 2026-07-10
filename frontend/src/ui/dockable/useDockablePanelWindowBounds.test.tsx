@@ -43,7 +43,7 @@ const Harness: React.FC<{
   return null;
 };
 
-const renderHarness = async (panelState: any, options: any) => {
+const renderHarness = async (panelState: unknown, options: unknown) => {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = ReactDOM.createRoot(host);

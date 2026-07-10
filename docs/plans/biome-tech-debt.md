@@ -187,11 +187,22 @@ Progress as of 2026-07-10:
   test files; `vitest.setup.ts` remains the shared owner.
 - ✅ Removed the remaining typed per-file `IS_REACT_ACT_ENVIRONMENT` assignments; the shared setup
   is now the only owner.
-- ✅ Current strict audit: 803 explicit-`any` and 928 non-null-assertion diagnostics remain. The
+- ✅ `src/modules/resource-grid` now enforces both rules; its 28 diagnostics were replaced with
+  typed production-contract mocks, fail-fast value/state-publisher helpers, validated React
+  pagination elements, and direct age-cell rendering in the test probe.
+- ✅ `src/core/codemirror` now enforces both rules; its 19 diagnostics were replaced with typed
+  CodeMirror mock functions, one explicit partial-`EditorView` fixture boundary, and `requireValue`
+  checks for captured bindings and DOM fixtures.
+- ✅ `src/ui/settings/sections` now enforces both rules; its 22 DOM lookup assertions now fail at
+  lookup time with fixture-specific `requireValue` messages.
+- ✅ `src/ui/command-palette` now enforces both rules; its 22 diagnostics were replaced with a shared
+  required-input lookup, typed snapshot options, descriptor-safe property cleanup, and the typed
+  window-property harness.
+- ✅ Current strict audit: 758 explicit-`any` and 882 non-null-assertion diagnostics remain. The
   largest concentrations are shared tables, object-panel components, namespace components,
   dockable panels, refresh streaming, and object-map tests.
-- ⏳ The next audited boundary is `src/modules/resource-grid`, with 28 diagnostics concentrated in
-  GridTable mock props, typed query mock calls, pagination React elements, and hook-result checks.
+- ⏳ The next boundary should remain a narrow directory or file from the measured inventory; the
+  broad test override stays in place only for test paths not yet listed in the strict override.
 
 - ✅ Inventory explicit `any` by mock boundary and introduce shared typed factories.
 - ✅ Inventory non-null assertions by pattern and introduce assertion helpers.

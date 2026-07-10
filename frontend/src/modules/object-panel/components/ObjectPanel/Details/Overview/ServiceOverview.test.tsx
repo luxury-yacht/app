@@ -9,7 +9,7 @@ import { serviceDescriptor } from './descriptors/service';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -79,7 +79,7 @@ describe('ServiceOverview', () => {
         labels: {},
         annotations: {},
         selector: { app: 'web' },
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Type')?.textContent).toBe('LoadBalancer');
@@ -119,7 +119,7 @@ describe('ServiceOverview', () => {
         labels: {},
         annotations: {},
         selector: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'External Name')?.textContent).toBe('api.example.com');

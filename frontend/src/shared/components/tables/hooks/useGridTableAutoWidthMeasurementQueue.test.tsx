@@ -16,6 +16,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type Row = { id: string; name: string };
 
@@ -86,7 +87,10 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
 
     // Fire an autoSize event.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'autoSize',
         columns: ['col-a'],
       });
@@ -103,7 +107,10 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
 
     // Fire an autoSize event first.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'autoSize',
         columns: ['col-a'],
       });
@@ -115,7 +122,10 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
     // Subsequent data-driven mark should work — phase must not be
     // permanently stuck in dragging.
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-b']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-b']);
     });
 
     expect(phaseRef.current).not.toBe('dragging');
@@ -192,13 +202,19 @@ describe('useDirtyQueue debounce and retry', () => {
     const { resultRef, dirtyColumns } = setupHookWithMeasurer();
 
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-a']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-a']);
     });
     expect(dirtyColumns.has('col-a')).toBe(true);
 
     // Mark another column before the debounce fires.
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-b']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-b']);
     });
     expect(dirtyColumns.has('col-b')).toBe(true);
 
@@ -214,7 +230,10 @@ describe('useDirtyQueue debounce and retry', () => {
     phaseRef.current = 'dragging';
 
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-a']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-a']);
     });
 
     // Should not have queued anything.
@@ -228,7 +247,10 @@ describe('useDirtyQueue debounce and retry', () => {
     options.manuallyResizedColumnsRef.current.add('col-a');
 
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-a', 'col-b']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-a', 'col-b']);
     });
 
     // col-a should be skipped, col-b should be queued.
@@ -240,7 +262,10 @@ describe('useDirtyQueue debounce and retry', () => {
     const { resultRef, options } = setupHookWithMeasurer();
 
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'autoSize',
         columns: ['col-a'],
       });
@@ -253,7 +278,10 @@ describe('useDirtyQueue debounce and retry', () => {
     const { resultRef, phaseRef } = setupHookWithMeasurer();
 
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
@@ -267,7 +295,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // Start a drag.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
@@ -276,7 +307,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // End the drag.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragEnd',
         columns: ['col-a'],
       });
@@ -289,7 +323,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // 1. Start a drag — phase should be dragging.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
@@ -298,7 +335,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // 2. End the drag — phase must return to idle.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragEnd',
         columns: ['col-a'],
       });
@@ -308,7 +348,10 @@ describe('useDirtyQueue debounce and retry', () => {
     // 3. Simulate a data change after the drag cycle completes.
     dirtyColumns.clear();
     act(() => {
-      resultRef.current!.markColumnsDirty(['col-a']);
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).markColumnsDirty(['col-a']);
     });
 
     // col-a must be queued — the phase gate should be open again.
@@ -320,7 +363,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // Perform a full drag cycle first.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
@@ -330,7 +376,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // End drag.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'dragEnd',
         columns: ['col-a'],
       });
@@ -338,7 +387,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     // Reset should stay in idle and queue all columns.
     act(() => {
-      resultRef.current!.handleManualResizeEvent({
+      requireValue(
+        resultRef.current,
+        'expected test value in useGridTableAutoWidthMeasurementQueue.test.tsx'
+      ).handleManualResizeEvent({
         type: 'reset',
         columns: ['col-a'],
       });

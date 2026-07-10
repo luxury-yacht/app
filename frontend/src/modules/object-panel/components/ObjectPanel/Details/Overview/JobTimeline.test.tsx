@@ -6,6 +6,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { JobTimeline } from './JobTimeline';
 
 describe('JobTimeline', () => {
@@ -127,7 +128,7 @@ describe('JobTimeline', () => {
     const bar = container.querySelector<HTMLButtonElement>('.job-timeline-bar--clickable');
     expect(bar).toBeTruthy();
     await act(async () => {
-      bar!.click();
+      requireValue(bar, 'expected test value in JobTimeline.test.tsx').click();
     });
     expect(onJobClick).toHaveBeenCalledWith('job-a');
   });
@@ -155,7 +156,7 @@ describe('JobTimeline', () => {
     ).find((b) => b.textContent === '12h');
     expect(twelveHourBtn).toBeTruthy();
     await act(async () => {
-      twelveHourBtn!.click();
+      requireValue(twelveHourBtn, 'expected test value in JobTimeline.test.tsx').click();
     });
     expect(container.querySelectorAll('.job-timeline-bar')).toHaveLength(1);
   });

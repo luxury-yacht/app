@@ -33,14 +33,14 @@ const {
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
+  confirmationPropsRef: { current: null as unknown },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
-const renderOutputToText = (output: any): string => {
+const renderOutputToText = (output: unknown): string => {
   if (typeof output === 'string') {
     return output;
   }
@@ -82,12 +82,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -110,7 +110,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -148,7 +148,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -220,7 +220,7 @@ describe('NsViewStorage', () => {
 
   const getColumn = (key: string) => {
     const props = gridTablePropsRef.current;
-    return props?.columns?.find((column: any) => column.key === key);
+    return props?.columns?.find((column: unknown) => column.key === key);
   };
 
   it('invokes object panel for resource actions', async () => {
@@ -228,7 +228,7 @@ describe('NsViewStorage', () => {
     const props = await renderStorageView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -245,7 +245,7 @@ describe('NsViewStorage', () => {
       })
     );
 
-    const objectMapItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -286,7 +286,7 @@ describe('NsViewStorage', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -314,7 +314,7 @@ describe('NsViewStorage', () => {
     const entry = baseStorage();
     const props = await renderStorageView();
 
-    const storageColumn = props.columns.find((column: any) => column.key === 'storageClass');
+    const storageColumn = props.columns.find((column: unknown) => column.key === 'storageClass');
     expect(storageColumn).toBeTruthy();
 
     const renderedCell = storageColumn.render(entry);
@@ -340,7 +340,7 @@ describe('NsViewStorage', () => {
 
     expect(props.keyExtractor(entry)).toBe('cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data');
 
-    const storageColumn = props.columns.find((column: any) => column.key === 'storageClass');
+    const storageColumn = props.columns.find((column: unknown) => column.key === 'storageClass');
     const renderedCell = storageColumn.render(entry);
 
     act(() => {
@@ -412,7 +412,7 @@ describe('NsViewStorage', () => {
     const props = await renderStorageView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
 
     act(() => {
       deleteItem?.onClick?.();

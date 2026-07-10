@@ -6,6 +6,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import type { PanelObjectData } from '../types';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
@@ -96,7 +97,8 @@ describe('useObjectPanelRefresh', () => {
     });
 
     return {
-      getResult: () => resultRef.current!,
+      getResult: () =>
+        requireValue(resultRef.current, 'expected test value in useObjectPanelRefresh.test.tsx'),
       rerender: async (next?: Partial<Parameters<typeof useObjectPanelRefresh>[0]>) => {
         propsRef.current = { ...propsRef.current, ...next };
         await act(async () => {

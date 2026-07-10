@@ -29,11 +29,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -97,7 +97,7 @@ describe('ConfigMapOverview', () => {
         usedBy: [podRef('pod-a', 'default'), podRef('pod-b', 'default')],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     // Data/Binary key counts are intentionally not surfaced in the overview —
@@ -132,7 +132,7 @@ describe('ConfigMapOverview', () => {
         usedBy: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const usedByValue = getValueForLabel('Used By');

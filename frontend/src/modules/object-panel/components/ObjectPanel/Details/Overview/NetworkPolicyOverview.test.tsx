@@ -9,7 +9,7 @@ import { networkPolicyDescriptor } from './descriptors/networkpolicy';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -91,7 +91,7 @@ describe('NetworkPolicyOverview', () => {
         ],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Pod Selector')?.textContent).toContain('app=web');
@@ -114,7 +114,7 @@ describe('NetworkPolicyOverview', () => {
         policyTypes: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Pod Selector')?.textContent).toBe('All pods in namespace');

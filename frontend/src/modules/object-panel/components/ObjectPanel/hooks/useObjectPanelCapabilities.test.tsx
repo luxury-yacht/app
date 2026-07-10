@@ -6,6 +6,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import type { FeatureSupport, PanelObjectData } from '../types';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
@@ -45,7 +46,10 @@ describe('useObjectPanelCapabilities', () => {
       await Promise.resolve();
     });
 
-    return resultRef.current!;
+    return requireValue(
+      resultRef.current,
+      'expected test value in useObjectPanelCapabilities.test.tsx'
+    );
   };
 
   const baseFeatureSupport: FeatureSupport = {

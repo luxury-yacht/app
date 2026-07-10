@@ -24,14 +24,14 @@ const {
   queryNamespacesPermissionsMock,
   POD_PERMISSIONS_SENTINEL,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
   mockOpenWithObject: vi.fn(),
-  objectPanelRef: { current: null as any },
+  objectPanelRef: { current: null as unknown },
   navigateToViewMock: vi.fn(),
   useTableSortMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
   useGridTablePersistenceMock: vi.fn(),
-  clusterMetricsRef: { current: null as any },
+  clusterMetricsRef: { current: null as unknown },
   queryNamespacesPermissionsMock: vi.fn(),
   POD_PERMISSIONS_SENTINEL: { feature: 'namespace-pods', specs: [] },
 }));
@@ -100,12 +100,12 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     gridTablePropsRef.current = props;
     return (
       <table data-testid="grid-table">
         <tbody>
-          {props.data.map((row: any) => (
+          {props.data.map((row: unknown) => (
             <tr key={row.name}>
               <td>{row.name}</td>
             </tr>
@@ -122,11 +122,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => useTableSortMock(...args),
+  useTableSort: (...args: unknown[]) => useTableSortMock(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (...args: any[]) => useGridTablePersistenceMock(...args),
+  useGridTablePersistence: (...args: unknown[]) => useGridTablePersistenceMock(...args),
 }));
 
 vi.mock('@/core/data-access', async (importOriginal) => {
@@ -370,7 +370,9 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const statusColumn = gridTablePropsRef.current.columns.find(
+      (col: unknown) => col.key === 'status'
+    );
     const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
     expect(cell.props.className).toBe('status-text warning');
   });
@@ -383,7 +385,7 @@ describe('PodsTab (query-backed)', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -413,9 +415,9 @@ describe('PodsTab (query-backed)', () => {
       gridTablePropsRef.current.data[0]
     );
     const portForwardItem = items.find(
-      (item: any) => item.actionId === OBJECT_ACTION_IDS.portForward
+      (item: unknown) => item.actionId === OBJECT_ACTION_IDS.portForward
     );
-    const deleteItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.delete);
+    const deleteItem = items.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.delete);
 
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem.disabled).toBeFalsy();
@@ -430,7 +432,7 @@ describe('PodsTab (query-backed)', () => {
 
     const portForwardItem = gridTablePropsRef.current
       .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.portForward);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.portForward);
 
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem.disabled).toBe(true);

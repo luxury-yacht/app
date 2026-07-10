@@ -9,6 +9,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const openWithObject = vi.fn();
 const navigateToView = vi.fn();
@@ -48,7 +49,10 @@ describe('ObjectPanelLink', () => {
         </ObjectPanelLink>
       );
     });
-    return container.querySelector<HTMLElement>('.object-panel-link')!;
+    return requireValue(
+      container.querySelector<HTMLElement>('.object-panel-link'),
+      'expected test value in ObjectPanelLink.test.tsx'
+    );
   };
   const click = (el: HTMLElement, altKey: boolean) =>
     act(() => {

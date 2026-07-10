@@ -25,7 +25,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 const { gridTablePropsRef, openWithObjectMock } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
   openWithObjectMock: vi.fn(),
 }));
 
@@ -57,7 +57,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -108,7 +108,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -165,7 +165,7 @@ describe('NsViewAutoscaling', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

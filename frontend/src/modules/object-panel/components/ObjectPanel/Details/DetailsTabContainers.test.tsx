@@ -9,7 +9,7 @@ import Containers from './DetailsTabContainers';
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 describe('DetailsTabContainers', () => {

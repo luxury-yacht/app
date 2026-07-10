@@ -6,6 +6,7 @@
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import { describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   computeObjectMapLayout,
   OBJECT_MAP_COLUMN_GAP,
@@ -51,9 +52,18 @@ describe('computeObjectMapLayout', () => {
       edge('e2', 'rs', 'pod', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const seed = layout.nodes.find((n) => n.id === 'seed')!;
-    const rs = layout.nodes.find((n) => n.id === 'rs')!;
-    const pod = layout.nodes.find((n) => n.id === 'pod')!;
+    const seed = requireValue(
+      layout.nodes.find((n) => n.id === 'seed'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const rs = requireValue(
+      layout.nodes.find((n) => n.id === 'rs'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const pod = requireValue(
+      layout.nodes.find((n) => n.id === 'pod'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(seed.column).toBe(0);
     expect(rs.column).toBe(1);
     expect(pod.column).toBe(2);
@@ -74,9 +84,24 @@ describe('computeObjectMapLayout', () => {
       edge('e2', 'rs', 'seed', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    expect(layout.nodes.find((n) => n.id === 'seed')!.column).toBe(0);
-    expect(layout.nodes.find((n) => n.id === 'rs')!.column).toBe(-1);
-    expect(layout.nodes.find((n) => n.id === 'dep')!.column).toBe(-2);
+    expect(
+      requireValue(
+        layout.nodes.find((n) => n.id === 'seed'),
+        'expected test value in objectMapLayout.test.ts'
+      ).column
+    ).toBe(0);
+    expect(
+      requireValue(
+        layout.nodes.find((n) => n.id === 'rs'),
+        'expected test value in objectMapLayout.test.ts'
+      ).column
+    ).toBe(-1);
+    expect(
+      requireValue(
+        layout.nodes.find((n) => n.id === 'dep'),
+        'expected test value in objectMapLayout.test.ts'
+      ).column
+    ).toBe(-2);
   });
 
   it('pulls graph sources rightward to sit adjacent to their successors', () => {
@@ -100,14 +125,23 @@ describe('computeObjectMapLayout', () => {
       edge('e4', 'nodeclaim', 'node', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const nodeRow = layout.nodes.find((n) => n.id === 'node')!;
-    const nc = layout.nodes.find((n) => n.id === 'nodeclaim')!;
+    const nodeRow = requireValue(
+      layout.nodes.find((n) => n.id === 'node'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const nc = requireValue(
+      layout.nodes.find((n) => n.id === 'nodeclaim'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(nodeRow.column).toBe(3);
     expect(nc.column).toBe(2);
     expect(nodeRow.column - nc.column).toBe(1);
     // The NodeClaim → Node edge must span exactly one column and stay
     // forward-going (no same-column, no backward).
-    const owned = layout.edges.find((e) => e.id === 'e4')!;
+    const owned = requireValue(
+      layout.edges.find((e) => e.id === 'e4'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(owned.sameColumn).toBe(false);
   });
 
@@ -128,8 +162,14 @@ describe('computeObjectMapLayout', () => {
       edge('e3', 'svc', 'es', 'endpoint'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const svc = layout.nodes.find((n) => n.id === 'svc')!;
-    const es = layout.nodes.find((n) => n.id === 'es')!;
+    const svc = requireValue(
+      layout.nodes.find((n) => n.id === 'svc'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const es = requireValue(
+      layout.nodes.find((n) => n.id === 'es'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(svc.column).not.toBe(es.column);
     layout.edges.forEach((e) => {
       expect(e.sameColumn).toBe(false);
@@ -147,8 +187,14 @@ describe('computeObjectMapLayout', () => {
       edge('e2', 'seed', 'rs2', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const rs1 = layout.nodes.find((n) => n.id === 'rs1')!;
-    const rs2 = layout.nodes.find((n) => n.id === 'rs2')!;
+    const rs1 = requireValue(
+      layout.nodes.find((n) => n.id === 'rs1'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const rs2 = requireValue(
+      layout.nodes.find((n) => n.id === 'rs2'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(rs1.column).toBe(rs2.column);
     expect(rs1.y).toBeLessThan(rs2.y);
   });
@@ -170,10 +216,22 @@ describe('computeObjectMapLayout', () => {
       edge('e2', 'rs-bot', 'pod-a', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const rsTop = layout.nodes.find((n) => n.id === 'rs-top')!;
-    const rsBot = layout.nodes.find((n) => n.id === 'rs-bot')!;
-    const podZ = layout.nodes.find((n) => n.id === 'pod-z')!;
-    const podA = layout.nodes.find((n) => n.id === 'pod-a')!;
+    const rsTop = requireValue(
+      layout.nodes.find((n) => n.id === 'rs-top'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const rsBot = requireValue(
+      layout.nodes.find((n) => n.id === 'rs-bot'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const podZ = requireValue(
+      layout.nodes.find((n) => n.id === 'pod-z'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const podA = requireValue(
+      layout.nodes.find((n) => n.id === 'pod-a'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(rsTop.y).toBeLessThan(rsBot.y);
     expect(podZ.y).toBeLessThan(podA.y);
   });
@@ -185,7 +243,10 @@ describe('computeObjectMapLayout', () => {
     ];
     const edges: ObjectMapEdge[] = [edge('e1', 'seed', 'rs', 'owner')];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const positioned = layout.edges.find((e) => e.id === 'e1')!;
+    const positioned = requireValue(
+      layout.edges.find((e) => e.id === 'e1'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(positioned.sameColumn).toBe(false);
     expect(positioned.d.startsWith('M ')).toBe(true);
     expect(positioned.d).toContain(' C ');
@@ -205,8 +266,14 @@ describe('computeObjectMapLayout', () => {
     ];
     const edges: ObjectMapEdge[] = [edge('e1', 'a', 'b', 'uses'), edge('e2', 'b', 'a', 'uses')];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const a = layout.nodes.find((n) => n.id === 'a')!;
-    const b = layout.nodes.find((n) => n.id === 'b')!;
+    const a = requireValue(
+      layout.nodes.find((n) => n.id === 'a'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const b = requireValue(
+      layout.nodes.find((n) => n.id === 'b'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     expect(a.column).toBe(b.column);
     const cycleEdges = layout.edges.filter((e) => e.sameColumn);
     expect(cycleEdges).toHaveLength(2);
@@ -235,9 +302,18 @@ describe('computeObjectMapLayout', () => {
       edge('e3', 'seed', 'svc', 'uses'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const cm = layout.nodes.find((n) => n.id === 'cm')!;
-    const rs = layout.nodes.find((n) => n.id === 'rs')!;
-    const svc = layout.nodes.find((n) => n.id === 'svc')!;
+    const cm = requireValue(
+      layout.nodes.find((n) => n.id === 'cm'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const rs = requireValue(
+      layout.nodes.find((n) => n.id === 'rs'),
+      'expected test value in objectMapLayout.test.ts'
+    );
+    const svc = requireValue(
+      layout.nodes.find((n) => n.id === 'svc'),
+      'expected test value in objectMapLayout.test.ts'
+    );
     // Kind ordering is alphabetic: ConfigMap, ReplicaSet, Service.
     expect(cm.y).toBeLessThan(rs.y);
     expect(rs.y).toBeLessThan(svc.y);
@@ -313,7 +389,10 @@ describe('computeObjectMapLayout', () => {
     ];
 
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const cm = layout.nodes.find((row) => row.id === 'cm')!;
+    const cm = requireValue(
+      layout.nodes.find((row) => row.id === 'cm'),
+      'expected test value in objectMapLayout.test.ts'
+    );
 
     expect(cm.column).toBe(2);
     expect(cm.x).toBe(COLUMN_STRIDE * 3);

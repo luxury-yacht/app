@@ -14,7 +14,7 @@ vi.mock('@shared/components/ResourceBar', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 describe('DetailsTabUtilization', () => {

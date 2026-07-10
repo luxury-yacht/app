@@ -34,7 +34,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -43,7 +43,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -184,7 +184,7 @@ describe('ClusterViewStorage', () => {
     });
 
     const statusColumn = gridTablePropsRef.current.columns.find(
-      (column: any) => column.key === 'status'
+      (column: unknown) => column.key === 'status'
     );
     const cell = statusColumn.render({
       ...basePV,
@@ -204,7 +204,7 @@ describe('ClusterViewStorage', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(basePV, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -6,6 +6,7 @@
 
 import type { GraphData } from '@antv/g6';
 import { describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { applyGraphData, createObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
@@ -48,7 +49,7 @@ const graph = () =>
     draw: vi.fn(() => Promise.resolve()),
     getViewportByCanvas: vi.fn(([x, y]: [number, number]) => [x * 2 + 10, y * 2 + 5]),
     translateBy: vi.fn(() => Promise.resolve()),
-  }) as any;
+  }) as unknown;
 
 const flushPromises = async () => {
   await Promise.resolve();
@@ -232,8 +233,8 @@ describe('applyGraphData', () => {
     await applyGraphData(g, previous, next);
 
     expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [next.nodes![0]],
-      edges: [next.edges![0]],
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
+      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
@@ -254,7 +255,7 @@ describe('applyGraphData', () => {
     await applyGraphData(g, previous, next);
 
     expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [next.nodes![0]],
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
@@ -274,7 +275,7 @@ describe('applyGraphData', () => {
     await applyGraphData(g, previous, next);
 
     expect(g.updateData).toHaveBeenCalledWith({
-      nodes: [next.nodes![0]],
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
@@ -308,7 +309,7 @@ describe('applyGraphData', () => {
     await applyGraphData(g, previous, next);
 
     expect(g.updateData).toHaveBeenCalledWith({
-      edges: [next.edges![0]],
+      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
@@ -352,7 +353,7 @@ describe('applyGraphData', () => {
     await applyGraphData(g, previous, next);
 
     expect(g.updateData).toHaveBeenCalledWith({
-      edges: [next.edges![0]],
+      edges: [requireValue(next.edges, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
@@ -389,7 +390,9 @@ describe('applyGraphData', () => {
 
     await applyGraphData(g, previous, next, { preserveViewportNodeId: 'pod' });
 
-    expect(g.updateData).toHaveBeenCalledWith({ nodes: [next.nodes![0]] });
+    expect(g.updateData).toHaveBeenCalledWith({
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
+    });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.translateBy).toHaveBeenCalledWith([40, -60], false);
   });

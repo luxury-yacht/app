@@ -12,6 +12,7 @@ import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableK
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const registeredSurfaces: Array<{
   kind: string;
@@ -128,7 +129,9 @@ describe('GridTableKeys filter target selectors', () => {
 
     const searchInput = el.querySelector<HTMLInputElement>(SELECTORS.search);
     expect(searchInput).not.toBeNull();
-    expect(searchInput!.tagName).toBe('INPUT');
+    expect(requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
+      'INPUT'
+    );
   });
 
   it('reset selector matches the reset button', async () => {
@@ -136,7 +139,9 @@ describe('GridTableKeys filter target selectors', () => {
 
     const resetBtn = el.querySelector<HTMLElement>(SELECTORS.reset);
     expect(resetBtn).not.toBeNull();
-    expect(resetBtn!.tagName).toBe('BUTTON');
+    expect(requireValue(resetBtn, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
+      'BUTTON'
+    );
   });
 
   it('kind selector matches the kind dropdown trigger', async () => {
@@ -162,7 +167,9 @@ describe('GridTableKeys filter target selectors', () => {
     // Search must always be reachable regardless of dropdown visibility.
     const searchInput = el.querySelector<HTMLInputElement>(SELECTORS.search);
     expect(searchInput).not.toBeNull();
-    expect(searchInput!.tagName).toBe('INPUT');
+    expect(requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
+      'INPUT'
+    );
   });
 
   it('columns selector matches the columns dropdown trigger', async () => {
@@ -272,7 +279,7 @@ describe('GridTableKeys filter target selectors', () => {
     const searchInput = container.querySelector<HTMLInputElement>(SELECTORS.search);
     expect(searchInput).not.toBeNull();
     await act(async () => {
-      searchInput!.focus();
+      requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').focus();
       await Promise.resolve();
     });
 

@@ -2,6 +2,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
+import { requireValue } from '@/test-utils/requireValue';
 import type { PermissionRow } from './diagnosticsPanelTypes';
 import { EffectivePermissionsTable } from './TableEffectivePermissions';
 
@@ -80,7 +81,10 @@ describe('EffectivePermissionsTable', () => {
     expect(search).toBeTruthy();
 
     await act(async () => {
-      setSearchValue(search!, 'namespace-299');
+      setSearchValue(
+        requireValue(search, 'expected test value in TableEffectivePermissions.test.tsx'),
+        'namespace-299'
+      );
       await Promise.resolve();
     });
 

@@ -1,6 +1,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import QueryPaginationControls from './QueryPaginationControls';
 
 describe('QueryPaginationControls', () => {
@@ -120,7 +121,10 @@ describe('QueryPaginationControls', () => {
         />
       );
     });
-    return container.querySelector<HTMLInputElement>('.query-pagination-page-jump-input')!;
+    return requireValue(
+      container.querySelector<HTMLInputElement>('.query-pagination-page-jump-input'),
+      'Expected the page-jump input after rendering pagination controls'
+    );
   };
 
   it('commits a page jump on blur (tab-out), clamped, same as Enter', () => {

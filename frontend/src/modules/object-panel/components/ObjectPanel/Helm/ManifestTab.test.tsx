@@ -42,15 +42,15 @@ const codeMirrorState = {
   },
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
+const CodeMirrorMock = React.forwardRef((_props: unknown, ref) => {
   const props = _props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView as unknown,
     };
   }
   React.useEffect(() => {
-    props.onCreateEditor?.(codeMirrorState.editorView as any);
+    props.onCreateEditor?.(codeMirrorState.editorView as unknown);
   }, [props]);
   return <div data-testid="code-mirror">{props.value}</div>;
 });

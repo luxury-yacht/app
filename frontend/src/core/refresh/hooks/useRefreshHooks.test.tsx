@@ -10,6 +10,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
 import type { RefreshCallback, RefreshContext, Refresher, RefresherState } from '../RefreshManager';
 import type { RefresherName } from '../refresherTypes';
 import { useRefreshContext } from './useRefreshContext';
@@ -243,7 +244,10 @@ describe('useRefreshWatcher', () => {
 
     const abortController = new AbortController();
     await act(async () => {
-      await subscription!(false, abortController.signal);
+      await requireValue(subscription, 'expected test value in useRefreshHooks.test.tsx')(
+        false,
+        abortController.signal
+      );
     });
 
     expect(onRefresh).toHaveBeenCalledWith(false, abortController.signal);

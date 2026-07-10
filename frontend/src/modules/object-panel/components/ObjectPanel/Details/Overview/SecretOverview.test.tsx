@@ -29,11 +29,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -97,7 +97,7 @@ describe('SecretOverview', () => {
         usedBy: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const typeValue = getValueForLabel(container, 'Type');
@@ -118,7 +118,7 @@ describe('SecretOverview', () => {
         usedBy: [podRef('pod-x', 'team')],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const podLink = getLinkByText(container, 'pod-x');
@@ -149,7 +149,7 @@ describe('SecretOverview', () => {
         usedBy: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const usedByValue = getValueForLabel(container, 'Used By');

@@ -34,7 +34,7 @@ afterEach(async () => {
   if (originalFetch) {
     globalThis.fetch = originalFetch;
   } else {
-    delete (globalThis as any).fetch;
+    delete (globalThis as unknown).fetch;
   }
 });
 
@@ -110,7 +110,7 @@ describe('fetchSnapshot', () => {
       headers,
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
     const controller = new AbortController();
@@ -137,7 +137,7 @@ describe('fetchSnapshot', () => {
 
   test('rejects a successful response without a snapshot payload', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown).fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({
@@ -160,7 +160,7 @@ describe('fetchSnapshot', () => {
 
   test('rejects a snapshot returned for a different domain', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown).fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({
@@ -193,7 +193,7 @@ describe('fetchSnapshot', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
     const result = await fetchSnapshot('catalog');
@@ -214,7 +214,7 @@ describe('fetchSnapshot', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
     await expect(fetchSnapshot('catalog')).rejects.toThrow('catalog sync failed');
@@ -238,7 +238,7 @@ describe('fetchSnapshot', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchSnapshot, SnapshotPermissionDeniedError } = await import('./client');
 
     // Typed, not just a message: the orchestrator marks the scope
@@ -260,7 +260,7 @@ describe('fetchSnapshot', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchSnapshot } = await import('./client');
 
     await expect(fetchSnapshot('catalog')).rejects.toThrow(
@@ -297,7 +297,7 @@ describe('fetchTelemetrySummary', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchTelemetrySummary } = await import('./client');
 
     await expect(fetchTelemetrySummary()).resolves.toEqual(summary);
@@ -308,7 +308,7 @@ describe('fetchTelemetrySummary', () => {
 
   test('rejects a successful response that does not match the telemetry contract', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown).fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
@@ -325,7 +325,7 @@ describe('fetchTelemetrySummary', () => {
 
   test('rejects nested telemetry fields that do not match the backend DTO', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown).fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
@@ -368,7 +368,7 @@ describe('fetchTelemetrySummary', () => {
 
   test('normalizes nullable telemetry collections for frontend consumers', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+    (globalThis as unknown).fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
@@ -409,7 +409,7 @@ describe('fetchTelemetrySummary', () => {
       headers: new Headers(),
     });
 
-    (globalThis as any).fetch = fetchMock;
+    (globalThis as unknown).fetch = fetchMock;
     const { fetchTelemetrySummary } = await import('./client');
 
     await expect(fetchTelemetrySummary()).rejects.toThrow(

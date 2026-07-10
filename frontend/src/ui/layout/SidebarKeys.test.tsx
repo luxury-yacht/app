@@ -9,6 +9,7 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   describeElementTarget,
   type SidebarCursorTarget,
@@ -278,9 +279,13 @@ describe('useSidebarKeyboardControls', () => {
     const { container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
-    const sidebarRoot = container.querySelector<HTMLElement>(
-      '[data-sidebar-target-kind="overview"]'
-    )!.parentElement!;
+    const sidebarRoot = requireValue(
+      requireValue(
+        container.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]'),
+        'expected test value in SidebarKeys.test.tsx'
+      ).parentElement,
+      'expected test value in SidebarKeys.test.tsx'
+    );
     const input = document.createElement('input');
     sidebarRoot.appendChild(input);
     input.focus();
@@ -316,12 +321,18 @@ describe('useSidebarKeyboardControls', () => {
     const { ref, container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
-    const overview = container.querySelector('[data-sidebar-target-kind="overview"]')!;
+    const overview = requireValue(
+      container.querySelector('[data-sidebar-target-kind="overview"]'),
+      'expected test value in SidebarKeys.test.tsx'
+    );
     expect(overview.className).toContain('active');
     act(() => {
       ref.current?.setCursorPreview({ kind: 'cluster-view', view: 'nodes' });
     });
-    const nodes = container.querySelector('[data-sidebar-target-view="nodes"]')!;
+    const nodes = requireValue(
+      container.querySelector('[data-sidebar-target-view="nodes"]'),
+      'expected test value in SidebarKeys.test.tsx'
+    );
     expect(nodes.className).toContain('keyboard-preview');
     cleanup();
   });
@@ -450,7 +461,10 @@ describe('useSidebarKeyboardControls', () => {
     });
     expect(document.activeElement).toBe(overview);
 
-    const sidebar = container.querySelector('[data-testid="sidebar"]')!;
+    const sidebar = requireValue(
+      container.querySelector('[data-testid="sidebar"]'),
+      'expected test value in SidebarKeys.test.tsx'
+    );
     await act(async () => {
       overview.focus();
       await Promise.resolve();
@@ -464,7 +478,10 @@ describe('useSidebarKeyboardControls', () => {
       });
     };
     await fireKey('ArrowDown');
-    const nodes = container.querySelector('[data-sidebar-target-view="nodes"]')!;
+    const nodes = requireValue(
+      container.querySelector('[data-sidebar-target-view="nodes"]'),
+      'expected test value in SidebarKeys.test.tsx'
+    );
     expect(nodes.className).toContain('keyboard-preview');
     expect(ref.current?.isKeyboardNavActive).toBe(true);
 
@@ -490,7 +507,10 @@ describe('useSidebarKeyboardControls', () => {
       selectionTarget: { kind: 'overview' },
       onClearPreview,
     });
-    const sidebar = container.querySelector('[data-testid="sidebar"]')!;
+    const sidebar = requireValue(
+      container.querySelector('[data-testid="sidebar"]'),
+      'expected test value in SidebarKeys.test.tsx'
+    );
     const overview = container.querySelector(
       '[data-sidebar-target-kind="overview"]'
     ) as HTMLElement;

@@ -15,7 +15,7 @@ vi.mock('react-dom', async () => {
   const actual = await vi.importActual<typeof import('react-dom')>('react-dom');
   return {
     ...actual,
-    createPortal: vi.fn((element: any) => element),
+    createPortal: vi.fn((element: unknown) => element),
   };
 });
 
@@ -78,7 +78,7 @@ const renderTooltipInside = async (
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.mocked(ReactDOM.createPortal).mockImplementation((element: any) => element as any);
+  vi.mocked(ReactDOM.createPortal).mockImplementation((element: unknown) => element as unknown);
   vi.useRealTimers();
 });
 

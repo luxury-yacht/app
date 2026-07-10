@@ -48,7 +48,7 @@ const {
       })
     ),
     useTableSortMock: vi.fn(
-      (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
+      (data: unknown[], _defaultKey?: string, _defaultDir?: unknown, opts?: unknown) => {
         latestRows.current = data;
         return {
           sortedData: data,
@@ -87,8 +87,8 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
-const loadingBoundaryPropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
+const loadingBoundaryPropsRef: { current: unknown } = { current: null };
 const openWithObjectMock = vi.fn();
 const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
 
@@ -98,7 +98,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -130,7 +130,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+  useTableSort: (...args: unknown[]) => (useTableSortMock as unknown)(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -341,7 +341,7 @@ describe('ClusterViewNodes', () => {
     const memoryColumn = columns.find((column) => column.key === 'memory');
     const ageColumn = columns.find((column) => column.key === 'age');
 
-    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3/50' } as any)).toBe(3);
+    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3/50' } as unknown)).toBe(3);
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
     expect(
@@ -364,7 +364,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusColumn = props.columns.find((column: unknown) => column.key === 'status');
     const statusCell = statusColumn.render(props.data[0]);
     const badge = statusCell.props.children[0];
 
@@ -384,7 +384,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusColumn = props.columns.find((column: unknown) => column.key === 'status');
     const statusCell = statusColumn.render(props.data[0]);
     const badge = statusCell.props.children[0];
 
@@ -403,7 +403,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusColumn = props.columns.find((column: unknown) => column.key === 'status');
     const statusCell = statusColumn.render(props.data[0]);
     const badge = statusCell.props.children[0];
 
@@ -422,7 +422,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusColumn = props.columns.find((column: unknown) => column.key === 'status');
     const statusCell = statusColumn.render(props.data[0]);
     const badge = statusCell.props.children[0];
 
@@ -434,7 +434,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
-    const nameColumn = props.columns.find((column: any) => column.key === 'name');
+    const nameColumn = props.columns.find((column: unknown) => column.key === 'name');
     const cell = nameColumn.render(props.data[0]);
 
     // Trigger the column click handler to exercise object navigation.
@@ -458,7 +458,7 @@ describe('ClusterViewNodes', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(baseNode, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

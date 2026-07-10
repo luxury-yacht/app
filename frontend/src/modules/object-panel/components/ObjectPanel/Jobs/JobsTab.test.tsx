@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobsTab } from './JobsTab';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   sortConfig: null,
   setSortConfig: vi.fn(),
@@ -27,7 +27,7 @@ const mockUseGridTablePersistence = vi.fn().mockReturnValue({
 });
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (...args: any[]) => mockUseGridTablePersistence(...args),
+  useGridTablePersistence: (...args: unknown[]) => mockUseGridTablePersistence(...args),
 }));
 
 const PANEL_CLUSTER_ID = 'panel-cluster-A';
@@ -75,7 +75,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     gridTablePropsRef.current = props;
     return <div data-testid="grid-table" />;
   },
@@ -219,7 +219,9 @@ describe('JobsTab', () => {
       );
     });
 
-    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
+    const statusColumn = gridTablePropsRef.current.columns.find(
+      (col: unknown) => col.key === 'status'
+    );
     const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
     expect(cell.props.className).toBe('status-text error');
   });
@@ -234,8 +236,8 @@ describe('JobsTab', () => {
     });
 
     const sortableKeys = gridTablePropsRef.current.columns
-      .filter((column: any) => column.sortable !== false)
-      .map((column: any) => column.key)
+      .filter((column: unknown) => column.sortable !== false)
+      .map((column: unknown) => column.key)
       .sort((left: string, right: string) => left.localeCompare(right));
     expect(sortableKeys).toEqual(['age', 'completions', 'duration', 'name', 'namespace', 'status']);
   });
@@ -252,7 +254,7 @@ describe('JobsTab', () => {
       );
     });
 
-    const ageColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'age');
+    const ageColumn = gridTablePropsRef.current.columns.find((col: unknown) => col.key === 'age');
     const cellContainer = document.createElement('div');
     document.body.appendChild(cellContainer);
     const cellRoot = ReactDOM.createRoot(cellContainer);
@@ -284,7 +286,7 @@ describe('JobsTab', () => {
     const row = gridTablePropsRef.current.data[0];
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(row)
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

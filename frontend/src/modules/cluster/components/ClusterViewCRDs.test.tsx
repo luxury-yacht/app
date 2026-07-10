@@ -33,7 +33,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -41,7 +41,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -165,8 +165,8 @@ describe('ClusterViewCRDs', () => {
   // CRD also serves additional versions. See
 
   describe('Version column', () => {
-    const findVersionColumn = (props: any) =>
-      props.columns.find((col: any) => col.key === 'version');
+    const findVersionColumn = (props: unknown) =>
+      props.columns.find((col: unknown) => col.key === 'version');
 
     it('renders bare storage version when there are no extra served versions', async () => {
       const singleVersion = {

@@ -130,12 +130,12 @@ describe('columnFactories', () => {
       expect(span.props['data-gridtable-shortcut-optout']).toBe('true');
       expect(span.props['data-gridtable-rowclick']).toBe('allow');
 
-      span.props.onClick?.({ stopPropagation() {} } as any);
+      span.props.onClick?.({ stopPropagation() {} } as unknown);
       span.props.onKeyDown?.({
         key: 'Enter',
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      } as any);
+      } as unknown);
 
       expect(onClick).toHaveBeenCalledTimes(2);
     });
@@ -194,12 +194,12 @@ describe('columnFactories', () => {
       expect(badge.props['data-gridtable-shortcut-optout']).toBe('true');
       expect(badge.props['data-gridtable-rowclick']).toBe('allow');
 
-      badge.props.onClick?.({ stopPropagation() {} } as any);
+      badge.props.onClick?.({ stopPropagation() {} } as unknown);
       badge.props.onKeyDown?.({
         key: ' ',
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      } as any);
+      } as unknown);
       expect(onKindClick).toHaveBeenCalledTimes(2);
     });
   });

@@ -15,7 +15,7 @@ vi.mock('react-dom', async () => {
   const actual = await vi.importActual<typeof import('react-dom')>('react-dom');
   return {
     ...actual,
-    createPortal: vi.fn((element: any) => element),
+    createPortal: vi.fn((element: unknown) => element),
   };
 });
 
@@ -47,7 +47,7 @@ const renderBar = async (props: React.ComponentProps<typeof ResourceBar>) => {
 };
 
 beforeEach(() => {
-  vi.mocked(ReactDOM.createPortal).mockImplementation((element: any) => element as any);
+  vi.mocked(ReactDOM.createPortal).mockImplementation((element: unknown) => element as unknown);
   vi.useRealTimers();
 });
 
@@ -249,7 +249,7 @@ describe('ResourceBar', () => {
   it('handles unbounded usage and resets animations when RAF is unavailable', async () => {
     const originalRAF = window.requestAnimationFrame;
     // Simulate environments without requestAnimationFrame (e.g., server-side render)
-    delete (window as any).requestAnimationFrame;
+    delete (window as unknown).requestAnimationFrame;
 
     const metricsTimestamp = new Date();
     const { container, root, cleanup } = await renderBar({
@@ -280,7 +280,7 @@ describe('ResourceBar', () => {
     if (originalRAF) {
       window.requestAnimationFrame = originalRAF;
     } else {
-      delete (window as any).requestAnimationFrame;
+      delete (window as unknown).requestAnimationFrame;
     }
   });
 

@@ -31,23 +31,25 @@ const {
   useTableSortMock,
   requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
   openWithObjectMock: vi.fn(),
-  persistedSortRef: { current: null as any },
+  persistedSortRef: { current: null as unknown },
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
-  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
-    const fallbackSort = defaultKey
-      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-      : { key: '', direction: null };
-    return {
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? fallbackSort,
-      handleSort: vi.fn(),
-    };
-  }),
+  useTableSortMock: vi.fn(
+    (data: unknown[], defaultKey?: string, defaultDir?: unknown, opts?: unknown) => {
+      const fallbackSort = defaultKey
+        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+        : { key: '', direction: null };
+      return {
+        sortedData: data,
+        sortConfig: opts?.controlledSort ?? fallbackSort,
+        handleSort: vi.fn(),
+      };
+    }
+  ),
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -79,12 +81,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.reason}</td>
@@ -115,7 +117,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+  useTableSort: (...args: unknown[]) => (useTableSortMock as unknown)(...args),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -177,7 +179,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@/utils/ageFormatter', () => ({
@@ -252,7 +254,7 @@ describe('NsViewEvents', () => {
   const renderEventsView = async (
     showNamespaceColumnOrOptions:
       | boolean
-      | { namespace?: string; showNamespaceColumn?: boolean; stats?: any } = true
+      | { namespace?: string; showNamespaceColumn?: boolean; stats?: unknown } = true
   ) => {
     const options =
       typeof showNamespaceColumnOrOptions === 'boolean'
@@ -273,7 +275,7 @@ describe('NsViewEvents', () => {
   it('defines Age as the visible event timestamp sort column', async () => {
     const event = baseEvent({ ageTimestamp: 42 });
     const props = await renderEventsView();
-    const ageColumn = props.columns.find((column: any) => column.key === 'age');
+    const ageColumn = props.columns.find((column: unknown) => column.key === 'age');
 
     expect(ageColumn).toBeTruthy();
     expect(ageColumn.sortable).not.toBe(false);
@@ -306,12 +308,14 @@ describe('NsViewEvents', () => {
     const props = gridTablePropsRef.current;
 
     const menu = props.getCustomContextMenuItems(event, 'objectName');
-    const labels = menu.map((item: any) => item.label);
+    const labels = menu.map((item: unknown) => item.label);
     expect(labels).not.toContain(objectActionLabel(OBJECT_ACTION_IDS.goToTable));
     expect(labels).toContain('View Pod');
 
     await act(async () => {
-      menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)?.onClick?.();
+      menu
+        .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)
+        ?.onClick?.();
       await Promise.resolve();
     });
 
@@ -331,7 +335,7 @@ describe('NsViewEvents', () => {
     const event = baseEvent();
     const props = await renderEventsView();
 
-    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const objectNameColumn = props.columns.find((column: unknown) => column.key === 'objectName');
     expect(objectNameColumn).toBeTruthy();
 
     const cell = objectNameColumn.render(event);
@@ -371,7 +375,7 @@ describe('NsViewEvents', () => {
       objectApiVersion: undefined,
     });
     const props = await renderEventsView();
-    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const objectNameColumn = props.columns.find((column: unknown) => column.key === 'objectName');
     const cell = objectNameColumn.render(event);
 
     await act(async () => {
@@ -412,7 +416,7 @@ describe('NsViewEvents', () => {
   it('renders age from timestamp when available and falls back to provided age', async () => {
     const eventWithTimestamp = baseEvent({ ageTimestamp: 99, age: undefined });
     const props = await renderEventsView();
-    const ageColumn = props.columns.find((column: any) => column.key === 'age');
+    const ageColumn = props.columns.find((column: unknown) => column.key === 'age');
     const cell = ageColumn.render(eventWithTimestamp);
     expect(cell.props.timestamp).toBe(99);
     expect(cell.props.fallback).toBe('-');
@@ -420,7 +424,7 @@ describe('NsViewEvents', () => {
     formatAgeMock.mockClear();
     const eventWithAge = baseEvent({ ageTimestamp: undefined, age: '5m' });
     const fallbackProps = await renderEventsView();
-    const fallbackAgeColumn = fallbackProps.columns.find((column: any) => column.key === 'age');
+    const fallbackAgeColumn = fallbackProps.columns.find((column: unknown) => column.key === 'age');
     expect(fallbackAgeColumn.render(eventWithAge)).toBe('5m');
     expect(formatAgeMock).not.toHaveBeenCalled();
   });
@@ -450,7 +454,9 @@ describe('NsViewEvents', () => {
     const props = gridTablePropsRef.current;
     const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
     await act(async () => {
-      menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)?.onClick?.();
+      menu
+        .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewInvolvedObject)
+        ?.onClick?.();
       await Promise.resolve();
     });
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -477,7 +483,7 @@ describe('NsViewEvents', () => {
 
     const noNamespaceProps = await renderEventsView(false);
     const namespaceColumn = noNamespaceProps.columns.find(
-      (column: any) => column.key === 'namespace'
+      (column: unknown) => column.key === 'namespace'
     );
     expect(namespaceColumn).toBeUndefined();
   });
@@ -486,7 +492,7 @@ describe('NsViewEvents', () => {
     shortNamesMock.mockReturnValue(true);
     const props = await renderEventsView();
 
-    const typeColumn = props.columns.find((column: any) => column.key === 'type');
+    const typeColumn = props.columns.find((column: unknown) => column.key === 'type');
     expect(typeColumn).toBeTruthy();
     // Type column renders with event-badge styling
     const cell = typeColumn.render(baseEvent({ type: 'Warning' }));

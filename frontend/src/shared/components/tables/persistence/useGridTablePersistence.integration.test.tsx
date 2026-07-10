@@ -54,7 +54,7 @@ describe('useGridTablePersistence integration', () => {
     });
 
     useEffect(() => {
-      (globalThis as any).__LATEST_STATE__ = state;
+      (globalThis as unknown).__LATEST_STATE__ = state;
     }, [state]);
 
     return null;
@@ -68,22 +68,22 @@ describe('useGridTablePersistence integration', () => {
     });
   };
 
-  const waitForHydratedState = async (): Promise<any> => {
+  const waitForHydratedState = async (): Promise<unknown> => {
     let attempts = 0;
     while (attempts < 10) {
       await act(async () => {
         await Promise.resolve();
       });
-      const state = (globalThis as any).__LATEST_STATE__;
+      const state = (globalThis as unknown).__LATEST_STATE__;
       if (state?.hydrated) {
         return state;
       }
       attempts += 1;
     }
-    return (globalThis as any).__LATEST_STATE__;
+    return (globalThis as unknown).__LATEST_STATE__;
   };
 
-  const snapshotStorage = (): Record<string, any> => getGridTablePersistenceSnapshot();
+  const snapshotStorage = (): Record<string, unknown> => getGridTablePersistenceSnapshot();
 
   it('keeps column visibility scoped per namespace', async () => {
     const container = document.createElement('div');
@@ -105,10 +105,10 @@ describe('useGridTablePersistence integration', () => {
     // First namespace: hide age
     await renderHarness('team-a', root);
     await waitForHydratedState();
-    const initialStateA = (globalThis as any).__LATEST_STATE__;
+    const initialStateA = (globalThis as unknown).__LATEST_STATE__;
     expect(initialStateA.storageKey).toBeTruthy();
     await act(async () => {
-      (globalThis as any).__LATEST_STATE__.setColumnVisibility({ status: false });
+      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ status: false });
     });
     await flushTimers();
     const afterNamespaceA = snapshotStorage();
@@ -118,7 +118,7 @@ describe('useGridTablePersistence integration', () => {
     await renderHarness('team-b', root);
     await waitForHydratedState();
     await act(async () => {
-      (globalThis as any).__LATEST_STATE__.setColumnVisibility({ owner: false });
+      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ owner: false });
     });
     await flushTimers();
     const afterNamespaceB = snapshotStorage();
@@ -128,13 +128,13 @@ describe('useGridTablePersistence integration', () => {
     await renderHarness('team-a', root);
     await waitForHydratedState();
     await flushTimers();
-    const stateA = (globalThis as any).__LATEST_STATE__;
+    const stateA = (globalThis as unknown).__LATEST_STATE__;
     expect(stateA.columnVisibility).toEqual({ status: false });
 
     await renderHarness('team-b', root);
     await waitForHydratedState();
     await flushTimers();
-    const stateB = (globalThis as any).__LATEST_STATE__;
+    const stateB = (globalThis as unknown).__LATEST_STATE__;
     expect(stateB.columnVisibility).toEqual({ owner: false });
 
     await act(async () => {
@@ -152,8 +152,8 @@ describe('useGridTablePersistence integration', () => {
     await waitForHydratedState();
 
     await act(async () => {
-      (globalThis as any).__LATEST_STATE__.setColumnVisibility({ status: false });
-      (globalThis as any).__LATEST_STATE__.setFilters({
+      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ status: false });
+      (globalThis as unknown).__LATEST_STATE__.setFilters({
         search: 'abc',
         kinds: ['Pod'],
         namespaces: [],
@@ -165,7 +165,7 @@ describe('useGridTablePersistence integration', () => {
       await Promise.resolve();
     });
 
-    const stateAfterReset = (globalThis as any).__LATEST_STATE__;
+    const stateAfterReset = (globalThis as unknown).__LATEST_STATE__;
     expect(stateAfterReset.columnVisibility).toEqual({});
     expect(stateAfterReset.filters).toEqual({
       search: '',

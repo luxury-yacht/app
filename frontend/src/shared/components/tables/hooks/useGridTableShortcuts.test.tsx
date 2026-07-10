@@ -10,12 +10,16 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 // Capture useShortcuts args so we can verify the registered shortcut keys and options.
-const capturedShortcuts: { shortcuts: any[]; options: any } = { shortcuts: [], options: undefined };
+const capturedShortcuts: { shortcuts: unknown[]; options: unknown } = {
+  shortcuts: [],
+  options: undefined,
+};
 
 vi.mock('@ui/shortcuts', () => ({
-  useShortcuts: (shortcuts: any[], options: any) => {
+  useShortcuts: (shortcuts: unknown[], options: unknown) => {
     capturedShortcuts.shortcuts = shortcuts;
     capturedShortcuts.options = options;
   },
@@ -132,23 +136,38 @@ describe('useGridTableShortcuts', () => {
     const findShortcut = (key: string) => capturedShortcuts.shortcuts.find((s) => s.key === key);
 
     // ArrowDown calls moveSelectionByDelta(1).
-    findShortcut('ArrowDown')!.handler();
+    requireValue(
+      findShortcut('ArrowDown'),
+      'expected test value in useGridTableShortcuts.test.tsx'
+    ).handler();
     expect(moveSelectionByDelta).toHaveBeenCalledWith(1);
 
     // ArrowUp calls moveSelectionByDelta(-1).
-    findShortcut('ArrowUp')!.handler();
+    requireValue(
+      findShortcut('ArrowUp'),
+      'expected test value in useGridTableShortcuts.test.tsx'
+    ).handler();
     expect(moveSelectionByDelta).toHaveBeenCalledWith(-1);
 
     // PageDown uses the page size ref.
-    findShortcut('PageDown')!.handler();
+    requireValue(
+      findShortcut('PageDown'),
+      'expected test value in useGridTableShortcuts.test.tsx'
+    ).handler();
     expect(moveSelectionByDelta).toHaveBeenCalledWith(15);
 
     // Home jumps to index 0.
-    findShortcut('Home')!.handler();
+    requireValue(
+      findShortcut('Home'),
+      'expected test value in useGridTableShortcuts.test.tsx'
+    ).handler();
     expect(jumpToIndex).toHaveBeenCalledWith(0);
 
     // End jumps to the last index (tableDataLength - 1).
-    findShortcut('End')!.handler();
+    requireValue(
+      findShortcut('End'),
+      'expected test value in useGridTableShortcuts.test.tsx'
+    ).handler();
     expect(jumpToIndex).toHaveBeenCalledWith(49);
   });
 
@@ -157,7 +176,9 @@ describe('useGridTableShortcuts', () => {
 
     const f10 = capturedShortcuts.shortcuts.find((s) => s.key === 'F10');
     expect(f10).toBeDefined();
-    expect(f10!.enabled).toBe(false);
+    expect(requireValue(f10, 'expected test value in useGridTableShortcuts.test.tsx').enabled).toBe(
+      false
+    );
   });
 
   const renderWithPagination = async (pagination: {
@@ -202,10 +223,20 @@ describe('useGridTableShortcuts', () => {
       canPageNext: true,
     });
 
-    expect(findShortcut('ArrowLeft')!.handler()).toBe(true);
+    expect(
+      requireValue(
+        findShortcut('ArrowLeft'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).handler()
+    ).toBe(true);
     expect(onPagePrevious).toHaveBeenCalledTimes(1);
 
-    expect(findShortcut('ArrowRight')!.handler()).toBe(true);
+    expect(
+      requireValue(
+        findShortcut('ArrowRight'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).handler()
+    ).toBe(true);
     expect(onPageNext).toHaveBeenCalledTimes(1);
   });
 
@@ -219,8 +250,18 @@ describe('useGridTableShortcuts', () => {
       canPageNext: false,
     });
 
-    expect(findShortcut('ArrowLeft')!.handler()).toBe(false);
-    expect(findShortcut('ArrowRight')!.handler()).toBe(false);
+    expect(
+      requireValue(
+        findShortcut('ArrowLeft'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).handler()
+    ).toBe(false);
+    expect(
+      requireValue(
+        findShortcut('ArrowRight'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).handler()
+    ).toBe(false);
     expect(onPagePrevious).not.toHaveBeenCalled();
     expect(onPageNext).not.toHaveBeenCalled();
   });
@@ -228,7 +269,17 @@ describe('useGridTableShortcuts', () => {
   it('does not claim ArrowLeft/ArrowRight for tables without pagination', async () => {
     const { findShortcut } = await renderWithPagination({});
 
-    expect(findShortcut('ArrowLeft')!.enabled).toBe(false);
-    expect(findShortcut('ArrowRight')!.enabled).toBe(false);
+    expect(
+      requireValue(
+        findShortcut('ArrowLeft'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).enabled
+    ).toBe(false);
+    expect(
+      requireValue(
+        findShortcut('ArrowRight'),
+        'expected test value in useGridTableShortcuts.test.tsx'
+      ).enabled
+    ).toBe(false);
   });
 });

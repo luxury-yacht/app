@@ -39,9 +39,9 @@ describe('ResourceStreamConnection', () => {
         writable: true,
       });
     }
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
-    (globalThis as any).WebSocket = FakeWebSocket;
+    (window as unknown).setTimeout = globalThis.setTimeout;
+    (window as unknown).clearTimeout = globalThis.clearTimeout;
+    (globalThis as unknown).WebSocket = FakeWebSocket;
     vi.useRealTimers();
   });
 
@@ -95,8 +95,8 @@ describe('ResourceStreamConnection', () => {
 
   it('invalidates the base URL and reconnects after socket close', async () => {
     vi.useFakeTimers();
-    (window as any).setTimeout = globalThis.setTimeout;
-    (window as any).clearTimeout = globalThis.clearTimeout;
+    (window as unknown).setTimeout = globalThis.setTimeout;
+    (window as unknown).clearTimeout = globalThis.clearTimeout;
     const delegate = {
       handleConnectionOpen: vi.fn(),
       handleMessage: vi.fn(),

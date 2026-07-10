@@ -20,7 +20,7 @@ const ThrowingChild = ({ shouldThrow }: { shouldThrow: boolean }) => {
 describe('DetailsTabDataErrorBoundary', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let consoleErrorSpy: any;
+  let consoleErrorSpy: unknown;
 
   const renderBoundary = async (child: React.ReactNode, fallback?: React.ReactNode) => {
     await act(async () => {

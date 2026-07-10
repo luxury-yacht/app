@@ -36,12 +36,12 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 const openWithObjectMock = vi.fn();
 const runObjectActionMock = vi.fn();
 const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
 const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
-const modalProps: { current: any } = { current: null };
+const modalProps: { current: unknown } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -49,7 +49,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -123,7 +123,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: unknown) => {
     modalProps.current = props;
     return <div data-testid="confirmation-modal" />;
   },
@@ -438,7 +438,7 @@ describe('ClusterViewCustom', () => {
     expect(typeof props?.fetchAllRows).toBe('function');
     expect(
       (props?.filters?.options?.postActions ?? []).some(
-        (item: any) => item.id === 'copy-cluster-custom-query-csv'
+        (item: unknown) => item.id === 'copy-cluster-custom-query-csv'
       )
     ).toBe(false);
   });
@@ -599,8 +599,8 @@ describe('ClusterViewCustom', () => {
   // group alone, and the click-through adds a navigation path the old
   // column lacked. Mirrors NsViewCustom's CRD column tests.
   describe('CRD column', () => {
-    const findColumn = (props: any, key: string) =>
-      props.columns.find((col: any) => col.key === key);
+    const findColumn = (props: unknown, key: string) =>
+      props.columns.find((col: unknown) => col.key === key);
 
     const resourceWithCRD = {
       ...baseCustom,
@@ -611,7 +611,7 @@ describe('ClusterViewCustom', () => {
       crdName: 'dbclusters.postgresql.cnpg.io',
     };
 
-    const renderWith = async (rows: any[]) => {
+    const renderWith = async (rows: unknown[]) => {
       useBrowseCatalogMock.mockReturnValue(
         browseCatalogResult(rows.map((row) => catalogItemFromCustom(row)))
       );
@@ -638,12 +638,12 @@ describe('ClusterViewCustom', () => {
 
       const props = gridTablePropsRef.current;
       const crdCol = findColumn(props, 'crd');
-      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<any>;
+      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<unknown>;
 
-      expect((rendered as any).type).toBe('span');
-      expect((rendered as any).props.role).toBe('button');
-      expect((rendered as any).props.children).toBe('dbclusters.postgresql.cnpg.io');
-      expect((rendered as any).props.title).toBe('Open dbclusters.postgresql.cnpg.io');
+      expect((rendered as unknown).type).toBe('span');
+      expect((rendered as unknown).props.role).toBe('button');
+      expect((rendered as unknown).props.children).toBe('dbclusters.postgresql.cnpg.io');
+      expect((rendered as unknown).props.title).toBe('Open dbclusters.postgresql.cnpg.io');
     });
 
     it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
@@ -651,10 +651,10 @@ describe('ClusterViewCustom', () => {
 
       const props = gridTablePropsRef.current;
       const crdCol = findColumn(props, 'crd');
-      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<any>;
+      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<unknown>;
 
       openWithObjectMock.mockClear();
-      const onClick = (rendered as any).props.onClick as (e: any) => void;
+      const onClick = (rendered as unknown).props.onClick as (e: unknown) => void;
       onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
 
       expect(openWithObjectMock).toHaveBeenCalledTimes(1);
@@ -696,8 +696,8 @@ describe('ClusterViewCustom', () => {
 
       const props = gridTablePropsRef.current;
       const sortableKeys = props.columns
-        .filter((column: any) => column.sortable !== false)
-        .map((column: any) => column.key)
+        .filter((column: unknown) => column.sortable !== false)
+        .map((column: unknown) => column.key)
         .sort((left: string, right: string) => left.localeCompare(right));
 
       expect(sortableKeys).toEqual(['age', 'kind', 'name']);
@@ -727,10 +727,10 @@ describe('ClusterViewCustom', () => {
 
       const props = gridTablePropsRef.current;
       const statusCol = findColumn(props, 'status');
-      const rendered = statusCol.render(resource) as React.ReactElement<any>;
+      const rendered = statusCol.render(resource) as React.ReactElement<unknown>;
 
-      expect((rendered as any).props.children).toBe('Ready');
-      expect((rendered as any).props.className).toBe('status-text ready');
+      expect((rendered as unknown).props.children).toBe('Ready');
+      expect((rendered as unknown).props.className).toBe('status-text ready');
     });
   });
 });

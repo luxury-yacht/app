@@ -339,6 +339,7 @@
       "includes": [
         "src/core/contexts/**/*.test.{ts,tsx}",
         "src/core/connection/**/*.test.{ts,tsx}",
+        "src/core/codemirror/**/*.test.{ts,tsx}",
         "src/core/data-access/**/*.test.{ts,tsx}",
         "src/core/events/**/*.test.{ts,tsx}",
         "src/core/logging/**/*.test.{ts,tsx}",
@@ -346,7 +347,10 @@
         "src/core/resource-metrics/**/*.test.{ts,tsx}",
         "src/core/settings/**/*.test.{ts,tsx}",
         "src/hooks/**/*.test.{ts,tsx}",
+        "src/modules/resource-grid/**/*.test.{ts,tsx}",
         "src/shared/utils/**/*.test.{ts,tsx}",
+        "src/ui/command-palette/**/*.test.{ts,tsx}",
+        "src/ui/settings/sections/**/*.test.{ts,tsx}",
         "src/utils/**/*.test.{ts,tsx}"
       ],
       "linter": {

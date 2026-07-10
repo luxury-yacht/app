@@ -11,6 +11,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
+import { requireValue } from '@/test-utils/requireValue';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before importing the component under test.
@@ -187,7 +188,7 @@ describe('FavMenuDropdown', () => {
     const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
     await act(async () => {
-      btn!.click();
+      requireValue(btn, 'expected test value in FavMenuDropdown.test.tsx').click();
       await Promise.resolve();
     });
   };
@@ -221,7 +222,9 @@ describe('FavMenuDropdown', () => {
     await renderComponent();
     const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
-    expect(btn!.className).toContain('settings-button');
+    expect(
+      requireValue(btn, 'expected test value in FavMenuDropdown.test.tsx').className
+    ).toContain('settings-button');
   });
 
   it('opens the dropdown from keyboard activation on the trigger', async () => {
@@ -231,7 +234,7 @@ describe('FavMenuDropdown', () => {
     expect(trigger).toBeTruthy();
 
     await act(async () => {
-      trigger!.dispatchEvent(
+      requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
       );
       await Promise.resolve();
@@ -282,7 +285,9 @@ describe('FavMenuDropdown', () => {
 
     const empty = container.querySelector('.fav-dropdown-empty');
     expect(empty).toBeTruthy();
-    expect(empty!.textContent).toContain('No favorites yet');
+    expect(
+      requireValue(empty, 'expected test value in FavMenuDropdown.test.tsx').textContent
+    ).toContain('No favorites yet');
   });
 
   // -----------------------------------------------------------------------
@@ -307,7 +312,7 @@ describe('FavMenuDropdown', () => {
     expect(row).toBeTruthy();
 
     await act(async () => {
-      row!.click();
+      requireValue(row, 'expected test value in FavMenuDropdown.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -342,10 +347,16 @@ describe('FavMenuDropdown', () => {
     // The CSS class fav-dropdown-hover-actions is present in the DOM — visibility
     // is controlled by the CSS rule `.fav-dropdown-row:hover .fav-dropdown-hover-actions`.
     // We verify the hover actions element exists and contains the expected buttons.
-    const actions = row!.querySelector('.fav-dropdown-hover-actions');
+    const actions = requireValue(
+      row,
+      'expected test value in FavMenuDropdown.test.tsx'
+    ).querySelector('.fav-dropdown-hover-actions');
     expect(actions).toBeTruthy();
 
-    const buttons = actions!.querySelectorAll('button');
+    const buttons = requireValue(
+      actions,
+      'expected test value in FavMenuDropdown.test.tsx'
+    ).querySelectorAll('button');
     // 3 action buttons: up, down, delete
     expect(buttons.length).toBe(3);
     expect(buttons[0].title).toBe('Move up');
@@ -366,7 +377,7 @@ describe('FavMenuDropdown', () => {
     expect(deleteButton).toBeTruthy();
 
     await act(async () => {
-      deleteButton!.click();
+      requireValue(deleteButton, 'expected test value in FavMenuDropdown.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -384,8 +395,12 @@ describe('FavMenuDropdown', () => {
 
     const footer = container.querySelector('.fav-dropdown-footer');
     expect(footer).toBeTruthy();
-    expect(footer!.textContent).toContain('any cluster');
-    expect(footer!.textContent).toContain('pinned to cluster');
+    expect(
+      requireValue(footer, 'expected test value in FavMenuDropdown.test.tsx').textContent
+    ).toContain('any cluster');
+    expect(
+      requireValue(footer, 'expected test value in FavMenuDropdown.test.tsx').textContent
+    ).toContain('pinned to cluster');
   });
 
   // -----------------------------------------------------------------------
@@ -416,10 +431,10 @@ describe('FavMenuDropdown', () => {
     // inside the menu's keyboard surface.
     const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(trigger).toBeTruthy();
-    trigger!.focus();
+    requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').focus();
 
     await act(async () => {
-      trigger!.dispatchEvent(
+      requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
       );
       await Promise.resolve();

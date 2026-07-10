@@ -11,17 +11,19 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
-  persistedSortRef: { current: null as any },
-  useTableSortMock: vi.fn((data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => {
-    const fallbackSort = defaultKey
-      ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-      : { key: '', direction: null };
-    return {
-      sortedData: data,
-      sortConfig: opts?.controlledSort ?? fallbackSort,
-      handleSort: vi.fn(),
-    };
-  }),
+  persistedSortRef: { current: null as unknown },
+  useTableSortMock: vi.fn(
+    (data: unknown[], defaultKey?: string, defaultDir?: unknown, opts?: unknown) => {
+      const fallbackSort = defaultKey
+        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
+        : { key: '', direction: null };
+      return {
+        sortedData: data,
+        sortConfig: opts?.controlledSort ?? fallbackSort,
+        handleSort: vi.fn(),
+      };
+    }
+  ),
 }));
 
 const openWithObjectMock = vi.fn();
@@ -50,7 +52,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: unknown } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -58,7 +60,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -87,7 +89,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+  useTableSort: (...args: unknown[]) => (useTableSortMock as unknown)(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -174,7 +176,9 @@ describe('ClusterViewEvents', () => {
       await Promise.resolve();
     });
 
-    const ageColumn = gridTablePropsRef.current.columns.find((column: any) => column.key === 'age');
+    const ageColumn = gridTablePropsRef.current.columns.find(
+      (column: unknown) => column.key === 'age'
+    );
 
     expect(ageColumn).toBeTruthy();
     expect(ageColumn.sortValue(baseEvent)).toBe(-123);
@@ -187,7 +191,7 @@ describe('ClusterViewEvents', () => {
     });
 
     const props = gridTablePropsRef.current;
-    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const objectNameColumn = props.columns.find((column: unknown) => column.key === 'objectName');
     expect(objectNameColumn).toBeTruthy();
 
     const cell = objectNameColumn.render(baseEvent);
@@ -244,7 +248,7 @@ describe('ClusterViewEvents', () => {
     });
 
     const props = gridTablePropsRef.current;
-    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const objectNameColumn = props.columns.find((column: unknown) => column.key === 'objectName');
     const cell = objectNameColumn.render(event);
 
     await act(async () => {
@@ -279,7 +283,7 @@ describe('ClusterViewEvents', () => {
     });
 
     const props = gridTablePropsRef.current;
-    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const objectNameColumn = props.columns.find((column: unknown) => column.key === 'objectName');
     const cell = objectNameColumn.render(event);
 
     await act(async () => {

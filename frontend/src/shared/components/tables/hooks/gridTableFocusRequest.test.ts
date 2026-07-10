@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import { buildGridTableFocusRequest, matchesGridTableFocusRequest } from './gridTableFocusRequest';
 
@@ -67,7 +68,7 @@ describe('matchesGridTableFocusRequest', () => {
         { kind: 'Deployment', name: 'wrong-name', namespace: 'apps', clusterId: 'cluster-a' },
         0,
         () => 'cluster-a|apps/v1/Deployment/apps/api',
-        request!
+        requireValue(request, 'expected test value in gridTableFocusRequest.test.ts')
       )
     ).toBe(true);
   });
@@ -86,7 +87,7 @@ describe('matchesGridTableFocusRequest', () => {
         { kind: 'HelmRelease', name: 'demo', namespace: 'apps', clusterId: 'cluster-a' },
         0,
         () => 'some-synthetic-key',
-        request!
+        requireValue(request, 'expected test value in gridTableFocusRequest.test.ts')
       )
     ).toBe(true);
   });

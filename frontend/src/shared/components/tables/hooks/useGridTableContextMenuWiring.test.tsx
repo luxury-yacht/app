@@ -11,6 +11,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type Row = { id: string; name: string };
 
@@ -25,7 +26,7 @@ const mockOpenWrapperContextMenu = vi.fn(() => true);
 const mockCloseContextMenu = vi.fn();
 // Controls whether useGridTableContextMenu returns a non-null contextMenu
 // (needed for rendering <ContextMenu> and testing the onClose/focus-restore path).
-let mockContextMenuState: any = null;
+let mockContextMenuState: unknown = null;
 
 vi.mock('@shared/components/tables/hooks/useGridTableContextMenuItems', () => ({
   useGridTableContextMenuItems: () => vi.fn(() => [{ label: 'Test', action: () => {} }]),
@@ -45,7 +46,7 @@ vi.mock('@shared/components/tables/hooks/useGridTableContextMenu', () => ({
 let capturedOnClose: (() => void) | null = null;
 
 vi.mock('@shared/components/ContextMenu', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     capturedOnClose = props.onClose;
     return <div data-testid="mock-context-menu" />;
   },
@@ -73,8 +74,13 @@ describe('useGridTableContextMenuWiring', () => {
 
   type HarnessResult = {
     openFocusedRowContextMenu: () => boolean;
-    handleCellContextMenu: (event: any, columnKey: string, item: Row | null, index: number) => void;
-    handleWrapperContextMenu: (event: any) => void;
+    handleCellContextMenu: (
+      event: unknown,
+      columnKey: string,
+      item: Row | null,
+      index: number
+    ) => void;
+    handleWrapperContextMenu: (event: unknown) => void;
     contextMenuActiveRef: { current: boolean };
     isContextMenuVisible: boolean;
     contextMenuNode: React.ReactNode;
@@ -96,7 +102,7 @@ describe('useGridTableContextMenuWiring', () => {
     const renderedColumnKey = opts.renderedColumnKey ?? 'name';
     const wrapperRef = { current: null as HTMLDivElement | null };
     const handleRowActivation = vi.fn();
-    let result: HarnessResult = null!;
+    let result: HarnessResult | null = null;
 
     const Harness: React.FC = () => {
       const wiring = useGridTableContextMenuWiring<Row>({
@@ -133,7 +139,10 @@ describe('useGridTableContextMenuWiring', () => {
       root.render(<Harness />);
     });
 
-    return result;
+    return requireValue(
+      result,
+      'expected the context-menu wiring result after rendering the harness'
+    );
   };
 
   it('openFocusedRowContextMenu returns false when context menu is disabled', () => {
@@ -207,14 +216,14 @@ describe('useGridTableContextMenuWiring', () => {
 
   it('handleCellContextMenu does nothing when context menu is disabled', () => {
     const result = renderHook({ enableContextMenu: false });
-    const fakeEvent = { preventDefault: vi.fn() } as any;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown;
     result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
     expect(mockOpenCellContextMenu).not.toHaveBeenCalled();
   });
 
   it('handleCellContextMenu opens without activating the row on right-click', () => {
     const result = renderHook({});
-    const fakeEvent = { preventDefault: vi.fn() } as any;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown;
 
     result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
 
@@ -224,7 +233,7 @@ describe('useGridTableContextMenuWiring', () => {
 
   it('handleWrapperContextMenu does nothing when context menu is disabled', () => {
     const result = renderHook({ enableContextMenu: false });
-    const fakeEvent = { preventDefault: vi.fn() } as any;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown;
     result.handleWrapperContextMenu(fakeEvent);
     expect(mockOpenWrapperContextMenu).not.toHaveBeenCalled();
   });
@@ -261,7 +270,10 @@ describe('useGridTableContextMenuWiring', () => {
 
     // Trigger close.
     act(() => {
-      capturedOnClose!();
+      requireValue(
+        capturedOnClose,
+        'expected test value in useGridTableContextMenuWiring.test.tsx'
+      )();
     });
 
     // contextMenuActiveRef should be cleared.

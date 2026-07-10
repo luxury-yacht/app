@@ -10,6 +10,7 @@ import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useG
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type SampleRow = { name: string; kind?: string };
 
@@ -34,7 +35,7 @@ afterEach(() => {
   if (originalScrollWidthDescriptor) {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidthDescriptor);
   } else {
-    delete (HTMLElement.prototype as any).scrollWidth;
+    delete (HTMLElement.prototype as unknown).scrollWidth;
   }
   document.body.innerHTML = '';
   vi.restoreAllMocks();
@@ -96,7 +97,10 @@ const renderHarness = async (tableData: SampleRow[]) => {
       // The measurement path creates and unmounts a temporary React root.
       // Keep that work inside act() so React test warnings stay clean.
       act(() => {
-        measured = measureColumnWidth!(column);
+        measured = requireValue(
+          measureColumnWidth,
+          'expected test value in useGridTableColumnMeasurer.test.tsx'
+        )(column);
       });
       return measured;
     },
@@ -136,11 +140,21 @@ describe('useGridTableColumnMeasurer', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
       configurable: true,
       get() {
-        return headerWidths.length ? headerWidths.shift()! : 0;
+        return headerWidths.length
+          ? requireValue(
+              headerWidths.shift(),
+              'expected test value in useGridTableColumnMeasurer.test.tsx'
+            )
+          : 0;
       },
     });
     HTMLElement.prototype.getBoundingClientRect = () => {
-      const width = cellWidths.length ? cellWidths.shift()! : 0;
+      const width = cellWidths.length
+        ? requireValue(
+            cellWidths.shift(),
+            'expected test value in useGridTableColumnMeasurer.test.tsx'
+          )
+        : 0;
       return {
         width,
         height: 0,

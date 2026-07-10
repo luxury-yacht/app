@@ -8,6 +8,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import ShellTab from './ShellTab';
 
 const wailsMocks = vi.hoisted(() => ({
@@ -237,13 +238,13 @@ describe('ShellTab', () => {
         this.callback = callback;
       }
     }
-    (globalThis as any).ResizeObserver = TestResizeObserver;
+    (globalThis as unknown).ResizeObserver = TestResizeObserver;
     const clipboardMock = {
       readText: vi.fn().mockResolvedValue(''),
       writeText: vi.fn().mockResolvedValue(undefined),
     };
     if (!navigator.clipboard) {
-      (navigator as any).clipboard = clipboardMock;
+      (navigator as unknown).clipboard = clipboardMock;
     } else {
       Object.assign(navigator.clipboard, clipboardMock);
     }
@@ -826,9 +827,9 @@ describe('ShellTab', () => {
 
     const terminal = getLatestTerminal();
     expect(terminal).toBeTruthy();
-    terminal!.buffer.active.baseY = 160;
-    terminal!.buffer.active.viewportY = 0;
-    terminal!.rows = 40;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').buffer.active.baseY = 160;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').buffer.active.viewportY = 0;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').rows = 40;
 
     const terminalElement = container.querySelector('.shell-tab__terminal') as HTMLDivElement;
     Object.defineProperty(terminalElement, 'clientHeight', {
@@ -849,7 +850,7 @@ describe('ShellTab', () => {
       }) as DOMRect;
 
     act(() => {
-      terminal!.triggerWriteParsed();
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').triggerWriteParsed();
     });
     await flushAsync();
 
@@ -859,7 +860,7 @@ describe('ShellTab', () => {
     expect(scrollbar?.style.getPropertyValue('--scrollbar-virtual-thumb-offset')).toBe('0px');
 
     act(() => {
-      terminal!.triggerScroll(80);
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').triggerScroll(80);
     });
     await flushAsync();
 
@@ -888,9 +889,9 @@ describe('ShellTab', () => {
 
     const terminal = getLatestTerminal();
     expect(terminal).toBeTruthy();
-    terminal!.buffer.active.baseY = 160;
-    terminal!.buffer.active.viewportY = 0;
-    terminal!.rows = 40;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').buffer.active.baseY = 160;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').buffer.active.viewportY = 0;
+    requireValue(terminal, 'expected test value in ShellTab.test.tsx').rows = 40;
 
     const terminalElement = container.querySelector('.shell-tab__terminal') as HTMLDivElement;
     Object.defineProperty(terminalElement, 'clientHeight', {
@@ -911,7 +912,7 @@ describe('ShellTab', () => {
       }) as DOMRect;
 
     act(() => {
-      terminal!.triggerWriteParsed();
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').triggerWriteParsed();
     });
     await flushAsync();
 
@@ -921,7 +922,7 @@ describe('ShellTab', () => {
     expect(thumb).toBeTruthy();
 
     act(() => {
-      scrollbar!.dispatchEvent(
+      requireValue(scrollbar, 'expected test value in ShellTab.test.tsx').dispatchEvent(
         new MouseEvent('pointerdown', {
           bubbles: true,
           button: 0,
@@ -932,10 +933,12 @@ describe('ShellTab', () => {
     });
     await flushAsync();
 
-    expect(terminal!.scrollLines).toHaveBeenCalledWith(40);
+    expect(
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').scrollLines
+    ).toHaveBeenCalledWith(40);
 
     act(() => {
-      scrollbar!.dispatchEvent(
+      requireValue(scrollbar, 'expected test value in ShellTab.test.tsx').dispatchEvent(
         new WheelEvent('wheel', {
           bubbles: true,
           cancelable: true,
@@ -945,10 +948,12 @@ describe('ShellTab', () => {
     });
     await flushAsync();
 
-    expect(terminal!.scrollLines).toHaveBeenCalledWith(2);
+    expect(
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').scrollLines
+    ).toHaveBeenCalledWith(2);
 
-    thumb!.setPointerCapture = vi.fn();
-    thumb!.releasePointerCapture = vi.fn();
+    requireValue(thumb, 'expected test value in ShellTab.test.tsx').setPointerCapture = vi.fn();
+    requireValue(thumb, 'expected test value in ShellTab.test.tsx').releasePointerCapture = vi.fn();
     const pointerDown = new MouseEvent('pointerdown', {
       bubbles: true,
       button: 0,
@@ -958,7 +963,7 @@ describe('ShellTab', () => {
     Object.defineProperty(pointerDown, 'pointerId', { value: 1 });
 
     act(() => {
-      thumb!.dispatchEvent(pointerDown);
+      requireValue(thumb, 'expected test value in ShellTab.test.tsx').dispatchEvent(pointerDown);
     });
 
     const pointerMove = new MouseEvent('pointermove', {
@@ -969,11 +974,13 @@ describe('ShellTab', () => {
     Object.defineProperty(pointerMove, 'pointerId', { value: 1 });
 
     act(() => {
-      thumb!.dispatchEvent(pointerMove);
+      requireValue(thumb, 'expected test value in ShellTab.test.tsx').dispatchEvent(pointerMove);
     });
     await flushAsync();
 
-    expect(terminal!.scrollToLine).toHaveBeenCalledWith(82);
+    expect(
+      requireValue(terminal, 'expected test value in ShellTab.test.tsx').scrollToLine
+    ).toHaveBeenCalledWith(82);
   });
 
   it('includes debug containers in shell dropdown from backend container discovery', async () => {

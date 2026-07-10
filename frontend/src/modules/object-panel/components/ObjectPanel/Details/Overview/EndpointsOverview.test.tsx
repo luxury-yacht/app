@@ -15,7 +15,7 @@ import { endpointSliceDescriptor } from './descriptors/endpointslice';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -86,7 +86,7 @@ describe('EndpointSliceOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     const overview = container;
     expect(overview.textContent).toContain('IPv4');
@@ -114,7 +114,7 @@ describe('EndpointSliceOverview', () => {
       ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     expect(container.textContent).toContain('IPv4');
     expect(container.textContent).toContain('2 ready');
@@ -134,7 +134,7 @@ describe('EndpointSliceOverview', () => {
       ports: [{ port: 8080, protocol: 'TCP' }],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     expect(container.textContent).toContain('2001:db8::1');
     expect(container.textContent).toContain('Pod/my-pod');

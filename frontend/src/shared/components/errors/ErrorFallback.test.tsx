@@ -27,7 +27,7 @@ describe('ErrorFallback', () => {
       root.unmount();
     });
     container.remove();
-    (import.meta.env as any).DEV = originalEnv;
+    (import.meta.env as unknown).DEV = originalEnv;
   });
 
   it('renders scope-aware messaging and invokes reset callback', async () => {
@@ -57,13 +57,13 @@ describe('ErrorFallback', () => {
     const reloadMock = vi.fn();
     const locationGetter = vi.spyOn(window, 'location', 'get');
     locationGetter.mockReturnValue({ reload: reloadMock } as unknown as Location);
-    (import.meta.env as any).DEV = true;
+    (import.meta.env as unknown).DEV = true;
 
     await act(async () => {
       root.render(
         <ErrorFallback
           error={new Error('stack')}
-          errorInfo={{ componentStack: 'Component stack trace' } as any}
+          errorInfo={{ componentStack: 'Component stack trace' } as unknown}
           resetError={vi.fn()}
           scope={undefined}
         />

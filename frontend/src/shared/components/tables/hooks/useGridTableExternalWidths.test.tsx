@@ -25,7 +25,7 @@ describe('useGridTableExternalWidths', () => {
     const root = ReactDOM.createRoot(container);
 
     const Harness: React.FC = () => {
-      const value = useGridTableExternalWidths(widths as any);
+      const value = useGridTableExternalWidths(widths as unknown);
       useEffect(() => {
         callback(value);
       }, [value]);
@@ -47,9 +47,12 @@ describe('useGridTableExternalWidths', () => {
 
   it('filters valid numeric widths', async () => {
     let captured: Record<string, number> | null = null;
-    await renderHarness({ name: { width: 120 }, kind: { width: Number.NaN } } as any, (value) => {
-      captured = value;
-    });
+    await renderHarness(
+      { name: { width: 120 }, kind: { width: Number.NaN } } as unknown,
+      (value) => {
+        captured = value;
+      }
+    );
     expect(captured).toEqual({ name: 120 });
   });
 });

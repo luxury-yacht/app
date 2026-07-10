@@ -35,8 +35,8 @@ const {
   errorHandlerMock,
   requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown },
+  confirmationPropsRef: { current: null as unknown },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
@@ -44,7 +44,7 @@ const {
   requestRefreshDomainStateMock: vi.fn(),
 }));
 
-const renderOutputToText = (output: any): string => {
+const renderOutputToText = (output: unknown): string => {
   if (typeof output === 'string') {
     return output;
   }
@@ -86,12 +86,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: unknown) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: any) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -114,7 +114,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -181,7 +181,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: unknown) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -198,13 +198,13 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
-  const state = { columnWidths: {} as Record<string, any> };
+  const state = { columnWidths: {} as Record<string, unknown> };
   return {
     useNamespaceGridTablePersistence: () => ({
       sortConfig: { key: 'name', direction: 'asc' },
       onSortChange: vi.fn(),
       columnWidths: state.columnWidths,
-      setColumnWidths: (next: any) => {
+      setColumnWidths: (next: unknown) => {
         state.columnWidths = next;
         if (gridTablePropsRef.current) {
           gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
@@ -285,7 +285,7 @@ describe('NsViewNetwork', () => {
   };
 
   const getColumn = (key: string) =>
-    gridTablePropsRef.current.columns.find((column: any) => column.key === key);
+    gridTablePropsRef.current.columns.find((column: unknown) => column.key === key);
 
   it('opens object panel through context menu', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
@@ -313,7 +313,7 @@ describe('NsViewNetwork', () => {
 
     expect(gridTablePropsRef.current.data).toHaveLength(1);
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -342,7 +342,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -368,7 +368,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: any) => item.label === 'Delete');
+    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -399,7 +399,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: any) => item.label === 'Delete');
+    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeUndefined();
   });
 
@@ -408,7 +408,7 @@ describe('NsViewNetwork', () => {
     // Simulate denied capability by not registering key
     const props = await renderNetworkView();
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: any) => item.label === 'Delete');
+    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
     expect(deleteItem).toBeUndefined();
   });
 
@@ -429,7 +429,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item: unknown) => item.label === 'Delete');
 
     act(() => {
       deleteItem?.onClick?.();

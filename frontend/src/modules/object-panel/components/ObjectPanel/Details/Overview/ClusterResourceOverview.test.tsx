@@ -18,7 +18,7 @@ import {
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -26,7 +26,7 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: unknown) => <div data-testid="resource-status">{props.status}</div>,
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -36,12 +36,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: any) => <a href="/object">{children}</a>,
+  ObjectPanelLink: ({ children }: unknown) => <a href="/object">{children}</a>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -55,7 +55,7 @@ describe('ClusterResourceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderOverview = async (descriptor: any, data: any) => {
+  const renderOverview = async (descriptor: unknown, data: unknown) => {
     await act(async () => {
       root.render(
         <OverviewRenderer

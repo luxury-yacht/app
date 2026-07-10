@@ -15,6 +15,7 @@ import type {
   PermissionStatus,
 } from '@/core/capabilities/permissionTypes';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { requireValue } from '@/test-utils/requireValue';
 import type { ViewType } from '@/types/navigation/views';
 import type { KubernetesAPIClientDiagnostics } from '../client';
 import { makeTelemetrySummary } from '../refreshContractTestBuilders';
@@ -125,8 +126,8 @@ vi.mock('@ui/dockable', () => ({
   }) => React.createElement('div', { ref: panelRef }, children),
 }));
 
-const domainStateMap: Record<string, DomainSnapshotState<any>> = {};
-const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<any>]>> = {};
+const domainStateMap: Record<string, DomainSnapshotState<unknown>> = {};
+const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<unknown>]>> = {};
 let refreshState: { pendingRequests: number } = { pendingRequests: 0 };
 
 const mockRefreshManager = vi.hoisted(() => ({
@@ -202,11 +203,14 @@ const getPermissionKeySafe = (
   return getPermissionKeyRef(resourceKind, verb, namespace, subresource);
 };
 
-const setDomainState = (domain: string, state: DomainSnapshotState<any>) => {
+const setDomainState = (domain: string, state: DomainSnapshotState<unknown>) => {
   domainStateMap[domain] = state;
 };
 
-const setScopedEntries = (domain: string, entries: Array<[string, DomainSnapshotState<any>]>) => {
+const setScopedEntries = (
+  domain: string,
+  entries: Array<[string, DomainSnapshotState<unknown>]>
+) => {
   scopedEntriesMap[domain] = entries;
 };
 
@@ -220,7 +224,7 @@ const resetDomainStates = () => {
   refreshState = { pendingRequests: 0 };
 };
 
-const createReadyState = (data: any = null): DomainSnapshotState<any> => ({
+const createReadyState = (data: unknown = null): DomainSnapshotState<unknown> => ({
   status: 'ready',
   data,
   stats: null,
@@ -254,7 +258,7 @@ const selectRefreshDomainsTab = async (container: HTMLElement) =>
   selectDiagnosticsTab(container, 1);
 
 const renderDiagnosticsPanel = async (
-  DiagnosticsPanelComponent: React.ComponentType<any>,
+  DiagnosticsPanelComponent: React.ComponentType<unknown>,
   props: Partial<{ isOpen: boolean; onClose: () => void }> = {},
   options: { keyboardDisabled?: boolean } = {}
 ) => {
@@ -1192,7 +1196,7 @@ describe('DiagnosticsPanel component', () => {
     });
     catalogState.stats = {
       timeToFirstRowMs: 450,
-    } as any;
+    } as unknown;
     setDomainState('catalog', catalogState);
 
     scopedEntriesMap['container-logs'] = [
@@ -1532,9 +1536,17 @@ describe('DiagnosticsPanel component', () => {
 
     const streamsSection = rendered.container.querySelector('.diagnostics-section');
     expect(streamsSection).toBeTruthy();
-    expect(streamsSection!.querySelectorAll('button, input').length).toBe(0);
+    expect(
+      requireValue(
+        streamsSection,
+        'expected test value in DiagnosticsPanel.test.ts'
+      ).querySelectorAll('button, input').length
+    ).toBe(0);
 
-    const streamRows = streamsSection!.querySelectorAll('tbody tr');
+    const streamRows = requireValue(
+      streamsSection,
+      'expected test value in DiagnosticsPanel.test.ts'
+    ).querySelectorAll('tbody tr');
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
 
@@ -1618,13 +1630,19 @@ describe('DiagnosticsPanel component', () => {
 
     // Both fixtures are domain-less stream header rows: Name | Delivered |
     // Dropped | Errors(3) | Resyncs(4) | Fallbacks(5) | Last Event | Last Error(7).
-    const catalogCells = catalogRow!.querySelectorAll('td');
+    const catalogCells = requireValue(
+      catalogRow,
+      'expected test value in DiagnosticsPanel.test.ts'
+    ).querySelectorAll('td');
     expect(catalogCells[3]?.textContent?.trim()).toBe('1');
     expect(catalogCells[4]?.textContent?.trim()).toBe('—');
     expect(catalogCells[5]?.textContent?.trim()).toBe('—');
     expect(catalogCells[7]?.textContent?.trim()).toBe('Catalog stream disconnected');
 
-    const resourceCells = resourcesRow!.querySelectorAll('td');
+    const resourceCells = requireValue(
+      resourcesRow,
+      'expected test value in DiagnosticsPanel.test.ts'
+    ).querySelectorAll('td');
     expect(resourceCells[3]?.textContent?.trim()).toBe('1');
     expect(resourceCells[4]?.textContent?.trim()).toBe('—');
     expect(resourceCells[5]?.textContent?.trim()).toBe('—');
@@ -1885,7 +1903,10 @@ describe('DiagnosticsPanel component', () => {
 
     const permissionsBody = rendered.container.querySelector('.diagnostics-table tbody');
     expect(permissionsBody).toBeTruthy();
-    const scopedRows = permissionsBody!.querySelectorAll('tr');
+    const scopedRows = requireValue(
+      permissionsBody,
+      'expected test value in DiagnosticsPanel.test.ts'
+    ).querySelectorAll('tr');
     expect(scopedRows.length).toBe(2);
     expect(scopedRows[0].textContent).toContain('default');
     expect(scopedRows[0].textContent).toContain('deployments (get)');

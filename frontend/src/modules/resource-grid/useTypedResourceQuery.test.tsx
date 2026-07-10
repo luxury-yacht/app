@@ -3,6 +3,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
 
@@ -29,6 +30,8 @@ describe('useTypedResourceQuery', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   let result: UseTypedResourceQueryResult<TestRow> | undefined;
+  const requireResult = (): UseTypedResourceQueryResult<TestRow> =>
+    requireValue(result, 'Expected the typed resource query result after rendering the probe');
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -128,7 +131,7 @@ describe('useTypedResourceQuery', () => {
 
     let all: TestRow[] = [];
     await act(async () => {
-      all = await result!.fetchAllRows();
+      all = await requireResult().fetchAllRows();
     });
 
     expect(all.map((row) => row.name)).toEqual(['a', 'b', 'c']);
@@ -159,7 +162,7 @@ describe('useTypedResourceQuery', () => {
 
     let all: TestRow[] = [];
     await act(async () => {
-      all = await result!.fetchAllRows({
+      all = await requireResult().fetchAllRows({
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
           search: 'api',
@@ -222,7 +225,7 @@ describe('useTypedResourceQuery', () => {
       });
 
     await act(async () => {
-      result!.loadMore();
+      requireResult().loadMore();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -250,7 +253,7 @@ describe('useTypedResourceQuery', () => {
       data: { status: 'ready', data: { rows: [{ name: 'c' }], total: 3 } },
     });
     await act(async () => {
-      result!.loadMore();
+      requireResult().loadMore();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -625,7 +628,7 @@ describe('useTypedResourceQuery', () => {
 
     // A partial export saved with a success toast is worse than an error: the
     // walk must reject so the action surfaces the failure.
-    await expect(result!.fetchAllRows()).rejects.toThrow(/page 2/);
+    await expect(requireResult().fetchAllRows()).rejects.toThrow(/page 2/);
   });
 
   it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {

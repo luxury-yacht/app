@@ -46,7 +46,7 @@ const searchMocks = vi.hoisted(() => {
 });
 
 const codeMirrorState = vi.hoisted(() => ({
-  props: null as any,
+  props: null as unknown,
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -56,7 +56,7 @@ const codeMirrorState = vi.hoisted(() => ({
     focus: vi.fn(),
   },
   contextMenuHandler: null as ((event: MouseEvent, view: unknown) => boolean) | null,
-  transactionFilters: [] as Array<(transaction: any) => unknown>,
+  transactionFilters: [] as Array<(transaction: unknown) => unknown>,
   decorationRanges: [] as Array<{ from: number; to: number; spec: Record<string, unknown> }>,
 }));
 
@@ -65,7 +65,7 @@ vi.mock('@uiw/react-codemirror', async () => {
   const ExternalChange = {
     of: (value: boolean) => ({ type: 'externalChange', value }),
   };
-  const CodeMirrorMock = ReactModule.forwardRef((_props: any, ref) => {
+  const CodeMirrorMock = ReactModule.forwardRef((_props: unknown, ref) => {
     const props = _props;
     codeMirrorState.props = props;
     codeMirrorState.decorationRanges = [];
@@ -177,7 +177,7 @@ vi.mock('@codemirror/state', () => ({
   },
   EditorState: {
     transactionFilter: {
-      of: (filter: (transaction: any) => unknown) => {
+      of: (filter: (transaction: unknown) => unknown) => {
         codeMirrorState.transactionFilters.push(filter);
         return { type: 'transactionFilter', filter };
       },

@@ -10,6 +10,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOMClient from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 
@@ -619,7 +620,9 @@ describe('ObjectMap', () => {
     expect(clear).toBeTruthy();
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('click'));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -630,7 +633,9 @@ describe('ObjectMap', () => {
     expect(edge?.dataset.highlighted).toBe('true');
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('click'));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -640,15 +645,16 @@ describe('ObjectMap', () => {
     expect(edge?.dataset.highlighted).toBe('false');
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]')!
-        .dispatchEvent(mouseEvent('click'));
+      requireValue(
+        container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]'),
+        'expected test value in ObjectMap.test.tsx'
+      ).dispatchEvent(mouseEvent('click'));
       await Promise.resolve();
     });
     expect(podNode?.dataset.active).toBe('true');
 
     await act(async () => {
-      clear!.click();
+      requireValue(clear, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -688,7 +694,7 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
 
     await act(async () => {
-      hideAll!.click();
+      requireValue(hideAll, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -703,7 +709,7 @@ describe('ObjectMap', () => {
     expect(hideAll?.disabled).toBe(true);
 
     await act(async () => {
-      showAll!.click();
+      requireValue(showAll, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -712,7 +718,7 @@ describe('ObjectMap', () => {
     expect(hideAll?.disabled).toBe(false);
 
     await act(async () => {
-      ownerToggle!.click();
+      requireValue(ownerToggle, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -733,7 +739,7 @@ describe('ObjectMap', () => {
     expect(legend).toBeTruthy();
     expect(hideAll).toBeTruthy();
 
-    canvas!.getBoundingClientRect = vi.fn(
+    requireValue(canvas, 'expected test value in ObjectMap.test.tsx').getBoundingClientRect = vi.fn(
       () =>
         ({
           left: 0,
@@ -744,7 +750,7 @@ describe('ObjectMap', () => {
           bottom: 400,
         }) as DOMRect
     );
-    legend!.getBoundingClientRect = vi.fn(
+    requireValue(legend, 'expected test value in ObjectMap.test.tsx').getBoundingClientRect = vi.fn(
       () =>
         ({
           left: 380,
@@ -757,24 +763,38 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      legend!.dispatchEvent(pointerEvent('pointerdown', { clientX: 400, clientY: 40 }));
-      legend!.dispatchEvent(pointerEvent('pointermove', { clientX: 320, clientY: 70 }));
-      legend!.dispatchEvent(pointerEvent('pointerup', { clientX: 320, clientY: 70 }));
+      requireValue(legend, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 400, clientY: 40 })
+      );
+      requireValue(legend, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        pointerEvent('pointermove', { clientX: 320, clientY: 70 })
+      );
+      requireValue(legend, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        pointerEvent('pointerup', { clientX: 320, clientY: 70 })
+      );
       await Promise.resolve();
     });
 
-    expect(legend!.style.left).toBe('300px');
-    expect(legend!.style.top).toBe('46px');
-    expect(legend!.style.right).toBe('auto');
+    expect(requireValue(legend, 'expected test value in ObjectMap.test.tsx').style.left).toBe(
+      '300px'
+    );
+    expect(requireValue(legend, 'expected test value in ObjectMap.test.tsx').style.top).toBe(
+      '46px'
+    );
+    expect(requireValue(legend, 'expected test value in ObjectMap.test.tsx').style.right).toBe(
+      'auto'
+    );
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
 
     await act(async () => {
-      hideAll!.click();
+      requireValue(hideAll, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
-    expect(legend!.style.left).toBe('300px');
+    expect(requireValue(legend, 'expected test value in ObjectMap.test.tsx').style.left).toBe(
+      '300px'
+    );
 
     cleanup();
   });
@@ -789,7 +809,9 @@ describe('ObjectMap', () => {
     expect(closeButton).toBeTruthy();
 
     await act(async () => {
-      closeButton!.dispatchEvent(mouseEvent('mouseover'));
+      requireValue(closeButton, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('mouseover')
+      );
       vi.advanceTimersByTime(499);
     });
 
@@ -807,7 +829,7 @@ describe('ObjectMap', () => {
     expect(document.body.querySelector('.tooltip')?.getAttribute('data-placement')).toBeNull();
 
     await act(async () => {
-      closeButton!.click();
+      requireValue(closeButton, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -838,7 +860,7 @@ describe('ObjectMap', () => {
     expect(autoFitToggle?.getAttribute('aria-pressed')).toBe('true');
 
     await act(async () => {
-      manualViewportChange!.click();
+      requireValue(manualViewportChange, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -868,7 +890,8 @@ describe('ObjectMap', () => {
     expect(resetButton?.disabled).toBe(true);
     expect(podA).toBeTruthy();
     expect(podANode).toBeTruthy();
-    const initialPodAX = podANode!.dataset.x;
+    const initialPodAX = requireValue(podANode, 'expected test value in ObjectMap.test.tsx').dataset
+      .x;
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
@@ -879,12 +902,14 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
 
     await act(async () => {
-      podA!.dispatchEvent(mouseEvent('click'));
+      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      focusToggle!.click();
+      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -904,7 +929,7 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeNull();
 
     await act(async () => {
-      resetButton!.click();
+      requireValue(resetButton, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -931,9 +956,11 @@ describe('ObjectMap', () => {
     expect(podA).toBeTruthy();
 
     await act(async () => {
-      manualViewportChange!.click();
-      podA!.dispatchEvent(mouseEvent('click'));
-      focusToggle!.click();
+      requireValue(manualViewportChange, 'expected test value in ObjectMap.test.tsx').click();
+      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
+      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -955,13 +982,21 @@ describe('ObjectMap', () => {
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      valueSetter!.call(search, 'web-abc');
-      search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      requireValue(valueSetter, 'expected test value in ObjectMap.test.tsx').call(
+        search,
+        'web-abc'
+      );
+      requireValue(search, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        new InputEvent('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      search!.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      requireValue(
+        requireValue(search, 'expected test value in ObjectMap.test.tsx').form,
+        'expected test value in ObjectMap.test.tsx'
+      ).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
 
@@ -980,7 +1015,9 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
 
     await act(async () => {
-      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      requireValue(kindTrigger, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -990,7 +1027,9 @@ describe('ObjectMap', () => {
     expect(podOption).toBeTruthy();
 
     await act(async () => {
-      podOption!.dispatchEvent(mouseEvent('click'));
+      requireValue(podOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1014,7 +1053,9 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
 
     await act(async () => {
-      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      requireValue(kindTrigger, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1029,7 +1070,9 @@ describe('ObjectMap', () => {
     expect(serviceOption).toBeTruthy();
 
     await act(async () => {
-      serviceOption!.dispatchEvent(mouseEvent('click'));
+      requireValue(serviceOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1037,7 +1080,9 @@ describe('ObjectMap', () => {
     expect(nextPodOption).toBeTruthy();
 
     await act(async () => {
-      nextPodOption!.dispatchEvent(mouseEvent('click'));
+      requireValue(nextPodOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1066,7 +1111,9 @@ describe('ObjectMap', () => {
     expect(search).toBeTruthy();
 
     await act(async () => {
-      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      requireValue(kindTrigger, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1077,13 +1124,18 @@ describe('ObjectMap', () => {
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      valueSetter!.call(search, 'svc');
-      search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      requireValue(valueSetter, 'expected test value in ObjectMap.test.tsx').call(search, 'svc');
+      requireValue(search, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        new InputEvent('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      search!.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      requireValue(
+        requireValue(search, 'expected test value in ObjectMap.test.tsx').form,
+        'expected test value in ObjectMap.test.tsx'
+      ).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
 
@@ -1108,7 +1160,9 @@ describe('ObjectMap', () => {
     expect(pod).toBeTruthy();
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click', { metaKey: true }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click', { metaKey: true })
+      );
       await Promise.resolve();
     });
 
@@ -1126,14 +1180,18 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click', { ctrlKey: true }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click', { ctrlKey: true })
+      );
       await Promise.resolve();
     });
 
     expect(onOpenPanel).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click', { shiftKey: true }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click', { shiftKey: true })
+      );
       await Promise.resolve();
     });
 
@@ -1151,7 +1209,9 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click', { altKey: true }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click', { altKey: true })
+      );
       await Promise.resolve();
     });
 
@@ -1180,7 +1240,9 @@ describe('ObjectMap', () => {
     expect(pod).toBeTruthy();
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
@@ -1193,15 +1255,19 @@ describe('ObjectMap', () => {
     expect(menu?.textContent).not.toContain('shift');
     expect(menu?.textContent).not.toContain('alt');
 
-    const openItem = menu!.querySelector<HTMLButtonElement>(
+    const openItem = requireValue(
+      menu,
+      'expected test value in ObjectMap.test.tsx'
+    ).querySelector<HTMLButtonElement>(
       `[data-context-action-id="${OBJECT_ACTION_IDS.viewDetails}"]`
     );
-    const mapItem = menu!.querySelector<HTMLButtonElement>(
-      `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
-    );
+    const mapItem = requireValue(
+      menu,
+      'expected test value in ObjectMap.test.tsx'
+    ).querySelector<HTMLButtonElement>(`[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`);
 
     await act(async () => {
-      openItem!.click();
+      requireValue(openItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -1218,18 +1284,21 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
     const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    const nextMapItem = nextMenu!.querySelector<HTMLButtonElement>(
-      `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
-    );
+    const nextMapItem = requireValue(
+      nextMenu,
+      'expected test value in ObjectMap.test.tsx'
+    ).querySelector<HTMLButtonElement>(`[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`);
     expect(mapItem).toBeTruthy();
 
     await act(async () => {
-      nextMapItem!.click();
+      requireValue(nextMapItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -1254,15 +1323,23 @@ describe('ObjectMap', () => {
     expect(deploy).toBeTruthy();
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     expect(
-      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
+      )
     ).toBeTruthy();
-    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
+    expect(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
+      )
+    ).toBeNull();
 
     cleanup();
   });
@@ -1275,15 +1352,23 @@ describe('ObjectMap', () => {
     expect(deploy).toBeTruthy();
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     expect(
-      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
+      )
     ).toBeTruthy();
-    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
+    expect(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
+      )
+    ).toBeNull();
 
     cleanup();
   });
@@ -1296,16 +1381,22 @@ describe('ObjectMap', () => {
     expect(deploy).toBeTruthy();
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     expect(
-      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
+      )
     ).toBeTruthy();
     expect(
-      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
+      )
     ).toBeNull();
 
     cleanup();
@@ -1319,14 +1410,22 @@ describe('ObjectMap', () => {
     expect(deploy).toBeTruthy();
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
+      );
       await Promise.resolve();
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`)).toBeNull();
     expect(
-      menu!.querySelector(`[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`)
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
+      )
+    ).toBeNull();
+    expect(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
+        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
+      )
     ).toBeNull();
 
     cleanup();
@@ -1346,8 +1445,10 @@ describe('ObjectMap', () => {
     expect(canvasMenu).toBeTruthy();
 
     await act(async () => {
-      controls!.click();
-      canvasMenu!.dispatchEvent(mouseEvent('contextmenu', { clientX: 140, clientY: 160 }));
+      requireValue(controls, 'expected test value in ObjectMap.test.tsx').click();
+      requireValue(canvasMenu, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 140, clientY: 160 })
+      );
       await Promise.resolve();
     });
 
@@ -1363,18 +1464,18 @@ describe('ObjectMap', () => {
     expect(menu?.textContent).toContain('Hide legend');
     expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(9);
 
-    const autoFitItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Auto-fit off'
-    );
-    const refreshItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Refresh'
-    );
-    const legendItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Hide legend'
-    );
+    const autoFitItem = Array.from(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
+    ).find((button) => button.textContent === 'Auto-fit off');
+    const refreshItem = Array.from(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
+    ).find((button) => button.textContent === 'Refresh');
+    const legendItem = Array.from(
+      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
+    ).find((button) => button.textContent === 'Hide legend');
 
     await act(async () => {
-      autoFitItem!.click();
+      requireValue(autoFitItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
     expect(
@@ -1382,7 +1483,9 @@ describe('ObjectMap', () => {
     ).toBe('false');
 
     await act(async () => {
-      canvasMenu!.dispatchEvent(mouseEvent('contextmenu', { clientX: 140, clientY: 160 }));
+      requireValue(canvasMenu, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('contextmenu', { clientX: 140, clientY: 160 })
+      );
       await Promise.resolve();
     });
     expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).toContain(
@@ -1390,13 +1493,13 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      refreshItem!.click();
+      requireValue(refreshItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
     expect(onRefresh).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      legendItem!.click();
+      requireValue(legendItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
     expect(container.querySelector('.object-map__legend')).toBeNull();
@@ -1429,7 +1532,7 @@ describe('ObjectMap', () => {
     expect(badge).toBeTruthy();
 
     await act(async () => {
-      badge!.click();
+      requireValue(badge, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -1500,25 +1603,34 @@ describe('ObjectMap', () => {
     expect(resetButton).toBeTruthy();
     expect(resetButton?.disabled).toBe(true);
 
-    const initialX = node!.dataset.x;
-    const initialPath = edge!.dataset.path;
+    const initialX = requireValue(node, 'expected test value in ObjectMap.test.tsx').dataset.x;
+    const initialPath = requireValue(edge, 'expected test value in ObjectMap.test.tsx').dataset
+      .path;
 
     await act(async () => {
-      dragButton!.click();
+      requireValue(dragButton, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
-    expect(node!.dataset.x).not.toBe(initialX);
-    expect(edge!.dataset.path).not.toBe(initialPath);
+    expect(requireValue(node, 'expected test value in ObjectMap.test.tsx').dataset.x).not.toBe(
+      initialX
+    );
+    expect(requireValue(edge, 'expected test value in ObjectMap.test.tsx').dataset.path).not.toBe(
+      initialPath
+    );
     expect(resetButton?.disabled).toBe(false);
 
     await act(async () => {
-      resetButton!.click();
+      requireValue(resetButton, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
-    expect(node!.dataset.x).toBe(initialX);
-    expect(edge!.dataset.path).toBe(initialPath);
+    expect(requireValue(node, 'expected test value in ObjectMap.test.tsx').dataset.x).toBe(
+      initialX
+    );
+    expect(requireValue(edge, 'expected test value in ObjectMap.test.tsx').dataset.path).toBe(
+      initialPath
+    );
     expect(resetButton?.disabled).toBe(true);
 
     cleanup();
@@ -1541,12 +1653,14 @@ describe('ObjectMap', () => {
     expect(podNode).toBeTruthy();
 
     await act(async () => {
-      dragButton!.click();
+      requireValue(dragButton, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click'));
+      requireValue(pod, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1554,7 +1668,9 @@ describe('ObjectMap', () => {
     expect(deployNode?.dataset.active).toBe('false');
 
     await act(async () => {
-      deploy!.dispatchEvent(mouseEvent('click'));
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 
@@ -1577,8 +1693,10 @@ describe('ObjectMap', () => {
     expect(deployNode).toBeTruthy();
 
     await act(async () => {
-      dragButton!.click();
-      deploy!.dispatchEvent(mouseEvent('click'));
+      requireValue(dragButton, 'expected test value in ObjectMap.test.tsx').click();
+      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
       await Promise.resolve();
     });
 

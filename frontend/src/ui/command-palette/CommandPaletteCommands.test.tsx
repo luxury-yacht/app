@@ -14,6 +14,7 @@ import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
 
 const { mocks } = vi.hoisted(() => ({
@@ -155,6 +156,8 @@ const renderHook = () => {
 };
 
 describe('CommandPaletteCommands', () => {
+  let restoreGo: () => void;
+
   beforeEach(() => {
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];
@@ -171,12 +174,12 @@ describe('CommandPaletteCommands', () => {
     mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
-    (window as any).go = { backend: { App: {} } };
+    restoreGo = installWindowProperty('go', { backend: { App: {} } });
     resetAppPreferencesCacheForTesting();
   });
 
   afterEach(() => {
-    delete (window as any).go;
+    restoreGo();
     document.body.innerHTML = '';
   });
 

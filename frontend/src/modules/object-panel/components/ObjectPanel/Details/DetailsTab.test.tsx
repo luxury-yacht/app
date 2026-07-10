@@ -85,7 +85,7 @@ const renderDetailsTab = async (props: DetailsTabProps) => {
   };
 };
 
-const createBaseProps = (objectData: any, detail: unknown = null): DetailsTabProps => ({
+const createBaseProps = (objectData: unknown, detail: unknown = null): DetailsTabProps => ({
   objectData,
   detailModel: buildObjectDetailModel(objectData, objectData?.kind?.toLowerCase() ?? null, detail),
   isActive: true,

@@ -10,7 +10,7 @@ import { ingressDescriptor } from './descriptors/ingress';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: unknown) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -28,12 +28,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: any) => <a href="/object">{children}</a>,
+  ObjectPanelLink: ({ children }: unknown) => <a href="/object">{children}</a>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: unknown) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -108,7 +108,7 @@ describe('IngressOverview', () => {
       },
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     // Ingress Class is now rendered as a link to the IngressClass panel.
     const ingressClass = getValueForLabel(container, 'Ingress Class');
@@ -145,7 +145,7 @@ describe('IngressOverview', () => {
       tls: [{ hosts: ['secure.example.com'], secretName: 'tls-secret' }],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     const rulesValue = getValueForLabel(container, 'Rules');
     const linkTitles = Array.from(
@@ -176,7 +176,7 @@ describe('IngressOverview', () => {
       tls: [],
       labels: {},
       annotations: {},
-    } as any);
+    } as unknown);
 
     const address = getValueForLabel(container, 'Address');
     expect(address?.textContent).toBe('no address');

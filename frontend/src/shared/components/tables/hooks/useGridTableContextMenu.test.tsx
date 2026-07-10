@@ -14,6 +14,7 @@ import {
 import React, { act, forwardRef, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type SampleRow = { id: string; name: string };
 
@@ -162,8 +163,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.source).toBe('cell');
-    expect(menu!.columnKey).toBe('name');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
+    ).toBe('cell');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').columnKey
+    ).toBe('name');
 
     await act(async () => {
       harness.getHandle().close();
@@ -202,8 +207,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.source).toBe('empty');
-    expect(menu!.itemsOverride).toEqual(wrapperItems);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
+    ).toBe('empty');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').itemsOverride
+    ).toEqual(wrapperItems);
 
     await harness.unmount();
   });
@@ -226,8 +235,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.position.x).toBeCloseTo(50);
-    expect(menu!.position.y).toBeCloseTo(40);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').position.x
+    ).toBeCloseTo(50);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').position.y
+    ).toBeCloseTo(40);
 
     await harness.unmount();
   });

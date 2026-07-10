@@ -10,6 +10,7 @@ import type React from 'react';
 import { act, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import Dropdown from './Dropdown';
 import type { DropdownOption } from './types';
 
@@ -195,7 +196,7 @@ describe('Dropdown', () => {
 
     await setTextInputValue(searchInput, 'gam');
 
-    expect(searchInput!.value).toBe('gam');
+    expect(requireValue(searchInput, 'expected test value in Dropdown.test.tsx').value).toBe('gam');
 
     const clearButton = container.querySelector<HTMLButtonElement>('.clear-button');
     expect(clearButton).not.toBeNull();
@@ -628,7 +629,7 @@ describe('Dropdown', () => {
     if (offsetHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDescriptor);
     } else {
-      delete (HTMLElement.prototype as any).offsetHeight;
+      delete (HTMLElement.prototype as unknown).offsetHeight;
     }
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,

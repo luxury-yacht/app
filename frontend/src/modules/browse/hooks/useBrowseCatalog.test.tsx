@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { requireValue } from '@/test-utils/requireValue';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
 
 const mocks = vi.hoisted(() => ({
@@ -535,7 +536,9 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    await expect(result!.fetchAllRows()).rejects.toThrow(/page 2/);
+    await expect(
+      requireValue(result, 'expected test value in useBrowseCatalog.test.tsx').fetchAllRows()
+    ).rejects.toThrow(/page 2/);
   });
 
   it('fetchAllRows pages at the backend max page size', async () => {
@@ -555,7 +558,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    await result!.fetchAllRows();
+    await requireValue(result, 'expected test value in useBrowseCatalog.test.tsx').fetchAllRows();
 
     const exportCall = mocks.requestRefreshDomainState.mock.calls.find((call: unknown[]) =>
       String((call[0] as { scope: string }).scope).includes('limit=')
@@ -563,7 +566,13 @@ describe('useBrowseCatalog', () => {
     expect(exportCall).toBeDefined();
     // The backend caps catalog query limits at 10000; paging below that
     // multiplies the number of full catalog scans per export.
-    expect((exportCall![0] as { scope: string }).scope).toContain('limit=10000');
+    expect(
+      (
+        requireValue(exportCall, 'expected test value in useBrowseCatalog.test.tsx')[0] as {
+          scope: string;
+        }
+      ).scope
+    ).toContain('limit=10000');
   });
 
   it('keeps the selected Cluster Browse cursor page when the base scope refreshes', async () => {

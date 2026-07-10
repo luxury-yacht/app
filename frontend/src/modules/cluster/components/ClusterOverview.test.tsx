@@ -511,7 +511,7 @@ describe('ClusterOverview', () => {
           totalNamespaces: 4,
           totalPods: 99,
         },
-      } as any,
+      } as unknown,
       error: null,
     };
 
@@ -980,7 +980,7 @@ describe('ClusterOverview', () => {
           successCount: 0,
           failureCount: 0,
         },
-      } as any,
+      } as unknown,
       error: null,
     };
 

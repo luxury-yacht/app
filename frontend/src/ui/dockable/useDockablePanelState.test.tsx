@@ -9,6 +9,7 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
@@ -63,7 +64,9 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
     },
     update: async (updater) => {
       await act(async () => {
-        await updater(result.current!);
+        await updater(
+          requireValue(result.current, 'expected test value in useDockablePanelState.test.tsx')
+        );
         await Promise.resolve();
       });
     },

@@ -34,6 +34,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -113,12 +114,12 @@ type RenderOptions = Partial<{
   enableContextMenu: boolean;
   enableColumnVisibilityMenu: boolean;
   enableColumnResizing: boolean;
-  getCustomContextMenuItems: (item: SimpleRow, columnKey: string) => any[];
+  getCustomContextMenuItems: (item: SimpleRow, columnKey: string) => unknown[];
   columnVisibility: Record<string, boolean>;
   onColumnVisibilityChange: (visibility: Record<string, boolean>) => void;
   nonHideableColumns: string[];
-  onColumnWidthsChange: (widths: Record<string, any>) => void;
-  columnWidths: Record<string, any>;
+  onColumnWidthsChange: (widths: Record<string, unknown>) => void;
+  columnWidths: Record<string, unknown>;
   allowHorizontalOverflow: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
   paginationControls: React.ReactNode;
@@ -181,7 +182,7 @@ describe('GridTable virtualization', () => {
     if (originalClientHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeightDescriptor);
     } else {
-      delete (HTMLElement.prototype as any).clientHeight;
+      delete (HTMLElement.prototype as unknown).clientHeight;
     }
 
     // Restore scrollTo
@@ -275,7 +276,11 @@ describe('GridTable virtualization', () => {
     expect(exportBtn).toBeTruthy();
     // Order: Copy · Export.
     expect(
-      Boolean(copy!.compareDocumentPosition(exportBtn!) & Node.DOCUMENT_POSITION_FOLLOWING)
+      Boolean(
+        requireValue(copy, 'expected test value in GridTable.test.tsx').compareDocumentPosition(
+          requireValue(exportBtn, 'expected test value in GridTable.test.tsx')
+        ) & Node.DOCUMENT_POSITION_FOLLOWING
+      )
     ).toBe(true);
 
     cleanup();
@@ -460,9 +465,13 @@ describe('GridTable virtualization', () => {
     const virtualInner = container.querySelector<HTMLDivElement>('.gridtable-virtual-inner');
 
     expect(virtualBody).not.toBeNull();
-    expect(virtualBody!.style.width).toBe('800px');
+    expect(requireValue(virtualBody, 'expected test value in GridTable.test.tsx').style.width).toBe(
+      '800px'
+    );
     expect(virtualInner).not.toBeNull();
-    expect(virtualInner!.style.width).toBe('800px');
+    expect(
+      requireValue(virtualInner, 'expected test value in GridTable.test.tsx').style.width
+    ).toBe('800px');
   });
 
   it('wires visual viewport listeners to keep the header synced', async () => {
@@ -499,7 +508,7 @@ describe('GridTable virtualization', () => {
     if (originalDescriptor) {
       Object.defineProperty(window, 'visualViewport', originalDescriptor);
     } else {
-      delete (window as any).visualViewport;
+      delete (window as unknown).visualViewport;
     }
   });
 
@@ -598,8 +607,13 @@ describe('GridTable virtualization', () => {
       await Promise.resolve();
     });
 
-    expect(overlay!.classList.contains('is-visible')).toBe(true);
-    const initialTransform = overlay!.style.transform;
+    expect(
+      requireValue(overlay, 'expected test value in GridTable.test.tsx').classList.contains(
+        'is-visible'
+      )
+    ).toBe(true);
+    const initialTransform = requireValue(overlay, 'expected test value in GridTable.test.tsx')
+      .style.transform;
 
     document.body.classList.add('gridtable-disable-hover');
 
@@ -608,8 +622,14 @@ describe('GridTable virtualization', () => {
       await Promise.resolve();
     });
 
-    expect(overlay!.style.transform).toBe(initialTransform);
-    expect(overlay!.classList.contains('is-visible')).toBe(true);
+    expect(requireValue(overlay, 'expected test value in GridTable.test.tsx').style.transform).toBe(
+      initialTransform
+    );
+    expect(
+      requireValue(overlay, 'expected test value in GridTable.test.tsx').classList.contains(
+        'is-visible'
+      )
+    ).toBe(true);
 
     document.body.classList.remove('gridtable-disable-hover');
   });
@@ -662,11 +682,15 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     // Click on the row - this triggers focus but should not invoke onRowClick
     await act(async () => {
-      firstRow!.click();
+      requireValue(firstRow, 'expected test value in GridTable.test.tsx').click();
     });
 
     expect(onRowClick).not.toHaveBeenCalled();
-    expect(firstRow!.classList.contains('gridtable-row--focused')).toBe(true);
+    expect(
+      requireValue(firstRow, 'expected test value in GridTable.test.tsx').classList.contains(
+        'gridtable-row--focused'
+      )
+    ).toBe(true);
   });
 
   it('ignores pointer clicks inside interactive descendants', async () => {
@@ -700,7 +724,9 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(icon).not.toBeNull();
 
     await act(async () => {
-      icon!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(icon, 'expected test value in GridTable.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -732,7 +758,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(interactive).not.toBeNull();
 
     await act(async () => {
-      interactive!.click();
+      requireValue(interactive, 'expected test value in GridTable.test.tsx').click();
     });
 
     expect(cellClick).toHaveBeenCalledTimes(1);
@@ -760,7 +786,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(wrapper).not.toBeNull();
 
     act(() => {
-      wrapper!.focus();
+      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
     });
 
     await flushAsync();
@@ -768,7 +794,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     const firstCell = container.querySelector('.gridtable--body .grid-cell');
     expect(firstCell).not.toBeNull();
     act(() => {
-      firstCell!.dispatchEvent(
+      requireValue(firstCell, 'expected test value in GridTable.test.tsx').dispatchEvent(
         new MouseEvent('contextmenu', { bubbles: true, button: 2, clientX: 50, clientY: 50 })
       );
     });
@@ -777,14 +803,16 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(document.querySelector('.context-menu')).not.toBeNull();
 
     act(() => {
-      wrapper!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true })
+      );
       document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
 
     await flushAsync();
 
     act(() => {
-      wrapper!.focus();
+      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
     });
 
     await flushAsync();
@@ -816,10 +844,15 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     const headerCell = container.querySelector('[data-column="label"]');
     expect(headerCell).not.toBeNull();
-    const headerTrigger = headerCell!.querySelector('.header-content span');
+    const headerTrigger = requireValue(
+      headerCell,
+      'expected test value in GridTable.test.tsx'
+    ).querySelector('.header-content span');
     expect(headerTrigger).not.toBeNull();
     act(() => {
-      headerTrigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(headerTrigger, 'expected test value in GridTable.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
     });
     expect(onSort).toHaveBeenCalledWith('label');
   });
@@ -872,8 +905,8 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(initialRows.length).toBeGreaterThan(1);
 
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    if (wrapper && !(wrapper as any).scrollTo) {
-      (wrapper as any).scrollTo = vi.fn();
+    if (wrapper && !(wrapper as unknown).scrollTo) {
+      (wrapper as unknown).scrollTo = vi.fn();
     }
 
     await applyFilters({
@@ -896,7 +929,9 @@ describe('GridTable interactions (non-virtualized)', () => {
     );
     expect(resetButton).not.toBeNull();
     act(() => {
-      resetButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(resetButton, 'expected test value in GridTable.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
     });
     expect(onFilterChange).toHaveBeenCalledWith({
       search: '',
@@ -949,12 +984,12 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(wrapper).not.toBeNull();
 
     act(() => {
-      columnsTrigger!.focus();
+      requireValue(columnsTrigger, 'expected test value in GridTable.test.tsx').focus();
     });
     expect(document.activeElement).toBe(columnsTrigger);
 
     act(() => {
-      columnsTrigger!.dispatchEvent(
+      requireValue(columnsTrigger, 'expected test value in GridTable.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', {
           key: 'Tab',
           bubbles: true,
@@ -1003,12 +1038,12 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(columnsTrigger).not.toBeNull();
 
     act(() => {
-      wrapper!.focus();
+      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
     });
     expect(document.activeElement).toBe(wrapper);
 
     act(() => {
-      wrapper!.dispatchEvent(
+      requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', {
           key: 'Tab',
           shiftKey: true,
@@ -1043,8 +1078,8 @@ describe('GridTable interactions (non-virtualized)', () => {
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
     expect(rowButton).not.toBeNull();
     expect(wrapper).not.toBeNull();
-    expect(rowButton!.tabIndex).toBe(-1);
-    expect(wrapper!.tabIndex).toBe(0);
+    expect(requireValue(rowButton, 'expected test value in GridTable.test.tsx').tabIndex).toBe(-1);
+    expect(requireValue(wrapper, 'expected test value in GridTable.test.tsx').tabIndex).toBe(0);
   });
 
   it('shows selection counts in kind and namespace dropdown labels', async () => {
@@ -1185,7 +1220,7 @@ function renderGridTable(options: RenderOptions = {}) {
     root.render(
       <ZoomProvider>
         <KeyboardProvider>
-          <GridTable<SimpleRow> {...(currentProps as any)} />
+          <GridTable<SimpleRow> {...(currentProps as unknown)} />
         </KeyboardProvider>
       </ZoomProvider>
     );
@@ -1206,7 +1241,7 @@ function renderGridTable(options: RenderOptions = {}) {
       root.render(
         <ZoomProvider>
           <KeyboardProvider>
-            <GridTable<SimpleRow> {...(currentProps as any)} />
+            <GridTable<SimpleRow> {...(currentProps as unknown)} />
           </KeyboardProvider>
         </ZoomProvider>
       );
@@ -1302,7 +1337,11 @@ it('activates hover overlay on focused row when wrapper receives keyboard focus'
   // and updateHoverForElement was called successfully.
   const overlay = container.querySelector('.gridtable-hover-overlay');
   expect(overlay).not.toBeNull();
-  expect(overlay!.classList.contains('is-visible')).toBe(true);
+  expect(
+    requireValue(overlay, 'expected test value in GridTable.test.tsx').classList.contains(
+      'is-visible'
+    )
+  ).toBe(true);
 });
 
 it('toggles hover suppression on the body only while focused', async () => {
@@ -1349,7 +1388,7 @@ it('ignores wrapper context menus when no empty-area items are exposed', async (
   expect(wrapper).not.toBeNull();
 
   act(() => {
-    wrapper!.dispatchEvent(
+    requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 50 })
     );
   });
@@ -1431,7 +1470,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
   expect(copyButton).not.toBeNull();
 
   await act(async () => {
-    copyButton!.click();
+    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
     await Promise.resolve();
   });
 
@@ -1501,7 +1540,7 @@ it('copies resource-bar columns using their displayed CPU and memory values', as
   expect(copyButton).not.toBeNull();
 
   await act(async () => {
-    copyButton!.click();
+    requireValue(copyButton, 'expected test value in GridTable.test.tsx').click();
     await Promise.resolve();
   });
 
@@ -1533,7 +1572,7 @@ it('shows cell-level context menu items for the targeted row', async () => {
   expect(firstCell).not.toBeNull();
 
   await act(async () => {
-    firstCell!.dispatchEvent(
+    requireValue(firstCell, 'expected test value in GridTable.test.tsx').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
     );
     await Promise.resolve();
@@ -1543,7 +1582,9 @@ it('shows cell-level context menu items for the targeted row', async () => {
 
   const menu = document.body.querySelector<HTMLDivElement>('.context-menu');
   expect(menu).not.toBeNull();
-  expect(menu!.textContent).toContain('Inspect Row 0');
+  expect(requireValue(menu, 'expected test value in GridTable.test.tsx').textContent).toContain(
+    'Inspect Row 0'
+  );
 
   cleanup();
 });
@@ -1576,11 +1617,16 @@ it('triggers onSort when a sortable header is clicked', () => {
     '.grid-cell-header[data-column="label"]'
   );
   expect(headerCell).not.toBeNull();
-  const clickable = headerCell!.querySelector<HTMLSpanElement>('.header-content > span');
+  const clickable = requireValue(
+    headerCell,
+    'expected test value in GridTable.test.tsx'
+  ).querySelector<HTMLSpanElement>('.header-content > span');
   expect(clickable).not.toBeNull();
 
   act(() => {
-    clickable!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(clickable, 'expected test value in GridTable.test.tsx').dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
 
   expect(mockSort).toHaveBeenCalledWith('label');
@@ -1641,7 +1687,7 @@ it('does not hide locked columns through visibility menu', async () => {
   expect(extraHeader).not.toBeNull();
 
   await act(async () => {
-    extraHeader!.dispatchEvent(
+    requireValue(extraHeader, 'expected test value in GridTable.test.tsx').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
     );
     await Promise.resolve();
@@ -1652,7 +1698,9 @@ it('does not hide locked columns through visibility menu', async () => {
   // since the column is neither sortable nor hideable.
   const menu = document.body.querySelector<HTMLDivElement>('.context-menu');
   expect(menu).not.toBeNull();
-  const items = menu!.querySelectorAll('[role="menuitem"]');
+  const items = requireValue(menu, 'expected test value in GridTable.test.tsx').querySelectorAll(
+    '[role="menuitem"]'
+  );
   expect(items).toHaveLength(1);
   expect(items[0].textContent).toBe('No Actions');
   expect(items[0].classList.contains('disabled')).toBe(true);
@@ -1687,7 +1735,7 @@ it('shows sort and hide actions in the sortable header context menu', async () =
   expect(labelHeader).not.toBeNull();
 
   await act(async () => {
-    labelHeader!.dispatchEvent(
+    requireValue(labelHeader, 'expected test value in GridTable.test.tsx').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
     );
     await Promise.resolve();
@@ -1710,7 +1758,7 @@ it('shows sort and hide actions in the sortable header context menu', async () =
   expect(onSort).toHaveBeenCalledWith('label', 'desc');
 
   await act(async () => {
-    labelHeader!.dispatchEvent(
+    requireValue(labelHeader, 'expected test value in GridTable.test.tsx').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 })
     );
     await Promise.resolve();
@@ -1967,7 +2015,11 @@ it('renders ARIA grid semantics on container, header, rows, and cells', () => {
   // Sortable header has aria-sort="none" when no sort is active
   const sortableHeader = container.querySelector('[role="columnheader"][aria-sort]');
   expect(sortableHeader).not.toBeNull();
-  expect(sortableHeader!.getAttribute('aria-sort')).toBe('none');
+  expect(
+    requireValue(sortableHeader, 'expected test value in GridTable.test.tsx').getAttribute(
+      'aria-sort'
+    )
+  ).toBe('none');
 
   // Data rows have role="row"
   const dataRows = container.querySelectorAll('.gridtable-row[role="row"]');
@@ -2009,10 +2061,14 @@ it('sets aria-sort="ascending" on the actively sorted column header', () => {
   });
 
   const labelHeader = container.querySelector('[data-column="label"][role="columnheader"]');
-  expect(labelHeader!.getAttribute('aria-sort')).toBe('ascending');
+  expect(
+    requireValue(labelHeader, 'expected test value in GridTable.test.tsx').getAttribute('aria-sort')
+  ).toBe('ascending');
 
   const nameHeader = container.querySelector('[data-column="name"][role="columnheader"]');
-  expect(nameHeader!.getAttribute('aria-sort')).toBe('none');
+  expect(
+    requireValue(nameHeader, 'expected test value in GridTable.test.tsx').getAttribute('aria-sort')
+  ).toBe('none');
 
   act(() => root.unmount());
   container.remove();
@@ -2027,7 +2083,9 @@ it('sets aria-busy on grid container when loading overlay is shown', () => {
   cleanupRoot = cleanup;
 
   const grid = container.querySelector('[role="grid"]');
-  expect(grid!.getAttribute('aria-busy')).toBe('true');
+  expect(
+    requireValue(grid, 'expected test value in GridTable.test.tsx').getAttribute('aria-busy')
+  ).toBe('true');
 
   const statusOverlay = container.querySelector('[role="status"]');
   expect(statusOverlay).not.toBeNull();
@@ -2043,7 +2101,11 @@ it('sets aria-activedescendant on the role="grid" container when a row is focuse
 
   const grid = container.querySelector('[role="grid"]');
   // No row focused initially.
-  expect(grid!.hasAttribute('aria-activedescendant')).toBe(false);
+  expect(
+    requireValue(grid, 'expected test value in GridTable.test.tsx').hasAttribute(
+      'aria-activedescendant'
+    )
+  ).toBe(false);
 
   // Click a specific row to focus it.
   const rows = container.querySelectorAll('.gridtable-row[role="row"]');
@@ -2052,14 +2114,24 @@ it('sets aria-activedescendant on the role="grid" container when a row is focuse
     (targetRow as HTMLElement).click();
   });
 
-  const activeId = grid!.getAttribute('aria-activedescendant');
+  const activeId = requireValue(grid, 'expected test value in GridTable.test.tsx').getAttribute(
+    'aria-activedescendant'
+  );
   expect(activeId).toBeTruthy();
   // The referenced element must exist and be a row.
-  const focusedRow = document.getElementById(activeId!);
+  const focusedRow = document.getElementById(
+    requireValue(activeId, 'expected test value in GridTable.test.tsx')
+  );
   expect(focusedRow).not.toBeNull();
-  expect(focusedRow!.getAttribute('role')).toBe('row');
+  expect(
+    requireValue(focusedRow, 'expected test value in GridTable.test.tsx').getAttribute('role')
+  ).toBe('row');
   // It should be the row we clicked.
-  expect(focusedRow!.getAttribute('data-row-key')).toBe('cluster-a|row-2');
+  expect(
+    requireValue(focusedRow, 'expected test value in GridTable.test.tsx').getAttribute(
+      'data-row-key'
+    )
+  ).toBe('cluster-a|row-2');
 });
 
 it('renders resize handles between columns when enableColumnResizing is true', () => {

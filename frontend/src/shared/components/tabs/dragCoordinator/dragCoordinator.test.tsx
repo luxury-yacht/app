@@ -1,15 +1,29 @@
 /**
  * frontend/src/shared/components/tabs/dragCoordinator/dragCoordinator.test.tsx
  */
+
 import type * as React from 'react';
 import { act, useContext } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import { TabDragContext, TabDragProvider } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE } from './types';
 import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
+
+type DragSourceResult = ReturnType<typeof useTabDragSource>;
+type ClusterDropTargetResult = ReturnType<typeof useTabDropTarget<'cluster-tab'>>;
+
+const requireDragSource = (value: DragSourceResult | null): DragSourceResult =>
+  requireValue<DragSourceResult | null>(value, 'expected the tab drag source after rendering');
+
+const requireClusterDropTarget = (value: ClusterDropTargetResult | null): ClusterDropTargetResult =>
+  requireValue<ClusterDropTargetResult | null>(
+    value,
+    'expected the cluster tab drop target after rendering'
+  );
 
 describe('TabDragProvider', () => {
   let container: HTMLDivElement;
@@ -46,7 +60,12 @@ describe('TabDragProvider', () => {
 
     expect(container.querySelector('[data-testid="probe"]')).toBeTruthy();
     expect(observed).toBeTruthy();
-    expect(observed!.currentDrag).toBeNull();
+    expect(
+      requireValue<{ currentDrag: unknown } | null>(
+        observed,
+        'expected the tab drag context after rendering'
+      ).currentDrag
+    ).toBeNull();
   });
 });
 
@@ -87,9 +106,9 @@ describe('useTabDragSource', () => {
       );
     });
 
-    expect(captured!.draggable).toBe(true);
-    expect(typeof captured!.onDragStart).toBe('function');
-    expect(typeof captured!.onDragEnd).toBe('function');
+    expect(requireDragSource(captured).draggable).toBe(true);
+    expect(typeof requireDragSource(captured).onDragStart).toBe('function');
+    expect(typeof requireDragSource(captured).onDragEnd).toBe('function');
   });
 
   it('returns draggable=false when payload is null', () => {
@@ -112,7 +131,7 @@ describe('useTabDragSource', () => {
       );
     });
 
-    expect(captured!.draggable).toBe(false);
+    expect(requireDragSource(captured).draggable).toBe(false);
   });
 
   it('writes the payload to dataTransfer on dragstart', () => {
@@ -143,7 +162,10 @@ describe('useTabDragSource', () => {
     } as unknown as React.DragEvent<HTMLElement>;
 
     act(() => {
-      captured!.onDragStart!(fakeEvent);
+      requireValue(
+        requireDragSource(captured).onDragStart,
+        'expected test value in dragCoordinator.test.tsx'
+      )(fakeEvent);
     });
 
     expect(setData).toHaveBeenCalledWith(
@@ -183,7 +205,10 @@ describe('useTabDragSource', () => {
     } as unknown as React.DragEvent<HTMLElement>;
 
     act(() => {
-      captured!.onDragStart!(fakeEvent);
+      requireValue(
+        requireDragSource(captured).onDragStart,
+        'expected test value in dragCoordinator.test.tsx'
+      )(fakeEvent);
     });
 
     expect(setDragImage).toHaveBeenCalledWith(previewEl, 14, 16);
@@ -219,7 +244,10 @@ describe('useTabDragSource', () => {
     } as unknown as React.DragEvent<HTMLElement>;
 
     act(() => {
-      captured!.onDragStart!(fakeEvent);
+      requireValue(
+        requireDragSource(captured).onDragStart,
+        'expected test value in dragCoordinator.test.tsx'
+      )(fakeEvent);
     });
 
     expect(setDragImage).not.toHaveBeenCalled();
@@ -248,7 +276,7 @@ describe('useTabDragSourceFactory', () => {
     // for an arbitrary number of tabs — more than any reasonable unrolled-hook
     // workaround would allow.
     const TAB_COUNT = 40;
-    const dragStartCallbacks: Array<(event: any) => void> = [];
+    const dragStartCallbacks: Array<(event: unknown) => void> = [];
 
     function Harness() {
       const makeDragSource = useTabDragSourceFactory();
@@ -332,7 +360,7 @@ describe('useTabDropTarget', () => {
       );
     });
 
-    expect(captured!.isDragOver).toBe(false);
+    expect(requireClusterDropTarget(captured).isDragOver).toBe(false);
     expect(container.querySelector('[data-testid="target"]')).toBeTruthy();
   });
 
@@ -351,7 +379,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: any) => void) | null = null;
+    let beginDragRef: ((p: unknown) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -369,19 +397,25 @@ describe('useTabDropTarget', () => {
 
     // Simulate a drag source starting a drag.
     act(() => {
-      beginDragRef!({ kind: 'cluster-tab', clusterId: 'c1' });
+      requireValue(
+        beginDragRef,
+        'expected test value in dragCoordinator.test.tsx'
+      )({ kind: 'cluster-tab', clusterId: 'c1' });
     });
 
-    const target = container.querySelector<HTMLElement>('[data-testid="target"]')!;
+    const target = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="target"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
     // Simulate dragenter then drop.
     const dataTransfer = {
       getData: vi.fn(() => JSON.stringify({ kind: 'cluster-tab', clusterId: 'c1' })),
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dragEnter = new Event('dragenter', { bubbles: true }) as any;
+    const dragEnter = new Event('dragenter', { bubbles: true }) as unknown;
     dragEnter.dataTransfer = dataTransfer;
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as any;
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as unknown;
     dropEvent.dataTransfer = dataTransfer;
 
     act(() => {
@@ -392,7 +426,7 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    expect((payload as any).clusterId).toBe('c1');
+    expect((payload as unknown).clusterId).toBe('c1');
   });
 
   it('calls preventDefault on dragover under HTML5 "protected mode" semantics', () => {
@@ -422,7 +456,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: any) => void) | null = null;
+    let beginDragRef: ((p: unknown) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -439,7 +473,10 @@ describe('useTabDropTarget', () => {
     });
 
     act(() => {
-      beginDragRef!({ kind: 'cluster-tab', clusterId: 'c1' });
+      requireValue(
+        beginDragRef,
+        'expected test value in dragCoordinator.test.tsx'
+      )({ kind: 'cluster-tab', clusterId: 'c1' });
     });
 
     // Protected-mode data transfer: types readable, getData returns ''.
@@ -452,15 +489,18 @@ describe('useTabDropTarget', () => {
     const dragEnter = new Event('dragenter', {
       bubbles: true,
       cancelable: true,
-    }) as any;
+    }) as unknown;
     dragEnter.dataTransfer = protectedDataTransfer;
     const dragOver = new Event('dragover', {
       bubbles: true,
       cancelable: true,
-    }) as any;
+    }) as unknown;
     dragOver.dataTransfer = protectedDataTransfer;
 
-    const target = container.querySelector<HTMLElement>('[data-testid="target"]')!;
+    const target = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="target"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
     act(() => {
       target.dispatchEvent(dragEnter);
       target.dispatchEvent(dragOver);
@@ -481,7 +521,7 @@ describe('useTabDropTarget', () => {
     const dropEvent = new Event('drop', {
       bubbles: true,
       cancelable: true,
-    }) as any;
+    }) as unknown;
     dropEvent.dataTransfer = readOnlyDataTransfer;
     act(() => {
       target.dispatchEvent(dropEvent);
@@ -490,7 +530,7 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    expect((payload as any).clusterId).toBe('c1');
+    expect((payload as unknown).clusterId).toBe('c1');
   });
 
   it('does not fire onDrop when the payload kind is not in accepts', () => {
@@ -508,7 +548,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: any) => void) | null = null;
+    let beginDragRef: ((p: unknown) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -525,16 +565,22 @@ describe('useTabDropTarget', () => {
     });
 
     act(() => {
-      beginDragRef!({ kind: 'cluster-tab', clusterId: 'c1' }); // cluster payload
+      requireValue(
+        beginDragRef,
+        'expected test value in dragCoordinator.test.tsx'
+      )({ kind: 'cluster-tab', clusterId: 'c1' }); // cluster payload
     });
 
-    const target = container.querySelector<HTMLElement>('[data-testid="target"]')!;
+    const target = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="target"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
     const dataTransfer = {
       getData: vi.fn(() => JSON.stringify({ kind: 'cluster-tab', clusterId: 'c1' })),
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as any;
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as unknown;
     dropEvent.dataTransfer = dataTransfer;
 
     act(() => {
@@ -574,7 +620,10 @@ describe('useTabDropTarget', () => {
       );
     });
 
-    const inner = container.querySelector('[data-testid="inner"]')!;
+    const inner = requireValue(
+      container.querySelector('[data-testid="inner"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
     // Fire a drop carrying an accepted payload on the inner target.
     const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(dropEvent, 'dataTransfer', {
@@ -611,7 +660,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: any) => void) | null = null;
+    let beginDragRef: ((p: unknown) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -628,12 +677,24 @@ describe('useTabDropTarget', () => {
     });
 
     act(() => {
-      beginDragRef!({ kind: 'cluster-tab', clusterId: 'c1' });
+      requireValue(
+        beginDragRef,
+        'expected test value in dragCoordinator.test.tsx'
+      )({ kind: 'cluster-tab', clusterId: 'c1' });
     });
 
-    const target = container.querySelector<HTMLElement>('[data-testid="target"]')!;
-    const childA = container.querySelector<HTMLElement>('[data-testid="child-a"]')!;
-    const childB = container.querySelector<HTMLElement>('[data-testid="child-b"]')!;
+    const target = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="target"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
+    const childA = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="child-a"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
+    const childB = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="child-b"]'),
+      'expected test value in dragCoordinator.test.tsx'
+    );
 
     const dataTransfer = {
       getData: vi.fn(() => JSON.stringify({ kind: 'cluster-tab', clusterId: 'c1' })),
@@ -642,7 +703,7 @@ describe('useTabDropTarget', () => {
     };
 
     // Enter the target initially.
-    const dragEnter = new Event('dragenter', { bubbles: true }) as any;
+    const dragEnter = new Event('dragenter', { bubbles: true }) as unknown;
     dragEnter.dataTransfer = dataTransfer;
     act(() => {
       target.dispatchEvent(dragEnter);
@@ -651,7 +712,7 @@ describe('useTabDropTarget', () => {
     expect(target.getAttribute('data-drag-over')).toBe('true');
 
     // Cursor moves from target into child A. dragleave fires with relatedTarget=childA.
-    const leaveToChildA = new Event('dragleave', { bubbles: true }) as any;
+    const leaveToChildA = new Event('dragleave', { bubbles: true }) as unknown;
     leaveToChildA.dataTransfer = dataTransfer;
     leaveToChildA.relatedTarget = childA;
     act(() => {
@@ -662,7 +723,7 @@ describe('useTabDropTarget', () => {
     expect(target.getAttribute('data-drag-over')).toBe('true');
 
     // Cursor moves from child A to child B (still inside target). Same behavior.
-    const leaveAtoB = new Event('dragleave', { bubbles: true }) as any;
+    const leaveAtoB = new Event('dragleave', { bubbles: true }) as unknown;
     leaveAtoB.dataTransfer = dataTransfer;
     leaveAtoB.relatedTarget = childB;
     act(() => {
@@ -674,7 +735,7 @@ describe('useTabDropTarget', () => {
     // Cursor leaves the target entirely (relatedTarget is some unrelated element).
     const unrelated = document.createElement('div');
     document.body.appendChild(unrelated);
-    const leaveToOutside = new Event('dragleave', { bubbles: true }) as any;
+    const leaveToOutside = new Event('dragleave', { bubbles: true }) as unknown;
     leaveToOutside.dataTransfer = dataTransfer;
     leaveToOutside.relatedTarget = unrelated;
     act(() => {

@@ -180,7 +180,7 @@ describe('KeyboardProvider', () => {
       if (originalExecDescriptor) {
         Object.defineProperty(document, 'execCommand', originalExecDescriptor);
       } else {
-        delete (document as any).execCommand;
+        delete (document as unknown).execCommand;
       }
     });
   });

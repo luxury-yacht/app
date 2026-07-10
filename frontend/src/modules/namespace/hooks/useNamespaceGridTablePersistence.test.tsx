@@ -13,14 +13,14 @@ import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Capture the params passed to useGridTablePersistence.
-const capturedParams: any[] = [];
+const capturedParams: unknown[] = [];
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'test-cluster' }),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: any) => {
+  useGridTablePersistence: (params: unknown) => {
     capturedParams.push(params);
     return {
       sortConfig: null,
@@ -54,7 +54,7 @@ describe('useNamespaceGridTablePersistence', () => {
 
   const Harness: React.FC<{
     namespace: string;
-    filterOptions?: any;
+    filterOptions?: unknown;
   }> = ({ namespace, filterOptions }) => {
     useNamespaceGridTablePersistence({
       viewId: 'test-view',
