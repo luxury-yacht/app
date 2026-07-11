@@ -287,7 +287,7 @@ describe('ShellTab', () => {
   };
 
   const setDebugContainerEnabled = (enabled: boolean) => {
-    const checkbox = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
+    const checkbox = container.querySelector<HTMLInputElement>('[id$="-shell-tab-debug-toggle"]');
     const debugCheckbox = requireValue(checkbox, 'expected shell debug toggle');
     if (debugCheckbox.checked === enabled) {
       return;
@@ -572,7 +572,7 @@ describe('ShellTab', () => {
     await flushAsync();
 
     expect(container.querySelector('.shell-tab__controls')).toBeNull();
-    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
+    expect(container.querySelector('[id$="-shell-tab-debug-toggle"]')).toBeNull();
     expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
   });
 
@@ -635,7 +635,7 @@ describe('ShellTab', () => {
 
   it('renders a debug checkbox toggle', async () => {
     await renderShellTab();
-    const toggle = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
+    const toggle = container.querySelector<HTMLInputElement>('[id$="-shell-tab-debug-toggle"]');
     expect(toggle).not.toBeNull();
     expect(toggle?.checked).toBe(false);
   });
@@ -817,7 +817,7 @@ describe('ShellTab', () => {
     await flushAsync();
 
     expect(container.querySelector('.shell-tab__controls')).toBeNull();
-    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
+    expect(container.querySelector('[id$="-shell-tab-debug-toggle"]')).toBeNull();
   });
 
   it('renders a custom shell scrollbar from xterm buffer geometry', async () => {

@@ -5,15 +5,7 @@
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
-import {
-  type MouseEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type WheelEvent,
-} from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type WheelEvent } from 'react';
 import {
   readShellSessionBacklog,
   readShellSessions,
@@ -89,6 +81,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   availableContainers,
   clusterId,
 }) => {
+  const elementIdPrefix = useId();
   const shellDropdownMenuClassName = 'shell-tab__dropdown-menu';
   const panelState = useDockablePanelState('object-panel');
   const [session, setSession] = useState<types.ShellSession | null>(null);
@@ -111,6 +104,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const terminalWrapperRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalScrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
@@ -978,7 +972,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     terminalRef.current?.focus();
   }, []);
 
-  const handleTerminalContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handleTerminalContextMenu = useCallback((event: globalThis.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     terminalRef.current?.focus();
@@ -986,6 +980,28 @@ const ShellTab: React.FC<ShellTabProps> = ({
       position: { x: event.clientX, y: event.clientY },
     });
   }, []);
+
+  useEffect(() => {
+    const wrapper = terminalWrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    wrapper.addEventListener('contextmenu', handleTerminalContextMenu);
+    wrapper.addEventListener('pointerleave', handleShellScrollbarPointerLeave);
+    wrapper.addEventListener('pointermove', handleShellScrollbarPointerMove);
+    wrapper.addEventListener('wheel', showShellScrollbar);
+    return () => {
+      wrapper.removeEventListener('contextmenu', handleTerminalContextMenu);
+      wrapper.removeEventListener('pointerleave', handleShellScrollbarPointerLeave);
+      wrapper.removeEventListener('pointermove', handleShellScrollbarPointerMove);
+      wrapper.removeEventListener('wheel', showShellScrollbar);
+    };
+  }, [
+    handleShellScrollbarPointerLeave,
+    handleShellScrollbarPointerMove,
+    handleTerminalContextMenu,
+    showShellScrollbar,
+  ]);
 
   const contextMenuItems: ContextMenuItem[] = [
     {
@@ -1017,9 +1033,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       {!hasActiveSession && (
         <div className="shell-tab__toolbar">
           <div className="shell-tab__controls">
-            <label className="shell-tab__debug-toggle" htmlFor="shell-tab-debug-toggle">
+            <label
+              className="shell-tab__debug-toggle"
+              htmlFor={`${elementIdPrefix}-shell-tab-debug-toggle`}
+            >
               <input
-                id="shell-tab-debug-toggle"
+                id={`${elementIdPrefix}-shell-tab-debug-toggle`}
                 type="checkbox"
                 checked={startDebugContainer}
                 onChange={(event) => setStartDebugContainer(event.target.checked)}
@@ -1176,15 +1195,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       )}
 
       <div
+        ref={terminalWrapperRef}
         className="shell-tab__terminal-wrapper"
         data-tab-native="true"
         role="application"
         aria-label="Shell terminal"
         tabIndex={-1}
-        onContextMenu={handleTerminalContextMenu}
-        onPointerLeave={handleShellScrollbarPointerLeave}
-        onPointerMove={handleShellScrollbarPointerMove}
-        onWheel={showShellScrollbar}
       >
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}

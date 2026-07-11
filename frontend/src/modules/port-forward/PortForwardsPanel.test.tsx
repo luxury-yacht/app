@@ -177,7 +177,7 @@ describe('PortForwardsPanel', () => {
       root.render(
         <KeyboardProvider>
           <PortForwardsPanel />
-          <button type="button" id="outside-panel">
+          <button type="button" data-testid="outside-panel">
             Outside
           </button>
         </KeyboardProvider>
@@ -228,7 +228,9 @@ describe('PortForwardsPanel', () => {
     await renderPanel();
     await flushPromises();
 
-    const outsideButton = document.querySelector('#outside-panel') as HTMLButtonElement | null;
+    const outsideButton = document.querySelector(
+      '[data-testid="outside-panel"]'
+    ) as HTMLButtonElement | null;
     expect(outsideButton).toBeTruthy();
     outsideButton?.focus();
 

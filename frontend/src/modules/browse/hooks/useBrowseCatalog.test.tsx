@@ -1309,7 +1309,10 @@ describe('doorbell refetch quietness on a paged catalog', () => {
     // user-initiated fetch is in flight.
     let resolveUserFetch: (value: unknown) => void = () => {};
     mocks.requestRefreshDomainState.mockImplementationOnce(
-      () => new Promise((resolve) => (resolveUserFetch = resolve))
+      () =>
+        new Promise((resolve) => {
+          resolveUserFetch = resolve;
+        })
     );
 
     await act(async () => {
@@ -1336,7 +1339,10 @@ describe('doorbell refetch quietness on a paged catalog', () => {
     // the busy flag stays FALSE the whole time.
     let resolveQuietFetch: (value: unknown) => void = () => {};
     mocks.requestRefreshDomainState.mockImplementationOnce(
-      () => new Promise((resolve) => (resolveQuietFetch = resolve))
+      () =>
+        new Promise((resolve) => {
+          resolveQuietFetch = resolve;
+        })
     );
     baseState = {
       ...baseState,

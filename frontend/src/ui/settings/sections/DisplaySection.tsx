@@ -12,7 +12,7 @@ import {
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
 import { errorHandler } from '@utils/errorHandler';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   hydrateAppPreferences,
   setDefaultTablePageSize as persistDefaultTablePageSize,
@@ -29,6 +29,7 @@ const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
 }));
 
 function DisplaySection() {
+  const elementIdPrefix = useId();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [dimInactiveNamespaces, setDimInactiveNamespaces] = useState<boolean>(true);
   const [exclusiveNamespaces, setExclusiveNamespaces] = useState<boolean>(true);
@@ -131,7 +132,7 @@ function DisplaySection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="short-resource-names"
+            id={`${elementIdPrefix}-short-resource-names`}
             checked={useShortResourceNames}
             onChange={handleShortNamesToggle}
             ariaLabel="Short resource names"
@@ -151,7 +152,7 @@ function DisplaySection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="dim-inactive-namespaces"
+            id={`${elementIdPrefix}-dim-inactive-namespaces`}
             checked={dimInactiveNamespaces}
             onChange={handleDimInactiveNamespacesToggle}
             ariaLabel="Dim inactive namespaces"
@@ -169,7 +170,7 @@ function DisplaySection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="exclusive-namespaces"
+            id={`${elementIdPrefix}-exclusive-namespaces`}
             checked={exclusiveNamespaces}
             onChange={handleExclusiveNamespacesToggle}
             ariaLabel="Exclusive namespaces"

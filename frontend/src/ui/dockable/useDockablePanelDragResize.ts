@@ -11,7 +11,7 @@ import type {
   RefObject,
 } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getContentBounds, LAYOUT } from './dockablePanelLayout';
+import { getContentBounds } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
 
 // Note: clientX/clientY and getBoundingClientRect() are already in CSS coordinates,
@@ -150,48 +150,6 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       });
     },
     [panelState, safeMinHeight, safeMinWidth]
-  );
-
-  // Detect resize edge for floating panels
-  const getResizeDirection = useCallback(
-    (e: ReactMouseEvent) => {
-      if (panelState.position !== 'floating' || !panelRef.current) return '';
-
-      const rect = panelRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      const isTop = y < LAYOUT.RESIZE_TOP_EDGE_SIZE;
-      const isLeft = x < LAYOUT.RESIZE_EDGE_SIZE;
-      const isRight = x > rect.width - LAYOUT.RESIZE_EDGE_SIZE;
-      const isBottom = y > rect.height - LAYOUT.RESIZE_EDGE_SIZE;
-
-      if (isTop && isLeft) return 'nw';
-      if (isTop && isRight) return 'ne';
-      if (isBottom && isLeft) return 'sw';
-      if (isBottom && isRight) return 'se';
-      if (isTop) return 'n';
-      if (isBottom) return 's';
-      if (isLeft) return 'w';
-      if (isRight) return 'e';
-
-      return '';
-    },
-    [panelState.position, panelRef]
-  );
-
-  // Handle mouse down for floating panel (drag or resize)
-  const handleFloatingMouseDown = useCallback(
-    (e: ReactMouseEvent) => {
-      if (isMaximized) return;
-      if (panelState.position !== 'floating') return;
-
-      const direction = getResizeDirection(e);
-      if (direction) {
-        handleMouseDownResize(e, direction);
-      }
-    },
-    [panelState.position, getResizeDirection, handleMouseDownResize, isMaximized]
   );
 
   const dragFrameRef = useRef<number | null>(null);
@@ -502,6 +460,5 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     handleHeaderKeyDown,
     handleMouseDownResize,
     handleDockedKeyboardResize,
-    handleFloatingMouseDown,
   };
 }

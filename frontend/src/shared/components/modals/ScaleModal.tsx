@@ -6,7 +6,7 @@
  */
 
 import { ScaleIcon } from '@shared/components/icons/SharedIcons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import ModalHeader from './ModalHeader';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
@@ -39,6 +39,7 @@ const ScaleModal = ({
   onScaleToZero,
   onValueChange,
 }: ScaleModalProps) => {
+  const elementIdPrefix = useId();
   // Local string state so the user can clear the field while typing.
   const [inputText, setInputText] = useState(String(value));
 
@@ -121,12 +122,12 @@ const ScaleModal = ({
               <span className="scale-modal-value">{name}</span>
             </>
           )}
-          <label className="scale-modal-label" htmlFor="scale-replicas">
+          <label className="scale-modal-label" htmlFor={`${elementIdPrefix}-scale-replicas`}>
             Replicas:
           </label>
           <div className="scale-input-group">
             <input
-              id="scale-replicas"
+              id={`${elementIdPrefix}-scale-replicas`}
               type="text"
               inputMode="numeric"
               value={inputText}

@@ -12,7 +12,11 @@ import type {
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { buildResourceMetricsReference, resolveResourceMetricsScope } from './scope';
 import { selectNodeMetrics, selectPodMetrics, selectWorkloadMetrics } from './selectors';
-import type { ResourceMetricsResolution, ResourceMetricsResult } from './types';
+import type {
+  ResourceMetricsData,
+  ResourceMetricsResolution,
+  ResourceMetricsResult,
+} from './types';
 
 const disabledDomain: RefreshDomain = 'pods';
 const disabledScope = '__resource_metrics_disabled__';
@@ -87,7 +91,7 @@ export const useResourceMetrics = (
       };
     }
 
-    let metrics = null;
+    let metrics: ResourceMetricsData | null = null;
     if (resolution.domain === 'pods') {
       metrics = selectPodMetrics(state.data as PodSnapshotPayload | null, ref);
     } else if (resolution.domain === 'namespace-workloads') {

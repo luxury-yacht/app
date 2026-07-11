@@ -9,7 +9,7 @@ import {
   type FrameSamplerSample,
   useFrameSampler,
 } from '@shared/components/tables/hooks/useFrameSampler';
-import { Profiler, useCallback, useMemo, useRef } from 'react';
+import { Profiler, useCallback, useId, useMemo, useRef } from 'react';
 
 // Optional perf helper for GridTable: wraps content in React Profiler, samples
 // frame timings, and surfaces one-time dev warnings when thresholds are hit.
@@ -41,6 +41,7 @@ export function useGridTableProfiler({
   onFrameSample,
   onRenderSample,
 }: GridTableProfilerOptions = {}): GridTableProfilerApi {
+  const elementIdPrefix = useId();
   const isJSDOM =
     typeof navigator !== 'undefined' &&
     typeof navigator.userAgent === 'string' &&
@@ -94,13 +95,13 @@ export function useGridTableProfiler({
   const wrapWithProfiler = useCallback(
     (content: React.ReactElement) =>
       profilerEnabled ? (
-        <Profiler id="GridTable" onRender={handleProfilerRender}>
+        <Profiler id={`${elementIdPrefix}-GridTable`} onRender={handleProfilerRender}>
           {content}
         </Profiler>
       ) : (
         content
       ),
-    [handleProfilerRender, profilerEnabled]
+    [elementIdPrefix, handleProfilerRender, profilerEnabled]
   );
 
   const { start: startFrameSampler, stop: stopFrameSampler } = useFrameSampler({

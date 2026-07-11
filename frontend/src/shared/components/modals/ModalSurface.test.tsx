@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestId } from '@/test-utils/createTestId';
 import ModalSurface from './ModalSurface';
 
 describe('ModalSurface', () => {
@@ -25,15 +26,16 @@ describe('ModalSurface', () => {
   });
 
   const renderSurface = async (onClose = vi.fn(), closeOnBackdrop?: boolean) => {
+    const titleId = createTestId('modal-title');
     await act(async () => {
       root.render(
         <ModalSurface
           modalRef={modalRef}
-          labelledBy="modal-title"
+          labelledBy={titleId}
           onClose={onClose}
           closeOnBackdrop={closeOnBackdrop}
         >
-          <h2 id="modal-title">Modal title</h2>
+          <h2 id={titleId}>Modal title</h2>
         </ModalSurface>
       );
       await Promise.resolve();

@@ -215,8 +215,20 @@ export const AppLayout: React.FC = () => {
                     )
                   ) : (
                     <div className="welcome">
-                      <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
-                      <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+                      <img
+                        src={captainK8s}
+                        alt="Captain K8s"
+                        className="welcome-logo"
+                        width={1024}
+                        height={1024}
+                      />
+                      <img
+                        src={logo}
+                        alt="Luxury Yacht"
+                        className="welcome-logo"
+                        width={827}
+                        height={500}
+                      />
 
                       <p>Select a view from the sidebar to get started</p>
                     </div>
@@ -231,8 +243,20 @@ export const AppLayout: React.FC = () => {
                   </RouteErrorBoundary>
                 ) : (
                   <div className="welcome">
-                    <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
-                    <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+                    <img
+                      src={captainK8s}
+                      alt="Captain K8s"
+                      className="welcome-logo"
+                      width={1024}
+                      height={1024}
+                    />
+                    <img
+                      src={logo}
+                      alt="Luxury Yacht"
+                      className="welcome-logo"
+                      width={827}
+                      height={500}
+                    />
 
                     <p>Select a view from the sidebar to get started</p>
                   </div>

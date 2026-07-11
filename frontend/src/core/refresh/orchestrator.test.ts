@@ -489,7 +489,9 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockImplementationOnce(
       (_domain: string, args: { signal?: AbortSignal }) => {
         firstSignal = args?.signal;
-        return new Promise((resolve) => (resolveFirst = resolve));
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        });
       }
     );
     const firstFetch = refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {

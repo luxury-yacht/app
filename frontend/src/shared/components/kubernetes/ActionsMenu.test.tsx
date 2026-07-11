@@ -276,7 +276,7 @@ describe('ActionsMenu', () => {
 
     const modal = document.querySelector('.scale-modal');
     expect(modal).toBeTruthy();
-    const input = modal?.querySelector<HTMLInputElement>('#scale-replicas');
+    const input = modal?.querySelector<HTMLInputElement>('[id$="-scale-replicas"]');
     expect(input?.value).toBe('3');
 
     const onChange = (() => {
@@ -319,7 +319,7 @@ describe('ActionsMenu', () => {
     openMenu(container);
     clickMenuItem(container, 'Scale');
 
-    const input = document.querySelector<HTMLInputElement>('#scale-replicas');
+    const input = document.querySelector<HTMLInputElement>('[id$="-scale-replicas"]');
     expect(input?.value).toBe('6');
   });
 

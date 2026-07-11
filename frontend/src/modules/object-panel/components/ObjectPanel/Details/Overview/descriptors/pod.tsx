@@ -58,7 +58,7 @@ const renderOwner = (d: PodDetailInfo, context: OverviewContext): React.ReactNod
   // The renderer evaluates `render` before honoring `hidden`, so guard the
   // no-owner case here too.
   if (!hasOwner(d)) return null;
-  let ownerRef = null;
+  let ownerRef: ReturnType<typeof buildRequiredRelatedObjectReference> | null = null;
   try {
     ownerRef = buildRequiredRelatedObjectReference({
       kind: d.ownerKind.toLowerCase(),

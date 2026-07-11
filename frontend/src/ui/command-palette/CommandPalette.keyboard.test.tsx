@@ -85,6 +85,7 @@ function BlockingSurfaceHarness() {
 
 function SharedModalHarness() {
   const modalRef = React.useRef<HTMLDivElement>(null);
+  const titleId = React.useId();
 
   useModalFocusTrap({
     ref: modalRef,
@@ -94,13 +95,13 @@ function SharedModalHarness() {
   return (
     <ModalSurface
       modalRef={modalRef}
-      labelledBy="blocking-modal-title"
+      labelledBy={titleId}
       onClose={() => {}}
       containerClassName="test-blocking-modal"
       closeOnBackdrop={false}
     >
       <div className="modal-header">
-        <h2 id="blocking-modal-title">Blocking modal</h2>
+        <h2 id={titleId}>Blocking modal</h2>
       </div>
       <div className="modal-content">
         <button type="button">Inside modal</button>

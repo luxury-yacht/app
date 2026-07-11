@@ -80,7 +80,7 @@ describe('ScaleModal', () => {
 
     await renderModal({ value: 5 });
 
-    const input = document.querySelector('#scale-replicas') as HTMLInputElement | null;
+    const input = document.querySelector('[id$="-scale-replicas"]') as HTMLInputElement | null;
     expect(input).not.toBeNull();
     expect(input?.value).toBe('5');
 
@@ -123,7 +123,7 @@ describe('ScaleModal', () => {
   it('cancels on Escape through the keyboard surface manager', async () => {
     await renderModal();
 
-    const input = document.querySelector('#scale-replicas') as HTMLInputElement | null;
+    const input = document.querySelector('[id$="-scale-replicas"]') as HTMLInputElement | null;
     expect(input).not.toBeNull();
     input?.focus();
 

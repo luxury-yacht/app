@@ -11,8 +11,7 @@ import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { readTargetPortsForRef, requestData } from '@/core/data-access';
 import './PortForwardModal.css';
 
@@ -69,6 +68,7 @@ function getDefaultLocalPort(containerPort: number): number {
  * custom port input when no ports are available.
  */
 const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps) => {
+  const elementIdPrefix = useId();
   // Selected container port (either from predefined list or manual input)
   const [containerPort, setContainerPort] = useState<number>(0);
   // Local port to forward to
@@ -353,10 +353,10 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
         {/* Local Port Input */}
         <div className="port-forward-field">
-          <label htmlFor="port-forward-local-port">Local Port</label>
+          <label htmlFor={`${elementIdPrefix}-port-forward-local-port`}>Local Port</label>
           <div className="port-forward-input-group">
             <input
-              id="port-forward-local-port"
+              id={`${elementIdPrefix}-port-forward-local-port`}
               type="number"
               className="port-forward-input"
               min={1}

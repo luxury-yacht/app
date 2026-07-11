@@ -29,7 +29,7 @@ import {
 } from '@ui/settings/settingsTabPreference';
 import type { backend } from '@wailsjs/go/models';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import '@ui/settings/Settings.css';
 import './SettingsModal.css';
@@ -63,6 +63,7 @@ const resolveTab = (tab: SettingsTabId | null | undefined): SettingsTabId =>
   tab && KNOWN_TAB_IDS.has(tab) ? tab : DEFAULT_SETTINGS_TAB;
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
+  const elementIdPrefix = useId();
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
@@ -139,7 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
       isClosing={isClosing}
     >
       <div className="modal-header settings-modal-header">
-        <div className="settings-modal-breadcrumb" id="settings-modal-title">
+        <div className="settings-modal-breadcrumb" id={`${elementIdPrefix}-settings-modal-title`}>
           <SettingsIcon width={18} height={18} />
           <span className="settings-modal-breadcrumb-root">Settings</span>
           <span className="settings-modal-breadcrumb-sep">›</span>

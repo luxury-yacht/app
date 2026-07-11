@@ -94,7 +94,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
               <div className="shortcut-list">
                 {group.shortcuts.map((shortcut) => {
                   // Build key combination display
-                  const keyParts = [];
+                  const keyParts: React.ReactElement[] = [];
                   const isMac = navigator.userAgent.includes('Mac');
 
                   if (shortcut.modifiers?.meta) {

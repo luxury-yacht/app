@@ -299,7 +299,7 @@ describe('FavSaveModal', () => {
     const props = makeProps({ defaultName: 'Test Default Name' });
     await renderComponent(props);
 
-    const input = container.querySelector<HTMLInputElement>('#fav-name');
+    const input = container.querySelector<HTMLInputElement>('[id$="-fav-name"]');
     expect(input).toBeTruthy();
     expect(requireValue(input, 'expected test value in FavSaveModal.test.tsx').value).toBe(
       'Test Default Name'

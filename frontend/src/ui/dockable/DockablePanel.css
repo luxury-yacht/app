@@ -263,6 +263,9 @@
 .dockable-panel__resize-zone {
   position: absolute;
   z-index: calc(var(--z-index-scrollbar-overlay) + 1);
+  border: 0;
+  background: transparent;
+  padding: 0;
 
   /* transition: background-color var(--transition-fast); */
 }

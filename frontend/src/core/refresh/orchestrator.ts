@@ -772,14 +772,7 @@ class RefreshOrchestrator {
         // visit to a streaming view. Fetch once now; streamSignal bypasses
         // the healthy-stream skip, performFetch dedupes in-flight, and a
         // denied domain gets its typed-403 stamp immediately.
-        if (!streaming.snapshotless && !getScopedDomainState(domain, scope).data) {
-          void this.performFetch(domain, scope, {
-            isManual: false,
-            streamSignal: true,
-          }).catch(() => {
-            // Failures land in the scoped state via performFetch's own path.
-          });
-        }
+        this.reconcileInitialStreamingSnapshot(domain, scope, streaming);
       })
       .catch((error) => {
         runtime.failStreamingStart(domain, scope);
@@ -797,6 +790,22 @@ class RefreshOrchestrator {
       });
 
     return startPromise.then(() => undefined).catch(() => undefined);
+  }
+
+  private reconcileInitialStreamingSnapshot(
+    domain: RefreshDomain,
+    scope: string,
+    streaming: StreamingRegistration
+  ): void {
+    if (streaming.snapshotless || getScopedDomainState(domain, scope).data) {
+      return;
+    }
+    void this.performFetch(domain, scope, {
+      isManual: false,
+      streamSignal: true,
+    }).catch(() => {
+      // Failures land in the scoped state via performFetch's own path.
+    });
   }
 
   private stopStreamingScope(

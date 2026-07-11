@@ -136,7 +136,9 @@ describe('PortForwardModal', () => {
     await renderModal();
 
     // Port 80 is < 1024, so default local port should be 80 + 8000 = 8080
-    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    const localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput).toBeTruthy();
     expect(localPortInput?.value).toBe('8080');
   });
@@ -145,7 +147,9 @@ describe('PortForwardModal', () => {
     await renderModal();
 
     // Initially port 80 is selected, local port should be 8080
-    let localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    let localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput?.value).toBe('8080');
 
     // Select port 443
@@ -158,7 +162,7 @@ describe('PortForwardModal', () => {
     });
 
     // Port 443 is < 1024, so local port should be 443 + 8000 = 8443
-    localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    localPortInput = document.querySelector<HTMLInputElement>('[id$="-port-forward-local-port"]');
     expect(localPortInput?.value).toBe('8443');
   });
 
@@ -207,7 +211,9 @@ describe('PortForwardModal', () => {
   it('closes on Escape through the keyboard surface manager', async () => {
     await renderModal();
 
-    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    const localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput).toBeTruthy();
     localPortInput?.focus();
 
@@ -239,7 +245,9 @@ describe('PortForwardModal', () => {
       await Promise.resolve();
     });
 
-    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    const localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput).toBeTruthy();
     localPortInput?.focus();
 
@@ -396,14 +404,18 @@ describe('PortForwardModal', () => {
     await renderModal({ target: targetWithHighPort });
 
     // Port 8080 is >= 1024, so local port should be the same: 8080
-    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    const localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput?.value).toBe('8080');
   });
 
   it('allows manual local port input', async () => {
     await renderModal();
 
-    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    const localPortInput = document.querySelector<HTMLInputElement>(
+      '[id$="-port-forward-local-port"]'
+    );
     expect(localPortInput).toBeTruthy();
 
     // Change local port to custom value

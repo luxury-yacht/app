@@ -271,7 +271,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     handleHeaderKeyDown,
     handleMouseDownResize,
     handleDockedKeyboardResize,
-    handleFloatingMouseDown,
   } = useDockablePanelDragResize({
     panelState,
     panelRef,
@@ -606,6 +605,21 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     return true;
   }, [closeActiveTabOnEscape, closeTab, groupInfo?.activeTab, panelId]);
 
+  useEffect(() => {
+    const panelRoot = panelRef.current;
+    if (!panelRoot || !isGroupLeader) {
+      return;
+    }
+    const focusPanel = () => {
+      panelState.focus();
+      if (groupKey) {
+        setLastFocusedGroupKey(groupKey);
+      }
+    };
+    panelRoot.addEventListener('mousedown', focusPanel, true);
+    return () => panelRoot.removeEventListener('mousedown', focusPanel, true);
+  }, [groupKey, isGroupLeader, panelState, setLastFocusedGroupKey]);
+
   useKeyboardSurface({
     kind: 'panel',
     rootRef: panelRef,
@@ -810,30 +824,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       className={panelClassName}
       data-dockable-group-key={groupKey ?? undefined}
       style={isGroupLeader ? panelStyle : { display: 'none' }}
-      onMouseDownCapture={
-        isGroupLeader
-          ? () => {
-              // Capture phase ensures focus/tracking runs even when children
-              // stop propagation (e.g. tab bar, object panel header).
-              panelState.focus();
-              if (groupKey) {
-                setLastFocusedGroupKey(groupKey);
-              }
-            }
-          : undefined
-      }
-      onMouseDown={
-        isGroupLeader
-          ? (e: React.MouseEvent) => {
-              if (isMaximized) {
-                return;
-              }
-              if (panelState.position === 'floating') {
-                handleFloatingMouseDown(e);
-              }
-            }
-          : undefined
-      }
       role="dialog"
       aria-label={activeTitle}
       aria-modal={panelState.position === 'floating'}
@@ -925,14 +915,62 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
           {!isMaximized && panelState.position === 'floating' && (
             <>
               {/* Invisible resize zones for floating panels */}
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--top" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--left" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--right" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--top-left" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--top-right" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-left" />
-              <div className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-right" />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from top"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top"
+                onMouseDown={(event) => handleMouseDownResize(event, 'n')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from bottom"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom"
+                onMouseDown={(event) => handleMouseDownResize(event, 's')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from left"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--left"
+                onMouseDown={(event) => handleMouseDownResize(event, 'w')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from right"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--right"
+                onMouseDown={(event) => handleMouseDownResize(event, 'e')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from top left"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top-left"
+                onMouseDown={(event) => handleMouseDownResize(event, 'nw')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from top right"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top-right"
+                onMouseDown={(event) => handleMouseDownResize(event, 'ne')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from bottom left"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-left"
+                onMouseDown={(event) => handleMouseDownResize(event, 'sw')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize floating panel from bottom right"
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-right"
+                onMouseDown={(event) => handleMouseDownResize(event, 'se')}
+              />
             </>
           )}
         </>

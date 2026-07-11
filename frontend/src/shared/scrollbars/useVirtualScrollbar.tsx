@@ -10,6 +10,7 @@ import {
 import { readScrollbarActiveTimeoutMs, readScrollbarPxToken } from './tokens';
 
 type ScrollbarAxis = 'horizontal' | 'vertical';
+type PointerCoordinates = Pick<globalThis.PointerEvent, 'clientX' | 'clientY'>;
 
 export interface VirtualScrollbarMetrics {
   contentSize: number;
@@ -57,13 +58,13 @@ const getTrackSize = (axis: ScrollbarAxis, host: HTMLElement): number =>
     ? host.clientHeight || host.getBoundingClientRect().height || 0
     : host.clientWidth || host.getBoundingClientRect().width || 0;
 
-const getPointerPosition = (axis: ScrollbarAxis, event: PointerEvent<HTMLElement>): number =>
+const getPointerPosition = (axis: ScrollbarAxis, event: PointerCoordinates): number =>
   axis === 'vertical' ? event.clientY : event.clientX;
 
 const isPointerInHoverZone = (
   axis: ScrollbarAxis,
   host: HTMLElement,
-  event: PointerEvent<HTMLElement>
+  event: PointerCoordinates
 ): boolean => {
   const rect = host.getBoundingClientRect();
   const hoverZoneSize = readScrollbarPxToken('--scrollbar-hover-zone-size', 16, host);
@@ -179,7 +180,7 @@ export const useVirtualScrollbar = ({
   }, [clearHideTimer]);
 
   const onSurfacePointerMove = useCallback(
-    (event: PointerEvent<HTMLElement>) => {
+    (event: PointerCoordinates) => {
       if (!state.canScroll || state.dragging) {
         return;
       }

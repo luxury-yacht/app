@@ -34,6 +34,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -172,6 +173,8 @@ function PaletteControls({
   onSaturationReset: () => void;
   onBrightnessReset: () => void;
 }) {
+  const elementIdPrefix = useId();
+
   return (
     <div className="settings-row">
       <div className="settings-row-label">
@@ -183,10 +186,10 @@ function PaletteControls({
       </div>
       <div className="settings-row-control">
         <div className="palette-tint-controls">
-          <label htmlFor="palette-hue">Hue</label>
+          <label htmlFor={`${elementIdPrefix}-palette-hue`}>Hue</label>
           <input
             type="range"
-            id="palette-hue"
+            id={`${elementIdPrefix}-palette-hue`}
             className="palette-slider palette-slider-hue"
             min={paletteBounds.hue.min}
             max={paletteBounds.hue.max}
@@ -205,10 +208,10 @@ function PaletteControls({
             ↺
           </button>
 
-          <label htmlFor="palette-saturation">Saturation</label>
+          <label htmlFor={`${elementIdPrefix}-palette-saturation`}>Saturation</label>
           <input
             type="range"
-            id="palette-saturation"
+            id={`${elementIdPrefix}-palette-saturation`}
             className="palette-slider palette-slider-saturation"
             min={paletteBounds.saturation.min}
             max={paletteBounds.saturation.max}
@@ -227,10 +230,10 @@ function PaletteControls({
             ↺
           </button>
 
-          <label htmlFor="palette-brightness">Brightness</label>
+          <label htmlFor={`${elementIdPrefix}-palette-brightness`}>Brightness</label>
           <input
             type="range"
-            id="palette-brightness"
+            id={`${elementIdPrefix}-palette-brightness`}
             className="palette-slider palette-slider-brightness"
             min={paletteBounds.brightness.min}
             max={paletteBounds.brightness.max}
@@ -341,6 +344,7 @@ function ColorControl({
 }
 
 function AppearanceSection() {
+  const elementIdPrefix = useId();
   const { mode, resolvedMode } = useAppearanceMode();
 
   // Palette tint state for hue/saturation/brightness sliders.
@@ -1190,7 +1194,10 @@ function AppearanceSection() {
                             }}
                           />
                           {!!themePatternError && (
-                            <div id="theme-pattern-error-active" className="theme-pattern-error">
+                            <div
+                              id={`${elementIdPrefix}-theme-pattern-error-active`}
+                              className="theme-pattern-error"
+                            >
                               {themePatternError}
                             </div>
                           )}
@@ -1293,7 +1300,10 @@ function AppearanceSection() {
                         }}
                       />
                       {!!themePatternError && (
-                        <div id="theme-pattern-error-new" className="theme-pattern-error">
+                        <div
+                          id={`${elementIdPrefix}-theme-pattern-error-new`}
+                          className="theme-pattern-error"
+                        >
                           {themePatternError}
                         </div>
                       )}

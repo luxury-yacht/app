@@ -165,7 +165,11 @@ describe('ClusterLifecycleContext', () => {
 
     // Deliver a LIVE event before hydration resolves.
     let resolveHydration: (value: unknown) => void = () => {};
-    mockGetAllStates.mockReturnValue(new Promise((resolve) => (resolveHydration = resolve)));
+    mockGetAllStates.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHydration = resolve;
+      })
+    );
 
     await renderProvider();
     await act(async () => {

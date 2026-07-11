@@ -21,7 +21,7 @@ import {
 } from '@core/settings/appPreferences';
 import Tooltip from '@shared/components/Tooltip';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,
@@ -31,6 +31,7 @@ import './ObjPanelLogsSettings.css';
 const LOG_API_TIMESTAMP_EXAMPLE = '2026-04-11T12:34:55.000Z';
 
 function ObjPanelLogsSettings() {
+  const elementIdPrefix = useId();
   const [objPanelLogsBufferMaxSizeInput, setObjPanelLogsBufferMaxSizeInput] = useState<string>(() =>
     String(getObjPanelLogsBufferMaxSize())
   );
@@ -121,12 +122,12 @@ function ObjPanelLogsSettings() {
         <h3>Constraints</h3>
         <div className="modal-form-items">
           <div className="modal-form-field modal-form-field-inline">
-            <label htmlFor="obj-panel-logs-buffer-max-size">
+            <label htmlFor={`${elementIdPrefix}-obj-panel-logs-buffer-max-size`}>
               Object Panel Logs Tab buffer size{' '}
             </label>
             <input
               type="number"
-              id="obj-panel-logs-buffer-max-size"
+              id={`${elementIdPrefix}-obj-panel-logs-buffer-max-size`}
               min={OBJ_PANEL_LOGS_BUFFER_MIN_SIZE}
               max={OBJ_PANEL_LOGS_BUFFER_MAX_SIZE}
               step={100}
@@ -162,7 +163,7 @@ function ObjPanelLogsSettings() {
                 <span>Max containers</span>
               </div>
               <label
-                htmlFor="log-target-per-scope-limit"
+                htmlFor={`${elementIdPrefix}-log-target-per-scope-limit`}
                 className="obj-panel-logs-settings-target-limits-row"
               >
                 Per tab
@@ -170,7 +171,7 @@ function ObjPanelLogsSettings() {
               <div className="obj-panel-logs-settings-target-limits-control">
                 <input
                   type="number"
-                  id="log-target-per-scope-limit"
+                  id={`${elementIdPrefix}-log-target-per-scope-limit`}
                   min={OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN}
                   max={OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX}
                   step={1}
@@ -202,7 +203,7 @@ function ObjPanelLogsSettings() {
                 />
               </div>
               <label
-                htmlFor="log-target-global-limit"
+                htmlFor={`${elementIdPrefix}-log-target-global-limit`}
                 className="obj-panel-logs-settings-target-limits-row"
               >
                 Global
@@ -210,7 +211,7 @@ function ObjPanelLogsSettings() {
               <div className="obj-panel-logs-settings-target-limits-control">
                 <input
                   type="number"
-                  id="log-target-global-limit"
+                  id={`${elementIdPrefix}-log-target-global-limit`}
                   min={OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN}
                   max={OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX}
                   step={1}
@@ -251,12 +252,12 @@ function ObjPanelLogsSettings() {
             <div className="obj-panel-logs-settings-timestamp-grid">
               <div className="obj-panel-logs-settings-timestamp-checkbox-row">
                 <label
-                  htmlFor="log-api-timestamp-local-time-zone"
+                  htmlFor={`${elementIdPrefix}-log-api-timestamp-local-time-zone`}
                   className="obj-panel-logs-settings-timestamp-checkbox"
                 >
                   <input
                     type="checkbox"
-                    id="log-api-timestamp-local-time-zone"
+                    id={`${elementIdPrefix}-log-api-timestamp-local-time-zone`}
                     checked={objPanelLogsApiTimestampUseLocalTimeZone}
                     onChange={(e) => {
                       const enabled = e.target.checked;
@@ -270,7 +271,7 @@ function ObjPanelLogsSettings() {
                 <Tooltip content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC." />
               </div>
               <label
-                htmlFor="log-api-timestamp-format"
+                htmlFor={`${elementIdPrefix}-log-api-timestamp-format`}
                 className="obj-panel-logs-settings-timestamp-format-label"
               >
                 Format
@@ -278,7 +279,7 @@ function ObjPanelLogsSettings() {
               <div className="obj-panel-logs-settings-timestamp-control">
                 <input
                   type="text"
-                  id="log-api-timestamp-format"
+                  id={`${elementIdPrefix}-log-api-timestamp-format`}
                   value={objPanelLogsApiTimestampFormatInput}
                   onChange={(e) => {
                     setObjPanelLogsApiTimestampFormatInput(e.target.value);

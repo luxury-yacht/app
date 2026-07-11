@@ -12,10 +12,12 @@ The global configuration is `frontend/biome.json`.
 - Test and production code inherit the same strict type-safety and hook-dependency rules.
 
 The repository uses Biome's `recommended` preset as its portable baseline and explicitly promotes
-additional applicable rules to errors. The explicit non-recommended rules currently include
-`noImportCycles`, `noLeakedRender`, `noMisplacedAssertion`, `noSkippedTests`,
-`noUnusedExpressions`, and `noUnusedInstantiation`. Explicit rules are also recorded in the
-policy manifest so removing or weakening one fails the policy check.
+additional applicable rules to errors. The explicit non-recommended rules include accessibility,
+React correctness, and suspicious-code checks such as `noNoninteractiveElementInteractions`,
+`useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
+`noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
+`noUnusedExpressions`, and `noUnusedInstantiation`. The policy manifest contains the authoritative
+list, so removing or weakening any required rule fails the policy check.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and

@@ -202,7 +202,7 @@ describe('AppearanceSection', () => {
 
   it('prompts to save live appearance changes as the default theme', async () => {
     const hueInput = requireValue(
-      container.querySelector<HTMLInputElement>('#palette-hue'),
+      container.querySelector<HTMLInputElement>('[id$="-palette-hue"]'),
       'expected the palette hue input'
     );
 

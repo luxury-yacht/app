@@ -1337,7 +1337,9 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(document.body.textContent).toContain('Object Panel Logs Tab Settings');
-    expect(document.querySelector<HTMLInputElement>('input#log-api-timestamp-format')).toBeTruthy();
+    expect(
+      document.querySelector<HTMLInputElement>('input[id$="-log-api-timestamp-format"]')
+    ).toBeTruthy();
   });
 
   it('formats API timestamps in the local timezone when enabled', async () => {

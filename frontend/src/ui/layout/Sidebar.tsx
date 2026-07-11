@@ -5,7 +5,7 @@
  * Implements Sidebar logic for the UI layer.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -73,6 +73,7 @@ const escapeAttributeSelectorValue = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 function Sidebar() {
+  const elementIdPrefix = useId();
   const {
     namespaces,
     namespaceLoading,
@@ -387,13 +388,16 @@ function Sidebar() {
                   data-sidebar-target-id="resources"
                   tabIndex={-1}
                   aria-expanded={clusterResourcesExpanded}
-                  aria-controls="sidebar-cluster-resource-views"
+                  aria-controls={`${elementIdPrefix}-sidebar-cluster-resource-views`}
                 >
                   <ClusterResourcesIcon width={14} height={14} />
                   <span>Resources</span>
                 </button>
                 {!!clusterResourcesExpanded && (
-                  <div className="sidebar-views" id="sidebar-cluster-resource-views">
+                  <div
+                    className="sidebar-views"
+                    id={`${elementIdPrefix}-sidebar-cluster-resource-views`}
+                  >
                     {/* Animate Resources the same way as namespace views. */}
                     {resourceViews.map((view) => (
                       <button

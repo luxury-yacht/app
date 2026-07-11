@@ -37,6 +37,7 @@
       "a11y": {
         "noAutofocus": "error",
         "noLabelWithoutControl": "error",
+        "noNoninteractiveElementInteractions": "error",
         "noNoninteractiveTabindex": "error",
         "noStaticElementInteractions": "error",
         "useAriaPropsForRole": "error",
@@ -52,6 +53,8 @@
       },
       "correctness": {
         "noUnusedInstantiation": "error",
+        "useImageSize": "error",
+        "useUniqueElementIds": "error",
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
@@ -63,10 +66,13 @@
         "noArrayIndexKey": "error",
         "noConfusingVoidType": "error",
         "noExplicitAny": "error",
+        "noEvolvingTypes": "error",
         "noImportCycles": "error",
         "noLeakedRender": "error",
         "noMisplacedAssertion": "error",
+        "noNestedPromises": "error",
         "noPrototypeBuiltins": "error",
+        "noReturnAssign": "error",
         "noSkippedTests": "error",
         "noUnusedExpressions": "error",
         "useIterableCallbackReturn": {

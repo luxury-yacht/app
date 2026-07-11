@@ -457,7 +457,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const publishRendererDebugSnapshot = useCallback(() => {
     if (!debugMapId) return;
     const graph = graphRef.current;
-    let viewport = null;
+    let viewport: ObjectMapRendererDebugSnapshot['viewport'] = null;
     if (graphReady && graph && !graph.destroyed) {
       try {
         const zoom = graph.getZoom();

@@ -5,6 +5,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
@@ -384,6 +385,7 @@ describe('Tabs', () => {
   });
 
   it('merges a consumer className onto the root and applies an id', () => {
+    const tabListId = createTestId('custom-id');
     act(() => {
       root.render(
         <Tabs
@@ -392,7 +394,7 @@ describe('Tabs', () => {
           onActivate={() => {}}
           aria-label="Test Tabs"
           className="custom-class"
-          id="custom-id"
+          id={tabListId}
         />
       );
     });
@@ -400,7 +402,7 @@ describe('Tabs', () => {
     const tablist = container.querySelector('[role="tablist"]');
     expect(tablist?.classList.contains('tab-strip')).toBe(true);
     expect(tablist?.classList.contains('custom-class')).toBe(true);
-    expect(tablist?.id).toBe('custom-id');
+    expect(tablist?.id).toBe(tabListId);
   });
 
   it('adds the fit sizing modifier class by default', () => {

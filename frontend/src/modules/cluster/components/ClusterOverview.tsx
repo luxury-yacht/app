@@ -865,8 +865,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           </div>
         </div>
         <div className="overview-top__hero">
-          <img src={captainK8s} alt="Captain K8s" className="captain-k8s-small" />
-          <img src={logo} alt="Luxury Yacht" className="logo-small" />
+          <img
+            src={captainK8s}
+            alt="Captain K8s"
+            className="captain-k8s-small"
+            width={1024}
+            height={1024}
+          />
+          <img src={logo} alt="Luxury Yacht" className="logo-small" width={827} height={500} />
         </div>
       </div>
 

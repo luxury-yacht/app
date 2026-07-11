@@ -6,7 +6,7 @@
  * G6 renderer so the heavy graph dependency stays out of the initial bundle.
  */
 
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
@@ -101,6 +101,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   onNavigateView,
   onOpenObjectMap,
 }) => {
+  const elementIdPrefix = useId();
   const payload = useMemo(() => normalizeObjectMapPayload(wirePayload), [wirePayload]);
   const modelTimingStartedAt = objectMapTimingNow();
   const model = useObjectMapModel(payload);
@@ -465,7 +466,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       >
         <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
           <Dropdown
-            id="object-map-kind-filter"
+            id={`${elementIdPrefix}-object-map-kind-filter`}
             name="object-map-kind-filter"
             multiple
             size="compact"

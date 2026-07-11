@@ -16,7 +16,7 @@ import { clearAccentColor } from '@utils/accentColor';
 import { errorHandler } from '@utils/errorHandler';
 import { clearLinkColor } from '@utils/linkColor';
 import { clearTintedPalette } from '@utils/paletteTint';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
   commitIntegerPreferenceInput,
@@ -31,6 +31,7 @@ import {
 } from '@/core/settings/appPreferences';
 
 function AdvancedSection() {
+  const elementIdPrefix = useId();
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const [kubernetesClientQPSInput, setKubernetesClientQPSInput] = useState<string>(() =>
@@ -174,7 +175,7 @@ function AdvancedSection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="refresh-enabled"
+            id={`${elementIdPrefix}-refresh-enabled`}
             checked={refreshEnabled}
             onChange={handleRefreshToggle}
             ariaLabel="Auto-refresh"
@@ -191,7 +192,7 @@ function AdvancedSection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="refresh-background"
+            id={`${elementIdPrefix}-refresh-background`}
             checked={backgroundRefreshEnabled}
             onChange={setBackgroundRefresh}
             ariaLabel="Background clusters refresh"
@@ -213,7 +214,7 @@ function AdvancedSection() {
           <div className="setting-item setting-item-inline">
             <input
               type="number"
-              id="settings-kubernetes-client-qps"
+              id={`${elementIdPrefix}-settings-kubernetes-client-qps`}
               min={kubernetesClientQPSMetadata.min}
               max={kubernetesClientQPSMetadata.max}
               step={10}
@@ -243,7 +244,7 @@ function AdvancedSection() {
           <div className="setting-item setting-item-inline">
             <input
               type="number"
-              id="settings-kubernetes-client-burst"
+              id={`${elementIdPrefix}-settings-kubernetes-client-burst`}
               min={kubernetesClientBurstMetadata.min}
               max={kubernetesClientBurstMetadata.max}
               step={10}
@@ -273,7 +274,7 @@ function AdvancedSection() {
           <div className="setting-item setting-item-inline">
             <input
               type="number"
-              id="settings-permission-ssrr-concurrency"
+              id={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
               min={permissionSSRRFetchConcurrencyMetadata.min}
               max={permissionSSRRFetchConcurrencyMetadata.max}
               step={1}
@@ -305,7 +306,7 @@ function AdvancedSection() {
         </div>
         <div className="settings-row-control">
           <ToggleSwitch
-            id="persist-namespaced"
+            id={`${elementIdPrefix}-persist-namespaced`}
             checked={persistenceMode === 'namespaced'}
             onChange={handlePersistenceModeToggle}
             ariaLabel="Per-namespace views"

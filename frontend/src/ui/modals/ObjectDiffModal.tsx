@@ -6,7 +6,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
 import { useRefreshScopedDomain } from '@core/refresh';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
@@ -378,6 +378,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
   initialRequest = null,
   onClose,
 }) => {
+  const elementIdPrefix = useId();
   const { selectedKubeconfigs, getClusterMeta } = useKubeconfig();
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -1208,11 +1209,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
             </div>
             {!!leftNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-left-cluster">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-left-cluster`}
+              >
                 Cluster
               </label>
               <Dropdown
-                id="object-diff-left-cluster"
+                id={`${elementIdPrefix}-object-diff-left-cluster`}
                 options={clusterOptions}
                 value={leftClusterId}
                 onChange={handleLeftClusterChange}
@@ -1222,11 +1226,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-left-namespace">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-left-namespace`}
+              >
                 Namespace
               </label>
               <Dropdown
-                id="object-diff-left-namespace"
+                id={`${elementIdPrefix}-object-diff-left-namespace`}
                 options={leftNamespaceOptions}
                 value={leftNamespace}
                 onChange={handleLeftNamespaceChange}
@@ -1238,11 +1245,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-left-kind">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-left-kind`}
+              >
                 Kind
               </label>
               <Dropdown
-                id="object-diff-left-kind"
+                id={`${elementIdPrefix}-object-diff-left-kind`}
                 options={leftKindOptions}
                 value={leftKind}
                 onChange={handleLeftKindChange}
@@ -1254,11 +1264,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-left-object">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-left-object`}
+              >
                 Object
               </label>
               <Dropdown
-                id="object-diff-left-object"
+                id={`${elementIdPrefix}-object-diff-left-object`}
                 options={leftObjectOptions}
                 value={leftObjectUid}
                 onChange={handleLeftSelectionChange}
@@ -1307,11 +1320,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
             </div>
             {!!rightNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-right-cluster">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-right-cluster`}
+              >
                 Cluster
               </label>
               <Dropdown
-                id="object-diff-right-cluster"
+                id={`${elementIdPrefix}-object-diff-right-cluster`}
                 options={clusterOptions}
                 value={rightClusterId}
                 onChange={handleRightClusterChange}
@@ -1321,11 +1337,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-right-namespace">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-right-namespace`}
+              >
                 Namespace
               </label>
               <Dropdown
-                id="object-diff-right-namespace"
+                id={`${elementIdPrefix}-object-diff-right-namespace`}
                 options={rightNamespaceOptions}
                 value={rightNamespace}
                 onChange={handleRightNamespaceChange}
@@ -1337,11 +1356,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-right-kind">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-right-kind`}
+              >
                 Kind
               </label>
               <Dropdown
-                id="object-diff-right-kind"
+                id={`${elementIdPrefix}-object-diff-right-kind`}
                 options={rightKindOptions}
                 value={rightKind}
                 onChange={handleRightKindChange}
@@ -1353,11 +1375,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             <div className="object-diff-field">
-              <label className="object-diff-label" htmlFor="object-diff-right-object">
+              <label
+                className="object-diff-label"
+                htmlFor={`${elementIdPrefix}-object-diff-right-object`}
+              >
                 Object
               </label>
               <Dropdown
-                id="object-diff-right-object"
+                id={`${elementIdPrefix}-object-diff-right-object`}
                 options={rightObjectOptions}
                 value={rightObjectUid}
                 onChange={handleRightSelectionChange}

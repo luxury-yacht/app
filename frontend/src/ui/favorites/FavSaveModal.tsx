@@ -17,7 +17,7 @@ import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
@@ -171,6 +171,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onSave,
   onDelete,
 }) => {
+  const elementIdPrefix = useId();
   const isEditing = existingFavorite != null;
   const { kubeconfigs, getClusterMeta } = useKubeconfig();
   const { namespaces } = useNamespace();
@@ -393,7 +394,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <div className="modal-form-items">
               <div className="modal-form-field">
                 <input
-                  id="fav-name"
+                  id={`${elementIdPrefix}-fav-name`}
                   type="text"
                   className="modal-input"
                   value={name}
@@ -470,9 +471,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <h3>View</h3>
             <div className="modal-form-items">
               <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                <label htmlFor="favorite-view">View</label>
+                <label htmlFor={`${elementIdPrefix}-favorite-view`}>View</label>
                 <Dropdown
-                  id="favorite-view"
+                  id={`${elementIdPrefix}-favorite-view`}
                   options={ALL_VIEWS}
                   value={selectedView}
                   onChange={(val) => setSelectedView(val as string)}
@@ -481,9 +482,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               </div>
               {isNamespaceScope && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label htmlFor="favorite-namespace">Namespace</label>
+                  <label htmlFor={`${elementIdPrefix}-favorite-namespace`}>Namespace</label>
                   <Dropdown
-                    id="favorite-namespace"
+                    id={`${elementIdPrefix}-favorite-namespace`}
                     options={namespaceOptions}
                     value={selectedNamespace}
                     onChange={(val) => setSelectedNamespace(val as string)}
@@ -499,9 +500,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <div className="modal-form-items">
               {kindDropdownOptions.length > 0 && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label htmlFor="favorite-kinds">Kinds</label>
+                  <label htmlFor={`${elementIdPrefix}-favorite-kinds`}>Kinds</label>
                   <Dropdown
-                    id="favorite-kinds"
+                    id={`${elementIdPrefix}-favorite-kinds`}
                     options={kindDropdownOptions}
                     value={filterKinds}
                     onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
@@ -518,9 +519,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               )}
               {nsFilterDropdownOptions.length > 0 && (
                 <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                  <label htmlFor="favorite-filter-namespaces">Namespaces</label>
+                  <label htmlFor={`${elementIdPrefix}-favorite-filter-namespaces`}>
+                    Namespaces
+                  </label>
                   <Dropdown
-                    id="favorite-filter-namespaces"
+                    id={`${elementIdPrefix}-favorite-filter-namespaces`}
                     options={nsFilterDropdownOptions}
                     value={filterNamespaces}
                     onChange={(val) =>
@@ -538,9 +541,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 </div>
               )}
               <div className="modal-form-field modal-form-field-inline fav-save-inline-row">
-                <label htmlFor="fav-filter-text">Filter Text</label>
+                <label htmlFor={`${elementIdPrefix}-fav-filter-text`}>Filter Text</label>
                 <input
-                  id="fav-filter-text"
+                  id={`${elementIdPrefix}-fav-filter-text`}
                   type="text"
                   className="modal-input"
                   value={filterText}

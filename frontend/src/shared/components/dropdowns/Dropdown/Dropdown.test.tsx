@@ -7,9 +7,10 @@
 
 import { KeyboardProvider } from '@ui/shortcuts';
 import type React from 'react';
-import { act, useState } from 'react';
+import { act, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';
 import Dropdown from './Dropdown';
 import type { DropdownOption } from './types';
@@ -129,11 +130,16 @@ describe('Dropdown', () => {
     const Harness = () => {
       const [firstValue, setFirstValue] = useState<string[]>([]);
       const [secondValue, setSecondValue] = useState<string[]>([]);
+      const formRef = useRef<HTMLFormElement>(null);
+      useEffect(() => {
+        const form = formRef.current;
+        if (!form) return;
+        const stopMouseDownPropagation = (event: MouseEvent) => event.stopPropagation();
+        form.addEventListener('mousedown', stopMouseDownPropagation);
+        return () => form.removeEventListener('mousedown', stopMouseDownPropagation);
+      }, []);
       return (
-        <form
-          aria-label="Dropdown propagation harness"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
+        <form ref={formRef} aria-label="Dropdown propagation harness">
           <Dropdown
             options={OPTIONS}
             value={firstValue}
@@ -674,8 +680,9 @@ describe('Dropdown', () => {
   });
 
   it('renders form input values when name is provided', async () => {
+    const dropdownId = createTestId('example');
     await mount(
-      <Dropdown options={OPTIONS} value="beta" onChange={vi.fn()} name="example" id="example-id" />
+      <Dropdown options={OPTIONS} value="beta" onChange={vi.fn()} name="example" id={dropdownId} />
     );
 
     const hidden = container.querySelector<HTMLInputElement>(
@@ -684,6 +691,6 @@ describe('Dropdown', () => {
     expect(hidden).toBeTruthy();
     expect(hidden?.value).toBe('beta');
     const trigger = container.querySelector('.dropdown-trigger');
-    expect(trigger?.getAttribute('aria-controls')).toBe('example-id-menu');
+    expect(trigger?.getAttribute('aria-controls')).toBe(`${dropdownId}-menu`);
   });
 });
