@@ -17,9 +17,15 @@ React correctness, and suspicious-code checks such as `noNoninteractiveElementIn
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
 `noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
 `noDelete`, `noEmptyBlockStatements`, `noForIn`, `noReactForwardRef`, `noShadow`, `useGuardForIn`,
-`noParameterAssign`, `noUnusedExpressions`, `noUnusedInstantiation`, and
+`useMaxParams`, `noParameterAssign`, `noUnusedExpressions`, `noUnusedInstantiation`, and
 `noUnusedTemplateLiteral`. The policy manifest contains the authoritative list, so removing or
 weakening any required rule fails the policy check.
+
+`useMaxParams` uses a project ceiling of seven parameters. Functions above that ceiling must group
+cohesive inputs into a typed object. The ceiling deliberately retains five-to-seven-argument
+callback, coordinate, and compact transformation signatures where wrapping the values would make
+the call less direct. Required rule options are recorded in the policy manifest and compared
+exactly, so raising the ceiling fails policy validation.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and
@@ -59,6 +65,26 @@ gates. Revisit them when their rule semantics or the application architecture ch
   and 18 helper functions that intentionally share their provider or component module. The project
   accepts a full reload for those edited modules instead of splitting cohesive public APIs solely
   to preserve development Fast Refresh state.
+- `suspicious.useAwait`: the 2026-07-11 isolated audit found 447 diagnostics: 425 in tests or
+  stories, 21 in production, and one in tooling. The production findings are promise-returning
+  brokers, facades, and lifecycle adapters; the test findings are predominantly async mock and
+  callback contracts. Removing `async` can change synchronous throws and promise settlement, while
+  adding an otherwise unnecessary `await` would exist only for the analyzer. Keep promise contracts
+  explicit and use `await` where the function actually consumes asynchronous work.
+- `style.useDefaultSwitchClause`: all ten findings were reviewed. Eight switches exhaust typed
+  resource-metric field unions, one exhausts the dock-position union, and one handles the
+  open-ended `KeyboardEvent.key` string. A mandatory default would hide newly added union members
+  or add a no-op branch to keyboard behavior that already ignores unknown keys.
+- `complexity.noForEach`: the isolated audit found 302 diagnostics across 129 files: 245 in
+  production, 53 in tests or stories, and four in tooling. The rule applies to every method named
+  `forEach`, not only arrays, and its proposed loop form is a coding convention rather than a
+  repository invariant. Use the iteration form that preserves the collection's semantics and
+  makes early exit, sparse entries, and index use clear.
+- `complexity.noVoid`: the isolated audit found 220 diagnostics, including 215 in production.
+  This frontend uses `void promise` to mark intentionally detached work and `void token` as the
+  documented hook-invalidation contract. Removing those markers would make promise ownership and
+  dependency lifetimes less explicit; detached promises must still handle rejection at their
+  owning boundary.
 
 ## React hook dependency lifetimes
 
@@ -85,7 +111,7 @@ Hook dependency suppressions and custom lifetime-hook allowlists are not approve
 
 - every config override that disables a rule;
 - every inline `biome-ignore`, aggregated by file and exact rule.
-- every required explicit error rule and Grit boundary plugin.
+- every required explicit error rule, exact required rule options, and Grit boundary plugin.
 
 `npm run check:biome-policy --prefix frontend` compares the code and config with that policy. It
 fails for both new exceptions and stale entries, so removing an exception also requires shrinking
@@ -102,7 +128,7 @@ lockfile, and generated-binding trees. It rejects:
 - inline suppressions without an exact rule and rationale;
 - disabled formatter, assist, or linter configuration;
 - global rule shutdowns, `preset: none`, and override-level linter shutdowns;
-- removal or weakening of required rules, hooks, or plugins;
+- removal or weakening of required rules, exact rule options, hooks, or plugins;
 - changes to the exact include/exclude scope of a required Grit plugin.
 
 The Grit plugins have executable adversarial fixtures in

@@ -119,19 +119,35 @@ const arraysEqual = (a: string[], b: string[]): boolean =>
   a.length === b.length && a.every((v, i) => v === b[i]);
 
 /** Compare current form state against an existing favorite to detect changes. */
+interface FavoriteFormState {
+  name: string;
+  clusterSpecific: boolean;
+  clusterSelection: string;
+  scope: 'cluster' | 'namespace';
+  view: string;
+  namespace: string;
+  filterText: string;
+  filterKinds: string[];
+  filterNamespaces: string[];
+  caseSensitive: boolean;
+  includeMetadata: boolean;
+}
+
 const hasFormChanges = (
   existing: Favorite,
-  name: string,
-  clusterSpecific: boolean,
-  clusterSelection: string,
-  scope: 'cluster' | 'namespace',
-  view: string,
-  namespace: string,
-  filterText: string,
-  filterKinds: string[],
-  filterNamespaces: string[],
-  caseSensitive: boolean,
-  includeMetadata: boolean
+  {
+    name,
+    clusterSpecific,
+    clusterSelection,
+    scope,
+    view,
+    namespace,
+    filterText,
+    filterKinds,
+    filterNamespaces,
+    caseSensitive,
+    includeMetadata,
+  }: FavoriteFormState
 ): boolean => {
   if (name !== existing.name) return true;
   const existingIsClusterSpecific = existing.clusterSelection !== '';
@@ -315,20 +331,19 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Detect whether Save should be enabled when editing.
   const changesDetected =
     isEditing && existingFavorite
-      ? hasFormChanges(
-          existingFavorite,
-          name.trim() || defaultName,
+      ? hasFormChanges(existingFavorite, {
+          name: name.trim() || defaultName,
           clusterSpecific,
           clusterSelection,
           scope,
-          activeView,
-          selectedNamespace,
+          view: activeView,
+          namespace: selectedNamespace,
           filterText,
           filterKinds,
           filterNamespaces,
           caseSensitive,
-          includeMetadataState
-        )
+          includeMetadata: includeMetadataState,
+        })
       : true;
 
   // ----- Handlers -----

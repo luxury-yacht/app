@@ -554,32 +554,28 @@ export const queryNamespacesPermissions = async (
           const transientError = targetResults.find(isTransientPermissionResultError);
           if (transientError) {
             transientTargets.add(target);
-            completeQueryDiagnostics(
-              target.diagnosticsKey,
-              false,
-              getPermissionResultErrorMessage(transientError),
-              target.startedAt,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              target.batch.length
-            );
+            completeQueryDiagnostics({
+              queryKey: target.diagnosticsKey,
+              success: false,
+              errorMessage: getPermissionResultErrorMessage(transientError),
+              startTime: target.startedAt,
+              completedCheckCount: target.batch.length,
+            });
             continue;
           }
           applyResults(targetResults, target.batch);
           const nsDiag = response.diagnostics?.find((d) => d.key === target.diagnosticsKey);
-          completeQueryDiagnostics(
-            target.diagnosticsKey,
-            true,
-            null,
-            target.startedAt,
-            nsDiag?.ssarFallbackCount,
-            nsDiag?.ssrrRuleCount,
-            nsDiag?.ssrrIncomplete,
-            nsDiag?.method as 'ssrr' | 'ssar' | undefined,
-            target.batch.length
-          );
+          completeQueryDiagnostics({
+            queryKey: target.diagnosticsKey,
+            success: true,
+            errorMessage: null,
+            startTime: target.startedAt,
+            ssarFallbackCount: nsDiag?.ssarFallbackCount,
+            ssrrRuleCount: nsDiag?.ssrrRuleCount,
+            ssrrIncomplete: nsDiag?.ssrrIncomplete,
+            method: nsDiag?.method as 'ssrr' | 'ssar' | undefined,
+            completedCheckCount: target.batch.length,
+          });
         }
       } catch (err) {
         const queryError = String(err);
@@ -601,17 +597,13 @@ export const queryNamespacesPermissions = async (
           });
         }
         for (const target of chunk) {
-          completeQueryDiagnostics(
-            target.diagnosticsKey,
-            false,
-            queryError,
-            target.startedAt,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            target.batch.length
-          );
+          completeQueryDiagnostics({
+            queryKey: target.diagnosticsKey,
+            success: false,
+            errorMessage: queryError,
+            startTime: target.startedAt,
+            completedCheckCount: target.batch.length,
+          });
         }
       } finally {
         for (const target of chunk) {
@@ -703,27 +695,27 @@ export const queryClusterPermissions = (clusterId: string): void => {
       const transientError = response.results.find(isTransientPermissionResultError);
       if (transientError) {
         shouldRecordTimestamp = false;
-        completeQueryDiagnostics(
+        completeQueryDiagnostics({
           queryKey,
-          false,
-          getPermissionResultErrorMessage(transientError),
-          startTime
-        );
+          success: false,
+          errorMessage: getPermissionResultErrorMessage(transientError),
+          startTime,
+        });
         return;
       }
 
       applyResults(response.results, batch);
       const nsDiag = response.diagnostics?.find((d) => d.key === queryKey);
-      completeQueryDiagnostics(
+      completeQueryDiagnostics({
         queryKey,
-        true,
-        null,
+        success: true,
+        errorMessage: null,
         startTime,
-        nsDiag?.ssarFallbackCount,
-        nsDiag?.ssrrRuleCount,
-        nsDiag?.ssrrIncomplete,
-        nsDiag?.method as 'ssrr' | 'ssar' | undefined
-      );
+        ssarFallbackCount: nsDiag?.ssarFallbackCount,
+        ssrrRuleCount: nsDiag?.ssrrRuleCount,
+        ssrrIncomplete: nsDiag?.ssrrIncomplete,
+        method: nsDiag?.method as 'ssrr' | 'ssar' | undefined,
+      });
     })
     .catch((err) => {
       const queryError = String(err);
@@ -744,7 +736,7 @@ export const queryClusterPermissions = (clusterId: string): void => {
           feature: item.feature,
         });
       }
-      completeQueryDiagnostics(queryKey, false, queryError, startTime);
+      completeQueryDiagnostics({ queryKey, success: false, errorMessage: queryError, startTime });
     })
     .finally(() => {
       inFlightQueries.delete(queryKey);
@@ -954,17 +946,29 @@ const beginQueryDiagnostics = (
  * for SSRR-fetch-failure batches the backend reports "ssar" even
  * though begin optimistically set "ssrr".
  */
-const completeQueryDiagnostics = (
-  queryKey: string,
-  success: boolean,
-  errorMessage: string | null,
-  startTime: number,
-  ssarFallbackCount?: number,
-  ssrrRuleCount?: number,
-  ssrrIncomplete?: boolean,
-  method?: 'ssrr' | 'ssar',
-  completedCheckCount?: number
-): void => {
+interface CompletedQueryDiagnostics {
+  queryKey: string;
+  success: boolean;
+  errorMessage: string | null;
+  startTime: number;
+  ssarFallbackCount?: number;
+  ssrrRuleCount?: number;
+  ssrrIncomplete?: boolean;
+  method?: 'ssrr' | 'ssar';
+  completedCheckCount?: number;
+}
+
+const completeQueryDiagnostics = ({
+  queryKey,
+  success,
+  errorMessage,
+  startTime,
+  ssarFallbackCount,
+  ssrrRuleCount,
+  ssrrIncomplete,
+  method,
+  completedCheckCount,
+}: CompletedQueryDiagnostics): void => {
   const diag = diagnosticsMap.get(queryKey);
   if (!diag) return;
 

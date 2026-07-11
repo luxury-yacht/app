@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 export const policyFileName = 'biome-policy.json';
 
@@ -78,6 +79,11 @@ const configuredRuleLevel = (rules, rulePath) => {
   return typeof configured === 'object' && configured !== null ? configured.level : configured;
 };
 
+const configuredRuleOptions = (rules, rulePath) => {
+  const configured = rulePath.split('.').reduce((value, key) => value?.[key], rules);
+  return typeof configured === 'object' && configured !== null ? configured.options : undefined;
+};
+
 export const collectConfigPolicyErrors = (config, policy) => {
   const errors = [];
   if (config.formatter?.enabled !== true) {
@@ -103,6 +109,11 @@ export const collectConfigPolicyErrors = (config, policy) => {
   for (const rule of policy.requiredRules ?? []) {
     if (configuredRuleLevel(rules, rule) !== 'error') {
       errors.push(`Biome strict rule must remain at error: ${rule}`);
+    }
+  }
+  for (const [rule, requiredOptions] of Object.entries(policy.requiredRuleOptions ?? {})) {
+    if (!isDeepStrictEqual(configuredRuleOptions(rules, rule), requiredOptions)) {
+      errors.push(`Biome strict rule options must remain exact: ${rule}`);
     }
   }
 

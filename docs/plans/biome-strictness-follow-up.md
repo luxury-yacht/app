@@ -151,11 +151,11 @@ demonstrated project benefit or a clear invariant, not solely because they are n
 
 | Rule | Diagnostics | Work and decision criteria |
 | --- | ---: | --- |
-| `suspicious.useAwait` | 295 | Classify async API-contract functions, promise-forwarding wrappers, test helpers, and accidental `async`. Remove unnecessary `async` or add real awaited work; do not add meaningless `await` expressions merely to satisfy the rule. |
-| `style.useDefaultSwitchClause` | 10 | Preserve exhaustive discriminated-union checks. Add a default only where unknown runtime input is possible and the fallback is intentional. |
-| `complexity.useMaxParams` | 40 | Establish a project threshold before enabling. Convert cohesive high-arity APIs to typed option objects, but do not obscure small mathematical or callback signatures. |
-| `complexity.noForEach` | 288 | Decide whether the project wants `for...of` as a universal convention. This is primarily a control-flow/style preference, not a correctness rule. |
-| `complexity.noVoid` | 218 | Do not enable while `void token` is the documented hook-invalidation contract at `docs/frontend/biome.md:41-45`. Separately review fire-and-forget promises and ensure they have explicit error handling. |
+| `suspicious.useAwait` | 447 | ⛔ Rejected as a blanket gate: 425 findings are test/story promise contracts and 21 production findings are promise-returning brokers, facades, or lifecycle adapters. The rule would require promise-semantic changes or analyzer-only awaits. |
+| `style.useDefaultSwitchClause` | 10 | ⛔ Rejected after reviewing every switch: nine preserve typed-union exhaustiveness and the keyboard switch intentionally ignores unknown runtime key strings. |
+| `complexity.useMaxParams` | 42 | ✅ Adopted with an exact policy-locked ceiling of seven. Refactored both nine-parameter functions and the twelve-parameter favorite comparison into typed option/state objects; the isolated rule reports zero diagnostics. |
+| `complexity.noForEach` | 302 | ⛔ Rejected as a universal convention after auditing 129 files. It applies to any method named `forEach`, and conversion is not a correctness invariant across arrays, maps, sets, sparse collections, and library objects. |
+| `complexity.noVoid` | 220 | ⛔ Rejected: 215 production findings include intentional detached-promise ownership and the documented `void token` hook-invalidation contract. |
 
 Acceptance: adopted async rules preserve public promise contracts and have rejection-path tests;
 rejected convention rules receive a rule-specific rationale in the durable Biome policy document.
@@ -279,3 +279,8 @@ For each adopted rule:
   pass 108 ref tests and 81 deletion-semantics tests. Rejected `useTopLevelRegex`,
   `noJsxPropsBind`, and `useComponentExportOnlyModules` as blanket gates with measured repository
   inventories and durable rule-specific rationale in `docs/frontend/biome.md`.
+- 2026-07-11: Completed Phase 3. Policy-locked `useMaxParams` with an exact ceiling of seven,
+  refactored the three signatures above that ceiling into typed inputs, and added red/green policy
+  coverage that rejects a weakened rule option. Rejected `useAwait`, `useDefaultSwitchClause`,
+  `noForEach`, and `noVoid` as blanket gates with measured inventories and contract-specific
+  rationale in `docs/frontend/biome.md`.

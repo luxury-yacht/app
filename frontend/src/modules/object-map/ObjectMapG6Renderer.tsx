@@ -374,12 +374,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       };
     }
     const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
-    const nextData = toObjectMapG6Data(
-      layout,
-      EMPTY_SELECTION_STATE,
-      badgeForNode,
-      palette,
-      (kind) => {
+    const nextData = toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette, {
+      kindBadgeStyleForKind: (kind) => {
         const key = `${styleVersion}:${kind.trim()}`;
         const cached = badgeStyleCache.get(key);
         if (cached) return cached;
@@ -390,8 +386,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       useShortResourceNames,
       cardDetailLevel,
       edgeDetailLevel,
-      ageNow
-    );
+      ageNow,
+    });
     return { data: nextData, durationMs: objectMapRendererTimingNow() - startedAt };
   }, [
     ageNow,

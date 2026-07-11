@@ -240,16 +240,26 @@ export const objectMapG6EdgeState = (
   return [selectionState.connectedEdgeIds.has(edge.id) ? 'highlighted' : 'dimmed'];
 };
 
+export interface ObjectMapG6DataOptions {
+  kindBadgeStyleForKind?: (kind: string) => KindBadgeVisualStyle;
+  useShortResourceNames?: boolean;
+  cardDetailLevel?: ObjectMapG6CardDetailLevel;
+  edgeDetailLevel?: ObjectMapG6EdgeDetailLevel;
+  ageNow?: Date | string | number;
+}
+
 export const toObjectMapG6Data = (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState,
   badgeForNode: ObjectMapNodeBadgeLookup,
   palette: ObjectMapG6Palette,
-  kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle,
-  useShortResourceNames = false,
-  cardDetailLevel: ObjectMapG6CardDetailLevel = 'full',
-  edgeDetailLevel: ObjectMapG6EdgeDetailLevel = 'routed',
-  ageNow?: Date | string | number
+  {
+    kindBadgeStyleForKind = fallbackKindBadgeVisualStyle,
+    useShortResourceNames = false,
+    cardDetailLevel = 'full',
+    edgeDetailLevel = 'routed',
+    ageNow,
+  }: ObjectMapG6DataOptions = {}
 ): GraphData => {
   const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
 

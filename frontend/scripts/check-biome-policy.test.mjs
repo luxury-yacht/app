@@ -280,6 +280,42 @@ describe('Biome config exception collection', () => {
     );
   });
 
+  it('rejects weakened options for a required strict rule', () => {
+    const errors = collectConfigPolicyErrors(
+      {
+        formatter: { enabled: true },
+        assist: { enabled: true },
+        linter: {
+          enabled: true,
+          rules: {
+            preset: 'recommended',
+            complexity: {
+              useMaxParams: { level: 'error', options: { max: 8 } },
+            },
+            correctness: {
+              useExhaustiveDependencies: {
+                level: 'error',
+                options: { reportUnnecessaryDependencies: true, hooks: [] },
+              },
+            },
+          },
+        },
+      },
+      {
+        rulePreset: 'recommended',
+        requiredRules: ['complexity.useMaxParams'],
+        requiredRuleOptions: {
+          'complexity.useMaxParams': { max: 7 },
+        },
+        requiredHooks: [],
+      }
+    );
+
+    expect(errors).toContain(
+      'Biome strict rule options must remain exact: complexity.useMaxParams'
+    );
+  });
+
   it('requires project file extensions and exact plugin scopes', () => {
     const errors = collectConfigPolicyErrors(
       {
