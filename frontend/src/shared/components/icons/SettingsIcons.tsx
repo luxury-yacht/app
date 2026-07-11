@@ -7,6 +7,8 @@ export const KubeconfigsIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
@@ -50,6 +52,8 @@ export const DisplayIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -66,6 +70,8 @@ export const AdvancedIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -85,6 +91,8 @@ export const AppearanceModeIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={width}
     height={height}
     viewBox="0 0 24 24"
@@ -104,6 +112,8 @@ export const LightModeIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={width}
     height={height}
     viewBox="0 0 24 24"
@@ -123,6 +133,8 @@ export const DarkModeIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={width}
     height={height}
     viewBox="0 0 24 24"
@@ -141,7 +153,15 @@ export const KubeconfigFolderIcon: React.FC<IconProps> = ({
   height = 24,
   className,
 }) => (
-  <svg viewBox="0 0 16 16" width={width} height={height} fill="none" className={className}>
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 16 16"
+    width={width}
+    height={height}
+    fill="none"
+    className={className}
+  >
     <path
       d="M1.75 3.5h4.19c.27 0 .53.1.72.3l1.27 1.27c.19.19.45.3.72.3h5.6c.55 0 1 .45 1 1v6.88c0 .55-.45 1-1 1H1.75c-.55 0-1-.45-1-1V4.5c0-.55.45-1 1-1Z"
       stroke="currentColor"

@@ -446,6 +446,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, []);
 
   const toolbar = (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
     <div
       className="object-map__toolbar"
       role="toolbar"
@@ -454,6 +455,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
+      {/** biome-ignore lint/a11y/useSemanticElements: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper. */}
       <form
         className="object-map__search"
         role="search"
@@ -651,9 +653,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           />
         </Suspense>
         {showLegend && (
-          <div
+          // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
+          <section
             className="object-map__legend"
-            role="region"
             aria-label="Object map legend"
             style={
               legendPosition
@@ -740,7 +742,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                 <span className="object-map__legend-count-label">Links</span>
               </span>
             </div>
-          </div>
+          </section>
         )}
       </div>
       {contextMenu && contextMenuPosition && contextMenuItems.length > 0 && (

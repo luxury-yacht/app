@@ -201,6 +201,8 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         const isFocused = index === focusedIndex;
 
         return (
+          // biome-ignore lint/a11y/useFocusableInteractive: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
+          // biome-ignore lint/a11y/useKeyWithClickEvents: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
           <div
             key={key}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${

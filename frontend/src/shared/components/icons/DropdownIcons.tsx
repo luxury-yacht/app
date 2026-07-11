@@ -8,6 +8,7 @@ export const DropdownSelectAllIcon: React.FC<IconProps> = ({ width = 24, height 
     width={width}
     height={height}
     aria-hidden="true"
+    focusable="false"
   >
     <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
     <path d="M8 4.5v7" stroke="currentColor" strokeLinecap="round" />
@@ -22,6 +23,7 @@ export const DropdownSelectNoneIcon: React.FC<IconProps> = ({ width = 24, height
     width={width}
     height={height}
     aria-hidden="true"
+    focusable="false"
   >
     <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
     <path d="M4.75 8h6.5" stroke="currentColor" strokeLinecap="round" />
@@ -39,6 +41,7 @@ export const DropdownArrowIcon: React.FC<IconProps> = ({ width = 24, height = 24
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
+    focusable="false"
   >
     <polyline points="6,9 12,15 18,9" />
   </svg>

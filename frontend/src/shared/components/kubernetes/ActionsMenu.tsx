@@ -160,7 +160,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           </button>
 
           {isOpen && (
-            <div className="context-menu actions-menu-dropdown" ref={dropdownRef}>
+            <div className="context-menu actions-menu-dropdown" ref={dropdownRef} role="menu">
               {withStableListKeys(menuItems, (item) =>
                 'divider' in item && item.divider
                   ? 'divider'
@@ -190,11 +190,13 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 };
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={key}
                     className={`context-menu-item${menuItem.disabled ? ' disabled' : ''}${menuItem.danger ? ' danger' : ''}`}
                     role="menuitem"
                     aria-disabled={menuItem.disabled ? 'true' : 'false'}
+                    disabled={menuItem.disabled}
                     data-context-action-id={menuItem.actionId}
                     onClick={() => {
                       if (!menuItem.disabled && menuItem.onClick) {
@@ -205,7 +207,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   >
                     {menuItem.icon && <span className="context-menu-icon">{menuItem.icon}</span>}
                     <span className="context-menu-label">{menuItem.label}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>

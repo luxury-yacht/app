@@ -66,6 +66,17 @@ const FavMenuDropdown: React.FC = () => {
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
   const closeDropdown = useCallback(() => setIsOpen(false), []);
 
+  const handleTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      event.preventDefault();
+      toggleOpen();
+    },
+    [toggleOpen]
+  );
+
   // Register the open menu as a keyboard surface so Escape closes it, matching
   // the menu/dropdown keyboard contract (docs/frontend/keyboard.md).
   useKeyboardSurface({
@@ -77,17 +88,6 @@ const FavMenuDropdown: React.FC = () => {
       return true;
     },
   });
-  const handleTriggerKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        return;
-      }
-      event.preventDefault();
-      toggleOpen();
-    },
-    [toggleOpen]
-  );
-
   // -- Reorder --
 
   const moveUp = useCallback(
@@ -155,17 +155,16 @@ const FavMenuDropdown: React.FC = () => {
 
   return (
     <div className="fav-dropdown-anchor" ref={anchorRef}>
-      <div
+      <button
+        type="button"
         className="settings-button"
         onClick={toggleOpen}
         onKeyDown={handleTriggerKeyDown}
         title="Favorites"
         aria-label="Favorites"
-        role="button"
-        tabIndex={0}
       >
         <FavoriteFilledIcon width={14} height={14} />
-      </div>
+      </button>
 
       {isOpen && (
         <div className="fav-dropdown-panel" role="menu">
@@ -184,7 +183,19 @@ const FavMenuDropdown: React.FC = () => {
                     key={fav.id}
                     className={`fav-dropdown-row${disabled ? ' disabled' : ''}`}
                     role="menuitem"
+                    aria-disabled={disabled}
+                    tabIndex={disabled ? -1 : 0}
                     onClick={() => {
+                      if (!disabled) handleNavigate(fav);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.target !== event.currentTarget ||
+                        (event.key !== 'Enter' && event.key !== ' ')
+                      ) {
+                        return;
+                      }
+                      event.preventDefault();
                       if (!disabled) handleNavigate(fav);
                     }}
                   >

@@ -331,6 +331,34 @@ describe('FavMenuDropdown', () => {
     expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
   });
 
+  it('navigates from a favorite row with keyboard activation', async () => {
+    mockFavorites.push(
+      makeFavorite({
+        id: 'fav-1',
+        name: 'My Pods',
+        viewType: 'namespace',
+        view: 'pods',
+        namespace: 'default',
+      })
+    );
+
+    await renderComponent();
+    await clickButton();
+
+    const row = requireValue(
+      container.querySelector<HTMLElement>('.fav-dropdown-row'),
+      'expected keyboard-focusable favorite row'
+    );
+    await act(async () => {
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockSetPendingFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: 'fav-1' }));
+  });
+
   // -----------------------------------------------------------------------
   // 5. Hover actions appear on mouse enter
   // -----------------------------------------------------------------------

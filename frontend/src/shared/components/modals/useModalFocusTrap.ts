@@ -133,7 +133,8 @@ export const useModalFocusTrap = ({
       return false;
     }
     const items = getFocusableItems();
-    const target = items[0] ?? root;
+    const target =
+      items.find((item) => item.hasAttribute('data-modal-initial-focus')) ?? items[0] ?? root;
     target.focus();
     return true;
   }, [getFocusableItems, ref]);

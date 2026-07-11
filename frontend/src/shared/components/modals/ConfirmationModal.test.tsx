@@ -105,6 +105,15 @@ describe('ConfirmationModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('initially focuses the non-destructive action', async () => {
+    await renderModal({});
+
+    const cancelButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.cancel'
+    );
+    expect(document.activeElement).toBe(cancelButton);
+  });
+
   it('supports escape key and ignores backdrop clicks', async () => {
     const onCancel = vi.fn();
     await renderModal({ onCancel });

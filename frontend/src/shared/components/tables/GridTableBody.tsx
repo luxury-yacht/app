@@ -189,6 +189,7 @@ function GridTableBody<T>({
   };
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
     <div
       ref={wrapperRef}
       className="gridtable-wrapper"
@@ -215,6 +216,7 @@ function GridTableBody<T>({
         }}
       />
 
+      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
       <div
         ref={tableRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}

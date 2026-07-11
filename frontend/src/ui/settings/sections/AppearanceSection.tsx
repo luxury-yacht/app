@@ -1069,6 +1069,7 @@ function AppearanceSection() {
                   const isDropTarget =
                     theme.id === dropTargetThemeId && theme.id !== draggingThemeId && !isDefault;
                   return (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                     <div
                       key={theme.id}
                       className={`setting-item setting-item-surface themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
@@ -1088,6 +1089,7 @@ function AppearanceSection() {
                       {isDefault ? (
                         <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
                       ) : (
+                        // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                         <span
                           className="themes-drag-handle"
                           draggable
@@ -1215,6 +1217,7 @@ function AppearanceSection() {
                         value={themeDraft.name}
                         onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
                         placeholder="Name"
+                        // biome-ignore lint/a11y/noAutofocus: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleThemeSave();
@@ -1272,7 +1275,7 @@ function AppearanceSection() {
                     className="button generic settings-add-button themes-save-new-row"
                     onClick={handleSaveCurrentAsTheme}
                   >
-                    <PlusIcon width={12} height={12} ariaHidden />
+                    <PlusIcon width={12} height={12} />
                     Save new theme
                   </button>
                 )}

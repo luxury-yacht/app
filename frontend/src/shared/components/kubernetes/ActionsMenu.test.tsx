@@ -171,6 +171,18 @@ describe('ActionsMenu', () => {
     container.remove();
   });
 
+  it('renders available actions as native menu buttons', async () => {
+    await renderMenu({ object: makeObject('Deployment', { group: 'apps', version: 'v1' }) });
+
+    openMenu(container);
+
+    const menu = container.querySelector('[role="menu"]');
+    const items = container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
+    expect(menu).toBeTruthy();
+    expect(items.length).toBeGreaterThan(0);
+    expect(Array.from(items).every((item) => item.type === 'button')).toBe(true);
+  });
+
   it('does not render when object is null', async () => {
     await renderMenu({ object: null });
     expect(container.innerHTML).toBe('');

@@ -354,6 +354,7 @@ const Dropdown = <TMetadata,>({
   return (
     <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
+      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action. */}
       <div
         ref={triggerRef}
         className="dropdown-trigger"
@@ -413,6 +414,7 @@ const Dropdown = <TMetadata,>({
                     onClick={(e) => e.stopPropagation()}
                     onFocus={() => setIsSearchFocused(true)}
                     onBlur={() => setIsSearchFocused(false)}
+                    // biome-ignore lint/a11y/noAutofocus: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
                     autoFocus
                   />
                 </div>
@@ -475,6 +477,9 @@ const Dropdown = <TMetadata,>({
               const isSeparator = isGroupHeader && option.label.trim().length === 0;
 
               return (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
+                // biome-ignore lint/a11y/noStaticElementInteractions: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
+                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
                 <div
                   key={option.value}
                   className={[

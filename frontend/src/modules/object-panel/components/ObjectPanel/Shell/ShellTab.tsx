@@ -1170,6 +1170,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
         </div>
       )}
 
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
+      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
       <div
         className="shell-tab__terminal-wrapper"
         data-tab-native="true"

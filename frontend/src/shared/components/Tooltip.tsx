@@ -393,6 +393,7 @@ const Tooltip: React.FC<TooltipProps> = ({
         !disabled &&
         portalTarget &&
         createPortal(
+          // biome-ignore lint/a11y/noStaticElementInteractions: Interactive tooltip hover persistence uses pointer enter and leave on the tooltip surface and does not expose an activation action.
           <div
             ref={tooltipRef}
             className={tooltipClasses}

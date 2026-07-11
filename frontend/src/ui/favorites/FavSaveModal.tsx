@@ -404,7 +404,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       (e.target as HTMLInputElement).select();
                     }
                   }}
-                  autoFocus
+                  data-modal-initial-focus
                 />
               </div>
             </div>

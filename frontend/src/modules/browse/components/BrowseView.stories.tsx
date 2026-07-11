@@ -137,8 +137,11 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
 
   const bodyNode = (
     <div className="gridtable-wrapper">
+      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
       <div className="gridtable gridtable--body gridtable-browse" role="grid">
         {ROWS.map((row) => (
+          // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+          // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
           <div
             key={`${row.kind}:${row.ns}:${row.name}`}
             className={`gridtable-row${row.focused ? ' gridtable-row--focused' : ''}`}

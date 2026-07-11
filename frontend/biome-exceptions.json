@@ -7,88 +7,6 @@
     },
     {
       "includes": [
-        "src/modules/port-forward/PortForwardModal.tsx",
-        "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-        "src/shared/components/inputs/SearchInput.tsx",
-        "src/shared/components/modals/ConfirmationModal.tsx",
-        "src/ui/favorites/FavSaveModal.tsx",
-        "src/ui/settings/sections/AppearanceSection.tsx"
-      ],
-      "rules": ["a11y.noAutofocus"],
-      "reason": "These focus-managed workflows intentionally move focus to their primary control when opened."
-    },
-    {
-      "includes": [
-        "src/modules/browse/components/BrowseView.stories.tsx",
-        "src/modules/object-map/ObjectMap.tsx",
-        "src/shared/components/tables/GridTableBody.tsx",
-        "src/shared/components/tables/columnFactories.tsx",
-        "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
-        "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
-        "src/ui/dockable/DockablePanel.tsx",
-        "src/ui/dockable/DockablePanelHeader.tsx",
-        "src/ui/panels/app-logs/AppLogsPanel.tsx"
-      ],
-      "rules": [
-        "a11y.noStaticElementInteractions",
-        "a11y.useFocusableInteractive",
-        "a11y.useKeyWithClickEvents",
-        "a11y.useSemanticElements"
-      ],
-      "reason": "Grid, map, and dockable composite widgets implement focus and keyboard behavior across multiple coordinated elements."
-    },
-    {
-      "includes": [
-        "src/shared/components/ContextMenu.tsx",
-        "src/shared/components/kubernetes/ActionsMenu.tsx",
-        "src/ui/command-palette/CommandPalette.tsx",
-        "src/ui/favorites/FavMenuDropdown.tsx",
-        "src/ui/layout/Sidebar.tsx"
-      ],
-      "rules": [
-        "a11y.noStaticElementInteractions",
-        "a11y.useFocusableInteractive",
-        "a11y.useKeyWithClickEvents",
-        "a11y.useSemanticElements"
-      ],
-      "reason": "Menu, palette, and sidebar composites use roving focus and delegated keyboard ownership."
-    },
-    {
-      "includes": ["src/shared/components/dropdowns/Dropdown/Dropdown.tsx"],
-      "rules": [
-        "a11y.noStaticElementInteractions",
-        "a11y.useAriaPropsSupportedByRole",
-        "a11y.useKeyWithClickEvents"
-      ],
-      "reason": "The custom combobox coordinates trigger, listbox, search, and option interactions across a composite widget."
-    },
-    {
-      "includes": [
-        "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
-        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
-        "src/shared/components/Tooltip.tsx",
-        "src/shared/components/modals/ModalSurface.tsx",
-        "src/ui/dockable/DockablePanelControls.tsx",
-        "src/ui/dockable/DockableTabBar.tsx",
-        "src/ui/layout/AppHeader.tsx",
-        "src/ui/layout/AppLayout.tsx",
-        "src/ui/settings/sections/AppearanceSection.tsx"
-      ],
-      "rules": ["a11y.noStaticElementInteractions", "a11y.useKeyWithClickEvents"],
-      "reason": "Pointer boundaries, drag surfaces, and delegated shell interactions are coordinated with keyboard owners elsewhere in the composite."
-    },
-    {
-      "includes": ["src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx"],
-      "rules": ["a11y.useSemanticElements"],
-      "reason": "The log viewer uses ARIA grouping around a virtualized, filterable log surface that has no equivalent native structure."
-    },
-    {
-      "includes": ["src/shared/components/diff/DiffViewer.tsx"],
-      "rules": ["a11y.noNoninteractiveTabindex"],
-      "reason": "The diff scroll region is programmatically focusable and owns keyboard scrolling and selection behavior."
-    },
-    {
-      "includes": [
         "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
         "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
         "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
@@ -129,11 +47,6 @@
       "reason": "Legacy cross-specificity component and state selectors require cascade refactoring before this rule can be restored file by file."
     },
     {
-      "includes": ["src/shared/components/icons/**"],
-      "rules": ["a11y.noSvgWithoutTitle"],
-      "reason": "Shared icon components have not yet standardized decorative versus meaningful SVG semantics."
-    },
-    {
       "includes": [
         "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
         "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
@@ -148,6 +61,221 @@
     }
   ],
   "suppressions": [
+    {
+      "file": "src/modules/browse/components/BrowseView.stories.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 1
+    },
+    {
+      "file": "src/modules/browse/components/BrowseView.stories.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-map/ObjectMap.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-map/ObjectMap.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/ContextMenu.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/ContextMenu.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/noAutofocus",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/useAriaPropsSupportedByRole",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/modals/ModalSurface.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/modals/ModalSurface.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/columnFactories.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/GridTableBody.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/Tooltip.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/command-palette/CommandPalette.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 3
+    },
+    {
+      "file": "src/ui/command-palette/CommandPalette.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 8
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/ui/dockable/DockablePanelControls.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/dockable/DockablePanelHeader.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/dockable/DockableTabBar.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/AppHeader.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/ui/layout/AppLayout.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/Sidebar.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 5
+    },
+    {
+      "file": "src/ui/layout/Sidebar.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 5
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 3
+    },
+    {
+      "file": "src/ui/settings/sections/AppearanceSection.tsx",
+      "rule": "lint/a11y/noAutofocus",
+      "count": 1
+    },
+    {
+      "file": "src/ui/settings/sections/AppearanceSection.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
     {
       "file": "src/core/contexts/ErrorContext.tsx",
       "rule": "lint/correctness/useExhaustiveDependencies",

@@ -45,7 +45,7 @@ const ClusterOverviewRestrictionNotice: React.FC<ClusterOverviewRestrictionNotic
           className="overview-restriction__item"
           data-testid={restriction.testId}
         >
-          <WarningIcon width={16} height={16} className="overview-restriction__icon" ariaHidden />
+          <WarningIcon width={16} height={16} className="overview-restriction__icon" />
           <span className="overview-restriction__headline">{restriction.headline}</span>
           <span className="overview-restriction__detail">{restriction.detail}</span>
         </div>

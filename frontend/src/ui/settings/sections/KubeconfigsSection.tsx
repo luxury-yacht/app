@@ -133,7 +133,7 @@ function KubeconfigsSection() {
               onClick={handleAddKubeconfigPath}
               disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
-              <PlusIcon width={12} height={12} ariaHidden />
+              <PlusIcon width={12} height={12} />
               Add path
             </button>
           </div>

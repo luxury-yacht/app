@@ -896,6 +896,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
         </div>
       )}
     >
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface. */}
       <div
         className={[
           'command-palette',
@@ -960,6 +961,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                       const currentIndex = commandIndexMap.get(command.id) ?? 0;
                       const isSelected = currentIndex === selectedIndex;
                       return (
+                        // biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
+                        // biome-ignore lint/a11y/useKeyWithClickEvents: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
                         <div
                           key={command.id}
                           ref={(el) => {
@@ -1021,6 +1024,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                     const currentIndex = catalogBaseIndex + idx;
                     const isSelected = currentIndex === selectedIndex;
                     return (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
+                      // biome-ignore lint/a11y/useKeyWithClickEvents: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
                       <div
                         key={entry.item.uid}
                         ref={(el) => {

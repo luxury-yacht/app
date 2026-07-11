@@ -29,11 +29,13 @@ const AppHeader: React.FC = () => {
   };
 
   return (
-    <div
+    // biome-ignore lint/a11y/noStaticElementInteractions: The desktop titlebar double-click gesture toggles the native window state, while the controls boundary prevents that gesture from swallowing native button activation.
+    <header
       className={`app-header${isMac ? ' app-header--mac' : ''}`}
       onDoubleClick={handleHeaderDoubleClick}
       data-app-region="header"
     >
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The desktop titlebar double-click gesture toggles the native window state, while the controls boundary prevents that gesture from swallowing native button activation. */}
       <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>
         <UpdateStatus />
         <div className="status-indicators">
@@ -53,7 +55,7 @@ const AppHeader: React.FC = () => {
           <SearchIcon width={14} height={14} />
         </button>
       </div>
-    </div>
+    </header>
   );
 };
 

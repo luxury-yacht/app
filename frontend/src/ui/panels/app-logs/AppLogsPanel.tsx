@@ -264,9 +264,12 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const renderHeaderCell = useCallback(
     (column: LogColumnKey | 'message', label: string, className: string) => (
+      // biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
+      // biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
       <span className={`app-logs-header-cell ${className}`} role="columnheader">
         <span className="app-logs-header-label">{label}</span>
         {column !== 'message' && (
+          // biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
           <span
             className="app-logs-column-resizer"
             role="separator"
@@ -868,6 +871,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       contentClassName="app-logs-panel-content"
     >
       {/* Panel-specific controls toolbar (moved from header for tab support) */}
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
       <div className="app-logs-panel-toolbar" onMouseDown={(e) => e.stopPropagation()}>
         <div className="app-logs-panel-controls">
           <Dropdown
@@ -940,6 +944,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         </div>
       </div>
 
+      {/** biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
+      {/** biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
       <div
         className="app-logs-header"
         role="row"

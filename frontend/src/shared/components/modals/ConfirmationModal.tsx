@@ -127,15 +127,10 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
             {secondaryActionText}
           </button>
         )}
-        <button type="button" className="button cancel" onClick={onCancel}>
+        <button type="button" className="button cancel" onClick={onCancel} data-modal-initial-focus>
           {cancelText}
         </button>
-        <button
-          type="button"
-          className={`button ${confirmButtonClass}`}
-          onClick={onConfirm}
-          autoFocus
-        >
+        <button type="button" className={`button ${confirmButtonClass}`} onClick={onConfirm}>
           {confirmText}
         </button>
       </div>

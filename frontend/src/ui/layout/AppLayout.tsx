@@ -147,6 +147,7 @@ export const AppLayout: React.FC = () => {
       >
         <Sidebar />
         {viewState.isSidebarVisible && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: The sidebar resize gutter is a pointer drag boundary owned by shared layout state and is not exposed as an activation control.
           <div
             className="sidebar-resizer"
             onMouseDown={(e) => {

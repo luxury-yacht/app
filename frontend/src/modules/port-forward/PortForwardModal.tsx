@@ -343,7 +343,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
                 onChange={handleContainerPortInput}
                 placeholder="Enter port (1-65535)"
                 disabled={isLoading}
-                autoFocus
+                data-modal-initial-focus
               />
             </div>
           )}

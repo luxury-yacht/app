@@ -627,6 +627,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         selectSideText(side);
       }}
       onKeyDown={handleKeyScroll}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: The diff scroll region is intentionally focusable and owns keyboard scrolling; a native interactive element would give the region incorrect semantics.
       tabIndex={0}
     >
       {shouldVirtualize ? (

@@ -128,118 +128,6 @@
     },
     {
       "includes": [
-        "src/modules/port-forward/PortForwardModal.tsx",
-        "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-        "src/shared/components/inputs/SearchInput.tsx",
-        "src/shared/components/modals/ConfirmationModal.tsx",
-        "src/ui/favorites/FavSaveModal.tsx",
-        "src/ui/settings/sections/AppearanceSection.tsx"
-      ],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noAutofocus": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/modules/browse/components/BrowseView.stories.tsx",
-        "src/modules/object-map/ObjectMap.tsx",
-        "src/shared/components/tables/GridTableBody.tsx",
-        "src/shared/components/tables/columnFactories.tsx",
-        "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
-        "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
-        "src/ui/dockable/DockablePanel.tsx",
-        "src/ui/dockable/DockablePanelHeader.tsx",
-        "src/ui/panels/app-logs/AppLogsPanel.tsx"
-      ],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noStaticElementInteractions": "off",
-            "useFocusableInteractive": "off",
-            "useKeyWithClickEvents": "off",
-            "useSemanticElements": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/shared/components/ContextMenu.tsx",
-        "src/shared/components/kubernetes/ActionsMenu.tsx",
-        "src/ui/command-palette/CommandPalette.tsx",
-        "src/ui/favorites/FavMenuDropdown.tsx",
-        "src/ui/layout/Sidebar.tsx"
-      ],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noStaticElementInteractions": "off",
-            "useFocusableInteractive": "off",
-            "useKeyWithClickEvents": "off",
-            "useSemanticElements": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/shared/components/dropdowns/Dropdown/Dropdown.tsx"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noStaticElementInteractions": "off",
-            "useAriaPropsSupportedByRole": "off",
-            "useKeyWithClickEvents": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
-        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
-        "src/shared/components/Tooltip.tsx",
-        "src/shared/components/modals/ModalSurface.tsx",
-        "src/ui/dockable/DockablePanelControls.tsx",
-        "src/ui/dockable/DockableTabBar.tsx",
-        "src/ui/layout/AppHeader.tsx",
-        "src/ui/layout/AppLayout.tsx",
-        "src/ui/settings/sections/AppearanceSection.tsx"
-      ],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noStaticElementInteractions": "off",
-            "useKeyWithClickEvents": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useSemanticElements": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/shared/components/diff/DiffViewer.tsx"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noNoninteractiveTabindex": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
         "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
         "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
         "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
@@ -285,16 +173,6 @@
         "rules": {
           "style": {
             "noDescendingSpecificity": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/shared/components/icons/**"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "noSvgWithoutTitle": "off"
           }
         }
       }

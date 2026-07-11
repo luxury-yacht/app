@@ -148,6 +148,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   }, []);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
       className="dockable-tab-bar-shell"

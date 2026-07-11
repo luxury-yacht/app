@@ -9,7 +9,7 @@ Progress:
 - ✅ Phase 1 completed 2026-07-10: exception snapshot validation, exact-rule enforcement, quality
   gate integration, and review guidance.
 - ✅ Phase 2 completed 2026-07-10: test and Storybook type escapes eliminated.
-- ⬜ Phase 3 not started: accessibility and shared icon exceptions.
+- ✅ Phase 3 completed 2026-07-10: accessibility overrides eliminated and shared icon semantics standardized.
 - ⬜ Phase 4 not started: CSS cascade exceptions.
 - ⬜ Phase 5 not started: unnecessary hook dependency reporting.
 
@@ -67,43 +67,46 @@ Exit criteria:
 - `reportUnnecessaryDependencies` is enabled globally.
 - Any irreducible cases use exact inline suppressions rather than a global option.
 
-### Accessibility overrides
+### Accessibility exceptions
 
-The global accessibility rules are errors, while exact-file overrides remain for:
+All accessibility rules now run at error level without configuration overrides. Native `button`,
+`header`, `nav`, and `section` elements replace avoidable role shims. The shared modal focus trap
+owns explicit initial-focus selection, native action-menu buttons provide keyboard activation, and
+favorite rows implement keyboard activation inside their registered menu surface.
 
-- focus-managed inputs and modal controls;
-- custom combobox, menu, command-palette, and sidebar widgets;
-- GridTable, object-map, drag, resize, and dockable-panel surfaces;
-- keyboard-focusable log and diff regions.
+Biome still evaluates individual elements rather than the complete composite contract. Exact
+inline suppressions therefore remain at the div-based virtual GridTable boundary, registered menu,
+dropdown, palette, sidebar, and panel surfaces, pointer-only drag/resize propagation boundaries,
+and keyboard-focusable log and diff regions. The exception snapshot records 89 accessibility
+suppression occurrences across 28 files; each occurrence names an exact rule and a local behavioral
+rationale. This is narrower than a file override because unrelated elements in every affected file
+remain subject to the global rules.
 
-Biome evaluates individual elements and does not always understand a composite widget's focus,
-keyboard, and ARIA contract. The current file-level scopes are nevertheless wider than the
-exceptional nodes and may mask unrelated future regressions.
+Completed exit criteria:
 
-Exit criteria:
-
-- Prefer native elements wherever they preserve the required behavior and styling.
-- Extract reusable accessible primitives for menus, listboxes, grids, drag handles, and focusable
-  regions.
-- Add interaction tests covering pointer and keyboard activation, focus entry/exit, disabled state,
-  and required ARIA relationships.
-- Replace each file-level accessibility override with either no override or an exact inline
+- ✅ Prefer native elements wherever they preserve the required behavior and styling.
+- ✅ Reuse the shared modal focus trap, registered keyboard surfaces, GridTable hooks, and dockable
+  drag/resize components as the accessible composite boundaries.
+- ✅ Cover native menu semantics, pointer activation, keyboard activation, modal focus entry, focus
+  trapping/restoration, disabled menu items, and shared icon semantics in focused tests.
+- ✅ Replace every file-level accessibility override with either no exception or an exact inline
   suppression on the composite-widget boundary.
-- Do not add a new file to an accessibility override without documenting its widget contract here.
+- ✅ Reject any future accessibility override or suppression that is absent from the reviewed
+  exception snapshot.
 
 ### Shared icon accessibility
 
-`src/shared/components/icons/**` disables `noSvgWithoutTitle`. Several shared SVG components rely
-on their consuming control for an accessible name but do not encode whether the SVG is decorative
-or meaningful at the icon boundary.
+Shared React icons and cursor SVG assets now default to decorative semantics with
+`aria-hidden="true"` and `focusable="false"`. Their consuming native control, labelled region, or
+adjacent text owns the accessible name; callers can no longer opt individual shared icons back into
+the accessibility tree through the former optional `ariaHidden` prop.
 
-Exit criteria:
+Completed exit criteria:
 
-- Shared icons default to decorative semantics, including `aria-hidden="true"` and focus exclusion
-  where applicable.
-- Meaningful standalone icons accept an explicit accessible title or label contract.
-- Cursor assets remain explicitly decorative.
-- `noSvgWithoutTitle` is re-enabled for the shared icon directory.
+- ✅ Shared icons default to decorative semantics and focus exclusion.
+- ✅ Meaningful controls and regions keep their explicit label at the consuming semantic boundary.
+- ✅ Cursor assets are explicitly decorative.
+- ✅ `noSvgWithoutTitle` is enabled for the shared icon directory with no override.
 
 ### CSS cascade exceptions
 
@@ -214,11 +217,32 @@ Progress as of 2026-07-10:
 
 ### Phase 3: Narrow accessibility exceptions
 
-- [ ] Audit focus-managed controls and remove avoidable `autoFocus` exceptions.
-- [ ] Consolidate menu, combobox, and command-palette keyboard behavior.
-- [ ] Consolidate grid, drag, resize, and dockable-panel interaction primitives.
-- [ ] Convert file overrides to exact inline suppressions or remove them.
-- [ ] Standardize shared icon semantics and re-enable SVG title checking.
+Progress as of 2026-07-10:
+
+- ✅ Removed the unused `SearchInput.autoFocus` API and replaced modal `autoFocus` attributes with
+  the shared focus trap's `data-modal-initial-focus` contract.
+- ✅ Confirmation dialogs focus the non-destructive cancel action; focused modal tests cover entry,
+  trapping, restoration, and nested behavior.
+- ✅ Converted object action entries and the Favorites trigger to native buttons; favorite menu rows
+  now support keyboard activation without bypassing the registered menu surface.
+- ✅ Replaced avoidable `role="navigation"`, `role="banner"`, and `role="region"` shims with native
+  `nav`, `header`, and `section` elements.
+- ✅ Kept GridTable, dropdown, palette, sidebar, diff/log, drag, resize, terminal, and modal backdrop
+  exceptions only at exact composite nodes with rule-specific behavioral rationales.
+- ✅ Made every exported shared React icon and cursor asset decorative and unfocusable by default;
+  the shared-icon contract test enumerates all icon-module exports.
+- ✅ Removed all eight accessibility override groups from `frontend/biome.json` and
+  `frontend/biome-exceptions.json`; zero accessibility overrides remain.
+- ✅ Focused validation passes across 210 affected test files: 1,756 tests passed and 1 skipped.
+- ✅ `npm run check --prefix frontend`, `npm run typecheck --prefix frontend`, and
+  `mage qc:prerelease` pass; the full frontend run passed 413 files and 3,404 tests with 1 skipped,
+  and Trivy reported zero vulnerabilities.
+
+- [x] Audit focus-managed controls and remove avoidable `autoFocus` exceptions.
+- [x] Consolidate menu, combobox, and command-palette keyboard behavior.
+- [x] Consolidate grid, drag, resize, and dockable-panel interaction primitives.
+- [x] Convert file overrides to exact inline suppressions or remove them.
+- [x] Standardize shared icon semantics and re-enable SVG title checking.
 
 ### Phase 4: Reduce CSS exceptions
 

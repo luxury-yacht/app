@@ -52,6 +52,8 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
     .join(' ');
 
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: Backdrop clicks are paired with shared modal Escape handling, while inner pointer boundaries only prevent accidental backdrop dismissal.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Backdrop clicks are paired with shared modal Escape handling, while inner pointer boundaries only prevent accidental backdrop dismissal.
     <div
       className={overlayClasses}
       onClick={closeOnBackdrop ? onClose : undefined}
@@ -63,6 +65,7 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
         onClick={(event) => event.stopPropagation()}
       />
       <div className="modal-backdrop">
+        {/** biome-ignore lint/a11y/useKeyWithClickEvents: Backdrop clicks are paired with shared modal Escape handling, while inner pointer boundaries only prevent accidental backdrop dismissal. */}
         <div
           ref={modalRef}
           className={containerClasses}
