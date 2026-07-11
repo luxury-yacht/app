@@ -17,7 +17,7 @@
 import { useZoom } from '@core/contexts/ZoomContext';
 import { TooltipInfoIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
@@ -88,6 +88,7 @@ const Tooltip: React.FC<TooltipProps> = ({
   interactive = false,
 }) => {
   const [visible, setVisible] = useState(false);
+  const tooltipId = `tooltip-${useId().replace(/:/g, '')}`;
   const [resolvedPlacement, setResolvedPlacement] = useState(placement);
   const [style, setStyle] = useState<React.CSSProperties>({});
 
@@ -376,12 +377,23 @@ const Tooltip: React.FC<TooltipProps> = ({
   // contexts (e.g. wrapping a ResourceBar).
   const TriggerTag = inline ? 'span' : 'div';
   const triggerClass = inline ? 'tooltip-trigger' : 'tooltip-trigger tooltip-trigger--block';
+  const tooltipInteractionProps: React.HTMLAttributes<HTMLDivElement> = interactive
+    ? {
+        role: 'dialog',
+        'aria-label': 'Additional information',
+        onMouseEnter: handleTooltipMouseEnter,
+        onMouseLeave: handleTooltipMouseLeave,
+      }
+    : { role: 'tooltip' };
 
   return (
     <>
       <TriggerTag
         ref={triggerRef}
         className={triggerClass}
+        aria-describedby={!interactive && visible ? tooltipId : undefined}
+        aria-controls={interactive && visible ? tooltipId : undefined}
+        aria-expanded={interactive ? visible : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
@@ -393,14 +405,13 @@ const Tooltip: React.FC<TooltipProps> = ({
         !disabled &&
         portalTarget &&
         createPortal(
-          // biome-ignore lint/a11y/noStaticElementInteractions: Interactive tooltip hover persistence uses pointer enter and leave on the tooltip surface and does not expose an activation action.
           <div
             ref={tooltipRef}
+            id={tooltipId}
             className={tooltipClasses}
             style={inlineStyle}
             data-placement={showArrow ? resolvedPlacement : undefined}
-            onMouseEnter={handleTooltipMouseEnter}
-            onMouseLeave={handleTooltipMouseLeave}
+            {...tooltipInteractionProps}
           >
             {content}
           </div>,

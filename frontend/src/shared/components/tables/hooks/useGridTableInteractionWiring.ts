@@ -28,6 +28,7 @@ interface UseGridTableInteractionWiringOptions<T> {
   keyExtractor: (item: T, index: number) => string;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
   onRowClick?: (item: T) => void;
+  onRowPointerClick?: (item: T) => void;
   enableContextMenu: boolean;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
@@ -74,6 +75,7 @@ export function useGridTableInteractionWiring<T>({
   keyExtractor,
   getRowClassName,
   onRowClick,
+  onRowPointerClick,
   enableContextMenu,
   getCustomContextMenuItems,
   sortConfig,
@@ -138,6 +140,7 @@ export function useGridTableInteractionWiring<T>({
     tableData,
     keyExtractor,
     onRowClick,
+    onRowPointerClick,
     isShortcutOptOutTarget,
     wrapperRef,
     updateHoverForElement,

@@ -147,6 +147,10 @@ describe('Tooltip', () => {
     });
     expect(container.querySelector('.tooltip')).toBeTruthy();
     expect(container.querySelector('.tooltip')?.textContent).toBe('Delayed tip');
+    const tooltip = container.querySelector('.tooltip');
+    expect(tooltip?.getAttribute('role')).toBe('tooltip');
+    expect(tooltip?.id).toBeTruthy();
+    expect(trigger.getAttribute('aria-describedby')).toBe(tooltip?.id);
 
     cleanup();
     vi.useRealTimers();

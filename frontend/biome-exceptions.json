@@ -237,89 +237,19 @@
       "count": 3
     },
     {
-      "file": "src/modules/browse/components/BrowseView.stories.tsx",
-      "rule": "lint/a11y/useFocusableInteractive",
-      "count": 1
-    },
-    {
-      "file": "src/modules/browse/components/BrowseView.stories.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
-    },
-    {
-      "file": "src/modules/object-map/ObjectMap.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 2
-    },
-    {
-      "file": "src/modules/object-map/ObjectMap.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 1
-    },
-    {
-      "file": "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 1
-    },
-    {
-      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 1
-    },
-    {
       "file": "src/shared/components/diff/DiffViewer.tsx",
       "rule": "lint/a11y/noNoninteractiveTabindex",
       "count": 1
     },
     {
-      "file": "src/shared/components/modals/ModalSurface.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/modals/ModalSurface.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/tables/GridTableBody.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "file": "src/shared/components/tables/AriaGridPrimitives.tsx",
       "rule": "lint/a11y/useFocusableInteractive",
-      "count": 2
+      "count": 3
     },
     {
-      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "file": "src/shared/components/tables/AriaGridPrimitives.tsx",
       "rule": "lint/a11y/useSemanticElements",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
-      "rule": "lint/a11y/useFocusableInteractive",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/Tooltip.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
+      "count": 5
     },
     {
       "file": "src/ui/dockable/DockablePanelHeader.tsx",
@@ -330,16 +260,6 @@
       "file": "src/ui/layout/AppHeader.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
-    },
-    {
-      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
-      "rule": "lint/a11y/useFocusableInteractive",
-      "count": 2
-    },
-    {
-      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
     },
     {
       "file": "src/ui/settings/sections/AppearanceSection.tsx",
@@ -367,24 +287,9 @@
       "count": 1
     },
     {
-      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 1
-    },
-    {
       "file": "src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx",
       "rule": "lint/complexity/noStaticOnlyClass",
       "count": 1
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableFocusNavigation.test.tsx",
-      "rule": "lint/a11y/noNoninteractiveTabindex",
-      "count": 2
     },
     {
       "file": "src/shared/components/tables/hooks/useGridTableController.tsx",
@@ -410,11 +315,6 @@
       "file": "src/shared/components/yaml/YamlEditor.test.tsx",
       "rule": "lint/complexity/noStaticOnlyClass",
       "count": 1
-    },
-    {
-      "file": "src/ui/layout/appFocusRegions.test.tsx",
-      "rule": "lint/a11y/noNoninteractiveTabindex",
-      "count": 3
     },
     {
       "file": "src/ui/layout/ClusterTabs.tsx",

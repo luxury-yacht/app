@@ -50,23 +50,19 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
   const containerClasses = ['modal-container', containerClassName, isClosing ? 'closing' : '']
     .filter(Boolean)
     .join(' ');
-  const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null;
-    if (
-      !closeOnBackdrop ||
-      target?.closest('[data-modal-dialog="true"], .modal-window-drag-region')
-    ) {
-      return;
-    }
-    onClose();
-  };
-
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: Backdrop clicks are paired with shared modal Escape handling, while inner pointer boundaries only prevent accidental backdrop dismissal.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Backdrop clicks are paired with shared modal Escape handling, while inner pointer boundaries only prevent accidental backdrop dismissal.
-    <div className={overlayClasses} onClick={handleOverlayClick} data-modal-surface="true">
+    <div className={overlayClasses} data-modal-surface="true">
       <div className="modal-window-drag-region" aria-hidden="true" />
       <div className="modal-backdrop">
+        {!!closeOnBackdrop && (
+          <button
+            type="button"
+            className="modal-backdrop-dismiss"
+            aria-label="Close dialog"
+            tabIndex={-1}
+            onClick={onClose}
+          />
+        )}
         <div
           ref={modalRef}
           className={containerClasses}
@@ -74,7 +70,6 @@ const ModalSurface: React.FC<ModalSurfaceProps> = ({
           aria-modal="true"
           aria-labelledby={labelledBy}
           tabIndex={-1}
-          data-modal-dialog="true"
         >
           {children}
         </div>

@@ -36,8 +36,7 @@ describe('appFocusRegions', () => {
             </div>
           </div>
           <div className="app-main">
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the harness models the app's programmatically focusable sidebar region. */}
-            <div className="sidebar" tabIndex={0}>
+            <div className="sidebar">
               <div className="sidebar-item active" data-sidebar-focusable="true" tabIndex={-1}>
                 Overview
               </div>
@@ -95,8 +94,7 @@ describe('appFocusRegions', () => {
             </div>
           </div>
           <div className="app-main">
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the harness models the app's programmatically focusable sidebar region. */}
-            <div className="sidebar" tabIndex={0}>
+            <div className="sidebar">
               <div className="sidebar-item" data-sidebar-focusable="true" tabIndex={-1}>
                 Overview
               </div>
@@ -152,8 +150,7 @@ describe('appFocusRegions', () => {
             </div>
           </div>
           <div className="app-main">
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the harness models the app's programmatically focusable sidebar region. */}
-            <div className="sidebar" tabIndex={0}>
+            <div className="sidebar">
               <div className="sidebar-item active" data-sidebar-focusable="true" tabIndex={-1}>
                 Overview
               </div>

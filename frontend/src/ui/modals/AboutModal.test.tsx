@@ -162,9 +162,9 @@ describe('AboutModal', () => {
     });
 
     const container = document.querySelector('.about-modal') as HTMLDivElement | null;
-    const overlay = document.querySelector('.modal-overlay') as HTMLDivElement | null;
+    const backdropDismiss = document.querySelector<HTMLButtonElement>('.modal-backdrop-dismiss');
     expect(container).toBeTruthy();
-    expect(overlay).toBeTruthy();
+    expect(backdropDismiss).toBeTruthy();
 
     act(() => {
       container?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -172,7 +172,7 @@ describe('AboutModal', () => {
     expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
-      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      backdropDismiss?.click();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
 

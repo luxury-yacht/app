@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { AriaGridCell, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
@@ -100,15 +101,11 @@ export function useGridTableRowRenderer<T>({
       const rowId = getStableRowId(rowKey);
 
       return (
-        // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-        // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-        // biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-        <div
+        <AriaGridRow
           key={elementKey}
           id={rowId}
           className={rowClassName}
           style={rowInlineStyle}
-          role="row"
           aria-selected={isFocused || isSelected || undefined}
           data-row-key={rowKey}
           data-grid-slot={slotId}
@@ -141,12 +138,9 @@ export function useGridTableRowRenderer<T>({
                 : model.column.disableShortcuts === true;
 
             return (
-              // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-              // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-              <div
+              <AriaGridCell
                 key={model.key}
                 className={`grid-cell ${model.className}`}
-                role="gridcell"
                 data-column={model.key}
                 data-has-context-menu="true"
                 onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
@@ -154,10 +148,10 @@ export function useGridTableRowRenderer<T>({
                 data-gridtable-shortcut-optout={disableShortcuts ? 'true' : undefined}
               >
                 <span className="grid-cell-content">{cell.content}</span>
-              </div>
+              </AriaGridCell>
             );
           })}
-        </div>
+        </AriaGridRow>
       );
     },
     [

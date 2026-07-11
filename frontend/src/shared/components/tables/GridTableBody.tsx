@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { AriaGrid, AriaGridRowGroup } from '@shared/components/tables/AriaGridPrimitives';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type React from 'react';
@@ -189,15 +190,13 @@ function GridTableBody<T>({
   };
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-    <div
+    <AriaGrid
       ref={wrapperRef}
       className="gridtable-wrapper"
       onContextMenu={onWrapperContextMenu}
       onFocus={onWrapperFocus}
       onBlur={onWrapperBlur}
       tabIndex={0}
-      role="grid"
       aria-busy={loading || undefined}
       aria-activedescendant={focusedRowKey ? getStableRowId(focusedRowKey) : undefined}
     >
@@ -216,15 +215,13 @@ function GridTableBody<T>({
         }}
       />
 
-      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
-      <div
+      <AriaGridRowGroup
         ref={tableRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
-        role="rowgroup"
       >
         {renderRows()}
-      </div>
-    </div>
+      </AriaGridRowGroup>
+    </AriaGrid>
   );
 }
 

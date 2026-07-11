@@ -1179,12 +1179,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
         </div>
       )}
 
-      {/** biome-ignore lint/a11y/noStaticElementInteractions: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
-      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
       <div
         className="shell-tab__terminal-wrapper"
         data-tab-native="true"
-        onClick={() => terminalRef.current?.focus()}
+        role="application"
+        aria-label="Shell terminal"
+        tabIndex={-1}
         onContextMenu={handleTerminalContextMenu}
         onPointerLeave={handleShellScrollbarPointerLeave}
         onPointerMove={handleShellScrollbarPointerMove}
@@ -1193,8 +1193,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}
-          role="application"
-          aria-label="Shell terminal"
           data-tab-native="true"
         />
         {shellScrollbarElement}

@@ -127,9 +127,9 @@ describe('ShortcutHelpModal', () => {
     await renderModal({ isOpen: true, onClose });
 
     const modal = document.querySelector('.shortcut-help-modal') as HTMLDivElement | null;
-    const overlay = document.querySelector('.shortcut-help-modal-overlay') as HTMLDivElement | null;
+    const backdropDismiss = document.querySelector<HTMLButtonElement>('.modal-backdrop-dismiss');
     expect(modal).toBeTruthy();
-    expect(overlay).toBeTruthy();
+    expect(backdropDismiss).toBeTruthy();
 
     act(() => {
       modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -137,7 +137,7 @@ describe('ShortcutHelpModal', () => {
     expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
-      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      backdropDismiss?.click();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
   });

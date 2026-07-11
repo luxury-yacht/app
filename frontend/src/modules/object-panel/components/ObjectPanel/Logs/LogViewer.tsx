@@ -2224,12 +2224,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
 
           {activeFilterChips.length > 0 && (
-            // biome-ignore lint/a11y/useSemanticElements: The virtualized filter summary uses an ARIA group so existing flex layout remains intact without fieldset presentation semantics.
-            <div
-              className="logs-viewer-active-filters"
-              role="group"
-              aria-label="Active log filters"
-            >
+            <fieldset className="logs-viewer-active-filters" aria-label="Active log filters">
+              <legend className="logs-viewer-active-filters__legend">Active log filters</legend>
               {activeFilterChips.length > 0 && (
                 <button
                   type="button"
@@ -2255,7 +2251,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   </button>
                 </span>
               ))}
-            </div>
+            </fieldset>
           )}
 
           {visibleLogWarnings.length > 0 && (

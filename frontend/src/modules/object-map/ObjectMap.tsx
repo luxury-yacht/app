@@ -451,19 +451,16 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, []);
 
   const toolbar = (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
     <div
       className="object-map__toolbar"
       role="toolbar"
       aria-label="Object map controls"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
     >
-      {/** biome-ignore lint/a11y/useSemanticElements: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper. */}
       <form
         className="object-map__search"
-        role="search"
+        aria-label="Search object map"
         onSubmit={(event) => {
           event.preventDefault();
           focusSearchMatch();
@@ -658,7 +655,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           />
         </Suspense>
         {!!showLegend && (
-          // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
           <section
             className="object-map__legend"
             aria-label="Object map legend"
@@ -668,7 +664,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                 : undefined
             }
             {...legendPointerHandlers}
-            onClick={(e) => e.stopPropagation()}
           >
             <Tooltip
               content="Close the legend. You can open it again with the Legend button on the toolbar."

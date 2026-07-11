@@ -93,4 +93,13 @@ describe('ModalSurface', () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('uses a native backdrop dismiss button when backdrop closing is enabled', async () => {
+    const onClose = await renderSurface(vi.fn(), true);
+    const dismissButton = document.querySelector<HTMLButtonElement>('.modal-backdrop-dismiss');
+
+    expect(dismissButton?.type).toBe('button');
+    act(() => dismissButton?.click());
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

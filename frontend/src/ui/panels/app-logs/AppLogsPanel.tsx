@@ -10,6 +10,7 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import { useLayoutEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
@@ -264,9 +265,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const renderHeaderCell = useCallback(
     (column: LogColumnKey | 'message', label: string, className: string) => (
-      // biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
-      // biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
-      <span className={`app-logs-header-cell ${className}`} role="columnheader">
+      <AriaGridColumnHeader className={`app-logs-header-cell ${className}`}>
         <span className="app-logs-header-label">{label}</span>
         {column !== 'message' && (
           <hr
@@ -281,7 +280,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             onKeyDown={(event) => handleColumnResizeKeyDown(column, event)}
           />
         )}
-      </span>
+      </AriaGridColumnHeader>
     ),
     [columnWidths, handleColumnResizeKeyDown, handleColumnResizePointerDown]
   );
@@ -945,11 +944,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         </div>
       </div>
 
-      {/** biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
-      {/** biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
-      <div
+      <AriaGridRow
         className="app-logs-header"
-        role="row"
         aria-label="Application log columns"
         style={columnWidthStyle}
       >
@@ -958,7 +954,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         {renderHeaderCell('source', 'Source', 'log-source')}
         {renderHeaderCell('cluster', 'Cluster', 'log-cluster')}
         {renderHeaderCell('message', 'Message', 'log-message')}
-      </div>
+      </AriaGridRow>
 
       <div
         ref={logsContainerRef}

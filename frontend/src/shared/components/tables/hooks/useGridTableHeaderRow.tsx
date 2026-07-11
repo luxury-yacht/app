@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
@@ -41,9 +42,7 @@ export function useGridTableHeaderRow<T>({
   sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
   return (
-    // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-    // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-    <div className="gridtable-header" role="row">
+    <AriaGridRow className="gridtable-header">
       {renderedColumns.map((column, index) => {
         const isSortable = isSortableColumn(column);
         const nextColumn = renderedColumns[index + 1];
@@ -62,12 +61,9 @@ export function useGridTableHeaderRow<T>({
         })();
 
         return (
-          // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-          // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-          <div
+          <AriaGridColumnHeader
             key={column.key}
             className={`grid-cell grid-cell-header ${column.className || ''}`}
-            role="columnheader"
             aria-sort={ariaSortValue}
             data-column={column.key}
             data-sortable={isSortable}
@@ -116,9 +112,9 @@ export function useGridTableHeaderRow<T>({
               />
             )}
             {!!showKindSeparator && <div className="column-separator" aria-hidden="true" />}
-          </div>
+          </AriaGridColumnHeader>
         );
       })}
-    </div>
+    </AriaGridRow>
   );
 }

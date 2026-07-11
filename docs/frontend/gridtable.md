@@ -60,10 +60,12 @@ virtual row never moves DOM focus to an element that can unmount.
 
 Sortable column labels are native buttons. Column and docked-layout resize
 separators are keyboard focusable and support arrow keys plus Home and End. Keep
-the narrowly scoped Biome semantic-element suppressions on the ARIA grid
-containers: native table elements are not compatible with the current
-div-based virtualization and column layout. Do not copy those suppressions to
-ordinary, non-virtualized tables or interactive cell content.
+the narrowly scoped Biome semantic/focus suppressions centralized in
+`AriaGridPrimitives.tsx`: native table elements are not compatible with the
+current div-based virtualization, independently scrolling header, and column
+layout. Production grids, app-log grids, tests, and stories must reuse those
+primitives or `GridTable`; do not copy the suppressions to consumers, ordinary
+non-virtualized tables, or interactive cell content.
 
 Auto-width dirty checking hashes the currently rendered cells before running column measurement.
 When row virtualization changes `virtualRange.start/end`, the controller must enqueue visible

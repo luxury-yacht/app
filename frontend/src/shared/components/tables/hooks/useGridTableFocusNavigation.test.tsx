@@ -4,6 +4,7 @@
  * Targeted regression tests for focused-row lookup and activation behavior.
  */
 
+import { AriaGrid } from '@shared/components/tables/AriaGridPrimitives';
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
 import React, { act, forwardRef, useImperativeHandle, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -50,8 +51,7 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
     }));
 
     return (
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: this harness mirrors GridTable's programmatically focusable div-based DOM contract.
-      <div ref={wrapperRef} tabIndex={0}>
+      <AriaGrid ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           // Mirrors useGridTableRowRenderer: both .gridtable-row and
           // data-row-key are on the same element.
@@ -59,7 +59,7 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
             Row {i}
           </div>
         ))}
-      </div>
+      </AriaGrid>
     );
   }
 );
@@ -151,11 +151,15 @@ interface ExtendedProps {
   tableData: Row[];
   updateHoverForElement: (el: HTMLDivElement | null) => void;
   onRowClick?: (item: Row) => void;
+  onRowPointerClick?: (item: Row) => void;
   isShortcutOptOutTarget?: (target: EventTarget | null) => boolean;
 }
 
 const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
-  ({ tableData, updateHoverForElement, onRowClick, isShortcutOptOutTarget }, ref) => {
+  (
+    { tableData, updateHoverForElement, onRowClick, onRowPointerClick, isShortcutOptOutTarget },
+    ref
+  ) => {
     const wrapperRef = useRef<HTMLDivElement | null>(null);
 
     const result = useGridTableFocusNavigation<Row>({
@@ -164,6 +168,7 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
       wrapperRef,
       updateHoverForElement,
       onRowClick,
+      onRowPointerClick,
       isShortcutOptOutTarget: isShortcutOptOutTarget ?? (() => false),
       shouldIgnoreRowClick: () => false,
     });
@@ -186,14 +191,13 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
     }));
 
     return (
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: this harness mirrors GridTable's programmatically focusable div-based DOM contract.
-      <div ref={wrapperRef} tabIndex={0}>
+      <AriaGrid ref={wrapperRef} tabIndex={0}>
         {tableData.map((row, i) => (
           <div key={row.id} className="gridtable-row" data-row-key={row.id}>
             Row {i}
           </div>
         ))}
-      </div>
+      </AriaGrid>
     );
   }
 );
@@ -215,6 +219,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
 
   it('keyboard activation triggers onRowClick, pointer activation does not', async () => {
     const onRowClick = vi.fn();
+    const onRowPointerClick = vi.fn();
     const data: Row[] = [{ id: 'a' }, { id: 'b' }];
     const ref = React.createRef<ExtendedHandle>();
 
@@ -225,6 +230,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
           tableData={data}
           updateHoverForElement={vi.fn()}
           onRowClick={onRowClick}
+          onRowPointerClick={onRowPointerClick}
         />
       );
     });
@@ -237,6 +243,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
       ).handleRowActivation(data[0], 0, 'pointer');
     });
     expect(onRowClick).not.toHaveBeenCalled();
+    expect(onRowPointerClick).toHaveBeenCalledWith(data[0]);
     expect(
       requireValue(ref.current, 'expected test value in useGridTableFocusNavigation.test.tsx')
         .focusedRowIndex
@@ -259,6 +266,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
     });
     expect(onRowClick).toHaveBeenCalledTimes(1);
     expect(onRowClick).toHaveBeenCalledWith(data[1]);
+    expect(onRowPointerClick).toHaveBeenCalledTimes(1);
     expect(
       requireValue(ref.current, 'expected test value in useGridTableFocusNavigation.test.tsx')
         .focusedRowIndex

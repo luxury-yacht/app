@@ -1,8 +1,7 @@
 /**
  * frontend/src/modules/browse/components/BrowseView.stories.tsx
  *
- * Renders a realistic Browse view mockup using real GridTableFiltersBar
- * and GridTableLayout to verify the IconBar integration and favorite action placement.
+ * Renders a realistic Browse view through the production GridTable surface.
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
@@ -10,20 +9,10 @@ import '@styles/components/gridtables.css';
 import './BrowseView.css';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
-import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
-import GridTableLayout from '@shared/components/tables/GridTableLayout';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
-// Column widths matching the real BrowseView (from useBrowseColumns.tsx)
-const COL_KIND = 160;
-const COL_NAME = 320;
-const COL_NS = 220;
-const COL_AGE = 120;
-
 const noOp = () => {};
-const renderOption = (option: { value: string; label: string }) => <span>{option.label}</span>;
-const renderValue = () => <span>All kinds</span>;
-const renderColumnsValue = () => <span>Columns</span>;
 
 const KINDS = [
   { value: 'Deployment', label: 'Deployment' },
@@ -34,20 +23,19 @@ const KINDS = [
   { value: 'StatefulSet', label: 'StatefulSet' },
 ];
 
-const COLUMNS = [
-  { value: 'kind', label: 'Kind' },
-  { value: 'name', label: 'Name' },
-  { value: 'namespace', label: 'Namespace' },
-  { value: 'age', label: 'Age' },
-];
+interface BrowseStoryRow {
+  kind: string;
+  name: string;
+  ns: string;
+  age: string;
+}
 
-const ROWS = [
+const ROWS: BrowseStoryRow[] = [
   {
     kind: 'ReplicaSet',
     name: 'nginx-deployment-7fb96c846b',
     ns: 'default',
     age: '3d',
-    focused: true,
   },
   { kind: 'Deployment', name: 'nginx-deployment', ns: 'default', age: '3d' },
   { kind: 'StatefulSet', name: 'redis-master-0', ns: 'default', age: '5d' },
@@ -62,6 +50,13 @@ const ROWS = [
   { kind: 'Deployment', name: 'ingress-nginx-controller', ns: 'ingress-nginx', age: '7d' },
 ];
 
+const COLUMNS: GridColumnDefinition<BrowseStoryRow>[] = [
+  { key: 'kind', header: 'Kind', render: (row) => row.kind, sortable: true, width: 160 },
+  { key: 'name', header: 'Name', render: (row) => row.name, sortable: true, width: 320 },
+  { key: 'namespace', header: 'Namespace', render: (row) => row.ns, sortable: true, width: 220 },
+  { key: 'age', header: 'Age', render: (row) => row.age, sortable: true, width: 120 },
+];
+
 function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
   const favoriteAction: IconBarItem = {
     type: 'toggle',
@@ -71,108 +66,28 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
     onClick: noOp,
     title: isFavorited ? 'Update or remove favorite' : 'Save as favorite',
   };
-  const filtersNode = (
-    <GridTableFiltersBar
-      activeFilters={{
-        search: '',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-        includeMetadata: false,
-      }}
-      resolvedFilterOptions={{
-        kinds: KINDS,
-        namespaces: [],
-      }}
-      kindDropdownId="kind"
-      namespaceDropdownId="ns"
-      searchInputId="search"
-      onKindsChange={noOp}
-      onNamespacesChange={noOp}
-      onSearchChange={noOp}
-      onReset={noOp}
-      onToggleCaseSensitive={noOp}
-      renderOption={renderOption}
-      renderKindsValue={renderValue}
-      renderNamespacesValue={renderValue}
-      renderColumnsValue={renderColumnsValue}
-      showKindDropdown
-      showColumnsDropdown
-      columnOptions={COLUMNS}
-      columnValue={['kind', 'name', 'namespace', 'age']}
-      onColumnsChange={noOp}
-      resultCount={{ filtered: ROWS.length, unfiltered: ROWS.length }}
-      preActions={[favoriteAction]}
-    />
-  );
-
-  const headerNode = (
-    <div className="gridtable-header-container">
-      <div className="gridtable gridtable--header gridtable-browse">
-        <div className="gridtable-header">
-          <div className="grid-cell-header" style={{ width: COL_KIND }} data-sortable="true">
-            <div className="header-content">
-              <span>Kind</span>
-            </div>
-          </div>
-          <div className="grid-cell-header" style={{ width: COL_NAME }} data-sortable="true">
-            <div className="header-content">
-              <span>Name</span>
-            </div>
-          </div>
-          <div className="grid-cell-header" style={{ width: COL_NS }} data-sortable="true">
-            <div className="header-content">
-              <span>Namespace</span>
-            </div>
-          </div>
-          <div className="grid-cell-header" style={{ width: COL_AGE }} data-sortable="true">
-            <div className="header-content">
-              <span>Age</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const bodyNode = (
-    <div className="gridtable-wrapper">
-      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
-      <div className="gridtable gridtable--body gridtable-browse" role="grid">
-        {ROWS.map((row) => (
-          // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-          // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-          <div
-            key={`${row.kind}:${row.ns}:${row.name}`}
-            className={`gridtable-row${row.focused ? ' gridtable-row--focused' : ''}`}
-            role="row"
-          >
-            <div className="grid-cell" style={{ width: COL_KIND }}>
-              <span className="grid-cell-content">{row.kind}</span>
-            </div>
-            <div className="grid-cell" style={{ width: COL_NAME }}>
-              <span className="grid-cell-content">{row.name}</span>
-            </div>
-            <div className="grid-cell" style={{ width: COL_NS }}>
-              <span className="grid-cell-content">{row.ns}</span>
-            </div>
-            <div className="grid-cell" style={{ width: COL_AGE }}>
-              <span className="grid-cell-content">{row.age}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
-    <GridTableLayout
-      embedded={false}
+    <GridTable
+      data={ROWS}
+      columns={COLUMNS}
+      keyExtractor={(row) => `${row.kind}:${row.ns}:${row.name}`}
       className="gridtable-browse"
-      loading={false}
-      filters={filtersNode}
-      header={headerNode}
-      body={bodyNode}
+      tableClassName="gridtable-browse"
+      onSort={noOp}
+      filters={{
+        enabled: true,
+        accessors: {
+          getSearchText: (row) => [row.kind, row.name, row.ns],
+          getKind: (row) => row.kind,
+          getNamespace: (row) => row.ns,
+        },
+        options: {
+          kinds: KINDS.map((kind) => kind.value),
+          showKindDropdown: true,
+          showNamespaceDropdown: false,
+          preActions: [favoriteAction],
+        },
+      }}
     />
   );
 }
