@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -20,20 +19,10 @@ func TestRefreshTypeScriptContractGeneratedInSync(t *testing.T) {
 }
 
 func TestRefreshTypeScriptContractHasSingleFormattingOwner(t *testing.T) {
-	biomeConfigJSON, err := os.ReadFile("../frontend/biome.json")
+	biomeConfigJSONC, err := os.ReadFile("../frontend/biome.jsonc")
 	require.NoError(t, err)
-
-	var biomeConfig struct {
-		Formatter struct {
-			Includes []string `json:"includes"`
-		} `json:"formatter"`
-		Linter struct {
-			Includes []string `json:"includes"`
-		} `json:"linter"`
-	}
-	require.NoError(t, json.Unmarshal(biomeConfigJSON, &biomeConfig))
-	require.Contains(t, biomeConfig.Formatter.Includes, "!src/core/refresh/types.generated.ts")
-	require.Contains(t, biomeConfig.Linter.Includes, "!src/core/refresh/types.generated.ts")
+	require.Equal(t, 3, strings.Count(string(biomeConfigJSONC), "!src/core/refresh/types.generated.ts"),
+		"generated refresh contracts must be excluded from Biome formatting, assist, and linting")
 
 	gitAttributes, err := os.ReadFile("../.gitattributes")
 	require.NoError(t, err)

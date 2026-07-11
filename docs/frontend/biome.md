@@ -1,7 +1,7 @@
 # Biome policy
 
 Biome owns frontend formatting, linting, import organization, and repository-specific Grit rules.
-The global configuration is `frontend/biome.json`.
+The commented global configuration is `frontend/biome.jsonc`.
 
 ## Strictness contract
 
@@ -19,15 +19,13 @@ React correctness, and suspicious-code checks such as `noNoninteractiveElementIn
 `noDelete`, `noEmptyBlockStatements`, `noForIn`, `noReactForwardRef`, `noShadow`, `useGuardForIn`,
 `useMaxParams`, `noConsole`, `noEnum`, `noEqualsToNull`, `noParameterAssign`,
 `noParameterProperties`, `noUnusedExpressions`, `noUnusedInstantiation`, `noUnusedTemplateLiteral`,
-`useBlockStatements`, `useConsistentObjectDefinitions`, and `useStrictMode`. The policy manifest
-contains the authoritative list, so removing or
-weakening any required rule fails the policy check.
+`useBlockStatements`, `useConsistentObjectDefinitions`, and `useStrictMode`. The commented
+`frontend/biome.jsonc` file is the authoritative rule configuration.
 
 `useMaxParams` uses a project ceiling of seven parameters. Functions above that ceiling must group
 cohesive inputs into a typed object. The ceiling deliberately retains five-to-seven-argument
 callback, coordinate, and compact transformation signatures where wrapping the values would make
-the call less direct. Required rule options are recorded in the policy manifest and compared
-exactly, so raising the ceiling fails policy validation.
+the call less direct. Changes to the ceiling are reviewed directly in `frontend/biome.jsonc`.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and
@@ -159,37 +157,17 @@ contract is non-obvious.
 
 Hook dependency suppressions and custom lifetime-hook allowlists are not approved.
 
-## Policy manifest
+## Suppression guard
 
-`frontend/biome-policy.json` is the approved policy for:
-
-- every config override that disables a rule;
-- every inline `biome-ignore`, aggregated by file and exact rule.
-- every required explicit error rule, exact required rule options, exact scoped rules, and Grit
-  boundary plugin.
-
-`npm run check:biome-policy --prefix frontend` compares the code and config with that policy. It
-fails for both new exceptions and stale entries, so removing an exception also requires shrinking
-the policy.
-
-The manifest is not permission to add an exception. It makes exceptional scope explicit and
-reviewable.
-
-The validator scans the whole frontend project for Biome-supported source/config extensions,
-including the repository's `.mjs` and `.cjs` scripts, while excluding dependency, build, coverage,
-lockfile, and generated-binding trees. It rejects:
-
-- `biome-ignore-all`, `biome-ignore-start`, and `biome-ignore-end`;
-- inline suppressions without an exact rule and rationale;
-- disabled formatter, assist, or linter configuration;
-- global rule shutdowns, `preset: none`, and override-level linter shutdowns;
-- removal or weakening of required rules, exact rule options, hooks, or plugins;
-- changes to the exact include/exclude scope of a required Grit plugin.
+`npm run check:biome-suppressions --prefix frontend` scans Biome-supported frontend source and
+configuration files. It rejects broad suppression ranges and requires every inline suppression to
+name an exact rule and include a rationale. Biome configuration changes remain visible directly in
+`frontend/biome.jsonc` rather than being duplicated in a policy manifest.
 
 The Grit plugins have executable adversarial fixtures in
 `frontend/scripts/check-biome-boundaries.test.mjs`. Isolated fixtures prove each pattern rejects its
 forbidden direct call and accepts a call through the approved facade. Real-project fixtures also
-lint temporary files under `frontend/src` through `frontend/biome.json`; these guard the configured
+lint temporary files under `frontend/src` through `frontend/biome.jsonc`; these guard the configured
 plugin globs and backend-binding import patterns, not only the plugin source.
 
 The single disabled-rule scope is `style.noRestrictedImports` under
@@ -205,11 +183,9 @@ Before adding or expanding an override:
 1. Run the rule without the proposed override and record the exact diagnostics.
 2. Confirm that native elements, typed helpers, or a local refactor cannot satisfy the contract.
 3. Scope the override to exact files and exact rules; never disable a whole rule category.
-4. Add a concrete rationale to `biome-policy.json` describing the behavioral, generated-code,
-   third-party, or protocol constraint.
-5. Update this policy or the relevant durable frontend contract when the exception establishes a
+4. Update the relevant durable frontend contract when the exception establishes a
    reusable boundary.
-6. Add focused regression coverage for any behavior the ignored rule would normally protect.
+5. Add focused regression coverage for any behavior the ignored rule would normally protect.
 
 ## Reviewing an inline suppression
 
@@ -218,7 +194,6 @@ Inline suppressions must:
 - name every exact rule, such as `lint/a11y/noStaticElementInteractions`;
 - include a rationale after `:` that describes the real contract;
 - sit directly on the exceptional statement or JSX node;
-- be added to the policy manifest with its file, rule, and occurrence count.
 
 Do not use category suppressions such as `lint/a11y`. If one node needs multiple exceptions, list
 each exact rule in the same directive.

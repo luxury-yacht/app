@@ -1,11 +1,18 @@
 {
+  // Biome's recommended preset is the portable baseline. The explicit rule groups below make the
+  // project stricter where additional rules describe this React application.
+  // Keep the schema version aligned with the installed @biomejs/biome version so editors validate
+  // exactly the options accepted by CI.
   "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  // Resolve ignore rules from the repository-level Git configuration, not only the frontend folder.
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "root": "..",
     "useIgnoreFile": true
   },
+  // Check every Biome-supported language maintained in this frontend. Build output, generated Wails
+  // bindings, and npm's lockfile have separate owners and must not be rewritten by Biome.
   "files": {
     "includes": [
       "**/*.{js,jsx,ts,tsx,mjs,cjs,css,json,jsonc,html}",
@@ -14,6 +21,8 @@
       "!!package-lock.json"
     ]
   },
+  // The generated refresh contract is rendered by Go and deliberately excluded from every Biome
+  // writer. All maintained frontend files share one deterministic formatting contract.
   "formatter": {
     "enabled": true,
     "includes": ["**", "!src/core/refresh/types.generated.ts"],
@@ -22,6 +31,8 @@
     "lineEnding": "lf",
     "lineWidth": 100
   },
+  // Recommended assists include source actions such as import organization. They follow the same
+  // generated-file boundary as the formatter.
   "assist": {
     "enabled": true,
     "includes": ["**", "!src/core/refresh/types.generated.ts"],
@@ -29,11 +40,15 @@
       "preset": "recommended"
     }
   },
+  // `recommended` supplies Biome's stable baseline. The groups below record audited strict rules
+  // explicitly, including additional rules beyond that preset.
   "linter": {
     "enabled": true,
     "includes": ["**", "!src/core/refresh/types.generated.ts"],
     "rules": {
       "preset": "recommended",
+      // Interactive UI must expose equivalent semantics to pointer, keyboard, and assistive
+      // technology users. Prefer native elements before adding ARIA roles to generic elements.
       "a11y": {
         "noAutofocus": "error",
         "noLabelWithoutControl": "error",
@@ -47,16 +62,20 @@
         "useSemanticElements": "error",
         "useValidAnchor": "error"
       },
+      // Reject constructs that obscure control flow or make APIs and CSS harder to maintain.
       "complexity": {
         "noImportantStyles": "error",
         "noStaticOnlyClass": "error",
         "useMaxParams": {
           "level": "error",
           "options": {
+            // Above seven parameters, group cohesive inputs into a named object.
             "max": 7
           }
         }
       },
+      // Treat unresolved modules, incomplete React dependencies, unstable IDs, and other likely
+      // runtime defects as build failures.
       "correctness": {
         "noUnresolvedImports": "error",
         "noUnusedInstantiation": "error",
@@ -65,19 +84,27 @@
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
+            // Dependency arrays must omit values that cannot affect the hook result, not merely
+            // include every value mentioned near the callback.
             "reportUnnecessaryDependencies": true
           }
         }
       },
+      // Prefer reconstruction or Map/Set operations over deleting object properties, which also
+      // keeps state transitions explicit.
       "performance": {
         "noDelete": "error"
       },
+      // Promote ambiguous, error-prone, or misleading JavaScript patterns beyond the recommended
+      // preset so they cannot accumulate behind warnings.
       "suspicious": {
         "noArrayIndexKey": "error",
         "noConfusingVoidType": "error",
         "noConsole": {
           "level": "error",
           "options": {
+            // Keep operational diagnostics, assertions, and structured groups available while
+            // rejecting casual console.log/debug output.
             "allow": ["assert", "error", "group", "groupCollapsed", "groupEnd", "info", "warn"]
           }
         },
@@ -101,10 +128,12 @@
         "useIterableCallbackReturn": {
           "level": "error",
           "options": {
+            // Also catch accidental return values and inconsistent returns in forEach callbacks.
             "checkForEach": true
           }
         }
       },
+      // Keep TypeScript and CSS conventions explicit and predictable across the frontend.
       "style": {
         "noDescendingSpecificity": "error",
         "noEnum": "error",
@@ -114,6 +143,8 @@
         "noRestrictedImports": {
           "level": "error",
           "options": {
+            // Both the configured alias and relative-path variants must cross the maintained
+            // backend API facade instead of binding application code to generated Wails modules.
             "paths": {
               "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api."
             },
@@ -131,6 +162,7 @@
       }
     }
   },
+  // These choices match the established TypeScript and JSX conventions used throughout the app.
   "javascript": {
     "formatter": {
       "arrowParentheses": "always",
@@ -141,29 +173,38 @@
       "trailingCommas": "es5"
     }
   },
+  // Full HTML support lets Biome format and lint index.html with the rest of the frontend.
   "html": {
     "experimentalFullSupportEnabled": true
   },
   "plugins": [
+    // These plugins keep feature code behind the shared data-access and lifecycle boundaries.
     {
+      // Network reads belong to refresh or data-access infrastructure.
       "path": "./biome-plugins/no-direct-fetch.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
     },
     {
+      // Cluster lifecycle state must be read through appStateAccess.
       "path": "./biome-plugins/no-direct-lifecycle-read.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
     },
     {
+      // Permission queries must be routed through the shared data-access reader.
       "path": "./biome-plugins/no-direct-permission-read.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
     },
     {
+      // Feature code must not couple directly to low-level refresh orchestration commands.
       "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
     }
   ],
+  // Overrides are narrow architectural boundaries, not general escape hatches. Keep the reason for
+  // every override next to its scope so config diffs remain self-explanatory.
   "overrides": [
     {
+      // Browser production code must not depend on Node.js-only modules.
       "includes": ["src/**", "!src/**/*.test.*", "!src/**/*.stories.*"],
       "linter": {
         "rules": {
@@ -174,6 +215,7 @@
       }
     },
     {
+      // The backend API facade is the one boundary allowed to import generated Wails bindings.
       "includes": ["src/core/backend-api/**"],
       "linter": {
         "rules": {
