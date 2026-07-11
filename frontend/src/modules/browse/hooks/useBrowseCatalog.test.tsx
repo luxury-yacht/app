@@ -187,7 +187,7 @@ describe('useBrowseCatalog', () => {
         clusterScopedOnly: false,
         customOnly: false,
         pageLimit: undefined,
-        onPageLimitChange: () => {},
+        onPageLimitChange: () => undefined,
         filters: { search: '', kinds: [], namespaces: [] },
         diagnosticLabel: 'test browse',
       });
@@ -1307,7 +1307,7 @@ describe('doorbell refetch quietness on a paged catalog', () => {
 
     // User navigation: resolves page 2; the busy flag is EXPECTED while a
     // user-initiated fetch is in flight.
-    let resolveUserFetch: (value: unknown) => void = () => {};
+    let resolveUserFetch: (value: unknown) => void = () => undefined;
     mocks.requestRefreshDomainState.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -1337,7 +1337,7 @@ describe('doorbell refetch quietness on a paged catalog', () => {
 
     // Doorbell ring: hold the quiet current-page refetch in flight and assert
     // the busy flag stays FALSE the whole time.
-    let resolveQuietFetch: (value: unknown) => void = () => {};
+    let resolveQuietFetch: (value: unknown) => void = () => undefined;
     mocks.requestRefreshDomainState.mockImplementationOnce(
       () =>
         new Promise((resolve) => {

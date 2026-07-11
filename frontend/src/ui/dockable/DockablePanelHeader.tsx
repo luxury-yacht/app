@@ -54,7 +54,7 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
           <DockableTabBar
             tabs={tabs}
             activeTab={activeTab ?? null}
-            onTabClick={onTabClick ?? (() => {})}
+            onTabClick={onTabClick ?? (() => undefined)}
             groupKey={groupKey}
           />
         ) : (

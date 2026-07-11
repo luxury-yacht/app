@@ -362,7 +362,7 @@ export class ClusterRefreshRuntime {
       this.streamingCleanup.set(key, cleanup);
       return;
     }
-    this.streamingCleanup.set(key, () => {});
+    this.streamingCleanup.set(key, () => undefined);
   }
 
   failStreamingStart(domain: RefreshDomain, scope: string): void {

@@ -33,9 +33,9 @@ const renderHook = <T,>(hook: () => T) => {
           namespacesPermissionDenied: false,
           namespaceRefreshing: false,
           namespaceReady: true,
-          setSelectedNamespace: () => {},
-          loadNamespaces: async () => {},
-          refreshNamespaces: async () => {},
+          setSelectedNamespace: () => undefined,
+          loadNamespaces: async () => undefined,
+          refreshNamespaces: async () => undefined,
           getClusterNamespace: () => undefined,
         }}
       >

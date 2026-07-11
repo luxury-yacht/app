@@ -200,7 +200,7 @@ describe('useGridTableHoverSync', () => {
       cb(16);
       return 1 as unknown as number;
     });
-    const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
 
     act(() => {
       requireValue(

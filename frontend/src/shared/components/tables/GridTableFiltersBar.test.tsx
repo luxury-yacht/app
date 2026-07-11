@@ -245,10 +245,10 @@ describe('GridTableFiltersBar', () => {
   });
 
   it('keeps search input focused across controlled filter updates', async () => {
-    const setInputValue = (input: HTMLInputElement, value: string) => {
+    const setInputValue = (inputElement: HTMLInputElement, value: string) => {
       const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-      descriptor?.set?.call(input, value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      descriptor?.set?.call(inputElement, value);
+      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     const Harness = () => {

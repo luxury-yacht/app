@@ -114,7 +114,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
       id: 'favorite',
       icon: null,
       active: false,
-      onClick: () => {},
+      onClick: () => undefined,
       title: 'Save as favorite',
     },
     modal: null,
@@ -607,7 +607,7 @@ describe('NsViewPods', () => {
     }>(nameColumn.render(gridProps.data[0]), 'expected the pod name cell element');
 
     act(() => {
-      cell.props.onClick?.({ stopPropagation: () => {} });
+      cell.props.onClick?.({ stopPropagation: () => undefined });
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(

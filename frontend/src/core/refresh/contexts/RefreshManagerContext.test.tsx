@@ -39,7 +39,7 @@ describe('RefreshManagerContext', () => {
       Reflect.deleteProperty(document, 'hidden');
     }
 
-    await act(async () => {});
+    await act(async () => undefined);
   });
 
   it('throws when useRefreshManagerContext is used outside the provider', async () => {

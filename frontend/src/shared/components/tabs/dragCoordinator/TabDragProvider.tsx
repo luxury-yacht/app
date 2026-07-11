@@ -39,10 +39,10 @@ interface TabDragContextValue {
 
 export const TabDragContext = createContext<TabDragContextValue>({
   currentDrag: null,
-  beginDrag: () => {},
-  endDrag: () => {},
-  registerTarget: () => {},
-  unregisterTarget: () => {},
+  beginDrag: () => undefined,
+  endDrag: () => undefined,
+  registerTarget: () => undefined,
+  unregisterTarget: () => undefined,
 });
 
 export interface TabDragProviderProps {

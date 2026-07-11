@@ -21,12 +21,12 @@ describe('parsePortForwardStatus', () => {
   });
 
   it('falls back to "connecting" for an unrecognized status', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(parsePortForwardStatus('bogus-status')).toBe('connecting');
   });
 
   it('logs an unrecognized status at most once per distinct value', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     parsePortForwardStatus('mystery-state');
     parsePortForwardStatus('mystery-state');
     expect(warn).toHaveBeenCalledTimes(1);
@@ -51,7 +51,7 @@ describe('normalizePortForwardSession', () => {
   });
 
   it('coerces an unrecognized status to the fallback', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(normalizePortForwardSession({ ...rawSession, status: 'weird-pf' }).status).toBe(
       'connecting'
     );
@@ -72,7 +72,7 @@ describe('normalizePortForwardStatusEvent', () => {
   });
 
   it('coerces an unrecognized status to the fallback', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(normalizePortForwardStatusEvent({ ...rawEvent, status: 'huh' }).status).toBe(
       'connecting'
     );

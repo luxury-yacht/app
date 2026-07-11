@@ -226,7 +226,7 @@ describe('ResourceBar', () => {
       compactContainer.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await Promise.resolve();
     });
-    await act(async () => {});
+    await act(async () => undefined);
 
     expect(container.querySelector('.resource-bar-overcommit')).toBeTruthy();
     await act(async () => {

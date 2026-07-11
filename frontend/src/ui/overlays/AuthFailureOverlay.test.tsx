@@ -44,7 +44,7 @@ describe('AuthFailureOverlayContent', () => {
   const renderContent = async (authState: ClusterAuthState) => {
     await act(async () => {
       root.render(
-        <AuthFailureOverlayContent authState={authState} clusterId="c1" onRetry={() => {}} />
+        <AuthFailureOverlayContent authState={authState} clusterId="c1" onRetry={() => undefined} />
       );
     });
   };

@@ -143,7 +143,7 @@ const columns: GridColumnDefinition<TestRow>[] = [
   {
     key: 'name',
     header: 'Name',
-    render: (row) => row.name,
+    render: (resourceRow) => resourceRow.name,
   },
 ];
 

@@ -639,7 +639,7 @@ describe('Dropdown', () => {
         right: 200,
         x: 0,
         y: 500,
-        toJSON: () => {},
+        toJSON: () => undefined,
       }),
     });
 

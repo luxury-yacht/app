@@ -96,7 +96,7 @@ function SharedModalHarness() {
     <ModalSurface
       modalRef={modalRef}
       labelledBy={titleId}
-      onClose={() => {}}
+      onClose={() => undefined}
       containerClassName="test-blocking-modal"
       closeOnBackdrop={false}
     >

@@ -125,10 +125,10 @@ run focused tests for behavior-bearing edits, turn the rule on as `error` in `bi
 | --- | ---: | --- |
 | `style.noParameterAssign` | 1 | ✅ Refactored the parameter mutation to an explicit local value and policy-locked the rule. |
 | `style.noUnusedTemplateLiteral` | 25 | ✅ Replaced interpolation-free template literals and policy-locked the rule. |
-| `suspicious.noShadow` | 55 | Rename shadowing bindings so scope and ownership are unambiguous. |
+| `suspicious.noShadow` | 55 | ✅ Renamed shadowed bindings with context-specific names and policy-locked the rule. |
 | `suspicious.noForIn` | 4 | ✅ Replaced object enumeration with own-key iteration and policy-locked the rule. |
 | `suspicious.useGuardForIn` | 3 | ✅ Own-key iteration removed the unguarded loops; the rule is policy-locked as defense in depth. |
-| `suspicious.noEmptyBlockStatements` | 260 | Remove accidental empty blocks; preserve intentional no-op boundaries only through explicit, readable implementations rather than suppressions. |
+| `suspicious.noEmptyBlockStatements` | 260 | ✅ Replaced ambiguous empty bodies with explicit no-op expressions or documented inert test-double methods and policy-locked the rule. |
 
 Acceptance: all six applicable rule audits report zero diagnostics, every adopted rule is
 policy-locked, and no new suppression or disabled override exists. The separately blocked
@@ -138,7 +138,7 @@ policy-locked, and no new suppression or disabled override exists. The separatel
 
 | Rule | Diagnostics | Work and decision criteria |
 | --- | ---: | --- |
-| `suspicious.noReactForwardRef` | 11 | The project declares React 19.2.7 (`frontend/package.json:41-42`), and `npx biome explain noReactForwardRef` says React 19 can accept `ref` as a prop. Migrate one component at a time with ref-forwarding tests before enabling it. |
+| `suspicious.noReactForwardRef` | 19 | The fresh isolated audit after Phase 1 reports 19 production and test-harness uses. The project declares React 19.2.7 (`frontend/package.json:41-42`), and `npx biome explain noReactForwardRef` says React 19 can accept `ref` as a prop. Migrate one component at a time with ref-forwarding tests before enabling it. |
 | `performance.useTopLevelRegex` | 158 | Hoist render/callback-local regular expressions when construction is repeated and semantics do not depend on local flags or state. Keep locally parameterized regex creation explicit. |
 | `performance.noDelete` | 20 | Replace shape-changing deletion where a stable immutable reconstruction is clearer; verify serialization and ownership semantics before changing mutable registries. |
 | `performance.noJsxPropsBind` | 504 | Do not apply mechanically. Profile representative tables, panels, and menus first. Enable only if stable callback identities produce measurable benefit without dependency-array churn or obscuring component logic. |
@@ -269,3 +269,9 @@ For each adopted rule:
   moved its gate to the analyzer-blocked section after the full Biome check reproduced the module
   resolver panic. Added a red/green regression proving Helm value derivation ignores inherited
   properties.
+- 2026-07-11: Completed the remaining applicable Phase 1 rules: renamed all 55 shadowed bindings,
+  made all 260 empty blocks explicit, and policy-locked `noShadow` and
+  `noEmptyBlockStatements`. Phase 1 source diagnostics are zero; `useArraySortCompare` remains
+  blocked only by the documented Biome resolver panic.
+- 2026-07-11: Began Phase 2 by refreshing the isolated `noReactForwardRef` inventory; it now has 19
+  sites across the shared ARIA grid primitives, YAML editor, and test harnesses.

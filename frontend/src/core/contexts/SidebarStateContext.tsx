@@ -89,9 +89,9 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
       }
       const allowed = new Set(selectedClusterIds);
       const next: Record<string, SidebarSelectionType> = {};
-      Object.entries(prev).forEach(([key, value]) => {
+      Object.entries(prev).forEach(([key, storedValue]) => {
         if (key === '__default__' || allowed.has(key)) {
-          next[key] = value;
+          next[key] = storedValue;
         }
       });
       return next;

@@ -206,7 +206,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       cb(0);
       return 1;
     });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
 
     const { unmount } = await renderPanel(
       <DockablePanel panelId="panel-right" defaultPosition="right" isOpen>
@@ -511,7 +511,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       cb(0);
       return 1;
     });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
 
     const { unmount } = await renderPanel(
       <DockablePanel panelId="panel-drag" defaultPosition="floating" isOpen>
@@ -606,7 +606,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       cb(0);
       return 1;
     });
-    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
 
     const { unmount } = await renderPanel(
       <DockablePanel panelId="panel-floating-resize" defaultPosition="floating" isOpen>
@@ -918,7 +918,7 @@ describe('DockablePanel behaviour (real hook)', () => {
   });
 
   it('logs an error and renders nothing when panelId is missing', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { unmount } = await renderPanel(
       <DockablePanel panelId={'' as unknown as string}>

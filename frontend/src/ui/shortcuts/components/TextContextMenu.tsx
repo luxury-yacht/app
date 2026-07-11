@@ -136,7 +136,7 @@ const TextContextMenu: React.FC = () => {
                   document.execCommand('insertText', false, text);
                 }
               })
-              .catch(() => {});
+              .catch(() => undefined);
           },
         });
       }

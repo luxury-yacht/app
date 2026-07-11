@@ -100,18 +100,18 @@ describe('useStreamSignalRefetch', () => {
     // Initial payload with back-filled object clock + validator.
     applyPayload('validator-1');
     render();
-    await act(async () => {});
+    await act(async () => undefined);
 
     // Another fetch applies: new validator, new back-filled object watermark,
     // new workloads signature. NOT a doorbell — no refetch (this was the echo:
     // every doorbell cost two fetches because the apply looked like a signal).
     applyPayload('validator-2');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).not.toHaveBeenCalled();
 
     // The doorbell (signalVersions) advances: refetch.
     ringDoorbell('ns-4');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
   });
 
@@ -120,11 +120,11 @@ describe('useStreamSignalRefetch', () => {
     // scope holds came from the fetch that observed it.
     ringDoorbell('ns-6');
     render();
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).not.toHaveBeenCalled();
 
     ringDoorbell('ns-7');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
     expect(requestRefreshDomainMock).toHaveBeenCalledWith({
       domain: 'namespaces',
@@ -136,7 +136,7 @@ describe('useStreamSignalRefetch', () => {
   it('settles at ONE fetch per doorbell even though the apply back-fills an object clock', async () => {
     applyPayload('validator-1');
     render();
-    await act(async () => {});
+    await act(async () => undefined);
 
     // The doorbell's refetch applies a payload whose sourceVersions carry the
     // back-filled object watermark. signalVersions are untouched by applies,
@@ -146,34 +146,34 @@ describe('useStreamSignalRefetch', () => {
       return { status: 'executed' as const };
     });
     ringDoorbell('ns-7');
-    await act(async () => {});
-    await act(async () => {});
-    await act(async () => {});
+    await act(async () => undefined);
+    await act(async () => undefined);
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
 
     // Stable: nothing further fires.
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(1);
 
     // The NEXT real doorbell still fires.
     ringDoorbell('ns-8');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).toHaveBeenCalledTimes(2);
   });
 
   it('ignores scopes it was not given and unchanged doorbell values', async () => {
     ringDoorbell('ns-1');
     render();
-    await act(async () => {});
+    await act(async () => undefined);
 
     // Unchanged doorbell value: nothing.
     ringDoorbell('ns-1');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).not.toHaveBeenCalled();
 
     // A different scope's signal: nothing.
     ringDoorbell('ns-9', 'cluster-b|');
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).not.toHaveBeenCalled();
   });
 
@@ -188,7 +188,7 @@ describe('useStreamSignalRefetch', () => {
     act(() => {
       root.render(<Detail />);
     });
-    await act(async () => {});
+    await act(async () => undefined);
     expect(requestRefreshDomainMock).not.toHaveBeenCalled();
   });
 });

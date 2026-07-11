@@ -83,7 +83,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));
@@ -366,7 +366,7 @@ describe('NsViewEvents', () => {
     }>(objectNameColumn.render(event), 'expected the event object-name cell element');
 
     await act(async () => {
-      cell.props.onClick({ stopPropagation: () => {} });
+      cell.props.onClick({ stopPropagation: () => undefined });
       await Promise.resolve();
     });
 
@@ -409,7 +409,7 @@ describe('NsViewEvents', () => {
     }>(objectNameColumn.render(event), 'expected the event object-name cell element');
 
     await act(async () => {
-      cell.props.onClick({ stopPropagation: () => {} });
+      cell.props.onClick({ stopPropagation: () => undefined });
       await Promise.resolve();
     });
 

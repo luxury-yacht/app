@@ -17,7 +17,7 @@ const meta: Meta<typeof AboutModal> = {
   // Reset mock to default before each story.
   args: {
     isOpen: true,
-    onClose: () => {},
+    onClose: () => undefined,
   },
 };
 

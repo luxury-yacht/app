@@ -530,7 +530,7 @@ describe('Cluster Health Listener Isolation', () => {
   });
 
   it('does not log raw health payloads when clusterId is missing', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { getResult, unmount } = await renderHealthHook();
 
     await act(async () => {

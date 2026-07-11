@@ -109,7 +109,7 @@ describe('useGridTableProfiler', () => {
     expect(startMock).toHaveBeenCalled();
     expect(stopMock).toHaveBeenCalledWith('manual');
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     harness.handle().warn('duplicate');
     harness.handle().warn('duplicate');
     expect(warnSpy).toHaveBeenCalledTimes(1);

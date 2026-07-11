@@ -429,8 +429,8 @@ describe('keyboard surfaces', () => {
         rootRef: regionRef,
         active: true,
         captureWhenActive: true,
-        onKeyDown: (event) => {
-          if (event.key !== 'Tab') {
+        onKeyDown: (keyboardEvent) => {
+          if (keyboardEvent.key !== 'Tab') {
             return false;
           }
           regionHandler();
@@ -442,8 +442,8 @@ describe('keyboard surfaces', () => {
         kind: 'dropdown',
         rootRef: dropdownRef,
         active: true,
-        onKeyDown: (event) => {
-          if (event.key !== 'Tab') {
+        onKeyDown: (keyboardEvent) => {
+          if (keyboardEvent.key !== 'Tab') {
             return false;
           }
           dropdownHandler();
@@ -863,8 +863,8 @@ describe('keyboard surfaces', () => {
         rootRef: surfaceRef,
         active: true,
         suppressShortcuts: true,
-        onKeyDown: (event) => {
-          if (event.key !== 'Tab') {
+        onKeyDown: (keyboardEvent) => {
+          if (keyboardEvent.key !== 'Tab') {
             return false;
           }
           surfaceHandler();

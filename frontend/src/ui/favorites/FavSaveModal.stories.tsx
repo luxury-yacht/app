@@ -89,7 +89,7 @@ const meta: Meta<typeof FavSaveModal> = {
   decorators: [SidebarProvidersDecorator],
   args: {
     isOpen: true,
-    onClose: () => {},
+    onClose: () => undefined,
     existingFavorite: null,
     defaultName: 'prod-cluster / default / Pods',
     kubeconfigSelection: '/Users/john/.kube/config:prod-cluster',

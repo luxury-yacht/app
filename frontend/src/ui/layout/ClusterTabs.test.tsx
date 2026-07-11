@@ -148,9 +148,15 @@ describe('ClusterTabs', () => {
     const restoreResizeObserver = installWindowProperty(
       'ResizeObserver',
       class implements ResizeObserver {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
+        observe() {
+          return undefined;
+        }
+        unobserve() {
+          return undefined;
+        }
+        disconnect() {
+          return undefined;
+        }
       }
     );
 

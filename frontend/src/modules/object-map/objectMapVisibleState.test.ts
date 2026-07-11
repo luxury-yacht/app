@@ -151,8 +151,18 @@ describe('deriveObjectMapVisibleState', () => {
       selectedKinds: ['Service', 'Pod'],
     });
 
-    expect(selected.visibleLayout.nodes.map((node) => [node.id, node.x, node.y])).toEqual(
-      unselected.visibleLayout.nodes.map((node) => [node.id, node.x, node.y])
+    expect(
+      selected.visibleLayout.nodes.map((selectedNode) => [
+        selectedNode.id,
+        selectedNode.x,
+        selectedNode.y,
+      ])
+    ).toEqual(
+      unselected.visibleLayout.nodes.map((unselectedNode) => [
+        unselectedNode.id,
+        unselectedNode.x,
+        unselectedNode.y,
+      ])
     );
     expect(selected.visibleSelectionState.activeId).toBe('pod-b');
   });

@@ -24,9 +24,13 @@ class MockResizeObserver {
     this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
   }
 
-  unobserve() {}
+  unobserve() {
+    return undefined;
+  }
 
-  disconnect() {}
+  disconnect() {
+    return undefined;
+  }
 }
 
 const buildRect = (width: number, height: number): DOMRect =>

@@ -450,15 +450,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       let candidates = entries;
       const clusterId = (preferredClusterId ?? '').trim();
       if (clusterId) {
-        const clusterMatches = entries.filter(([scopeKey, state]) => {
-          const parsed = parseClusterScopeList(state.scope ?? scopeKey);
+        const clusterMatches = entries.filter(([entryScopeKey, state]) => {
+          const parsed = parseClusterScopeList(state.scope ?? entryScopeKey);
           return parsed.clusterIds.includes(clusterId);
         });
         if (clusterMatches.length > 0) {
           candidates = clusterMatches;
         } else {
-          const hasClusterScopedEntries = entries.some(([scopeKey, state]) => {
-            const parsed = parseClusterScopeList(state.scope ?? scopeKey);
+          const hasClusterScopedEntries = entries.some(([entryScopeKey, state]) => {
+            const parsed = parseClusterScopeList(state.scope ?? entryScopeKey);
             return parsed.clusterIds.length > 0;
           });
           if (hasClusterScopedEntries) {

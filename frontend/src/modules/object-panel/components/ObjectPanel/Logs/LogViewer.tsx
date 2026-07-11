@@ -753,8 +753,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           return;
         }
         // The error surfaces through the refresh-store snapshot status below.
-        setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => ({
-          ...previous,
+        setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previousState) => ({
+          ...previousState,
           status: 'error',
           error: message,
           scope: containerLogsScope,
@@ -850,12 +850,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     const clearAllEntries = normalizedActivePods.length === 0;
     const activePodSet = new Set(normalizedActivePods);
-    const filteredEntries = clearAllEntries
+    const visibleEntries = clearAllEntries
       ? []
       : logEntries.filter((entry) => activePodSet.has(entry.pod));
     const hasChanged = clearAllEntries
       ? logEntries.length > 0
-      : filteredEntries.length !== logEntries.length;
+      : visibleEntries.length !== logEntries.length;
 
     if (!hasChanged) {
       previousActivePodsRef.current = normalizedActivePods;
@@ -879,7 +879,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         error: null,
         data: {
           ...previousPayload,
-          entries: filteredEntries,
+          entries: visibleEntries,
           generatedAt,
           resetCount: previousPayload.resetCount + 1,
         },
@@ -890,7 +890,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       };
     });
 
-    hasPrimedScopeRef.current = filteredEntries.length > 0;
+    hasPrimedScopeRef.current = visibleEntries.length > 0;
     previousActivePodsRef.current = normalizedActivePods;
   }, [isWorkload, logEntries, containerLogsScope, normalizedActivePods, showPreviousContainerLogs]);
 

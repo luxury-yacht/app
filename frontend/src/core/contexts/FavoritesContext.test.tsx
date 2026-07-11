@@ -15,7 +15,7 @@ import type { Favorite } from '@/core/persistence/favorites';
 // Mock the persistence module before any imports that reference it.
 const persistenceMocks = vi.hoisted(() => ({
   hydrateFavorites: vi.fn().mockResolvedValue([]),
-  subscribeFavorites: vi.fn().mockReturnValue(() => {}),
+  subscribeFavorites: vi.fn().mockReturnValue(() => undefined),
   addFavorite: vi.fn(),
   updateFavorite: vi.fn(),
   deleteFavorite: vi.fn(),
@@ -138,7 +138,7 @@ describe('FavoritesContext', () => {
 
     // Reset persistence mocks
     persistenceMocks.hydrateFavorites.mockResolvedValue([]);
-    persistenceMocks.subscribeFavorites.mockReturnValue(() => {});
+    persistenceMocks.subscribeFavorites.mockReturnValue(() => undefined);
   });
 
   afterEach(() => {
@@ -161,7 +161,7 @@ describe('FavoritesContext', () => {
 
   it('throws when useFavorites is used outside of FavoritesProvider', () => {
     // Suppress React error boundary noise in test output.
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => {
       const TestComponent = () => {
         useFavorites();

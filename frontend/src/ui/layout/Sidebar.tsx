@@ -266,8 +266,8 @@ function Sidebar() {
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
   };
 
-  const handleNamespaceSelect = (namespaceScope: string, clusterId?: string) => {
-    const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
+  const handleNamespaceSelect = (selectedNamespaceScope: string, clusterId?: string) => {
+    const namespaceKey = toNamespaceKey(clusterId, selectedNamespaceScope);
     // Toggle expansion only; namespace selection happens when a view is chosen.
     const isExpanded = expandedNamespaceKeys.has(namespaceKey);
     if (isExpanded) {
@@ -296,22 +296,22 @@ function Sidebar() {
   };
 
   const handleNamespaceViewSelect = (
-    namespaceScope: string,
+    viewNamespaceScope: string,
     view: NamespaceViewType,
     clusterId?: string
   ) => {
-    const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
+    const namespaceKey = toNamespaceKey(clusterId, viewNamespaceScope);
     setPendingSelection({ kind: 'namespace-view', namespace: namespaceKey, view });
-    setSelectedNamespace(namespaceScope, clusterId);
+    setSelectedNamespace(viewNamespaceScope, clusterId);
 
     if (
       viewState.sidebarSelection?.type !== 'namespace' ||
-      viewState.sidebarSelection?.value !== namespaceScope
+      viewState.sidebarSelection?.value !== viewNamespaceScope
     ) {
-      viewState.onNamespaceSelect(namespaceScope);
+      viewState.onNamespaceSelect(viewNamespaceScope);
     } else {
       viewState.setViewType('namespace');
-      viewState.setSidebarSelection({ type: 'namespace', value: namespaceScope });
+      viewState.setSidebarSelection({ type: 'namespace', value: viewNamespaceScope });
     }
 
     viewState.setActiveNamespaceTab(view);

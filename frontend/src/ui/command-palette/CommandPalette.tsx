@@ -206,7 +206,9 @@ export function buildCatalogDisplayEntries(
   return scored.slice(0, limit).map(({ score: _score, ...entry }) => entry);
 }
 
-export const CommandPalette = memo(function CommandPalette({ commands = [] }: CommandPaletteProps) {
+export const CommandPalette = memo(function CommandPaletteComponent({
+  commands = [],
+}: CommandPaletteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);

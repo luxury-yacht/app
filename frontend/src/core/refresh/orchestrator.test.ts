@@ -238,10 +238,10 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
 
       streaming: {
-        start: (scope: string) => resourceStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          resourceStreamMocks.stop(scope, options),
-        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        start: (streamScope: string) => resourceStreamMocks.start(streamScope),
+        stop: (streamScope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(streamScope, options),
+        refreshOnce: (streamScope: string) => resourceStreamMocks.refreshOnce(streamScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -283,10 +283,10 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
 
       streaming: {
-        start: (scope: string) => catalogStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          catalogStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
+        start: (catalogScope: string) => catalogStreamMocks.start(catalogScope),
+        stop: (catalogScope: string, options?: { reset?: boolean }) =>
+          catalogStreamMocks.stop(catalogScope, options?.reset ?? false),
+        refreshOnce: (catalogScope: string) => catalogStreamMocks.refreshOnce(catalogScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -316,10 +316,10 @@ describe('refreshOrchestrator', () => {
       refresherName: SYSTEM_REFRESHERS.unifiedPods,
       category: 'system',
       streaming: {
-        start: (scope: string) => resourceStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          resourceStreamMocks.stop(scope, options),
-        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        start: (streamScope: string) => resourceStreamMocks.start(streamScope),
+        stop: (streamScope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(streamScope, options),
+        refreshOnce: (streamScope: string) => resourceStreamMocks.refreshOnce(streamScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -385,10 +385,10 @@ describe('refreshOrchestrator', () => {
       refresherName: 'cluster-overview',
       category: 'cluster',
       streaming: {
-        start: (scope: string) => resourceStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          resourceStreamMocks.stop(scope, options),
-        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        start: (overviewScope: string) => resourceStreamMocks.start(overviewScope),
+        stop: (overviewScope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(overviewScope, options),
+        refreshOnce: (overviewScope: string) => resourceStreamMocks.refreshOnce(overviewScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -484,7 +484,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockClear();
 
     // First doorbell's fetch hangs in flight.
-    let resolveFirst: (value: unknown) => void = () => {};
+    let resolveFirst: (value: unknown) => void = () => undefined;
     let firstSignal: AbortSignal | undefined;
     clientMocks.fetchSnapshotMock.mockImplementationOnce(
       (_domain: string, args: { signal?: AbortSignal }) => {
@@ -647,10 +647,10 @@ describe('refreshOrchestrator', () => {
       refresherName: SYSTEM_REFRESHERS.namespaces,
       category: 'system',
       streaming: {
-        start: (scope: string) => catalogStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          catalogStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
+        start: (namespaceScope: string) => catalogStreamMocks.start(namespaceScope),
+        stop: (namespaceScope: string, options?: { reset?: boolean }) =>
+          catalogStreamMocks.stop(namespaceScope, options?.reset ?? false),
+        refreshOnce: (namespaceScope: string) => catalogStreamMocks.refreshOnce(namespaceScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -1772,10 +1772,10 @@ describe('refreshOrchestrator', () => {
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
       streaming: {
-        start: (scope: string) => resourceStreamMocks.start(scope),
-        stop: (scope: string, options?: { reset?: boolean }) =>
-          resourceStreamMocks.stop(scope, options),
-        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        start: (configScope: string) => resourceStreamMocks.start(configScope),
+        stop: (configScope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(configScope, options),
+        refreshOnce: (configScope: string) => resourceStreamMocks.refreshOnce(configScope),
         pauseRefresherWhenStreaming: true,
       },
     });
@@ -2167,7 +2167,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('cleans up pending streaming promises and logs errors when cleanup fails', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     refreshOrchestrator.registerDomain({
       domain: 'catalog',
@@ -2244,7 +2244,7 @@ describe('refreshOrchestrator', () => {
 
   it('suppresses catalog hydration errors from bubbling to user error handler', async () => {
     const scope = 'cluster-a';
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     clientMocks.fetchSnapshotMock.mockRejectedValue(
       new Error('Catalog hydration incomplete - retry')
     );
@@ -2533,7 +2533,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('resets state when streaming start fails', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const startError = new Error('stream boom');
 
     containerLogsStreamMocks.start.mockRejectedValueOnce(startError);
@@ -2575,7 +2575,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('surfaces streaming initialisation failures and clears loading state when scope creation fails', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     clientMocks.ensureRefreshBaseURLMock.mockRejectedValueOnce(new Error('bootstrap failed'));
 
     refreshOrchestrator.registerDomain({

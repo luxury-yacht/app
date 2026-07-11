@@ -539,8 +539,8 @@ export const useObjectActionController = ({
           confirmText={confirmation?.confirmText ?? 'Confirm'}
           cancelText="Cancel"
           confirmButtonClass={confirmation?.confirmButtonClass}
-          onConfirm={confirmation?.onConfirm ?? (() => {})}
-          onCancel={confirmation?.onCancel ?? (() => {})}
+          onConfirm={confirmation?.onConfirm ?? (() => undefined)}
+          onCancel={confirmation?.onCancel ?? (() => undefined)}
         />
         <ScaleModal
           isOpen={Boolean(scaleState.object)}

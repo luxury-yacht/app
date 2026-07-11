@@ -117,7 +117,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'fav',
   }),
 }));
@@ -200,7 +200,7 @@ describe('Nodes view revisit', () => {
     gridRenders.length = 0;
 
     // Revisit: the query is in flight (unresolved) on the way back in.
-    requestRefreshDomainStateMock.mockReturnValue(new Promise(() => {}));
+    requestRefreshDomainStateMock.mockReturnValue(new Promise(() => undefined));
     await act(async () => {
       root.render(<ClusterViewNodes />);
     });

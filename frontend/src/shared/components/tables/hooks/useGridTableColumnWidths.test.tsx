@@ -50,7 +50,7 @@ describe('useGridTableColumnWidths', () => {
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame = immediateRaf;
     }
-    const noop = () => {};
+    const noop = () => undefined;
     globalThis.cancelAnimationFrame = noop;
     if (typeof window !== 'undefined') {
       window.cancelAnimationFrame = noop;

@@ -54,9 +54,9 @@ export const collectSuppressions = (sources) => {
 const collectOffRulePaths = (value, prefix = []) => {
   if (!value || typeof value !== 'object') return [];
   return Object.entries(value).flatMap(([key, child]) => {
-    const path = [...prefix, key];
-    if (child === 'off') return [path.join('.')];
-    return collectOffRulePaths(child, path);
+    const rulePath = [...prefix, key];
+    if (child === 'off') return [rulePath.join('.')];
+    return collectOffRulePaths(child, rulePath);
   });
 };
 

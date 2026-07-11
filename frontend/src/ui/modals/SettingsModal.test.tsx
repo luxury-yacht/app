@@ -66,7 +66,7 @@ vi.mock('@/core/refresh/RefreshManager', () => ({
   refreshManager: {
     register: vi.fn(),
     unregister: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn(() => () => undefined),
     enable: vi.fn(),
     disable: vi.fn(),
     pause: vi.fn(),

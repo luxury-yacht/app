@@ -821,7 +821,7 @@ describe('useTypedResourceQuery', () => {
         });
       }
       // cluster-b: keep the fetch in flight so no cluster-b rows ever arrive.
-      return new Promise(() => {});
+      return new Promise(() => undefined);
     });
 
     const committed: Array<{ clusterId: string; rows: TestRow[] }> = [];

@@ -120,7 +120,7 @@ const buildNamespaceScope = (namespace?: string) => {
   return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
-const buildSelectionParts = (item: CatalogItem | null, useShortNames: boolean) => {
+const buildSelectionParts = (item: CatalogItem | null, shortNamesEnabled: boolean) => {
   if (!item) {
     return {
       hasSelection: false,
@@ -132,7 +132,7 @@ const buildSelectionParts = (item: CatalogItem | null, useShortNames: boolean) =
   }
   const namespaceLabel = buildNamespaceLabel(item.namespace);
   const clusterLabel = item.clusterName?.trim() || item.clusterId?.trim() || '';
-  const kindLabel = getDisplayKind(item.kind, useShortNames);
+  const kindLabel = getDisplayKind(item.kind, shortNamesEnabled);
   return {
     hasSelection: true,
     clusterLabel,
@@ -277,14 +277,14 @@ const resolveNamespaceList = (payload: CatalogSnapshotPayload | null): string[] 
   return Array.from(fromItems);
 };
 
-const buildKindOptions = (kinds: string[], useShortNames: boolean): DropdownOption[] => {
+const buildKindOptions = (kinds: string[], shortNamesEnabled: boolean): DropdownOption[] => {
   const options = new Map<string, DropdownOption>();
   kinds.forEach((kind) => {
     const value = kind.trim();
     if (!value) {
       return;
     }
-    options.set(value.toLowerCase(), { value, label: getDisplayKind(value, useShortNames) });
+    options.set(value.toLowerCase(), { value, label: getDisplayKind(value, shortNamesEnabled) });
   });
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
 };

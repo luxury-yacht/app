@@ -8,34 +8,36 @@ type HeaderProps = React.ThHTMLAttributes<HTMLTableCellElement>;
 type CellProps = React.TdHTMLAttributes<HTMLTableCellElement>;
 
 /** Native focus owner for a virtualized table whose rows may be recycled. */
-export const AriaGrid = forwardRef<HTMLTableElement, TableProps>(function AriaGrid(props, ref) {
-  return <table {...props} ref={ref} />;
-});
+export const AriaGrid = forwardRef<HTMLTableElement, TableProps>(
+  function AriaGridComponent(props, ref) {
+    return <table {...props} ref={ref} />;
+  }
+);
 
 /** Row collection inside a virtualized ARIA grid. */
 export const AriaGridRowGroup = forwardRef<HTMLTableSectionElement, RowGroupProps>(
-  function AriaGridRowGroup(props, ref) {
+  function AriaGridRowGroupComponent(props, ref) {
     return <tbody {...props} ref={ref} />;
   }
 );
 
 /** Native row owned by the table-level keyboard focus model. */
 export const AriaGridRow = forwardRef<HTMLTableRowElement, RowProps>(
-  function AriaGridRow(props, ref) {
+  function AriaGridRowComponent(props, ref) {
     return <tr {...props} ref={ref} />;
   }
 );
 
 /** Native header cell for the independently scrolling table header. */
 export const AriaGridColumnHeader = forwardRef<HTMLTableCellElement, HeaderProps>(
-  function AriaGridColumnHeader(props, ref) {
+  function AriaGridColumnHeaderComponent(props, ref) {
     return <th {...props} ref={ref} scope="col" />;
   }
 );
 
 /** Native data cell inside a row-focused virtual table. */
 export const AriaGridCell = forwardRef<HTMLTableCellElement, CellProps>(
-  function AriaGridCell(props, ref) {
+  function AriaGridCellComponent(props, ref) {
     return <td {...props} ref={ref} />;
   }
 );

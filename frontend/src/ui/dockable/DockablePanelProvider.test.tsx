@@ -113,7 +113,7 @@ function createDataTransfer(): DataTransfer {
     clearData: () => {
       store.clear();
     },
-    setDragImage: () => {},
+    setDragImage: () => undefined,
   } as unknown as DataTransfer;
 }
 
@@ -1201,7 +1201,7 @@ describe('DockablePanelProvider', () => {
           <DockableTabBar
             tabs={bottomTabs}
             activeTab={ctx.tabGroups.bottom.activeTab}
-            onTabClick={() => {}}
+            onTabClick={() => undefined}
             groupKey="bottom"
           />
         </div>

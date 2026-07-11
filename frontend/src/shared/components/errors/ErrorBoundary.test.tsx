@@ -40,9 +40,9 @@ describe('ErrorBoundary', () => {
     consoleGroupSpy = vi.spyOn(console, 'group');
     consoleGroupEndSpy = vi.spyOn(console, 'groupEnd');
 
-    consoleErrorSpy.mockImplementation(() => {});
-    consoleGroupSpy.mockImplementation(() => {});
-    consoleGroupEndSpy.mockImplementation(() => {});
+    consoleErrorSpy.mockImplementation(() => undefined);
+    consoleGroupSpy.mockImplementation(() => undefined);
+    consoleGroupEndSpy.mockImplementation(() => undefined);
   });
 
   afterEach(() => {

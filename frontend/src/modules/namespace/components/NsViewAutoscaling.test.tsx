@@ -48,7 +48,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));

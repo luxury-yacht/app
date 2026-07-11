@@ -25,7 +25,7 @@ const meta: Meta<typeof SettingsModal> = {
   ],
   args: {
     isOpen: true,
-    onClose: () => {},
+    onClose: () => undefined,
   },
 };
 

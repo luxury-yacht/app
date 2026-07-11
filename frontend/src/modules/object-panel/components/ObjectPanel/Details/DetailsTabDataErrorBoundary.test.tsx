@@ -36,7 +36,7 @@ describe('DetailsTabDataErrorBoundary', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     consoleErrorSpy = vi.spyOn(console, 'error');
-    consoleErrorSpy.mockImplementation(() => {});
+    consoleErrorSpy.mockImplementation(() => undefined);
   });
 
   afterEach(() => {

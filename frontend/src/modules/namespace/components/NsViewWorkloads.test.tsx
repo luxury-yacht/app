@@ -64,7 +64,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));
@@ -686,7 +686,7 @@ describe('NsViewWorkloads', () => {
 
     // Use the name column click handler to verify object panel routing.
     act(() => {
-      cell.props.onClick?.({ stopPropagation: () => {} });
+      cell.props.onClick?.({ stopPropagation: () => undefined });
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(

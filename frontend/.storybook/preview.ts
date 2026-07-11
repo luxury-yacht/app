@@ -3,7 +3,7 @@ import '../styles/index.css';
 
 // Stub Wails globals so generated .js files work outside the Wails desktop shell.
 // The Wails runtime.js calls window.runtime.*, and App.js calls window.go.backend.App.*.
-const noOp = () => {};
+const noOp = () => undefined;
 const noOpAsync = () => Promise.resolve();
 
 // Proxy that returns noOp for any property access — handles window.runtime.*

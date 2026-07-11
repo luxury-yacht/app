@@ -524,18 +524,18 @@ export const computeObjectMapLayout = (
   const columnLanes = new Map<number, ObjectMapNode[][]>();
   const laneCounts = new Map<number, number>();
   sortedColumns.forEach((column) => {
-    const nodes = columns.get(column);
-    if (!nodes) return;
-    const lanes = splitColumnIntoKindAwareLanes(nodes);
+    const columnNodes = columns.get(column);
+    if (!columnNodes) return;
+    const lanes = splitColumnIntoKindAwareLanes(columnNodes);
     columnLanes.set(column, lanes);
     laneCounts.set(column, lanes.length);
   });
   const columnStartX = computeColumnStartX(sortedColumns, laneCounts, seedColumn);
 
   sortedColumns.forEach((column) => {
-    const nodes = columns.get(column);
-    if (!nodes) return;
-    const lanes = columnLanes.get(column) ?? [nodes];
+    const columnNodes = columns.get(column);
+    if (!columnNodes) return;
+    const lanes = columnLanes.get(column) ?? [columnNodes];
     const columnX = columnStartX.get(column) ?? column * COLUMN_STRIDE;
 
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {

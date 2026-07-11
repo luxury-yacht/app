@@ -872,7 +872,7 @@ describe('CommandPalette component behaviour', () => {
   });
 
   it('selects all text via Ctrl+A and keeps catalog loading state consistent on errors', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     fetchSnapshotMock.mockRejectedValueOnce(new Error('network down'));
 
     await renderPalette([]);

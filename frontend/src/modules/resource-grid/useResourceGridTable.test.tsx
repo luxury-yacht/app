@@ -35,7 +35,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
       id: 'favorite',
       icon: null,
       active: false,
-      onClick: () => {},
+      onClick: () => undefined,
       title: 'Save as favorite',
     },
     modal: null,
@@ -53,12 +53,12 @@ const columns: GridColumnDefinition<TestRow>[] = [
   {
     key: 'name',
     header: 'Name',
-    render: (row) => row.name,
+    render: (resourceRow) => resourceRow.name,
   },
   {
     key: 'age',
     header: 'Age',
-    render: (row) => row.name,
+    render: (resourceRow) => resourceRow.name,
   },
 ];
 
@@ -187,9 +187,9 @@ const renderNamespaceGrid = (
           namespacesPermissionDenied: false,
           namespaceRefreshing: false,
           namespaceReady: true,
-          setSelectedNamespace: () => {},
-          loadNamespaces: async () => {},
-          refreshNamespaces: async () => {},
+          setSelectedNamespace: () => undefined,
+          loadNamespaces: async () => undefined,
+          refreshNamespaces: async () => undefined,
           getClusterNamespace: () => undefined,
         }}
       >

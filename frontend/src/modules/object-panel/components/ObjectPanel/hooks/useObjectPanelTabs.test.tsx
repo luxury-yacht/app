@@ -195,7 +195,7 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('keeps the Map tab for backend-supported object-map types', async () => {
-    for (const objectData of [
+    for (const candidateObject of [
       {
         kind: 'IngressClass',
         name: 'public',
@@ -218,7 +218,7 @@ describe('useObjectPanelTabs', () => {
         version: 'v1',
       },
     ]) {
-      const { availableTabs } = await renderHook({ objectData });
+      const { availableTabs } = await renderHook({ objectData: candidateObject });
       expect(availableTabs.map((tab) => tab.label)).toContain('Map');
     }
   });

@@ -42,7 +42,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));
@@ -199,7 +199,7 @@ describe('ClusterViewConfig', () => {
   });
 
   it('keeps initial empty query-backed cluster config behind the loading boundary', async () => {
-    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => {}));
+    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => undefined));
 
     await act(async () => {
       root.render(<ClusterViewConfig />);

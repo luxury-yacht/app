@@ -24,21 +24,21 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@ui/shortcuts')>();
   return {
     ...actual,
-    useSearchShortcutTarget: () => {},
+    useSearchShortcutTarget: () => undefined,
     useKeyboardContext: () => ({
       registerShortcut: () => 'mock-id',
-      unregisterShortcut: () => {},
+      unregisterShortcut: () => undefined,
       getAvailableShortcuts: () => [],
       isShortcutAvailable: () => false,
-      setEnabled: () => {},
+      setEnabled: () => undefined,
       isEnabled: true,
       registerSurface: () => 'mock-surface-id',
-      unregisterSurface: () => {},
-      updateSurface: () => {},
+      unregisterSurface: () => undefined,
+      updateSurface: () => undefined,
       dispatchNativeAction: () => false,
       hasActiveBlockingSurface: () => false,
     }),
-    useShortcuts: () => {},
+    useShortcuts: () => undefined,
     useKeyboardSurface: (surface: {
       kind: string;
       onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | undefined;

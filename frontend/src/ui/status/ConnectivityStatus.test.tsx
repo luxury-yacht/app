@@ -86,7 +86,7 @@ vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
 
 vi.mock('@/core/events', () => ({
   eventBus: {
-    on: vi.fn(() => () => {}),
+    on: vi.fn(() => () => undefined),
   },
 }));
 

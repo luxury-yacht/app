@@ -182,13 +182,13 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       // cache for any panels in clusters that are about to be dropped —
       // those panels will never remount, so their cached scopes and
       // prefs would otherwise leak forever.
-      Object.entries(prev).forEach(([key, value]) => {
+      Object.entries(prev).forEach(([key, storedValue]) => {
         const keepingThisCluster =
           key === '__default__' || (activeClusterIds.length > 0 && allowed.has(key));
         if (keepingThisCluster) {
           return;
         }
-        value.openPanels.forEach((ref, panelId) => {
+        storedValue.openPanels.forEach((ref, panelId) => {
           evictPanelScopes(ref);
           clearLogViewerPrefs(panelId);
         });
@@ -197,9 +197,9 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         return prev.__default__ ? { __default__: prev.__default__ } : {};
       }
       const next: Record<string, ObjectPanelState> = {};
-      Object.entries(prev).forEach(([key, value]) => {
+      Object.entries(prev).forEach(([key, storedValue]) => {
         if (key === '__default__' || allowed.has(key)) {
-          next[key] = value;
+          next[key] = storedValue;
         }
       });
       return next;

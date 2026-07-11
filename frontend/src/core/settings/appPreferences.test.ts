@@ -737,7 +737,7 @@ describe('appPreferences', () => {
   });
 
   it('rolls back optimistic runtime preference state and events when persistence fails', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const events: boolean[] = [];
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',

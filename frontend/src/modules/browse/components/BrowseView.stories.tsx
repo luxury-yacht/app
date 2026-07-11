@@ -12,7 +12,7 @@ import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icon
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
-const noOp = () => {};
+const noOp = () => undefined;
 
 const KINDS = [
   { value: 'Deployment', label: 'Deployment' },

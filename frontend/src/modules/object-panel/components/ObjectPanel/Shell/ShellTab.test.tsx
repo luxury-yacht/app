@@ -610,7 +610,7 @@ describe('ShellTab', () => {
         command: ['/bin/sh'],
       },
     ]);
-    let resolveBacklog: (value: string) => void = () => {};
+    let resolveBacklog: (value: string) => void = () => undefined;
     const backlogPromise = new Promise<string>((resolve) => {
       resolveBacklog = resolve;
     });

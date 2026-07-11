@@ -294,7 +294,7 @@ export function useGridTableColumnWidths<T>(
     (
       base: Record<string, number>,
       containerWidth: number,
-      options?: { forceFit?: boolean }
+      resizeOptions?: { forceFit?: boolean }
     ): Record<string, number> => {
       // Adjust widths so the table fits its container without fighting the user.
       // - Skip auto-fitting while a drag is in progress.
@@ -313,7 +313,7 @@ export function useGridTableColumnWidths<T>(
         naturalWidths: naturalWidthsRef.current,
         containerWidth,
         allowHorizontalOverflow,
-        forceFit: options?.forceFit,
+        forceFit: resizeOptions?.forceFit,
         enableColumnResizing,
         externalColumnWidths,
         manuallyResizedColumnKeys: manuallyResizedColumnsRef.current,

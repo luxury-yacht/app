@@ -253,8 +253,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
     }
     installEventSource(MockEventSource);
 
@@ -354,8 +358,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
       emit(type: string, evt?: unknown) {
         this.listeners[type]?.(evt);
       }
@@ -407,8 +415,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
       emit(type: string, evt?: unknown) {
         this.listeners[type]?.(evt);
       }
@@ -458,8 +470,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
       emit(type: string, evt?: unknown) {
         this.listeners[type]?.(evt);
       }
@@ -497,8 +513,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
       emit(type: string, evt?: unknown) {
         this.listeners[type]?.(evt);
       }
@@ -541,8 +561,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
     }
     installEventSource(MockEventSource);
 
@@ -579,8 +603,12 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void) {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
-      close(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
       emit(type: string, evt?: unknown) {
         this.listeners[type]?.(evt);
       }
@@ -612,9 +640,15 @@ describe('ContainerLogsStreamManager', () => {
       constructor() {
         MockEventSource.instances.push(this);
       }
-      addEventListener(): void {}
-      removeEventListener(): void {}
-      close(): void {}
+      addEventListener(): void {
+        // Listener registration is intentionally inert in this test double.
+      }
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
+      close(): void {
+        // Closing is intentionally inert in this test double.
+      }
     }
     installEventSource(MockEventSource);
 
@@ -657,7 +691,9 @@ describe('ContainerLogsStreamManager', () => {
       addEventListener(type: string, handler: (evt?: unknown) => void): void {
         this.listeners[type] = handler;
       }
-      removeEventListener(): void {}
+      removeEventListener(): void {
+        // Listener removal is intentionally inert in this test double.
+      }
       close(): void {
         this.closed = true;
       }

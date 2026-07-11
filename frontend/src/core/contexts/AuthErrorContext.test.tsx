@@ -148,8 +148,8 @@ describe('AuthErrorContext', () => {
   });
 
   it('does not log auth event payloads', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await renderProvider();
 

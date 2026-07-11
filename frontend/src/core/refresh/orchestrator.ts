@@ -68,7 +68,7 @@ type DomainFetchOptions = {
 // registration, regardless of whether the user is on the relevant view.
 // Set autoStart: true on individual domain registrations when needed.
 const DEFAULT_AUTO_START = false;
-const noopStreamingCleanup = () => {};
+const noopStreamingCleanup = () => undefined;
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
@@ -819,7 +819,7 @@ class RefreshOrchestrator {
 
     if (pending) {
       pending
-        .then((cleanup) => {
+        .then((streamingCleanup) => {
           // LOAD-BEARING — docs/architecture/refresh-system.md, "Streaming
           // Start Lifecycle": teardown has exactly one owner. The start's
           // own continuation (attached first) already handled a cancelled
@@ -832,9 +832,9 @@ class RefreshOrchestrator {
           }
           runtime.failStreamingStart(domain, scope);
           runtime.clearStreamingCancelled(domain, scope);
-          if (typeof cleanup === 'function') {
+          if (typeof streamingCleanup === 'function') {
             try {
-              cleanup();
+              streamingCleanup();
             } catch (error) {
               console.error(`Failed to stop pending streaming domain ${domain}::${scope}`, error);
             }

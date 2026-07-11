@@ -104,12 +104,12 @@ export const logAppLogsError = (
 
 export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {
   if (typeof window === 'undefined') {
-    return () => {};
+    return () => undefined;
   }
 
   const runtime = window.runtime;
   if (!runtime?.EventsOn) {
-    return () => {};
+    return () => undefined;
   }
 
   const eventHandler = (event?: unknown) => {

@@ -75,7 +75,7 @@ describe('ResourceLoadingBoundary', () => {
   });
 
   it('warns when allowPartial is set but no data arrives', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await act(async () => {
       root.render(
@@ -94,7 +94,7 @@ describe('ResourceLoadingBoundary', () => {
   });
 
   it('suppresses the empty warning when suppressEmptyWarning is true', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await act(async () => {
       root.render(

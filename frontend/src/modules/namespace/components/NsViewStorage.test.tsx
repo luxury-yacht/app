@@ -80,7 +80,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));
@@ -340,7 +340,7 @@ describe('NsViewStorage', () => {
     expect(renderedCell.props.className).toContain('storage-class-link');
 
     act(() => {
-      renderedCell.props.onClick({ stopPropagation: () => {} });
+      renderedCell.props.onClick({ stopPropagation: () => undefined });
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -370,7 +370,7 @@ describe('NsViewStorage', () => {
     }>(storageColumn.render(entry), 'expected the storage-class cell element');
 
     act(() => {
-      renderedCell.props.onClick({ stopPropagation: () => {} });
+      renderedCell.props.onClick({ stopPropagation: () => undefined });
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -437,7 +437,7 @@ describe('NsViewStorage', () => {
     expect(renderedCell.props.className).toContain('default-class');
 
     act(() => {
-      renderedCell.props.onClick?.({ stopPropagation: () => {} });
+      renderedCell.props.onClick?.({ stopPropagation: () => undefined });
     });
     expect(openWithObjectMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'StorageClass' })

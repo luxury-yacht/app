@@ -68,7 +68,7 @@ vi.mock('./permissionStore', () => {
 
   // useUserPermissions reads the store via useSyncExternalStore; tests drive
   // updates by swapping the map and re-rendering, so subscribe is inert.
-  const subscribeUserPermissions = vi.fn(() => () => {});
+  const subscribeUserPermissions = vi.fn(() => () => undefined);
   const getUserPermissionMap = vi.fn(() => permissionStore.map);
 
   return {

@@ -200,9 +200,9 @@ const scheduleOverlayGeometryUpdate = (element: Element): void => {
     overlayGeometryFrameId = undefined;
     const elements = Array.from(pendingOverlayGeometryUpdates);
     pendingOverlayGeometryUpdates.clear();
-    elements.forEach((element) => {
-      overlayGeometryTransitionsDisabled.add(element);
-      updateOverlayScrollbarGeometry(element);
+    elements.forEach((scrollbarElement) => {
+      overlayGeometryTransitionsDisabled.add(scrollbarElement);
+      updateOverlayScrollbarGeometry(scrollbarElement);
     });
   });
 };

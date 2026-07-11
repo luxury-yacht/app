@@ -34,7 +34,7 @@ export type {
 } from '@shared/components/tables/GridTable.types';
 export { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable.types';
 
-const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
+const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) {
   const {
     // Destructure render-only props that aren't passed to the controller
     embedded = false,

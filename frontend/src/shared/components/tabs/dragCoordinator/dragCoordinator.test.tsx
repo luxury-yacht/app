@@ -365,7 +365,7 @@ describe('useTabDropTarget', () => {
     function Probe() {
       captured = useTabDropTarget({
         accepts: ['cluster-tab'],
-        onDrop: () => {},
+        onDrop: () => undefined,
       });
       return (
         <div ref={captured.ref} data-testid="target">
@@ -659,7 +659,7 @@ describe('useTabDropTarget', () => {
     function Probe() {
       captured = useTabDropTarget({
         accepts: ['cluster-tab'],
-        onDrop: () => {},
+        onDrop: () => undefined,
       });
       return (
         <div ref={captured.ref} data-testid="target" data-drag-over={captured.isDragOver}>

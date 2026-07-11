@@ -61,14 +61,14 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     ...original,
     useKeyboardContext: () => ({
       registerShortcut: () => 'mock-id',
-      unregisterShortcut: () => {},
+      unregisterShortcut: () => undefined,
       getAvailableShortcuts: () => [],
       isShortcutAvailable: () => false,
-      setEnabled: () => {},
+      setEnabled: () => undefined,
       isEnabled: true,
       registerSurface: () => 'mock-surface-id',
-      unregisterSurface: () => {},
-      updateSurface: () => {},
+      unregisterSurface: () => undefined,
+      updateSurface: () => undefined,
       dispatchNativeAction: () => false,
       hasActiveBlockingSurface: () => false,
     }),
@@ -674,10 +674,10 @@ describe('GridTable interactions (non-virtualized)', () => {
       {
         key: 'toggle',
         header: 'Toggle',
-        render: (row) => (
+        render: (tableRow) => (
           <div className="row-toggle">
             <button type="button" className="toggle-button">
-              <span className="toggle-icon" data-row={row.id}>
+              <span className="toggle-icon" data-row={tableRow.id}>
                 ⇵
               </span>
             </button>
@@ -715,7 +715,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     const onRowClick = vi.fn();
     const cellClick = vi.fn();
     const columns: GridColumnDefinition<SimpleRow>[] = [
-      createTextColumn<SimpleRow>('name', 'Name', (row) => row.name, {
+      createTextColumn<SimpleRow>('name', 'Name', (tableRow) => tableRow.name, {
         onClick: cellClick,
       }),
     ];
@@ -749,7 +749,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       getCustomContextMenuItems: () => [
         {
           label: 'Action',
-          onClick: () => {},
+          onClick: () => undefined,
         },
       ],
     });
@@ -1912,7 +1912,7 @@ afterEach(async () => {
 });
 
 it('warns in dev when keyExtractor returns an unscoped key (missing | separator)', async () => {
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
   const { cleanup } = renderGridTable({
     data: [{ id: 'row-1', label: 'A' }],
@@ -1931,7 +1931,7 @@ it('warns in dev when keyExtractor returns an unscoped key (missing | separator)
 });
 
 it('does not warn when keyExtractor returns a cluster-scoped key', async () => {
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -2022,7 +2022,7 @@ it('sets aria-sort="ascending" on the actively sorted column header', () => {
             columns={sortableColumns}
             keyExtractor={(item) => `cluster|${item.id}`}
             sortConfig={{ key: 'label', direction: 'asc' }}
-            onSort={() => {}}
+            onSort={() => undefined}
           />
         </KeyboardProvider>
       </ZoomProvider>
@@ -2064,7 +2064,7 @@ it('marks the focused native row when a row is clicked', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(5),
     virtualization: { enabled: false },
-    onRowClick: () => {},
+    onRowClick: () => undefined,
   });
   cleanupRoot = cleanup;
 
@@ -2162,7 +2162,7 @@ it('defers external column width notifications until drag end', () => {
     });
   const cancelAnimationFrameSpy = vi
     .spyOn(window, 'cancelAnimationFrame')
-    .mockImplementation(() => {});
+    .mockImplementation(() => undefined);
 
   const { container, cleanup } = renderGridTable({
     data: createRows(3),

@@ -32,7 +32,7 @@ const createHarness = async (props: HarnessProps) => {
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
 
-  const Harness = React.forwardRef<HarnessHandle, HarnessProps>((incomingProps, ref) => {
+  const Harness = React.forwardRef<HarnessHandle, HarnessProps>((incomingProps, samplerRef) => {
     const sampler = useFrameSampler({
       enabled: incomingProps.enabled ?? true,
       sampleLabel: 'GridTable scroll',
@@ -45,7 +45,7 @@ const createHarness = async (props: HarnessProps) => {
       clearTimeoutImpl: incomingProps.clearTimeoutImpl,
     });
 
-    useImperativeHandle(ref, () => ({
+    useImperativeHandle(samplerRef, () => ({
       start: sampler.start,
       stop: sampler.stop,
     }));

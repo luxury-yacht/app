@@ -145,7 +145,7 @@ describe('RefreshManager scheduling and state handling', () => {
     });
     refreshManager.subscribe(AUTO_NAME, failingCallback);
 
-    await refreshManager.triggerManualRefresh(AUTO_NAME).catch(() => {});
+    await refreshManager.triggerManualRefresh(AUTO_NAME).catch(() => undefined);
 
     const stateAfterFailure = requireValue(
       refreshManager.getState(AUTO_NAME),
@@ -197,7 +197,7 @@ describe('RefreshManager scheduling and state handling', () => {
       .mockImplementationOnce(() => {
         throw new Error('boom');
       })
-      .mockImplementation(() => {});
+      .mockImplementation(() => undefined);
 
     refreshManager.register({
       name: AUTO_NAME,
@@ -215,7 +215,7 @@ describe('RefreshManager scheduling and state handling', () => {
     instance.isEnabled = true;
     instance.state.status = 'idle';
 
-    await unsafeRefreshManager.refreshSingle(AUTO_NAME, false).catch(() => {});
+    await unsafeRefreshManager.refreshSingle(AUTO_NAME, false).catch(() => undefined);
     expect(callback).toHaveBeenCalledTimes(1);
     expect(refreshManager.getState(AUTO_NAME)?.status).toBe('cooldown');
 
@@ -245,7 +245,7 @@ describe('RefreshManager registration lifecycle', () => {
 
   it('preserves subscribers when re-registering an existing refresher', async () => {
     vi.useFakeTimers();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const subscriber = vi.fn();
 
     refreshManager.register({
@@ -659,7 +659,7 @@ describe('RefreshManager pause and cancellation integration', () => {
     expect(refreshManager.getState(NAME)?.status).toBe('refreshing');
 
     eventBus.emit('kubeconfig:changing', '');
-    await refreshPromise.catch(() => {});
+    await refreshPromise.catch(() => undefined);
 
     expect(refreshManager.getState(NAME)?.status).toBe('idle');
     expect(emitSpy.mock.calls.some(([event]) => event === 'refresh:state-change')).toBe(true);

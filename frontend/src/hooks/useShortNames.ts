@@ -13,7 +13,7 @@ import { getUseShortResourceNames } from '@/core/settings/appPreferences';
  * and triggers re-renders when the setting changes
  */
 export function useShortNames(): boolean {
-  const [useShortNames, setUseShortNames] = useState(() => {
+  const [shortNamesEnabled, setUseShortNames] = useState(() => {
     return getUseShortResourceNames();
   });
 
@@ -29,5 +29,5 @@ export function useShortNames(): boolean {
     };
   }, []);
 
-  return useShortNames;
+  return shortNamesEnabled;
 }

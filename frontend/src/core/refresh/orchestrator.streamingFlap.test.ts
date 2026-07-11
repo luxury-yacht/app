@@ -24,26 +24,26 @@ const { fetchSnapshotMock } = vi.hoisted(() => ({
 
 vi.mock('./client', () => ({
   ensureRefreshBaseURL: () => Promise.resolve('http://127.0.0.1:0'),
-  invalidateRefreshBaseURL: () => {},
+  invalidateRefreshBaseURL: () => undefined,
   fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
   isSnapshotPermissionDenied: () => false,
-  setMetricsActive: () => {},
+  setMetricsActive: () => undefined,
 }));
 
 vi.mock('./RefreshManager', () => ({
   refreshManager: {
-    subscribe: () => () => {},
-    enable: () => {},
-    disable: () => {},
-    register: () => {},
-    updateContext: () => {},
+    subscribe: () => () => undefined,
+    enable: () => undefined,
+    disable: () => undefined,
+    register: () => undefined,
+    updateContext: () => undefined,
     triggerManualRefreshForContext: () => Promise.resolve(),
   },
 }));
 
 // Keep the singleton lean: no default domains, no stream-manager wiring.
 vi.mock('./domainRegistrations', () => ({
-  registerDefaultRefreshDomains: () => {},
+  registerDefaultRefreshDomains: () => undefined,
 }));
 
 // The flap contract is view-independent: bypass the view-activity and
@@ -59,9 +59,9 @@ vi.mock('@/core/settings/appPreferences', () => ({
 
 vi.mock('@/core/logging/appLogsClient', () => ({
   APP_LOG_SOURCES: new Proxy({}, { get: (_t, key) => String(key) }),
-  logAppLogsInfo: () => {},
-  logAppLogsWarn: () => {},
-  logAppLogsError: () => {},
+  logAppLogsInfo: () => undefined,
+  logAppLogsWarn: () => undefined,
+  logAppLogsError: () => undefined,
 }));
 
 import { refreshOrchestrator } from './orchestrator';
@@ -138,7 +138,7 @@ describe('streaming start under the mount-time lease flap', () => {
     // The fresh start completes: streaming is active and the initial
     // reconciliation fetch runs so the scope leaves 'initialising' now, not
     // at the fallback poller's first tick.
-    resolvers[1](() => {});
+    resolvers[1](() => undefined);
     await flush();
     expect(fetchSnapshotMock).toHaveBeenCalled();
     // fetchSnapshot(domain, options) — the scope rides in the options.
@@ -174,7 +174,7 @@ describe('streaming start under the mount-time lease flap', () => {
     refreshOrchestrator.setScopedDomainEnabled(DOMAIN, SCOPE, true);
     await flush();
     expect(startCalls).toHaveLength(1);
-    resolvers[0](() => {});
+    resolvers[0](() => undefined);
     await flush();
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
   });

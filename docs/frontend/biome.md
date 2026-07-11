@@ -16,9 +16,10 @@ additional applicable rules to errors. The explicit non-recommended rules includ
 React correctness, and suspicious-code checks such as `noNoninteractiveElementInteractions`,
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
 `noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
-`noForIn`, `useGuardForIn`, `noParameterAssign`, `noUnusedExpressions`,
-`noUnusedInstantiation`, and `noUnusedTemplateLiteral`. The policy manifest contains the
-authoritative list, so removing or weakening any required rule fails the policy check.
+`noEmptyBlockStatements`, `noForIn`, `noShadow`, `useGuardForIn`, `noParameterAssign`,
+`noUnusedExpressions`, `noUnusedInstantiation`, and `noUnusedTemplateLiteral`. The policy manifest
+contains the authoritative list, so removing or weakening any required rule fails the policy
+check.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and

@@ -38,7 +38,7 @@ describe('parseClusterLifecycleState', () => {
   });
 
   it('treats absence as undefined without warning', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(parseClusterLifecycleState('')).toBeUndefined();
     expect(parseClusterLifecycleState(undefined)).toBeUndefined();
     expect(parseClusterLifecycleState(null)).toBeUndefined();
@@ -46,7 +46,7 @@ describe('parseClusterLifecycleState', () => {
   });
 
   it('drops unknown states with a once-per-value warning', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     expect(parseClusterLifecycleState('parse-test-bogus-a')).toBeUndefined();
     expect(parseClusterLifecycleState('parse-test-bogus-a')).toBeUndefined();

@@ -513,7 +513,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
                       if (!text) return;
                       insertTextAtSelection(view, text);
                     })
-                    .catch(() => {});
+                    .catch(() => undefined);
                 },
               });
             }

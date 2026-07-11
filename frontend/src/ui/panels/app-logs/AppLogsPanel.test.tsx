@@ -664,7 +664,7 @@ describe('AppLogsPanel', () => {
       }
       await Promise.resolve();
     });
-    await act(async () => {});
+    await act(async () => undefined);
 
     const emptyMessage = container.querySelector('.app-logs-empty');
     const remainingEntries = container.querySelectorAll('.log-entry');

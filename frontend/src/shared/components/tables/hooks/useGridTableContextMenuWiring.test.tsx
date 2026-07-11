@@ -29,7 +29,7 @@ const mockCloseContextMenu = vi.fn();
 let mockContextMenuState: unknown = null;
 
 vi.mock('@shared/components/tables/hooks/useGridTableContextMenuItems', () => ({
-  useGridTableContextMenuItems: () => vi.fn(() => [{ label: 'Test', action: () => {} }]),
+  useGridTableContextMenuItems: () => vi.fn(() => [{ label: 'Test', action: () => undefined }]),
 }));
 
 vi.mock('@shared/components/tables/hooks/useGridTableContextMenu', () => ({

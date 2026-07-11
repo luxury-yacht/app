@@ -90,7 +90,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
     id: 'favorite',
     icon: null,
     active: false,
-    onClick: () => {},
+    onClick: () => undefined,
     title: 'Save as favorite',
   }),
 }));
@@ -268,7 +268,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
             onClick?: (event: { stopPropagation: () => void }) => void;
             onKeyDown?: (event: { key: string; preventDefault: () => void }) => void;
           }>(rendered, 'expected a configuration cell element');
-          element.props.onClick?.({ stopPropagation() {} });
+          element.props.onClick?.({ stopPropagation: () => undefined });
           element.props.onKeyDown?.({ key: 'Enter', preventDefault: vi.fn() });
         }
       }

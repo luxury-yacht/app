@@ -112,7 +112,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
 describe('Sidebar', () => {
   beforeAll(() => {
     if (!Element.prototype.scrollIntoView) {
-      Element.prototype.scrollIntoView = () => {};
+      Element.prototype.scrollIntoView = () => undefined;
     }
   });
 
