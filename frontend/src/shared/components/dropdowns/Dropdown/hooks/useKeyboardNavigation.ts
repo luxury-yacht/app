@@ -33,23 +33,33 @@ export function useKeyboardNavigation({
     (currentIndex: number, direction: 'up' | 'down'): number => {
       const isSelectable = (opt: DropdownOption) => !opt.disabled && opt.group !== 'header';
       const enabledOptions = options.filter(isSelectable);
-      if (enabledOptions.length === 0) return -1;
+      if (enabledOptions.length === 0) {
+        return -1;
+      }
 
       if (direction === 'down') {
         for (let i = currentIndex + 1; i < options.length; i++) {
-          if (isSelectable(options[i])) return i;
+          if (isSelectable(options[i])) {
+            return i;
+          }
         }
         // Wrap to first enabled option
         for (let i = 0; i <= currentIndex; i++) {
-          if (isSelectable(options[i])) return i;
+          if (isSelectable(options[i])) {
+            return i;
+          }
         }
       } else {
         for (let i = currentIndex - 1; i >= 0; i--) {
-          if (isSelectable(options[i])) return i;
+          if (isSelectable(options[i])) {
+            return i;
+          }
         }
         // Wrap to last enabled option
         for (let i = options.length - 1; i >= currentIndex; i--) {
-          if (isSelectable(options[i])) return i;
+          if (isSelectable(options[i])) {
+            return i;
+          }
         }
       }
 
@@ -62,7 +72,9 @@ export function useKeyboardNavigation({
 
   const handleKeyAction = useCallback(
     (key: string): KeyActionResult => {
-      if (disabled) return 'ignored';
+      if (disabled) {
+        return 'ignored';
+      }
 
       const openIfPossible = () => {
         if (!isOpen) {

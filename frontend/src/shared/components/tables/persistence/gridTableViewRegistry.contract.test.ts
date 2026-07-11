@@ -76,7 +76,9 @@ function walkSourceFiles(dir: string): string[] {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       // Skip node_modules, dist, and test fixtures.
-      if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+      if (entry.name === 'node_modules' || entry.name === 'dist') {
+        continue;
+      }
       results.push(...walkSourceFiles(full));
     } else if (/\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')) {
       results.push(full);
@@ -115,7 +117,9 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
       continue;
     }
     const content = fs.readFileSync(filePath, 'utf-8');
-    if (!hookPattern.test(content)) continue;
+    if (!hookPattern.test(content)) {
+      continue;
+    }
 
     // Collect static viewId literals.
     for (const match of content.matchAll(staticViewIdPattern)) {

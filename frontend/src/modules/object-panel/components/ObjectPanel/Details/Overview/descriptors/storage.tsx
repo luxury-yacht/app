@@ -27,28 +27,36 @@ const clusterMeta = (context: OverviewContext) => ({
 });
 
 const reclaimPolicyVariant = (policy?: string): StatusChipVariant => {
-  if (policy === 'Delete') return 'warning';
+  if (policy === 'Delete') {
+    return 'warning';
+  }
   return 'info';
 };
 
 const reclaimPolicyTooltip = (policy?: string): string | undefined => {
-  if (policy === 'Delete')
+  if (policy === 'Delete') {
     return 'Volumes are destroyed when their PVC is deleted. Data is not recoverable.';
-  if (policy === 'Retain')
+  }
+  if (policy === 'Retain') {
     return 'Volumes are kept after their PVC is deleted. Manual cleanup required.';
+  }
   return undefined;
 };
 
 const bindingModeVariant = (mode?: string): StatusChipVariant => {
-  if (mode === 'Immediate') return 'warning';
+  if (mode === 'Immediate') {
+    return 'warning';
+  }
   return 'info';
 };
 
 const bindingModeTooltip = (mode?: string): string | undefined => {
-  if (mode === 'Immediate')
+  if (mode === 'Immediate') {
     return 'Volumes are bound as soon as the PVC is created, without considering where pods will be scheduled. In multi-zone clusters this can result in volumes that can’t actually be used by their pods.';
-  if (mode === 'WaitForFirstConsumer')
+  }
+  if (mode === 'WaitForFirstConsumer') {
     return 'Volume binding is delayed until a pod is scheduled, so the provisioner can match the pod’s zone and topology constraints.';
+  }
   return undefined;
 };
 
@@ -100,7 +108,9 @@ const renderStorageClassLink = (
   storageClass: string | undefined,
   context: OverviewContext
 ): React.ReactNode => {
-  if (!storageClass) return storageClass;
+  if (!storageClass) {
+    return storageClass;
+  }
   return (
     <ObjectPanelLink
       objectRef={buildRequiredObjectReference({
@@ -166,7 +176,9 @@ export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
         hidden: (d) => !d.dataSource,
         render: (d, context) => {
           const ds = d.dataSource;
-          if (!ds) return undefined;
+          if (!ds) {
+            return undefined;
+          }
           const label = `${ds.kind}/${ds.name}`;
           let ref: ReturnType<typeof buildRequiredObjectReference> | null;
           try {
@@ -271,7 +283,9 @@ export const pvDescriptor: OverviewDescriptor<PersistentVolumeDetails> = {
         hidden: (d) => !d.volumeSource?.type,
         render: (d) => {
           const source = d.volumeSource;
-          if (!source?.type) return undefined;
+          if (!source?.type) {
+            return undefined;
+          }
           return (
             <div className="overview-stacked">
               <div>

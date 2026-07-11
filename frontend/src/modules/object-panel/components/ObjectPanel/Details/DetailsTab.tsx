@@ -114,7 +114,9 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
 
         {/* Containers Section - Only for Pods and core Workloads (not Jobs/CronJobs) */}
         {(() => {
-          if (!model.containerSection) return null;
+          if (!model.containerSection) {
+            return null;
+          }
 
           return (
             <div className="details-section-spaced">
@@ -130,7 +132,9 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             rules are the primary content of the resource. */}
         {(() => {
           const rules = model.roleRules;
-          if (!rules || rules.length === 0) return null;
+          if (!rules || rules.length === 0) {
+            return null;
+          }
           return (
             <div className="details-section-spaced">
               <RBACRules policyRules={rules} />

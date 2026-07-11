@@ -152,7 +152,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
   private getNamespaceTextWidth(attributes: Required<ObjectMapG6CardNodeStyleProps>): number {
     const [width] = this.getSize(attributes);
     const fullWidth = width - OBJECT_MAP_CARD_STYLE.paddingX * 2;
-    if (!attributes.cardAgeText) return fullWidth;
+    if (!attributes.cardAgeText) {
+      return fullWidth;
+    }
     const ageWidth = measureTextWidth(
       attributes.cardAgeText,
       attributes.cardFontFamily,
@@ -274,7 +276,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
   private getStatusDotStyle(
     attributes: Required<ObjectMapG6CardNodeStyleProps>
   ): CircleStyleProps | false {
-    if (!attributes.cardStatusFill) return false;
+    if (!attributes.cardStatusFill) {
+      return false;
+    }
     const [cardWidth, cardHeight] = this.getSize(attributes);
     const radius = OBJECT_MAP_CARD_STYLE.statusDotSize / 2;
     const x = cardWidth / 2 - OBJECT_MAP_CARD_STYLE.statusDotRightInset - radius;
@@ -446,7 +450,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
 let isRegistered = false;
 
 export const ensureObjectMapG6CardNodeRegistered = (): void => {
-  if (isRegistered) return;
+  if (isRegistered) {
+    return;
+  }
   register(ExtensionCategory.NODE, OBJECT_MAP_G6_CARD_NODE, ObjectMapG6CardNode);
   isRegistered = true;
 };

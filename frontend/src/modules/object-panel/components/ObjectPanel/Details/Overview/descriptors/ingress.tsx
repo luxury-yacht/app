@@ -84,7 +84,9 @@ const renderAddress = (d: IngressDetails): React.ReactNode => {
 const renderIngressClass = (d: IngressDetails, context: OverviewContext): React.ReactNode => {
   // Guard internally: the renderer evaluates render() even for hidden rows, so this must be safe
   // when the field is absent (buildRequiredObjectReference throws on an empty name).
-  if (!d.ingressClassName) return null;
+  if (!d.ingressClassName) {
+    return null;
+  }
   return (
     <ObjectPanelLink
       objectRef={buildRequiredObjectReference({

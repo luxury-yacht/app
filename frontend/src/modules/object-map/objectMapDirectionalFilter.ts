@@ -46,8 +46,12 @@ export const filterByDirectionalReachability = (
   const outgoing = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
   const incoming = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
   edges.forEach((edge) => {
-    if (!validIds.has(edge.source) || !validIds.has(edge.target)) return;
-    if (edge.source === edge.target) return;
+    if (!validIds.has(edge.source) || !validIds.has(edge.target)) {
+      return;
+    }
+    if (edge.source === edge.target) {
+      return;
+    }
     let outs = outgoing.get(edge.source);
     if (!outs) {
       outs = [];
@@ -74,10 +78,14 @@ export const filterByDirectionalReachability = (
     for (let head = 0; head < queue.length; head += 1) {
       const u = queue[head];
       const outs = outgoing.get(u);
-      if (!outs) continue;
+      if (!outs) {
+        continue;
+      }
       for (const { edgeId, neighbor } of outs) {
         reachableEdges.add(edgeId);
-        if (visited.has(neighbor)) continue;
+        if (visited.has(neighbor)) {
+          continue;
+        }
         visited.add(neighbor);
         reachableNodes.add(neighbor);
         queue.push(neighbor);
@@ -94,10 +102,14 @@ export const filterByDirectionalReachability = (
     for (let head = 0; head < queue.length; head += 1) {
       const u = queue[head];
       const ins = incoming.get(u);
-      if (!ins) continue;
+      if (!ins) {
+        continue;
+      }
       for (const { edgeId, neighbor } of ins) {
         reachableEdges.add(edgeId);
-        if (visited.has(neighbor)) continue;
+        if (visited.has(neighbor)) {
+          continue;
+        }
         visited.add(neighbor);
         reachableNodes.add(neighbor);
         queue.push(neighbor);

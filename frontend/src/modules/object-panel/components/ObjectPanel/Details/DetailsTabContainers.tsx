@@ -70,17 +70,25 @@ const formatRef = (parsed: ParsedImage): string =>
 const TRANSIENT_WAITING_REASONS = new Set(['ContainerCreating', 'PodInitializing']);
 
 const stateVariant = (state?: string, reason?: string): StatusChipVariant => {
-  if (state === 'Running') return 'healthy';
-  if (state === 'Terminated' && reason === 'Completed') return 'healthy';
+  if (state === 'Running') {
+    return 'healthy';
+  }
+  if (state === 'Terminated' && reason === 'Completed') {
+    return 'healthy';
+  }
   if (state === 'Waiting') {
     return reason && TRANSIENT_WAITING_REASONS.has(reason) ? 'info' : 'unhealthy';
   }
-  if (state === 'Terminated') return 'unhealthy';
+  if (state === 'Terminated') {
+    return 'unhealthy';
+  }
   return 'info';
 };
 
 const stateLabel = (state?: string, reason?: string): string => {
-  if (!state) return 'Unknown';
+  if (!state) {
+    return 'Unknown';
+  }
   return reason ? `${state}: ${reason}` : state;
 };
 

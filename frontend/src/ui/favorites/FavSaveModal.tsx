@@ -149,19 +149,41 @@ const hasFormChanges = (
     includeMetadata,
   }: FavoriteFormState
 ): boolean => {
-  if (name !== existing.name) return true;
+  if (name !== existing.name) {
+    return true;
+  }
   const existingIsClusterSpecific = existing.clusterSelection !== '';
-  if (clusterSpecific !== existingIsClusterSpecific) return true;
-  if (clusterSpecific && clusterSelection !== existing.clusterSelection) return true;
-  if (scope !== existing.viewType) return true;
-  if (view !== existing.view) return true;
-  if (scope === 'namespace' && namespace !== existing.namespace) return true;
+  if (clusterSpecific !== existingIsClusterSpecific) {
+    return true;
+  }
+  if (clusterSpecific && clusterSelection !== existing.clusterSelection) {
+    return true;
+  }
+  if (scope !== existing.viewType) {
+    return true;
+  }
+  if (view !== existing.view) {
+    return true;
+  }
+  if (scope === 'namespace' && namespace !== existing.namespace) {
+    return true;
+  }
   if (existing.filters) {
-    if (filterText !== (existing.filters.search ?? '')) return true;
-    if (!arraysEqual(filterKinds, existing.filters.kinds ?? [])) return true;
-    if (!arraysEqual(filterNamespaces, existing.filters.namespaces ?? [])) return true;
-    if (caseSensitive !== (existing.filters.caseSensitive ?? false)) return true;
-    if (includeMetadata !== (existing.filters.includeMetadata ?? false)) return true;
+    if (filterText !== (existing.filters.search ?? '')) {
+      return true;
+    }
+    if (!arraysEqual(filterKinds, existing.filters.kinds ?? [])) {
+      return true;
+    }
+    if (!arraysEqual(filterNamespaces, existing.filters.namespaces ?? [])) {
+      return true;
+    }
+    if (caseSensitive !== (existing.filters.caseSensitive ?? false)) {
+      return true;
+    }
+    if (includeMetadata !== (existing.filters.includeMetadata ?? false)) {
+      return true;
+    }
   }
   return false;
 };
@@ -188,7 +210,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onDelete,
 }) => {
   const elementIdPrefix = useId();
-  const isEditing = existingFavorite != null;
+  const isEditing = Boolean(existingFavorite);
   const { kubeconfigs, getClusterMeta } = useKubeconfig();
   const { namespaces } = useNamespace();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -209,7 +231,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
   // ----- Initialize form when modal opens -----
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     if (existingFavorite) {
       setName(existingFavorite.name);
       setClusterSpecific(existingFavorite.clusterSelection !== '');
@@ -250,7 +274,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     ref: modalRef,
     disabled: !isOpen || showDeleteConfirm,
     onEscape: () => {
-      if (!isOpen || showDeleteConfirm) return false;
+      if (!isOpen || showDeleteConfirm) {
+        return false;
+      }
       onClose();
       return true;
     },
@@ -263,7 +289,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     const seen = new Set<string>();
     return kubeconfigs.map((kc) => {
       const isFirstForFile = !seen.has(kc.name);
-      if (isFirstForFile) seen.add(kc.name);
+      if (isFirstForFile) {
+        seen.add(kc.name);
+      }
       return {
         value: `${kc.path}:${kc.context}`,
         label: `${kc.name} [${kc.context}]`,
@@ -283,7 +311,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     const opts = [{ value: ALL_NAMESPACES_SCOPE, label: 'All Namespaces' }];
     namespaces.forEach((ns) => {
       // Skip the synthetic "All Namespaces" item already added above.
-      if (ns.isSynthetic) return;
+      if (ns.isSynthetic) {
+        return;
+      }
       opts.push({ value: ns.scope || ns.name, label: ns.name });
     });
     return opts;
@@ -385,7 +415,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <>
@@ -460,7 +492,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   placeholder="Select cluster..."
                   disabled={!clusterSpecific}
                   renderValue={(val) => {
-                    if (!clusterSpecific) return 'Select cluster...';
+                    if (!clusterSpecific) {
+                      return 'Select cluster...';
+                    }
                     const match = clusterOptions.find((o) => o.value === val);
                     return match?.metadata?.context ?? val ?? 'Select cluster...';
                   }}
@@ -525,8 +559,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     multiple
                     renderValue={(val) => {
                       const count = Array.isArray(val) ? val.length : val ? 1 : 0;
-                      if (count === 0) return 'All kinds';
-                      if (count === 1) return Array.isArray(val) ? val[0] : val;
+                      if (count === 0) {
+                        return 'All kinds';
+                      }
+                      if (count === 1) {
+                        return Array.isArray(val) ? val[0] : val;
+                      }
                       return `${count} selected`;
                     }}
                   />
@@ -548,8 +586,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     multiple
                     renderValue={(val) => {
                       const count = Array.isArray(val) ? val.length : val ? 1 : 0;
-                      if (count === 0) return 'All namespaces';
-                      if (count === 1) return Array.isArray(val) ? val[0] : val;
+                      if (count === 0) {
+                        return 'All namespaces';
+                      }
+                      if (count === 1) {
+                        return Array.isArray(val) ? val[0] : val;
+                      }
                       return `${count} selected`;
                     }}
                   />

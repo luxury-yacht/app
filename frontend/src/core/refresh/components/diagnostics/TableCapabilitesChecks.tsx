@@ -35,13 +35,17 @@ const matchesSearch = (row: CapabilityBatchRow, query: string): boolean => {
     row.lastResult,
     row.lastError,
     row.method,
-    row.ssrrIncomplete == null ? null : row.ssrrIncomplete ? 'incomplete' : 'complete',
+    row.ssrrIncomplete === null || row.ssrrIncomplete === undefined
+      ? null
+      : row.ssrrIncomplete
+        ? 'incomplete'
+        : 'complete',
     row.ssrrRuleCount,
     row.ssarFallbackCount,
     row.totalChecks,
     descriptorText,
   ]
-    .filter((value) => value != null)
+    .filter((value) => value !== null && value !== undefined)
     .some((value) => String(value).toLowerCase().includes(query));
 };
 
@@ -67,7 +71,13 @@ const CapabilityRow: React.FC<{
     <td>{row.totalChecks}</td>
     <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
     <td>{row.method ?? '—'}</td>
-    <td>{row.ssrrIncomplete != null ? (row.ssrrIncomplete ? 'Yes' : 'No') : '—'}</td>
+    <td>
+      {row.ssrrIncomplete !== null && row.ssrrIncomplete !== undefined
+        ? row.ssrrIncomplete
+          ? 'Yes'
+          : 'No'
+        : '—'}
+    </td>
     <td>{row.ssrrRuleCount ?? '—'}</td>
     <td>{row.ssarFallbackCount ?? '—'}</td>
     <td>

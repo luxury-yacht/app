@@ -106,18 +106,24 @@ export const publishObjectMapRendererDebugSnapshot = (
   renderer: ObjectMapRendererDebugSnapshot
 ): void => {
   const previous = snapshots.get(id);
-  if (!previous) return;
+  if (!previous) {
+    return;
+  }
   snapshots.set(id, { ...previous, renderer, updatedAt: Date.now() });
   emit();
 };
 
 export const removeObjectMapDebugSnapshot = (id: string): void => {
-  if (!snapshots.delete(id)) return;
+  if (!snapshots.delete(id)) {
+    return;
+  }
   emit();
 };
 
 export const setObjectMapDebugOverlayVisible = (isVisible: boolean): void => {
-  if (isDebugOverlayVisible === isVisible) return;
+  if (isDebugOverlayVisible === isVisible) {
+    return;
+  }
   isDebugOverlayVisible = isVisible;
   overlayVisibilityListeners.forEach((listener) => {
     listener();

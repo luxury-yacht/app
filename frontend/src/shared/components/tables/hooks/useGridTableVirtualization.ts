@@ -152,9 +152,13 @@ export function useGridTableVirtualization<T>({
   // getBoundingClientRect and updates the cache if it changed.
   const measureRowRef: MeasureRowRefFn = useCallback(
     (rowKey: string, node: HTMLDivElement | null) => {
-      if (!node) return;
+      if (!node) {
+        return;
+      }
       const rect = node.getBoundingClientRect();
-      if (rect.height <= 0) return;
+      if (rect.height <= 0) {
+        return;
+      }
       const cached = rowHeightCacheRef.current.get(rowKey);
       if (cached === undefined || Math.abs(cached - rect.height) > 0.5) {
         rowHeightCacheRef.current.set(rowKey, rect.height);
@@ -351,7 +355,7 @@ export function useGridTableVirtualization<T>({
       }
     }
     return () => {
-      if (rafHandle != null) {
+      if (rafHandle !== null && rafHandle !== undefined) {
         cancelAnimationFrame(rafHandle);
       }
     };
@@ -383,7 +387,9 @@ export function useGridTableVirtualization<T>({
     let visibleCount = 0;
     const viewportBottom = virtualScrollTop + virtualViewportHeight;
     for (let i = firstVisible; i < totalCount; i++) {
-      if (rowPositions[i] >= viewportBottom) break;
+      if (rowPositions[i] >= viewportBottom) {
+        break;
+      }
       visibleCount++;
     }
 
@@ -471,7 +477,9 @@ export function useGridTableVirtualization<T>({
   // Helper to get the top offset of a row by absolute index
   const getRowTop = useCallback(
     (index: number): number => {
-      if (index < 0 || index >= rowPositions.length) return 0;
+      if (index < 0 || index >= rowPositions.length) {
+        return 0;
+      }
       return rowPositions[index];
     },
     [rowPositions]

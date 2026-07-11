@@ -11,7 +11,9 @@ let timer: TimerHandle | null = null;
 let currentNow = Date.now();
 
 export const parseAgeTimestampMillis = (timestamp: AgeTimestampInput): number | null => {
-  if (!timestamp) return null;
+  if (!timestamp) {
+    return null;
+  }
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   const millis = date.getTime();
   return Number.isNaN(millis) ? null : millis;
@@ -19,7 +21,9 @@ export const parseAgeTimestampMillis = (timestamp: AgeTimestampInput): number | 
 
 const hasSecondLevelAge = (): boolean => {
   for (const timestamp of activeTimestamps.values()) {
-    if (timestamp === null) continue;
+    if (timestamp === null) {
+      continue;
+    }
     if (Math.max(0, currentNow - timestamp) < 60_000) {
       return true;
     }
@@ -28,14 +32,18 @@ const hasSecondLevelAge = (): boolean => {
 };
 
 const clearAgeTimer = () => {
-  if (timer === null) return;
+  if (timer === null) {
+    return;
+  }
   clearTimeout(timer);
   timer = null;
 };
 
 const scheduleAgeTimer = () => {
   clearAgeTimer();
-  if (listeners.size === 0) return;
+  if (listeners.size === 0) {
+    return;
+  }
 
   const delay = hasSecondLevelAge() ? 1000 : 60_000;
   timer = setTimeout(() => {

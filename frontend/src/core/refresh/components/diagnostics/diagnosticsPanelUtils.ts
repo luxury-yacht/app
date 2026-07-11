@@ -67,7 +67,12 @@ export const formatLastUpdated = (value?: number): { display: string; tooltip: s
 };
 
 export const formatDurationMs = (durationMs?: number | null): string => {
-  if (durationMs == null || Number.isNaN(durationMs) || durationMs <= 0) {
+  if (
+    durationMs === null ||
+    durationMs === undefined ||
+    Number.isNaN(durationMs) ||
+    durationMs <= 0
+  ) {
     return '—';
   }
   if (durationMs < 1000) {

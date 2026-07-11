@@ -370,7 +370,11 @@ export const buildInitialMeasuredColumnWidthPlan = <T>({
     const naturalWidths: Record<string, number> = {};
     renderedColumns.forEach((column) => {
       let width: number | undefined;
-      if (manuallyResizedColumnKeys.has(column.key) && columnWidths[column.key] != null) {
+      if (
+        manuallyResizedColumnKeys.has(column.key) &&
+        columnWidths[column.key] !== null &&
+        columnWidths[column.key] !== undefined
+      ) {
         width = columnWidths[column.key];
       } else if (isFixedColumnKey(column.key)) {
         width = measuredFixedWidths[column.key];

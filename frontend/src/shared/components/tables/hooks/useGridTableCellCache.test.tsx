@@ -46,7 +46,9 @@ const renderHarness = async (renderedColumns: GridColumnDefinition<SampleRow>[])
       renderedColumns,
       isKindColumnKey: (key) => key === 'kind',
       getTextContent: (node) => {
-        if (typeof node === 'string') return node;
+        if (typeof node === 'string') {
+          return node;
+        }
         if (Array.isArray(node)) {
           return node.map((item) => (typeof item === 'string' ? item : '')).join('');
         }

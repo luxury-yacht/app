@@ -238,7 +238,9 @@ export function useGridTableFiltersWiring<T>({
   // backend (totalCount = N, unfilteredTotal = M); local tables derive N from the client-filtered
   // set and M from the full row set. The bar only renders this while a narrowing filter is active.
   const resultCount = useMemo(() => {
-    if (!filteringEnabled) return undefined;
+    if (!filteringEnabled) {
+      return undefined;
+    }
     // Server-paginated tables (searchBehavior 'query') filter on the backend, so the displayed
     // rows are just the current page — N/M come from the backend counts. Local tables filter
     // client-side, so N is the filtered row set and M is the full provided dataset.

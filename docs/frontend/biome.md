@@ -17,8 +17,10 @@ React correctness, and suspicious-code checks such as `noNoninteractiveElementIn
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
 `noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
 `noDelete`, `noEmptyBlockStatements`, `noForIn`, `noReactForwardRef`, `noShadow`, `useGuardForIn`,
-`useMaxParams`, `noParameterAssign`, `noUnusedExpressions`, `noUnusedInstantiation`, and
-`noUnusedTemplateLiteral`. The policy manifest contains the authoritative list, so removing or
+`useMaxParams`, `noConsole`, `noEnum`, `noEqualsToNull`, `noParameterAssign`,
+`noParameterProperties`, `noUnusedExpressions`, `noUnusedInstantiation`, `noUnusedTemplateLiteral`,
+`useBlockStatements`, `useConsistentObjectDefinitions`, and `useStrictMode`. The policy manifest
+contains the authoritative list, so removing or
 weakening any required rule fails the policy check.
 
 `useMaxParams` uses a project ceiling of seven parameters. Functions above that ceiling must group
@@ -85,6 +87,29 @@ gates. Revisit them when their rule semantics or the application architecture ch
   documented hook-invalidation contract. Removing those markers would make promise ownership and
   dependency lifetimes less explicit; detached promises must still handle rejection at their
   owning boundary.
+- `style.noDefaultExport`: the isolated audit found 119 diagnostics across 118 files. Storybook CSF
+  metadata and Vite configuration require default exports, and ambient asset declarations expose
+  default module values. Retaining default component exports alongside those framework contracts
+  avoids a mixed global rule with permanent exceptions.
+- `style.useGlobalThis`: the isolated audit found 409 diagnostics, including 247 in production.
+  Most production uses intentionally name the browser owner (`window` for timers, viewport,
+  storage, media queries, and Wails globals; `document` for DOM ownership). Replacing those with
+  `globalThis` would erase environment intent without changing capability or portability.
+- `style.noNamespace`: both findings are in `.storybook/mocks/wailsModels.ts`, whose exported
+  `backend` and `types` namespaces intentionally reproduce the generated Wails model API in
+  Storybook. Flattening that mock would make stories differ from the runtime import contract.
+- `performance.noReExportAll`: the 12 findings include the generated refresh-contract facade and
+  maintained broker/diagnostics/resource-metrics entry points. Explicitly mirroring every generated
+  export would create a second registry that can drift; these boundaries intentionally re-export
+  their complete owned contract.
+- `performance.noBarrelFile`: all 24 findings are maintained public entry points or cohesive module
+  surfaces such as data access, capabilities, refresh, dockable panels, tabs, shortcuts, and YAML.
+  Consumers use these boundaries to preserve dependency direction; bypassing them for direct file
+  imports would weaken ownership for an unmeasured bundling hypothesis.
+- `performance.noNamespaceImport`: the 41 findings are cohesive APIs: the shared column-factory
+  catalog, `yaml`, React/ReactDOM adapters, and test modules that inspect complete export surfaces.
+  Vite/Rollup can tree-shake these ES modules, while named imports would make the factory and YAML
+  call sites less explicit about their owning API.
 
 ## React hook dependency lifetimes
 
@@ -111,7 +136,8 @@ Hook dependency suppressions and custom lifetime-hook allowlists are not approve
 
 - every config override that disables a rule;
 - every inline `biome-ignore`, aggregated by file and exact rule.
-- every required explicit error rule, exact required rule options, and Grit boundary plugin.
+- every required explicit error rule, exact required rule options, exact scoped rules, and Grit
+  boundary plugin.
 
 `npm run check:biome-policy --prefix frontend` compares the code and config with that policy. It
 fails for both new exceptions and stale entries, so removing an exception also requires shrinking

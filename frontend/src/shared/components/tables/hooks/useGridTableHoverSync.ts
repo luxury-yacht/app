@@ -183,7 +183,7 @@ export function useGridTableHoverSync({
       flushHeaderSync();
       return;
     }
-    if (headerSyncFrameRef.current != null) {
+    if (headerSyncFrameRef.current !== null && headerSyncFrameRef.current !== undefined) {
       return;
     }
     headerSyncFrameRef.current = window.requestAnimationFrame(flushHeaderSync);
@@ -191,7 +191,11 @@ export function useGridTableHoverSync({
 
   useEffect(() => {
     return () => {
-      if (headerSyncFrameRef.current != null && typeof window !== 'undefined') {
+      if (
+        headerSyncFrameRef.current !== null &&
+        headerSyncFrameRef.current !== undefined &&
+        typeof window !== 'undefined'
+      ) {
         if (typeof window.cancelAnimationFrame === 'function') {
           window.cancelAnimationFrame(headerSyncFrameRef.current);
         }

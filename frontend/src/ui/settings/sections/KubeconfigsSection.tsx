@@ -59,8 +59,12 @@ function KubeconfigsSection() {
     try {
       const selected = await OpenKubeconfigSearchPathDialog();
       const trimmed = selected?.trim();
-      if (!trimmed) return;
-      if (kubeconfigPaths.some((path) => path.trim() === trimmed)) return;
+      if (!trimmed) {
+        return;
+      }
+      if (kubeconfigPaths.some((path) => path.trim() === trimmed)) {
+        return;
+      }
       await persistKubeconfigPaths([...kubeconfigPaths, trimmed], 'addKubeconfigPath');
     } catch (error) {
       errorHandler.handle(error, { action: 'addKubeconfigPath' });
@@ -70,7 +74,9 @@ function KubeconfigsSection() {
   };
 
   const handleRemoveKubeconfigPath = async (index: number) => {
-    if (kubeconfigPaths.length <= 1) return;
+    if (kubeconfigPaths.length <= 1) {
+      return;
+    }
     const nextPaths = kubeconfigPaths.filter((_, currentIndex) => currentIndex !== index);
     await persistKubeconfigPaths(nextPaths, 'removeKubeconfigPath');
   };

@@ -47,11 +47,17 @@ export const fitObjectMapG6GraphToView = async (
   graph: ObjectMapG6ViewportGraph,
   padding: number
 ): Promise<void> => {
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   await graph.fitView({ when: 'always', direction: 'both' }, false);
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   const [width, height] = graph.getSize();
-  if (width <= 0 || height <= 0) return;
+  if (width <= 0 || height <= 0) {
+    return;
+  }
   if (padding > 0) {
     const widthRatio = Math.max(0.01, (width - padding * 2) / width);
     const heightRatio = Math.max(0.01, (height - padding * 2) / height);
@@ -60,7 +66,9 @@ export const fitObjectMapG6GraphToView = async (
       await graph.zoomBy(zoomRatio, false);
     }
   }
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   const zoom = graph.getZoom();
   if (Number.isFinite(zoom) && zoom > OBJECT_MAP_FIT_VIEW_MAX_ZOOM) {
     await graph.zoomTo(OBJECT_MAP_FIT_VIEW_MAX_ZOOM, false, [width / 2, height / 2]);
@@ -68,7 +76,9 @@ export const fitObjectMapG6GraphToView = async (
 };
 
 export const resetObjectMapG6GraphZoom = async (graph: ObjectMapG6ViewportGraph): Promise<void> => {
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   const [width, height] = graph.getSize();
   await graph.zoomTo(1, false, [width / 2, height / 2]);
 };

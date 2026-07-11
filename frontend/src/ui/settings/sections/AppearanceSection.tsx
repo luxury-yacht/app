@@ -313,7 +313,9 @@ function ColorControl({
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
                   onHexCancel();
-                } else e.stopPropagation();
+                } else {
+                  e.stopPropagation();
+                }
               }}
               onBlur={onHexCancel}
               maxLength={7}
@@ -568,7 +570,9 @@ function AppearanceSection() {
 
   const handleAccentHexCommit = () => {
     let trimmed = accentHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
+    if (!trimmed.startsWith('#')) {
+      trimmed = `#${trimmed}`;
+    }
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
       trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
@@ -611,7 +615,9 @@ function AppearanceSection() {
 
   const handleLinkHexCommit = () => {
     let trimmed = linkHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
+    if (!trimmed.startsWith('#')) {
+      trimmed = `#${trimmed}`;
+    }
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
       trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
@@ -631,7 +637,9 @@ function AppearanceSection() {
   };
 
   const handlePaletteValueCommit = () => {
-    if (!editingPaletteField) return;
+    if (!editingPaletteField) {
+      return;
+    }
     const parsed = parseInt(paletteDraft, 10);
     if (Number.isNaN(parsed)) {
       setEditingPaletteField(null);
@@ -680,11 +688,17 @@ function AppearanceSection() {
 
   // Commit the active theme's edits (palette + name/pattern from themeDraft).
   const handleSaveActiveTheme = async () => {
-    if (!activeThemeId) return;
+    if (!activeThemeId) {
+      return;
+    }
     const existing = themes.find((t) => t.id === activeThemeId);
-    if (!existing) return;
+    if (!existing) {
+      return;
+    }
     const trimmedName = themeDraft.name.trim();
-    if (!trimmedName) return; // Name is required.
+    if (!trimmedName) {
+      return; // Name is required.
+    }
     const isDefault = existing.id === DEFAULT_THEME_ID;
     const clusterPattern = isDefault ? '' : themeDraft.clusterPattern.trim();
 
@@ -710,7 +724,9 @@ function AppearanceSection() {
 
   // Cancel: re-apply the saved theme values and exit edit mode.
   const handleCancelActiveTheme = async () => {
-    if (!activeThemeId) return;
+    if (!activeThemeId) {
+      return;
+    }
     await handleApplyTheme(activeThemeId);
     setThemePatternError(null);
     setActiveThemeId(null);
@@ -720,7 +736,9 @@ function AppearanceSection() {
   };
 
   const handleThemeSave = async () => {
-    if (!themeDraft.name.trim()) return;
+    if (!themeDraft.name.trim()) {
+      return;
+    }
     const clusterPattern = themeDraft.clusterPattern.trim();
 
     if (!(await validateThemePatternDraft(clusterPattern))) {
@@ -748,7 +766,9 @@ function AppearanceSection() {
   };
 
   const handleDeleteThemeConfirm = async () => {
-    if (!deleteConfirmThemeId) return;
+    if (!deleteConfirmThemeId) {
+      return;
+    }
     try {
       await deleteThemeEntry(deleteConfirmThemeId);
     } catch (error) {
@@ -882,7 +902,9 @@ function AppearanceSection() {
   }
 
   const handleSaveDefaultThemeFromPrompt = async () => {
-    if (!defaultTheme) return;
+    if (!defaultTheme) {
+      return;
+    }
     try {
       await saveThemeEntry(
         buildThemeFromCurrentAppearance({
@@ -911,7 +933,9 @@ function AppearanceSection() {
     const ids = themes.map((t) => t.id);
     const fromIdx = ids.indexOf(draggingThemeId);
     const toIdx = ids.indexOf(targetId);
-    if (fromIdx === -1 || toIdx === -1) return;
+    if (fromIdx === -1 || toIdx === -1) {
+      return;
+    }
 
     const reordered = [...ids];
     reordered.splice(fromIdx, 1);
@@ -933,7 +957,9 @@ function AppearanceSection() {
       themeId,
       offset
     );
-    if (!reordered) return;
+    if (!reordered) {
+      return;
+    }
     try {
       await reorderThemeEntries(reordered);
     } catch (error) {
@@ -1132,7 +1158,9 @@ function AppearanceSection() {
                             setDropTargetThemeId(null);
                           }}
                           onDragOver={(event) => {
-                            if (!draggingThemeId) return;
+                            if (!draggingThemeId) {
+                              return;
+                            }
                             event.preventDefault();
                             setDropTargetThemeId(theme.id);
                           }}
@@ -1146,7 +1174,9 @@ function AppearanceSection() {
                             void handleThemeDrop(theme.id);
                           }}
                           onKeyDown={(event) => {
-                            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+                              return;
+                            }
                             event.preventDefault();
                             void handleThemeKeyboardReorder(
                               theme.id,
@@ -1167,9 +1197,13 @@ function AppearanceSection() {
                             onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
                             placeholder="Name"
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveActiveTheme();
-                              else if (e.key === 'Escape') handleCancelActiveTheme();
-                              else e.stopPropagation();
+                              if (e.key === 'Enter') {
+                                handleSaveActiveTheme();
+                              } else if (e.key === 'Escape') {
+                                handleCancelActiveTheme();
+                              } else {
+                                e.stopPropagation();
+                              }
                             }}
                           />
                           <input
@@ -1188,9 +1222,13 @@ function AppearanceSection() {
                               themePatternError ? 'theme-pattern-error-active' : undefined
                             }
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveActiveTheme();
-                              else if (e.key === 'Escape') handleCancelActiveTheme();
-                              else e.stopPropagation();
+                              if (e.key === 'Enter') {
+                                handleSaveActiveTheme();
+                              } else if (e.key === 'Escape') {
+                                handleCancelActiveTheme();
+                              } else {
+                                e.stopPropagation();
+                              }
                             }}
                           />
                           {!!themePatternError && (
@@ -1275,9 +1313,13 @@ function AppearanceSection() {
                         onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
                         placeholder="Name"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleThemeSave();
-                          else if (e.key === 'Escape') handleThemeEditCancel();
-                          else e.stopPropagation();
+                          if (e.key === 'Enter') {
+                            handleThemeSave();
+                          } else if (e.key === 'Escape') {
+                            handleThemeEditCancel();
+                          } else {
+                            e.stopPropagation();
+                          }
                         }}
                       />
                       <input
@@ -1294,9 +1336,13 @@ function AppearanceSection() {
                         aria-invalid={themePatternError ? 'true' : undefined}
                         aria-describedby={themePatternError ? 'theme-pattern-error-new' : undefined}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleThemeSave();
-                          else if (e.key === 'Escape') handleThemeEditCancel();
-                          else e.stopPropagation();
+                          if (e.key === 'Enter') {
+                            handleThemeSave();
+                          } else if (e.key === 'Escape') {
+                            handleThemeEditCancel();
+                          } else {
+                            e.stopPropagation();
+                          }
                         }}
                       />
                       {!!themePatternError && (

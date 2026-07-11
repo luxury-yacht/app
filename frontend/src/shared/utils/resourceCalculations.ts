@@ -30,8 +30,9 @@ export interface ResourceCalculations {
 
 // Parse CPU values to millicores
 const parseCpuValue = (value: string | undefined): number => {
-  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set')
+  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set') {
     return 0;
+  }
 
   try {
     if (value.endsWith('m')) {
@@ -48,12 +49,15 @@ const parseCpuValue = (value: string | undefined): number => {
 
 // Parse Memory values to MB (Mi)
 const parseMemoryValue = (value: string | undefined): number => {
-  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set')
+  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set') {
     return 0;
+  }
 
   try {
     const num = parseFloat(value);
-    if (Number.isNaN(num)) return 0;
+    if (Number.isNaN(num)) {
+      return 0;
+    }
 
     if (value.endsWith('Ki')) {
       return num / 1024; // Convert Ki to Mi
@@ -78,7 +82,9 @@ const parseMemoryValue = (value: string | undefined): number => {
 
 // Format CPU values for display
 export const formatCpuValue = (millicores: number): string => {
-  if (millicores === 0) return '0';
+  if (millicores === 0) {
+    return '0';
+  }
   if (millicores < 1000) {
     return `${millicores}m`;
   }
@@ -92,7 +98,9 @@ export const formatCpuValue = (millicores: number): string => {
 
 // Format memory values for display
 export const formatMemoryValue = (mb: number): string => {
-  if (mb === 0) return '0';
+  if (mb === 0) {
+    return '0';
+  }
   if (mb >= 1024 * 1024) {
     return `${(mb / (1024 * 1024)).toFixed(1)}Ti`;
   } else if (mb >= 1024) {

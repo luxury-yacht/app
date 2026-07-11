@@ -158,7 +158,9 @@ const useWorkloadTableColumns = ({
         getShowEmptyState: () => true,
         sortable: true,
         sortValue: (row) =>
-          parseCpuToMillicores(row.cpuUsage != null ? String(row.cpuUsage) : undefined),
+          parseCpuToMillicores(
+            row.cpuUsage !== null && row.cpuUsage !== undefined ? String(row.cpuUsage) : undefined
+          ),
       })
     );
 
@@ -177,7 +179,10 @@ const useWorkloadTableColumns = ({
         getAnimationKey: (row) => `workload:${row.namespace}/${row.name}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
-        sortValue: (row) => parseMemToMB(row.memUsage != null ? String(row.memUsage) : undefined),
+        sortValue: (row) =>
+          parseMemToMB(
+            row.memUsage !== null && row.memUsage !== undefined ? String(row.memUsage) : undefined
+          ),
       })
     );
 

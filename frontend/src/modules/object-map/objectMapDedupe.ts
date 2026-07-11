@@ -54,7 +54,9 @@ export const dedupeServiceEdges = (
   const targetsBySlice = new Map<string, Set<string>>();
 
   edges.forEach((edge) => {
-    if (edge.type !== 'endpoint') return;
+    if (edge.type !== 'endpoint') {
+      return;
+    }
     const sourceKind = kindOf(edge.source);
     const targetKind = kindOf(edge.target);
     if (sourceKind === SERVICE_KIND && targetKind === ENDPOINTSLICE_KIND) {
@@ -83,7 +85,9 @@ export const dedupeServiceEdges = (
     const reachable = new Set<string>();
     sliceIds.forEach((sliceId) => {
       const targets = targetsBySlice.get(sliceId);
-      if (!targets) return;
+      if (!targets) {
+        return;
+      }
       targets.forEach((targetId) => {
         reachable.add(targetId);
       });
@@ -111,7 +115,9 @@ export const dedupeServiceEdges = (
       // from non-Services (shouldn't happen, but defensive) and
       // selector edges to Pods that aren't in the endpoint chain
       // (the divergence case) survive.
-      if (kindOf(edge.source) !== SERVICE_KIND) return true;
+      if (kindOf(edge.source) !== SERVICE_KIND) {
+        return true;
+      }
       const reachable = endpointChainTargets.get(edge.source);
       if (reachable?.has(edge.target)) {
         return false;

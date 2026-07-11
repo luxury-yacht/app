@@ -44,8 +44,12 @@ type ObjectRef = resourcemodel.ResourceRef;
 type DisplayRef = resourcemodel.DisplayRef;
 
 const conditionVariant = (status: string): StatusChipVariant => {
-  if (status === 'True') return 'healthy';
-  if (status === 'False') return 'unhealthy';
+  if (status === 'True') {
+    return 'healthy';
+  }
+  if (status === 'False') {
+    return 'unhealthy';
+  }
   return 'warning';
 };
 

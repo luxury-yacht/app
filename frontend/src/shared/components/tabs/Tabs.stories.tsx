@@ -18,7 +18,7 @@ import { Tabs, type TabsProps } from './';
 const logAction =
   (name: string) =>
   (...args: unknown[]): void => {
-    console.log(`[Tabs story] ${name}`, ...args);
+    console.info(`[Tabs story] ${name}`, ...args);
   };
 
 /**

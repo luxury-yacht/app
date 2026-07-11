@@ -1,15 +1,21 @@
 export class StreamVisibilityController<T> {
+  private readonly config: {
+    captureActive: () => T[];
+    suspendActive: (items: T[]) => void;
+    resumeItems?: (suspendedItems: T[]) => T[];
+    resumeItem: (item: T) => void;
+  };
   private suspended = false;
   private suspendedItems: T[] = [];
 
-  constructor(
-    private readonly config: {
-      captureActive: () => T[];
-      suspendActive: (items: T[]) => void;
-      resumeItems?: (suspendedItems: T[]) => T[];
-      resumeItem: (item: T) => void;
-    }
-  ) {}
+  constructor(config: {
+    captureActive: () => T[];
+    suspendActive: (items: T[]) => void;
+    resumeItems?: (suspendedItems: T[]) => T[];
+    resumeItem: (item: T) => void;
+  }) {
+    this.config = config;
+  }
 
   suspend = (): void => {
     if (this.suspended) {

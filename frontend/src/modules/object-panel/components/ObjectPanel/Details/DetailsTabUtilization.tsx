@@ -228,9 +228,11 @@ const Utilization: React.FC<UtilizationProps> = ({
     <div className="object-panel-section">
       <div className="object-panel-section-title">
         Resource Utilization
-        {podCount != null && podCount > 0 && (
+        {podCount !== null && podCount !== undefined && podCount > 0 && (
           <span className="utilization-pod-count">
-            {readyPodCount != null ? `${readyPodCount}/${podCount} pods` : `${podCount} pods`}
+            {readyPodCount !== null && readyPodCount !== undefined
+              ? `${readyPodCount}/${podCount} pods`
+              : `${podCount} pods`}
           </span>
         )}
       </div>

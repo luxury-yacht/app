@@ -28,7 +28,9 @@ class ObjectMapG6PathEdge extends BaseEdge {
 let isRegistered = false;
 
 export const ensureObjectMapG6PathEdgeRegistered = (): void => {
-  if (isRegistered) return;
+  if (isRegistered) {
+    return;
+  }
   register(ExtensionCategory.EDGE, OBJECT_MAP_G6_PATH_EDGE, ObjectMapG6PathEdge);
   isRegistered = true;
 };

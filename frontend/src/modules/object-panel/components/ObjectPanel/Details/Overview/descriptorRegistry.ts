@@ -119,7 +119,9 @@ for (const reg of registrations) {
 export function getOverviewDescriptor(
   kind: string | null | undefined
 ): OverviewDescriptor<never> | undefined {
-  if (!kind) return undefined;
+  if (!kind) {
+    return undefined;
+  }
   return byKind.get(kind.toLowerCase());
 }
 

@@ -65,13 +65,17 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     ref: modalRef,
     disabled: !shouldRender,
     onEscape: () => {
-      if (!isOpen) return false;
+      if (!isOpen) {
+        return false;
+      }
       onClose();
       return true;
     },
   });
 
-  if (!shouldRender) return null;
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <ModalSurface

@@ -120,9 +120,15 @@ const preview: Preview = {
         ];
         const ai = order.indexOf(a.id);
         const bi = order.indexOf(b.id);
-        if (ai !== -1 && bi !== -1) return ai - bi;
-        if (ai !== -1) return -1;
-        if (bi !== -1) return 1;
+        if (ai !== -1 && bi !== -1) {
+          return ai - bi;
+        }
+        if (ai !== -1) {
+          return -1;
+        }
+        if (bi !== -1) {
+          return 1;
+        }
         return a.id.localeCompare(b.id, undefined, { numeric: true });
       },
     },

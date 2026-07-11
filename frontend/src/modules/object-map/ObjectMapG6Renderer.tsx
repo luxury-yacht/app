@@ -91,14 +91,20 @@ const objectMapDebugGridSpacing = (zoom: number): number => {
 };
 
 const isObjectMapDebugGridMajorLine = (value: number, spacing: number): boolean => {
-  if (value === 0) return true;
+  if (value === 0) {
+    return true;
+  }
   return Math.abs(Math.round(value / spacing)) % 5 === 0;
 };
 
 const computeObjectMapDebugGridState = (graph: Graph): ObjectMapDebugGridState | null => {
-  if (graph.destroyed) return null;
+  if (graph.destroyed) {
+    return null;
+  }
   const [width, height] = graph.getSize();
-  if (width <= 0 || height <= 0) return null;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
   const zoom = graph.getZoom();
   const spacing = objectMapDebugGridSpacing(zoom);
   const topLeft = graph.getCanvasByViewport([0, 0]);
@@ -378,7 +384,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       kindBadgeStyleForKind: (kind) => {
         const key = `${styleVersion}:${kind.trim()}`;
         const cached = badgeStyleCache.get(key);
-        if (cached) return cached;
+        if (cached) {
+          return cached;
+        }
         const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
         badgeStyleCache.set(key, resolved);
         return resolved;
@@ -451,7 +459,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, []);
 
   const publishRendererDebugSnapshot = useCallback(() => {
-    if (!debugMapId) return;
+    if (!debugMapId) {
+      return;
+    }
     const graph = graphRef.current;
     let viewport: ObjectMapRendererDebugSnapshot['viewport'] = null;
     if (graphReady && graph && !graph.destroyed) {
@@ -517,9 +527,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [graphReady, showDebugGrid]);
 
   const updateCardDetailLevel = useCallback(() => {
-    if (!graphReady) return;
+    if (!graphReady) {
+      return;
+    }
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     try {
       const nextLevel = objectMapG6CardDetailLevelForZoom(graph.getZoom());
       setCardDetailLevel((previous) => (previous === nextLevel ? previous : nextLevel));
@@ -563,14 +577,18 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graph || graph.destroyed || !palette || !applyQueue.isReady()) return;
+    if (!graph || graph.destroyed || !palette || !applyQueue.isReady()) {
+      return;
+    }
     graph.setNode(objectMapG6NodeOptions(palette));
     graph.setEdge(objectMapG6EdgeOptions(palette));
   }, [applyQueue, palette]);
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graph || graph.destroyed || !palette) return;
+    if (!graph || graph.destroyed || !palette) {
+      return;
+    }
     scheduleGraphData(data);
   }, [data, palette, scheduleGraphData]);
 
@@ -579,9 +597,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [publishRendererDebugSnapshot]);
 
   useEffect(() => {
-    if (!debugMapId || !graphReady) return;
+    if (!debugMapId || !graphReady) {
+      return;
+    }
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     graph.on(GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot);
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot);
     return () => {
@@ -597,9 +619,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [updateCardDetailLevel]);
 
   useEffect(() => {
-    if (!graphReady) return;
+    if (!graphReady) {
+      return;
+    }
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     graph.on(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
     return () => {
       if (!graph.destroyed) {
@@ -613,9 +639,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [updateDebugGrid]);
 
   useEffect(() => {
-    if (!showDebugGrid || !graphReady) return;
+    if (!showDebugGrid || !graphReady) {
+      return;
+    }
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     graph.on(GraphEvent.AFTER_TRANSFORM, updateDebugGrid);
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
     return () => {
@@ -628,14 +658,18 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   useEffect(() => {
     void data;
-    if (!showDebugGrid) return;
+    if (!showDebugGrid) {
+      return;
+    }
     const frame = requestAnimationFrame(updateDebugGrid);
     return () => cancelAnimationFrame(frame);
   }, [showDebugGrid, updateDebugGrid, data]);
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     scheduleSelectionState(layout, selectionState);
   }, [layout, scheduleSelectionState, selectionState]);
 
@@ -659,7 +693,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [updateTooltipPosition, hoverEdge]);
 
   const tooltipText = useMemo(() => {
-    if (!palette || !hoverEdge) return null;
+    if (!palette || !hoverEdge) {
+      return null;
+    }
     return computeObjectMapTooltipLayout({
       hoverEdge,
       palette,

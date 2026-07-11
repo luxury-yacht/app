@@ -66,7 +66,9 @@ export const beginObjectMapLegendDrag = ({
   canvasRect: ObjectMapLegendRect;
   legendRect: ObjectMapLegendRect;
 }): { drag: ObjectMapLegendDragState; position: ObjectMapLegendPosition } | null => {
-  if (button !== 0 || isObjectMapInteractiveLegendTarget(target)) return null;
+  if (button !== 0 || isObjectMapInteractiveLegendTarget(target)) {
+    return null;
+  }
 
   const position = clampObjectMapLegendPosition(
     legendRect.left - canvasRect.left,
@@ -95,7 +97,9 @@ export const moveObjectMapLegendDrag = (
   canvasRect: ObjectMapLegendRect,
   legendRect: ObjectMapLegendRect
 ): ObjectMapLegendPosition | null => {
-  if (!drag || drag.pointerId !== pointerId) return null;
+  if (!drag || drag.pointerId !== pointerId) {
+    return null;
+  }
 
   return clampObjectMapLegendPosition(
     drag.originLeft + clientX - drag.originClientX,
@@ -119,7 +123,9 @@ export const useObjectMapLegendDrag = (canvasRef: RefObject<HTMLElement | null>)
       event.stopPropagation();
 
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        return;
+      }
 
       const legend = event.currentTarget;
       const result = beginObjectMapLegendDrag({
@@ -131,7 +137,9 @@ export const useObjectMapLegendDrag = (canvasRef: RefObject<HTMLElement | null>)
         canvasRect: canvas.getBoundingClientRect(),
         legendRect: legend.getBoundingClientRect(),
       });
-      if (!result) return;
+      if (!result) {
+        return;
+      }
 
       legendDragRef.current = result.drag;
       setLegendPosition(result.position);
@@ -145,11 +153,15 @@ export const useObjectMapLegendDrag = (canvasRef: RefObject<HTMLElement | null>)
   const handleLegendPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       const drag = legendDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return;
+      }
 
       event.stopPropagation();
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        return;
+      }
 
       const position = moveObjectMapLegendDrag(
         drag,
@@ -168,7 +180,9 @@ export const useObjectMapLegendDrag = (canvasRef: RefObject<HTMLElement | null>)
 
   const handleLegendPointerEnd = useCallback((event: PointerEvent<HTMLElement>) => {
     event.stopPropagation();
-    if (!endObjectMapLegendDrag(legendDragRef.current, event.pointerId)) return;
+    if (!endObjectMapLegendDrag(legendDragRef.current, event.pointerId)) {
+      return;
+    }
 
     legendDragRef.current = null;
     if (typeof event.currentTarget.releasePointerCapture === 'function') {

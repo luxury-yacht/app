@@ -824,13 +824,19 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const containerOptions = useMemo<DropdownOption[]>(() => {
     const merged = new Set<string>();
     availableContainers.forEach((name) => {
-      if (name) merged.add(name);
+      if (name) {
+        merged.add(name);
+      }
     });
     discoveredContainers.forEach((name) => {
-      if (name) merged.add(name);
+      if (name) {
+        merged.add(name);
+      }
     });
     session?.containers?.forEach((name) => {
-      if (name) merged.add(name);
+      if (name) {
+        merged.add(name);
+      }
     });
     return Array.from(merged).map((name) => ({ value: name, label: name }));
   }, [availableContainers, discoveredContainers, session?.containers]);

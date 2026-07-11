@@ -310,7 +310,9 @@ describe('useTabDragSourceFactory', () => {
         <div>
           {tabs.map((tab) => {
             const props = makeDragSource({ kind: 'cluster-tab', clusterId: tab.id });
-            if (props.onDragStart) dragStartCallbacks.push(props.onDragStart);
+            if (props.onDragStart) {
+              dragStartCallbacks.push(props.onDragStart);
+            }
             return (
               <div key={tab.id} data-testid={`tab-${tab.id}`} draggable={props.draggable}>
                 {tab.label}
@@ -446,7 +448,9 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    if (payload.kind !== 'cluster-tab') throw new Error('expected a cluster-tab drop payload');
+    if (payload.kind !== 'cluster-tab') {
+      throw new Error('expected a cluster-tab drop payload');
+    }
     expect(payload.clusterId).toBe('c1');
   });
 
@@ -539,7 +543,9 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    if (payload.kind !== 'cluster-tab') throw new Error('expected a cluster-tab drop payload');
+    if (payload.kind !== 'cluster-tab') {
+      throw new Error('expected a cluster-tab drop payload');
+    }
     expect(payload.clusterId).toBe('c1');
   });
 

@@ -29,13 +29,19 @@ export const autoApplyClusterTheme = async ({
 }: AutoApplyClusterThemeOptions): Promise<void> => {
   try {
     const matched = await matchThemeForCluster(selectedClusterName);
-    if (!isCurrent() || !matched) return;
+    if (!isCurrent() || !matched) {
+      return;
+    }
 
     await applyTheme(matched.id);
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      return;
+    }
 
     await hydrateAppPreferences({ force: true });
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      return;
+    }
 
     applyAppearanceOverrides();
   } catch (error) {

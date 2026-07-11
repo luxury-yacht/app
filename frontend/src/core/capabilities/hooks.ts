@@ -235,7 +235,9 @@ export const useCapabilities = (
       .then((response) => {
         const nextMap = new Map(namedResultsRef.current);
         for (const r of response.results) {
-          if (!r.name) continue;
+          if (!r.name) {
+            continue;
+          }
           const isError = r.source === 'error' || !!r.error;
           if (isTransientPermissionResultError(r)) {
             nextMap.set(r.id, {

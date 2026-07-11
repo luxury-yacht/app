@@ -87,7 +87,9 @@ export const createObjectMapPerformanceFixture = ({
   while (edges.length < edgeCount) {
     for (let sourceIndex = 0; sourceIndex + stride < nodeCount; sourceIndex += 1) {
       addEdge(sourceIndex, sourceIndex + stride, edges.length);
-      if (edges.length >= edgeCount) break;
+      if (edges.length >= edgeCount) {
+        break;
+      }
     }
     stride += 1;
   }

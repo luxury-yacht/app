@@ -49,7 +49,7 @@ import './stories.css';
 const logAction =
   (name: string) =>
   (...args: unknown[]): void => {
-    console.log(`[ObjectTabsPreview story] ${name}`, ...args);
+    console.info(`[ObjectTabsPreview story] ${name}`, ...args);
   };
 
 // Small colored kind-indicator span. Markup is byte-identical to the
@@ -271,7 +271,9 @@ interface TabGroup {
 function nextGroupId(existing: Set<string>): string {
   for (let code = 'a'.charCodeAt(0); code <= 'z'.charCodeAt(0); code++) {
     const candidate = String.fromCharCode(code);
-    if (!existing.has(candidate)) return candidate;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
   }
   return `strip-${Date.now()}`;
 }
@@ -310,13 +312,17 @@ function ObjectTabsPreviewHarness() {
       setGroups((prev) => {
         const sourceGroup = prev.find((g) => g.id === sourceGroupId);
         const tab = sourceGroup?.tabs.find((t) => t.id === panelId);
-        if (!tab) return prev;
+        if (!tab) {
+          return prev;
+        }
 
         // Within-strip reorder — tab count is unchanged, so no group can
         // become empty.
         if (sourceGroupId === targetGroupId) {
           return prev.map((g) => {
-            if (g.id !== sourceGroupId) return g;
+            if (g.id !== sourceGroupId) {
+              return g;
+            }
             const without = g.tabs.filter((t) => t.id !== panelId);
             const clamped = Math.max(0, Math.min(toIndex, without.length));
             return {
@@ -335,7 +341,9 @@ function ObjectTabsPreviewHarness() {
               return { ...g, tabs: g.tabs.filter((t) => t.id !== panelId) };
             }
             if (g.id === targetGroupId) {
-              if (g.tabs.some((t) => t.id === panelId)) return g;
+              if (g.tabs.some((t) => t.id === panelId)) {
+                return g;
+              }
               const clamped = Math.max(0, Math.min(toIndex, g.tabs.length));
               return {
                 ...g,
@@ -359,7 +367,9 @@ function ObjectTabsPreviewHarness() {
     setGroups((prev) => {
       const sourceGroup = prev.find((g) => g.id === sourceGroupId);
       const tab = sourceGroup?.tabs.find((t) => t.id === panelId);
-      if (!tab) return prev;
+      if (!tab) {
+        return prev;
+      }
 
       const newId = nextGroupId(new Set(prev.map((g) => g.id)));
       const newGroup: TabGroup = {

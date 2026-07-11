@@ -86,7 +86,9 @@ export function useMetadataSearch<T>(
       const values: string[] = getDefaultValues(row).filter(Boolean);
       if (includeMetadata) {
         for (const map of getMetadataMaps(row)) {
-          if (!map) continue;
+          if (!map) {
+            continue;
+          }
           for (const [k, v] of Object.entries(map)) {
             values.push(k, v, `${k}: ${v}`);
           }

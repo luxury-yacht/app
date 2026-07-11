@@ -142,7 +142,9 @@ vi.mock('@shared/components/Tooltip', () => ({
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
   default: (props: ConfirmationModalMockProps) => {
-    if (!props.isOpen) return null;
+    if (!props.isOpen) {
+      return null;
+    }
     return (
       <div data-testid="confirmation-modal">
         <button type="button" data-testid="confirm-delete" onClick={props.onConfirm}>

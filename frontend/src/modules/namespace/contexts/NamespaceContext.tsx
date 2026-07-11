@@ -259,7 +259,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     async (_showSpinner: boolean = true) => {
       const scopes =
         namespaceScopes.length > 0 ? namespaceScopes : namespacesScope ? [namespacesScope] : [];
-      if (scopes.length === 0) return;
+      if (scopes.length === 0) {
+        return;
+      }
       await Promise.all(
         scopes.map((scope) =>
           requestRefreshDomain({

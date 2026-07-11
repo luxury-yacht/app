@@ -56,7 +56,9 @@ export const updateObjectMapNodeGesture = (
   }
 ): boolean => {
   const drag = state.activeDrag;
-  if (!drag || drag.pointerId !== pointer.pointerId) return false;
+  if (!drag || drag.pointerId !== pointer.pointerId) {
+    return false;
+  }
 
   const dx = pointer.clientX - drag.originClientX;
   const dy = pointer.clientY - drag.originClientY;
@@ -71,7 +73,9 @@ export const endObjectMapNodeGesture = (
   pointerId: number
 ): { nodeId: string; didDrag: boolean } | null => {
   const drag = state.activeDrag;
-  if (!drag || drag.pointerId !== pointerId) return null;
+  if (!drag || drag.pointerId !== pointerId) {
+    return null;
+  }
 
   state.activeDrag = null;
   if (drag.didDrag) {
@@ -84,7 +88,9 @@ export const consumeObjectMapSuppressedClick = (
   state: ObjectMapNodeGestureState,
   nodeId: string
 ): boolean => {
-  if (!state.suppressClickNodeId) return false;
+  if (!state.suppressClickNodeId) {
+    return false;
+  }
 
   const shouldSuppress = state.suppressClickNodeId === nodeId;
   state.suppressClickNodeId = null;

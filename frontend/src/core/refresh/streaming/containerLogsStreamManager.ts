@@ -89,7 +89,8 @@ function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPa
   }
 
   if (
-    obj.warnings != null &&
+    obj.warnings !== null &&
+    obj.warnings !== undefined &&
     (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
   ) {
     return false;
@@ -120,18 +121,29 @@ const DEFAULT_PAYLOAD: ContainerLogsSnapshotPayload = {
 };
 
 class ContainerLogsStreamConnection {
+  private readonly scope: string;
+  private readonly mode: StreamMode;
+  private readonly manager: ContainerLogsStreamManager;
+  private readonly resolve?: () => void;
+  private readonly reject?: (error: Error) => void;
   private eventSource: EventSource | null = null;
   private retryTimer: number | null = null;
   private closed = false;
   private attempt = 0;
 
   constructor(
-    private readonly scope: string,
-    private readonly mode: StreamMode,
-    private readonly manager: ContainerLogsStreamManager,
-    private readonly resolve?: () => void,
-    private readonly reject?: (error: Error) => void
-  ) {}
+    scope: string,
+    mode: StreamMode,
+    manager: ContainerLogsStreamManager,
+    resolve?: () => void,
+    reject?: (error: Error) => void
+  ) {
+    this.scope = scope;
+    this.mode = mode;
+    this.manager = manager;
+    this.resolve = resolve;
+    this.reject = reject;
+  }
 
   async start(): Promise<void> {
     this.closed = false;

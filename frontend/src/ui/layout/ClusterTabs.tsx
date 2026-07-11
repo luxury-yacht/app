@@ -156,9 +156,13 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       // is insertIndex - 1. When source is at or after the insert index, no
       // shift is needed.
       const sourceIdx = mergedOrder.indexOf(payload.clusterId);
-      if (sourceIdx < 0) return;
+      if (sourceIdx < 0) {
+        return;
+      }
       const adjustedInsert = sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
-      if (adjustedInsert === sourceIdx) return; // no-op drop onto itself
+      if (adjustedInsert === sourceIdx) {
+        return; // no-op drop onto itself
+      }
       const nextOrder = [...mergedOrder];
       nextOrder.splice(sourceIdx, 1);
       nextOrder.splice(adjustedInsert, 0, payload.clusterId);
@@ -278,7 +282,9 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
           activeId={activeTabId}
           onActivate={(id) => {
             const tab = tabsById.get(id);
-            if (tab) handleTabClick(tab.selection);
+            if (tab) {
+              handleTabClick(tab.selection);
+            }
           }}
           dropInsertIndex={dropInsertIndex}
           className="cluster-tabs"

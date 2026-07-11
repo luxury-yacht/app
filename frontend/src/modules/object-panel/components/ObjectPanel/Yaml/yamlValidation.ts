@@ -32,7 +32,9 @@ const ensureNonEmptyString = (value: unknown): value is string =>
 
 const extractLinePos = (error: YAML.YAMLParseError) => {
   const pos = error.linePos?.[0];
-  if (!pos) return null;
+  if (!pos) {
+    return null;
+  }
   const { line, col } = pos as { line: number; col: number };
   return { line: line + 1, column: col + 1 };
 };

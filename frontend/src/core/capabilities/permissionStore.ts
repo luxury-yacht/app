@@ -446,7 +446,9 @@ export const queryNamespacesPermissions = async (
   options?: { force?: boolean; specLists?: PermissionSpecList[] }
 ): Promise<void> => {
   const specLists = options?.specLists ?? ALL_NAMESPACE_PERMISSIONS;
-  if (targets.length === 0 || specLists.length === 0) return;
+  if (targets.length === 0 || specLists.length === 0) {
+    return;
+  }
 
   const seen = new Set<string>();
   const queryTargets: NamespaceQueryTarget[] = [];
@@ -454,10 +456,14 @@ export const queryNamespacesPermissions = async (
   for (const target of targets) {
     const namespace = target.namespace.trim();
     const cid = (target.clusterId || currentClusterId).trim();
-    if (!cid || !namespace) continue;
+    if (!cid || !namespace) {
+      continue;
+    }
 
     const requestKey = buildNamespaceRequestKey(cid, namespace, specLists);
-    if (seen.has(requestKey) || inFlightQueries.has(requestKey)) continue;
+    if (seen.has(requestKey) || inFlightQueries.has(requestKey)) {
+      continue;
+    }
     seen.add(requestKey);
 
     if (!options?.force) {
@@ -468,7 +474,9 @@ export const queryNamespacesPermissions = async (
     }
 
     const batch = buildBatch(specLists, namespace, cid);
-    if (batch.length === 0) continue;
+    if (batch.length === 0) {
+      continue;
+    }
 
     const diagnosticsKey = `${cid}|${namespace.toLowerCase()}`;
     const batchSpecs: PermissionSpec[] = batch.map((item) => ({
@@ -491,7 +499,9 @@ export const queryNamespacesPermissions = async (
     });
   }
 
-  if (queryTargets.length === 0) return;
+  if (queryTargets.length === 0) {
+    return;
+  }
 
   for (const target of queryTargets) {
     pendingSpecs.set(
@@ -642,13 +652,19 @@ export const queryNamespacePermissions = (
  * PermissionSpecList[] so it's passed directly to buildBatch.
  */
 export const queryClusterPermissions = (clusterId: string): void => {
-  if (!clusterId) return;
+  if (!clusterId) {
+    return;
+  }
 
   const queryKey = `${clusterId}|__cluster__`;
-  if (inFlightQueries.has(queryKey)) return;
+  if (inFlightQueries.has(queryKey)) {
+    return;
+  }
 
   const batch = buildBatch(CLUSTER_PERMISSIONS, null, clusterId);
-  if (batch.length === 0) return;
+  if (batch.length === 0) {
+    return;
+  }
 
   const batchSpecs: PermissionSpec[] = batch.map((item) => ({
     kind: item.resourceKind,
@@ -773,7 +789,9 @@ export const queryKindPermissions = (
   version?: string | null
 ): void => {
   const cid = clusterId || currentClusterId;
-  if (!cid || !kind) return;
+  if (!cid || !kind) {
+    return;
+  }
 
   // Resolve GVK once: honour caller-supplied group/version (required for
   // CRDs) or fall back to the built-in lookup. The backend rejects
@@ -786,7 +804,9 @@ export const queryKindPermissions = (
   const ns = namespace ?? '';
   const gvSegment = `${groupVal}/${versionVal}`;
   const queryKey = `${cid}|${ns}|kind:${gvSegment}/${kind.toLowerCase()}`;
-  if (inFlightQueries.has(queryKey)) return;
+  if (inFlightQueries.has(queryKey)) {
+    return;
+  }
 
   const lastQuery = lastQueryTimestamps.get(queryKey);
   if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
@@ -824,7 +844,7 @@ export const queryKindPermissions = (
       },
       feature,
       clusterId: cid,
-      namespace: namespace,
+      namespace,
     }))
   );
   notify();
@@ -970,7 +990,9 @@ const completeQueryDiagnostics = ({
   completedCheckCount,
 }: CompletedQueryDiagnostics): void => {
   const diag = diagnosticsMap.get(queryKey);
-  if (!diag) return;
+  if (!diag) {
+    return;
+  }
 
   const now = Date.now();
   const completedCount = completedCheckCount ?? diag.inFlightCount;
@@ -984,10 +1006,18 @@ const completeQueryDiagnostics = ({
   diag.lastResult = success ? 'success' : 'error';
   diag.lastError = errorMessage;
   diag.consecutiveFailureCount = success ? 0 : diag.consecutiveFailureCount + 1;
-  if (ssarFallbackCount !== undefined) diag.ssarFallbackCount = ssarFallbackCount;
-  if (ssrrRuleCount !== undefined) diag.ssrrRuleCount = ssrrRuleCount;
-  if (ssrrIncomplete !== undefined) diag.ssrrIncomplete = ssrrIncomplete;
-  if (method) diag.method = method;
+  if (ssarFallbackCount !== undefined) {
+    diag.ssarFallbackCount = ssarFallbackCount;
+  }
+  if (ssrrRuleCount !== undefined) {
+    diag.ssrrRuleCount = ssrrRuleCount;
+  }
+  if (ssrrIncomplete !== undefined) {
+    diag.ssrrIncomplete = ssrrIncomplete;
+  }
+  if (method) {
+    diag.method = method;
+  }
   notifyDiagnostics();
 };
 
@@ -1053,7 +1083,9 @@ const refreshExpiredQueries = (): void => {
   const expiredClusters: string[] = [];
 
   for (const [queryKey, timestamp] of lastQueryTimestamps) {
-    if (now - timestamp < PERMISSION_REFRESH_INTERVAL_MS) continue;
+    if (now - timestamp < PERMISSION_REFRESH_INTERVAL_MS) {
+      continue;
+    }
 
     const namespaceMetadata = namespaceQueryMetadata.get(queryKey);
     if (namespaceMetadata) {
@@ -1062,7 +1094,9 @@ const refreshExpiredQueries = (): void => {
     }
 
     const pipeIdx = queryKey.indexOf('|');
-    if (pipeIdx < 0) continue;
+    if (pipeIdx < 0) {
+      continue;
+    }
     const clusterId = queryKey.slice(0, pipeIdx);
     const namespace = queryKey.slice(pipeIdx + 1);
     if (namespace === '__cluster__') {
@@ -1092,7 +1126,9 @@ const refreshExpiredQueries = (): void => {
 };
 
 const startRefreshTimer = (): void => {
-  if (refreshTimerId) return;
+  if (refreshTimerId) {
+    return;
+  }
   refreshTimerId = setInterval(refreshExpiredQueries, PERMISSION_REFRESH_INTERVAL_MS);
 };
 
@@ -1198,12 +1234,12 @@ export const setActivePermissionCluster = (
  * Clears all permission state, stops the refresh timer, and notifies listeners.
  */
 export const resetPermissionStore = (): void => {
-  if (permissionNotifyHandle != null) {
+  if (permissionNotifyHandle !== null && permissionNotifyHandle !== undefined) {
     clearTimeout(permissionNotifyHandle);
     permissionNotifyHandle = null;
     permissionNotifyScheduled = false;
   }
-  if (diagnosticsNotifyHandle != null) {
+  if (diagnosticsNotifyHandle !== null && diagnosticsNotifyHandle !== undefined) {
     clearTimeout(diagnosticsNotifyHandle);
     diagnosticsNotifyHandle = null;
     diagnosticsNotifyScheduled = false;

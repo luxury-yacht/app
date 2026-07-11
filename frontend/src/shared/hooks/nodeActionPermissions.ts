@@ -28,7 +28,7 @@ const isAllowed = (status: PermissionStatus | null): boolean =>
 const combineRequiredPermissions = (
   permissions: Array<PermissionStatus | null>
 ): PermissionStatus | null => {
-  if (permissions.some((status) => status == null)) {
+  if (permissions.some((status) => status === null || status === undefined)) {
     return null;
   }
   if (permissions.some((status) => status?.pending)) {
@@ -49,7 +49,7 @@ const combineAlternativePermissions = (
   if (permissions.some((status) => status?.pending)) {
     return { allowed: false, pending: true };
   }
-  if (permissions.every((status) => status == null)) {
+  if (permissions.every((status) => status === null || status === undefined)) {
     return null;
   }
   return { allowed: false, pending: false };

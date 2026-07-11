@@ -31,10 +31,14 @@ export function useNavigateToView(): NavigateToViewResult {
   const navigateToView = useCallback(
     (objectRef: KubernetesObjectReference) => {
       const kind = objectRef.kind ?? objectRef.metadata?.kind;
-      if (!kind) return;
+      if (!kind) {
+        return;
+      }
 
       const destination = getViewForKind(kind);
-      if (!destination) return;
+      if (!destination) {
+        return;
+      }
 
       // Multi-cluster rule (AGENTS.md): carry clusterId through as
       // `string | undefined` rather than a `''` fallback. Downstream

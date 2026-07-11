@@ -38,7 +38,9 @@ const areSortValuesEqual = (a: unknown, b: unknown): boolean => Object.is(a, b);
 
 // Parse Kubernetes-style age strings into seconds for sorting.
 const parseAge = (ageStr: string): number => {
-  if (!ageStr || ageStr === '-') return 0;
+  if (!ageStr || ageStr === '-') {
+    return 0;
+  }
 
   const units: Record<string, number> = {
     y: 365 * 86400,
@@ -126,7 +128,9 @@ export function useTableSort<T>(
   // Build a lookup from column key → sortValue extractor. When a column
   // defines sortValue, that function is used instead of row[key].
   const sortValueExtractors = useMemo(() => {
-    if (!columns) return null;
+    if (!columns) {
+      return null;
+    }
     const map: Record<string, (item: T) => unknown> = {};
     for (const col of columns) {
       if (col.sortValue) {
@@ -247,9 +251,18 @@ export function useTableSort<T>(
         const bValue = b.value;
 
         // Handle null/undefined values
-        if (aValue == null && bValue == null) return a.index - b.index;
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
+        if (
+          (aValue === null || aValue === undefined) &&
+          (bValue === null || bValue === undefined)
+        ) {
+          return a.index - b.index;
+        }
+        if (aValue === null || aValue === undefined) {
+          return 1;
+        }
+        if (bValue === null || bValue === undefined) {
+          return -1;
+        }
 
         // Special handling for timestamp columns (if they exist)
         if (
@@ -319,7 +332,11 @@ export function useTableSort<T>(
 
   useEffect(() => {
     void sortedData;
-    if (!diagnosticsLabel || sortDurationRef.current == null) {
+    if (
+      !diagnosticsLabel ||
+      sortDurationRef.current === null ||
+      sortDurationRef.current === undefined
+    ) {
       return;
     }
     recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);

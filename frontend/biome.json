@@ -74,9 +74,16 @@
       "suspicious": {
         "noArrayIndexKey": "error",
         "noConfusingVoidType": "error",
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["assert", "error", "group", "groupCollapsed", "groupEnd", "info", "warn"]
+          }
+        },
         "noExplicitAny": "error",
         "noEmptyBlockStatements": "error",
         "noEvolvingTypes": "error",
+        "noEqualsToNull": "error",
         "noForIn": "error",
         "noImportCycles": "error",
         "noLeakedRender": "error",
@@ -89,6 +96,7 @@
         "noSkippedTests": "error",
         "noUnusedExpressions": "error",
         "useGuardForIn": "error",
+        "useStrictMode": "error",
         "useIterableCallbackReturn": {
           "level": "error",
           "options": {
@@ -98,8 +106,10 @@
       },
       "style": {
         "noDescendingSpecificity": "error",
+        "noEnum": "error",
         "noNonNullAssertion": "error",
         "noParameterAssign": "error",
+        "noParameterProperties": "error",
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -114,7 +124,9 @@
             ]
           }
         },
-        "noUnusedTemplateLiteral": "error"
+        "noUnusedTemplateLiteral": "error",
+        "useBlockStatements": "error",
+        "useConsistentObjectDefinitions": "error"
       }
     }
   },
@@ -150,6 +162,16 @@
     }
   ],
   "overrides": [
+    {
+      "includes": ["src/**", "!src/**/*.test.*", "!src/**/*.stories.*"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    },
     {
       "includes": ["src/core/backend-api/**"],
       "linter": {

@@ -186,7 +186,11 @@ export function useGridTableFilters<T>({
 
   useEffect(() => {
     void resolvedFilterOptions;
-    if (!diagnosticsLabel || filterOptionsDurationRef.current == null) {
+    if (
+      !diagnosticsLabel ||
+      filterOptionsDurationRef.current === null ||
+      filterOptionsDurationRef.current === undefined
+    ) {
       return;
     }
     recordGridTablePerformanceSample(
@@ -199,7 +203,11 @@ export function useGridTableFilters<T>({
   useEffect(() => {
     void tableData;
     void filterSignature;
-    if (!diagnosticsLabel || filterPassDurationRef.current == null) {
+    if (
+      !diagnosticsLabel ||
+      filterPassDurationRef.current === null ||
+      filterPassDurationRef.current === undefined
+    ) {
       return;
     }
     recordGridTablePerformanceSample(diagnosticsLabel, 'filterPass', filterPassDurationRef.current);

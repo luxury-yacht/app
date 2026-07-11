@@ -26,7 +26,7 @@ import './stories.css';
 const logAction =
   (name: string) =>
   (...args: unknown[]): void => {
-    console.log(`[ObjectPanelTabsPreview story] ${name}`, ...args);
+    console.info(`[ObjectPanelTabsPreview story] ${name}`, ...args);
   };
 
 /**

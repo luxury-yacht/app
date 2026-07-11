@@ -1292,8 +1292,12 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       sourceVersion: 'catalog:1',
     };
     mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
-      if (scope === baseScope) return baseState;
-      if (scope === metadataScope) return metadataState;
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
       return { status: 'idle', data: null, scope };
     });
 

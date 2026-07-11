@@ -96,7 +96,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
         }
       })
       .catch(() => {
-        if (!cancelled) setHpaManaged(null);
+        if (!cancelled) {
+          setHpaManaged(null);
+        }
       });
     return () => {
       cancelled = true;

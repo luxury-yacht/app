@@ -87,7 +87,9 @@ const extractDesiredReplicas = (object: ObjectActionData): number => {
     return clampReplicas(object.desiredReplicas);
   }
   const ready = object.ready?.trim();
-  if (!ready) return 0;
+  if (!ready) {
+    return 0;
+  }
   const segments = ready.split('/');
   const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
   return Number.isFinite(candidate) ? clampReplicas(candidate) : 0;
@@ -162,13 +164,17 @@ export const useObjectActionController = ({
   });
 
   const closeScale = useCallback(() => {
-    if (scaleState.loading) return;
+    if (scaleState.loading) {
+      return;
+    }
     setScaleState({ object: null, value: 1, loading: false, error: null });
   }, [scaleState.loading]);
 
   const getMenuItems = useCallback(
     (object: ObjectActionData | null): ContextMenuItem[] => {
-      if (!object) return [];
+      if (!object) {
+        return [];
+      }
       const actionObject = object as ObjectActionReference;
       const namespace = object.namespace ?? null;
       const clusterId = object.clusterId ?? null;
@@ -188,7 +194,9 @@ export const useObjectActionController = ({
         kind: object.kind,
       };
       const permissionStatusFor = (descriptor: ObjectActionPermissionDescriptor | null) => {
-        if (!descriptor) return null;
+        if (!descriptor) {
+          return null;
+        }
         const input = permissionKeyInput(descriptor);
         return (
           permissionMap.get(
@@ -394,7 +402,9 @@ export const useObjectActionController = ({
 
   const confirmRestart = useCallback(async () => {
     const object = restartTarget;
-    if (!object) return;
+    if (!object) {
+      return;
+    }
     try {
       await runObjectRestart(actionTargetFor(object, 'restart'));
       onAfterAction?.(object, 'restart');
@@ -407,7 +417,9 @@ export const useObjectActionController = ({
 
   const confirmDelete = useCallback(async () => {
     const object = deleteTarget;
-    if (!object) return;
+    if (!object) {
+      return;
+    }
     try {
       await runObjectDelete(actionTargetFor(object, 'delete'));
       onAfterDelete?.(object);
@@ -421,7 +433,9 @@ export const useObjectActionController = ({
 
   const confirmTrigger = useCallback(async () => {
     const object = triggerTarget;
-    if (!object) return;
+    if (!object) {
+      return;
+    }
     try {
       await runCronJobTrigger(actionTargetFor(object, 'trigger'));
       onAfterAction?.(object, 'trigger');
@@ -435,7 +449,9 @@ export const useObjectActionController = ({
   const applyScaleValue = useCallback(
     async (replicas: number) => {
       const object = scaleState.object;
-      if (!object) return;
+      if (!object) {
+        return;
+      }
       setScaleState((previous) => ({ ...previous, loading: true, error: null }));
       try {
         await runObjectScale(actionTargetFor(object, 'scale'), replicas);
@@ -456,7 +472,9 @@ export const useObjectActionController = ({
 
   const confirmScaleToZero = useCallback(async () => {
     const confirmation = scaleConfirmation;
-    if (!confirmation) return;
+    if (!confirmation) {
+      return;
+    }
     const { object, replicas } = confirmation;
     try {
       await runObjectScale(actionTargetFor(object, 'scale'), replicas);
@@ -553,7 +571,9 @@ export const useObjectActionController = ({
           onCancel={closeScale}
           onApply={confirmScale}
           onScaleToZero={() => {
-            if (!scaleState.object) return;
+            if (!scaleState.object) {
+              return;
+            }
             setScaleConfirmation({ object: scaleState.object, replicas: 0 });
             setScaleState({ object: null, value: 1, loading: false, error: null });
           }}

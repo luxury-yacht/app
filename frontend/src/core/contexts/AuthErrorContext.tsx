@@ -239,7 +239,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           resource: 'cluster-auth-states',
           read: () => readAllClusterAuthStates(),
         });
-        if (!states) return;
+        if (!states) {
+          return;
+        }
 
         const initialErrors = new Map<string, ClusterAuthState>();
         for (const [clusterId, stateInfo] of Object.entries(states)) {

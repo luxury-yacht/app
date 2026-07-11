@@ -184,11 +184,11 @@ export function useColumnResizeController<T>({
 
       pendingResizeRef.current = nextLeft;
 
-      if (resizeRafRef.current == null) {
+      if (resizeRafRef.current === null || resizeRafRef.current === undefined) {
         const applyResize = () => {
           resizeRafRef.current = null;
           const pending = pendingResizeRef.current;
-          if (pending == null) {
+          if (pending === null || pending === undefined) {
             return;
           }
           pendingResizeRef.current = null;
@@ -208,12 +208,16 @@ export function useColumnResizeController<T>({
     };
 
     const handleMouseUp = () => {
-      if (resizeRafRef.current != null && typeof window !== 'undefined') {
+      if (
+        resizeRafRef.current !== null &&
+        resizeRafRef.current !== undefined &&
+        typeof window !== 'undefined'
+      ) {
         window.cancelAnimationFrame(resizeRafRef.current);
         resizeRafRef.current = null;
       }
       const pending = pendingResizeRef.current;
-      if (pending != null) {
+      if (pending !== null && pending !== undefined) {
         pendingResizeRef.current = null;
         setColumnWidths((prev) => ({
           ...prev,
@@ -240,7 +244,11 @@ export function useColumnResizeController<T>({
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      if (resizeRafRef.current != null && typeof window !== 'undefined') {
+      if (
+        resizeRafRef.current !== null &&
+        resizeRafRef.current !== undefined &&
+        typeof window !== 'undefined'
+      ) {
         window.cancelAnimationFrame(resizeRafRef.current);
         resizeRafRef.current = null;
       }
@@ -277,7 +285,7 @@ export function useColumnResizeController<T>({
       const configuredMaxWidth = getColumnMaxWidth(column);
       const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
       const maxWidth =
-        autoSizeMaxWidth != null
+        autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
           ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
           : configuredMaxWidth;
       const clampedWidth = Math.max(minWidth, Math.min(maxWidth, measuredWidth));

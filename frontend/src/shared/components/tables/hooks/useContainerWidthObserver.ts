@@ -64,7 +64,7 @@ export function useContainerWidthObserver({
       if (typeof width === 'number' && width > 0) {
         const lastWidth = lastWidthRef.current;
         // Skip re-emitting when the width hasn't meaningfully changed to avoid resize loops.
-        if (lastWidth != null && Math.abs(width - lastWidth) < 1) {
+        if (lastWidth !== null && lastWidth !== undefined && Math.abs(width - lastWidth) < 1) {
           return;
         }
         lastWidthRef.current = width;

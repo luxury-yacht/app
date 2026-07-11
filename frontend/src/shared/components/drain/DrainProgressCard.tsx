@@ -207,7 +207,7 @@ function summaryLine(progress: DrainProgress, usingDelete: boolean): string {
   const total = progress.totalPlanned;
   const seen = progress.totalSeen;
   const head =
-    total != null
+    total !== null && total !== undefined
       ? `${progress.done} of ${total} pods ${verb}`
       : seen > 0
         ? `${progress.done} of ${seen} pods ${verb}`

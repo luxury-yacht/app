@@ -162,39 +162,42 @@ rejected convention rules receive a rule-specific rationale in the durable Biome
 
 ## Phase 4: Remaining style and module-architecture decisions
 
-These rules require an explicit convention decision. Diagnostic counts come from the 2026-07-11
-group audit.
+These rules require an explicit convention decision. Diagnostic counts were refreshed with
+isolated rule audits on 2026-07-11.
 
 | Rule | Diagnostics | Decision to make |
 | --- | ---: | --- |
-| `style.noDefaultExport` | 116 | Named exports everywhere versus retaining framework/configuration defaults. |
-| `style.useGlobalThis` | 369 | Universal `globalThis` versus context-specific `window`, `document`, and worker globals. |
-| `style.useBlockStatements` | 753 | Mandatory braces for every control-flow body. |
-| `style.noNamespace` | 2 | Remove TypeScript namespaces unless required by generated or declaration-merging boundaries. |
-| `style.useConsistentObjectDefinitions` | 2 | Select `interface` or object type aliases as the project convention. |
-| `style.noParameterProperties` | 14 | Explicit class fields versus TypeScript constructor parameter properties. |
-| `style.noEnum` | 3 | Literal unions/objects versus TypeScript enums. |
-| `performance.noReExportAll` | 12 | Explicit re-exports versus wildcard public surfaces. |
-| `performance.noBarrelFile` | 24 | Direct imports versus maintained package/module entry points. |
-| `performance.noNamespaceImport` | 41 | Named imports versus namespaces where a library exposes a cohesive API. |
-| `suspicious.noConsole` | 102 | Approved application logger/test diagnostics versus a blanket console ban. |
-| `suspicious.noEqualsToNull` | 101 | Explicit nullish comparisons versus intentional `value == null` checks. |
-| `suspicious.useStrictMode` | 1 | Verify whether the finding is a classic script; ES modules are already strict by language semantics. |
+| `style.noDefaultExport` | 119 | ⛔ Rejected: Storybook CSF, Vite configuration, and ambient asset modules require default exports; a global rule would require permanent framework exceptions. |
+| `style.useGlobalThis` | 409 | ⛔ Rejected: 247 production findings intentionally name browser owners such as `window` and `document`; `globalThis` would erase environment intent. |
+| `style.useBlockStatements` | 770 | ✅ Added braces to every control-flow body and policy-locked the rule. |
+| `style.noNamespace` | 2 | ⛔ Rejected: the Storybook Wails model mock intentionally mirrors the generated `backend` and `types` namespace API. |
+| `style.useConsistentObjectDefinitions` | 2 | ✅ Adopted shorthand object definitions and policy-locked the rule. |
+| `style.noParameterProperties` | 14 | ✅ Replaced constructor parameter properties with explicit fields and assignments; policy-locked. |
+| `style.noEnum` | 3 | ✅ Replaced enums with `as const` value objects plus value-union aliases; 19 focused tests pass and the rule is policy-locked. |
+| `performance.noReExportAll` | 12 | ⛔ Rejected: complete generated-contract and owned-facade exports avoid duplicate drift-prone registries. |
+| `performance.noBarrelFile` | 24 | ⛔ Rejected: these maintained entry points enforce module ownership and dependency direction. |
+| `performance.noNamespaceImport` | 41 | ⛔ Rejected: findings are cohesive column-factory/YAML/React APIs and complete-surface contract tests; Vite/Rollup handles ES-module tree shaking. |
+| `suspicious.noConsole` | 102 | ✅ Policy-locked with an exact runtime-observability allowlist; replaced all eight `console.log` calls and the profiler's `console.table`. |
+| `suspicious.noEqualsToNull` | 101 | ✅ Expanded every loose nullish comparison to explicit null-or-undefined checks, preserving behavior after rejecting Biome's unsafe null-only rewrite; policy-locked. |
+| `suspicious.useStrictMode` | 1 | ✅ Added `use strict` to the classic inline appearance bootstrap script and policy-locked the rule. |
 
 For each rule, either enable and remediate it or record a short rule-specific rejection rationale in
 `docs/frontend/biome.md`. “Not recommended by default” is not sufficient justification.
 
 ## Browser-source-only rule
 
-`correctness.noNodejsModules` reported 29 uses. Node built-ins are valid in frontend tooling,
-configuration, and test scripts but should not enter browser bundles.
+`correctness.noNodejsModules` reported 30 uses, all in test or tooling files. Node built-ins are
+valid in frontend tooling, configuration, and test scripts but should not enter browser bundles.
+
+✅ The rule is enabled as an error for `src/**` with exact test/story exclusions. The include list
+and severity are policy-locked by `requiredScopedRules`; changing either fails the policy test.
 
 Work:
 
-1. Inventory all 29 paths.
-2. Enable `noNodejsModules` as an error specifically for browser source under `src/**`.
-3. Do not disable the rule globally and then suppress individual source files.
-4. Validate production and Storybook builds so indirect browser imports are also caught by their
+1. ✅ Inventoried all 30 findings and confirmed zero production-source imports.
+2. ✅ Enabled `noNodejsModules` as an error specifically for browser source under `src/**`.
+3. ✅ Kept Node test/tooling support through exact include exclusions without suppressions.
+4. ✅ Validated production and Storybook builds so indirect browser imports are also caught by their
    bundlers.
 
 Acceptance: browser source has zero Node built-in imports; Node tooling remains analyzable without
@@ -284,3 +287,8 @@ For each adopted rule:
   coverage that rejects a weakened rule option. Rejected `useAwait`, `useDefaultSwitchClause`,
   `noForEach`, and `noVoid` as blanket gates with measured inventories and contract-specific
   rationale in `docs/frontend/biome.md`.
+- 2026-07-11: Completed Phase 4. Policy-locked `useBlockStatements`,
+  `useConsistentObjectDefinitions`, `noParameterProperties`, `noEnum`, `noConsole`,
+  `noEqualsToNull`, and `useStrictMode`; added a red/green exact-scope policy contract for
+  browser-source `noNodejsModules`. Recorded measured framework/module-boundary rationales for the
+  six rejected blanket conventions in `docs/frontend/biome.md`.

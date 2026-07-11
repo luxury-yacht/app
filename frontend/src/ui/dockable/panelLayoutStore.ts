@@ -301,7 +301,9 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     applyObjectPanelLayoutDefaults: () => {
       const layout = getObjectPanelLayoutDefaults();
       panelStates.forEach((state, panelId) => {
-        if (!panelId.startsWith('obj:')) return;
+        if (!panelId.startsWith('obj:')) {
+          return;
+        }
         updateState(panelId, {
           rightSize: { width: layout.dockedRightWidth, height: state.rightSize.height },
           bottomSize: { width: state.bottomSize.width, height: layout.dockedBottomHeight },

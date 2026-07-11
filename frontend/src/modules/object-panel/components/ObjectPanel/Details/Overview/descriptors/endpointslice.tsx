@@ -26,7 +26,9 @@ interface ClusterMeta {
 }
 
 const parseTargetRef = (targetRef: string): { kind: string; name: string } | null => {
-  if (!targetRef) return null;
+  if (!targetRef) {
+    return null;
+  }
   const parts = targetRef.split('/');
   if (parts.length === 2) {
     return { kind: parts[0], name: parts[1] };

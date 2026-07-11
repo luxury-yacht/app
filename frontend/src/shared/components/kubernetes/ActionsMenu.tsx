@@ -21,7 +21,9 @@ const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, valu
 
 const parseDesiredReplicas = (value?: string | null): number | null => {
   const trimmed = value?.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
   const segments = trimmed.split('/');
   const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
   return Number.isFinite(candidate) ? clampReplicas(candidate) : null;
@@ -121,7 +123,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       if (isOpen && dropdownRef.current && menuRef.current) {
         const dropdown = dropdownRef.current;
         const button = menuRef.current.querySelector('.actions-menu-button');
-        if (!button) return;
+        if (!button) {
+          return;
+        }
 
         const buttonRect = button.getBoundingClientRect();
         const dropdownRect = dropdown.getBoundingClientRect();

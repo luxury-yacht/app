@@ -65,7 +65,9 @@ export function useRuntimeOperationStatus(
           adapter: 'runtime-read',
           read: () => readRuntimeOperations(),
         });
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         dispatch({ type: 'runtime-operations:list', operations: operations || [] });
       } catch (error) {
         onInitialReadError?.(error, 'runtime-operations');
@@ -77,7 +79,9 @@ export function useRuntimeOperationStatus(
           adapter: 'runtime-read',
           read: () => readShellSessions(),
         });
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         dispatch({ type: 'object-shell:list', sessions: shellList || [] });
       } catch (error) {
         onInitialReadError?.(error, 'shell-sessions');
@@ -89,7 +93,9 @@ export function useRuntimeOperationStatus(
           adapter: 'runtime-read',
           read: () => readPortForwardSessions(),
         });
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         dispatch({
           type: 'portforward:list',
           sessions: (portForwardList || []).map(normalizePortForwardSession),
@@ -133,7 +139,9 @@ export function useRuntimeOperationStatus(
 
     const cancelPortForwardStatus = runtime.EventsOn('portforward:status', (...args: unknown[]) => {
       const raw = args[0] as RawPortForwardStatusEvent | undefined;
-      if (!raw?.sessionId) return;
+      if (!raw?.sessionId) {
+        return;
+      }
       dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
     }) as unknown as (() => void) | undefined;
 

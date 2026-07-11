@@ -63,7 +63,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   };
 
   const activateFocusedItem = () => {
-    if (focusedIndex == null || focusedIndex < 0) {
+    if (focusedIndex === null || focusedIndex === undefined || focusedIndex < 0) {
       return;
     }
     const item = items[focusedIndex];

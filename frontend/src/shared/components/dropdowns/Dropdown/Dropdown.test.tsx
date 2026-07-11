@@ -64,21 +64,27 @@ describe('Dropdown', () => {
   };
 
   const click = (element: Element | null) => {
-    if (!element) throw new Error('Element not found');
+    if (!element) {
+      throw new Error('Element not found');
+    }
     act(() => {
       element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
   };
 
   const mouseDown = (element: Element | null) => {
-    if (!element) throw new Error('Element not found');
+    if (!element) {
+      throw new Error('Element not found');
+    }
     act(() => {
       element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
   };
 
   const pressKey = async (element: Element | null, key: string) => {
-    if (!element) throw new Error('Element not found');
+    if (!element) {
+      throw new Error('Element not found');
+    }
     await act(async () => {
       element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
       await Promise.resolve();
@@ -86,7 +92,9 @@ describe('Dropdown', () => {
   };
 
   const setTextInputValue = async (input: HTMLInputElement | null, value: string) => {
-    if (!input) throw new Error('Input not found');
+    if (!input) {
+      throw new Error('Input not found');
+    }
     const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
     descriptor?.set?.call(input, value);
     await act(async () => {
@@ -133,7 +141,9 @@ describe('Dropdown', () => {
       const formRef = useRef<HTMLFormElement>(null);
       useEffect(() => {
         const form = formRef.current;
-        if (!form) return;
+        if (!form) {
+          return;
+        }
         const stopMouseDownPropagation = (event: MouseEvent) => event.stopPropagation();
         form.addEventListener('mousedown', stopMouseDownPropagation);
         return () => form.removeEventListener('mousedown', stopMouseDownPropagation);

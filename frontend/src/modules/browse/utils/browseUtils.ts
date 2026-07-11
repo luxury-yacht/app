@@ -75,7 +75,7 @@ const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
     }
 
     const existingIndex = indexByUid.get(uid);
-    if (existingIndex == null) {
+    if (existingIndex === null || existingIndex === undefined) {
       indexByUid.set(uid, items.length);
       items.push(item);
       continue;

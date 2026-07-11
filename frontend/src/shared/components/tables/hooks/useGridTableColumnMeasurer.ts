@@ -268,7 +268,7 @@ export function useGridTableColumnMeasurer<T>({
       const configuredMaxAllowed = getColumnMaxWidth(column);
       const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
       const maxAllowed =
-        autoSizeMaxWidth != null
+        autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
           ? Math.min(configuredMaxAllowed, autoSizeMaxWidth)
           : configuredMaxAllowed;
       if (Number.isFinite(maxAllowed)) {

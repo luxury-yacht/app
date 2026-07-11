@@ -25,7 +25,9 @@ export interface ParsedToleration {
 
 export const parseToleration = (raw: string): ParsedToleration | null => {
   let remaining = raw.trim();
-  if (!remaining) return null;
+  if (!remaining) {
+    return null;
+  }
 
   let seconds: string | undefined;
   const secondsMatch = remaining.match(/\s+for\s+(\d+)s$/);

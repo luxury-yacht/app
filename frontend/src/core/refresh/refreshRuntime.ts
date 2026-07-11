@@ -83,6 +83,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
 ]);
 
 export class ClusterRefreshRuntime {
+  readonly clusterId: string;
   private readonly inFlight = new Map<string, InFlightRequest>();
   private readonly streamingCleanup = new Map<string, () => void>();
   private readonly pendingStreaming = new Map<string, Promise<(() => void) | undefined>>();
@@ -97,7 +98,9 @@ export class ClusterRefreshRuntime {
   // still needs (the remount race behind transient false-empty tables).
   private readonly scopedLeases = new Map<RefreshDomain, Map<string, number>>();
 
-  constructor(readonly clusterId: string) {}
+  constructor(clusterId: string) {
+    this.clusterId = clusterId;
+  }
 
   markDomainKnown(domain: RefreshDomain): void {
     if (!this.scopedEnabledState.has(domain)) {

@@ -255,7 +255,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
   useShortcut({
     key: 'm',
     handler: useCallback(() => {
-      if (!isActive || isEditing) return false;
+      if (!isActive || isEditing) {
+        return false;
+      }
       setShowManagedFields((prev) => !prev);
       return true;
     }, [isActive, isEditing]),

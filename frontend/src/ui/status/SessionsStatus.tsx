@@ -227,9 +227,15 @@ const SessionsStatus: React.FC = () => {
   const totalUnhealthy = Math.max(0, totalCount - totalHealthy);
 
   const status = useMemo<StatusState>(() => {
-    if (totalCount === 0) return 'inactive';
-    if (totalUnhealthy === 0) return 'healthy';
-    if (totalHealthy === 0) return 'unhealthy';
+    if (totalCount === 0) {
+      return 'inactive';
+    }
+    if (totalUnhealthy === 0) {
+      return 'healthy';
+    }
+    if (totalHealthy === 0) {
+      return 'unhealthy';
+    }
     return 'degraded';
   }, [totalCount, totalHealthy, totalUnhealthy]);
 

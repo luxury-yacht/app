@@ -488,7 +488,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     focusableSelector: '.dropdown-trigger, button, input',
     disabled: !shouldRender,
     onEscape: () => {
-      if (!isOpen) return false;
+      if (!isOpen) {
+        return false;
+      }
       onClose();
       return true;
     },
@@ -1160,7 +1162,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     );
   };
 
-  if (!shouldRender) return null;
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <ModalSurface

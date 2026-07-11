@@ -7,16 +7,24 @@ export function formatAge(
   timestamp: Date | string | number | null | undefined,
   nowInput: Date | string | number = Date.now()
 ): string {
-  if (!timestamp) return '-';
+  if (!timestamp) {
+    return '-';
+  }
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return '-';
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
 
   const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
-  if (Number.isNaN(now.getTime())) return '-';
+  if (Number.isNaN(now.getTime())) {
+    return '-';
+  }
   const diffMs = now.getTime() - date.getTime();
 
-  if (diffMs < 0) return 'future';
+  if (diffMs < 0) {
+    return 'future';
+  }
 
   const seconds = Math.floor(diffMs / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -25,12 +33,24 @@ export function formatAge(
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  if (years > 0) return `${years}y`;
-  if (months > 0) return `${months}mo`;
-  if (days > 0) return `${days}d`;
-  if (hours > 0) return `${hours}h`;
-  if (minutes > 0) return `${minutes}m`;
-  if (seconds > 0) return `${seconds}s`;
+  if (years > 0) {
+    return `${years}y`;
+  }
+  if (months > 0) {
+    return `${months}mo`;
+  }
+  if (days > 0) {
+    return `${days}d`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  if (seconds > 0) {
+    return `${seconds}s`;
+  }
 
   return 'now';
 }
@@ -41,10 +61,14 @@ export function formatAge(
  * @returns A formatted date string
  */
 export function formatFullDate(timestamp: Date | string | number | null | undefined): string {
-  if (!timestamp) return '-';
+  if (!timestamp) {
+    return '-';
+  }
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return '-';
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
 
   return date.toLocaleString();
 }

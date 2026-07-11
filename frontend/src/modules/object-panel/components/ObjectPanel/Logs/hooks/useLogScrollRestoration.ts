@@ -88,7 +88,9 @@ export const useLogScrollRestoration = ({
     const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
     const savedScrollTop = forceTailRestoreRef.current ? undefined : getScrollTop(cacheKey);
     const targetScrollTop =
-      savedScrollTop != null ? Math.min(savedScrollTop, maxScrollTop) : maxScrollTop;
+      savedScrollTop !== null && savedScrollTop !== undefined
+        ? Math.min(savedScrollTop, maxScrollTop)
+        : maxScrollTop;
 
     scrollEl.scrollTop = targetScrollTop;
     scrollRestoredRef.current = true;

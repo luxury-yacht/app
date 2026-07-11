@@ -86,7 +86,7 @@ const normalizeRgb = (color: string): [number, number, number, number] | null =>
   const red = Number.parseInt(match[1] ?? '', 10);
   const green = Number.parseInt(match[2] ?? '', 10);
   const blue = Number.parseInt(match[3] ?? '', 10);
-  const alpha = match[4] == null ? 1 : Number.parseFloat(match[4]);
+  const alpha = match[4] === null || match[4] === undefined ? 1 : Number.parseFloat(match[4]);
   if ([red, green, blue].some((value) => Number.isNaN(value))) {
     return null;
   }

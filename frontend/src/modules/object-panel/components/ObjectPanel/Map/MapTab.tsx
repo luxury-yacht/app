@@ -54,7 +54,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
 
   const fetchMap = useCallback(
     (reason: 'startup' | 'user' = 'startup') => {
-      if (!mapScope) return;
+      if (!mapScope) {
+        return;
+      }
       void refreshMap(reason, mapScope).catch(handleFetchError);
     },
     [handleFetchError, mapScope, refreshMap]
@@ -73,7 +75,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const handleOpenPanel = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) openWithObject(resolved);
+      if (resolved) {
+        openWithObject(resolved);
+      }
     },
     [openWithObject]
   );
@@ -81,7 +85,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const handleNavigateView = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) navigateToView(resolved);
+      if (resolved) {
+        navigateToView(resolved);
+      }
     },
     [navigateToView]
   );
@@ -89,7 +95,9 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   const handleOpenObjectMap = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) openWithObject(resolved, { initialTab: 'map' });
+      if (resolved) {
+        openWithObject(resolved, { initialTab: 'map' });
+      }
     },
     [openWithObject]
   );

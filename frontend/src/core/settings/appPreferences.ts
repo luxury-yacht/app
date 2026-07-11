@@ -536,14 +536,19 @@ export const normalizeIntegerPreferenceValue = (
   options?: { defaultOnNonPositive?: boolean }
 ): number => {
   const metadata = getIntegerPreferenceMetadata(key);
-  if (value == null || Number.isNaN(value) || (options?.defaultOnNonPositive && value <= 0)) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value) ||
+    (options?.defaultOnNonPositive && value <= 0)
+  ) {
     return numericPreferenceDefault(key);
   }
   const floored = Math.floor(value);
-  if (metadata.min != null && floored < metadata.min) {
+  if (metadata.min !== null && metadata.min !== undefined && floored < metadata.min) {
     return metadata.min;
   }
-  if (metadata.max != null && floored > metadata.max) {
+  if (metadata.max !== null && metadata.max !== undefined && floored > metadata.max) {
     return metadata.max;
   }
   return floored;
@@ -767,7 +772,7 @@ const captureLocalStorageSnapshot = (): LocalStorageSnapshot => {
 
 const restoreLocalStorageValue = (key: string, value: string | null): void => {
   try {
-    if (value == null) {
+    if (value === null || value === undefined) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, value);

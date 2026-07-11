@@ -170,8 +170,12 @@ const computeNodeColumns = (
   });
 
   edges.forEach((edge) => {
-    if (!validIds.has(edge.source) || !validIds.has(edge.target)) return;
-    if (edge.source === edge.target) return;
+    if (!validIds.has(edge.source) || !validIds.has(edge.target)) {
+      return;
+    }
+    if (edge.source === edge.target) {
+      return;
+    }
     let outs = out.get(edge.source);
     if (!outs) {
       outs = [];
@@ -194,11 +198,17 @@ const computeNodeColumns = (
   });
   for (let head = 0; head < queue.length; head += 1) {
     const u = queue[head];
-    if (u === undefined) continue;
+    if (u === undefined) {
+      continue;
+    }
     const cu = column.get(u);
-    if (cu === undefined) continue;
+    if (cu === undefined) {
+      continue;
+    }
     const outs = out.get(u);
-    if (!outs) continue;
+    if (!outs) {
+      continue;
+    }
     for (const v of outs) {
       const cv = column.get(v);
       const candidate = cu + 1;
@@ -206,7 +216,9 @@ const computeNodeColumns = (
         column.set(v, candidate);
       }
       const priorRemaining = remaining.get(v);
-      if (priorRemaining === undefined) continue;
+      if (priorRemaining === undefined) {
+        continue;
+      }
       const newRemaining = priorRemaining - 1;
       remaining.set(v, newRemaining);
       if (newRemaining === 0) {
@@ -237,10 +249,16 @@ const computeNodeColumns = (
   // outgoing edges still satisfy col(target) >= col(source) + 1 after
   // the move.
   inDegree.forEach((degree, id) => {
-    if (degree !== 0) return;
-    if (id === seedId) return;
+    if (degree !== 0) {
+      return;
+    }
+    if (id === seedId) {
+      return;
+    }
     const outs = out.get(id);
-    if (!outs || outs.length === 0) return;
+    if (!outs || outs.length === 0) {
+      return;
+    }
     let minSuccessorColumn = Infinity;
     for (const successor of outs) {
       const sc = column.get(successor);
@@ -299,11 +317,17 @@ const buildCrossColumnAdjacency = (
       return;
     }
     const sList = adj.get(edge.source);
-    if (sList) sList.push(edge.target);
-    else adj.set(edge.source, [edge.target]);
+    if (sList) {
+      sList.push(edge.target);
+    } else {
+      adj.set(edge.source, [edge.target]);
+    }
     const tList = adj.get(edge.target);
-    if (tList) tList.push(edge.source);
-    else adj.set(edge.target, [edge.source]);
+    if (tList) {
+      tList.push(edge.source);
+    } else {
+      adj.set(edge.target, [edge.source]);
+    }
   });
   return adj;
 };
@@ -328,19 +352,27 @@ const orderColumnsByBarycenter = (
   // Index lookup is recomputed each pass because column orderings mutate.
   const indexOf = (nodeId: string): number => {
     const col = columnOf.get(nodeId);
-    if (col === undefined) return -1;
+    if (col === undefined) {
+      return -1;
+    }
     return columns.get(col)?.findIndex((n) => n.id === nodeId) ?? -1;
   };
 
   const barycenter = (node: ObjectMapNode, neighborColumn: number): number => {
     const neighbors = adj.get(node.id);
-    if (!neighbors || neighbors.length === 0) return Infinity;
+    if (!neighbors || neighbors.length === 0) {
+      return Infinity;
+    }
     let sum = 0;
     let count = 0;
     for (const neighborId of neighbors) {
-      if (columnOf.get(neighborId) !== neighborColumn) continue;
+      if (columnOf.get(neighborId) !== neighborColumn) {
+        continue;
+      }
       const idx = indexOf(neighborId);
-      if (idx < 0) continue;
+      if (idx < 0) {
+        continue;
+      }
       sum += idx;
       count += 1;
     }
@@ -354,9 +386,13 @@ const orderColumnsByBarycenter = (
       for (let i = 1; i < sortedColumns.length; i += 1) {
         const columnKey = sortedColumns[i];
         const neighborColumn = sortedColumns[i - 1];
-        if (columnKey === undefined || neighborColumn === undefined) continue;
+        if (columnKey === undefined || neighborColumn === undefined) {
+          continue;
+        }
         const col = columns.get(columnKey);
-        if (!col) continue;
+        if (!col) {
+          continue;
+        }
         col.sort((a, b) => {
           // Kind is the outermost sort key so same-kind nodes cluster
           // into a contiguous band; the position pass below adds an
@@ -368,9 +404,15 @@ const orderColumnsByBarycenter = (
           }
           const ba = barycenter(a, neighborColumn);
           const bb = barycenter(b, neighborColumn);
-          if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
-          if (ba === Infinity) return 1;
-          if (bb === Infinity) return -1;
+          if (ba === Infinity && bb === Infinity) {
+            return compareForColumn(a, b);
+          }
+          if (ba === Infinity) {
+            return 1;
+          }
+          if (bb === Infinity) {
+            return -1;
+          }
           return ba - bb || compareForColumn(a, b);
         });
       }
@@ -385,7 +427,9 @@ const orderColumnsByBarycenter = (
           continue;
         }
         const col = columns.get(columnKey);
-        if (!col) continue;
+        if (!col) {
+          continue;
+        }
         col.sort((a, b) => {
           // Kind is the outermost sort key so same-kind nodes cluster
           // into a contiguous band; the position pass below adds an
@@ -397,9 +441,15 @@ const orderColumnsByBarycenter = (
           }
           const ba = barycenter(a, neighborColumn);
           const bb = barycenter(b, neighborColumn);
-          if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
-          if (ba === Infinity) return 1;
-          if (bb === Infinity) return -1;
+          if (ba === Infinity && bb === Infinity) {
+            return compareForColumn(a, b);
+          }
+          if (ba === Infinity) {
+            return 1;
+          }
+          if (bb === Infinity) {
+            return -1;
+          }
           return ba - bb || compareForColumn(a, b);
         });
       }
@@ -417,7 +467,9 @@ const splitColumnIntoKindAwareLanes = (columnNodes: ObjectMapNode[]): ObjectMapN
   let groupStart = 0;
 
   const pushCurrentLane = () => {
-    if (currentLane.length === 0) return;
+    if (currentLane.length === 0) {
+      return;
+    }
     lanes.push(currentLane);
     currentLane = [];
   };
@@ -506,8 +558,11 @@ export const computeObjectMapLayout = (
   nodes.forEach((node) => {
     const col = columnOf.get(node.id) ?? 0;
     const list = columns.get(col);
-    if (list) list.push(node);
-    else columns.set(col, [node]);
+    if (list) {
+      list.push(node);
+    } else {
+      columns.set(col, [node]);
+    }
   });
 
   const seedColumn = columnOf.get(seedId) ?? 0;
@@ -525,7 +580,9 @@ export const computeObjectMapLayout = (
   const laneCounts = new Map<number, number>();
   sortedColumns.forEach((column) => {
     const columnNodes = columns.get(column);
-    if (!columnNodes) return;
+    if (!columnNodes) {
+      return;
+    }
     const lanes = splitColumnIntoKindAwareLanes(columnNodes);
     columnLanes.set(column, lanes);
     laneCounts.set(column, lanes.length);
@@ -534,7 +591,9 @@ export const computeObjectMapLayout = (
 
   sortedColumns.forEach((column) => {
     const columnNodes = columns.get(column);
-    if (!columnNodes) return;
+    if (!columnNodes) {
+      return;
+    }
     const lanes = columnLanes.get(column) ?? [columnNodes];
     const columnX = columnStartX.get(column) ?? column * COLUMN_STRIDE;
 

@@ -41,7 +41,9 @@ interface ContractedPath {
 }
 
 const comparePath = (a: CandidatePath, b: CandidatePath): number => {
-  if (a.edges.length !== b.edges.length) return a.edges.length - b.edges.length;
+  if (a.edges.length !== b.edges.length) {
+    return a.edges.length - b.edges.length;
+  }
   return a.nodes.join('\0').localeCompare(b.nodes.join('\0'));
 };
 
@@ -54,7 +56,9 @@ const toFilteredPath = (
   const nodes = path.nodes
     .map((id) => {
       const node = nodeById.get(id);
-      if (!node) return null;
+      if (!node) {
+        return null;
+      }
       return {
         id,
         ref: node.ref,
@@ -62,7 +66,9 @@ const toFilteredPath = (
       };
     })
     .filter((node): node is ObjectMapFilteredPathNode => Boolean(node));
-  if (nodes.length !== path.nodes.length) return null;
+  if (nodes.length !== path.nodes.length) {
+    return null;
+  }
   return {
     nodes,
     relationships: path.edges.map((edge) => ({ type: edge.type, label: edge.label })),
@@ -101,8 +107,12 @@ export const contractObjectMapKindFilter = (
   visibleNodes.forEach((source) => {
     const firstEdges = outgoing.get(source.id) ?? [];
     firstEdges.forEach((firstEdge) => {
-      if (visibleNodeIds.has(firstEdge.target)) return;
-      if (!nodeById.has(firstEdge.target)) return;
+      if (visibleNodeIds.has(firstEdge.target)) {
+        return;
+      }
+      if (!nodeById.has(firstEdge.target)) {
+        return;
+      }
 
       const queue: CandidatePath[] = [
         {
@@ -117,8 +127,12 @@ export const contractObjectMapKindFilter = (
         const nextEdges = outgoing.get(currentNodeId) ?? [];
 
         nextEdges.forEach((edge) => {
-          if (!nodeById.has(edge.target)) return;
-          if (current.nodes.includes(edge.target)) return;
+          if (!nodeById.has(edge.target)) {
+            return;
+          }
+          if (current.nodes.includes(edge.target)) {
+            return;
+          }
           const nextPath: CandidatePath = {
             nodes: [...current.nodes, edge.target],
             edges: [...current.edges, edge],
@@ -147,7 +161,9 @@ export const contractObjectMapKindFilter = (
   contracted.forEach((entry, key) => {
     const [source, target] = key.split('\0');
     const filteredPath = toFilteredPath(entry.path, entry.count, nodeById, visibleNodeIds);
-    if (!filteredPath) return;
+    if (!filteredPath) {
+      return;
+    }
     visibleEdges.push({
       id: `${FILTERED_PATH_EDGE_TYPE}:${source}:${target}`,
       source,

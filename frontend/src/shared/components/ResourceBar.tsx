@@ -84,8 +84,15 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
 
   // Parse resource values to numbers
   const parseResource = (value: string | undefined): number => {
-    if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set')
+    if (
+      !value ||
+      value === '-' ||
+      value === 'undefined' ||
+      value === 'null' ||
+      value === 'not set'
+    ) {
       return 0;
+    }
 
     try {
       if (type === 'cpu') {
@@ -100,7 +107,9 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       } else {
         // Handle Memory - match DetailsTabUtilization's parseMemToMB exactly
         const num = parseFloat(value);
-        if (Number.isNaN(num)) return 0;
+        if (Number.isNaN(num)) {
+          return 0;
+        }
 
         if (value.endsWith('Ki')) {
           return num / 1024; // Convert Ki to Mi
@@ -241,16 +250,22 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
 
   // Format values for display
   const formatValue = (value: string | undefined, parsedValue: number): string => {
-    if (!value || value === '-' || value === 'undefined' || value === 'null') return '-';
+    if (!value || value === '-' || value === 'undefined' || value === 'null') {
+      return '-';
+    }
 
     if (type === 'cpu') {
       // For CPU, 0 is a valid value (0 millicores)
       // Only return '-' if the original value was invalid
-      if (Number.isNaN(parsedValue)) return '-';
+      if (Number.isNaN(parsedValue)) {
+        return '-';
+      }
       return `${Math.round(parsedValue)}m`;
     } else {
       // For memory, 0 likely means parsing failed
-      if (parsedValue === 0) return '-';
+      if (parsedValue === 0) {
+        return '-';
+      }
       if (parsedValue >= 1024 * 1024) {
         return `${(parsedValue / (1024 * 1024)).toFixed(1)}Ti`;
       } else if (parsedValue >= 1024) {

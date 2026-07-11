@@ -98,19 +98,31 @@ export interface OverviewDescriptor<T> {
  */
 export function coverageKeys<T>(descriptor: OverviewDescriptor<T>): Set<string> {
   const keys = new Set<string>(FRAME_FIELDS);
-  if (descriptor.schema.showSelector) keys.add('selector');
+  if (descriptor.schema.showSelector) {
+    keys.add('selector');
+  }
   for (const item of descriptor.schema.items) {
     const itemKind = (item as { kind?: string }).kind;
     if (itemKind === 'status') {
-      for (const k of STATUS_FIELDS) keys.add(k);
+      for (const k of STATUS_FIELDS) {
+        keys.add(k);
+      }
     } else if (itemKind === 'widget') {
-      for (const k of (item as OverviewWidget<T>).consumes ?? []) keys.add(k);
+      for (const k of (item as OverviewWidget<T>).consumes ?? []) {
+        keys.add(k);
+      }
     } else {
       const field = item as OverviewField<T>;
-      if (field.field) keys.add(field.field);
-      for (const k of field.derivedFrom ?? []) keys.add(k);
+      if (field.field) {
+        keys.add(field.field);
+      }
+      for (const k of field.derivedFrom ?? []) {
+        keys.add(k);
+      }
     }
   }
-  for (const k of descriptor.coveredElsewhere ?? []) keys.add(k);
+  for (const k of descriptor.coveredElsewhere ?? []) {
+    keys.add(k);
+  }
   return keys;
 }

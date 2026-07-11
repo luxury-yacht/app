@@ -63,7 +63,9 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
 
   const fetchMap = useCallback(
     (reason: 'startup' | 'user' = 'startup') => {
-      if (!mapScope) return;
+      if (!mapScope) {
+        return;
+      }
       void requestRefreshDomain({
         domain: 'object-map',
         scope: mapScope,
@@ -86,7 +88,9 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   const handleOpenPanel = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) openWithObject(resolved);
+      if (resolved) {
+        openWithObject(resolved);
+      }
     },
     [openWithObject]
   );
@@ -94,7 +98,9 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   const handleNavigateView = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) navigateToView(resolved);
+      if (resolved) {
+        navigateToView(resolved);
+      }
     },
     [navigateToView]
   );
@@ -102,7 +108,9 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   const handleOpenObjectMap = useCallback(
     (ref: ObjectMapReference) => {
       const resolved = buildResolvedFromMapRef(ref);
-      if (resolved) openWithObject(resolved, { initialTab: 'map' });
+      if (resolved) {
+        openWithObject(resolved, { initialTab: 'map' });
+      }
     },
     [openWithObject]
   );

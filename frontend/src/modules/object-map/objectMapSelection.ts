@@ -17,7 +17,9 @@ export const computeObjectMapSelectionState = (
   edges: PositionedEdge[],
   activeNodeId: string | null
 ): ObjectMapSelectionState => {
-  if (activeNodeId === null) return EMPTY_SELECTION;
+  if (activeNodeId === null) {
+    return EMPTY_SELECTION;
+  }
 
   const outgoing = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
   const incoming = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
@@ -48,10 +50,14 @@ export const computeObjectMapSelectionState = (
     for (let head = 0; head < queue.length; head += 1) {
       const current = queue[head];
       const adjacent = adjacency.get(current);
-      if (!adjacent) continue;
+      if (!adjacent) {
+        continue;
+      }
       for (const { edgeId, neighbor } of adjacent) {
         connectedEdgeIds.add(edgeId);
-        if (visited.has(neighbor)) continue;
+        if (visited.has(neighbor)) {
+          continue;
+        }
         visited.add(neighbor);
         connectedIds.add(neighbor);
         queue.push(neighbor);

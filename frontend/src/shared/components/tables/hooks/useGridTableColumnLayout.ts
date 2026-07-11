@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const getColumnMinWidth = <T>(column: GridColumnDefinition<T>) => {
   const parsed = parseWidthInputToNumber(column.minWidth);
-  if (parsed != null) {
+  if (parsed !== null && parsed !== undefined) {
     return parsed;
   }
   return DEFAULT_COLUMN_MIN_WIDTH;
@@ -35,7 +35,7 @@ const getColumnMinWidth = <T>(column: GridColumnDefinition<T>) => {
 
 const getColumnMaxWidth = <T>(column: GridColumnDefinition<T>) => {
   const parsed = parseWidthInputToNumber(column.maxWidth);
-  if (parsed != null) {
+  if (parsed !== null && parsed !== undefined) {
     return parsed;
   }
   return Number.POSITIVE_INFINITY;

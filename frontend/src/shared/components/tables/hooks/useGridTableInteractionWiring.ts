@@ -208,7 +208,12 @@ export function useGridTableInteractionWiring<T>({
   );
 
   const activateFocusedRow = useCallback(() => {
-    if (focusedRowIndex == null || focusedRowIndex < 0 || focusedRowIndex >= tableData.length) {
+    if (
+      focusedRowIndex === null ||
+      focusedRowIndex === undefined ||
+      focusedRowIndex < 0 ||
+      focusedRowIndex >= tableData.length
+    ) {
       return false;
     }
     const item = tableData[focusedRowIndex];

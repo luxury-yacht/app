@@ -36,13 +36,15 @@ import './stories.css';
 const logAction =
   (name: string) =>
   (...args: unknown[]): void => {
-    console.log(`[TabsWithDrag story] ${name}`, ...args);
+    console.info(`[TabsWithDrag story] ${name}`, ...args);
   };
 
 /** Reorder: move `fromId` to position `toIndex` in the tab list. */
 function reorder(tabs: TabDescriptor[], fromId: string, toIndex: number): TabDescriptor[] {
   const fromIndex = tabs.findIndex((t) => t.id === fromId);
-  if (fromIndex === -1) return tabs;
+  if (fromIndex === -1) {
+    return tabs;
+  }
   const next = tabs.slice();
   const [moved] = next.splice(fromIndex, 1);
   // If the item was before the target index, removing it shifted everything.

@@ -70,7 +70,7 @@ ensureStorage('sessionStorage');
 Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
   configurable: true,
   writable: true,
-  value: function click(this: HTMLAnchorElement) {
+  value(this: HTMLAnchorElement) {
     this.dispatchEvent(
       new MouseEvent('click', {
         bubbles: true,

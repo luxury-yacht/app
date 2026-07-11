@@ -298,8 +298,12 @@ export const CommandPalette = memo(function CommandPaletteComponent({
       }
 
       // If only one is in the order array, it comes first
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
+      if (indexA !== -1) {
+        return -1;
+      }
+      if (indexB !== -1) {
+        return 1;
+      }
 
       // If neither is in the order array, sort alphabetically
       return a[0].localeCompare(b[0]);
@@ -874,7 +878,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   // Handle clicks outside to close
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -889,9 +895,13 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   }, [isOpen, close]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      return;
+    }
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!mouseSelectionArmedRef.current) {
@@ -911,7 +921,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return () => container.removeEventListener('pointermove', handlePointerMove);
   }, [isOpen, updateSelection]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <ErrorBoundary

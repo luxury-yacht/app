@@ -87,7 +87,9 @@ function scrollToFocusedRow(
 ): void {
   requestAnimationFrame(() => {
     const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    if (!wrapper) {
+      return;
+    }
 
     // Try direct DOM lookup — works for non-virtualized tables and rows
     // that happen to be within the current virtual viewport.
@@ -100,7 +102,9 @@ function scrollToFocusedRow(
     // Row not in DOM — table is likely virtualized and the row is off-screen.
     // Scroll the container to bring the row into the virtual viewport.
     const virtualBody = wrapper.querySelector<HTMLElement>('.gridtable-virtual-body');
-    if (!virtualBody || rowCount <= 0) return;
+    if (!virtualBody || rowCount <= 0) {
+      return;
+    }
 
     const totalHeight = virtualBody.offsetHeight;
     const estimatedRowHeight = totalHeight / rowCount;

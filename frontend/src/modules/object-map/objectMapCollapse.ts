@@ -52,7 +52,9 @@ const buildOwnerMaps = (
   const ownerOf = new Map<string, string>();
   const childrenOf = new Map<string, Set<string>>();
   edges.forEach((edge) => {
-    if (edge.type !== 'owner') return;
+    if (edge.type !== 'owner') {
+      return;
+    }
     ownerOf.set(edge.target, edge.source);
     let children = childrenOf.get(edge.source);
     if (!children) {
@@ -82,7 +84,9 @@ const findSeedAncestorReplicaSets = (
   let current: string | undefined = seedId;
   while (current && !visited.has(current)) {
     visited.add(current);
-    if (isReplicaSet(current)) lineageRs.add(current);
+    if (isReplicaSet(current)) {
+      lineageRs.add(current);
+    }
     current = ownerOf.get(current);
   }
   return lineageRs;
@@ -139,7 +143,9 @@ export const computeCollapseInfo = (
 
   const replicaSetIds = new Set<string>();
   nodes.forEach((n) => {
-    if (n.ref.kind === REPLICASET_KIND) replicaSetIds.add(n.id);
+    if (n.ref.kind === REPLICASET_KIND) {
+      replicaSetIds.add(n.id);
+    }
   });
   const isReplicaSet = (id: string) => replicaSetIds.has(id);
 
@@ -150,9 +156,13 @@ export const computeCollapseInfo = (
   const rsByDeployment = new Map<string, string[]>();
   replicaSetIds.forEach((rsId) => {
     const ownerId = ownerOf.get(rsId);
-    if (!ownerId) return;
+    if (!ownerId) {
+      return;
+    }
     const owner = nodesById.get(ownerId);
-    if (!owner || owner.ref.kind !== DEPLOYMENT_KIND) return;
+    if (!owner || owner.ref.kind !== DEPLOYMENT_KIND) {
+      return;
+    }
     let group = rsByDeployment.get(ownerId);
     if (!group) {
       group = [];
@@ -168,16 +178,24 @@ export const computeCollapseInfo = (
 
   rsByDeployment.forEach((rsIds, deploymentId) => {
     const currentRsId = chooseCurrentRs(rsIds, childrenOf, nodesById);
-    if (!currentRsId) return;
+    if (!currentRsId) {
+      return;
+    }
 
     // Anything with owned Pods remains visible so rollout activity is
     // visible immediately. Zero-Pod siblings are collapsible unless
     // they are the current badge anchor or part of the seed lineage.
     const collapsibleRsIds: string[] = [];
     for (const rsId of rsIds) {
-      if (rsId === currentRsId) continue;
-      if (seedLineageRs.has(rsId)) continue;
-      if (podChildCount(rsId, childrenOf, nodesById) > 0) continue;
+      if (rsId === currentRsId) {
+        continue;
+      }
+      if (seedLineageRs.has(rsId)) {
+        continue;
+      }
+      if (podChildCount(rsId, childrenOf, nodesById) > 0) {
+        continue;
+      }
       collapsibleRsIds.push(rsId);
     }
 
@@ -210,10 +228,16 @@ export const computeCollapseInfo = (
     for (let head = 0; head < queue.length; head += 1) {
       const u = queue[head];
       const children = childrenOf.get(u);
-      if (!children) continue;
+      if (!children) {
+        continue;
+      }
       children.forEach((c) => {
-        if (c === seedId) return;
-        if (hiddenDescendantIds.has(c)) return;
+        if (c === seedId) {
+          return;
+        }
+        if (hiddenDescendantIds.has(c)) {
+          return;
+        }
         hiddenDescendantIds.add(c);
         queue.push(c);
       });
@@ -222,8 +246,12 @@ export const computeCollapseInfo = (
 
   const visibleNodeIds = new Set<string>();
   nodes.forEach((n) => {
-    if (hiddenRsIds.has(n.id)) return;
-    if (hiddenDescendantIds.has(n.id)) return;
+    if (hiddenRsIds.has(n.id)) {
+      return;
+    }
+    if (hiddenDescendantIds.has(n.id)) {
+      return;
+    }
     visibleNodeIds.add(n.id);
   });
 

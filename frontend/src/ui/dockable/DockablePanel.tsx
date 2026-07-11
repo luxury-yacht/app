@@ -85,7 +85,9 @@ interface DockablePanelProps {
 }
 
 function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
-  if (!ref) return;
+  if (!ref) {
+    return;
+  }
   if (typeof ref === 'function') {
     ref(value);
     return;
@@ -469,7 +471,9 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Set CSS variables on the shared content container so both the route layout
   // and the portal-mounted dock layer can read the same dock geometry.
   useLayoutEffect(() => {
-    if (!panelState.isOpen || isMaximized || !isGroupLeader) return;
+    if (!panelState.isOpen || isMaximized || !isGroupLeader) {
+      return;
+    }
     const target = document.querySelector('.content');
     if (!(target instanceof HTMLElement)) {
       return;
@@ -728,14 +732,28 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const panelClassName = useMemo(() => {
     const classes = ['dockable-panel', `dockable-panel--${panelState.position}`, className];
 
-    if (isDragging) classes.push('dockable-panel--dragging');
-    if (isResizing) classes.push('dockable-panel--resizing');
-    if (panelState.position === 'floating') classes.push('dockable-panel--floating');
-    if (isMaximized) classes.push('dockable-panel--maximized');
+    if (isDragging) {
+      classes.push('dockable-panel--dragging');
+    }
+    if (isResizing) {
+      classes.push('dockable-panel--resizing');
+    }
+    if (panelState.position === 'floating') {
+      classes.push('dockable-panel--floating');
+    }
+    if (isMaximized) {
+      classes.push('dockable-panel--maximized');
+    }
     // Dim panels whose group is not the most recently focused one. Pre-first-focus
     // (lastFocusedGroupKey === null) leaves all panels at full opacity so the
     // app doesn't open in a fully-dimmed state.
-    if (groupKey != null && lastFocusedGroupKey != null && lastFocusedGroupKey !== groupKey) {
+    if (
+      groupKey !== null &&
+      groupKey !== undefined &&
+      lastFocusedGroupKey !== null &&
+      lastFocusedGroupKey !== undefined &&
+      lastFocusedGroupKey !== groupKey
+    ) {
       classes.push('dockable-panel--inactive');
     }
     return classes.join(' ');
@@ -813,8 +831,12 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     constraints,
   ]);
 
-  if (!panelState.isOpen) return null;
-  if (!panelHostNode) return null;
+  if (!panelState.isOpen) {
+    return null;
+  }
+  if (!panelHostNode) {
+    return null;
+  }
 
   // Always render through a single createPortal so React reuses the DOM node
   // when group leadership transfers between panels, avoiding a visible flash.

@@ -44,9 +44,15 @@ const WRITE_VERBS = new Set([
 const READ_VERBS = new Set(['get', 'list', 'watch']);
 
 const verbVariant = (verb: string): StatusChipVariant => {
-  if (verb === '*') return 'unhealthy';
-  if (WRITE_VERBS.has(verb)) return 'warning';
-  if (READ_VERBS.has(verb)) return 'healthy';
+  if (verb === '*') {
+    return 'unhealthy';
+  }
+  if (WRITE_VERBS.has(verb)) {
+    return 'warning';
+  }
+  if (READ_VERBS.has(verb)) {
+    return 'healthy';
+  }
   return 'info';
 };
 

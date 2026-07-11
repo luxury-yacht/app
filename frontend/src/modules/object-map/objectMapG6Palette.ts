@@ -16,7 +16,9 @@ const objectMapCssColorVar = (
   name: string
 ): string => {
   const raw = objectMapCssVar(styles, name);
-  if (!raw.includes('var(')) return raw;
+  if (!raw.includes('var(')) {
+    return raw;
+  }
   const probe = document.createElement('span');
   probe.style.position = 'absolute';
   probe.style.visibility = 'hidden';
@@ -129,7 +131,9 @@ export const sameObjectMapG6Palette = (
   previous: ObjectMapG6Palette | null,
   next: ObjectMapG6Palette
 ): boolean => {
-  if (!previous) return false;
+  if (!previous) {
+    return false;
+  }
   return (Object.keys(next) as Array<keyof ObjectMapG6Palette>).every((key) => {
     const previousValue = previous[key];
     const nextValue = next[key];

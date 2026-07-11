@@ -107,7 +107,9 @@ const Tooltip: React.FC<TooltipProps> = ({
   // Positioning — runs after the tooltip is rendered so we can measure it
   // ------------------------------------------------------------------
   useLayoutEffect(() => {
-    if (!visible || !triggerRef.current || !tooltipRef.current) return;
+    if (!visible || !triggerRef.current || !tooltipRef.current) {
+      return;
+    }
 
     const zoomFactor = zoomLevel / 100;
     const triggerRect = triggerRef.current.getBoundingClientRect();
@@ -185,7 +187,9 @@ const Tooltip: React.FC<TooltipProps> = ({
   // Outside-click handler for click-trigger mode
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (trigger !== 'click' || !visible) return;
+    if (trigger !== 'click' || !visible) {
+      return;
+    }
 
     const handleOutside = (e: MouseEvent) => {
       if (
@@ -246,7 +250,9 @@ const Tooltip: React.FC<TooltipProps> = ({
   // Global dismissal for hover tooltips
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (trigger !== 'hover' || !visible) return;
+    if (trigger !== 'hover' || !visible) {
+      return;
+    }
 
     const hide = () => {
       clearTimers();
@@ -307,14 +313,18 @@ const Tooltip: React.FC<TooltipProps> = ({
   }, [interactive]);
 
   const handleMouseEnter = useCallback(() => {
-    if (disabled || trigger !== 'hover') return;
+    if (disabled || trigger !== 'hover') {
+      return;
+    }
     cancelHide();
     timerRef.current = setTimeout(() => setVisible(true), hoverDelay);
   }, [disabled, trigger, hoverDelay, cancelHide]);
 
   const handleMouseLeave = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (trigger !== 'hover') return;
+      if (trigger !== 'hover') {
+        return;
+      }
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -329,14 +339,18 @@ const Tooltip: React.FC<TooltipProps> = ({
 
   /** When the mouse enters the tooltip popup (interactive mode). */
   const handleTooltipMouseEnter = useCallback(() => {
-    if (!interactive) return;
+    if (!interactive) {
+      return;
+    }
     cancelHide();
   }, [interactive, cancelHide]);
 
   /** When the mouse leaves the tooltip popup (interactive mode). */
   const handleTooltipMouseLeave = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!interactive) return;
+      if (!interactive) {
+        return;
+      }
       if (isWithinInteractiveRegion(event.relatedTarget)) {
         return;
       }
@@ -346,7 +360,9 @@ const Tooltip: React.FC<TooltipProps> = ({
   );
 
   const handleClick = useCallback(() => {
-    if (disabled || trigger !== 'click') return;
+    if (disabled || trigger !== 'click') {
+      return;
+    }
     setVisible((v) => !v);
   }, [disabled, trigger]);
 
@@ -365,8 +381,12 @@ const Tooltip: React.FC<TooltipProps> = ({
 
   const inlineStyle: React.CSSProperties = { ...style };
   inlineStyle.zIndex = zIndex ?? resolveTooltipZIndex();
-  if (maxWidth !== undefined) inlineStyle.maxWidth = maxWidth;
-  if (minWidth !== undefined) inlineStyle.minWidth = minWidth;
+  if (maxWidth !== undefined) {
+    inlineStyle.maxWidth = maxWidth;
+  }
+  if (minWidth !== undefined) {
+    inlineStyle.minWidth = minWidth;
+  }
 
   // ------------------------------------------------------------------
   // Render

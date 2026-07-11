@@ -107,7 +107,9 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       navigationAppliedRef.current = false;
       return;
     }
-    if (navigationAppliedRef.current) return;
+    if (navigationAppliedRef.current) {
+      return;
+    }
 
     // For cluster-specific favorites, wait for the correct cluster to be active AND ready.
     // New favorites carry clusterId; older persisted favorites only have the kubeconfig
@@ -116,16 +118,24 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     const isClusterSpecific = pendingFavorite.clusterSelection !== '' || favoriteClusterId !== '';
     if (isClusterSpecific) {
       if (favoriteClusterId) {
-        if (selectedClusterId !== favoriteClusterId) return;
+        if (selectedClusterId !== favoriteClusterId) {
+          return;
+        }
       } else if (selectedKubeconfig !== pendingFavorite.clusterSelection) {
         return;
       }
-      if (!isClusterReady(favoriteClusterId || selectedClusterId)) return;
+      if (!isClusterReady(favoriteClusterId || selectedClusterId)) {
+        return;
+      }
     } else {
       // Generic favorite: wait for the active cluster to be ready.
-      if (selectedClusterId && !isClusterReady(selectedClusterId)) return;
+      if (selectedClusterId && !isClusterReady(selectedClusterId)) {
+        return;
+      }
     }
-    if (pendingFavorite.viewType === 'namespace' && !namespaceReady) return;
+    if (pendingFavorite.viewType === 'namespace' && !namespaceReady) {
+      return;
+    }
 
     navigationAppliedRef.current = true;
 

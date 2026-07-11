@@ -50,7 +50,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'r',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_AUTO_REFRESH' });
       return true;
     }, [isActive, dispatch]),
@@ -64,7 +66,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 't',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       dispatch({
         type: 'SET_TIMESTAMP_MODE',
         payload: showTimestamps ? 'hidden' : 'default',
@@ -81,7 +85,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'v',
     handler: useCallback(() => {
-      if (!isActive || !supportsPreviousContainerLogs) return false;
+      if (!isActive || !supportsPreviousContainerLogs) {
+        return false;
+      }
       handleTogglePreviousContainerLogs();
       return true;
     }, [handleTogglePreviousContainerLogs, isActive, supportsPreviousContainerLogs]),
@@ -94,7 +100,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'h',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
       return true;
     }, [isActive, dispatch]),
@@ -107,7 +115,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'i',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
       return true;
     }, [isActive, dispatch]),
@@ -120,7 +130,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'x',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
       return true;
     }, [isActive, dispatch]),
@@ -133,7 +145,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'c',
     handler: useCallback(() => {
-      if (!isActive || regexMatches) return false;
+      if (!isActive || regexMatches) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
       return true;
     }, [dispatch, isActive, regexMatches]),
@@ -147,7 +161,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'p',
     handler: useCallback(() => {
-      if (!isActive || !canParseContainerLogs) return false;
+      if (!isActive || !canParseContainerLogs) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_PARSED_VIEW' });
       return true;
     }, [isActive, canParseContainerLogs, dispatch]),
@@ -160,7 +176,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'o',
     handler: useCallback(() => {
-      if (!isActive || isParsedView || !hasAnsiLogEntries) return false;
+      if (!isActive || isParsedView || !hasAnsiLogEntries) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' });
       return true;
     }, [dispatch, hasAnsiLogEntries, isActive, isParsedView]),
@@ -174,7 +192,9 @@ export function useLogKeyboardShortcuts({
     key: 'c',
     modifiers: { shift: true },
     handler: useCallback(() => {
-      if (!isActive || !hasCopyableContent) return false;
+      if (!isActive || !hasCopyableContent) {
+        return false;
+      }
       handleCopyContainerLogs();
       return true;
     }, [handleCopyContainerLogs, hasCopyableContent, isActive]),
@@ -187,7 +207,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'j',
     handler: useCallback(() => {
-      if (!isActive || !canParseContainerLogs) return false;
+      if (!isActive || !canParseContainerLogs) {
+        return false;
+      }
       dispatch({
         type: 'SET_DISPLAY_MODE',
         payload: displayMode === 'pretty' ? 'raw' : 'pretty',
@@ -204,7 +226,9 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'w',
     handler: useCallback(() => {
-      if (!isActive || isParsedView) return false;
+      if (!isActive || isParsedView) {
+        return false;
+      }
       dispatch({ type: 'TOGGLE_WRAP_TEXT' });
       return true;
     }, [isActive, isParsedView, dispatch]),
@@ -216,7 +240,9 @@ export function useLogKeyboardShortcuts({
 
   // Helper to get the scroll container for the current view mode
   const getScrollContainer = useCallback((): HTMLElement | null => {
-    if (!logsContentRef.current) return null;
+    if (!logsContentRef.current) {
+      return null;
+    }
     if (isParsedView) {
       return logsContentRef.current.querySelector('.gridtable-wrapper');
     }
@@ -232,9 +258,13 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'Home',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       const container = getScrollContainer();
-      if (!container) return false;
+      if (!container) {
+        return false;
+      }
       container.scrollTo({ top: 0, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),
@@ -249,9 +279,13 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'End',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive) {
+        return false;
+      }
       const container = getScrollContainer();
-      if (!container) return false;
+      if (!container) {
+        return false;
+      }
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
       return true;
     }, [isActive, getScrollContainer]),

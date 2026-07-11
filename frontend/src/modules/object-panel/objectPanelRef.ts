@@ -114,7 +114,7 @@ const normalizePanelInput = (input: KubernetesObjectReference): KubernetesObject
 
 const hasExplicitScopeGVK = (input: KubernetesObjectReference): boolean => {
   const version = normalizeOptional(input.version);
-  if (input.group == null || !version) {
+  if (input.group === null || input.group === undefined || !version) {
     return false;
   }
   const group = input.group.trim();
@@ -169,7 +169,8 @@ export const hasCompleteObjectMapReference = (
     Boolean(objectData.clusterId?.trim()) &&
     Boolean(objectData.kind?.trim()) &&
     Boolean(objectData.name?.trim()) &&
-    objectData.group != null &&
+    objectData.group !== null &&
+    objectData.group !== undefined &&
     Boolean(objectData.version?.trim())
   );
 };

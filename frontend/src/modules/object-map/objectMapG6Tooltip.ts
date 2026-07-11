@@ -31,7 +31,9 @@ const objectMapTooltipTextWidth = (text: string, font: string): number => {
   } catch {
     context = null;
   }
-  if (!context) return text.length;
+  if (!context) {
+    return text.length;
+  }
   context.font = font;
   return context.measureText(text).width;
 };
@@ -237,7 +239,9 @@ export const computeObjectMapTooltipLayout = ({
   }
 
   const widestRow = rows.reduce((max, row) => {
-    if (row.type === 'object') return Math.max(max, row.endpoint.groupWidth);
+    if (row.type === 'object') {
+      return Math.max(max, row.endpoint.groupWidth);
+    }
     return Math.max(max, objectMapTooltipTextWidth(row.text, relationshipFont));
   }, 0);
   const rowOffsets = rows.reduce<number[]>((offsets, _row, index) => {

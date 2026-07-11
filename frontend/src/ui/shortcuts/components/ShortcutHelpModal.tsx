@@ -64,7 +64,9 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
     },
   });
 
-  if (!shouldRender) return null;
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <ModalSurface

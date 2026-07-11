@@ -465,7 +465,7 @@ export const buildCapabilityBatchRows = (
       const include =
         entry.inFlightCount > 0 ||
         entry.pendingCount > 0 ||
-        entry.lastRunCompletedAt != null ||
+        (entry.lastRunCompletedAt !== null && entry.lastRunCompletedAt !== undefined) ||
         entry.lastDescriptors.length > 0;
       if (!include) {
         return null;
@@ -659,7 +659,12 @@ export const buildPermissionRows = (params: {
       if (row.scope === 'Cluster') {
         return true;
       }
-      return row.descriptorNamespace && row.feature != null && scopedFeatureSet.has(row.feature);
+      return (
+        row.descriptorNamespace &&
+        row.feature !== null &&
+        row.feature !== undefined &&
+        scopedFeatureSet.has(row.feature)
+      );
     }
 
     if (viewType === 'namespace') {

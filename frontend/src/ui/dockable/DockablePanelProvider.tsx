@@ -323,11 +323,17 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   useEffect(() => {
     const handleFocusIn = (event: FocusEvent) => {
       const target = event.target;
-      if (!(target instanceof Element)) return;
+      if (!(target instanceof Element)) {
+        return;
+      }
       const owner = target.closest<HTMLElement>('[data-dockable-group-key]');
-      if (!owner) return;
+      if (!owner) {
+        return;
+      }
       const key = owner.dataset.dockableGroupKey;
-      if (!key) return;
+      if (!key) {
+        return;
+      }
       setLastFocusedGroupKey(key as GroupKey);
     };
     document.addEventListener('focusin', handleFocusIn);
@@ -357,8 +363,12 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const getLastFocusedPosition = useCallback((): DockPosition => {
     // Helper: map a group key to a DockPosition.
     const keyToPosition = (key: GroupKey | 'floating'): DockPosition => {
-      if (key === 'right') return 'right';
-      if (key === 'bottom') return 'bottom';
+      if (key === 'right') {
+        return 'right';
+      }
+      if (key === 'bottom') {
+        return 'bottom';
+      }
       return 'floating';
     };
 
@@ -383,7 +393,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       }
       activeStore.setTabGroups((prev) => {
         const groupKey = getGroupForPanel(prev, panelId);
-        if (!groupKey) return prev;
+        if (!groupKey) {
+          return prev;
+        }
         return setActiveTab(prev, panelId, groupKey);
       });
       focusPanelById(panelId);

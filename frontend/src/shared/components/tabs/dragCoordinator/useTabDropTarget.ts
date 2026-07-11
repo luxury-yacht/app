@@ -92,7 +92,9 @@ function computeDropInsertIndex(container: HTMLElement, clientX: number): number
   const buttons = container.querySelectorAll<HTMLElement>('[role="tab"]');
   for (let i = 0; i < buttons.length; i += 1) {
     const rect = buttons[i].getBoundingClientRect();
-    if (clientX < rect.left + rect.width / 2) return i;
+    if (clientX < rect.left + rect.width / 2) {
+      return i;
+    }
   }
   return buttons.length;
 }
@@ -105,9 +107,13 @@ let nextTargetId = 0;
  * mode and this returns null for custom MIME types.
  */
 function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
-  if (!event.dataTransfer) return null;
+  if (!event.dataTransfer) {
+    return null;
+  }
   const raw = event.dataTransfer.getData(TAB_DRAG_DATA_TYPE);
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   try {
     return JSON.parse(raw) as TabDragPayload;
   } catch {
@@ -121,13 +127,17 @@ function readPayloadFromDataTransfer(event: DragEvent): TabDragPayload | null {
  * mode), so we use it as the presence gate. Works cross-browser.
  */
 function hasTabDragType(event: DragEvent): boolean {
-  if (!event.dataTransfer) return false;
+  if (!event.dataTransfer) {
+    return false;
+  }
   const types = event.dataTransfer.types;
   // `types` is a frozen array in modern browsers and a DOMStringList in
   // older ones. Both are iterable, but only the former has `.includes`,
   // so loop manually for portability.
   for (let i = 0; i < types.length; i += 1) {
-    if (types[i] === TAB_DRAG_DATA_TYPE) return true;
+    if (types[i] === TAB_DRAG_DATA_TYPE) {
+      return true;
+    }
   }
   return false;
 }
@@ -157,21 +167,31 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   currentDragRef.current = currentDrag;
 
   const handleDragEnter = useCallback((event: DragEvent) => {
-    if (!hasTabDragType(event)) return;
+    if (!hasTabDragType(event)) {
+      return;
+    }
     const drag = currentDragRef.current;
-    if (!drag || !acceptsRef.current.includes(drag.kind as K)) return;
+    if (!drag || !acceptsRef.current.includes(drag.kind as K)) {
+      return;
+    }
     event.preventDefault();
     setIsDragOver(true);
     onDragEnterRef.current?.(drag as Extract<TabDragPayload, { kind: K }>);
   }, []);
 
   const handleDragOver = useCallback((event: DragEvent) => {
-    if (!hasTabDragType(event)) return;
+    if (!hasTabDragType(event)) {
+      return;
+    }
     const drag = currentDragRef.current;
-    if (!drag || !acceptsRef.current.includes(drag.kind as K)) return;
+    if (!drag || !acceptsRef.current.includes(drag.kind as K)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
     const el = elementRef.current;
     if (el) {
       const nextIndex = computeDropInsertIndex(el, event.clientX);
@@ -198,7 +218,9 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     // different document/window where the provider's state isn't
     // visible).
     const payload = readPayloadFromDataTransfer(event) ?? currentDragRef.current ?? null;
-    if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
+    if (!payload || !acceptsRef.current.includes(payload.kind as K)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const el = elementRef.current;

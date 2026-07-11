@@ -133,7 +133,9 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
 
     return () => {
       active = false;
-      if (typeof dispose === 'function') dispose();
+      if (typeof dispose === 'function') {
+        dispose();
+      }
     };
   }, []);
 

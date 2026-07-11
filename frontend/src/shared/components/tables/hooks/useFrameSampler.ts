@@ -117,10 +117,10 @@ export function useFrameSampler({
       }
       sampler.running = false;
 
-      if (sampler.rafId != null && cancelAnimationFrameFn) {
+      if (sampler.rafId !== null && sampler.rafId !== undefined && cancelAnimationFrameFn) {
         cancelAnimationFrameFn(sampler.rafId);
       }
-      if (sampler.timeoutId != null && clearTimeoutFn) {
+      if (sampler.timeoutId !== null && sampler.timeoutId !== undefined && clearTimeoutFn) {
         clearTimeoutFn(sampler.timeoutId);
       }
 
@@ -176,7 +176,7 @@ export function useFrameSampler({
       if (!current.running) {
         return;
       }
-      if (current.lastTimestamp != null) {
+      if (current.lastTimestamp !== null && current.lastTimestamp !== undefined) {
         current.deltas.push(timestamp - current.lastTimestamp);
       }
       current.lastTimestamp = timestamp;

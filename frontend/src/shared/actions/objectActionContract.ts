@@ -136,7 +136,9 @@ const sourceClusterId = (source: ObjectActionIdentitySource): string | undefined
   trimOptional(source.clusterId);
 
 const sourceGroup = (source: ObjectActionIdentitySource): string | undefined => {
-  if (source.group === null || source.group === undefined) return undefined;
+  if (source.group === null || source.group === undefined) {
+    return undefined;
+  }
   return source.group.trim();
 };
 
@@ -166,7 +168,9 @@ const targetObjectDescriptor = ({
   kind?: string;
 }): ObjectActionPermissionDescriptor | null => {
   const resourceKind = sourceKind(source, kind);
-  if (!resourceKind) return null;
+  if (!resourceKind) {
+    return null;
+  }
   return {
     id: capabilityId,
     actionId,
@@ -478,7 +482,9 @@ export const buildObjectActionCapabilityDescriptor = (
   source: ObjectActionIdentitySource
 ): CapabilityDescriptor | null => {
   const descriptor = buildObjectActionPermissionDescriptor(actionId, source);
-  if (!descriptor) return null;
+  if (!descriptor) {
+    return null;
+  }
   return {
     id: descriptor.id,
     clusterId: descriptor.clusterId,

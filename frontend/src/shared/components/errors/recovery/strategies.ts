@@ -87,9 +87,12 @@ export function getRecoveryMessage(strategy: RecoveryStrategy): string {
 }
 
 export function canAutoRecover(strategy: RecoveryStrategy): boolean {
-  return [RecoveryStrategy.RETRY, RecoveryStrategy.REFRESH, RecoveryStrategy.RESET].includes(
-    strategy
-  );
+  const automaticStrategies: RecoveryStrategy[] = [
+    RecoveryStrategy.RETRY,
+    RecoveryStrategy.REFRESH,
+    RecoveryStrategy.RESET,
+  ];
+  return automaticStrategies.includes(strategy);
 }
 
 export function shouldLogToServer(error: Error, strategy: RecoveryStrategy): boolean {

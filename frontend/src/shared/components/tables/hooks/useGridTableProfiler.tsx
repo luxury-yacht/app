@@ -77,7 +77,7 @@ export function useGridTableProfiler({
         return;
       }
 
-      console.table([
+      console.info('GridTable profiler sample', [
         {
           id,
           phase,

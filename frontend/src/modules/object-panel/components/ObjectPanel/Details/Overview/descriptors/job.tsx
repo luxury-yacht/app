@@ -26,7 +26,9 @@ type CronJobDetails = cronjob.CronJobDetails;
  *  the wails-generated type claims `v1.Time`. Treat anything that isn't
  *  a non-empty string as missing. */
 const normalizeTime = (t: unknown): string | undefined => {
-  if (typeof t === 'string' && t.length > 0) return t;
+  if (typeof t === 'string' && t.length > 0) {
+    return t;
+  }
   return undefined;
 };
 
@@ -35,7 +37,9 @@ const normalizeTime = (t: unknown): string | undefined => {
  *  locale conventions. */
 const formatLocalDateTime = (iso: string): string => {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) {
+    return '-';
+  }
   const pad = (n: number) => n.toString().padStart(2, '0');
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
@@ -48,15 +52,23 @@ const formatLocalDateTime = (iso: string): string => {
  *  largest so the readout doesn't jump in hour- or day-sized
  *  increments — useful for both "in X" (future) and "X ago" (past). */
 const formatDuration = (ms: number): string => {
-  if (ms <= 0) return '0s';
+  if (ms <= 0) {
+    return '0s';
+  }
   const totalSec = Math.floor(ms / 1000);
   const days = Math.floor(totalSec / 86_400);
   const hours = Math.floor((totalSec % 86_400) / 3600);
   const mins = Math.floor((totalSec % 3600) / 60);
   const secs = totalSec % 60;
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  if (mins > 0) return `${mins}m`;
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (hours > 0) {
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  if (mins > 0) {
+    return `${mins}m`;
+  }
   return `${secs}s`;
 };
 
@@ -68,9 +80,13 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
   missing = 'Never',
 }) => {
   const iso = normalizeTime(value);
-  if (!iso) return <>{missing}</>;
+  if (!iso) {
+    return <>{missing}</>;
+  }
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return <>{missing}</>;
+  if (Number.isNaN(t)) {
+    return <>{missing}</>;
+  }
   const elapsed = Date.now() - t;
   const label = elapsed <= 0 ? 'just now' : `${formatDuration(elapsed)} ago`;
   return <span title={formatLocalDateTime(iso)}>{label}</span>;
@@ -80,12 +96,20 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
  *  "in 2h 15m"; past as "2h 15m ago"; nil as "—". */
 const formatRelative = (raw: unknown): string => {
   const iso = normalizeTime(raw);
-  if (!iso) return '—';
+  if (!iso) {
+    return '—';
+  }
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) {
+    return '—';
+  }
   const ms = t - Date.now();
-  if (ms > 0) return `in ${formatDuration(ms)}`;
-  if (ms === 0) return 'just now';
+  if (ms > 0) {
+    return `in ${formatDuration(ms)}`;
+  }
+  if (ms === 0) {
+    return 'just now';
+  }
   return `${formatDuration(-ms)} ago`;
 };
 
@@ -184,7 +208,9 @@ const concurrencyTooltip = (policy: string): string | undefined => {
 };
 
 const concurrencyVariant = (policy: string): StatusChipVariant => {
-  if (policy === 'Forbid' || policy === 'Replace') return 'warning';
+  if (policy === 'Forbid' || policy === 'Replace') {
+    return 'warning';
+  }
   return 'info';
 };
 
@@ -192,9 +218,15 @@ const concurrencyVariant = (policy: string): StatusChipVariant => {
  *  to a chip variant. Falls back to info for unknown values. */
 const jobStatusVariant = (status: string): StatusChipVariant => {
   const s = status.toLowerCase();
-  if (s.includes('complete') || s === 'succeeded') return 'healthy';
-  if (s.includes('fail')) return 'unhealthy';
-  if (s.includes('suspend')) return 'warning';
+  if (s.includes('complete') || s === 'succeeded') {
+    return 'healthy';
+  }
+  if (s.includes('fail')) {
+    return 'unhealthy';
+  }
+  if (s.includes('suspend')) {
+    return 'warning';
+  }
   return 'info';
 };
 
@@ -212,7 +244,9 @@ const CronJobHistory: React.FC<{ data: CronJobDetails; context: OverviewContext 
   // Owned Jobs share the CronJob's namespace and cluster.
   const onJobClick = useCallback(
     (jobName: string) => {
-      if (!namespace) return;
+      if (!namespace) {
+        return;
+      }
       openWithObject(
         buildRequiredObjectReference({
           kind: 'Job',
@@ -245,7 +279,9 @@ export const jobDescriptor: OverviewDescriptor<JobDetails> = {
         label: 'Status',
         hidden: (d) => !(d.suspend || d.status),
         render: (d) => {
-          if (d.suspend) return <StatusChip variant="warning">Suspended</StatusChip>;
+          if (d.suspend) {
+            return <StatusChip variant="warning">Suspended</StatusChip>;
+          }
           if (d.status) {
             return <StatusChip variant={jobStatusVariant(d.status)}>{d.status}</StatusChip>;
           }

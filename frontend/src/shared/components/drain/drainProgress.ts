@@ -211,7 +211,7 @@ export function deriveDrainProgress(job: NodeMaintenanceDrainJob): DrainProgress
   let hasError = false;
   let errorMessage: string | undefined;
   for (const event of events) {
-    if (lastActivity == null || event.timestamp > lastActivity) {
+    if (lastActivity === null || lastActivity === undefined || event.timestamp > lastActivity) {
       lastActivity = event.timestamp;
     }
     if (event.kind === 'error' || event.phase === 'error') {

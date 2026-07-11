@@ -66,7 +66,9 @@ export function useGridTableFocusNavigation<T>({
 
   // Derive index from key — the key is the source of truth.
   const focusedRowIndex = useMemo(() => {
-    if (focusedRowKey == null) return null;
+    if (focusedRowKey === null || focusedRowKey === undefined) {
+      return null;
+    }
     const idx = tableData.findIndex((item, i) => keyExtractor(item, i) === focusedRowKey);
     return idx === -1 ? null : idx;
   }, [focusedRowKey, keyExtractor, tableData]);
@@ -103,9 +105,11 @@ export function useGridTableFocusNavigation<T>({
       if (tableData.length > 0) {
         lastNavigationMethodRef.current = 'keyboard';
         setFocusedRowKey((prev) => {
-          if (prev != null) {
+          if (prev !== null && prev !== undefined) {
             const stillExists = tableData.some((item, i) => keyExtractor(item, i) === prev);
-            if (stillExists) return prev;
+            if (stillExists) {
+              return prev;
+            }
           }
           return keyExtractor(tableData[0], 0);
         });
@@ -188,7 +192,12 @@ export function useGridTableFocusNavigation<T>({
   }, [wrapperRef]);
 
   useEffect(() => {
-    if (focusedRowIndex == null || focusedRowKey == null) {
+    if (
+      focusedRowIndex === null ||
+      focusedRowIndex === undefined ||
+      focusedRowKey === null ||
+      focusedRowKey === undefined
+    ) {
       return;
     }
     const currentRow = findGridTableRowByKey(wrapperRef.current, focusedRowKey);

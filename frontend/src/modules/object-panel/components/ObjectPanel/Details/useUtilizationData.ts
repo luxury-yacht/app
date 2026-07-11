@@ -65,7 +65,9 @@ function deriveDetailUtilizationData(
   const objectKind = objectData?.kind?.toLowerCase();
   const hasUtilization = objectKind ? UTILIZATION_KINDS.has(objectKind) : false;
 
-  if (!objectData) return null;
+  if (!objectData) {
+    return null;
+  }
   const d = (detail ?? undefined) as UtilizationDetail | undefined;
 
   // Node utilization
@@ -75,7 +77,9 @@ function deriveDetailUtilizationData(
     const hasMemData =
       d.memoryCapacity || d.memoryAllocatable || d.memRequests || d.memLimits || d.memoryUsage;
 
-    if (!hasCpuData && !hasMemData) return null;
+    if (!hasCpuData && !hasMemData) {
+      return null;
+    }
 
     return {
       cpu: hasCpuData
@@ -105,13 +109,17 @@ function deriveDetailUtilizationData(
     };
   }
 
-  if (!hasUtilization) return null;
+  if (!hasUtilization) {
+    return null;
+  }
 
   // Pod utilization
   if (d && objectKind === 'pod') {
     const hasCpuData = d.cpuUsage || d.cpuRequest || d.cpuLimit;
     const hasMemData = d.memUsage || d.memRequest || d.memLimit;
-    if (!hasCpuData && !hasMemData) return null;
+    if (!hasCpuData && !hasMemData) {
+      return null;
+    }
     return {
       cpu: hasCpuData
         ? { usage: d.cpuUsage || '-', request: d.cpuRequest || '-', limit: d.cpuLimit || '-' }
@@ -140,7 +148,9 @@ function deriveDetailUtilizationData(
     const source = hasSummary ? summary : d;
     const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
     const hasMemData = source.memUsage || source.memRequest || source.memLimit;
-    if (!hasCpuData && !hasMemData) return null;
+    if (!hasCpuData && !hasMemData) {
+      return null;
+    }
     return {
       cpu: hasCpuData
         ? {
@@ -165,7 +175,9 @@ function deriveDetailUtilizationData(
   const od = objectData as unknown as UtilizationDetail;
   const hasCpuData = od.cpuUsage || od.cpuRequest || od.cpuLimit;
   const hasMemData = od.memUsage || od.memRequest || od.memLimit;
-  if (!hasCpuData && !hasMemData) return null;
+  if (!hasCpuData && !hasMemData) {
+    return null;
+  }
   return {
     cpu: hasCpuData
       ? { usage: od.cpuUsage || '-', request: od.cpuRequest || '-', limit: od.cpuLimit || '-' }

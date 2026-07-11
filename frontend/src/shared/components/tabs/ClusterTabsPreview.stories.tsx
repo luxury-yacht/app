@@ -35,7 +35,7 @@ import './stories.css';
 const logAction =
   (name: string) =>
   (...args: unknown[]): void => {
-    console.log(`[ClusterTabsPreview story] ${name}`, ...args);
+    console.info(`[ClusterTabsPreview story] ${name}`, ...args);
   };
 
 /**
@@ -62,7 +62,9 @@ const INITIAL_TABS: ClusterTabMeta[] = [
 /** Move `fromId` to position `toIndex` in the tab list. */
 function reorder(tabs: ClusterTabMeta[], fromId: string, toIndex: number): ClusterTabMeta[] {
   const fromIndex = tabs.findIndex((t) => t.id === fromId);
-  if (fromIndex === -1) return tabs;
+  if (fromIndex === -1) {
+    return tabs;
+  }
   const next = tabs.slice();
   const [moved] = next.splice(fromIndex, 1);
   const adjusted = fromIndex < toIndex ? toIndex - 1 : toIndex;

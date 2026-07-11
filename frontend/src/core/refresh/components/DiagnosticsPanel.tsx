@@ -223,8 +223,12 @@ const resolveScopeDetails = (
       };
     })
     .sort((a, b) => {
-      if (a.label === 'Active' && b.label !== 'Active') return -1;
-      if (b.label === 'Active' && a.label !== 'Active') return 1;
+      if (a.label === 'Active' && b.label !== 'Active') {
+        return -1;
+      }
+      if (b.label === 'Active' && a.label !== 'Active') {
+        return 1;
+      }
       return a.clusterName.localeCompare(b.clusterName);
     });
   // Format as "cluster-A (active), cluster-B, cluster-C".
@@ -1106,7 +1110,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
         const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
 
-        const version = state.version != null ? String(state.version) : '—';
+        const version =
+          state.version !== null && state.version !== undefined ? String(state.version) : '—';
         const streamActive = isResourceStreamDomain
           ? Boolean(streamHealth && streamHealth.reason !== 'inactive')
           : Boolean(streamTelemetry?.activeSessions);
@@ -1202,7 +1207,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
       const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
-      const version = state.version != null ? String(state.version) : '—';
+      const version =
+        state.version !== null && state.version !== undefined ? String(state.version) : '—';
       const streamHealth = toStreamHealthSummary(
         resourceStreamManager.getHealthSnapshot('pods', scope)
       );
@@ -1429,7 +1435,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const name = parts.slice(2).join(':');
         const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
         const label = name ? `ObjPanel - ${tabName} - ${name}` : `ObjPanel - ${tabName}`;
-        const version = state.version != null ? String(state.version) : '—';
+        const version =
+          state.version !== null && state.version !== undefined ? String(state.version) : '—';
         const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
         const roleDetails = resolveScopeRole(domain, scope);
         const healthDetails = resolveHealthDetails({
@@ -1714,7 +1721,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         row.scope === 'Cluster' ||
         row.pendingCount > 0 ||
         row.inFlightCount > 0 ||
-        (activeNamespaceKey != null && row.scope.toLowerCase() === activeNamespaceKey);
+        (activeNamespaceKey !== null &&
+          activeNamespaceKey !== undefined &&
+          row.scope.toLowerCase() === activeNamespaceKey);
       if (isCurrent) {
         current.push(row);
       } else {

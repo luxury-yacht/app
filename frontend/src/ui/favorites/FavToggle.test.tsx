@@ -105,7 +105,9 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 vi.mock('./FavSaveModal', () => ({
   default: ({ isOpen, onClose, onSave, onDelete, existingFavorite }: FavSaveModalProps) => {
-    if (!isOpen) return null;
+    if (!isOpen) {
+      return null;
+    }
     return (
       <div data-testid="fav-save-modal">
         <button

@@ -36,7 +36,9 @@ const AppHeader: React.FC = () => {
         aria-label="Toggle window maximize"
         title="Double-click to maximize or restore the window"
         onClick={(event) => {
-          if (event.detail === 0) toggleWindowMaximize();
+          if (event.detail === 0) {
+            toggleWindowMaximize();
+          }
         }}
         onDoubleClick={toggleWindowMaximize}
       />

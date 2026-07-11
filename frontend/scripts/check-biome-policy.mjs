@@ -14,7 +14,9 @@ export const collectSuppressions = (sources) => {
   for (const { file, content } of sources) {
     content.split('\n').forEach((line, index) => {
       const markerMatch = line.match(/biome-ignore(?:-all|-start|-end)?\s/);
-      if (!markerMatch || markerMatch.index === undefined) return;
+      if (!markerMatch || markerMatch.index === undefined) {
+        return;
+      }
       const suppressionForm = markerMatch[0].trim();
       if (suppressionForm !== 'biome-ignore') {
         errors.push(
@@ -53,10 +55,14 @@ export const collectSuppressions = (sources) => {
 };
 
 const collectOffRulePaths = (value, prefix = []) => {
-  if (!value || typeof value !== 'object') return [];
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
   return Object.entries(value).flatMap(([key, child]) => {
     const rulePath = [...prefix, key];
-    if (child === 'off') return [rulePath.join('.')];
+    if (child === 'off') {
+      return [rulePath.join('.')];
+    }
     return collectOffRulePaths(child, rulePath);
   });
 };
@@ -130,8 +136,12 @@ export const collectConfigPolicyErrors = (config, policy) => {
 
   const fileIncludes = config.files?.includes ?? [];
   const includesExtension = (pattern, extension) => {
-    if (pattern.startsWith('!')) return false;
-    if (pattern.endsWith(`.${extension}`)) return true;
+    if (pattern.startsWith('!')) {
+      return false;
+    }
+    if (pattern.endsWith(`.${extension}`)) {
+      return true;
+    }
     return [...pattern.matchAll(/\{([^{}]+)\}/g)].some((match) =>
       match[1].split(',').includes(extension)
     );
@@ -156,6 +166,17 @@ export const collectConfigPolicyErrors = (config, policy) => {
       JSON.stringify(configuredPlugins.get(pluginPath)) !== JSON.stringify(requiredPlugin.includes)
     ) {
       errors.push(`Biome boundary plugin scope must remain exact: ${pluginPath}`);
+    }
+  }
+
+  for (const requiredScopedRule of policy.requiredScopedRules ?? []) {
+    const matchingOverride = (config.overrides ?? []).find(
+      (override) =>
+        isDeepStrictEqual(override.includes ?? [], requiredScopedRule.includes) &&
+        configuredRuleLevel(override.linter?.rules ?? {}, requiredScopedRule.rule) === 'error'
+    );
+    if (!matchingOverride) {
+      errors.push(`Biome scoped strict rule must remain exact: ${requiredScopedRule.rule}`);
     }
   }
 
@@ -243,7 +264,9 @@ const excludedFiles = new Set([
 export const readSourceFiles = (projectRoot) => {
   const sources = [];
   const visit = (entryPath) => {
-    if (!fs.existsSync(entryPath)) return;
+    if (!fs.existsSync(entryPath)) {
+      return;
+    }
     const stat = fs.statSync(entryPath);
     if (stat.isDirectory()) {
       fs.readdirSync(entryPath)
@@ -253,9 +276,13 @@ export const readSourceFiles = (projectRoot) => {
         });
       return;
     }
-    if (!sourceExtensions.has(path.extname(entryPath))) return;
+    if (!sourceExtensions.has(path.extname(entryPath))) {
+      return;
+    }
     const file = path.relative(projectRoot, entryPath).split(path.sep).join('/');
-    if (excludedFiles.has(file)) return;
+    if (excludedFiles.has(file)) {
+      return;
+    }
     sources.push({ file, content: fs.readFileSync(entryPath, 'utf8') });
   };
   visit(projectRoot);
@@ -289,6 +316,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === modulePath) {
     });
     process.exitCode = 1;
   } else {
-    console.log('Biome configuration and exceptions match the approved policy.');
+    console.info('Biome configuration and exceptions match the approved policy.');
   }
 }

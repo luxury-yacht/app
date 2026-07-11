@@ -30,8 +30,12 @@ const clusterMeta = (context: OverviewContext) => ({
 });
 
 const qosVariant = (qosClass: string): StatusChipVariant => {
-  if (qosClass === 'Guaranteed') return 'healthy';
-  if (qosClass === 'BestEffort') return 'warning';
+  if (qosClass === 'Guaranteed') {
+    return 'healthy';
+  }
+  if (qosClass === 'BestEffort') {
+    return 'warning';
+  }
   return 'info';
 };
 
@@ -57,7 +61,9 @@ const hasOwner = (d: PodDetailInfo): boolean =>
 const renderOwner = (d: PodDetailInfo, context: OverviewContext): React.ReactNode => {
   // The renderer evaluates `render` before honoring `hidden`, so guard the
   // no-owner case here too.
-  if (!hasOwner(d)) return null;
+  if (!hasOwner(d)) {
+    return null;
+  }
   let ownerRef: ReturnType<typeof buildRequiredRelatedObjectReference> | null = null;
   try {
     ownerRef = buildRequiredRelatedObjectReference({
@@ -107,7 +113,9 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         hidden: (d) => !d.ready,
         render: (d) => {
           // `render` runs before `hidden` is honored, so guard the empty case.
-          if (!d.ready) return null;
+          if (!d.ready) {
+            return null;
+          }
           const parts = d.ready.split('/');
           if (parts.length === 2) {
             const readyCount = parseInt(parts[0], 10);

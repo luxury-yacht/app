@@ -45,7 +45,9 @@ function renderField<T>(
   // Decide visibility before doing any work: a hidden row is dropped, so evaluating its
   // render/label/fullWidth resolvers would be wasted — and it would force every conditional
   // render() to re-guard against the absent value to avoid throwing on a row nobody sees.
-  if (field.hidden?.(data)) return null;
+  if (field.hidden?.(data)) {
+    return null;
+  }
 
   const rawValue = field.render
     ? field.render(data, context)
@@ -68,7 +70,9 @@ export function OverviewRenderer<T>({
   data,
   context = {},
 }: OverviewRendererProps<T>): React.ReactElement | null {
-  if (!data) return null;
+  if (!data) {
+    return null;
+  }
   const frame = data as unknown as FrameAccess;
 
   return (
@@ -80,8 +84,12 @@ export function OverviewRenderer<T>({
       />
 
       {withStableListKeys(descriptor.schema.items, (item) => {
-        if (item.kind === 'status') return 'status';
-        if (item.kind === 'widget') return `widget:${item.consumes?.join(',') ?? ''}`;
+        if (item.kind === 'status') {
+          return 'status';
+        }
+        if (item.kind === 'widget') {
+          return `widget:${item.consumes?.join(',') ?? ''}`;
+        }
         return `field:${item.field ?? String(item.label)}`;
       }).map(({ key, value: item }) => {
         const itemKind = (item as { kind?: string }).kind;

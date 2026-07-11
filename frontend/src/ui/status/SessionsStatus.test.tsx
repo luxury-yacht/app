@@ -72,8 +72,12 @@ const kubeconfigState = vi.hoisted(() => ({
   selectedClusterId: 'cluster-a',
   selectedKubeconfigs: ['selection-a', 'selection-b'],
   getClusterMeta: (selection: string) => {
-    if (selection === 'selection-a') return { id: 'cluster-a', name: 'a' };
-    if (selection === 'selection-b') return { id: 'cluster-b', name: 'b' };
+    if (selection === 'selection-a') {
+      return { id: 'cluster-a', name: 'a' };
+    }
+    if (selection === 'selection-b') {
+      return { id: 'cluster-b', name: 'b' };
+    }
     return { id: '', name: '' };
   },
 }));

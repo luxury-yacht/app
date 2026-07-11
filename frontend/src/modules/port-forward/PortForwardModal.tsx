@@ -211,7 +211,9 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     // Validate ports
     if (!isValidPort(containerPort)) {

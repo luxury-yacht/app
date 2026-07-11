@@ -105,7 +105,7 @@ const flushNotify = () => {
 };
 
 const cancelScheduledNotify = () => {
-  if (scheduledNotifyHandle == null) {
+  if (scheduledNotifyHandle === null || scheduledNotifyHandle === undefined) {
     notifyScheduled = false;
     return;
   }

@@ -48,8 +48,12 @@ const clusterMeta = (context: OverviewContext) => ({
  *  Real wire payload formats `Status.Replicas/desired` as a string here; the
  *  DaemonSet DTO reports `ready` as a plain number. */
 const parseLeadingCount = (value: string | number | undefined): number | null => {
-  if (value === undefined) return null;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
   const match = value.trim().match(/^(\d+)/);
   return match ? Number(match[1]) : null;
 };
@@ -65,7 +69,9 @@ const composePodStateCaption = (
   statusLabel: 'available' | 'ready' = 'available'
 ): { headline: string; drift?: string } => {
   const headline = `${available} of ${desired} ${statusLabel}`;
-  if (available >= desired) return { headline };
+  if (available >= desired) {
+    return { headline };
+  }
   if (created < desired) {
     const n = desired - created;
     return { headline, drift: `${n} unscheduled` };
@@ -233,7 +239,9 @@ const renderPodStateWidget = (
   counts: PodStateCounts | null,
   context: OverviewContext
 ): React.ReactNode => {
-  if (!counts) return null;
+  if (!counts) {
+    return null;
+  }
   return (
     <>
       <OverviewItem
@@ -273,7 +281,9 @@ interface ParsedCondition {
 const parseCondition = (raw: string): ParsedCondition | null => {
   // Type: Status [(Reason)] [- Message]
   const m = raw.match(/^([A-Za-z]+):\s*([A-Za-z]+)\s*(?:\(([^)]+)\))?(?:\s*-\s*(.+))?$/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   return {
     type: m[1],
     status: m[2],
@@ -283,10 +293,14 @@ const parseCondition = (raw: string): ParsedCondition | null => {
 };
 
 const findCondition = (conditions: string[] | undefined, type: string): ParsedCondition | null => {
-  if (!conditions) return null;
+  if (!conditions) {
+    return null;
+  }
   for (const raw of conditions) {
     const parsed = parseCondition(raw);
-    if (parsed && parsed.type === type) return parsed;
+    if (parsed && parsed.type === type) {
+      return parsed;
+    }
   }
   return null;
 };
@@ -295,8 +309,12 @@ const findCondition = (conditions: string[] | undefined, type: string): ParsedCo
 // chip variant. Complete states are filtered out at the call site.
 const rolloutStatusVariant = (status: string): StatusChipVariant => {
   const s = status.toLowerCase();
-  if (s.includes('fail') || s === 'replicafailure') return 'unhealthy';
-  if (s.includes('progress')) return 'info';
+  if (s.includes('fail') || s === 'replicafailure') {
+    return 'unhealthy';
+  }
+  if (s.includes('progress')) {
+    return 'info';
+  }
   return 'info';
 };
 
@@ -344,11 +362,13 @@ const podManagementTooltip = (policy: string): string | undefined => {
 const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode | undefined => {
   switch (strategy) {
     case 'RollingUpdate':
-      if (kind === 'deployment')
+      if (kind === 'deployment') {
         return 'Pods are replaced incrementally, controlled by maxSurge and maxUnavailable.';
-      if (kind === 'daemonset')
+      }
+      if (kind === 'daemonset') {
         return 'Pods are replaced one node at a time, respecting maxUnavailable.';
-      if (kind === 'statefulset')
+      }
+      if (kind === 'statefulset') {
         return (
           <>
             Pods are replaced in reverse ordinal order, one at a time.
@@ -358,6 +378,7 @@ const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode 
             allowing staged rollouts.
           </>
         );
+      }
       return undefined;
     case 'Recreate':
       return (
@@ -399,7 +420,9 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
   const serviceAccount = d.serviceAccount !== 'default' ? d.serviceAccount : undefined;
   const nodeSelector =
     d.nodeSelector && Object.keys(d.nodeSelector).length > 0 ? d.nodeSelector : undefined;
-  if (!serviceAccount && !nodeSelector && tolerations.length === 0) return null;
+  if (!serviceAccount && !nodeSelector && tolerations.length === 0) {
+    return null;
+  }
 
   return (
     <>
@@ -535,7 +558,9 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     label: 'Availability',
     render: (d) => {
       const c = findCondition(d.conditions, 'Available');
-      if (c?.status !== 'False') return null;
+      if (c?.status !== 'False') {
+        return null;
+      }
       const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
       return (
         <StatusChip variant="unhealthy" tooltip={tip}>
@@ -549,7 +574,9 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     label: 'Replica Failure',
     render: (d) => {
       const c = findCondition(d.conditions, 'ReplicaFailure');
-      if (c?.status !== 'True') return null;
+      if (c?.status !== 'True') {
+        return null;
+      }
       const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
       return (
         <StatusChip variant="unhealthy" tooltip={tip}>
@@ -569,7 +596,9 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
         d.rolloutStatus === 'complete' ||
         (d.rolloutStatus === 'progressing' &&
           d.rolloutMessage?.includes('successfully progressed'));
-      if (!d.rolloutStatus || isActuallyComplete) return null;
+      if (!d.rolloutStatus || isActuallyComplete) {
+        return null;
+      }
       return (
         <StatusChip variant={rolloutStatusVariant(d.rolloutStatus)}>{d.rolloutStatus}</StatusChip>
       );
@@ -584,7 +613,9 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
         d.rolloutStatus === 'complete' ||
         (d.rolloutStatus === 'progressing' &&
           d.rolloutMessage?.includes('successfully progressed'));
-      if (!d.rolloutStatus || isActuallyComplete || !d.rolloutMessage) return null;
+      if (!d.rolloutStatus || isActuallyComplete || !d.rolloutMessage) {
+        return null;
+      }
       return d.rolloutMessage;
     },
   },
@@ -876,7 +907,9 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
       const retention = d.pvcRetentionPolicy ?? {};
       const hasTemplates = templates.length > 0;
       const hasRetention = Object.keys(retention).length > 0;
-      if (!hasTemplates && !hasRetention) return null;
+      if (!hasTemplates && !hasRetention) {
+        return null;
+      }
       return (
         <>
           {/* Visual separator before the volumes group. */}

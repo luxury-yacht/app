@@ -103,7 +103,9 @@ const renderReplicasSummary = (d: HorizontalPodAutoscalerDetails): React.ReactNo
   const hasData =
     d.currentReplicas !== undefined || d.minReplicas !== undefined || d.maxReplicas !== undefined;
 
-  if (!hasData) return undefined;
+  if (!hasData) {
+    return undefined;
+  }
 
   return (
     <div className="policy-detail-rows">
@@ -143,7 +145,9 @@ const findCurrentMetric = (
   const target = metric.target ?? {};
 
   return currentMetrics.find((candidate) => {
-    if (candidate.kind?.toLowerCase() !== kind) return false;
+    if (candidate.kind?.toLowerCase() !== kind) {
+      return false;
+    }
 
     const currentData = candidate.current ?? {};
     if (kind === 'resource') {
@@ -277,7 +281,9 @@ const renderMetricsWidget = (d: HorizontalPodAutoscalerDetails): React.ReactNode
 // Build the scale-target link reference. Prefers the apiVersion the HPA explicitly references so
 // CRD scale targets keep their real GVK. Returns null when the reference can't be resolved.
 const scaleTargetReference = (d: HorizontalPodAutoscalerDetails, context: OverviewContext) => {
-  if (!d.scaleTargetRef) return null;
+  if (!d.scaleTargetRef) {
+    return null;
+  }
   try {
     return buildRequiredRelatedObjectReference({
       kind: d.scaleTargetRef.kind,
@@ -301,7 +307,9 @@ export const hpaDescriptor: OverviewDescriptor<HorizontalPodAutoscalerDetails> =
         field: 'scaleTargetRef',
         label: 'Target',
         render: (d, context) => {
-          if (!d.scaleTargetRef) return undefined;
+          if (!d.scaleTargetRef) {
+            return undefined;
+          }
           const ref = scaleTargetReference(d, context);
           const label = `${d.scaleTargetRef.kind}/${d.scaleTargetRef.name}`;
           return ref ? <ObjectPanelLink objectRef={ref}>{label}</ObjectPanelLink> : label;

@@ -173,7 +173,9 @@ class RefreshManager {
    */
   public unregister(name: RefresherName): void {
     const instance = this.refreshers.get(name);
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
 
     // Clear all timers
     this.clearTimers(instance);
@@ -188,7 +190,9 @@ class RefreshManager {
    */
   public enable(name: RefresherName): void {
     const instance = this.refreshers.get(name);
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
     if (instance.isEnabled) {
       if (this.isGloballyPaused) {
         instance.state.status = 'paused';
@@ -216,7 +220,9 @@ class RefreshManager {
    */
   public disable(name: RefresherName): void {
     const instance = this.refreshers.get(name);
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
 
     if (!instance.isEnabled && instance.state.status === 'disabled') {
       return;
@@ -423,7 +429,9 @@ class RefreshManager {
    */
   private startRefresher(name: RefresherName): void {
     const instance = this.refreshers.get(name);
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
 
     if (!instance.isEnabled) {
       instance.state.status = 'disabled';
@@ -590,17 +598,23 @@ class RefreshManager {
    */
   private async refreshSingle(name: RefresherName, isManual: boolean): Promise<void> {
     const instance = this.refreshers.get(name);
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
 
     if (!instance.isEnabled && !isManual) {
       return;
     }
 
     // Don't refresh if globally paused (unless manual refresh)
-    if (this.isGloballyPaused && !isManual) return;
+    if (this.isGloballyPaused && !isManual) {
+      return;
+    }
 
     // Don't refresh if individually paused (unless manual refresh)
-    if (instance.state.status === 'paused' && !isManual) return;
+    if (instance.state.status === 'paused' && !isManual) {
+      return;
+    }
 
     // Handle concurrent refresh based on type
     if (instance.state.status === 'refreshing') {

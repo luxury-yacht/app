@@ -108,8 +108,15 @@ export function createResourceBarColumn<T>(
   };
 
   const parseResourceForExport = (value: string | undefined): number => {
-    if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set')
+    if (
+      !value ||
+      value === '-' ||
+      value === 'undefined' ||
+      value === 'null' ||
+      value === 'not set'
+    ) {
       return 0;
+    }
 
     if (type === 'cpu') {
       if (value.endsWith('m')) {

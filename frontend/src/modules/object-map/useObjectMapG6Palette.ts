@@ -18,7 +18,9 @@ export const useObjectMapG6Palette = (containerRef: RefObject<HTMLElement | null
 
   const refreshPalette = useCallback(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     const nextPalette = readObjectMapG6Palette(container);
     setPalette((previousPalette) =>
       sameObjectMapG6Palette(previousPalette, nextPalette) ? previousPalette : nextPalette
@@ -32,7 +34,9 @@ export const useObjectMapG6Palette = (containerRef: RefObject<HTMLElement | null
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     let frame = 0;
     const schedulePaletteRefresh = () => {
       cancelAnimationFrame(frame);
@@ -41,7 +45,9 @@ export const useObjectMapG6Palette = (containerRef: RefObject<HTMLElement | null
     const observer = new MutationObserver(schedulePaletteRefresh);
     const observed = new Set<HTMLElement>([document.documentElement, document.body, container]);
     const objectMapRoot = container.closest<HTMLElement>('.object-map');
-    if (objectMapRoot) observed.add(objectMapRoot);
+    if (objectMapRoot) {
+      observed.add(objectMapRoot);
+    }
     observed.forEach((element) => {
       observer.observe(element, {
         attributes: true,

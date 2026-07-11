@@ -134,7 +134,9 @@ const ScaleModal = ({
               onChange={handleInputChange}
               onBlur={handleBlur}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !unchanged) onApply();
+                if (e.key === 'Enter' && !unchanged) {
+                  onApply();
+                }
               }}
               className="scale-input"
               disabled={loading}

@@ -228,7 +228,9 @@ export const runtimeOperationStatusReducer = (
 };
 
 function parseTimestamp(value?: string | { time?: string }): number {
-  if (!value) return 0;
+  if (!value) {
+    return 0;
+  }
   if (typeof value === 'string') {
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? 0 : parsed;

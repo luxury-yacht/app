@@ -1593,7 +1593,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Schedule copy feedback reset, cancelling any prior pending timer
   const scheduleCopyReset = useCallback(() => {
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
     copyTimerRef.current = setTimeout(
       () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
       750
@@ -1603,7 +1605,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // Clean up copy timer on unmount
   useEffect(() => {
     return () => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
     };
   }, []);
 
@@ -1628,7 +1632,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         });
         const containerList = result.status === 'executed' ? (result.data ?? []) : [];
 
-        if (isCancelled) return;
+        if (isCancelled) {
+          return;
+        }
 
         if (!containerList || containerList.length === 0) {
           dispatch({ type: 'SET_CONTAINERS', payload: [] });
@@ -1639,7 +1645,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         dispatch({ type: 'SET_CONTAINERS', payload: containerList });
         dispatch({ type: 'SET_SELECTED_CONTAINER', payload: isWorkload ? '' : ALL_CONTAINERS });
       } catch (err) {
-        if (isCancelled) return;
+        if (isCancelled) {
+          return;
+        }
         console.warn('Failed to fetch containers:', err);
         dispatch({ type: 'SET_CONTAINERS', payload: [] });
         dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
@@ -1671,7 +1679,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
 
   const tableColumns = useMemo(() => {
-    if (derivedFieldKeys.length === 0) return [];
+    if (derivedFieldKeys.length === 0) {
+      return [];
+    }
 
     const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
 

@@ -64,7 +64,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const valuesError = snapshot.error ?? null;
 
   const hasPath = useCallback((obj: HelmValue | undefined, path: string[]): boolean => {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return false;
+    }
     let current: HelmValue = obj;
     for (const key of path) {
       if (
@@ -106,7 +108,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       userVals: HelmValue | undefined,
       path: string[] = []
     ): HelmValue | undefined => {
-      if (allVals === null || allVals === undefined) return allVals;
+      if (allVals === null || allVals === undefined) {
+        return allVals;
+      }
       if (typeof allVals !== 'object' || Array.isArray(allVals)) {
         if (hasPath(userVals, path)) {
           return undefined;
@@ -143,7 +147,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       userValues: HelmValue | undefined,
       path: string[] = []
     ): HelmValue | undefined => {
-      if (obj === null || obj === undefined) return obj;
+      if (obj === null || obj === undefined) {
+        return obj;
+      }
       if (typeof obj !== 'object' || Array.isArray(obj)) {
         if (hasPath(userValues, path)) {
           return getValueAtPath(userValues, path);
@@ -174,7 +180,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       _allVals: HelmValue | undefined,
       path: string[] = []
     ): HelmValue | undefined => {
-      if (userVals === null || userVals === undefined) return userVals;
+      if (userVals === null || userVals === undefined) {
+        return userVals;
+      }
       if (typeof userVals !== 'object' || Array.isArray(userVals)) {
         return userVals;
       }

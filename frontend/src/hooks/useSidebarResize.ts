@@ -17,10 +17,18 @@ export function getSidebarWidthFromKey(
   maxWidth = SIDEBAR_MAX_WIDTH
 ): number | null {
   const clamp = (width: number) => Math.max(minWidth, Math.min(maxWidth, width));
-  if (key === 'ArrowLeft') return clamp(currentWidth - SIDEBAR_KEYBOARD_STEP);
-  if (key === 'ArrowRight') return clamp(currentWidth + SIDEBAR_KEYBOARD_STEP);
-  if (key === 'Home') return minWidth;
-  if (key === 'End') return maxWidth;
+  if (key === 'ArrowLeft') {
+    return clamp(currentWidth - SIDEBAR_KEYBOARD_STEP);
+  }
+  if (key === 'ArrowRight') {
+    return clamp(currentWidth + SIDEBAR_KEYBOARD_STEP);
+  }
+  if (key === 'Home') {
+    return minWidth;
+  }
+  if (key === 'End') {
+    return maxWidth;
+  }
   return null;
 }
 
@@ -66,7 +74,9 @@ export function useSidebarResize({
 
   // Handle document-level mouse events during resize
   useEffect(() => {
-    if (!isResizing) return;
+    if (!isResizing) {
+      return;
+    }
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);

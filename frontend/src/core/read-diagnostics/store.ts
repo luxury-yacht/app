@@ -108,7 +108,7 @@ const getOrCreateEntry = (options: BeginBrokerReadOptions): BrokerReadDiagnostic
 };
 
 const normalizeError = (error: unknown): string | null => {
-  if (error == null) {
+  if (error === null || error === undefined) {
     return null;
   }
   if (error instanceof Error) {

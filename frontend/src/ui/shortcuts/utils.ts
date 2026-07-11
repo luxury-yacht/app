@@ -14,10 +14,18 @@ export function formatShortcut(key: string, modifiers?: ShortcutModifiers): stri
   // Use appropriate symbols based on platform
   const isMac = navigator.userAgent.includes('Mac');
 
-  if (modifiers?.meta) parts.push(isMac ? '⌘' : 'Win');
-  if (modifiers?.ctrl) parts.push(isMac ? '⌃' : 'Ctrl');
-  if (modifiers?.alt) parts.push(isMac ? '⌥' : 'Alt');
-  if (modifiers?.shift) parts.push(isMac ? '⇧' : 'Shift');
+  if (modifiers?.meta) {
+    parts.push(isMac ? '⌘' : 'Win');
+  }
+  if (modifiers?.ctrl) {
+    parts.push(isMac ? '⌃' : 'Ctrl');
+  }
+  if (modifiers?.alt) {
+    parts.push(isMac ? '⌥' : 'Alt');
+  }
+  if (modifiers?.shift) {
+    parts.push(isMac ? '⇧' : 'Shift');
+  }
 
   // Format the key
   const formattedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -41,18 +49,30 @@ export function modifiersMatch(event: KeyboardEvent, modifiers?: ShortcutModifie
 // Helper to create a shortcut key string for Map keys
 export function getShortcutKey(key: string, modifiers?: ShortcutModifiers): string {
   const parts: string[] = [];
-  if (modifiers?.meta) parts.push('meta');
-  if (modifiers?.ctrl) parts.push('ctrl');
-  if (modifiers?.alt) parts.push('alt');
-  if (modifiers?.shift) parts.push('shift');
+  if (modifiers?.meta) {
+    parts.push('meta');
+  }
+  if (modifiers?.ctrl) {
+    parts.push('ctrl');
+  }
+  if (modifiers?.alt) {
+    parts.push('alt');
+  }
+  if (modifiers?.shift) {
+    parts.push('shift');
+  }
   parts.push(key.toLowerCase());
   return parts.join('+');
 }
 
 // Check if user is typing in an input field
 export const resolveEventElement = (target: EventTarget | null): HTMLElement | null => {
-  if (!target) return null;
-  if (target instanceof HTMLElement) return target;
+  if (!target) {
+    return null;
+  }
+  if (target instanceof HTMLElement) {
+    return target;
+  }
   if (target instanceof Node) {
     return target.parentElement;
   }
@@ -72,7 +92,9 @@ export function isInputElement(target: EventTarget | null): boolean {
     const anchorNode = selection?.anchorNode ?? null;
     element = resolveEventElement(anchorNode);
   }
-  if (!element) return false;
+  if (!element) {
+    return false;
+  }
 
   const tagName = element.tagName.toLowerCase();
   const contentEditable = element.contentEditable;

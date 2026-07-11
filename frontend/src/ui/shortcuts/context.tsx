@@ -414,7 +414,9 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
   // Handle keyboard events
   useEffect(() => {
-    if (!isEnabled || disabled) return;
+    if (!isEnabled || disabled) {
+      return;
+    }
 
     const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') {

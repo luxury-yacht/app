@@ -23,9 +23,11 @@
       "performance.noDelete",
       "suspicious.noArrayIndexKey",
       "suspicious.noConfusingVoidType",
+      "suspicious.noConsole",
       "suspicious.noExplicitAny",
       "suspicious.noEmptyBlockStatements",
       "suspicious.noEvolvingTypes",
+      "suspicious.noEqualsToNull",
       "suspicious.noForIn",
       "suspicious.noImportCycles",
       "suspicious.noLeakedRender",
@@ -38,19 +40,33 @@
       "suspicious.noSkippedTests",
       "suspicious.noUnusedExpressions",
       "suspicious.useGuardForIn",
+      "suspicious.useStrictMode",
       "suspicious.useIterableCallbackReturn",
       "style.noDescendingSpecificity",
+      "style.noEnum",
       "style.noNonNullAssertion",
       "style.noParameterAssign",
+      "style.noParameterProperties",
       "style.noRestrictedImports",
-      "style.noUnusedTemplateLiteral"
+      "style.noUnusedTemplateLiteral",
+      "style.useBlockStatements",
+      "style.useConsistentObjectDefinitions"
     ],
     "requiredRuleOptions": {
       "complexity.useMaxParams": {
         "max": 7
+      },
+      "suspicious.noConsole": {
+        "allow": ["assert", "error", "group", "groupCollapsed", "groupEnd", "info", "warn"]
       }
     },
     "requiredFileExtensions": ["mjs", "cjs"],
+    "requiredScopedRules": [
+      {
+        "rule": "correctness.noNodejsModules",
+        "includes": ["src/**", "!src/**/*.test.*", "!src/**/*.stories.*"]
+      }
+    ],
     "requiredPlugins": [
       {
         "path": "./biome-plugins/no-direct-fetch.grit",

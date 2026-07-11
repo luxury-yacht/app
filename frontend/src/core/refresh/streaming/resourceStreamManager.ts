@@ -99,7 +99,7 @@ const normalizeStreamScope = (domain: DoorbellDomain, scope: unknown): string | 
     return null;
   }
   // Cluster-scoped updates omit scope in JSON, so treat missing scope as empty.
-  if (scope == null && isClusterScopedDomain(domain)) {
+  if ((scope === null || scope === undefined) && isClusterScopedDomain(domain)) {
     return '';
   }
   return null;

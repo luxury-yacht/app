@@ -555,7 +555,9 @@ describe('ContainerLogsStreamManager', () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];
       listeners: Record<string, (evt?: unknown) => void> = {};
-      constructor(public url: string) {
+      url: string;
+      constructor(url: string) {
+        this.url = url;
         MockEventSource.instances.push(this);
       }
       addEventListener(type: string, handler: (evt?: unknown) => void) {

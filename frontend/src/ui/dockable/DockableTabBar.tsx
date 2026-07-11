@@ -76,7 +76,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       {
         getDragImage: () => {
           const previewEl = dragPreviewRef.current;
-          if (!previewEl) return null;
+          if (!previewEl) {
+            return null;
+          }
           const labelEl = previewEl.querySelector<HTMLSpanElement>(
             '.dockable-tab-drag-preview__label'
           );

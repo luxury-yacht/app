@@ -28,12 +28,16 @@ function ToggleSwitch({
   className = '',
 }: ToggleSwitchProps) {
   const handleClick = () => {
-    if (disabled) return;
+    if (disabled) {
+      return;
+    }
     onChange(!checked);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (disabled) return;
+    if (disabled) {
+      return;
+    }
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       onChange(!checked);

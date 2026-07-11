@@ -57,21 +57,29 @@ const renderHarness = async (tableData: SampleRow[]) => {
       tableRef,
       tableData,
       parseWidthInputToNumber: (input) => {
-        if (typeof input === 'number') return input;
-        if (!input || input === 'auto') return null;
+        if (typeof input === 'number') {
+          return input;
+        }
+        if (!input || input === 'auto') {
+          return null;
+        }
         const numeric = Number.parseFloat(input);
         return Number.isFinite(numeric) ? numeric : null;
       },
       defaultColumnWidth: 150,
       isKindColumnKey: (key) => key === 'kind',
       getTextContent: (node) => {
-        if (typeof node === 'string') return node;
+        if (typeof node === 'string') {
+          return node;
+        }
         if (Array.isArray(node)) {
           return node.map((item) => (typeof item === 'string' ? item : '')).join('');
         }
         if (React.isValidElement(node)) {
           const props = node.props as { children?: React.ReactNode };
-          if (typeof props.children === 'string') return props.children;
+          if (typeof props.children === 'string') {
+            return props.children;
+          }
         }
         return '';
       },

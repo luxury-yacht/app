@@ -53,7 +53,9 @@ const updateObjectMapG6CanvasDevicePixelRatio = (
   width: number,
   height: number
 ): boolean => {
-  if (graph.destroyed || width <= 0 || height <= 0) return false;
+  if (graph.destroyed || width <= 0 || height <= 0) {
+    return false;
+  }
   const canvas = graph.getCanvas();
   const nextDevicePixelRatio = objectMapG6DevicePixelRatioForAppZoom(appZoomLevel);
   const config = canvas.getConfig();
@@ -61,7 +63,9 @@ const updateObjectMapG6CanvasDevicePixelRatio = (
   const changed =
     config.devicePixelRatio !== nextDevicePixelRatio ||
     layers.some((layer) => layer.context.config.devicePixelRatio !== nextDevicePixelRatio);
-  if (!changed) return false;
+  if (!changed) {
+    return false;
+  }
   config.devicePixelRatio = nextDevicePixelRatio;
   layers.forEach((layer) => {
     layer.context.config.devicePixelRatio = nextDevicePixelRatio;
@@ -97,7 +101,9 @@ export const useObjectMapG6Viewport = ({
 
   const shouldSuppressAutoFitForAppZoomResize = useCallback(() => {
     const suppression = appZoomResizeSuppressionRef.current;
-    if (!suppression) return false;
+    if (!suppression) {
+      return false;
+    }
     const isSameWindowSize =
       window.innerWidth === suppression.windowWidth &&
       window.innerHeight === suppression.windowHeight;
@@ -109,7 +115,9 @@ export const useObjectMapG6Viewport = ({
   }, [clearAppZoomResizeSuppression]);
 
   useLayoutEffect(() => {
-    if (previousAppZoomLevelRef.current === appZoomLevel) return undefined;
+    if (previousAppZoomLevelRef.current === appZoomLevel) {
+      return undefined;
+    }
     previousAppZoomLevelRef.current = appZoomLevel;
     clearAppZoomResizeSuppression();
     const timeoutId = setTimeout(() => {
@@ -134,10 +142,14 @@ export const useObjectMapG6Viewport = ({
   useEffect(() => clearAppZoomResizeSuppression, [clearAppZoomResizeSuppression]);
 
   const scheduleFitGraphToView = useCallback(() => {
-    if (!graphReady) return;
+    if (!graphReady) {
+      return;
+    }
     const graph = graphRef.current;
     const currentPalette = paletteRef.current;
-    if (!graph || graph.destroyed || !currentPalette) return;
+    if (!graph || graph.destroyed || !currentPalette) {
+      return;
+    }
     void fitObjectMapG6GraphToView(graph, currentPalette.fitViewPadding)
       .then(updateTooltipPosition)
       .catch((error: unknown) => {
@@ -150,10 +162,14 @@ export const useObjectMapG6Viewport = ({
   const resizeGraphToContainer = useCallback(() => {
     const graph = graphRef.current;
     const container = containerRef.current;
-    if (!graph || graph.destroyed || !container) return;
+    if (!graph || graph.destroyed || !container) {
+      return;
+    }
     const width = container.clientWidth;
     const height = container.clientHeight;
-    if (width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
     const [currentWidth, currentHeight] = graph.getSize();
     const devicePixelRatioChanged = updateObjectMapG6CanvasDevicePixelRatio(
       graph,
@@ -183,7 +199,9 @@ export const useObjectMapG6Viewport = ({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      return;
+    }
     let frame = 0;
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
@@ -198,7 +216,9 @@ export const useObjectMapG6Viewport = ({
   }, [containerRef, resizeGraphToContainer]);
 
   useEffect(() => {
-    if (!onViewportControlsChange) return;
+    if (!onViewportControlsChange) {
+      return;
+    }
     if (!graphReady) {
       onViewportControlsChange(null);
       return;
@@ -206,19 +226,25 @@ export const useObjectMapG6Viewport = ({
     const controls: ObjectMapViewportControls = {
       zoomIn: () => {
         const graph = graphRef.current;
-        if (!graph || graph.destroyed) return;
+        if (!graph || graph.destroyed) {
+          return;
+        }
         onUserViewportChangeRef.current?.();
         void graph.zoomBy(1.2, false);
       },
       zoomOut: () => {
         const graph = graphRef.current;
-        if (!graph || graph.destroyed) return;
+        if (!graph || graph.destroyed) {
+          return;
+        }
         onUserViewportChangeRef.current?.();
         void graph.zoomBy(0.8, false);
       },
       resetZoom: () => {
         const graph = graphRef.current;
-        if (!graph || graph.destroyed) return;
+        if (!graph || graph.destroyed) {
+          return;
+        }
         onUserViewportChangeRef.current?.();
         void resetObjectMapG6GraphZoom(graph)
           .then(updateTooltipPosition)
@@ -233,7 +259,9 @@ export const useObjectMapG6Viewport = ({
       },
       focusNode: (nodeId: string) => {
         const graph = graphRef.current;
-        if (!graph || graph.destroyed) return;
+        if (!graph || graph.destroyed) {
+          return;
+        }
         void graph.focusElement(nodeId, false).catch((error: unknown) => {
           if (graphRef.current === graph && !graph.destroyed) {
             console.error('[ObjectMapG6Renderer] Failed to focus node:', error);
@@ -255,7 +283,9 @@ export const useObjectMapG6Viewport = ({
   useEffect(() => {
     void data;
     void palette;
-    if (!autoFit || !graphReady) return;
+    if (!autoFit || !graphReady) {
+      return;
+    }
     scheduleFitGraphToView();
   }, [autoFit, graphReady, scheduleFitGraphToView, data, palette]);
 };

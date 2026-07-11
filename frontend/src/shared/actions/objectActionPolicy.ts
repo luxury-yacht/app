@@ -176,7 +176,9 @@ const extractDesiredReplicas = (object: ObjectActionData): number | null => {
     return Math.max(0, object.desiredReplicas);
   }
   const ready = object.ready?.trim();
-  if (!ready) return null;
+  if (!ready) {
+    return null;
+  }
   const segments = ready.split('/');
   const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
   return Number.isFinite(candidate) ? Math.max(0, candidate) : null;

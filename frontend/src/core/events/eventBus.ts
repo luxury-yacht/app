@@ -180,7 +180,9 @@ class EventBus {
     ...args: AppEvents[K] extends void ? [] : [AppEvents[K]]
   ): void {
     const subs = this.listeners.get(event);
-    if (!subs) return;
+    if (!subs) {
+      return;
+    }
 
     const payload = args[0];
     const toRemove: Subscription[] = [];
@@ -211,7 +213,9 @@ class EventBus {
 
   off<K extends keyof AppEvents>(event: K, callback: EventCallback<AppEvents[K]>): void {
     const subs = this.listeners.get(event);
-    if (!subs) return;
+    if (!subs) {
+      return;
+    }
 
     for (const sub of subs) {
       if (sub.callback === callback) {

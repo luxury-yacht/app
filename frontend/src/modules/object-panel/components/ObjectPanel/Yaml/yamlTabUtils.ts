@@ -48,7 +48,9 @@ export const prepareDraftYaml = (raw: string, includeManagedFields: boolean): st
 };
 
 export const applyResourceVersionToYaml = (yamlText: string, resourceVersion: string): string => {
-  if (!resourceVersion) return yamlText;
+  if (!resourceVersion) {
+    return yamlText;
+  }
   try {
     const doc = YAML.parseDocument(yamlText);
     doc.setIn(['metadata', 'resourceVersion'], resourceVersion);

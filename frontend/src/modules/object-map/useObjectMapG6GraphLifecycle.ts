@@ -68,7 +68,9 @@ export const useObjectMapG6GraphLifecycle = ({
     onGraphReadyChange?.(false);
     const container = containerRef.current;
     const initialPalette = paletteRef.current;
-    if (!container || !paletteReady || !initialPalette) return;
+    if (!container || !paletteReady || !initialPalette) {
+      return;
+    }
     ensureObjectMapG6CardNodeRegistered();
     ensureObjectMapG6PathEdgeRegistered();
     const initialData = dataRef.current;

@@ -20,7 +20,9 @@ const nodeCenter = (
   data: GraphData,
   id: string | null | undefined
 ): { x: number; y: number } | null => {
-  if (!id) return null;
+  if (!id) {
+    return null;
+  }
   const node = graphNodes(data).find((entry) => entry.id === id);
   const x = Number(node?.style?.x);
   const y = Number(node?.style?.y);
@@ -33,30 +35,46 @@ const nodeViewportPoint = (
   id: string | null | undefined
 ): { x: number; y: number } | null => {
   const center = nodeCenter(data, id);
-  if (!center) return null;
+  if (!center) {
+    return null;
+  }
   const [x, y] = graph.getViewportByCanvas([center.x, center.y]);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 };
 
 const sameIds = <T extends { id?: string }>(previous: T[], next: T[]): boolean => {
-  if (previous.length !== next.length) return false;
+  if (previous.length !== next.length) {
+    return false;
+  }
   const previousIds = new Set(previous.map((entry) => entry.id));
   return next.every((entry) => entry.id && previousIds.has(entry.id));
 };
 
 const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
-  if (previous === next) return false;
-  if (!Array.isArray(previous) || !Array.isArray(next)) return true;
+  if (previous === next) {
+    return false;
+  }
+  if (!Array.isArray(previous) || !Array.isArray(next)) {
+    return true;
+  }
   return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
 };
 
 const objectMapPathChanged = (previous?: unknown, next?: unknown): boolean => {
-  if (previous === next) return false;
-  if (!Array.isArray(previous) || !Array.isArray(next)) return true;
-  if (previous.length !== next.length) return true;
+  if (previous === next) {
+    return false;
+  }
+  if (!Array.isArray(previous) || !Array.isArray(next)) {
+    return true;
+  }
+  if (previous.length !== next.length) {
+    return true;
+  }
   return previous.some((previousSegment, segmentIndex) => {
     const nextSegment = next[segmentIndex];
-    if (!Array.isArray(previousSegment) || !Array.isArray(nextSegment)) return true;
+    if (!Array.isArray(previousSegment) || !Array.isArray(nextSegment)) {
+      return true;
+    }
     return (
       previousSegment.length !== nextSegment.length ||
       previousSegment.some((value, valueIndex) => value !== nextSegment[valueIndex])
@@ -153,9 +171,13 @@ export const applyGraphData = async (
     options.preserveViewportNodeId
   );
   const preserveViewportForNode = async () => {
-    if (!previousViewportPoint) return;
+    if (!previousViewportPoint) {
+      return;
+    }
     const nextViewportPoint = nodeViewportPoint(graph, nextData, options.preserveViewportNodeId);
-    if (!nextViewportPoint) return;
+    if (!nextViewportPoint) {
+      return;
+    }
     await graph.translateBy(
       [
         previousViewportPoint.x - nextViewportPoint.x,
@@ -183,10 +205,16 @@ export const applyGraphData = async (
     return !previous || edgeChanged(previous, edge);
   });
 
-  if (nodeUpdates.length === 0 && edgeUpdates.length === 0) return;
+  if (nodeUpdates.length === 0 && edgeUpdates.length === 0) {
+    return;
+  }
   const patch: { nodes?: NodeData[]; edges?: EdgeData[] } = {};
-  if (nodeUpdates.length > 0) patch.nodes = nodeUpdates;
-  if (edgeUpdates.length > 0) patch.edges = edgeUpdates;
+  if (nodeUpdates.length > 0) {
+    patch.nodes = nodeUpdates;
+  }
+  if (edgeUpdates.length > 0) {
+    patch.edges = edgeUpdates;
+  }
   graph.updateData(patch);
   await graph.draw();
   await preserveViewportForNode();
@@ -198,7 +226,9 @@ export const applySelectionState = async (
   selectionState: ObjectMapSelectionState,
   hoveredEdgeId: string | null = null
 ): Promise<void> => {
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   const states: Record<string, string[]> = {};
   const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
   const hoveredNodeIds = new Set(hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []);
@@ -210,7 +240,9 @@ export const applySelectionState = async (
     const edgeStates = objectMapG6EdgeState(edge, selectionState);
     states[edge.id] = edge.id === hoveredEdgeId ? [...edgeStates, 'hovered'] : edgeStates;
   });
-  if (graph.destroyed) return;
+  if (graph.destroyed) {
+    return;
+  }
   await graph.setElementState(states, false);
 };
 
@@ -297,7 +329,9 @@ export const createObjectMapG6ApplyQueue = ({
     nextSelectionState: ObjectMapSelectionState
   ) => {
     const graph = getGraph();
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     if (!graphReady) {
       selectionApply.latest = {
         layout: nextLayout,
@@ -308,7 +342,9 @@ export const createObjectMapG6ApplyQueue = ({
 
     selectionApply.version += 1;
     selectionApply.latest = { layout: nextLayout, selectionState: nextSelectionState };
-    if (selectionApply.applying) return;
+    if (selectionApply.applying) {
+      return;
+    }
     selectionApply.applying = true;
 
     const run = async () => {
@@ -352,11 +388,17 @@ export const createObjectMapG6ApplyQueue = ({
 
   const scheduleGraphData = (nextData: GraphData) => {
     const graph = getGraph();
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed) {
+      return;
+    }
     dataApply.version += 1;
     dataApply.latest = nextData;
-    if (!graphReady) return;
-    if (dataApply.applying) return;
+    if (!graphReady) {
+      return;
+    }
+    if (dataApply.applying) {
+      return;
+    }
     dataApply.applying = true;
 
     const run = async () => {
@@ -382,7 +424,9 @@ export const createObjectMapG6ApplyQueue = ({
             nodes: latest.nodes?.length ?? 0,
             edges: latest.edges?.length ?? 0,
           });
-          if (graph.destroyed) return;
+          if (graph.destroyed) {
+            return;
+          }
           renderedData = latest;
           scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
           if (dataApply.version === requestedVersion) {
@@ -405,7 +449,9 @@ export const createObjectMapG6ApplyQueue = ({
 
   const setReady = (ready: boolean) => {
     graphReady = ready;
-    if (!graphReady) return;
+    if (!graphReady) {
+      return;
+    }
     if (dataApply.latest) {
       scheduleGraphData(dataApply.latest);
       return;

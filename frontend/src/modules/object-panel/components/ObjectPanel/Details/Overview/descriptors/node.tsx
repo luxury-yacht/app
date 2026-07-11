@@ -30,7 +30,9 @@ const PRESSURE_CONDITION_TYPES = new Set([
 ]);
 
 const nodeConditionVariant = (type: string, status: string): StatusChipVariant => {
-  if (status === 'Unknown') return 'warning';
+  if (status === 'Unknown') {
+    return 'warning';
+  }
   const healthyStatus = PRESSURE_CONDITION_TYPES.has(type) ? 'False' : 'True';
   return status === healthyStatus ? 'healthy' : 'unhealthy';
 };
@@ -44,7 +46,9 @@ const hasSystemInfo = (d: NodeDetails): boolean =>
  * exists for this node (`drainInProgress`) and the open-drain handler is wired.
  */
 const renderDrainIcon = (_d: NodeDetails, context: OverviewContext): React.ReactNode => {
-  if (!(context.drainInProgress && context.onOpenDrain)) return null;
+  if (!(context.drainInProgress && context.onOpenDrain)) {
+    return null;
+  }
   return (
     <button
       type="button"

@@ -70,7 +70,9 @@ export function useWindowBoundsConstraint(
         const currentPanelState = panelStateRef.current;
 
         // Skip if panel is closed or user is actively resizing.
-        if (!currentPanelState.isOpen || isResizing) return;
+        if (!currentPanelState.isOpen || isResizing) {
+          return;
+        }
 
         const currentSize = currentPanelState.size;
         const currentPosition = currentPanelState.floatingPosition;

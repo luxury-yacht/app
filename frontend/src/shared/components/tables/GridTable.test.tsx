@@ -162,11 +162,17 @@ describe('GridTable virtualization', () => {
     originalScrollTo = Element.prototype.scrollTo;
     Element.prototype.scrollTo = function (options?: ScrollToOptions | number, y?: number) {
       if (typeof options === 'object' && options !== null) {
-        if (options.top !== undefined) this.scrollTop = options.top;
-        if (options.left !== undefined) this.scrollLeft = options.left;
+        if (options.top !== undefined) {
+          this.scrollTop = options.top;
+        }
+        if (options.left !== undefined) {
+          this.scrollLeft = options.left;
+        }
       } else if (typeof options === 'number') {
         this.scrollLeft = options;
-        if (y !== undefined) this.scrollTop = y;
+        if (y !== undefined) {
+          this.scrollTop = y;
+        }
       }
     };
   });

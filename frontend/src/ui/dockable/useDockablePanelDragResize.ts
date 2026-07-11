@@ -64,11 +64,17 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
   // Handle dragging for floating panels
   const handleMouseDownDrag = useCallback(
     (e: ReactMouseEvent) => {
-      if (isMaximized) return;
-      if (panelState.position !== 'floating') return;
+      if (isMaximized) {
+        return;
+      }
+      if (panelState.position !== 'floating') {
+        return;
+      }
 
       const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect) {
+        return;
+      }
 
       // clientX/clientY and getBoundingClientRect() are already in CSS coordinates —
       // no zoom conversion needed (see ZoomContext docs).
@@ -85,7 +91,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
   // Handle resizing
   const handleMouseDownResize = useCallback(
     (e: ReactMouseEvent, direction: string) => {
-      if (isMaximized) return;
+      if (isMaximized) {
+        return;
+      }
       e.stopPropagation();
       // clientX/clientY are already in CSS coordinates — no zoom conversion needed.
       const content = getContentBounds();
@@ -115,19 +123,27 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
       switch (event.key) {
         case 'ArrowLeft':
-          if (!isRightDock) return;
+          if (!isRightDock) {
+            return;
+          }
           nextValue = current + KEYBOARD_RESIZE_STEP;
           break;
         case 'ArrowRight':
-          if (!isRightDock) return;
+          if (!isRightDock) {
+            return;
+          }
           nextValue = current - KEYBOARD_RESIZE_STEP;
           break;
         case 'ArrowUp':
-          if (isRightDock) return;
+          if (isRightDock) {
+            return;
+          }
           nextValue = current + KEYBOARD_RESIZE_STEP;
           break;
         case 'ArrowDown':
-          if (isRightDock) return;
+          if (isRightDock) {
+            return;
+          }
           nextValue = current - KEYBOARD_RESIZE_STEP;
           break;
         case 'Home':
@@ -178,7 +194,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
         flushDragPosition();
         return;
       }
-      if (dragFrameRef.current != null) {
+      if (dragFrameRef.current !== null && dragFrameRef.current !== undefined) {
         return;
       }
       dragFrameRef.current = window.requestAnimationFrame(flushDragPosition);
@@ -213,7 +229,8 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
           : null;
       const hasPositionChange =
         currentPanelState.position === 'floating' &&
-        nextFloatingPosition != null &&
+        nextFloatingPosition !== null &&
+        nextFloatingPosition !== undefined &&
         (Math.abs(nextFloatingPosition.x - currentPanelState.floatingPosition.x) >= 0.5 ||
           Math.abs(nextFloatingPosition.y - currentPanelState.floatingPosition.y) >= 0.5);
       // Skip redundant size updates to avoid thrashing resize observers downstream.
@@ -229,7 +246,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
         flushSizeUpdate();
         return;
       }
-      if (sizeFrameRef.current != null) {
+      if (sizeFrameRef.current !== null && sizeFrameRef.current !== undefined) {
         return;
       }
       sizeFrameRef.current = window.requestAnimationFrame(flushSizeUpdate);
@@ -240,10 +257,10 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-        if (dragFrameRef.current != null) {
+        if (dragFrameRef.current !== null && dragFrameRef.current !== undefined) {
           window.cancelAnimationFrame(dragFrameRef.current);
         }
-        if (sizeFrameRef.current != null) {
+        if (sizeFrameRef.current !== null && sizeFrameRef.current !== undefined) {
           window.cancelAnimationFrame(sizeFrameRef.current);
         }
       }
@@ -256,7 +273,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   // Set class on document.body during drag to disable underlying pointer events
   useEffect(() => {
-    if (!isDragging) return;
+    if (!isDragging) {
+      return;
+    }
 
     document.body.classList.add('dockable-panel-dragging');
 
@@ -267,7 +286,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   // Set cursor on document.body during resize using a class to allow !important override
   useEffect(() => {
-    if (!isResizing || !resizeDirection) return;
+    if (!isResizing || !resizeDirection) {
+      return;
+    }
 
     const className = `dockable-panel-resizing-${resizeDirection}`;
     document.body.classList.add('dockable-panel-resizing', className);
@@ -279,12 +300,16 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   // Mouse move handler
   useEffect(() => {
-    if (!isDragging && !isResizing) return;
+    if (!isDragging && !isResizing) {
+      return;
+    }
 
     const handleMouseMove = (e: MouseEvent) => {
       const currentPanelState = panelStateRef.current;
       // Don't update position if panel is not open (prevents race conditions during close)
-      if (!currentPanelState.isOpen) return;
+      if (!currentPanelState.isOpen) {
+        return;
+      }
 
       // clientX/clientY and getContentBounds() are already in CSS coordinates —
       // no zoom conversion needed (see ZoomContext docs).
@@ -423,7 +448,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   const handleHeaderKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
-      if (isMaximized || panelState.position !== 'floating') return;
+      if (isMaximized || panelState.position !== 'floating') {
+        return;
+      }
       const direction =
         event.key === 'ArrowLeft'
           ? { x: -1, y: 0 }
@@ -434,7 +461,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
               : event.key === 'ArrowDown'
                 ? { x: 0, y: 1 }
                 : null;
-      if (!direction) return;
+      if (!direction) {
+        return;
+      }
       event.preventDefault();
       const content = getContentBounds();
       const maxX = Math.max(content.left, content.left + content.width - panelState.size.width);

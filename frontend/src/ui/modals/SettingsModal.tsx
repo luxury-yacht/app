@@ -100,7 +100,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
   // Fetch app version for the sidebar footer.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     requestAppState({
       resource: 'app-info',
       read: () => readAppInfo(),
@@ -115,7 +117,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
     ref: modalRef,
     disabled: !shouldRender,
     onEscape: () => {
-      if (!isOpen) return false;
+      if (!isOpen) {
+        return false;
+      }
       onClose();
       return true;
     },
@@ -128,7 +132,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
 
   const activeTabDef = useMemo(() => TABS.find((t) => t.id === activeTab) ?? TABS[0], [activeTab]);
 
-  if (!shouldRender) return null;
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <ModalSurface

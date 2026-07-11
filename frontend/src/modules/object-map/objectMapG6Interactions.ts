@@ -116,8 +116,12 @@ const objectMapG6EventClientPoint = (event: ObjectMapG6PointerInput): { x: numbe
 const objectMapG6LayoutPoint = (
   point: Float32Array | number[] | { x: number; y: number } | null
 ): { x?: number; y?: number } => {
-  if (!point) return {};
-  if ('x' in point) return { x: point.x, y: point.y };
+  if (!point) {
+    return {};
+  }
+  if ('x' in point) {
+    return { x: point.x, y: point.y };
+  }
   return { x: point[0], y: point[1] };
 };
 
@@ -174,7 +178,9 @@ export const handleObjectMapG6NodeClick = (
 ): void => {
   const id = event.target.id;
   const node = findObjectMapG6Node(context.getLayout(), id);
-  if (!node) return;
+  if (!node) {
+    return;
+  }
 
   context.markNodeClickHandled();
   const {
@@ -188,7 +194,9 @@ export const handleObjectMapG6NodeClick = (
 
   if (isObjectMapG6BadgeEvent(event)) {
     const badge = badgeForNode(id);
-    if (badge) onToggleGroup(badge.deploymentId);
+    if (badge) {
+      onToggleGroup(badge.deploymentId);
+    }
     return;
   }
   if (consumeObjectMapSuppressedClick(context.gestureState, id)) {
@@ -216,7 +224,9 @@ export const handleObjectMapG6NodeContextMenu = (
   event.preventDefault?.();
   event.nativeEvent?.preventDefault?.();
   const node = findObjectMapG6Node(context.getLayout(), event.target.id);
-  if (!node) return;
+  if (!node) {
+    return;
+  }
   context.handlers.onNodeContextMenu?.({
     ref: node.ref as ObjectMapReference,
     position: objectMapG6EventClientPoint(event),
@@ -227,7 +237,9 @@ export const handleObjectMapG6CanvasContextMenu = (
   context: ObjectMapG6NodeInteractionContext,
   event: ObjectMapG6ElementPointerEvent
 ): void => {
-  if (event.targetType && event.targetType !== 'canvas') return;
+  if (event.targetType && event.targetType !== 'canvas') {
+    return;
+  }
   event.preventDefault?.();
   event.nativeEvent?.preventDefault?.();
   context.handlers.onCanvasContextMenu?.({
@@ -239,9 +251,13 @@ export const handleObjectMapG6NodePointerDown = (
   context: ObjectMapG6NodeInteractionContext,
   event: ObjectMapG6ElementPointerEvent
 ): void => {
-  if (objectMapG6EventButton(event) !== 0 || isObjectMapG6BadgeEvent(event)) return;
+  if (objectMapG6EventButton(event) !== 0 || isObjectMapG6BadgeEvent(event)) {
+    return;
+  }
   const node = findObjectMapG6Node(context.getLayout(), event.target.id);
-  if (!node) return;
+  if (!node) {
+    return;
+  }
   const pointer = toObjectMapG6Pointer(event, context.graph);
   beginObjectMapNodeGesture(context.gestureState, {
     pointerId: pointer.pointerId,

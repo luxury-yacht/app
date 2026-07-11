@@ -211,9 +211,12 @@ export function useGridTableColumnWidths<T>(
             source = 'user';
           } else if (resolvedAuto) {
             source = 'auto';
-          } else if (initialColumnWidths?.[key] != null) {
+          } else if (
+            initialColumnWidths?.[key] !== null &&
+            initialColumnWidths?.[key] !== undefined
+          ) {
             source = 'table';
-          } else if (column?.width != null) {
+          } else if (column?.width !== null && column?.width !== undefined) {
             source = 'column';
           } else {
             source = 'table';
@@ -247,11 +250,11 @@ export function useGridTableColumnWidths<T>(
       let source: ColumnWidthState['source'] = 'column';
       if (manual) {
         source = 'user';
-      } else if (initialInput != null) {
+      } else if (initialInput !== null && initialInput !== undefined) {
         source = 'table';
       } else if (autoActive) {
         source = 'auto';
-      } else if (column?.width != null) {
+      } else if (column?.width !== null && column?.width !== undefined) {
         source = 'column';
       }
 

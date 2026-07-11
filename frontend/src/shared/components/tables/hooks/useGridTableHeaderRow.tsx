@@ -55,8 +55,12 @@ export function useGridTableHeaderRow<T>({
 
         // Compute aria-sort for this header cell.
         const ariaSortValue = (() => {
-          if (!isSortable) return undefined;
-          if (!sortConfig || sortConfig.key !== column.key || !sortConfig.direction) return 'none';
+          if (!isSortable) {
+            return undefined;
+          }
+          if (!sortConfig || sortConfig.key !== column.key || !sortConfig.direction) {
+            return 'none';
+          }
           return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
         })();
 

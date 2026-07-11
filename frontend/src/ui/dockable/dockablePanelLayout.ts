@@ -59,7 +59,9 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
   const style = getComputedStyle(panel);
   const readOpt = (prop: string): number | undefined => {
     const raw = style.getPropertyValue(prop).trim();
-    if (!raw) return undefined;
+    if (!raw) {
+      return undefined;
+    }
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : undefined;
   };

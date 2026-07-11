@@ -166,7 +166,9 @@ export const AppLayout: React.FC = () => {
             }}
             onKeyDown={(event) => {
               const width = getSidebarWidthFromKey(viewState.sidebarWidth, event.key);
-              if (width === null) return;
+              if (width === null) {
+                return;
+              }
               event.preventDefault();
               viewState.setSidebarWidth(width);
             }}

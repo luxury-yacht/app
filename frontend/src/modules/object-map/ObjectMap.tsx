@@ -209,7 +209,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [visibleState.normalizedSearchQuery]);
 
   const focusSearchMatch = useCallback(() => {
-    if (visibleState.searchMatches.length === 0) return;
+    if (visibleState.searchMatches.length === 0) {
+      return;
+    }
     const nextIndex = Math.min(searchIndex, visibleState.searchMatches.length - 1);
     const node = visibleState.searchMatches[nextIndex];
     setSearchIndex((prev) => (prev + 1) % visibleState.searchMatches.length);
@@ -334,7 +336,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     [payload.nodes]
   );
   const contextMenuObject = useMemo<ObjectActionData | null>(() => {
-    if (contextMenu?.type !== 'object') return null;
+    if (contextMenu?.type !== 'object') {
+      return null;
+    }
     const ref = contextMenu.request.ref;
     const node = nodeByReference.get(objectMapReferenceKey(ref));
     const actionFacts = node?.actionFacts;
@@ -431,7 +435,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     viewportControlsReady,
   ]);
   const contextMenuItems = useMemo(() => {
-    if (!contextMenu) return [];
+    if (!contextMenu) {
+      return [];
+    }
     return contextMenu.type === 'object'
       ? objectActions.getMenuItems(contextMenuObject)
       : canvasContextMenuItems;

@@ -46,7 +46,12 @@ export function useGridTableKeyboardNavigation({
         return false;
       }
       lastNavigationMethodRef.current = 'keyboard';
-      const base = focusedRowIndex == null ? (delta > 0 ? -1 : tableDataLength) : focusedRowIndex;
+      const base =
+        focusedRowIndex === null || focusedRowIndex === undefined
+          ? delta > 0
+            ? -1
+            : tableDataLength
+          : focusedRowIndex;
       const next = Math.min(Math.max(base + delta, 0), tableDataLength - 1);
       focusByIndex(next);
       return true;
@@ -126,7 +131,8 @@ export function useGridTableKeyboardNavigation({
       allowAutoScroll &&
       shouldVirtualize &&
       virtualRowHeight > 0 &&
-      focusedRowIndex != null &&
+      focusedRowIndex !== null &&
+      focusedRowIndex !== undefined &&
       focusedRowIndex >= 0
     ) {
       const rowTop = getRowTop(focusedRowIndex);

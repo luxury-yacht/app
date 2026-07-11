@@ -98,7 +98,9 @@ function AppContent() {
 
     // When the resolved mode changes, apply the palette for the new mode.
     const unsubscribeModeResolved = eventBus.on('settings:appearance-mode-resolved', (newMode) => {
-      if (!active) return;
+      if (!active) {
+        return;
+      }
       applyAppearanceOverrides(newMode);
     });
 
@@ -118,7 +120,9 @@ function AppContent() {
   // Auto-apply a matching theme when the active cluster changes.
   useEffect(() => {
     const runId = ++themeApplyRunRef.current;
-    if (!selectedClusterName) return;
+    if (!selectedClusterName) {
+      return;
+    }
 
     void autoApplyClusterTheme({
       selectedClusterName,

@@ -31,13 +31,15 @@ interface TextElementProps {
 export const isKindColumnKey = (key: string) => FIXED_KIND_KEYS.has(key);
 export const isFixedColumnKey = (key: string) => isKindColumnKey(key);
 export const isSortableColumn = <T>(column: GridColumnDefinition<T> | null | undefined) =>
-  column != null && column.sortable !== false;
+  column !== null && column !== undefined && column.sortable !== false;
 
 export const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export const defaultGetKind = (row: unknown): string | null => {
   const record = asRecord(row);
-  if (!record) return null;
+  if (!record) {
+    return null;
+  }
   if (typeof record.kindDisplay === 'string') {
     return record.kindDisplay;
   }
@@ -53,7 +55,9 @@ export const defaultGetKind = (row: unknown): string | null => {
 
 export const defaultGetNamespace = (row: unknown): string | null => {
   const record = asRecord(row);
-  if (!record) return null;
+  if (!record) {
+    return null;
+  }
   const item = asRecord(record.item);
   const value =
     typeof record.namespaceDisplay === 'string'
@@ -71,7 +75,9 @@ export const defaultGetNamespace = (row: unknown): string | null => {
 
 const defaultGetClusterId = (row: unknown): string | null => {
   const record = asRecord(row);
-  if (!record) return null;
+  if (!record) {
+    return null;
+  }
   if (typeof record.clusterId === 'string') {
     return record.clusterId;
   }
@@ -145,7 +151,9 @@ export const findGridTableCellByColumnKey = (
 
 export const defaultGetSearchText = (row: unknown): string[] => {
   const record = asRecord(row);
-  if (!record) return [];
+  if (!record) {
+    return [];
+  }
   const values = new Set<string>();
   const add = (value: unknown) => {
     if (typeof value === 'string' && value.trim()) {
@@ -209,7 +217,7 @@ export const detectWidthUnit = (input: ColumnWidthInput | undefined | null): Col
 };
 
 export const parseWidthInputToNumber = (input: ColumnWidthInput | undefined): number | null => {
-  if (input == null) {
+  if (input === null || input === undefined) {
     return null;
   }
   if (typeof input === 'number') {

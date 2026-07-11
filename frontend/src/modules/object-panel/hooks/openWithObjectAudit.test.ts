@@ -66,11 +66,17 @@ function* walkSourceFiles(root: string): Generator<string> {
         stack.push(full);
         continue;
       }
-      if (!entry.isFile()) continue;
-      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) {
+        continue;
+      }
       // Skip test files: tests assert against mocks; production code is
       // what actually constructs the references that hit the backend.
-      if (/\.test\.(ts|tsx)$/.test(entry.name)) continue;
+      if (/\.test\.(ts|tsx)$/.test(entry.name)) {
+        continue;
+      }
       yield full;
     }
   }
@@ -198,7 +204,9 @@ function findObjectPanelLinkHelperBackedLiterals(
 function lineNumberAtOffset(source: string, offset: number): number {
   let line = 1;
   for (let i = 0; i < offset && i < source.length; i++) {
-    if (source[i] === '\n') line++;
+    if (source[i] === '\n') {
+      line++;
+    }
   }
   return line;
 }
@@ -237,13 +245,19 @@ function gatherViolations(config: AuditConfig): CallSite[] {
   const violations: CallSite[] = [];
   for (const file of walkSourceFiles(frontendSrc)) {
     const source = fs.readFileSync(file, 'utf8');
-    if (!source.includes(config.sourceMarker)) continue;
+    if (!source.includes(config.sourceMarker)) {
+      continue;
+    }
     const literals = config.finder(source);
-    if (literals.length === 0) continue;
+    if (literals.length === 0) {
+      continue;
+    }
 
     const relative = path.relative(path.resolve(frontendSrc, '..'), file);
     for (const literal of literals) {
-      if (literalSatisfiesInvariant(literal.body)) continue;
+      if (literalSatisfiesInvariant(literal.body)) {
+        continue;
+      }
       violations.push({
         file: relative,
         line: lineNumberAtOffset(source, literal.start),
@@ -292,7 +306,9 @@ describe('openWithObject audit (kind-only-objects guardrail)', () => {
     let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('openWithObject')) continue;
+      if (!source.includes('openWithObject')) {
+        continue;
+      }
       totalLiterals +=
         findOpenWithObjectLiterals(source).length +
         findOpenWithObjectHelperBackedLiterals(source).length;
@@ -315,7 +331,9 @@ describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
     let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('ObjectPanelLink')) continue;
+      if (!source.includes('ObjectPanelLink')) {
+        continue;
+      }
       totalLiterals +=
         findObjectPanelLinkLiterals(source).length +
         findObjectPanelLinkHelperBackedLiterals(source).length;

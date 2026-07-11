@@ -198,8 +198,12 @@ const layoutSearchPanel = (panel: HTMLElement): void => {
   }
   updateNavButton(previousButton, '<');
   updateNavButton(nextButton, '>');
-  if (previousButton) navRow.appendChild(previousButton);
-  if (nextButton) navRow.appendChild(nextButton);
+  if (previousButton) {
+    navRow.appendChild(previousButton);
+  }
+  if (nextButton) {
+    navRow.appendChild(nextButton);
+  }
   if (navRow.parentElement !== primaryRow) {
     primaryRow.appendChild(navRow);
   }

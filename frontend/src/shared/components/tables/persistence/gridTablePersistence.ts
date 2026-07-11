@@ -60,7 +60,7 @@ const STORAGE_VERSION = 1;
 const LOCKED_COLUMNS = new Set(['kind', 'type', 'name', 'age']);
 
 const normalizeNamespaceKey = (namespace?: string | null): string | null => {
-  if (namespace == null) {
+  if (namespace === null || namespace === undefined) {
     return null;
   }
   const trimmed = namespace.trim();
@@ -405,7 +405,7 @@ export const prunePersistedState = <T>(
     !pruned.columnWidths &&
     !pruned.sort &&
     !pruned.filters &&
-    pruned.pageSize == null
+    (pruned.pageSize === null || pruned.pageSize === undefined)
   ) {
     return null;
   }
@@ -488,7 +488,7 @@ export const buildPersistedStateForSave = <T>(
     !state.columnWidths &&
     !state.sort &&
     !state.filters &&
-    state.pageSize == null
+    (state.pageSize === null || state.pageSize === undefined)
   ) {
     return null;
   }

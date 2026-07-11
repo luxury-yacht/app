@@ -15,6 +15,7 @@ const createdSockets: FakeWebSocket[] = [];
 let restoreWebSocket: (() => void) | undefined;
 
 class FakeWebSocket {
+  readonly url: string;
   static OPEN = 1;
   readyState = FakeWebSocket.OPEN;
   onopen: ((event?: Event) => void) | null = null;
@@ -24,7 +25,8 @@ class FakeWebSocket {
   send = vi.fn();
   close = vi.fn();
 
-  constructor(readonly url: string) {
+  constructor(url: string) {
+    this.url = url;
     createdSockets.push(this);
   }
 }

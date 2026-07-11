@@ -316,6 +316,48 @@ describe('Biome config exception collection', () => {
     );
   });
 
+  it('requires exact scopes for scoped strict rules', () => {
+    const errors = collectConfigPolicyErrors(
+      {
+        formatter: { enabled: true },
+        assist: { enabled: true },
+        linter: {
+          enabled: true,
+          rules: {
+            preset: 'recommended',
+            correctness: {
+              useExhaustiveDependencies: {
+                level: 'error',
+                options: { reportUnnecessaryDependencies: true, hooks: [] },
+              },
+            },
+          },
+        },
+        overrides: [
+          {
+            includes: ['src/**'],
+            linter: { rules: { correctness: { noNodejsModules: 'error' } } },
+          },
+        ],
+      },
+      {
+        rulePreset: 'recommended',
+        requiredRules: [],
+        requiredHooks: [],
+        requiredScopedRules: [
+          {
+            rule: 'correctness.noNodejsModules',
+            includes: ['src/**', '!src/**/*.test.*', '!src/**/*.stories.*'],
+          },
+        ],
+      }
+    );
+
+    expect(errors).toContain(
+      'Biome scoped strict rule must remain exact: correctness.noNodejsModules'
+    );
+  });
+
   it('requires project file extensions and exact plugin scopes', () => {
     const errors = collectConfigPolicyErrors(
       {

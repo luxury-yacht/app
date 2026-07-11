@@ -309,7 +309,9 @@ describe('useGridTableColumnWidths', () => {
     ];
 
     const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      if (column.key === 'kind') return 120;
+      if (column.key === 'kind') {
+        return 120;
+      }
       return 180;
     });
 
@@ -360,8 +362,12 @@ describe('useGridTableColumnWidths', () => {
     const columns = [createColumn('kind'), createColumn('name'), createColumn('misc')];
 
     const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      if (column.key === 'kind') return 90;
-      if (column.key === 'misc') return 140;
+      if (column.key === 'kind') {
+        return 90;
+      }
+      if (column.key === 'misc') {
+        return 140;
+      }
       return 260;
     });
 
@@ -446,8 +452,12 @@ describe('useGridTableColumnWidths', () => {
     const columns = [createColumn('kind'), createColumn('name'), createColumn('age')];
 
     const measureColumnWidth = vi.fn((column: GridColumnDefinition<Row>) => {
-      if (column.key === 'kind') return 90;
-      if (column.key === 'age') return 100;
+      if (column.key === 'kind') {
+        return 90;
+      }
+      if (column.key === 'age') {
+        return 100;
+      }
       return 180;
     });
 

@@ -19,9 +19,13 @@ export const createWailsRuntimeHarness = (): WailsRuntimeHarness => {
       return () => {
         disposerCalls.push(eventName);
         const currentListeners = listeners.get(eventName);
-        if (!currentListeners) return;
+        if (!currentListeners) {
+          return;
+        }
         const index = currentListeners.indexOf(callback);
-        if (index >= 0) currentListeners.splice(index, 1);
+        if (index >= 0) {
+          currentListeners.splice(index, 1);
+        }
       };
     },
   };

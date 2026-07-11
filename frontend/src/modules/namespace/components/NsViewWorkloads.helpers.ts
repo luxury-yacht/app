@@ -95,7 +95,7 @@ export const parseWorkloadKeyValue = (
 };
 
 const appendToken = (tokens: string[], value?: string | number | null) => {
-  if (value == null) {
+  if (value === null || value === undefined) {
     return;
   }
   const text = typeof value === 'string' ? value : String(value);

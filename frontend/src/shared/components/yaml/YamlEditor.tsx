@@ -496,7 +496,9 @@ const YamlEditor = ({
                 // same source the Edit menu paste uses.
                 void ClipboardGetText()
                   .then((text) => {
-                    if (!text) return;
+                    if (!text) {
+                      return;
+                    }
                     insertTextAtSelection(view, text);
                   })
                   .catch(() => undefined);

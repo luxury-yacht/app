@@ -23,6 +23,7 @@ export type ResourceStreamConnectionDelegate = {
 };
 
 export class ResourceStreamConnection {
+  private readonly delegate: ResourceStreamConnectionDelegate;
   private socket: WebSocket | null = null;
   private attempt = 0;
   private closed = false;
@@ -30,7 +31,9 @@ export class ResourceStreamConnection {
   private reconnectTimer: number | null = null;
   private pendingMessages: ResourceStreamClientMessage[] = [];
 
-  constructor(private readonly delegate: ResourceStreamConnectionDelegate) {}
+  constructor(delegate: ResourceStreamConnectionDelegate) {
+    this.delegate = delegate;
+  }
 
   async connect(): Promise<void> {
     if (this.closed || this.paused || typeof window === 'undefined') {

@@ -91,7 +91,9 @@ export const useObjectPanelRefresh = ({
 
   const fetchResourceDetails = useCallback(
     async (reason: DataRequestReason = 'startup') => {
-      if (!detailScope) return;
+      if (!detailScope) {
+        return;
+      }
       await requestRefreshDomain({
         domain: 'object-details',
         scope: detailScope,
@@ -115,7 +117,9 @@ export const useObjectPanelRefresh = ({
   );
 
   useEffect(() => {
-    if (!objectData || !objectKind || !detailRefresherName) return;
+    if (!objectData || !objectKind || !detailRefresherName) {
+      return;
+    }
 
     const resourceKind = objectKind.toLowerCase();
 
@@ -137,7 +141,9 @@ export const useObjectPanelRefresh = ({
     refresherName: detailRefresherName,
     onRefresh: async (isManual, signal) => {
       if (refreshEnabled && objectData) {
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          return;
+        }
         await fetchResourceDetails(isManual ? 'user' : 'background');
       }
     },

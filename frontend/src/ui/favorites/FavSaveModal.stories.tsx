@@ -99,8 +99,8 @@ const meta: Meta<typeof FavSaveModal> = {
     filters: mockFilters,
     tableState: mockTableState,
     includeMetadata: false,
-    onSave: (fav: Favorite) => console.log('onSave', fav),
-    onDelete: (id: string) => console.log('onDelete', id),
+    onSave: (fav: Favorite) => console.info('onSave', fav),
+    onDelete: (id: string) => console.info('onDelete', id),
   },
 };
 

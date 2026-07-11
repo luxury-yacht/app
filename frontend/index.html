@@ -13,6 +13,8 @@
       }
     </style>
     <script>
+      'use strict';
+
       // Set the resolved appearance mode and replay precomputed CSS variables
       // immediately to prevent FOUC. Color math lives in TypeScript utilities;
       // this startup path only applies the cached result.
@@ -49,11 +51,11 @@
 
         try {
           const rawBootstrap = localStorage.getItem('app-appearance-bootstrap-v1');
-          if (!rawBootstrap) return;
+          if (!rawBootstrap) { return; }
 
           const bootstrap = JSON.parse(rawBootstrap);
           const variables = bootstrap && bootstrap.version === 1 ? bootstrap[mode] : null;
-          if (!variables || typeof variables !== 'object') return;
+          if (!variables || typeof variables !== 'object') { return; }
 
           const root = document.documentElement;
           for (const token of Object.keys(variables)) {

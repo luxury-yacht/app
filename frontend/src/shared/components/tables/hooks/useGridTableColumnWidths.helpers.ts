@@ -22,7 +22,7 @@ const getAutoSizeMaxWidth = <T>(
 ) => {
   const configuredMaxWidth = getColumnMaxWidth(column);
   const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
-  return autoSizeMaxWidth != null
+  return autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
     ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
     : configuredMaxWidth;
 };
@@ -68,14 +68,14 @@ export function useColumnWidthState<T>({
 
       const initialInput = initialColumnWidths?.[col.key];
       const initialParsed = parseWidthInputToNumber(initialInput);
-      if (initialParsed != null) {
+      if (initialParsed !== null && initialParsed !== undefined) {
         initialWidths[col.key] = initialParsed;
         naturalWidthsRef.current[col.key] = initialParsed;
         return;
       }
 
       const columnParsed = parseWidthInputToNumber(col.width);
-      if (columnParsed != null) {
+      if (columnParsed !== null && columnParsed !== undefined) {
         initialWidths[col.key] = columnParsed;
         naturalWidthsRef.current[col.key] = columnParsed;
         return;
@@ -486,7 +486,9 @@ export function useInitialMeasurementAndReconcile<T>({
 
     const rafHandle = requestAnimationFrame(() => {
       const container = tableRef.current?.closest('.gridtable-wrapper') as HTMLElement | null;
-      if (!container) return;
+      if (!container) {
+        return;
+      }
 
       const containerWidth = container.clientWidth;
       const measuredFixedWidths: Record<string, number> = {};

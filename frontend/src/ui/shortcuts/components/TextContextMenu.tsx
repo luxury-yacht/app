@@ -41,7 +41,9 @@ function isEditableTarget(target: Element): boolean {
   if (target instanceof HTMLTextAreaElement) {
     return !target.readOnly && !target.disabled;
   }
-  if (target.closest('[contenteditable="true"]')) return true;
+  if (target.closest('[contenteditable="true"]')) {
+    return true;
+  }
   return false;
 }
 
@@ -75,13 +77,19 @@ const TextContextMenu: React.FC = () => {
   useEffect(() => {
     const handleContextMenu = (event: MouseEvent) => {
       // Skip if already handled (e.g., GridTable or CodeMirror context menus).
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented) {
+        return;
+      }
 
       const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
+      if (!target) {
+        return;
+      }
 
       // CodeMirror editors have their own handler in YamlTab — skip here.
-      if (target.closest('.cm-editor')) return;
+      if (target.closest('.cm-editor')) {
+        return;
+      }
 
       // Only show on text-relevant targets.
       const isInput =
@@ -92,7 +100,9 @@ const TextContextMenu: React.FC = () => {
       const selectedText = deriveCopyText(window.getSelection());
       const hasSelection = !!selectedText;
 
-      if (!isInput && !isContentEditable && !hasSelection && !logSelectionRoot) return;
+      if (!isInput && !isContentEditable && !hasSelection && !logSelectionRoot) {
+        return;
+      }
 
       event.preventDefault();
       targetRef.current = target;
@@ -106,7 +116,9 @@ const TextContextMenu: React.FC = () => {
           label: 'Cut',
           disabled: !hasSelection,
           onClick: () => {
-            if (!selectedTextRef.current) return;
+            if (!selectedTextRef.current) {
+              return;
+            }
             navigator.clipboard.writeText(selectedTextRef.current);
             focusTarget(targetRef.current);
             document.execCommand('delete');
@@ -166,7 +178,9 @@ const TextContextMenu: React.FC = () => {
     return () => document.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  if (!menu) return null;
+  if (!menu) {
+    return null;
+  }
 
   return <ContextMenu items={menu.items} position={menu.position} onClose={handleClose} />;
 };

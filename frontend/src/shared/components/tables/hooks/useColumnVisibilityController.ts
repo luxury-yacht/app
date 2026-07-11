@@ -55,7 +55,7 @@ export function useColumnVisibilityController<T>({
   const [localColumnVisibility, setLocalColumnVisibility] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (columnVisibility == null) {
+    if (columnVisibility === null || columnVisibility === undefined) {
       return;
     }
     // Avoid re-setting local state when the map is referentially new but equivalent.

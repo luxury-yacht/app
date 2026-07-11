@@ -51,7 +51,9 @@ const FavMenuDropdown: React.FC = () => {
 
   // Close the dropdown when clicking outside.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
     const handleClickOutside = (e: MouseEvent) => {
       if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
@@ -92,7 +94,9 @@ const FavMenuDropdown: React.FC = () => {
 
   const moveUp = useCallback(
     async (index: number) => {
-      if (index <= 0) return;
+      if (index <= 0) {
+        return;
+      }
       const ids = favorites.map((f) => f.id);
       [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
       await reorderFavorites(ids);
@@ -102,7 +106,9 @@ const FavMenuDropdown: React.FC = () => {
 
   const moveDown = useCallback(
     async (index: number) => {
-      if (index >= favorites.length - 1) return;
+      if (index >= favorites.length - 1) {
+        return;
+      }
       const ids = favorites.map((f) => f.id);
       [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
       await reorderFavorites(ids);
@@ -141,10 +147,16 @@ const FavMenuDropdown: React.FC = () => {
   // Generic favorites are disabled when their namespace isn't available.
   const isDisabled = useCallback(
     (fav: Favorite): boolean => {
-      if (fav.clusterSelection !== '') return false;
-      if (fav.viewType !== 'namespace' || !fav.namespace) return false;
+      if (fav.clusterSelection !== '') {
+        return false;
+      }
+      if (fav.viewType !== 'namespace' || !fav.namespace) {
+        return false;
+      }
       // The synthetic "All Namespaces" scope is always available.
-      if (isAllNamespaces(fav.namespace)) return false;
+      if (isAllNamespaces(fav.namespace)) {
+        return false;
+      }
       const ns = namespaceCtx.namespaces;
       return (
         ns.length > 0 && !ns.some((n) => n.scope === fav.namespace || n.name === fav.namespace)
@@ -186,7 +198,9 @@ const FavMenuDropdown: React.FC = () => {
                     aria-disabled={disabled}
                     tabIndex={disabled ? -1 : 0}
                     onClick={() => {
-                      if (!disabled) handleNavigate(fav);
+                      if (!disabled) {
+                        handleNavigate(fav);
+                      }
                     }}
                     onKeyDown={(event) => {
                       if (
@@ -196,7 +210,9 @@ const FavMenuDropdown: React.FC = () => {
                         return;
                       }
                       event.preventDefault();
-                      if (!disabled) handleNavigate(fav);
+                      if (!disabled) {
+                        handleNavigate(fav);
+                      }
                     }}
                   >
                     <TypeIcon clusterSelection={fav.clusterSelection} />
@@ -209,7 +225,9 @@ const FavMenuDropdown: React.FC = () => {
                         title="Move up"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (idx > 0) void moveUp(idx);
+                          if (idx > 0) {
+                            void moveUp(idx);
+                          }
                         }}
                       >
                         <ChevronUpIcon width={14} height={14} />
@@ -220,7 +238,9 @@ const FavMenuDropdown: React.FC = () => {
                         title="Move down"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (idx < favorites.length - 1) void moveDown(idx);
+                          if (idx < favorites.length - 1) {
+                            void moveDown(idx);
+                          }
                         }}
                       >
                         <ChevronDownIcon width={14} height={14} />
