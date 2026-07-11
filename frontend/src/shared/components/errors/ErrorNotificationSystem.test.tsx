@@ -5,6 +5,8 @@
  * Covers the "Copy error" button wiring on error notifications.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ErrorNotification } from '@contexts/ErrorContext';
 import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
 import { act } from 'react';
@@ -26,6 +28,11 @@ vi.mock('@contexts/ErrorContext', () => ({
 
 import { ErrorNotificationSystem } from './ErrorNotificationSystem';
 import { formatErrorForClipboard } from './formatErrorForClipboard';
+
+const notificationStyles = readFileSync(
+  resolve(process.cwd(), 'src/shared/components/errors/ErrorNotificationSystem.css'),
+  'utf8'
+);
 
 const makeError = (overrides: Partial<ErrorNotification> = {}): ErrorNotification => ({
   id: 'error-1',
@@ -127,14 +134,19 @@ describe('ErrorNotificationSystem copy button', () => {
 describe('ErrorNotificationSystem header label', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+  let style: HTMLStyleElement;
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
+    style = document.createElement('style');
+    style.textContent = notificationStyles;
+    document.head.appendChild(style);
     root = ReactDOM.createRoot(container);
   });
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    style.remove();
     errorsRef.current = [];
   });
 
@@ -151,5 +163,17 @@ describe('ErrorNotificationSystem header label', () => {
     errorsRef.current = [makeError({ category: ErrorCategory.UNKNOWN, title: 'Export' })];
     act(() => root.render(<ErrorNotificationSystem />));
     expect(headerLabel()).toBe('Export');
+  });
+
+  it('shows the stack count on the active notification', () => {
+    expect(notificationStyles).toContain('.error-notification-count');
+    errorsRef.current = [makeError({ id: 'error-1' }), makeError({ id: 'error-2' })];
+    act(() => root.render(<ErrorNotificationSystem />));
+
+    const count = container.querySelector<HTMLElement>(
+      '.error-notification--active .error-notification-count'
+    );
+    expect(count).toBeTruthy();
+    expect(window.getComputedStyle(count as HTMLElement).display).toBe('inline-flex');
   });
 });

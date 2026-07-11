@@ -35,12 +35,6 @@
   border-radius: var(--border-radius);
 }
 
-/* Enhance controls visibility in maximized mode */
-.logs-viewer-display.maximized .logs-viewer-controls {
-  background-color: var(--log-controls-maximized-bg);
-  box-shadow: var(--log-controls-maximized-shadow);
-}
-
 .logs-viewer-controls {
   display: flex;
   align-items: center;
@@ -49,6 +43,12 @@
   border-bottom: 1px solid var(--log-controls-border);
   background-color: var(--log-controls-bg);
   box-shadow: var(--log-controls-shadow, none);
+}
+
+/* Enhance controls visibility in maximized mode */
+.logs-viewer-display.maximized .logs-viewer-controls {
+  background-color: var(--log-controls-maximized-bg);
+  box-shadow: var(--log-controls-maximized-shadow);
 }
 
 .logs-viewer-controls--with-active-filters {
@@ -361,13 +361,13 @@
   font-family:
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   position: relative;
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .logs-viewer-content * {
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .logs-viewer-content:focus {
@@ -418,6 +418,18 @@
   padding-bottom: 0.1rem;
 }
 
+/* Individual log line with hanging indent for wrapped text */
+.log-viewer-line {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+  /* Create hanging indent: first line flush left, wrapped lines indented */
+  padding-left: 1rem;
+  text-indent: -1rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* No wrap mode - disable text wrapping */
 .logs-viewer-text.no-wrap .log-viewer-line {
   white-space: pre;
@@ -436,18 +448,6 @@
 
 .logs-viewer-text.no-wrap .logs-viewer-virtual-inner {
   right: auto;
-}
-
-/* Individual log line with hanging indent for wrapped text */
-.log-viewer-line {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  word-break: break-all;
-  /* Create hanging indent: first line flush left, wrapped lines indented */
-  padding-left: 1rem;
-  text-indent: -1rem;
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 .log-viewer-line .log-viewer-metadata {
@@ -484,18 +484,18 @@
 
 /* Override absolute positioning from tables.css for ANY table inside logs-viewer-content */
 .logs-viewer-content > .table-container {
-  position: relative !important;
-  top: auto !important;
-  left: auto !important;
-  right: auto !important;
-  bottom: auto !important;
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
   height: 100%;
   background-color: transparent;
 }
 
 /* Additional specificity for parsed-logs-table */
 .logs-viewer-content .parsed-logs-table {
-  position: relative !important;
+  position: relative;
   height: 100%;
 }
 
@@ -571,7 +571,7 @@
 
 /* Visual feedback when copied */
 .parsed-log-cell.copied {
-  background-color: var(--log-cell-copied-bg) !important;
+  background-color: var(--log-cell-copied-bg);
   animation: copyFeedback 0.3s ease-out;
 }
 

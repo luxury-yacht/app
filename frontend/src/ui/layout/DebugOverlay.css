@@ -28,13 +28,13 @@
   line-height: 1.3;
   white-space: normal;
   overflow: hidden;
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .debug-overlay-window * {
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .debug-overlay__header {
@@ -47,8 +47,8 @@
   min-width: 0;
   padding-bottom: 0.45rem;
   cursor: move;
-  user-select: none !important;
-  -webkit-user-select: none !important;
+  user-select: none;
+  -webkit-user-select: none;
   font-family: var(--font-family-display, var(--font-family-base));
   font-size: 0.8rem;
   font-weight: 600;

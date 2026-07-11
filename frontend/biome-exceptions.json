@@ -7,47 +7,6 @@
     },
     {
       "includes": [
-        "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
-        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
-        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
-        "src/shared/components/KubeconfigSelector.css",
-        "src/shared/components/ResourceBar.css",
-        "src/ui/command-palette/CommandPalette.css",
-        "src/ui/dockable/DockablePanel.css",
-        "src/ui/layout/DebugOverlay.css",
-        "src/ui/layout/Sidebar.css",
-        "src/ui/panels/app-logs/AppLogsPanel.css",
-        "styles/components/gridtables.css",
-        "styles/utilities/display.css",
-        "styles/utilities/motion.css"
-      ],
-      "rules": ["complexity.noImportantStyles"],
-      "reason": "Legacy cascade contracts include global state, reduced-motion, visibility, selection, and embedded-widget overrides; tracked for isolation and removal."
-    },
-    {
-      "includes": [
-        "src/core/refresh/components/DiagnosticsPanel.css",
-        "src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.css",
-        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
-        "src/shared/components/ResourceBar.css",
-        "src/shared/components/diff/DiffViewer.css",
-        "src/shared/components/errors/ErrorNotificationSystem.css",
-        "src/ui/command-palette/CommandPalette.css",
-        "src/ui/dockable/DockablePanel.css",
-        "src/ui/layout/Sidebar.css",
-        "src/ui/modals/ObjectDiffModal.css",
-        "src/ui/panels/app-logs/AppLogsPanel.css",
-        "styles/base/scrollbars.css",
-        "styles/components/dropdowns.css",
-        "styles/components/gridtables.css",
-        "styles/components/tabs.css",
-        "styles/utilities/motion.css"
-      ],
-      "rules": ["style.noDescendingSpecificity"],
-      "reason": "Legacy cross-specificity component and state selectors require cascade refactoring before this rule can be restored file by file."
-    },
-    {
-      "includes": [
         "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
         "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
       ],
@@ -61,6 +20,26 @@
     }
   ],
   "suppressions": [
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 3
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 6
+    },
+    {
+      "file": "src/ui/layout/Sidebar.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 2
+    },
+    {
+      "file": "styles/utilities/motion.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 3
+    },
     {
       "file": "src/modules/browse/components/BrowseView.stories.tsx",
       "rule": "lint/a11y/useFocusableInteractive",

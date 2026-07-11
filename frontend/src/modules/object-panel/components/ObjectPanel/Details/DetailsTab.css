@@ -141,13 +141,6 @@
   }
 }
 
-.loading-overlay .loading-message {
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
 /* ============================================
    Main Details Tab Styles
    ============================================ */
@@ -170,6 +163,13 @@
   padding: 1rem;
   text-align: center;
   color: var(--color-text-secondary);
+}
+
+.loading-overlay .loading-message {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: capitalize;
 }
 
 .error-message {

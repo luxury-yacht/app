@@ -110,13 +110,13 @@
   line-height: 1.5;
   background: var(--color-bg);
   min-height: 0;
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-logs-container * {
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-logs-header {
@@ -179,15 +179,6 @@
 .app-logs-column-resizer:focus-visible {
   outline: 1px solid var(--color-accent);
   outline-offset: -1px;
-}
-
-.app-logs-header .log-timestamp,
-.app-logs-header .log-level,
-.app-logs-header .log-source,
-.app-logs-header .log-cluster,
-.app-logs-header .log-message {
-  color: inherit;
-  opacity: 1;
 }
 
 .app-logs-container.empty {
@@ -267,6 +258,15 @@
   word-wrap: break-word;
   white-space: pre-wrap;
   padding-left: 10px;
+}
+
+.app-logs-header .log-timestamp,
+.app-logs-header .log-level,
+.app-logs-header .log-source,
+.app-logs-header .log-cluster,
+.app-logs-header .log-message {
+  color: inherit;
+  opacity: 1;
 }
 
 /* Loading state */

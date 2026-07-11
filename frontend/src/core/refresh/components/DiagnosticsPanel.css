@@ -124,12 +124,6 @@
   gap: 0.75rem;
 }
 
-.diagnostics-section-header--toolbar .diagnostics-section-actions,
-.diagnostics-section-header--toolbar .diagnostics-permissions-actions {
-  margin-left: auto;
-  justify-content: flex-end;
-}
-
 .diagnostics-section-title-group {
   display: flex;
   flex-direction: column;
@@ -156,6 +150,7 @@
   gap: 0.35rem;
   justify-content: flex-end;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .diagnostics-section-toggle {
@@ -438,6 +433,8 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .diagnostics-table-batches th,

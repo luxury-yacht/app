@@ -128,57 +128,6 @@
     },
     {
       "includes": [
-        "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.css",
-        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
-        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
-        "src/shared/components/KubeconfigSelector.css",
-        "src/shared/components/ResourceBar.css",
-        "src/ui/command-palette/CommandPalette.css",
-        "src/ui/dockable/DockablePanel.css",
-        "src/ui/layout/DebugOverlay.css",
-        "src/ui/layout/Sidebar.css",
-        "src/ui/panels/app-logs/AppLogsPanel.css",
-        "styles/components/gridtables.css",
-        "styles/utilities/display.css",
-        "styles/utilities/motion.css"
-      ],
-      "linter": {
-        "rules": {
-          "complexity": {
-            "noImportantStyles": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/core/refresh/components/DiagnosticsPanel.css",
-        "src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.css",
-        "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.css",
-        "src/shared/components/ResourceBar.css",
-        "src/shared/components/diff/DiffViewer.css",
-        "src/shared/components/errors/ErrorNotificationSystem.css",
-        "src/ui/command-palette/CommandPalette.css",
-        "src/ui/dockable/DockablePanel.css",
-        "src/ui/layout/Sidebar.css",
-        "src/ui/modals/ObjectDiffModal.css",
-        "src/ui/panels/app-logs/AppLogsPanel.css",
-        "styles/base/scrollbars.css",
-        "styles/components/dropdowns.css",
-        "styles/components/gridtables.css",
-        "styles/components/tabs.css",
-        "styles/utilities/motion.css"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "noDescendingSpecificity": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
         "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
         "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
       ],

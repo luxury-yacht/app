@@ -5,6 +5,21 @@
   --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
 }
 
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
+  }
+
+  .scrollbar-active * {
+    scrollbar-color: var(--scrollbar-thumb-idle-bg) transparent;
+  }
+
+  .scrollbar-active {
+    scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+  }
+}
+
 .scrollbar-active * {
   --scrollbar-thumb-current-bg: var(--scrollbar-thumb-idle-bg);
   --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
@@ -50,21 +65,6 @@
 
 *::-webkit-scrollbar-corner {
   background: var(--scrollbar-corner-bg);
-}
-
-@supports not selector(::-webkit-scrollbar) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
-  }
-
-  .scrollbar-active * {
-    scrollbar-color: var(--scrollbar-thumb-idle-bg) transparent;
-  }
-
-  .scrollbar-active {
-    scrollbar-color: var(--scrollbar-thumb-bg) transparent;
-  }
 }
 
 :where(body *) {

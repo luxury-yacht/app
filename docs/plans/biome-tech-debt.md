@@ -10,7 +10,7 @@ Progress:
   gate integration, and review guidance.
 - ✅ Phase 2 completed 2026-07-10: test and Storybook type escapes eliminated.
 - ✅ Phase 3 completed 2026-07-10: accessibility overrides eliminated and shared icon semantics standardized.
-- ⬜ Phase 4 not started: CSS cascade exceptions.
+- ✅ Phase 4 completed 2026-07-10: CSS file overrides eliminated and cascade boundaries narrowed.
 - ⬜ Phase 5 not started: unnecessary hook dependency reporting.
 
 The production baseline uses Biome's recommended rules and promotes the project's selected
@@ -110,21 +110,32 @@ Completed exit criteria:
 
 ### CSS cascade exceptions
 
-`noImportantStyles` and `noDescendingSpecificity` are errors globally, with exact stylesheet
-overrides for drag/resize states, reduced-motion utilities, visibility utilities, selectable log
-content, embedded editor/terminal surfaces, and established component cascade contracts.
+`noImportantStyles` and `noDescendingSpecificity` are errors globally without stylesheet
+overrides. The original 57 `!important` diagnostics were reduced to 14 exact inline exceptions:
 
-The declarations may currently be functional, but file-wide overrides allow unrelated future
-violations in the same stylesheets.
+- 3 reduced-motion accessibility declarations that must override component animations;
+- 3 xterm/Monaco integration declarations that override library-owned scrollbar elements;
+- 6 document-wide dock drag/resize state declarations for cursor, selection, and pointer ownership;
+- 2 document-wide sidebar-resize declarations for cursor and selection ownership.
 
-Exit criteria:
+All 30 descending-specificity diagnostics were eliminated by placing state and modifier selectors
+after their bases, consolidating redundant selectors, scoping component overrides, and moving
+global fallbacks before component state. Cascade layers were not introduced because each removable
+case had a direct component or source-order boundary; a new layer would have added ordering policy
+without eliminating an external or global-state exception.
 
-- Classify each remaining `!important` declaration as third-party boundary, global state,
-  accessibility utility, or removable specificity debt.
-- Use CSS cascade layers, explicit state selectors, or component boundaries for removable cases.
-- Preserve reduced-motion and visibility behavior with focused visual or browser tests.
-- Narrow irreducible third-party exceptions to dedicated boundary stylesheets where practical.
-- Remove files from the overrides as their final exceptional declaration disappears.
+Completed exit criteria:
+
+- ✅ Classify every retained `!important` declaration as third-party boundary, global state, or
+  accessibility utility; no removable specificity-debt declaration remains.
+- ✅ Use explicit state selectors, scoped component boundaries, and winner-after-base ordering for
+  removable cases.
+- ✅ Preserve hidden visibility, no-animation state, selected kubeconfig presentation, and active
+  notification-count behavior with focused computed-style tests.
+- ✅ Keep irreducible third-party declarations inside the owning Shell integration stylesheet with
+  exact rule-specific suppressions.
+- ✅ Remove both CSS override groups from `frontend/biome.json` and
+  `frontend/biome-exceptions.json`.
 
 ### Inline suppressions
 
@@ -246,10 +257,30 @@ Progress as of 2026-07-10:
 
 ### Phase 4: Reduce CSS exceptions
 
-- [ ] Audit and classify every remaining `!important` declaration.
-- [ ] Introduce cascade layers or isolated boundary styles where they reduce specificity coupling.
-- [ ] Remove obsolete `!important` declarations and descending-specificity exceptions.
-- [ ] Remove each stylesheet from its override as soon as it passes globally.
+Progress as of 2026-07-10:
+
+- ✅ Audited 57 `!important` and 30 descending-specificity diagnostics across the two former CSS
+  override groups.
+- ✅ Removed 43 `!important` declarations from component selection, positioning, highlighting,
+  cursor, transition, visibility, and badge rules.
+- ✅ Retained 14 declarations as exact inline exceptions across four classified boundary files.
+- ✅ Eliminated all 30 descending-specificity diagnostics through selector consolidation, scoped
+  component selectors, and base-before-modifier ordering.
+- ✅ Added computed-style regression coverage for the active notification stack count after the
+  audit exposed an incorrectly ordered hide rule.
+- ✅ Added focused CSS contracts for the hidden utility, selected kubeconfig surface, resource-bar
+  no-animation state, and the exact retained boundary counts.
+- ✅ Focused validation passes across 101 affected test files: 931 tests passed and 1 skipped.
+- ✅ Representative Sidebar and Browse Storybook render endpoints return HTTP 200.
+- ✅ Removed both CSS override groups; all 1,128 frontend files pass the two rules globally.
+- ✅ `npm run check --prefix frontend`, `npm run typecheck --prefix frontend`, and
+  `mage qc:prerelease` pass; the full frontend run passed 414 files and 3,409 tests with 1 skipped,
+  and Trivy reported zero vulnerabilities.
+
+- [x] Audit and classify every remaining `!important` declaration.
+- [x] Introduce cascade layers or isolated boundary styles where they reduce specificity coupling.
+- [x] Remove obsolete `!important` declarations and descending-specificity exceptions.
+- [x] Remove each stylesheet from its override as soon as it passes globally.
 
 ### Phase 5: Tighten hook dependency reporting
 
