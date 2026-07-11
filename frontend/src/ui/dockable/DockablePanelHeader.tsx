@@ -22,6 +22,8 @@ interface DockablePanelHeaderProps {
   /** Identifier for the tab group (e.g. "bottom", "right"). */
   groupKey?: string;
   onMouseDown: (event: React.MouseEvent) => void;
+  onKeyDown: (event: React.KeyboardEvent) => void;
+  moveEnabled: boolean;
   controls: React.ReactNode;
 }
 
@@ -37,6 +39,8 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   onTabClick,
   groupKey,
   onMouseDown,
+  onKeyDown,
+  moveEnabled,
   controls,
 }) => {
   // Render the tab bar whenever tabs are provided so single-tab and multi-tab
@@ -44,8 +48,7 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   const showTabBar = tabs && tabs.length > 0 && groupKey;
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: The panel header is the pointer drag handle, while its nested tab and control buttons retain their own native keyboard interactions.
-    <header className="dockable-panel__header" onMouseDown={onMouseDown}>
+    <header className="dockable-panel__header">
       <div className="dockable-panel__header-content">
         {showTabBar ? (
           <DockableTabBar
@@ -58,6 +61,15 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
           <span className="dockable-panel__title">{title}</span>
         )}
       </div>
+      <button
+        type="button"
+        className="dockable-panel__drag-control"
+        aria-label="Move panel with arrow keys"
+        title="Drag or use arrow keys to move the panel"
+        disabled={!moveEnabled}
+        onMouseDown={onMouseDown}
+        onKeyDown={onKeyDown}
+      />
       {controls}
     </header>
   );

@@ -52,20 +52,18 @@ cluster-scoped row keys.
 
 ### Accessibility model
 
-`GridTable` is a virtualized ARIA grid, not a native HTML table. The wrapper is
-the single tab stop and exposes the focused row with `aria-activedescendant`;
-rendered rows and cells use `row`, `gridcell`, and `columnheader` roles. Arrow,
-Home, End, Page Up, and Page Down navigation stays on the wrapper so recycling a
-virtual row never moves DOM focus to an element that can unmount.
+`GridTable` renders native `table`, `thead`, `tbody`, `tr`, `th`, and `td`
+elements. The table is the single keyboard entry point; Arrow, Home, End, Page
+Up, and Page Down update the focused-row state while DOM focus stays on the
+table, so recycling a virtual row never moves focus to an element that can
+unmount. Virtual rows remain direct `tbody` children and are positioned from the
+virtualizer's per-row top offsets.
 
 Sortable column labels are native buttons. Column and docked-layout resize
 separators are keyboard focusable and support arrow keys plus Home and End. Keep
-the narrowly scoped Biome semantic/focus suppressions centralized in
-`AriaGridPrimitives.tsx`: native table elements are not compatible with the
-current div-based virtualization, independently scrolling header, and column
-layout. Production grids, app-log grids, tests, and stories must reuse those
-primitives or `GridTable`; do not copy the suppressions to consumers, ordinary
-non-virtualized tables, or interactive cell content.
+the native elements centralized in `AriaGridPrimitives.tsx`. Production grids,
+app-log grids, tests, and stories must reuse those primitives or `GridTable` so
+virtualization cannot regress to synthetic table roles.
 
 Auto-width dirty checking hashes the currently rendered cells before running column measurement.
 When row virtualization changes `virtualRange.start/end`, the controller must enqueue visible

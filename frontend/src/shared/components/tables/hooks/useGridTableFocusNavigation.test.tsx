@@ -32,7 +32,7 @@ interface HarnessProps {
  */
 const Harness = forwardRef<HarnessHandle, HarnessProps>(
   ({ tableData, updateHoverForElement }, ref) => {
-    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const wrapperRef = useRef<HTMLTableElement | null>(null);
 
     const result = useGridTableFocusNavigation<Row>({
       tableData,
@@ -52,13 +52,13 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
 
     return (
       <AriaGrid ref={wrapperRef} tabIndex={0}>
-        {tableData.map((row, i) => (
-          // Mirrors useGridTableRowRenderer: both .gridtable-row and
-          // data-row-key are on the same element.
-          <div key={row.id} className="gridtable-row" data-row-key={row.id}>
-            Row {i}
-          </div>
-        ))}
+        <tbody>
+          {tableData.map((row, i) => (
+            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+              <td>Row {i}</td>
+            </tr>
+          ))}
+        </tbody>
       </AriaGrid>
     );
   }
@@ -102,7 +102,7 @@ describe('useGridTableFocusNavigation', () => {
     // data-row-key attribute live on the same element.
     expect(updateHover).toHaveBeenCalled();
     const calledWith = updateHover.mock.calls[updateHover.mock.calls.length - 1][0];
-    expect(calledWith).toBeInstanceOf(HTMLDivElement);
+    expect(calledWith).toBeInstanceOf(HTMLTableRowElement);
     expect(calledWith.dataset.rowKey).toBe('row-b');
     expect(calledWith.classList.contains('gridtable-row')).toBe(true);
   });
@@ -125,7 +125,7 @@ describe('useGridTableFocusNavigation', () => {
 
     expect(updateHover).toHaveBeenCalled();
     const calledWith = updateHover.mock.calls[updateHover.mock.calls.length - 1][0];
-    expect(calledWith).toBeInstanceOf(HTMLDivElement);
+    expect(calledWith).toBeInstanceOf(HTMLTableRowElement);
     expect(calledWith.dataset.rowKey).toBe('cluster|"prod]/pods/nginx:main');
   });
 });
@@ -160,7 +160,7 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
     { tableData, updateHoverForElement, onRowClick, onRowPointerClick, isShortcutOptOutTarget },
     ref
   ) => {
-    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const wrapperRef = useRef<HTMLTableElement | null>(null);
 
     const result = useGridTableFocusNavigation<Row>({
       tableData,
@@ -192,11 +192,13 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
 
     return (
       <AriaGrid ref={wrapperRef} tabIndex={0}>
-        {tableData.map((row, i) => (
-          <div key={row.id} className="gridtable-row" data-row-key={row.id}>
-            Row {i}
-          </div>
-        ))}
+        <tbody>
+          {tableData.map((row, i) => (
+            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+              <td>Row {i}</td>
+            </tr>
+          ))}
+        </tbody>
       </AriaGrid>
     );
   }

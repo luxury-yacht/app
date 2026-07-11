@@ -50,8 +50,8 @@ interface GridTableInteractionWiring<T> {
   suppressFocusedRowHighlight: () => void;
   shortcutsActive: boolean;
   lastNavigationMethodRef: RefObject<'pointer' | 'keyboard'>;
-  handleWrapperFocus: (event: React.FocusEvent<HTMLDivElement>) => void;
-  handleWrapperBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
+  handleWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
+  handleWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   getRowClassNameWithFocus: (item: T, index: number) => string;
   contextMenuNode: ReactNode;

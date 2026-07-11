@@ -4,6 +4,7 @@
    ========================================================================== */
 
 .object-diff-table {
+  position: relative;
   font-family: var(--font-family-mono);
   font-size: var(--font-size-mono);
   overflow: auto;
@@ -16,6 +17,31 @@
 .object-diff-table:focus-visible {
   outline: 1px solid var(--color-primary);
   outline-offset: -1px;
+}
+
+.object-diff-keyboard-control {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.object-diff-keyboard-control:focus-visible {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  padding: 4px 8px;
+  border: 1px solid var(--color-accent);
+  clip-path: none;
+  background: var(--color-bg-primary);
+  color: var(--color-text);
 }
 
 .object-diff-row {

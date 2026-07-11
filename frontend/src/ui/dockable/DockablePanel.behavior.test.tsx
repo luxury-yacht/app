@@ -539,7 +539,9 @@ describe('DockablePanel behaviour (real hook)', () => {
       }
     );
 
-    const header = document.querySelector('.dockable-panel__header') as HTMLDivElement | null;
+    const header = document.querySelector(
+      '.dockable-panel__drag-control'
+    ) as HTMLButtonElement | null;
     expect(header).toBeTruthy();
 
     await act(async () => {
@@ -563,6 +565,29 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     rafSpy.mockRestore();
     cafSpy.mockRestore();
+    await unmount();
+  });
+
+  it('moves a floating panel from the native header control with arrow keys', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="panel-keyboard-move" defaultPosition="floating" isOpen>
+        <div>panel</div>
+      </DockablePanel>
+    );
+    await flushEffects();
+
+    const initial = getPanelState('panel-keyboard-move').floatingPosition;
+    const moveControl = document.querySelector<HTMLButtonElement>('.dockable-panel__drag-control');
+    expect(moveControl?.type).toBe('button');
+
+    await act(async () => {
+      moveControl?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+      );
+    });
+    await flushEffects();
+
+    expect(getPanelState('panel-keyboard-move').floatingPosition.x).toBeGreaterThan(initial.x);
     await unmount();
   });
 
@@ -725,7 +750,9 @@ describe('DockablePanel behaviour (real hook)', () => {
       }
     );
 
-    const header = document.querySelector('.dockable-panel__header') as HTMLDivElement | null;
+    const header = document.querySelector(
+      '.dockable-panel__drag-control'
+    ) as HTMLButtonElement | null;
     expect(header).toBeTruthy();
 
     await act(async () => {

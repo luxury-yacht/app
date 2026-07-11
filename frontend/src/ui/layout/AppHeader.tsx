@@ -22,20 +22,24 @@ const AppHeader: React.FC = () => {
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
-  const handleHeaderDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest('button, input, select, textarea, a[href]') && !isModalOpen()) {
+  const toggleWindowMaximize = () => {
+    if (!isModalOpen()) {
       WindowToggleMaximise();
     }
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Empty desktop titlebar space supports the native window double-click gesture; interactive descendants are excluded by the owning handler.
-    <header
-      className={`app-header${isMac ? ' app-header--mac' : ''}`}
-      onDoubleClick={handleHeaderDoubleClick}
-      data-app-region="header"
-    >
+    <header className={`app-header${isMac ? ' app-header--mac' : ''}`} data-app-region="header">
+      <button
+        type="button"
+        className="app-header-drag-control"
+        aria-label="Toggle window maximize"
+        title="Double-click to maximize or restore the window"
+        onClick={(event) => {
+          if (event.detail === 0) toggleWindowMaximize();
+        }}
+        onDoubleClick={toggleWindowMaximize}
+      />
       <div className="app-header-controls">
         <UpdateStatus />
         <div className="status-indicators">

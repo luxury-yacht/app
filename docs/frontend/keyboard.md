@@ -49,9 +49,9 @@ Surface kinds include:
 - Comboboxes keep DOM focus on the trigger or search field and expose the
   highlighted option through `aria-activedescendant`; popup options are not
   additional tab stops.
-- Virtualized grids keep DOM focus on their grid wrapper and expose the active
-  row through `aria-activedescendant`, allowing row recycling without losing
-  focus.
+- Virtualized tables keep DOM focus on their native table element while shared
+  state marks the active row, allowing native table semantics and row recycling
+  without moving focus to an element that can unmount.
 - Adjustable separators support the appropriate arrow keys and Home/End while
   publishing their current, minimum, and maximum values.
 - Panels and table regions own focused keyboard behavior without blocking the

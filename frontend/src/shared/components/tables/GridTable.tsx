@@ -56,7 +56,6 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     headerInnerRef,
     tableData,
     filtersNode,
-    focusedRowKey,
     handleWrapperFocus,
     handleWrapperBlur,
     hoverState,
@@ -67,7 +66,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     virtualRows,
     virtualRange,
     totalVirtualHeight,
-    virtualOffset,
+    getRowTop,
     scrollbarWidth,
     tableContentWidth,
     tableViewportWidth,
@@ -115,7 +114,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       virtualRows={virtualRows}
       virtualRangeStart={virtualRange.start}
       totalVirtualHeight={totalVirtualHeight}
-      virtualOffset={virtualOffset}
+      getRowTop={getRowTop}
       renderRowContent={renderRowContent}
       onWrapperFocus={handleWrapperFocus}
       onWrapperBlur={handleWrapperBlur}
@@ -123,7 +122,6 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       allowHorizontalOverflow={allowHorizontalOverflow}
       viewportWidth={tableViewportWidth}
       loading={loading}
-      focusedRowKey={focusedRowKey}
       hasActiveFilters={hasActiveFilters}
       onClearFilters={onClearFilters}
     />

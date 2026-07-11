@@ -102,6 +102,26 @@
   max-width: 100%;
 }
 
+.dockable-panel__drag-control {
+  align-self: stretch;
+  flex: 0 0 24px;
+  min-width: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: move;
+}
+
+.dockable-panel__drag-control:disabled {
+  cursor: default;
+}
+
+.dockable-panel__drag-control:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .dockable-panel__title {
   font-size: 14px;
   font-weight: 500;

@@ -944,17 +944,21 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         </div>
       </div>
 
-      <AriaGridRow
+      <table
         className="app-logs-header"
         aria-label="Application log columns"
         style={columnWidthStyle}
       >
-        {renderHeaderCell('timestamp', 'Time', 'log-timestamp')}
-        {renderHeaderCell('level', 'Level', 'log-level')}
-        {renderHeaderCell('source', 'Source', 'log-source')}
-        {renderHeaderCell('cluster', 'Cluster', 'log-cluster')}
-        {renderHeaderCell('message', 'Message', 'log-message')}
-      </AriaGridRow>
+        <thead>
+          <AriaGridRow>
+            {renderHeaderCell('timestamp', 'Time', 'log-timestamp')}
+            {renderHeaderCell('level', 'Level', 'log-level')}
+            {renderHeaderCell('source', 'Source', 'log-source')}
+            {renderHeaderCell('cluster', 'Cluster', 'log-cluster')}
+            {renderHeaderCell('message', 'Message', 'log-message')}
+          </AriaGridRow>
+        </thead>
+      </table>
 
       <div
         ref={logsContainerRef}

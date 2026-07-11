@@ -497,17 +497,12 @@ describe('GridTable virtualization', () => {
     });
     cleanupRoot = cleanup;
 
-    const virtualBody = container.querySelector<HTMLDivElement>('.gridtable-virtual-body');
-    const virtualInner = container.querySelector<HTMLDivElement>('.gridtable-virtual-inner');
+    const virtualBody = container.querySelector<HTMLElement>('.gridtable-virtual-body');
 
     expect(virtualBody).not.toBeNull();
     expect(requireValue(virtualBody, 'expected test value in GridTable.test.tsx').style.width).toBe(
       '800px'
     );
-    expect(virtualInner).not.toBeNull();
-    expect(
-      requireValue(virtualInner, 'expected test value in GridTable.test.tsx').style.width
-    ).toBe('800px');
   });
 
   it('wires visual viewport listeners to keep the header synced', async () => {
@@ -1968,7 +1963,7 @@ it('does not warn when keyExtractor returns a cluster-scoped key', async () => {
   container.remove();
 });
 
-it('renders ARIA grid semantics on container, header, rows, and cells', () => {
+it('renders native table, row, header, and cell semantics', () => {
   const sortableColumns: GridColumnDefinition<SimpleRow>[] = [
     { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
   ];
@@ -1980,20 +1975,17 @@ it('renders ARIA grid semantics on container, header, rows, and cells', () => {
   });
   cleanupRoot = cleanup;
 
-  // Body wrapper (the focus host) has role="grid"
-  const grid = container.querySelector('[role="grid"]');
-  expect(grid).not.toBeNull();
+  const grid = container.querySelector('table.gridtable-wrapper');
+  expect(grid?.getAttribute('role')).toBeNull();
 
-  // Header row has role="row"
-  const headerRow = container.querySelector('.gridtable-header[role="row"]');
+  const headerRow = container.querySelector('thead > .gridtable-header');
   expect(headerRow).not.toBeNull();
 
-  // Header cells have role="columnheader"
-  const headerCells = container.querySelectorAll('[role="columnheader"]');
+  const headerCells = container.querySelectorAll('th.grid-cell-header');
   expect(headerCells.length).toBeGreaterThan(0);
 
   // Sortable header has aria-sort="none" when no sort is active
-  const sortableHeader = container.querySelector('[role="columnheader"][aria-sort]');
+  const sortableHeader = container.querySelector('th[aria-sort]');
   expect(sortableHeader).not.toBeNull();
   expect(
     requireValue(sortableHeader, 'expected test value in GridTable.test.tsx').getAttribute(
@@ -2001,16 +1993,13 @@ it('renders ARIA grid semantics on container, header, rows, and cells', () => {
     )
   ).toBe('none');
 
-  // Data rows have role="row"
-  const dataRows = container.querySelectorAll('.gridtable-row[role="row"]');
+  const dataRows = container.querySelectorAll('tbody > .gridtable-row');
   expect(dataRows.length).toBe(3);
 
-  // Data cells have role="gridcell"
-  const gridcells = container.querySelectorAll('[role="gridcell"]');
+  const gridcells = container.querySelectorAll('td.grid-cell');
   expect(gridcells.length).toBe(3); // 1 column × 3 rows
 
-  // Body has role="rowgroup"
-  const rowgroup = container.querySelector('[role="rowgroup"]');
+  const rowgroup = container.querySelector('table.gridtable-wrapper > tbody');
   expect(rowgroup).not.toBeNull();
 });
 
@@ -2040,12 +2029,12 @@ it('sets aria-sort="ascending" on the actively sorted column header', () => {
     );
   });
 
-  const labelHeader = container.querySelector('[data-column="label"][role="columnheader"]');
+  const labelHeader = container.querySelector('th[data-column="label"]');
   expect(
     requireValue(labelHeader, 'expected test value in GridTable.test.tsx').getAttribute('aria-sort')
   ).toBe('ascending');
 
-  const nameHeader = container.querySelector('[data-column="name"][role="columnheader"]');
+  const nameHeader = container.querySelector('th[data-column="name"]');
   expect(
     requireValue(nameHeader, 'expected test value in GridTable.test.tsx').getAttribute('aria-sort')
   ).toBe('none');
@@ -2062,7 +2051,7 @@ it('sets aria-busy on grid container when loading overlay is shown', () => {
   });
   cleanupRoot = cleanup;
 
-  const grid = container.querySelector('[role="grid"]');
+  const grid = container.querySelector('table.gridtable-wrapper');
   expect(
     requireValue(grid, 'expected test value in GridTable.test.tsx').getAttribute('aria-busy')
   ).toBe('true');
@@ -2071,7 +2060,7 @@ it('sets aria-busy on grid container when loading overlay is shown', () => {
   expect(statusOverlay).not.toBeNull();
 });
 
-it('sets aria-activedescendant on the role="grid" container when a row is focused', () => {
+it('marks the focused native row when a row is clicked', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(5),
     virtualization: { enabled: false },
@@ -2079,39 +2068,13 @@ it('sets aria-activedescendant on the role="grid" container when a row is focuse
   });
   cleanupRoot = cleanup;
 
-  const grid = container.querySelector('[role="grid"]');
-  // No row focused initially.
-  expect(
-    requireValue(grid, 'expected test value in GridTable.test.tsx').hasAttribute(
-      'aria-activedescendant'
-    )
-  ).toBe(false);
-
-  // Click a specific row to focus it.
-  const rows = container.querySelectorAll('.gridtable-row[role="row"]');
+  const rows = container.querySelectorAll('tbody > .gridtable-row');
   const targetRow = rows[2]; // Third row
   act(() => {
     (targetRow as HTMLElement).click();
   });
 
-  const activeId = requireValue(grid, 'expected test value in GridTable.test.tsx').getAttribute(
-    'aria-activedescendant'
-  );
-  expect(activeId).toBeTruthy();
-  // The referenced element must exist and be a row.
-  const focusedRow = document.getElementById(
-    requireValue(activeId, 'expected test value in GridTable.test.tsx')
-  );
-  expect(focusedRow).not.toBeNull();
-  expect(
-    requireValue(focusedRow, 'expected test value in GridTable.test.tsx').getAttribute('role')
-  ).toBe('row');
-  // It should be the row we clicked.
-  expect(
-    requireValue(focusedRow, 'expected test value in GridTable.test.tsx').getAttribute(
-      'data-row-key'
-    )
-  ).toBe('cluster-a|row-2');
+  expect((targetRow as HTMLElement).dataset.rowFocused).toBe('true');
 });
 
 it('renders resize handles between columns when enableColumnResizing is true', () => {

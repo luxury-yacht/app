@@ -35,6 +35,7 @@ interface DockablePanelDragResizeOptions {
 }
 
 const KEYBOARD_RESIZE_STEP = 16;
+const KEYBOARD_MOVE_STEP = 16;
 
 /**
  * Handle drag/resize interactions and cursor updates for dockable panels.
@@ -454,21 +455,51 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     flushSizeUpdate,
   ]);
 
-  // Empty header space starts a panel drag. Interactive descendants keep their
-  // native pointer behavior so buttons and draggable tabs never start a panel drag.
+  // The dedicated native header control owns floating-panel pointer dragging.
   const handleHeaderMouseDown = useCallback(
     (e: ReactMouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('button, [role="tab"], input, select, textarea, a[href]')) return;
       handleMouseDownDrag(e);
     },
     [handleMouseDownDrag]
+  );
+
+  const handleHeaderKeyDown = useCallback(
+    (event: ReactKeyboardEvent) => {
+      if (isMaximized || panelState.position !== 'floating') return;
+      const direction =
+        event.key === 'ArrowLeft'
+          ? { x: -1, y: 0 }
+          : event.key === 'ArrowRight'
+            ? { x: 1, y: 0 }
+            : event.key === 'ArrowUp'
+              ? { x: 0, y: -1 }
+              : event.key === 'ArrowDown'
+                ? { x: 0, y: 1 }
+                : null;
+      if (!direction) return;
+      event.preventDefault();
+      const content = getContentBounds();
+      const maxX = Math.max(content.left, content.left + content.width - panelState.size.width);
+      const maxY = Math.max(content.top, content.top + content.height - panelState.size.height);
+      panelState.setFloatingPosition({
+        x: Math.min(
+          maxX,
+          Math.max(content.left, panelState.floatingPosition.x + direction.x * KEYBOARD_MOVE_STEP)
+        ),
+        y: Math.min(
+          maxY,
+          Math.max(content.top, panelState.floatingPosition.y + direction.y * KEYBOARD_MOVE_STEP)
+        ),
+      });
+    },
+    [isMaximized, panelState]
   );
 
   return {
     isDragging,
     isResizing,
     handleHeaderMouseDown,
+    handleHeaderKeyDown,
     handleMouseDownResize,
     handleDockedKeyboardResize,
     handleFloatingMouseDown,

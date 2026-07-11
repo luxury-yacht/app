@@ -20,7 +20,8 @@ export type RenderRowContentFn<T> = (
   absoluteIndex: number,
   shouldMeasure: boolean,
   elementKey: string,
-  slotId?: string
+  slotId?: string,
+  virtualTop?: number
 ) => React.ReactNode;
 
 export interface UseGridTableRowRendererParams<T> {
@@ -82,12 +83,21 @@ export function useGridTableRowRenderer<T>({
       absoluteIndex: number,
       shouldMeasure: boolean,
       elementKey: string,
-      slotId?: string
+      slotId?: string,
+      virtualTop?: number
     ): React.ReactNode => {
       const rowKey = keyExtractor(item, absoluteIndex);
       const rowExtraClass = getRowClassName?.(item, absoluteIndex);
       const rowClassName = ['gridtable-row', rowExtraClass || ''].filter(Boolean).join(' ');
-      const rowInlineStyle = getRowStyle ? getRowStyle(item, absoluteIndex) : undefined;
+      const configuredRowStyle = getRowStyle ? getRowStyle(item, absoluteIndex) : undefined;
+      const rowInlineStyle =
+        virtualTop === undefined
+          ? configuredRowStyle
+          : {
+              ...configuredRowStyle,
+              position: 'absolute' as const,
+              transform: `translateY(${virtualTop}px)`,
+            };
       const isSelected = rowClassName.includes('gridtable-row--selected');
       const isFocused = rowClassName.includes('gridtable-row--focused');
 

@@ -77,6 +77,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const [forceFullRender, setForceFullRender] = useState(false);
 
   const diffTableRef = useRef<HTMLDivElement>(null);
+  const keyboardControlRef = useRef<HTMLButtonElement>(null);
   const truncatedRowsRef = useRef<TruncationMap>({});
   const rowHeightCacheRef = useRef<Map<number, number>>(new Map());
   const rowObserverMapRef = useRef<Map<number, ResizeObserver>>(new Map());
@@ -214,7 +215,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   );
 
   const handleKeyScroll = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
+    (event: React.KeyboardEvent<HTMLElement>) => {
       const table = diffTableRef.current;
       if (!table || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
         return;
@@ -222,6 +223,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
 
       const target = event.target as HTMLElement | null;
       if (
+        target !== keyboardControlRef.current &&
         target?.closest(
           'button, input, textarea, select, [contenteditable="true"], [contenteditable=""]'
         )
@@ -618,7 +620,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         if (target?.closest('.object-diff-expand-toggle')) {
           return;
         }
-        diffTableRef.current?.focus({ preventScroll: true });
+        keyboardControlRef.current?.focus({ preventScroll: true });
         if (target?.closest('.object-diff-cell-left')) {
           flushSync(() => setSelectionSide('left'));
           return;
@@ -650,9 +652,16 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         selectSideText(side);
       }}
       onKeyDown={handleKeyScroll}
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: The named scroll region must be keyboard-focusable so its Arrow, Page, Home, and End scrolling controls are reachable.
-      tabIndex={0}
     >
+      <button
+        ref={keyboardControlRef}
+        type="button"
+        className="object-diff-keyboard-control"
+        aria-label="Navigate object difference with arrow and page keys"
+        onClick={() => scrollDiffTableTo(0)}
+      >
+        Use arrow and page keys to scroll the difference
+      </button>
       {shouldVirtualize ? (
         <div className="object-diff-virtual-body" style={{ height: `${totalVirtualHeight}px` }}>
           <div

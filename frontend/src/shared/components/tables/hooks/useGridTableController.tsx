@@ -52,9 +52,9 @@ const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
 
 export interface GridTableControllerResult<T> {
   // Refs needed by sub-components
-  wrapperRef: RefObject<HTMLDivElement | null>;
-  tableRef: RefObject<HTMLDivElement | null>;
-  headerInnerRef: RefObject<HTMLDivElement | null>;
+  wrapperRef: RefObject<HTMLTableElement | null>;
+  tableRef: RefObject<HTMLTableSectionElement | null>;
+  headerInnerRef: RefObject<HTMLTableElement | null>;
 
   // Filtered data
   tableData: T[];
@@ -62,8 +62,8 @@ export interface GridTableControllerResult<T> {
 
   // Focus
   focusedRowKey: string | null;
-  handleWrapperFocus: (e: React.FocusEvent<HTMLDivElement>) => void;
-  handleWrapperBlur: (e: React.FocusEvent<HTMLDivElement>) => void;
+  handleWrapperFocus: (e: React.FocusEvent<HTMLElement>) => void;
+  handleWrapperBlur: (e: React.FocusEvent<HTMLElement>) => void;
 
   // Hover
   hoverState: HoverState;
@@ -78,7 +78,7 @@ export interface GridTableControllerResult<T> {
   virtualRows: T[];
   virtualRange: { start: number; end: number };
   totalVirtualHeight: number;
-  virtualOffset: number;
+  getRowTop: (index: number) => number;
   scrollbarWidth: number;
 
   // Columns
@@ -147,9 +147,9 @@ export function useGridTableController<T>({
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
     [inputData]
   );
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
-  const headerInnerRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLTableElement>(null);
+  const tableRef = useRef<HTMLTableSectionElement>(null);
+  const headerInnerRef = useRef<HTMLTableElement | null>(null);
   const previousInputDataRef = useRef(inputData);
   const contextMenuActiveRef = useRef(false);
   const clusterKeyCheckRef = useRef(false);
@@ -326,7 +326,6 @@ export function useGridTableController<T>({
     virtualRange,
     virtualRowHeight,
     totalVirtualHeight,
-    virtualOffset,
     measureRowRef,
     getRowTop,
     scrollbarWidth,
@@ -482,7 +481,7 @@ export function useGridTableController<T>({
     virtualRows,
     virtualRange,
     totalVirtualHeight,
-    virtualOffset,
+    getRowTop,
     scrollbarWidth,
     tableContentWidth,
     tableViewportWidth,

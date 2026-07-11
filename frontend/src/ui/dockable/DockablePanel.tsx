@@ -268,6 +268,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     isDragging,
     isResizing,
     handleHeaderMouseDown,
+    handleHeaderKeyDown,
     handleMouseDownResize,
     handleDockedKeyboardResize,
     handleFloatingMouseDown,
@@ -852,6 +853,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
             }}
             groupKey={groupKey ?? panelId}
             onMouseDown={handleHeaderMouseDown}
+            onKeyDown={handleHeaderKeyDown}
+            moveEnabled={panelState.position === 'floating' && !isMaximized}
             controls={
               <DockablePanelControls
                 position={panelState.position}

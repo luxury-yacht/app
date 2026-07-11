@@ -24,9 +24,9 @@ describe('GridTableBody', () => {
   const renderTableBody = async (props: Partial<BodyProps> = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const wrapper = document.createElement('div');
+    const wrapper = document.createElement('table');
     wrapper.className = 'gridtable-wrapper';
-    const table = document.createElement('div');
+    const table = document.createElement('tbody');
     wrapper.appendChild(table);
     container.appendChild(wrapper);
 
@@ -34,9 +34,9 @@ describe('GridTableBody', () => {
     const tableRef = { current: table };
 
     const defaultRenderRowContent: RenderRowContentFn<TestRow> = (item, index) => (
-      <div key={item.id} data-index={index}>
-        Row {item.id}
-      </div>
+      <tr key={item.id} data-index={index}>
+        <td>Row {item.id}</td>
+      </tr>
     );
 
     const defaultProps: BodyProps = {
@@ -53,7 +53,7 @@ describe('GridTableBody', () => {
       virtualRows: [],
       virtualRangeStart: 0,
       totalVirtualHeight: 0,
-      virtualOffset: 0,
+      getRowTop: (index) => index * 44,
       renderRowContent: defaultRenderRowContent,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
@@ -61,7 +61,6 @@ describe('GridTableBody', () => {
       allowHorizontalOverflow: false,
       viewportWidth: 0,
       loading: false,
-      focusedRowKey: null,
       hasActiveFilters: false,
       onClearFilters: vi.fn(),
     };
@@ -90,9 +89,9 @@ describe('GridTableBody', () => {
 
   it('renders virtualization body when enabled', async () => {
     const renderRowContent: RenderRowContentFn<TestRow> = (item, _index, _attach, key) => (
-      <div key={key} data-slot={key}>
-        Virtual {item.id}
-      </div>
+      <tr key={key} data-slot={key}>
+        <td>Virtual {item.id}</td>
+      </tr>
     );
 
     const { container } = await renderTableBody({
@@ -101,10 +100,10 @@ describe('GridTableBody', () => {
       renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
     });
 
-    const virtualInner = container.querySelector('.gridtable-virtual-inner');
-    expect(virtualInner).not.toBeNull();
+    const virtualBody = container.querySelector('.gridtable-virtual-body');
+    expect(virtualBody).not.toBeNull();
     expect(
-      requireValue(virtualInner, 'expected test value in GridTableBody.test.tsx').textContent
+      requireValue(virtualBody, 'expected test value in GridTableBody.test.tsx').textContent
     ).toContain('Virtual A');
   });
 

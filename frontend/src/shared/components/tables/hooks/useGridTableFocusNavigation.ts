@@ -36,8 +36,8 @@ type FocusNavigationResult<T> = {
   shortcutsActive: boolean;
   pendingPointerFocusRef: RefObject<boolean>;
   lastNavigationMethodRef: RefObject<'pointer' | 'keyboard'>;
-  handleWrapperFocus: (event: React.FocusEvent<HTMLDivElement>) => void;
-  handleWrapperBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
+  handleWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
+  handleWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   handleRowActivation: (item: T, index: number, source: 'pointer' | 'keyboard') => void;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   getRowClassNameWithFocus: (item: T, index: number) => string;
@@ -84,7 +84,7 @@ export function useGridTableFocusNavigation<T>({
   );
 
   const handleWrapperFocus = useCallback(
-    (event: React.FocusEvent<HTMLDivElement>) => {
+    (event: React.FocusEvent<HTMLElement>) => {
       const shouldSuppress = isShortcutOptOutTarget(event.target);
       setIsWrapperFocused(true);
       setIsShortcutsSuppressed(shouldSuppress);
@@ -114,7 +114,7 @@ export function useGridTableFocusNavigation<T>({
     [isShortcutOptOutTarget, keyExtractor, tableData]
   );
 
-  const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLDivElement>) => {
+  const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLElement>) => {
     setIsWrapperFocused(false);
     setIsShortcutsSuppressed(false);
     // Keep the focused row visible even when the table loses focus.

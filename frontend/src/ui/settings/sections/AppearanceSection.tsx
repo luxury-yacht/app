@@ -1108,22 +1108,9 @@ function AppearanceSection() {
                   const isDropTarget =
                     theme.id === dropTargetThemeId && theme.id !== draggingThemeId && !isDefault;
                   return (
-                    // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                     <div
                       key={theme.id}
                       className={`setting-item setting-item-surface themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
-                      onDragOver={(e) => {
-                        if (!draggingThemeId || isDefault) return;
-                        e.preventDefault();
-                        setDropTargetThemeId(theme.id);
-                      }}
-                      onDragLeave={() => {
-                        setDropTargetThemeId((c) => (c === theme.id ? null : c));
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        handleThemeDrop(theme.id);
-                      }}
                     >
                       {isDefault ? (
                         <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
@@ -1139,6 +1126,20 @@ function AppearanceSection() {
                           onDragEnd={() => {
                             setDraggingThemeId(null);
                             setDropTargetThemeId(null);
+                          }}
+                          onDragOver={(event) => {
+                            if (!draggingThemeId) return;
+                            event.preventDefault();
+                            setDropTargetThemeId(theme.id);
+                          }}
+                          onDragLeave={() => {
+                            setDropTargetThemeId((current) =>
+                              current === theme.id ? null : current
+                            );
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            void handleThemeDrop(theme.id);
                           }}
                           onKeyDown={(event) => {
                             if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;

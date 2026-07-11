@@ -237,36 +237,6 @@
       "count": 3
     },
     {
-      "file": "src/shared/components/diff/DiffViewer.tsx",
-      "rule": "lint/a11y/noNoninteractiveTabindex",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/tables/AriaGridPrimitives.tsx",
-      "rule": "lint/a11y/useFocusableInteractive",
-      "count": 3
-    },
-    {
-      "file": "src/shared/components/tables/AriaGridPrimitives.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 5
-    },
-    {
-      "file": "src/ui/dockable/DockablePanelHeader.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/ui/layout/AppHeader.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/ui/settings/sections/AppearanceSection.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
       "file": "src/modules/browse/hooks/useBrowseCatalog.test.tsx",
       "rule": "lint/correctness/useHookAtTopLevel",
       "count": 1

@@ -63,7 +63,7 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['Favorites', 'Command Palette']);
+    ).toEqual(['Toggle window maximize', 'Favorites', 'Command Palette']);
   });
 
   it('does not toggle maximise from the header while a modal is open', () => {
@@ -72,12 +72,23 @@ describe('AppHeader', () => {
       root.render(<AppHeader />);
     });
 
-    const header = container.querySelector('.app-header') as HTMLDivElement;
+    const header = container.querySelector('.app-header-drag-control') as HTMLButtonElement;
     act(() => {
       header.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     });
 
     expect(runtimeMock.WindowToggleMaximise).not.toHaveBeenCalled();
+  });
+
+  it('exposes the titlebar maximize gesture as a native keyboard control', () => {
+    act(() => {
+      root.render(<AppHeader />);
+    });
+
+    const dragControl = container.querySelector<HTMLButtonElement>('.app-header-drag-control');
+    expect(dragControl?.type).toBe('button');
+    act(() => dragControl?.click());
+    expect(runtimeMock.WindowToggleMaximise).toHaveBeenCalledTimes(1);
   });
 
   it('does not toggle maximise when a control is double-clicked', () => {

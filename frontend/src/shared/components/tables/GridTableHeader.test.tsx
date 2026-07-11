@@ -20,7 +20,7 @@ describe('GridTableHeader', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
-    const headerRef = { current: null as HTMLDivElement | null };
+    const headerRef = { current: null as HTMLTableElement | null };
 
     await act(async () => {
       root.render(
@@ -29,7 +29,11 @@ describe('GridTableHeader', () => {
           tableClassName="table"
           useShortNames
           scrollbarWidth={12}
-          headerRow={<div className="row">Header</div>}
+          headerRow={
+            <tr className="row">
+              <th>Header</th>
+            </tr>
+          }
           hideHeader={false}
           trailingBoundaryOffset={96}
         />
@@ -51,7 +55,7 @@ describe('GridTableHeader', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
-    const headerRef = { current: null as HTMLDivElement | null };
+    const headerRef = { current: null as HTMLTableElement | null };
 
     await act(async () => {
       root.render(
@@ -60,7 +64,11 @@ describe('GridTableHeader', () => {
           tableClassName="table"
           useShortNames={false}
           scrollbarWidth={0}
-          headerRow={<div>Hidden</div>}
+          headerRow={
+            <tr>
+              <th>Hidden</th>
+            </tr>
+          }
           hideHeader
           trailingBoundaryOffset={null}
         />
@@ -74,7 +82,7 @@ describe('GridTableHeader', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
-    const headerRef = { current: null as HTMLDivElement | null };
+    const headerRef = { current: null as HTMLTableElement | null };
 
     await act(async () => {
       root.render(
@@ -83,7 +91,11 @@ describe('GridTableHeader', () => {
           tableClassName="table"
           useShortNames={false}
           scrollbarWidth={0}
-          headerRow={<div className="row">Header</div>}
+          headerRow={
+            <tr className="row">
+              <th>Header</th>
+            </tr>
+          }
           hideHeader={false}
           trailingBoundaryOffset={null}
         />

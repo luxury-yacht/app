@@ -9,7 +9,7 @@ import type React from 'react';
 import type { RefObject } from 'react';
 
 interface GridTableHeaderProps {
-  headerInnerRef: RefObject<HTMLDivElement | null>;
+  headerInnerRef: RefObject<HTMLTableElement | null>;
   tableClassName: string;
   useShortNames: boolean;
   scrollbarWidth: number;
@@ -36,12 +36,12 @@ const GridTableHeader: React.FC<GridTableHeaderProps> = ({
       className="gridtable-header-container"
       style={scrollbarWidth > 0 ? { paddingRight: `${scrollbarWidth}px` } : undefined}
     >
-      <div
+      <table
         ref={headerInnerRef}
         className={`gridtable gridtable--header ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
       >
-        {headerRow}
-      </div>
+        <thead>{headerRow}</thead>
+      </table>
       {trailingBoundaryOffset !== null && (
         <div
           className="gridtable-trailing-boundary gridtable-trailing-boundary--header"

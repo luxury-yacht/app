@@ -102,6 +102,20 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.gridtable-wrapper > caption {
+  display: block;
+}
+
+.gridtable-wrapper > tbody {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: fit-content;
+  min-width: 100%;
 }
 
 .gridtable-wrapper:focus {
@@ -173,6 +187,11 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   width: fit-content;
   min-width: 100%;
   will-change: transform;
+}
+
+.gridtable--header > thead {
+  display: block;
+  width: 100%;
 }
 
 .gridtable--body {
@@ -361,14 +380,6 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 .gridtable-virtual-body {
   position: relative;
   width: 100%;
-}
-
-.gridtable-virtual-inner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  will-change: transform;
-  min-width: 100%;
 }
 
 .gridtable-row {

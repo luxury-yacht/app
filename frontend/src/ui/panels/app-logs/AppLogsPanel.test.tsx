@@ -241,9 +241,7 @@ describe('AppLogsPanel', () => {
     expect(header).not.toBeNull();
     expect(
       Array.from(
-        requireValue(header, 'expected test value in AppLogsPanel.test.tsx').querySelectorAll(
-          '[role="columnheader"]'
-        )
+        requireValue(header, 'expected test value in AppLogsPanel.test.tsx').querySelectorAll('th')
       ).map((cell) => cell.textContent)
     ).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
 
