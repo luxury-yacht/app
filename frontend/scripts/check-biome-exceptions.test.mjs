@@ -5,8 +5,8 @@ import {
   collectLifetimeHookCallsites,
   collectSuppressions,
   readSourceFiles,
-  validateLifetimeHookSnapshot,
   validateExceptionSnapshot,
+  validateLifetimeHookSnapshot,
 } from './check-biome-exceptions.mjs';
 
 describe('Biome exception snapshot', () => {
@@ -104,24 +104,25 @@ describe('Biome exception snapshot', () => {
 });
 
 describe('Biome inline suppression policy', () => {
-  it.each(['biome-ignore-all', 'biome-ignore-start', 'biome-ignore-end'])(
-    'rejects broad %s directives',
-    (directive) => {
-      const result = collectSuppressions([
-        {
-          file: 'src/widget.tsx',
-          content: `// ${directive} lint/a11y/noAutofocus: broad suppression`,
-        },
-      ]);
+  it.each([
+    'biome-ignore-all',
+    'biome-ignore-start',
+    'biome-ignore-end',
+  ])('rejects broad %s directives', (directive) => {
+    const result = collectSuppressions([
+      {
+        file: 'src/widget.tsx',
+        content: `// ${directive} lint/a11y/noAutofocus: broad suppression`,
+      },
+    ]);
 
-      expect(result).toEqual({
-        errors: [
-          `src/widget.tsx:1 Biome suppression form ${directive} is prohibited; use an exact inline biome-ignore directive`,
-        ],
-        suppressions: [],
-      });
-    }
-  );
+    expect(result).toEqual({
+      errors: [
+        `src/widget.tsx:1 Biome suppression form ${directive} is prohibited; use an exact inline biome-ignore directive`,
+      ],
+      suppressions: [],
+    });
+  });
 
   it('requires an exact rule instead of a rule category', () => {
     const result = collectSuppressions([
@@ -272,6 +273,46 @@ describe('Biome config exception collection', () => {
         'Biome strict rule must remain at error: suspicious.noExplicitAny',
         'Biome unnecessary hook dependency reporting must remain enabled.',
         'Biome exhaustive-dependency hook is missing: useEffectWithInvalidation',
+      ])
+    );
+  });
+
+  it('requires project file extensions and exact plugin scopes', () => {
+    const errors = collectConfigPolicyErrors(
+      {
+        files: { includes: ['**/*.{js,ts,mjs-disabled,cjs.map}'] },
+        formatter: { enabled: true },
+        assist: { enabled: true },
+        linter: {
+          enabled: true,
+          rules: {
+            preset: 'recommended',
+            correctness: {
+              useExhaustiveDependencies: {
+                level: 'error',
+                options: { reportUnnecessaryDependencies: true, hooks: [] },
+              },
+            },
+          },
+        },
+        plugins: [{ path: './boundary.grit', includes: ['src/**/*.ts'] }],
+      },
+      {
+        rulePreset: 'recommended',
+        requiredRules: [],
+        requiredHooks: [],
+        requiredFileExtensions: ['mjs', 'cjs'],
+        requiredPlugins: [
+          { path: './boundary.grit', includes: ['**/src/**/*.ts', '!**/src/allowed/**'] },
+        ],
+      }
+    );
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        'Biome files.includes must cover .mjs files.',
+        'Biome files.includes must cover .cjs files.',
+        'Biome boundary plugin scope must remain exact: ./boundary.grit',
       ])
     );
   });

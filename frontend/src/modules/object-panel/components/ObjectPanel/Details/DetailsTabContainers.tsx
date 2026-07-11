@@ -12,6 +12,7 @@
  */
 
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import '../shared.css';
 import './DetailsTabContainers.css';
@@ -135,9 +136,11 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
 
 const ContainerList: React.FC<{ containers: Container[] }> = ({ containers }) => (
   <div className="containers-card-list">
-    {containers.map((c) => (
-      <ContainerCard key={c.name} container={c} />
-    ))}
+    {withStableListKeys(containers, (container) => container.name).map(
+      ({ key, value: container }) => (
+        <ContainerCard key={key} container={container} />
+      )
+    )}
   </div>
 );
 

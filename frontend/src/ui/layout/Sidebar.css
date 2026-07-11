@@ -341,6 +341,9 @@ body.sidebar-resizing * {
 
 .namespace-scope-add {
   color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
 }
 
 .namespace-scope-add:hover {

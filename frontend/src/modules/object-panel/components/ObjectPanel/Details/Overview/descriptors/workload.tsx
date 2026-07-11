@@ -15,6 +15,7 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor, OverviewItemSpec } from '../schema';
@@ -445,11 +446,13 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
           fullWidth
           value={
             <div className="overview-condition-list">
-              {tolerations.map((p) => (
-                <StatusChip key={`${p.label}:${p.tooltip}`} variant="info" tooltip={p.tooltip}>
-                  {p.label}
-                </StatusChip>
-              ))}
+              {withStableListKeys(tolerations, (toleration) => JSON.stringify(toleration)).map(
+                ({ key, value: toleration }) => (
+                  <StatusChip key={key} variant="info" tooltip={toleration.tooltip}>
+                    {toleration.label}
+                  </StatusChip>
+                )
+              )}
             </div>
           }
         />

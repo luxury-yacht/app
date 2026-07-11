@@ -2,6 +2,7 @@
 
 ### Changed
 
+- Confirmation dialogs initially focus the non-destructive Cancel action.
 - Refresh API TypeScript contracts are now generated from backend Go DTOs, with stale-output and domain-parity checks to prevent cross-layer drift.
 
 ### Fixed

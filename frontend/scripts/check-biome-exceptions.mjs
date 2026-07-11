@@ -35,14 +35,10 @@ export const collectSuppressions = (sources) => {
       const rules = ruleText.split(/\s+/).filter(Boolean);
       rules.forEach((rule) => {
         if (rule.split('/').length < 3) {
-          errors.push(
-            `${file}:${index + 1} Biome suppression must name an exact rule: ${rule}`
-          );
+          errors.push(`${file}:${index + 1} Biome suppression must name an exact rule: ${rule}`);
         }
         if (!rationale) {
-          errors.push(
-            `${file}:${index + 1} Biome suppression requires a rationale: ${rule}`
-          );
+          errors.push(`${file}:${index + 1} Biome suppression requires a rationale: ${rule}`);
         }
         const key = `${file}::${rule}`;
         counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -105,7 +101,9 @@ export const collectConfigPolicyErrors = (config, policy) => {
   }
   collectOffRulePaths(rules)
     .filter((rule) => rule !== 'preset')
-    .forEach((rule) => errors.push(`Biome global rule disabling is prohibited: ${rule}`));
+    .forEach((rule) => {
+      errors.push(`Biome global rule disabling is prohibited: ${rule}`);
+    });
 
   for (const rule of policy.requiredRules ?? []) {
     if (configuredRuleLevel(rules, rule) !== 'error') {
@@ -124,10 +122,34 @@ export const collectConfigPolicyErrors = (config, policy) => {
     }
   }
 
-  const configuredPlugins = new Set((config.plugins ?? []).map(({ path: pluginPath }) => pluginPath));
-  for (const pluginPath of policy.requiredPlugins ?? []) {
+  const fileIncludes = config.files?.includes ?? [];
+  const includesExtension = (pattern, extension) => {
+    if (pattern.startsWith('!')) return false;
+    if (pattern.endsWith(`.${extension}`)) return true;
+    return [...pattern.matchAll(/\{([^{}]+)\}/g)].some((match) =>
+      match[1].split(',').includes(extension)
+    );
+  };
+  for (const extension of policy.requiredFileExtensions ?? []) {
+    if (!fileIncludes.some((pattern) => includesExtension(pattern, extension))) {
+      errors.push(`Biome files.includes must cover .${extension} files.`);
+    }
+  }
+
+  const configuredPlugins = new Map(
+    (config.plugins ?? []).map((plugin) => [plugin.path, plugin.includes ?? []])
+  );
+  for (const requiredPlugin of policy.requiredPlugins ?? []) {
+    const pluginPath = typeof requiredPlugin === 'string' ? requiredPlugin : requiredPlugin.path;
     if (!configuredPlugins.has(pluginPath)) {
       errors.push(`Biome boundary plugin is missing: ${pluginPath}`);
+      continue;
+    }
+    if (
+      typeof requiredPlugin !== 'string' &&
+      JSON.stringify(configuredPlugins.get(pluginPath)) !== JSON.stringify(requiredPlugin.includes)
+    ) {
+      errors.push(`Biome boundary plugin scope must remain exact: ${pluginPath}`);
     }
   }
 
@@ -163,8 +185,7 @@ export const validateLifetimeHookSnapshot = (actual, approved) => {
   const errors = actual
     .filter(({ file }) => !approvedByFile.has(file))
     .map(
-      ({ file, hooks }) =>
-        `Unapproved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
+      ({ file, hooks }) => `Unapproved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
     );
   for (const { file, hooks } of actual) {
     const expected = approvedByFile.get(file);
@@ -262,7 +283,9 @@ export const readSourceFiles = (projectRoot) => {
     if (stat.isDirectory()) {
       fs.readdirSync(entryPath)
         .filter((entry) => !excludedDirectories.has(entry))
-        .forEach((entry) => visit(path.join(entryPath, entry)));
+        .forEach((entry) => {
+          visit(path.join(entryPath, entry));
+        });
       return;
     }
     if (!sourceExtensions.has(path.extname(entryPath))) return;
@@ -302,7 +325,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === modulePath) {
   const projectRoot = path.resolve(path.dirname(modulePath), '..');
   const errors = validateProjectExceptions(projectRoot);
   if (errors.length > 0) {
-    errors.forEach((error) => console.error(error));
+    errors.forEach((error) => {
+      console.error(error);
+    });
     process.exitCode = 1;
   } else {
     console.log('Biome exception snapshot matches the approved manifest.');

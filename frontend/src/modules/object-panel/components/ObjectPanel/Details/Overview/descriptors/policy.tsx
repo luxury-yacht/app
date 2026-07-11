@@ -9,6 +9,7 @@
 
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -73,8 +74,8 @@ const renderBehaviorRules = (
       {policies.length > 0 ? (
         <div className="policy-detail-row">
           <span className="policy-detail-label">Rules:</span>
-          {policies.map((p, i) => (
-            <span key={formatPolicy(p)}>
+          {withStableListKeys(policies, formatPolicy).map(({ key, value: p }, i) => (
+            <span key={key}>
               {i > 0 && ', '}
               {formatPolicy(p)}
             </span>

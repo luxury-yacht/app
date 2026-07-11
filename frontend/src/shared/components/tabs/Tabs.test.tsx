@@ -718,6 +718,89 @@ describe('Tabs', () => {
     expect(tablist?.querySelectorAll('[role="tab"]').length).toBe(0);
   });
 
+  it('does not recreate the scroll observer when only the tabs array identity changes', async () => {
+    let observeCount = 0;
+    let disconnectCount = 0;
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {
+          observeCount += 1;
+        }
+        unobserve() {}
+        disconnect() {
+          disconnectCount += 1;
+        }
+      }
+    );
+    const render = (tabs: Array<{ id: string; label: string }>) => {
+      root.render(
+        <Tabs
+          tabs={tabs}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+          overflow="scroll"
+        />
+      );
+    };
+
+    try {
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+      const initialObserveCount = observeCount;
+
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+
+      expect(observeCount).toBe(initialObserveCount);
+      expect(disconnectCount).toBe(0);
+    } finally {
+      restoreResizeObserver();
+    }
+  });
+
+  it('remeasures overflow when the tab list changes without recreating the observer', async () => {
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const render = (tabs: Array<{ id: string; label: string }>) => {
+      root.render(
+        <Tabs
+          tabs={tabs}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+          overflow="scroll"
+        />
+      );
+    };
+
+    try {
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+      const tablist = requireValue(
+        container.querySelector<HTMLElement>('[role="tablist"]'),
+        'expected scrollable tab list'
+      );
+      Object.defineProperty(tablist, 'clientWidth', { configurable: true, value: 100 });
+      Object.defineProperty(tablist, 'scrollWidth', { configurable: true, value: 240 });
+
+      await act(async () =>
+        render([
+          { id: 'a', label: 'Alpha' },
+          { id: 'b', label: 'Beta' },
+        ])
+      );
+
+      expect(container.querySelector('[aria-label="Scroll tabs right"]')).not.toBeNull();
+    } finally {
+      restoreResizeObserver();
+    }
+  });
+
   it('keeps the strip keyboard-reachable when activeId does not match any tab', () => {
     act(() => {
       root.render(

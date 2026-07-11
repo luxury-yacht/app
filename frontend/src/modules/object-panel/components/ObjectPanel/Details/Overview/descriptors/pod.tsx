@@ -10,6 +10,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { types } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -177,8 +178,11 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         hidden: (d) => parsedTolerations(d).length === 0,
         render: (d) => (
           <div className="overview-condition-list">
-            {parsedTolerations(d).map((p) => (
-              <StatusChip key={`${p.label}:${p.tooltip}`} variant="info" tooltip={p.tooltip}>
+            {withStableListKeys(
+              parsedTolerations(d),
+              (item) => `${item.label}:${item.tooltip}`
+            ).map(({ key, value: p }) => (
+              <StatusChip key={key} variant="info" tooltip={p.tooltip}>
                 {p.label}
               </StatusChip>
             ))}

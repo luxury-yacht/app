@@ -1,7 +1,7 @@
+import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const temporaryDirectories = [];
@@ -36,14 +36,22 @@ const lintWithPlugin = (pluginName, source) => {
   );
 };
 
+const lintWithProjectConfig = (source) => {
+  const directory = mkdtempSync(path.join(process.cwd(), 'src', '.biome-boundary-'));
+  temporaryDirectories.push(directory);
+  const sourcePath = path.join(directory, 'adversarial.ts');
+  writeFileSync(sourcePath, source);
+  return spawnSync(
+    path.join(process.cwd(), 'node_modules', '.bin', 'biome'),
+    ['lint', sourcePath],
+    { encoding: 'utf8' }
+  );
+};
+
 describe('Biome architectural boundary plugins', () => {
   it.each([
     ['no-direct-fetch', 'fetch("/api/resources");', 'direct fetch calls'],
-    [
-      'no-direct-lifecycle-read',
-      'runtime.GetAllClusterLifecycleStates();',
-      'appStateAccess',
-    ],
+    ['no-direct-lifecycle-read', 'runtime.GetAllClusterLifecycleStates();', 'appStateAccess'],
     ['no-direct-permission-read', 'runtime.QueryPermissions([]);', 'dataAccess'],
     [
       'no-direct-refresh-orchestrator',
@@ -71,5 +79,29 @@ describe('Biome architectural boundary plugins', () => {
     const result = lintWithPlugin(pluginName, source);
 
     expect(result.status).toBe(0);
+  });
+
+  it.each([
+    ['fetch("/api/resources");', 'direct fetch calls'],
+    ['runtime.GetAllClusterLifecycleStates();', 'appStateAccess'],
+    ['runtime.QueryPermissions([]);', 'dataAccess'],
+    ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
+    ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
+  ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
+    const result = lintWithProjectConfig(source);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(diagnostic);
+  });
+
+  it('rejects relative imports of the generated backend App binding', () => {
+    const result = lintWithProjectConfig(
+      'import { GetAppInfo } from "../../wailsjs/go/backend/App"; void GetAppInfo;'
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      'Import generated backend bindings only through @/core/backend-api.'
+    );
   });
 });

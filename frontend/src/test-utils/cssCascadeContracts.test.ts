@@ -59,6 +59,48 @@ describe('strict CSS cascade contracts', () => {
     expect(window.getComputedStyle(usage as HTMLElement).transition).toBe('none');
   });
 
+  it('keeps the log timestamp format error border above its input base rule', () => {
+    const style = installStyles(
+      readProjectFile('styles/components/modals.css').replace(
+        /var\(--status-error-text\)/g,
+        'rgb(200, 10, 20)'
+      ),
+      readProjectFile(
+        'src/modules/object-panel/components/ObjectPanel/Logs/ObjPanelLogsSettings.css'
+      )
+        .replace(/var\(--color-border\)/g, 'rgb(1, 2, 3)')
+        .replace(/var\(--status-error-text\)/g, 'rgb(200, 10, 20)')
+    );
+    style.dataset.cssContract = 'log-timestamp-error';
+    document.body.innerHTML = `
+      <div class="obj-panel-logs-settings-timestamp-grid">
+        <input type="text" class="modal-input-error" />
+      </div>
+    `;
+
+    const input = document.querySelector<HTMLInputElement>('input');
+    expect(window.getComputedStyle(input as HTMLInputElement).borderTopColor).toBe(
+      'rgb(200, 10, 20)'
+    );
+  });
+
+  it('resets native button chrome on the namespace-scope add affordance', () => {
+    const style = installStyles(readProjectFile('src/ui/layout/Sidebar.css'));
+    style.dataset.cssContract = 'namespace-scope-add';
+    document.body.innerHTML = `
+      <button type="button" class="sidebar-item namespace-scope-add">Add namespace</button>
+    `;
+
+    const button = document.querySelector<HTMLButtonElement>('.namespace-scope-add');
+    const computed = window.getComputedStyle(button as HTMLButtonElement);
+    expect(computed.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(computed.borderTopStyle).toBe('none');
+    expect(computed.borderRightStyle).toBe('none');
+    expect(computed.borderBottomStyle).toBe('none');
+    expect(computed.borderLeftStyle).toBe('solid');
+    expect(computed.borderLeftWidth).toBe('3px');
+  });
+
   it('limits important declarations to documented external and global-state boundaries', () => {
     const classifiedBoundaries = [
       ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 3],

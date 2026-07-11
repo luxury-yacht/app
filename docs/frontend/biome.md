@@ -62,7 +62,11 @@ The approved hook-rule suppression surface is intentionally narrow:
 - four suppressions inside `useHookLifetimes.ts`, where the helper APIs implement the explicit
   lifetime contract;
 - one controlled-field persistence effect in `LogViewer.tsx`;
-- one stable ref callback in `useTabDropTarget.ts` whose identity must not churn.
+- one stable ref callback in `useTabDropTarget.ts` whose identity must not churn;
+- one state-only overflow remeasurement in `Tabs.tsx`, where tab identity changes scroll width
+  without changing the observed container size;
+- two tab-count remeasurements in `ClusterTabs.tsx`, where tab content changes can require height
+  and label-fit checks without changing either observed box.
 
 All other hook dependency arrays must pass missing- and unnecessary-dependency reporting directly.
 
@@ -82,18 +86,22 @@ requires shrinking the manifest.
 The manifest is not permission to add an exception. It makes exceptional scope explicit and
 reviewable.
 
-The validator scans the whole frontend project for Biome-supported source/config extensions while
-excluding dependency, build, coverage, lockfile, and generated-binding trees. It rejects:
+The validator scans the whole frontend project for Biome-supported source/config extensions,
+including the repository's `.mjs` and `.cjs` scripts, while excluding dependency, build, coverage,
+lockfile, and generated-binding trees. It rejects:
 
 - `biome-ignore-all`, `biome-ignore-start`, and `biome-ignore-end`;
 - inline suppressions without an exact rule and rationale;
 - disabled formatter, assist, or linter configuration;
 - global rule shutdowns, `preset: none`, and override-level linter shutdowns;
-- removal or weakening of required rules, hooks, or plugins.
+- removal or weakening of required rules, hooks, or plugins;
+- changes to the exact include/exclude scope of a required Grit plugin.
 
 The Grit plugins have executable adversarial fixtures in
-`frontend/scripts/check-biome-boundaries.test.mjs`. Each fixture proves the boundary rejects its
-forbidden direct call and accepts a call through the approved facade.
+`frontend/scripts/check-biome-boundaries.test.mjs`. Isolated fixtures prove each pattern rejects its
+forbidden direct call and accepts a call through the approved facade. Real-project fixtures also
+lint temporary files under `frontend/src` through `frontend/biome.json`; these guard the configured
+plugin globs and backend-binding import patterns, not only the plugin source.
 
 ## Reviewing a config override
 

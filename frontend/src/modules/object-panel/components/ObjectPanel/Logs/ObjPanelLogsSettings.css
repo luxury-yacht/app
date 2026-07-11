@@ -107,6 +107,10 @@
   width: 30ch;
 }
 
+.obj-panel-logs-settings-timestamp-grid input[type="text"].modal-input-error {
+  border-color: var(--status-error-text);
+}
+
 .obj-panel-logs-settings-timestamp-control {
   grid-column: 2;
   display: inline-flex;

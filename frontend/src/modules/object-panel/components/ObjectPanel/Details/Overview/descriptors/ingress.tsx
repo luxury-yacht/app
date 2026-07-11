@@ -9,6 +9,7 @@
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { ingress } from '@wailsjs/go/models';
 import React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -103,43 +104,47 @@ const renderRules = (d: IngressDetails, context: OverviewContext): React.ReactNo
   const tlsHosts = tlsHostsOf(d);
   return (
     <div className="overview-card-list">
-      {(d.rules ?? []).map((rule: ingress.IngressRuleDetails) => (
-        <div key={JSON.stringify(rule)} className="overview-card">
-          <div className="overview-card-header">
-            <span className="overview-card-title">
-              {rule.host ? (
-                <ExternalHostLinks
-                  host={rule.host}
-                  schemes={ingressHostSchemes(rule.host, tlsHosts).map((scheme) => ({
-                    scheme,
-                  }))}
-                />
-              ) : (
-                'Default'
-              )}
-            </span>
-          </div>
-          {rule.paths && rule.paths.length > 0 && (
-            <div className="overview-card-rows">
-              {rule.paths.map((path: ingress.IngressPathDetails) => (
-                <div key={JSON.stringify(path)} className="overview-row">
-                  <span className="overview-row-label">{path.path || '/'}</span>
-                  <span className="overview-row-value">
-                    {!!path.pathType && (
-                      <>
-                        <StatusChip variant="info" tooltip={pathTypeTooltip(path.pathType)}>
-                          {path.pathType}
-                        </StatusChip>{' '}
-                      </>
-                    )}
-                    → {renderBackend(path.backend, namespace, clusterMeta)}
-                  </span>
-                </div>
-              ))}
+      {withStableListKeys(d.rules ?? [], (rule) => JSON.stringify(rule)).map(
+        ({ key, value: rule }) => (
+          <div key={key} className="overview-card">
+            <div className="overview-card-header">
+              <span className="overview-card-title">
+                {rule.host ? (
+                  <ExternalHostLinks
+                    host={rule.host}
+                    schemes={ingressHostSchemes(rule.host, tlsHosts).map((scheme) => ({
+                      scheme,
+                    }))}
+                  />
+                ) : (
+                  'Default'
+                )}
+              </span>
             </div>
-          )}
-        </div>
-      ))}
+            {rule.paths && rule.paths.length > 0 && (
+              <div className="overview-card-rows">
+                {withStableListKeys(rule.paths, (path) => JSON.stringify(path)).map(
+                  ({ key: pathKey, value: path }) => (
+                    <div key={pathKey} className="overview-row">
+                      <span className="overview-row-label">{path.path || '/'}</span>
+                      <span className="overview-row-value">
+                        {!!path.pathType && (
+                          <>
+                            <StatusChip variant="info" tooltip={pathTypeTooltip(path.pathType)}>
+                              {path.pathType}
+                            </StatusChip>{' '}
+                          </>
+                        )}
+                        → {renderBackend(path.backend, namespace, clusterMeta)}
+                      </span>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )
+      )}
     </div>
   );
 };
@@ -149,19 +154,21 @@ const renderTls = (d: IngressDetails, context: OverviewContext): React.ReactNode
   const clusterMeta = clusterMetaOf(context);
   return (
     <div className="overview-card-list">
-      {(d.tls ?? []).map((tls: ingress.IngressTLSDetails) => (
-        <div key={JSON.stringify(tls)} className="overview-card">
+      {withStableListKeys(d.tls ?? [], (tls) => JSON.stringify(tls)).map(({ key, value: tls }) => (
+        <div key={key} className="overview-card">
           <div className="overview-card-rows">
             {tls.hosts && tls.hosts.length > 0 && (
               <div className="overview-row">
                 <span className="overview-row-label">Hosts</span>
                 <span className="overview-row-value">
-                  {tls.hosts.map((host, i) => (
-                    <React.Fragment key={host}>
-                      {i > 0 && ' '}
-                      <StatusChip variant="info">{host}</StatusChip>
-                    </React.Fragment>
-                  ))}
+                  {withStableListKeys(tls.hosts, (host) => host).map(
+                    ({ key: hostKey, value: host }, i) => (
+                      <React.Fragment key={hostKey}>
+                        {i > 0 && ' '}
+                        <StatusChip variant="info">{host}</StatusChip>
+                      </React.Fragment>
+                    )
+                  )}
                 </span>
               </div>
             )}

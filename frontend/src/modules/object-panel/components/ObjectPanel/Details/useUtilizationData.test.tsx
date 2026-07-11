@@ -27,8 +27,7 @@ vi.mock('@/core/refresh', () => ({
       refreshMocks.acquireScopedDomainLease(...args),
     releaseScopedDomainLease: (...args: unknown[]) =>
       refreshMocks.releaseScopedDomainLease(...args),
-    fetchScopedDomain: (domain: unknown, scope: unknown, options: unknown) =>
-      refreshMocks.fetchScopedDomain(domain, scope, options),
+    fetchScopedDomain: refreshMocks.fetchScopedDomain,
   },
 }));
 

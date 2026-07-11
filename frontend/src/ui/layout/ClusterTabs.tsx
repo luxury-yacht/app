@@ -180,6 +180,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     [dropRef]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Adding or removing tabs can change the tab-strip height without a reliable observed-box resize notification.
   useEffect(() => {
     // Expose the tab strip height so dockable panels can respect the top chrome.
     if (typeof document === 'undefined') {
@@ -204,8 +205,9 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       observer?.disconnect();
       root.style.setProperty('--cluster-tabs-height', '0px');
     };
-  }, []);
+  }, [orderedTabs.length]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Adding or removing tabs changes measured strip content without necessarily resizing either observed box.
   useEffect(() => {
     // Show "Open Cluster" beside the "+" while the bar has room; collapse to just
     // "+" when the tabs need the space. The test compares the tabs' full content
@@ -247,7 +249,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       observer.observe(strip);
     }
     return () => observer.disconnect();
-  }, []);
+  }, [orderedTabs.length]);
 
   // Note: `makeDragSource` produces a fresh closure every call (by design —
   // one call per tab per render). Do NOT wrap this .map() in useMemo with

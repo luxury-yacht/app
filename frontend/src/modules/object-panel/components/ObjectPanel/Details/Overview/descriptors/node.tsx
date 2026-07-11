@@ -10,6 +10,7 @@
 
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { nodes } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
@@ -91,14 +92,16 @@ const renderRoles = (d: NodeDetails): React.ReactNode => (
 
 const renderTaints = (d: NodeDetails): React.ReactNode => (
   <div className="overview-condition-list">
-    {(d.taints ?? []).map((taint) => {
-      const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
-      return (
-        <StatusChip key={label} variant="warning">
-          {label}
-        </StatusChip>
-      );
-    })}
+    {withStableListKeys(d.taints ?? [], (taint) => JSON.stringify(taint)).map(
+      ({ key, value: taint }) => {
+        const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
+        return (
+          <StatusChip key={key} variant="warning">
+            {label}
+          </StatusChip>
+        );
+      }
+    )}
   </div>
 );
 

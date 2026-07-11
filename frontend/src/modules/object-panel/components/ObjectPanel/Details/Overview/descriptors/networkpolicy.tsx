@@ -5,6 +5,7 @@
  * NetworkPolicyOverview.tsx.
  */
 
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { networkpolicy } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
@@ -29,9 +30,9 @@ const PeerLines: React.FC<{ peers: networkpolicy.NetworkPolicyPeer[]; keyPrefix:
   keyPrefix,
 }) => (
   <>
-    {peers.flatMap((peer, peerIndex) => {
+    {withStableListKeys(peers, (peer) => JSON.stringify(peer)).flatMap(({ key, value: peer }) => {
       const lines: React.ReactNode[] = [];
-      const baseKey = `${keyPrefix}-${peerIndex}`;
+      const baseKey = `${keyPrefix}-${key}`;
       if (peer.podSelector && Object.keys(peer.podSelector).length > 0) {
         lines.push(
           <div key={`${baseKey}-pods`}>
@@ -103,14 +104,11 @@ const renderRules = (
   direction: 'ingress' | 'egress'
 ): React.ReactNode => (
   <div className="overview-card-list">
-    {rules.map((rule, ruleIndex) => (
-      <RuleCard
-        key={`${direction}:${JSON.stringify(rule)}`}
-        rule={rule}
-        index={ruleIndex}
-        direction={direction}
-      />
-    ))}
+    {withStableListKeys(rules, (rule) => JSON.stringify(rule)).map(
+      ({ key, value: rule }, ruleIndex) => (
+        <RuleCard key={`${direction}:${key}`} rule={rule} index={ruleIndex} direction={direction} />
+      )
+    )}
   </div>
 );
 

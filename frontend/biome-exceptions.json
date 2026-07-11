@@ -35,11 +35,32 @@
       "useLayoutEffectWithInvalidation",
       "useMemoWithInvalidation"
     ],
+    "requiredFileExtensions": ["mjs", "cjs"],
     "requiredPlugins": [
-      "./biome-plugins/no-direct-fetch.grit",
-      "./biome-plugins/no-direct-lifecycle-read.grit",
-      "./biome-plugins/no-direct-permission-read.grit",
-      "./biome-plugins/no-direct-refresh-orchestrator.grit"
+      {
+        "path": "./biome-plugins/no-direct-fetch.grit",
+        "includes": [
+          "**/src/**/*.{ts,tsx}",
+          "!**/src/core/refresh/**",
+          "!**/src/core/data-access/**"
+        ]
+      },
+      {
+        "path": "./biome-plugins/no-direct-lifecycle-read.grit",
+        "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
+      },
+      {
+        "path": "./biome-plugins/no-direct-permission-read.grit",
+        "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
+      },
+      {
+        "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
+        "includes": [
+          "**/src/**/*.{ts,tsx}",
+          "!**/src/core/refresh/**",
+          "!**/src/core/data-access/**"
+        ]
+      }
     ]
   },
   "hookLifetimes": [
@@ -152,7 +173,6 @@
       "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
       "hooks": { "useMountEffect": 1 }
     },
-    { "file": "src/shared/components/tabs/Tabs.tsx", "hooks": { "useEffectWithInvalidation": 1 } },
     {
       "file": "src/shared/components/yaml/YamlEditor.tsx",
       "hooks": { "useEffectWithInvalidation": 1 }
@@ -487,6 +507,11 @@
       "count": 1
     },
     {
+      "file": "src/shared/components/tabs/Tabs.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
       "file": "src/shared/hooks/useHookLifetimes.ts",
       "rule": "lint/correctness/useExhaustiveDependencies",
       "count": 4
@@ -500,6 +525,11 @@
       "file": "src/ui/layout/appFocusRegions.test.tsx",
       "rule": "lint/a11y/noNoninteractiveTabindex",
       "count": 3
+    },
+    {
+      "file": "src/ui/layout/ClusterTabs.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 2
     }
   ]
 }

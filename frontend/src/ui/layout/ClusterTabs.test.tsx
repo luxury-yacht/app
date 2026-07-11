@@ -14,6 +14,7 @@ import ClusterTabs from '@ui/layout/ClusterTabs';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 
 type MockState = {
   selectedKubeconfigs: string[];
@@ -119,6 +120,63 @@ describe('ClusterTabs', () => {
 
     const addButton = container.querySelector('.cluster-tabs-add');
     expect(addButton?.textContent).toContain('Open Cluster');
+  });
+
+  it('remeasures Open Cluster label fit when the number of tabs changes', async () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth'
+    );
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        return this.classList.contains('cluster-tabs-wrapper') ? 300 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get() {
+        if (this.classList.contains('cluster-tabs-add')) return 100;
+        if (this.classList.contains('tab-item')) return 80;
+        return 0;
+      },
+    });
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+
+    try {
+      mockState.selectedKubeconfigs = ['a'];
+      mockState.selectedKubeconfig = 'a';
+      await renderTabs({ onOpenCluster: vi.fn() });
+      expect(container.querySelector('.cluster-tabs-add__label')).not.toBeNull();
+
+      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
+      await renderTabs({ onOpenCluster: vi.fn() });
+
+      expect(container.querySelector('.cluster-tabs-add__label')).toBeNull();
+    } finally {
+      restoreResizeObserver();
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+      }
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
+      }
+    }
   });
 
   it('orders tabs by persisted drag order with selection-order fallback', async () => {

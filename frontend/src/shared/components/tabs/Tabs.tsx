@@ -10,7 +10,6 @@
  */
 
 import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import {
   type CSSProperties,
   Fragment,
@@ -325,38 +324,34 @@ export function Tabs({
   // was the root cause of rapid-chevron-click tabs appearing broken in the
   // live app while working in Storybook (Storybook parents re-render far
   // less frequently). See also the unmount-only rAF cleanup effect below.
-  useEffectWithInvalidation(
-    () => {
-      if (overflow !== 'scroll' || !scrollRef.current) {
-        setHasOverflow(false);
-        setAtStart(true);
-        setAtEnd(false);
-        return;
-      }
+  useEffect(() => {
+    if (overflow !== 'scroll' || !scrollRef.current) {
+      setHasOverflow(false);
+      setAtStart(true);
+      setAtEnd(false);
+      return;
+    }
 
-      const el = scrollRef.current;
-      const measure = () => {
-        const max = el.scrollWidth - el.clientWidth;
-        setHasOverflow(max > 1);
-        setAtStart(el.scrollLeft <= 0);
-        setAtEnd(el.scrollLeft >= max - 1);
-      };
+    const el = scrollRef.current;
+    const measure = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setHasOverflow(max > 1);
+      setAtStart(el.scrollLeft <= 0);
+      setAtEnd(el.scrollLeft >= max - 1);
+    };
 
-      measure();
-      // ResizeObserver is a global in browsers; in environments without it
-      // (e.g. jsdom without a mock) fall back to a one-shot measurement.
-      const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
-      const observer = RO ? new RO(measure) : null;
-      observer?.observe(el);
-      el.addEventListener('scroll', measure);
-      return () => {
-        observer?.disconnect();
-        el.removeEventListener('scroll', measure);
-      };
-    },
-    [overflow],
-    [tabs]
-  );
+    measure();
+    // ResizeObserver is a global in browsers; in environments without it
+    // (e.g. jsdom without a mock) fall back to a one-shot measurement.
+    const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
+    const observer = RO ? new RO(measure) : null;
+    observer?.observe(el);
+    el.addEventListener('scroll', measure);
+    return () => {
+      observer?.disconnect();
+      el.removeEventListener('scroll', measure);
+    };
+  }, [overflow]);
 
   // Re-measure when the tab list changes so hasOverflow / atStart / atEnd
   // catch newly-added or newly-removed tabs. ResizeObserver observes the
@@ -367,6 +362,7 @@ export function Tabs({
   // dep array even though that identity flips on every parent render.
   // React bails out of no-op state updates (e.g. setHasOverflow(true) when
   // already true), so repeat invocations are free.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Tab descriptors change scrollWidth without changing the observed container size, so the list identity intentionally triggers a state-only remeasurement.
   useEffect(() => {
     if (overflow !== 'scroll') return;
     const el = scrollRef.current;
@@ -375,7 +371,7 @@ export function Tabs({
     setHasOverflow(max > 1);
     setAtStart(el.scrollLeft <= 0);
     setAtEnd(el.scrollLeft >= max - 1);
-  }, [overflow]);
+  }, [overflow, tabs]);
 
   // Cancel any in-flight rAF scroll animation on unmount. Kept as a
   // separate unmount-only effect so it doesn't run on every overflow or

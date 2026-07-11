@@ -8,7 +8,7 @@
   },
   "files": {
     "includes": [
-      "**/*.{js,jsx,ts,tsx,css,json,jsonc,html}",
+      "**/*.{js,jsx,ts,tsx,mjs,cjs,css,json,jsonc,html}",
       "!!dist",
       "!!wailsjs",
       "!!package-lock.json"
@@ -101,7 +101,13 @@
           "options": {
             "paths": {
               "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api."
-            }
+            },
+            "patterns": [
+              {
+                "group": ["**/wailsjs/go/backend/App"],
+                "message": "Import generated backend bindings only through @/core/backend-api."
+              }
+            ]
           }
         }
       }
@@ -123,19 +129,19 @@
   "plugins": [
     {
       "path": "./biome-plugins/no-direct-fetch.grit",
-      "includes": ["src/**/*.{ts,tsx}", "!src/core/refresh/**", "!src/core/data-access/**"]
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
     },
     {
       "path": "./biome-plugins/no-direct-lifecycle-read.grit",
-      "includes": ["src/**/*.{ts,tsx}", "!src/core/app-state-access/readers.ts"]
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
     },
     {
       "path": "./biome-plugins/no-direct-permission-read.grit",
-      "includes": ["src/**/*.{ts,tsx}", "!src/core/data-access/readers.ts"]
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
     },
     {
       "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
-      "includes": ["src/**/*.{ts,tsx}", "!src/core/refresh/**", "!src/core/data-access/**"]
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
     }
   ],
   "overrides": [
