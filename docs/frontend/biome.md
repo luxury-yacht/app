@@ -66,7 +66,9 @@ The approved hook-rule suppression surface is intentionally narrow:
 - one state-only overflow remeasurement in `Tabs.tsx`, where tab identity changes scroll width
   without changing the observed container size;
 - two tab-count remeasurements in `ClusterTabs.tsx`, where tab content changes can require height
-  and label-fit checks without changing either observed box.
+  and label-fit checks without changing either observed box;
+- one GridTable visible-auto-column invalidation, where virtual row-range changes alter the
+  rendered-cell signature without changing the dirty-marking callback identity.
 
 All other hook dependency arrays must pass missing- and unnecessary-dependency reporting directly.
 

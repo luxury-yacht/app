@@ -502,6 +502,11 @@
       "count": 2
     },
     {
+      "file": "src/shared/components/tables/hooks/useGridTableController.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
       "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
       "rule": "lint/correctness/useExhaustiveDependencies",
       "count": 1

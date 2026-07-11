@@ -358,6 +358,41 @@ describe('GridTable virtualization', () => {
     expect(renderedRows[renderedRows.length - 1]).toContain('Row 20');
   });
 
+  it('invalidates visible auto-width columns when the virtual row window changes', async () => {
+    const renderCell = vi.fn((row: SimpleRow) => row.label);
+    const rows = createRows(120);
+    const { cleanup, scrollWrapper } = renderGridTable({
+      data: rows,
+      columns: [
+        {
+          key: 'label',
+          header: 'Label',
+          autoWidth: true,
+          render: renderCell,
+        },
+      ],
+      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+    });
+    cleanupRoot = cleanup;
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 320));
+    });
+    renderCell.mockClear();
+
+    const wrapper = scrollWrapper();
+    await act(async () => {
+      wrapper.scrollTop = 400;
+      wrapper.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 320));
+    });
+
+    expect(renderCell).toHaveBeenCalledWith(rows[rows.length - 1]);
+  });
+
   it('maintains focus on focused row content while the virtual window shifts', () => {
     const { container, cleanup, scrollWrapper } = renderGridTable({
       data: createRows(60),
