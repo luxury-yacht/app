@@ -388,19 +388,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     ]
   );
 
-  const handlePodStatusKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>, filter: PodStatusFilter, count: number) => {
-      if (count <= 0) {
-        return;
-      }
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        handlePodStatusNavigate(filter, count);
-      }
-    },
-    [handlePodStatusNavigate]
-  );
-
   const podStatusItems = [
     {
       key: 'ready',
@@ -457,26 +444,29 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }) => {
     const clickable = item.clickable !== false && item.value > 0;
     const itemClass = `pod-status-card pod-status-card--${item.variant}${clickable ? ' pod-status-card--clickable' : ''}`;
-    return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: the card is conditionally interactive and supplies role, focus, and keyboard activation together.
-      <div
-        key={item.key}
-        className={itemClass}
-        role={clickable ? 'button' : undefined}
-        tabIndex={clickable ? 0 : undefined}
-        onClick={clickable ? () => handlePodStatusNavigate(item.filter, item.value) : undefined}
-        onKeyDown={
-          clickable ? (event) => handlePodStatusKeyDown(event, item.filter, item.value) : undefined
-        }
-        aria-disabled={!clickable}
-        data-testid={`cluster-pod-status-${item.key}`}
-      >
+    const content = (
+      <>
         <span className="pod-status-card__count">
           {showSkeleton || podsUnavailable ? DASH : item.value}
         </span>
         <span className="pod-status-card__label" title={item.label}>
           {item.label}
         </span>
+      </>
+    );
+    return clickable ? (
+      <button
+        type="button"
+        key={item.key}
+        className={itemClass}
+        onClick={() => handlePodStatusNavigate(item.filter, item.value)}
+        data-testid={`cluster-pod-status-${item.key}`}
+      >
+        {content}
+      </button>
+    ) : (
+      <div key={item.key} className={itemClass} data-testid={`cluster-pod-status-${item.key}`}>
+        {content}
       </div>
     );
   };
@@ -1254,32 +1244,29 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 const rowClass = `recent-events__row${
                   clickable ? ' recent-events__row--clickable' : ''
                 }`;
+                const content = (
+                  <>
+                    <LiveAgeText timestamp={event.timestamp} className="recent-events__age" />
+                    <span className="recent-events__reason">{event.reason}</span>
+                    <span className="recent-events__message">{event.message}</span>
+                  </>
+                );
                 return (
                   <li key={event.eventUid}>
-                    {/* biome-ignore lint/a11y/noStaticElementInteractions: interactive event rows supply role, focus, and keyboard activation when navigation is available. */}
-                    <div
-                      className={rowClass}
-                      role={clickable ? 'button' : undefined}
-                      tabIndex={clickable ? 0 : undefined}
-                      onClick={clickable ? () => void handleRecentEventOpen(event) : undefined}
-                      onKeyDown={
-                        clickable
-                          ? (e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                void handleRecentEventOpen(event);
-                              }
-                            }
-                          : undefined
-                      }
-                      title={`${event.objectKind}/${event.objectName}${
-                        event.objectNamespace ? ` · ${event.objectNamespace}` : ''
-                      }`}
-                    >
-                      <LiveAgeText timestamp={event.timestamp} className="recent-events__age" />
-                      <span className="recent-events__reason">{event.reason}</span>
-                      <span className="recent-events__message">{event.message}</span>
-                    </div>
+                    {clickable ? (
+                      <button
+                        type="button"
+                        className={rowClass}
+                        onClick={() => void handleRecentEventOpen(event)}
+                        title={`${event.objectKind}/${event.objectName}${
+                          event.objectNamespace ? ` · ${event.objectNamespace}` : ''
+                        }`}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div className={rowClass}>{content}</div>
+                    )}
                   </li>
                 );
               })}

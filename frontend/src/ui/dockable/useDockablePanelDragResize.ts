@@ -5,7 +5,11 @@
  * Handles mouse events, updates panel size/position, and manages cursor styles.
  */
 
-import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  RefObject,
+} from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
@@ -29,6 +33,8 @@ interface DockablePanelDragResizeOptions {
   safeMinHeight: number;
   isMaximized: boolean;
 }
+
+const KEYBOARD_RESIZE_STEP = 16;
 
 /**
  * Handle drag/resize interactions and cursor updates for dockable panels.
@@ -95,6 +101,54 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       e.preventDefault();
     },
     [panelState.size, panelState.floatingPosition, isMaximized]
+  );
+
+  const handleDockedKeyboardResize = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>, position: 'right' | 'bottom') => {
+      const content = getContentBounds();
+      const isRightDock = position === 'right';
+      const minimum = isRightDock ? safeMinWidth : safeMinHeight;
+      const maximum = Math.max(minimum, isRightDock ? content.width : content.height);
+      const current = isRightDock ? panelState.size.width : panelState.size.height;
+      let nextValue: number | null = null;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          if (!isRightDock) return;
+          nextValue = current + KEYBOARD_RESIZE_STEP;
+          break;
+        case 'ArrowRight':
+          if (!isRightDock) return;
+          nextValue = current - KEYBOARD_RESIZE_STEP;
+          break;
+        case 'ArrowUp':
+          if (isRightDock) return;
+          nextValue = current + KEYBOARD_RESIZE_STEP;
+          break;
+        case 'ArrowDown':
+          if (isRightDock) return;
+          nextValue = current - KEYBOARD_RESIZE_STEP;
+          break;
+        case 'Home':
+          nextValue = minimum;
+          break;
+        case 'End':
+          nextValue = maximum;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      const clampedValue = Math.min(Math.max(nextValue, minimum), maximum);
+      panelState.setSize({
+        ...panelState.size,
+        width: isRightDock ? clampedValue : panelState.size.width,
+        height: isRightDock ? panelState.size.height : clampedValue,
+      });
+    },
+    [panelState, safeMinHeight, safeMinWidth]
   );
 
   // Detect resize edge for floating panels
@@ -400,9 +454,12 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     flushSizeUpdate,
   ]);
 
-  // Header clicks always start a drag; dedicated CSS resize-zone overlays handle resizing.
+  // Empty header space starts a panel drag. Interactive descendants keep their
+  // native pointer behavior so buttons and draggable tabs never start a panel drag.
   const handleHeaderMouseDown = useCallback(
     (e: ReactMouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button, [role="tab"], input, select, textarea, a[href]')) return;
       handleMouseDownDrag(e);
     },
     [handleMouseDownDrag]
@@ -413,6 +470,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     isResizing,
     handleHeaderMouseDown,
     handleMouseDownResize,
+    handleDockedKeyboardResize,
     handleFloatingMouseDown,
   };
 }

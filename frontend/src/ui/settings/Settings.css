@@ -569,6 +569,9 @@
 }
 
 .themes-drag-handle {
+  border: 0;
+  background: transparent;
+  padding: 0;
   cursor: grab;
   text-align: center;
   font-size: var(--font-size-normal);

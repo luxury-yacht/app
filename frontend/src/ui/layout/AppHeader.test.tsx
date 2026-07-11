@@ -79,4 +79,19 @@ describe('AppHeader', () => {
 
     expect(runtimeMock.WindowToggleMaximise).not.toHaveBeenCalled();
   });
+
+  it('does not toggle maximise when a control is double-clicked', () => {
+    act(() => {
+      root.render(<AppHeader />);
+    });
+
+    const commandPaletteButton = container.querySelector(
+      '[aria-label="Command Palette"]'
+    ) as HTMLButtonElement;
+    act(() => {
+      commandPaletteButton.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+
+    expect(runtimeMock.WindowToggleMaximise).not.toHaveBeenCalled();
+  });
 });

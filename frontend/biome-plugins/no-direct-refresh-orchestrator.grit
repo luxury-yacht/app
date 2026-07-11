@@ -1,6 +1,9 @@
 engine biome(1.0)
 language js(typescript, jsx)
 
+// Keep feature code behind dataAccess instead of coupling it to low-level refresh-orchestrator
+// reads or contextual refresh commands. The plugin scope exempts refresh and data-access
+// infrastructure, which implements that boundary.
 or {
   `$receiver.fetchScopedDomain($...)` as $call where {
     register_diagnostic(

@@ -22,7 +22,8 @@
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
-import React, { type HTMLAttributes } from 'react';
+import type React from 'react';
+import type { HTMLAttributes } from 'react';
 import { useDockablePanelContext } from './DockablePanelProvider';
 
 /** Describes a single tab in the bar. */
@@ -113,47 +114,8 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     };
   });
 
-  // Stop mousedown from bubbling to the DockablePanelHeader ONLY when the
-  // click landed on an interactive child of the strip (a tab or an overflow
-  // chevron). Clicks on the bar's empty gutter past the last tab must still
-  // bubble, because that gutter is the only remaining drag handle on a
-  // floating panel's header — the tab-bar shell is `flex: 1` and fills the
-  // header, so without this carve-out users lose the ability to drag the
-  // floating panel by its header.
-  //
-  // DO NOT DELETE. The panel header attaches `onMouseDown={handleHeaderMouseDown}`,
-  // which starts a floating-panel move drag for `panelState.position === 'floating'`
-  // (useDockablePanelDragResize.ts:handleMouseDownDrag) and, critically, calls
-  // `e.preventDefault()` on the native mousedown. preventDefault on mousedown
-  // suppresses the browser's subsequent `dragstart` event, which means the
-  // shared drag coordinator never sees the tab drag and the user sees the
-  // floating panel move when they try to drag a tab.
-  //
-  // The previous hand-rolled DockableTabBar had an equivalent
-  // `handleBarMouseDown` for the same reason. Task 8 of the shared-tabs
-  // migration deleted it with the comment "no longer needed (shared component
-  // doesn't fire mousedown on drag)", which was wrong — tabs ARE native
-  // mousedown+mouseup+click sources, and propagation to the header still
-  // triggers the header's drag handler.
-  const stopMouseDownOnInteractive = React.useCallback((event: React.MouseEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    // [role="tab"] catches the tab root divs (which carry the drag source).
-    // button.tab-strip__overflow-indicator catches the scroll chevrons.
-    // button.tab-item__close is nested inside [role="tab"] so the first
-    // selector already covers it.
-    if (target.closest('[role="tab"], .tab-strip__overflow-indicator')) {
-      event.stopPropagation();
-    }
-  }, []);
-
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
-    <div
-      ref={dropRef as (el: HTMLDivElement | null) => void}
-      className="dockable-tab-bar-shell"
-      onMouseDown={stopMouseDownOnInteractive}
-    >
+    <div ref={dropRef as (el: HTMLDivElement | null) => void} className="dockable-tab-bar-shell">
       <Tabs
         aria-label="Object Tabs"
         tabs={tabDescriptors}

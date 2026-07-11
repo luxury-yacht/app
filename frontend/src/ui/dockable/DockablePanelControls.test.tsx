@@ -76,14 +76,13 @@ describe('DockablePanelControls', () => {
     await unmount();
   });
 
-  it('renders right-docked controls and stops mouse down propagation', async () => {
+  it('renders native right-docked controls and invokes their actions', async () => {
     const onDock = vi.fn();
     const onToggleMaximize = vi.fn();
     const onClose = vi.fn();
-    const parentMouseDown = vi.fn();
 
     const { host, unmount } = await renderControls(
-      <form aria-label="Panel controls propagation harness" onMouseDown={parentMouseDown}>
+      <form aria-label="Panel controls harness">
         <DockablePanelControls
           position="right"
           isMaximized={false}
@@ -95,15 +94,8 @@ describe('DockablePanelControls', () => {
       </form>
     );
 
-    // Ensure the controls container intercepts mouse down events.
     const controls = host.querySelector('.dockable-panel__controls') as HTMLDivElement;
     expect(controls).toBeTruthy();
-
-    await act(async () => {
-      controls.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-
-    expect(parentMouseDown).not.toHaveBeenCalled();
 
     const dockBottom = host.querySelector(
       '[aria-label="Dock panel to bottom"]'
@@ -113,6 +105,8 @@ describe('DockablePanelControls', () => {
     ) as HTMLButtonElement;
     expect(dockBottom).toBeTruthy();
     expect(dockFloat).toBeTruthy();
+    expect(dockBottom.type).toBe('button');
+    expect(dockFloat.type).toBe('button');
 
     await act(async () => {
       dockBottom.click();

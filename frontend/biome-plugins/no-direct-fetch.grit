@@ -1,6 +1,9 @@
 engine biome(1.0)
 language js(typescript, jsx)
 
+// Keep feature code behind the shared refresh and data-access boundaries instead of issuing
+// network requests directly. The plugin scope exempts those infrastructure layers so they can
+// perform the underlying fetches.
 or {
   `fetch($...)`,
   `$receiver.fetch($...)`

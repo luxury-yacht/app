@@ -327,8 +327,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
             silently disappear from grouped panels). */}
         <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
           {/* Kind badge + name toolbar */}
-          {/** biome-ignore lint/a11y/noStaticElementInteractions: This toolbar boundary only stops panel-drag pointer propagation; its descendant controls retain native keyboard behavior. */}
-          <div onMouseDown={(e) => e.stopPropagation()}>
+          <div>
             <ObjectPanelHeader
               kind={objectData?.kind ?? null}
               kindAlias={objectData?.kindAlias ?? null}

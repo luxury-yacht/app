@@ -57,6 +57,24 @@ import { useThemes } from './useThemes';
 
 const DEFAULT_THEME_ID = 'default';
 
+export function reorderThemeByOffset(
+  ids: string[],
+  themeId: string,
+  offset: -1 | 1
+): string[] | null {
+  const fromIndex = ids.indexOf(themeId);
+  const defaultIndex = ids.indexOf(DEFAULT_THEME_ID);
+  const lastCustomIndex = defaultIndex === -1 ? ids.length - 1 : defaultIndex - 1;
+  const toIndex = fromIndex + offset;
+  if (themeId === DEFAULT_THEME_ID || fromIndex < 0 || toIndex < 0 || toIndex > lastCustomIndex) {
+    return null;
+  }
+  const reordered = [...ids];
+  reordered.splice(fromIndex, 1);
+  reordered.splice(toIndex, 0, themeId);
+  return reordered;
+}
+
 const isDefaultTheme = (theme: types.Theme) => theme.id === DEFAULT_THEME_ID;
 
 type PaletteSliderStyle = CSSProperties & {
@@ -369,6 +387,7 @@ function AppearanceSection() {
   const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
   const [hasUnsavedDefaultThemeChanges, setHasUnsavedDefaultThemeChanges] = useState(false);
   const [themePatternError, setThemePatternError] = useState<string | null>(null);
+  const newThemeNameInputRef = useRef<HTMLInputElement>(null);
   const appearanceModeMetadata = getPreferenceMetadata('appearanceMode');
   const enabledAppearanceModeOptions = appearanceModeOptions.filter(
     (option) =>
@@ -410,6 +429,12 @@ function AppearanceSection() {
       paletteInputRef.current.select();
     }
   }, [editingPaletteField]);
+
+  useEffect(() => {
+    if (editingThemeId === 'new') {
+      newThemeNameInputRef.current?.focus();
+    }
+  }, [editingThemeId]);
 
   // Clean up pending preference commits on unmount.
   useEffect(() => {
@@ -898,6 +923,20 @@ function AppearanceSection() {
     }
   };
 
+  const handleThemeKeyboardReorder = async (themeId: string, offset: -1 | 1) => {
+    const reordered = reorderThemeByOffset(
+      themes.map((theme) => theme.id),
+      themeId,
+      offset
+    );
+    if (!reordered) return;
+    try {
+      await reorderThemeEntries(reordered);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'reorderThemes' });
+    }
+  };
+
   const saturationOffset = (paletteSaturation / 100) * MAX_SATURATION;
   const brightnessLightness = Math.min(
     99,
@@ -1089,8 +1128,8 @@ function AppearanceSection() {
                       {isDefault ? (
                         <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
                       ) : (
-                        // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
-                        <span
+                        <button
+                          type="button"
                           className="themes-drag-handle"
                           draggable
                           onDragStart={(e) => {
@@ -1101,10 +1140,19 @@ function AppearanceSection() {
                             setDraggingThemeId(null);
                             setDropTargetThemeId(null);
                           }}
-                          title="Drag to reorder"
+                          onKeyDown={(event) => {
+                            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                            event.preventDefault();
+                            void handleThemeKeyboardReorder(
+                              theme.id,
+                              event.key === 'ArrowUp' ? -1 : 1
+                            );
+                          }}
+                          aria-label={`Reorder ${theme.name}. Use Up and Down Arrow keys.`}
+                          title="Drag or use Up and Down Arrow keys to reorder"
                         >
                           &#x283F;
-                        </span>
+                        </button>
                       )}
                       {activeThemeId === theme.id && !isDefault ? (
                         <div className="theme-fields">
@@ -1213,12 +1261,11 @@ function AppearanceSection() {
                     <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
                     <div className="theme-fields">
                       <input
+                        ref={newThemeNameInputRef}
                         className="theme-name-input"
                         value={themeDraft.name}
                         onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
                         placeholder="Name"
-                        // biome-ignore lint/a11y/noAutofocus: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
-                        autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleThemeSave();
                           else if (e.key === 'Escape') handleThemeEditCancel();

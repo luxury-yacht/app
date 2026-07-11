@@ -494,6 +494,38 @@ describe('CommandPalette component behaviour', () => {
     expect(firstAction).not.toHaveBeenCalled();
   });
 
+  it('exposes search results as an accessible combobox with active option state', async () => {
+    const commands: Command[] = [
+      { id: 'first', label: 'First command', category: 'Application', action: vi.fn() },
+      { id: 'second', label: 'Second command', category: 'Application', action: vi.fn() },
+    ];
+
+    await renderPalette(commands);
+    await openPalette();
+
+    const input = queryInput();
+    const listbox = requireValue(
+      container.querySelector<HTMLElement>('[role="listbox"]'),
+      'expected command-palette listbox'
+    );
+    const options = Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'));
+
+    expect(input.getAttribute('role')).toBe('combobox');
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-controls')).toBe(listbox.id);
+    expect(input.getAttribute('aria-autocomplete')).toBe('list');
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0]?.id);
+    expect(options).toHaveLength(2);
+    expect(options[0]?.getAttribute('aria-selected')).toBe('true');
+    expect(options[1]?.getAttribute('aria-selected')).toBe('false');
+
+    await triggerShortcut('ArrowDown');
+
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[1]?.id);
+    expect(options[0]?.getAttribute('aria-selected')).toBe('false');
+    expect(options[1]?.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('keeps the first item selected until the mouse actually moves', async () => {
     const commands: Command[] = [
       { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
@@ -525,7 +557,7 @@ describe('CommandPalette component behaviour', () => {
     expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
 
     await act(async () => {
-      items[2].dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      items[2].dispatchEvent(new Event('pointermove', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -819,7 +851,7 @@ describe('CommandPalette component behaviour', () => {
 
     const paletteContainer = container.querySelector('.command-palette') as HTMLElement;
     await act(async () => {
-      paletteContainer.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      paletteContainer.dispatchEvent(new Event('pointermove', { bubbles: true }));
       await Promise.resolve();
     });
     expect(container.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(

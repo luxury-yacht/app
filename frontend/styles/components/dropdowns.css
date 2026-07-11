@@ -45,6 +45,8 @@
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
+  font-family: inherit;
+  text-align: left;
 }
 
 .dropdown-trigger:hover:not(.disabled .dropdown-trigger) {
@@ -176,6 +178,7 @@
    4. OPTION & ITEM STYLES
    ============================================ */
 .dropdown-option {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -185,6 +188,11 @@
   color: var(--color-text);
   user-select: none;
   white-space: nowrap;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .dropdown-option:hover:not(.disabled) {

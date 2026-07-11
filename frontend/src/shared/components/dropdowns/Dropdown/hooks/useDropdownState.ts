@@ -17,7 +17,7 @@ export function useDropdownState(
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const openDropdown = useCallback(() => {

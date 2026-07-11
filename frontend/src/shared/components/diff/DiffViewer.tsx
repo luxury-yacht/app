@@ -609,10 +609,10 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     .join(' ');
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: this scroll region is keyboard-focusable and implements its own scrolling keys.
-    <div
+    <section
       className={rootClassName}
       ref={diffTableRef}
+      aria-label="Object difference"
       onMouseDown={(event) => {
         const target = event.target as HTMLElement | null;
         if (target?.closest('.object-diff-expand-toggle')) {
@@ -650,7 +650,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         selectSideText(side);
       }}
       onKeyDown={handleKeyScroll}
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: The diff scroll region is intentionally focusable and owns keyboard scrolling; a native interactive element would give the region incorrect semantics.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: The named scroll region must be keyboard-focusable so its Arrow, Page, Home, and End scrolling controls are reachable.
       tabIndex={0}
     >
       {shouldVirtualize ? (
@@ -665,7 +665,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
       ) : (
         renderedLineEntries.map(({ line, index }) => renderDiffRow(line, index))
       )}
-    </div>
+    </section>
   );
 };
 

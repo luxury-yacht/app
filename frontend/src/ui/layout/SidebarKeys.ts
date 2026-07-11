@@ -96,6 +96,7 @@ interface SidebarKeyboardParams {
 
 interface SidebarKeyboardApi {
   buildSidebarItemClassName: (baseClasses: string[], target?: SidebarCursorTarget | null) => string;
+  isTargetSelected: (target: SidebarCursorTarget) => boolean;
   focusSelectedSidebarItem: () => void;
   getDisplaySelectionTarget: () => SidebarCursorTarget | null;
   describeTarget: (element: HTMLElement | null) => SidebarCursorTarget | null;
@@ -426,6 +427,7 @@ export const useSidebarKeyboardControls = ({
 
   return {
     buildSidebarItemClassName,
+    isTargetSelected,
     focusSelectedSidebarItem,
     getDisplaySelectionTarget,
     describeTarget: describeElementTarget,

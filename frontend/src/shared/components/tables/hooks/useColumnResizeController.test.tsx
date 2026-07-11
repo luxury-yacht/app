@@ -24,6 +24,7 @@ type HarnessProps = {
 
 type HarnessHandle = {
   beginResize: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
+  resizeWithKeyboard: (event: React.KeyboardEvent, columnKey: string) => void;
   autoSizeColumn: (columnKey: string) => void;
   resetManualResizes: () => void;
   getWidths: () => Record<string, number>;
@@ -91,6 +92,7 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
       ref,
       () => ({
         beginResize: controller.handleResizeStart,
+        resizeWithKeyboard: controller.handleResizeKeyDown,
         autoSizeColumn: controller.autoSizeColumn,
         resetManualResizes: controller.resetManualResizes,
         getWidths: () => widthsRef.current,
@@ -142,6 +144,29 @@ afterEach(() => {
 });
 
 describe('useColumnResizeController', () => {
+  it('resizes a column with Arrow, Home, and End keys within its configured bounds', async () => {
+    const harness = await renderHarness();
+    const handle = harness.getHandle();
+    const keyEvent = (key: string) =>
+      ({
+        key,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      }) as unknown as React.KeyboardEvent;
+
+    await act(async () => handle.resizeWithKeyboard(keyEvent('ArrowRight'), 'name'));
+    expect(handle.getWidths().name).toBe(236);
+
+    await act(async () => handle.resizeWithKeyboard(keyEvent('Home'), 'name'));
+    expect(handle.getWidths().name).toBe(140);
+
+    await act(async () => handle.resizeWithKeyboard(keyEvent('End'), 'name'));
+    expect(handle.getWidths().name).toBe(420);
+    expect(handle.getManualKeys()).toEqual(['name']);
+
+    await harness.unmount();
+  });
+
   it('updates widths and manual keys when dragging between columns', async () => {
     const harness = await renderHarness();
     const handle = harness.getHandle();

@@ -1,6 +1,8 @@
 engine biome(1.0)
 language js(typescript, jsx)
 
+// Keep permission reads behind dataAccess so feature code does not call the runtime API directly.
+// The plugin scope exempts the dataAccess reader that performs the underlying permission query.
 `$receiver.QueryPermissions($...)` as $call where {
   register_diagnostic(
     span = $call,

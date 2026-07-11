@@ -149,6 +149,31 @@ describe('Sidebar', () => {
     });
   };
 
+  it('exposes navigation items and disclosure state with native buttons', () => {
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    const overview = host.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]');
+    const resources = host.querySelector<HTMLElement>(
+      '[data-sidebar-target-kind="cluster-toggle"]'
+    );
+    const namespace = host.querySelector<HTMLElement>(
+      '[data-sidebar-target-kind="namespace-toggle"]'
+    );
+
+    expect(overview?.tagName).toBe('BUTTON');
+    expect(overview?.getAttribute('aria-current')).toBe('page');
+    expect(resources?.tagName).toBe('BUTTON');
+    expect(resources?.getAttribute('aria-expanded')).toBe('true');
+    expect(resources?.getAttribute('aria-controls')).toBeTruthy();
+    expect(namespace?.tagName).toBe('BUTTON');
+    expect(namespace?.getAttribute('aria-expanded')).toBe('false');
+    expect(namespace?.getAttribute('aria-controls')).toBeTruthy();
+
+    act(() => resources?.click());
+    expect(resources?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

@@ -231,7 +231,8 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   overflow: hidden;
 }
 
-.header-content > span {
+.header-content > span,
+.gridtable-sort-button {
   display: inline-block;
   line-height: inherit;
   white-space: nowrap;
@@ -239,11 +240,20 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   text-overflow: ellipsis;
 }
 
+.gridtable-sort-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
 .grid-cell-header[data-sortable="true"] {
   transition: background-color var(--transition-fast);
 }
 
-.grid-cell-header[data-sortable="true"] .header-content > span {
+.grid-cell-header[data-sortable="true"] .gridtable-sort-button {
   cursor: pointer;
 }
 
@@ -268,6 +278,9 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   z-index: var(--z-index-grid-resize-handle);
   transition: background-color 0.2s;
   touch-action: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .resize-handle::before {
@@ -617,6 +630,16 @@ body.dockable-panel-resizing .content-body .gridtable-pagination {
 .gridtable-link {
   color: var(--color-text);
   transition: color 0.2s;
+}
+
+.gridtable-cell-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .gridtable-link:hover {

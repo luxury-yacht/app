@@ -52,6 +52,11 @@ import type { NamespaceViewType } from '@ui/navigation/types';
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { eventBus } from '@/core/events';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
+import {
+  getSidebarWidthFromKey,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from '@/hooks/useSidebarResize';
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { isMacPlatform } from '@/utils/platform';
 
@@ -147,12 +152,23 @@ export const AppLayout: React.FC = () => {
       >
         <Sidebar />
         {!!viewState.isSidebarVisible && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: The sidebar resize gutter is a pointer drag boundary owned by shared layout state and is not exposed as an activation control.
-          <div
+          <hr
             className="sidebar-resizer"
+            aria-label="Resize sidebar"
+            aria-orientation="vertical"
+            aria-valuemin={SIDEBAR_MIN_WIDTH}
+            aria-valuemax={SIDEBAR_MAX_WIDTH}
+            aria-valuenow={viewState.sidebarWidth}
+            tabIndex={0}
             onMouseDown={(e) => {
               e.preventDefault();
               viewState.setIsResizing(true);
+            }}
+            onKeyDown={(event) => {
+              const width = getSidebarWidthFromKey(viewState.sidebarWidth, event.key);
+              if (width === null) return;
+              event.preventDefault();
+              viewState.setSidebarWidth(width);
             }}
           />
         )}

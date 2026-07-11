@@ -287,6 +287,9 @@ export function useGridTableController<T>({
     tableContentWidth,
     tableViewportWidth,
     handleResizeStart,
+    handleResizeKeyDown,
+    getColumnMinWidth,
+    getColumnMaxWidth,
     autoSizeColumn,
     markVisibleAutoColumnsDirty,
   } = useGridTableColumnLayout<T>({
@@ -453,6 +456,9 @@ export function useGridTableController<T>({
     handleHeaderClick,
     renderSortIndicator,
     handleResizeStart,
+    handleResizeKeyDown,
+    getColumnMinWidth,
+    getColumnMaxWidth,
     autoSizeColumn,
     sortConfig,
   });

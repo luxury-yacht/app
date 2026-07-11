@@ -304,6 +304,7 @@
 }
 
 .recent-events__row {
+  width: 100%;
   display: grid;
   grid-template-columns: 3rem 8rem 1fr;
   align-items: baseline;
@@ -311,6 +312,13 @@
   border-radius: var(--border-radius-md);
   font-size: 0.75rem;
   border-bottom: 1px solid var(--color-border);
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
 }
 
 .recent-events__row--clickable {
@@ -409,6 +417,8 @@
   border-radius: var(--border-radius-md);
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
+  font-family: inherit;
+  text-align: left;
 }
 
 .pod-status-card--healthy,

@@ -180,6 +180,9 @@
 /* Resize handles */
 .dockable-panel__resize-handle {
   position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
   z-index: calc(var(--z-index-scrollbar-overlay) + 1);
 }

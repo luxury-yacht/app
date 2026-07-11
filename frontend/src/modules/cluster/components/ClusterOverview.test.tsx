@@ -382,6 +382,11 @@ describe('ClusterOverview', () => {
         (element) => element.textContent
       )
     ).toEqual(['40ready', '1starting', '1failing', '2terminating', '7restarts', '9not ready']);
+    expect(
+      Array.from(container.querySelectorAll('.pod-status-card')).every(
+        (element) => element.tagName === 'BUTTON'
+      )
+    ).toBe(true);
     expect(container.querySelector('.pod-status-card--ready')).not.toBeNull();
     expect(container.querySelector('.pod-status-card--starting')).not.toBeNull();
     expect(container.querySelector('.pod-status-card--failing')).not.toBeNull();
@@ -726,8 +731,8 @@ describe('ClusterOverview', () => {
 
     const restartedCard = container.querySelector('[data-testid="cluster-pod-status-restarted"]');
     const notReadyCard = container.querySelector('[data-testid="cluster-pod-status-not-ready"]');
-    expect(restartedCard?.getAttribute('role')).toBe('button');
-    expect(notReadyCard?.getAttribute('role')).toBe('button');
+    expect(restartedCard?.tagName).toBe('BUTTON');
+    expect(notReadyCard?.tagName).toBe('BUTTON');
 
     act(() => {
       restartedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -818,6 +823,7 @@ describe('ClusterOverview', () => {
 
     const row = container.querySelector('.recent-events__row--clickable');
     expect(row).not.toBeNull();
+    expect(row?.tagName).toBe('BUTTON');
 
     await act(async () => {
       row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -246,6 +246,61 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
+  it('resizes a right-docked panel with the separator keyboard controls', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
+
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="panel-right-keyboard" defaultPosition="right" isOpen>
+        <div>panel</div>
+      </DockablePanel>
+    );
+
+    await flushEffects();
+    const initialWidth = getPanelState('panel-right-keyboard').rightSize.width;
+    const resizeHandle = document.querySelector<HTMLElement>(
+      '.dockable-panel__resize-handle--left'
+    );
+    expect(resizeHandle?.tagName).toBe('HR');
+    expect(resizeHandle?.getAttribute('aria-valuemax')).toBeTruthy();
+
+    await act(async () => {
+      resizeHandle?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    const updatedWidth = getPanelState('panel-right-keyboard').rightSize.width;
+    expect(updatedWidth).toBeGreaterThan(initialWidth);
+    expect(resizeHandle?.getAttribute('aria-valuenow')).toBe(String(updatedWidth));
+
+    await act(async () => {
+      resizeHandle?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+    expect(getPanelState('panel-right-keyboard').rightSize.width).toBe(
+      Number(resizeHandle?.getAttribute('aria-valuemin'))
+    );
+
+    await act(async () => {
+      resizeHandle?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+    expect(getPanelState('panel-right-keyboard').rightSize.width).toBe(
+      Number(resizeHandle?.getAttribute('aria-valuemax'))
+    );
+
+    await unmount();
+  });
+
   it('maximizes within the content body and restores previous layout', async () => {
     const contentBody = document.createElement('div');
     contentBody.className = 'content-body';
@@ -745,6 +800,39 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
     expect(getPanelState('panel-bottom-resize').bottomSize.height).not.toBe(initialHeight);
+
+    await unmount();
+  });
+
+  it('resizes a bottom-docked panel with the separator keyboard controls', async () => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 900,
+    });
+
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="panel-bottom-keyboard" defaultPosition="bottom" isOpen>
+        <div>panel</div>
+      </DockablePanel>
+    );
+
+    await flushEffects();
+    const initialHeight = getPanelState('panel-bottom-keyboard').bottomSize.height;
+    const resizeHandle = document.querySelector<HTMLElement>('.dockable-panel__resize-handle--top');
+    expect(resizeHandle?.tagName).toBe('HR');
+    expect(resizeHandle?.getAttribute('aria-valuemax')).toBeTruthy();
+
+    await act(async () => {
+      resizeHandle?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    const updatedHeight = getPanelState('panel-bottom-keyboard').bottomSize.height;
+    expect(updatedHeight).toBeGreaterThan(initialHeight);
+    expect(resizeHandle?.getAttribute('aria-valuenow')).toBe(String(updatedHeight));
 
     await unmount();
   });

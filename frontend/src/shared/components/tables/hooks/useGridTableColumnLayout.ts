@@ -134,6 +134,9 @@ interface GridTableColumnLayout<T> {
   tableContentWidth: number;
   tableViewportWidth: number;
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
+  handleResizeKeyDown: (event: React.KeyboardEvent, columnKey: string) => void;
+  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
+  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   autoSizeColumn: (columnKey: string) => void;
   markVisibleAutoColumnsDirty: () => void;
 }
@@ -278,19 +281,20 @@ export function useGridTableColumnLayout<T>({
     tableDataLength: tableData.length,
   });
 
-  const { handleResizeStart, autoSizeColumn, resetManualResizes } = useColumnResizeController<T>({
-    columns,
-    renderedColumns,
-    columnWidths,
-    setColumnWidths,
-    manuallyResizedColumnsRef,
-    getColumnMinWidth,
-    getColumnMaxWidth,
-    measureColumnWidth,
-    enableColumnResizing,
-    isFixedColumnKey,
-    onManualResize: handleManualResizeEvent,
-  });
+  const { handleResizeStart, handleResizeKeyDown, autoSizeColumn, resetManualResizes } =
+    useColumnResizeController<T>({
+      columns,
+      renderedColumns,
+      columnWidths,
+      setColumnWidths,
+      manuallyResizedColumnsRef,
+      getColumnMinWidth,
+      getColumnMaxWidth,
+      measureColumnWidth,
+      enableColumnResizing,
+      isFixedColumnKey,
+      onManualResize: handleManualResizeEvent,
+    });
 
   useEffect(() => {
     if (!enableColumnResizing) {
@@ -307,6 +311,9 @@ export function useGridTableColumnLayout<T>({
     tableContentWidth,
     tableViewportWidth,
     handleResizeStart,
+    handleResizeKeyDown,
+    getColumnMinWidth,
+    getColumnMaxWidth,
     autoSizeColumn,
     markVisibleAutoColumnsDirty,
   };

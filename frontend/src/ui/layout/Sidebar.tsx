@@ -101,7 +101,7 @@ function Sidebar() {
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
   const isCollapsed = !viewState.isSidebarVisible;
   const sidebarSelection = viewState.sidebarSelection;
-  const selectedNamespaceRef = useRef<HTMLDivElement>(null);
+  const selectedNamespaceRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const keyboardCursorIndexRef = useRef<number | null>(null);
   const [cursorPreview, setCursorPreview] = useState<SidebarCursorTarget | null>(null);
@@ -152,19 +152,20 @@ function Sidebar() {
     selectedNamespaceKey,
   ]);
 
-  const { buildSidebarItemClassName, isKeyboardNavActive } = useSidebarKeyboardControls({
-    sidebarRef,
-    isCollapsed,
-    cursorPreview,
-    setCursorPreview,
-    pendingSelection,
-    setPendingSelection,
-    keyboardCursorIndexRef,
-    pendingCommitRef,
-    keyboardActivationRef,
-    clearKeyboardPreview,
-    getCurrentSelectionTarget,
-  });
+  const { buildSidebarItemClassName, isTargetSelected, isKeyboardNavActive } =
+    useSidebarKeyboardControls({
+      sidebarRef,
+      isCollapsed,
+      cursorPreview,
+      setCursorPreview,
+      pendingSelection,
+      setPendingSelection,
+      keyboardCursorIndexRef,
+      pendingCommitRef,
+      keyboardActivationRef,
+      clearKeyboardPreview,
+      getCurrentSelectionTarget,
+    });
 
   // Cluster view items (always visible)
   const resourceViews = RESOURCE_VIEWS;
@@ -355,9 +356,8 @@ function Sidebar() {
             <div className="sidebar-section">
               <h3>Cluster</h3>
               <div className="cluster-items">
-                {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                <div
+                <button
+                  type="button"
                   className={buildSidebarItemClassName(['sidebar-item'], { kind: 'overview' })}
                   onClick={() => {
                     if (!keyboardActivationRef.current) {
@@ -370,13 +370,13 @@ function Sidebar() {
                   data-sidebar-focusable="true"
                   data-sidebar-target-kind="overview"
                   tabIndex={-1}
+                  aria-current={isTargetSelected({ kind: 'overview' }) ? 'page' : undefined}
                 >
                   <ClusterOverviewIcon width={14} height={14} />
                   <span>Overview</span>
-                </div>
-                {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                <div
+                </button>
+                <button
+                  type="button"
                   className={buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {
                     kind: 'cluster-toggle',
                     id: 'resources',
@@ -386,17 +386,18 @@ function Sidebar() {
                   data-sidebar-target-kind="cluster-toggle"
                   data-sidebar-target-id="resources"
                   tabIndex={-1}
+                  aria-expanded={clusterResourcesExpanded}
+                  aria-controls="sidebar-cluster-resource-views"
                 >
                   <ClusterResourcesIcon width={14} height={14} />
                   <span>Resources</span>
-                </div>
+                </button>
                 {!!clusterResourcesExpanded && (
-                  <div className="sidebar-views">
+                  <div className="sidebar-views" id="sidebar-cluster-resource-views">
                     {/* Animate Resources the same way as namespace views. */}
                     {resourceViews.map((view) => (
-                      // biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
-                      // biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
-                      <div
+                      <button
+                        type="button"
                         key={view.id}
                         className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
                           kind: 'cluster-view',
@@ -412,10 +413,15 @@ function Sidebar() {
                         data-sidebar-target-kind="cluster-view"
                         data-sidebar-target-view={view.id}
                         tabIndex={-1}
+                        aria-current={
+                          isTargetSelected({ kind: 'cluster-view', view: view.id })
+                            ? 'page'
+                            : undefined
+                        }
                       >
                         <CategoryIcon width={14} height={14} />
                         <span>{view.label}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -462,6 +468,7 @@ function Sidebar() {
                     // keyboard navigation, and only supports hover-delete.
                     const inaccessible = Boolean(namespace.scopeStatus);
                     const isExpanded = !inaccessible && expandedNamespaceKeys.has(namespaceKey);
+                    const namespaceViewsId = `sidebar-namespace-${encodeURIComponent(namespaceKey)}-views`;
                     const namespaceViews =
                       scope === ALL_NAMESPACES_SCOPE
                         ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
@@ -469,63 +476,69 @@ function Sidebar() {
 
                     return (
                       <div key={namespaceKey}>
-                        {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                        {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
-                        <div
-                          ref={selectedNamespaceKey === namespaceKey ? selectedNamespaceRef : null}
-                          className={buildSidebarItemClassName(
-                            [
-                              'sidebar-item',
-                              inaccessible ? 'scope-inaccessible' : '',
-                              // Only a CONFIRMED absence of workloads changes the
-                              // presentation; while workload presence is still
-                              // unknown (ingest stores settling after connect) the
-                              // namespace renders exactly like a normal one.
-                              dimInactiveNamespaces &&
-                              !namespace.hasWorkloads &&
-                              !namespace.workloadsUnknown
-                                ? 'dimmed'
-                                : '',
-                            ].filter(Boolean),
-                            {
-                              kind: 'namespace-toggle',
-                              namespace: namespaceKey,
+                        <div className="sidebar-item-row">
+                          <button
+                            type="button"
+                            ref={
+                              selectedNamespaceKey === namespaceKey ? selectedNamespaceRef : null
                             }
-                          )}
-                          data-namespace={namespaceKey}
-                          onClick={() => {
-                            if (!keyboardActivationRef.current) {
-                              clearKeyboardPreview();
-                            }
-                            if (inaccessible) {
-                              return;
-                            }
-                            handleNamespaceSelect(scope, selectedClusterId || undefined);
-                          }}
-                          data-sidebar-focusable={inaccessible ? undefined : 'true'}
-                          data-sidebar-target-kind="namespace-toggle"
-                          data-sidebar-target-namespace={namespaceKey}
-                          title={namespace.details || undefined}
-                          tabIndex={-1}
-                        >
-                          {isExpanded ? (
-                            <NamespaceOpenIcon width={14} height={14} />
-                          ) : (
-                            <NamespaceIcon width={14} height={14} />
-                          )}
-                          <span>{namespace.name}</span>
-                          {namespace.scopeStatus ? (
-                            <span
-                              className="namespace-scope-flag"
-                              title={
-                                namespace.scopeStatus === 'not-found'
-                                  ? 'Namespace not found on the cluster.'
-                                  : 'Insufficient permissions to access this namespace (or it does not exist).'
+                            className={buildSidebarItemClassName(
+                              [
+                                'sidebar-item',
+                                inaccessible ? 'scope-inaccessible' : '',
+                                // Only a CONFIRMED absence of workloads changes the
+                                // presentation; while workload presence is still
+                                // unknown (ingest stores settling after connect) the
+                                // namespace renders exactly like a normal one.
+                                dimInactiveNamespaces &&
+                                !namespace.hasWorkloads &&
+                                !namespace.workloadsUnknown
+                                  ? 'dimmed'
+                                  : '',
+                              ].filter(Boolean),
+                              {
+                                kind: 'namespace-toggle',
+                                namespace: namespaceKey,
                               }
-                            >
-                              <WarningIcon width={16} height={16} />
-                            </span>
-                          ) : null}
+                            )}
+                            data-namespace={namespaceKey}
+                            onClick={() => {
+                              if (!keyboardActivationRef.current) {
+                                clearKeyboardPreview();
+                              }
+                              if (inaccessible) {
+                                return;
+                              }
+                              handleNamespaceSelect(scope, selectedClusterId || undefined);
+                            }}
+                            data-sidebar-focusable={inaccessible ? undefined : 'true'}
+                            data-sidebar-target-kind="namespace-toggle"
+                            data-sidebar-target-namespace={namespaceKey}
+                            title={namespace.details || undefined}
+                            tabIndex={-1}
+                            disabled={inaccessible}
+                            aria-expanded={inaccessible ? undefined : isExpanded}
+                            aria-controls={inaccessible ? undefined : namespaceViewsId}
+                          >
+                            {isExpanded ? (
+                              <NamespaceOpenIcon width={14} height={14} />
+                            ) : (
+                              <NamespaceIcon width={14} height={14} />
+                            )}
+                            <span>{namespace.name}</span>
+                            {namespace.scopeStatus ? (
+                              <span
+                                className="namespace-scope-flag"
+                                title={
+                                  namespace.scopeStatus === 'not-found'
+                                    ? 'Namespace not found on the cluster.'
+                                    : 'Insufficient permissions to access this namespace (or it does not exist).'
+                                }
+                              >
+                                <WarningIcon width={16} height={16} />
+                              </span>
+                            ) : null}
+                          </button>
                           {namespaceScope.scope.includes(namespace.name) &&
                           scope !== ALL_NAMESPACES_SCOPE ? (
                             <button
@@ -545,13 +558,12 @@ function Sidebar() {
                           ) : null}
                         </div>
                         {!!isExpanded && (
-                          <div className="sidebar-views">
+                          <div className="sidebar-views" id={namespaceViewsId}>
                             {namespaceViews.map((view) => {
                               const label = view.label;
                               return (
-                                // biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
-                                // biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
-                                <div
+                                <button
+                                  type="button"
                                   key={view.id}
                                   className={buildSidebarItemClassName(
                                     ['sidebar-item', 'indented'],
@@ -577,10 +589,19 @@ function Sidebar() {
                                   data-sidebar-target-namespace={namespaceKey}
                                   data-sidebar-target-view={view.id}
                                   tabIndex={-1}
+                                  aria-current={
+                                    isTargetSelected({
+                                      kind: 'namespace-view',
+                                      namespace: namespaceKey,
+                                      view: view.id,
+                                    })
+                                      ? 'page'
+                                      : undefined
+                                  }
                                 >
                                   <CategoryIcon width={14} height={14} />
                                   <span>{label}</span>
-                                </div>
+                                </button>
                               );
                             })}
                           </div>

@@ -317,10 +317,18 @@ describe('Dropdown', () => {
     click(trigger);
 
     await pressKey(trigger, 'ArrowDown');
-    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Alpha');
+    const firstHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    expect(firstHighlighted?.textContent).toContain('Alpha');
+    expect(trigger?.getAttribute('aria-activedescendant')).toBe(firstHighlighted?.id);
+    expect(firstHighlighted?.getAttribute('role')).toBe('option');
+    expect(firstHighlighted?.getAttribute('aria-selected')).toBe('true');
 
     await pressKey(trigger, 'ArrowDown');
-    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
+    const secondHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    expect(secondHighlighted?.textContent).toContain('Beta');
+    expect(trigger?.getAttribute('aria-activedescendant')).toBe(secondHighlighted?.id);
+    expect(firstHighlighted?.getAttribute('aria-selected')).toBe('false');
+    expect(secondHighlighted?.getAttribute('aria-selected')).toBe('true');
 
     await pressKey(trigger, 'Enter');
     expect(handleChange).toHaveBeenCalledWith('beta');
@@ -338,10 +346,18 @@ describe('Dropdown', () => {
     searchInput?.focus();
 
     await pressKey(searchInput, 'ArrowDown');
-    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Alpha');
+    const firstHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    expect(firstHighlighted?.textContent).toContain('Alpha');
+    expect(searchInput?.getAttribute('role')).toBe('combobox');
+    expect(searchInput?.getAttribute('aria-controls')).toBe(
+      container.querySelector<HTMLElement>('[role="listbox"]')?.id
+    );
+    expect(searchInput?.getAttribute('aria-activedescendant')).toBe(firstHighlighted?.id);
 
     await pressKey(searchInput, 'ArrowDown');
-    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
+    const secondHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    expect(secondHighlighted?.textContent).toContain('Beta');
+    expect(searchInput?.getAttribute('aria-activedescendant')).toBe(secondHighlighted?.id);
   });
 
   it('removes the trigger highlight while the internal search input is focused', async () => {

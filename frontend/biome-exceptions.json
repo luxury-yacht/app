@@ -262,27 +262,12 @@
       "count": 1
     },
     {
-      "file": "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
       "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
     },
     {
       "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/ContextMenu.tsx",
-      "rule": "lint/a11y/useFocusableInteractive",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/ContextMenu.tsx",
       "rule": "lint/a11y/useKeyWithClickEvents",
       "count": 1
     },
@@ -292,26 +277,6 @@
       "count": 1
     },
     {
-      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-      "rule": "lint/a11y/noAutofocus",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-      "rule": "lint/a11y/useAriaPropsSupportedByRole",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 2
-    },
-    {
       "file": "src/shared/components/modals/ModalSurface.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
@@ -319,12 +284,7 @@
     {
       "file": "src/shared/components/modals/ModalSurface.tsx",
       "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/columnFactories.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
+      "count": 1
     },
     {
       "file": "src/shared/components/tables/GridTableBody.tsx",
@@ -333,17 +293,7 @@
     },
     {
       "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
       "rule": "lint/a11y/useFocusableInteractive",
-      "count": 2
-    },
-    {
-      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
       "count": 2
     },
     {
@@ -372,62 +322,12 @@
       "count": 1
     },
     {
-      "file": "src/ui/command-palette/CommandPalette.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 3
-    },
-    {
-      "file": "src/ui/command-palette/CommandPalette.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 2
-    },
-    {
-      "file": "src/ui/dockable/DockablePanel.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 8
-    },
-    {
-      "file": "src/ui/dockable/DockablePanel.tsx",
-      "rule": "lint/a11y/useSemanticElements",
-      "count": 2
-    },
-    {
-      "file": "src/ui/dockable/DockablePanelControls.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
       "file": "src/ui/dockable/DockablePanelHeader.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
     },
     {
-      "file": "src/ui/dockable/DockableTabBar.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
       "file": "src/ui/layout/AppHeader.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 2
-    },
-    {
-      "file": "src/ui/layout/AppLayout.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 1
-    },
-    {
-      "file": "src/ui/layout/Sidebar.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 5
-    },
-    {
-      "file": "src/ui/layout/Sidebar.tsx",
-      "rule": "lint/a11y/useKeyWithClickEvents",
-      "count": 5
-    },
-    {
-      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
     },
@@ -439,27 +339,17 @@
     {
       "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
       "rule": "lint/a11y/useSemanticElements",
-      "count": 3
-    },
-    {
-      "file": "src/ui/settings/sections/AppearanceSection.tsx",
-      "rule": "lint/a11y/noAutofocus",
-      "count": 1
+      "count": 2
     },
     {
       "file": "src/ui/settings/sections/AppearanceSection.tsx",
       "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 2
+      "count": 1
     },
     {
       "file": "src/modules/browse/hooks/useBrowseCatalog.test.tsx",
       "rule": "lint/correctness/useHookAtTopLevel",
       "count": 1
-    },
-    {
-      "file": "src/modules/cluster/components/ClusterOverview.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
-      "count": 2
     },
     {
       "file": "src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx",
@@ -489,11 +379,6 @@
     {
       "file": "src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx",
       "rule": "lint/complexity/noStaticOnlyClass",
-      "count": 1
-    },
-    {
-      "file": "src/shared/components/diff/DiffViewer.tsx",
-      "rule": "lint/a11y/noStaticElementInteractions",
       "count": 1
     },
     {

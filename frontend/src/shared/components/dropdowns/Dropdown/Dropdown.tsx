@@ -67,6 +67,12 @@ const Dropdown = <TMetadata,>({
   const [isFocused, setIsFocused] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const menuScrollTopRef = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const generatedId = React.useId().replace(/:/g, '');
+  const controlId = id || `dropdown-${generatedId}`;
+  const menuId = `${controlId}-menu`;
+  const activeOptionId =
+    isOpen && highlightedIndex >= 0 ? `${controlId}-option-${highlightedIndex}` : undefined;
 
   useEffect(() => {
     const node = dropdownRef.current;
@@ -120,6 +126,12 @@ const Dropdown = <TMetadata,>({
       setHighlightedIndex(-1);
     }
   }, [filteredOptions.length, highlightedIndex, isOpen, setHighlightedIndex]);
+
+  useLayoutEffect(() => {
+    if (isOpen && searchable) {
+      searchInputRef.current?.focus();
+    }
+  }, [isOpen, searchable]);
 
   const { handleKeyAction } = useKeyboardNavigation({
     options: filteredOptions,
@@ -350,47 +362,69 @@ const Dropdown = <TMetadata,>({
   };
 
   const showBulkActionLabels = !searchable;
+  const triggerContent = (
+    <>
+      <span className="dropdown-value">{getDisplayText()}</span>
+      <span className="dropdown-arrow">
+        <DropdownArrowIcon />
+      </span>
+    </>
+  );
 
   return (
     <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
-      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action. */}
-      <div
-        ref={triggerRef}
-        className="dropdown-trigger"
-        onClick={toggleDropdown}
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-disabled={disabled}
-        aria-label={ariaLabel}
-        aria-describedby={ariaDescribedBy}
-        aria-labelledby={ariaLabelledBy}
-        aria-controls={`${id || 'dropdown'}-menu`}
-        tabIndex={disabled ? -1 : 0}
-        id={id}
-      >
-        <span className="dropdown-value">{getDisplayText()}</span>
+      {searchable ? (
+        <button
+          type="button"
+          ref={triggerRef}
+          className="dropdown-trigger"
+          onClick={toggleDropdown}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-labelledby={ariaLabelledBy}
+          aria-controls={menuId}
+          tabIndex={disabled ? -1 : 0}
+          id={id}
+          disabled={disabled}
+        >
+          {triggerContent}
+        </button>
+      ) : (
+        <button
+          type="button"
+          ref={triggerRef}
+          className="dropdown-trigger"
+          onClick={toggleDropdown}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-labelledby={ariaLabelledBy}
+          aria-controls={menuId}
+          aria-activedescendant={activeOptionId}
+          tabIndex={disabled ? -1 : 0}
+          id={id}
+          disabled={disabled}
+        >
+          {triggerContent}
+        </button>
+      )}
 
-        {clearable && !multiple && value && !disabled && (
-          <button
-            type="button"
-            className="clear-button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange('');
-            }}
-            aria-label="Clear selection"
-            tabIndex={-1}
-          >
-            ×
-          </button>
-        )}
-
-        <span className="dropdown-arrow">
-          <DropdownArrowIcon />
-        </span>
-      </div>
+      {clearable && !multiple && value && !disabled && (
+        <button
+          type="button"
+          className="clear-button"
+          onClick={() => onChange('')}
+          aria-label="Clear selection"
+          tabIndex={-1}
+        >
+          ×
+        </button>
+      )}
 
       {/* Menu */}
       {isOpen && !disabled && !loading && (
@@ -399,13 +433,14 @@ const Dropdown = <TMetadata,>({
           className={menuClasses}
           role="listbox"
           aria-multiselectable={multiple}
-          id={`${id || 'dropdown'}-menu`}
+          id={menuId}
         >
           {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
             <div className="dropdown-menu-controls">
               {!!searchable && (
                 <div className="search-container">
                   <input
+                    ref={searchInputRef}
                     type="text"
                     className="search-input"
                     placeholder={searchPlaceholder}
@@ -414,8 +449,12 @@ const Dropdown = <TMetadata,>({
                     onClick={(e) => e.stopPropagation()}
                     onFocus={() => setIsSearchFocused(true)}
                     onBlur={() => setIsSearchFocused(false)}
-                    // biome-ignore lint/a11y/noAutofocus: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
-                    autoFocus
+                    role="combobox"
+                    aria-label={searchPlaceholder}
+                    aria-autocomplete="list"
+                    aria-expanded="true"
+                    aria-controls={menuId}
+                    aria-activedescendant={activeOptionId}
                   />
                 </div>
               )}
@@ -476,42 +515,51 @@ const Dropdown = <TMetadata,>({
               const isGroupHeader = option.group === 'header';
               const isSeparator = isGroupHeader && option.label.trim().length === 0;
 
+              if (isGroupHeader) {
+                return isSeparator ? (
+                  <hr key={option.value} className="dropdown-separator" />
+                ) : (
+                  <div key={option.value} className="dropdown-group-header" role="presentation">
+                    {renderOption ? renderOption(option, false) : option.label}
+                  </div>
+                );
+              }
+
+              const optionAriaSelected = multiple
+                ? optionIsSelected
+                : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
               return (
-                // biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
-                // biome-ignore lint/a11y/noStaticElementInteractions: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
-                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
-                <div
+                <button
+                  type="button"
                   key={option.value}
+                  id={`${controlId}-option-${index}`}
                   className={[
-                    isGroupHeader ? 'dropdown-group-header' : 'dropdown-option',
-                    isSeparator && 'dropdown-separator',
+                    'dropdown-option',
                     optionIsSelected && 'selected',
                     optionIsHighlighted && 'highlighted',
                     option.disabled && 'disabled',
                   ]
                     .filter(Boolean)
                     .join(' ')}
-                  onClick={() => !option.disabled && !isGroupHeader && selectOption(option.value)}
-                  onMouseEnter={() =>
-                    !option.disabled && !isGroupHeader && setHighlightedIndex(index)
-                  }
-                  role={isGroupHeader ? 'presentation' : 'option'}
-                  aria-selected={isGroupHeader ? undefined : optionIsSelected}
-                  aria-disabled={isGroupHeader ? undefined : option.disabled}
+                  onClick={() => selectOption(option.value)}
+                  onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
+                  role="option"
+                  aria-selected={optionAriaSelected}
+                  aria-disabled={option.disabled}
+                  disabled={option.disabled}
+                  tabIndex={-1}
                 >
                   {renderOption ? (
                     renderOption(option, optionIsSelected)
                   ) : (
                     <>
-                      {multiple && !isGroupHeader && (
+                      {!!multiple && (
                         <span className="dropdown-filter-check">{optionIsSelected ? '✓' : ''}</span>
                       )}
-                      <span className={isGroupHeader ? 'group-header-label' : 'option-label'}>
-                        {option.label}
-                      </span>
+                      <span className="option-label">{option.label}</span>
                     </>
                   )}
-                </div>
+                </button>
               );
             })
           )}

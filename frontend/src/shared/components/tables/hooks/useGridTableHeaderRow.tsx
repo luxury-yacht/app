@@ -18,6 +18,9 @@ export interface UseGridTableHeaderRowParams<T> {
   handleHeaderClick: (column: GridColumnDefinition<T>) => void;
   renderSortIndicator: (columnKey: string) => React.ReactNode;
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
+  handleResizeKeyDown: (event: React.KeyboardEvent, columnKey: string) => void;
+  getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
+  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   autoSizeColumn: (columnKey: string) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
@@ -31,6 +34,9 @@ export function useGridTableHeaderRow<T>({
   handleHeaderClick,
   renderSortIndicator,
   handleResizeStart,
+  handleResizeKeyDown,
+  getColumnMinWidth,
+  getColumnMaxWidth,
   autoSizeColumn,
   sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
@@ -76,40 +82,37 @@ export function useGridTableHeaderRow<T>({
             }}
           >
             <span className="header-content">
-              {/** biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
-              {/** biome-ignore lint/a11y/noStaticElementInteractions: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
-              <span
-                onClick={() => isSortable && handleHeaderClick(column)}
-                {...(isSortable
-                  ? {
-                      role: 'button',
-                      tabIndex: 0,
-                      'aria-label': `Sort by ${typeof column.header === 'string' ? column.header : column.key}`,
-                      onKeyDown: (e: React.KeyboardEvent) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleHeaderClick(column);
-                        }
-                      },
-                    }
-                  : undefined)}
-              >
-                {column.header}
-                {isSortable && renderSortIndicator(column.key)}
-              </span>
+              {isSortable ? (
+                <button
+                  type="button"
+                  className="gridtable-sort-button"
+                  onClick={() => handleHeaderClick(column)}
+                  aria-label={`Sort by ${typeof column.header === 'string' ? column.header : column.key}`}
+                >
+                  {column.header}
+                  {renderSortIndicator(column.key)}
+                </button>
+              ) : (
+                <span>{column.header}</span>
+              )}
             </span>
             {!!showResizeHandle && (
-              // biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-              // biome-ignore lint/a11y/noStaticElementInteractions: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
-              <div
+              <hr
                 className="resize-handle"
                 onMouseDown={(e) => handleResizeStart(e, column.key, nextColumn.key)}
+                onKeyDown={(event) => handleResizeKeyDown(event, column.key)}
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   autoSizeColumn(column.key);
                 }}
+                aria-label={`Resize ${typeof column.header === 'string' ? column.header : column.key} column`}
+                aria-orientation="vertical"
+                aria-valuemin={getColumnMinWidth(column)}
+                aria-valuemax={getColumnMaxWidth(column)}
+                aria-valuenow={columnWidths[column.key]}
+                tabIndex={0}
               />
             )}
             {!!showKindSeparator && <div className="column-separator" aria-hidden="true" />}

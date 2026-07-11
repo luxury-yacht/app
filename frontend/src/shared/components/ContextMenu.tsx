@@ -9,7 +9,7 @@ import { useZoom } from '@core/contexts/ZoomContext';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import type React from 'react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './ContextMenu.css';
 
@@ -36,6 +36,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   const menuRef = useRef<HTMLDivElement>(null);
   const { zoomLevel } = useZoom();
   const [isPositioned, setIsPositioned] = useState(false);
+  const menuId = useId().replace(/:/g, '');
   const selectableIndexes = useMemo(
     () =>
       items
@@ -179,6 +180,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
       }}
       role="menu"
       tabIndex={-1}
+      aria-activedescendant={
+        focusedIndex >= 0 ? `context-menu-${menuId}-item-${focusedIndex}` : undefined
+      }
     >
       {withStableListKeys(items, (item) =>
         item.divider
@@ -186,7 +190,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
           : item.actionId || `${item.header ? 'header' : 'item'}:${item.label}`
       ).map(({ key, value: item }, index) => {
         if (item.divider) {
-          return <div key={key} className="context-menu-divider" />;
+          return <hr key={key} className="context-menu-divider" />;
         }
         // Render non-interactive headers (e.g., permission pending state).
         if (item.header) {
@@ -201,15 +205,17 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         const isFocused = index === focusedIndex;
 
         return (
-          // biome-ignore lint/a11y/useFocusableInteractive: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
-          // biome-ignore lint/a11y/useKeyWithClickEvents: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
-          <div
+          <button
+            type="button"
             key={key}
+            id={`context-menu-${menuId}-item-${index}`}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
               item.danger ? 'danger' : ''
             } ${isFocused ? 'is-focused' : ''}`}
             role="menuitem"
             aria-disabled={item.disabled ? 'true' : 'false'}
+            disabled={item.disabled}
+            tabIndex={-1}
             data-context-action-id={item.actionId}
             data-context-index={index}
             onClick={() => {
@@ -230,7 +236,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
             {!!(item.disabled && item.disabledReason) && (
               <span className="context-menu-reason">{item.disabledReason}</span>
             )}
-          </div>
+          </button>
         );
       })}
     </div>,

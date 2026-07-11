@@ -50,6 +50,21 @@ of interpolating keys into selectors.
 DOM ids must use stable helper functions that cannot collapse distinct
 cluster-scoped row keys.
 
+### Accessibility model
+
+`GridTable` is a virtualized ARIA grid, not a native HTML table. The wrapper is
+the single tab stop and exposes the focused row with `aria-activedescendant`;
+rendered rows and cells use `row`, `gridcell`, and `columnheader` roles. Arrow,
+Home, End, Page Up, and Page Down navigation stays on the wrapper so recycling a
+virtual row never moves DOM focus to an element that can unmount.
+
+Sortable column labels are native buttons. Column and docked-layout resize
+separators are keyboard focusable and support arrow keys plus Home and End. Keep
+the narrowly scoped Biome semantic-element suppressions on the ARIA grid
+containers: native table elements are not compatible with the current
+div-based virtualization and column layout. Do not copy those suppressions to
+ordinary, non-virtualized tables or interactive cell content.
+
 Auto-width dirty checking hashes the currently rendered cells before running column measurement.
 When row virtualization changes `virtualRange.start/end`, the controller must enqueue visible
 auto-width columns after the new row window commits; the range bounds are intentional effect
@@ -197,6 +212,8 @@ When changing table behavior:
 
 1. Check row key, column key, and persisted-state compatibility.
 2. Verify virtualization, keyboard focus, hover, context menu, and empty states.
+   For accessibility changes, also verify the wrapper's active descendant,
+   row/cell roles, native sort buttons, and separator value attributes.
 3. Verify pagination placement, page-size behavior, visible range, and total
    exactness for query-backed tables.
 4. Verify partial/degraded copy and action limits for Local Partial tables.

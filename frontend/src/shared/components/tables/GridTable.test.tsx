@@ -827,7 +827,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     const headerTrigger = requireValue(
       headerCell,
       'expected test value in GridTable.test.tsx'
-    ).querySelector('.header-content span');
+    ).querySelector('.header-content button');
     expect(headerTrigger).not.toBeNull();
     act(() => {
       requireValue(headerTrigger, 'expected test value in GridTable.test.tsx').dispatchEvent(
@@ -1600,7 +1600,7 @@ it('triggers onSort when a sortable header is clicked', () => {
   const clickable = requireValue(
     headerCell,
     'expected test value in GridTable.test.tsx'
-  ).querySelector<HTMLSpanElement>('.header-content > span');
+  ).querySelector<HTMLButtonElement>('.header-content > button');
   expect(clickable).not.toBeNull();
 
   act(() => {

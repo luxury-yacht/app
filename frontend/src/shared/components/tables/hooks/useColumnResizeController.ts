@@ -21,6 +21,8 @@ interface ResizeState {
   leftStartWidth: number;
 }
 
+const KEYBOARD_RESIZE_STEP = 16;
+
 export interface ColumnResizeControllerOptions<T> {
   columns: GridColumnDefinition<T>[];
   renderedColumns: GridColumnDefinition<T>[];
@@ -40,6 +42,7 @@ export interface ColumnResizeControllerOptions<T> {
 
 export interface ColumnResizeController {
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
+  handleResizeKeyDown: (event: React.KeyboardEvent, columnKey: string) => void;
   autoSizeColumn: (columnKey: string) => void;
   resetManualResizes: () => void;
 }
@@ -97,6 +100,56 @@ export function useColumnResizeController<T>({
       onManualResize?.({ type: 'drag', columns: [leftKey] });
     },
     [columnWidths, enableColumnResizing, getColumnMinWidth, isFixedColumnKey, onManualResize]
+  );
+
+  const handleResizeKeyDown = useCallback(
+    (event: React.KeyboardEvent, columnKey: string) => {
+      if (!enableColumnResizing || isFixedColumnKey(columnKey)) {
+        return;
+      }
+      const column = columnsRef.current.find((candidate) => candidate.key === columnKey);
+      if (!column) {
+        return;
+      }
+
+      const minimum = getColumnMinWidth(column);
+      const maximum = getColumnMaxWidth(column);
+      const current = columnWidths[columnKey] ?? minimum;
+      let nextWidth: number;
+      switch (event.key) {
+        case 'ArrowLeft':
+          nextWidth = current - KEYBOARD_RESIZE_STEP;
+          break;
+        case 'ArrowRight':
+          nextWidth = current + KEYBOARD_RESIZE_STEP;
+          break;
+        case 'Home':
+          nextWidth = minimum;
+          break;
+        case 'End':
+          nextWidth = maximum;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      const clampedWidth = Math.min(Math.max(nextWidth, minimum), maximum);
+      setColumnWidths((previous) => ({ ...previous, [columnKey]: clampedWidth }));
+      manuallyResizedColumnsRef.current.add(columnKey);
+      onManualResize?.({ type: 'dragEnd', columns: [columnKey] });
+    },
+    [
+      columnWidths,
+      enableColumnResizing,
+      getColumnMaxWidth,
+      getColumnMinWidth,
+      isFixedColumnKey,
+      manuallyResizedColumnsRef,
+      onManualResize,
+      setColumnWidths,
+    ]
   );
 
   useEffect(() => {
@@ -265,6 +318,7 @@ export function useColumnResizeController<T>({
 
   return {
     handleResizeStart,
+    handleResizeKeyDown,
     autoSizeColumn,
     resetManualResizes,
   };

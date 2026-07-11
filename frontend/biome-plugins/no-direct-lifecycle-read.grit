@@ -1,6 +1,8 @@
 engine biome(1.0)
 language js(typescript, jsx)
 
+// Keep cluster lifecycle reads behind appStateAccess so callers use the shared application-state
+// boundary. The plugin scope exempts the appStateAccess reader that performs the runtime call.
 `$receiver.GetAllClusterLifecycleStates($...)` as $call where {
   register_diagnostic(
     span = $call,

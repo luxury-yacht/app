@@ -22,21 +22,21 @@ const AppHeader: React.FC = () => {
   const isModalOpen = () =>
     typeof document !== 'undefined' && document.body.classList.contains('modal-surface-open');
 
-  const handleHeaderDoubleClick = () => {
-    if (!isModalOpen()) {
+  const handleHeaderDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('button, input, select, textarea, a[href]') && !isModalOpen()) {
       WindowToggleMaximise();
     }
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: The desktop titlebar double-click gesture toggles the native window state, while the controls boundary prevents that gesture from swallowing native button activation.
+    // biome-ignore lint/a11y/noStaticElementInteractions: Empty desktop titlebar space supports the native window double-click gesture; interactive descendants are excluded by the owning handler.
     <header
       className={`app-header${isMac ? ' app-header--mac' : ''}`}
       onDoubleClick={handleHeaderDoubleClick}
       data-app-region="header"
     >
-      {/** biome-ignore lint/a11y/noStaticElementInteractions: The desktop titlebar double-click gesture toggles the native window state, while the controls boundary prevents that gesture from swallowing native button activation. */}
-      <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="app-header-controls">
         <UpdateStatus />
         <div className="status-indicators">
           <ConnectivityStatus />

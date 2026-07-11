@@ -156,14 +156,18 @@ describe('ContextMenu', () => {
     };
 
     const itemNodes = () =>
-      Array.from(menu.querySelectorAll<HTMLDivElement>('.context-menu-item')).filter(
+      Array.from(menu.querySelectorAll<HTMLButtonElement>('.context-menu-item')).filter(
         (node) => !node.classList.contains('context-menu-divider')
       );
 
     expect(itemNodes()[0]?.classList.contains('is-focused')).toBe(true);
+    expect(itemNodes()[0]?.tagName).toBe('BUTTON');
+    expect(itemNodes()[0]?.getAttribute('role')).toBe('menuitem');
+    expect(menu.getAttribute('aria-activedescendant')).toBe(itemNodes()[0]?.id);
 
     await dispatchKey('ArrowDown');
     expect(itemNodes()[1]?.classList.contains('is-focused')).toBe(true);
+    expect(menu.getAttribute('aria-activedescendant')).toBe(itemNodes()[1]?.id);
 
     await dispatchKey('ArrowUp');
     expect(itemNodes()[0]?.classList.contains('is-focused')).toBe(true);

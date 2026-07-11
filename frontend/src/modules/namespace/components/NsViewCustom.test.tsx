@@ -837,15 +837,14 @@ describe('NsViewCustom', () => {
       expect(crdCol).toBeTruthy();
       expect(crdCol.header).toBe('CRD');
 
-      // Interactive cells render as a `<span role="button">` with the
-      // CRD name as their child text.
+      // Interactive cells render as native buttons with the CRD name as text.
       const rendered = requireReactElement<{
         role?: string;
         children?: React.ReactNode;
         title?: string;
       }>(crdCol.render(resource), 'expected the CRD link element');
-      expect(rendered.type).toBe('span');
-      expect(rendered.props.role).toBe('button');
+      expect(rendered.type).toBe('button');
+      expect(rendered.props.role).toBeUndefined();
       expect(rendered.props.children).toBe('dbinstances.rds.services.k8s.aws');
       expect(rendered.props.title).toBe('Open dbinstances.rds.services.k8s.aws');
     });

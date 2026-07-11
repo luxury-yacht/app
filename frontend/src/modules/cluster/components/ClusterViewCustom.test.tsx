@@ -672,8 +672,8 @@ describe('ClusterViewCustom', () => {
         title?: string;
       }>(crdCol.render(resourceWithCRD), 'expected the cluster CRD link element');
 
-      expect(rendered.type).toBe('span');
-      expect(rendered.props.role).toBe('button');
+      expect(rendered.type).toBe('button');
+      expect(rendered.props.role).toBeUndefined();
       expect(rendered.props.children).toBe('dbclusters.postgresql.cnpg.io');
       expect(rendered.props.title).toBe('Open dbclusters.postgresql.cnpg.io');
     });
