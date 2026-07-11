@@ -103,7 +103,7 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
       <div className="podstate-summary">
         <div className="podstate-caption">
           <span className="podstate-caption-zero">None</span>
-          {hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
+          {!!hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
         </div>
       </div>
     );
@@ -153,8 +153,8 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
       </div>
       <div className="podstate-caption">
         {headline}
-        {drift && <span className="podstate-caption-drift">· {drift}</span>}
-        {hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
+        {!!drift && <span className="podstate-caption-drift">· {drift}</span>}
+        {!!hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
       </div>
     </div>
   );
@@ -405,7 +405,7 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
       <div className="metadata-section-separator" />
       {/* ServiceAccount — only when explicitly set to a non-default SA. The
           implicit `default` SA is noise. */}
-      {serviceAccount && (
+      {!!serviceAccount && (
         <OverviewItem
           label="Svc Account"
           value={
@@ -424,7 +424,7 @@ const renderPodTemplateGroup = (d: PodTemplate, context: OverviewContext): React
       )}
       {/* Pod placement constraints — surfaced here (not in metadata) because
           they directly determine which nodes pods can land on. */}
-      {nodeSelector && (
+      {!!nodeSelector && (
         <OverviewItem
           label="Node Selector"
           fullWidth
@@ -625,7 +625,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
           >
             {d.currentReplicaSet}
           </ObjectPanelLink>
-          {d.currentRevision && (
+          {!!d.currentRevision && (
             <span className="workload-replicaset-meta">
               <span>Revision {d.currentRevision}</span>
               {typeof d.revisionHistory === 'number' &&
@@ -889,8 +889,8 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
                     <div key={tmpl.name} className="workload-volume-template">
                       <span className="workload-volume-template-name">{tmpl.name}</span>
                       <span className="workload-volume-template-meta">
-                        {tmpl.storageRequest && <span>{tmpl.storageRequest}</span>}
-                        {tmpl.storageClass && <span>{tmpl.storageClass}</span>}
+                        {!!tmpl.storageRequest && <span>{tmpl.storageRequest}</span>}
+                        {!!tmpl.storageClass && <span>{tmpl.storageClass}</span>}
                         {tmpl.accessModes && tmpl.accessModes.length > 0 && (
                           <span className="workload-volume-template-modes">
                             {tmpl.accessModes.map((mode) => (

@@ -51,6 +51,7 @@
         "noStaticOnlyClass": "error"
       },
       "correctness": {
+        "noUnusedInstantiation": "error",
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
@@ -79,7 +80,12 @@
         "noArrayIndexKey": "error",
         "noConfusingVoidType": "error",
         "noExplicitAny": "error",
+        "noImportCycles": "error",
+        "noLeakedRender": "error",
+        "noMisplacedAssertion": "error",
         "noPrototypeBuiltins": "error",
+        "noSkippedTests": "error",
+        "noUnusedExpressions": "error",
         "useIterableCallbackReturn": {
           "level": "error",
           "options": {

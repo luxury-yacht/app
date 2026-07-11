@@ -5,15 +5,28 @@ import { fileURLToPath } from 'node:url';
 const overrideKey = ({ includes, rules }) =>
   `${[...includes].sort().join(',')}::${[...rules].sort().join(',')}`;
 const suppressionKey = ({ file, rule, count }) => `${file}::${rule}::${count}`;
+const lifetimeHookNames = [
+  'useEffectWithInvalidation',
+  'useLayoutEffectWithInvalidation',
+  'useMemoWithInvalidation',
+  'useMountEffect',
+];
 
 export const collectSuppressions = (sources) => {
   const errors = [];
   const counts = new Map();
   for (const { file, content } of sources) {
     content.split('\n').forEach((line, index) => {
-      const markerIndex = line.indexOf('biome-ignore ');
-      if (markerIndex < 0) return;
-      const directive = line.slice(markerIndex + 'biome-ignore '.length);
+      const markerMatch = line.match(/biome-ignore(?:-all|-start|-end)?\s/);
+      if (!markerMatch || markerMatch.index === undefined) return;
+      const suppressionForm = markerMatch[0].trim();
+      if (suppressionForm !== 'biome-ignore') {
+        errors.push(
+          `${file}:${index + 1} Biome suppression form ${suppressionForm} is prohibited; use an exact inline biome-ignore directive`
+        );
+        return;
+      }
+      const directive = line.slice(markerMatch.index + markerMatch[0].length);
       const rationaleSeparator = directive.indexOf(':');
       const ruleText =
         rationaleSeparator < 0 ? directive.trim() : directive.slice(0, rationaleSeparator).trim();
@@ -69,6 +82,109 @@ export const collectDisabledOverrides = (config) =>
       : [];
   });
 
+const configuredRuleLevel = (rules, rulePath) => {
+  const configured = rulePath.split('.').reduce((value, key) => value?.[key], rules);
+  return typeof configured === 'object' && configured !== null ? configured.level : configured;
+};
+
+export const collectConfigPolicyErrors = (config, policy) => {
+  const errors = [];
+  if (config.formatter?.enabled !== true) {
+    errors.push('Biome formatter must remain enabled.');
+  }
+  if (config.assist?.enabled !== true) {
+    errors.push('Biome assist must remain enabled.');
+  }
+  if (config.linter?.enabled !== true) {
+    errors.push('Biome linter must remain enabled.');
+  }
+
+  const rules = config.linter?.rules ?? {};
+  if (rules.preset !== policy.rulePreset) {
+    errors.push(`Biome rule preset must remain ${policy.rulePreset}.`);
+  }
+  collectOffRulePaths(rules)
+    .filter((rule) => rule !== 'preset')
+    .forEach((rule) => errors.push(`Biome global rule disabling is prohibited: ${rule}`));
+
+  for (const rule of policy.requiredRules ?? []) {
+    if (configuredRuleLevel(rules, rule) !== 'error') {
+      errors.push(`Biome strict rule must remain at error: ${rule}`);
+    }
+  }
+
+  const exhaustiveOptions = rules.correctness?.useExhaustiveDependencies?.options;
+  if (exhaustiveOptions?.reportUnnecessaryDependencies !== true) {
+    errors.push('Biome unnecessary hook dependency reporting must remain enabled.');
+  }
+  const configuredHooks = new Set((exhaustiveOptions?.hooks ?? []).map(({ name }) => name));
+  for (const hook of policy.requiredHooks ?? []) {
+    if (!configuredHooks.has(hook)) {
+      errors.push(`Biome exhaustive-dependency hook is missing: ${hook}`);
+    }
+  }
+
+  const configuredPlugins = new Set((config.plugins ?? []).map(({ path: pluginPath }) => pluginPath));
+  for (const pluginPath of policy.requiredPlugins ?? []) {
+    if (!configuredPlugins.has(pluginPath)) {
+      errors.push(`Biome boundary plugin is missing: ${pluginPath}`);
+    }
+  }
+
+  for (const override of config.overrides ?? []) {
+    const scope = `[${(override.includes ?? []).join(', ')}]`;
+    if (override.linter?.enabled === false) {
+      errors.push(`Biome override may not disable the linter: ${scope}`);
+    }
+    if (override.linter?.rules?.preset === 'none') {
+      errors.push(`Biome override may not set the rule preset to none: ${scope}`);
+    }
+  }
+  return errors;
+};
+
+export const collectLifetimeHookCallsites = (sources) =>
+  sources
+    .map(({ file, content }) => {
+      const hooks = Object.fromEntries(
+        lifetimeHookNames.flatMap((hook) => {
+          const count = [...content.matchAll(new RegExp(`\\b${hook}\\s*\\(`, 'g'))].length;
+          return count > 0 ? [[hook, count]] : [];
+        })
+      );
+      return { file, hooks };
+    })
+    .filter(({ hooks }) => Object.keys(hooks).length > 0)
+    .sort((left, right) => left.file.localeCompare(right.file));
+
+export const validateLifetimeHookSnapshot = (actual, approved) => {
+  const actualByFile = new Map(actual.map((entry) => [entry.file, entry.hooks]));
+  const approvedByFile = new Map(approved.map((entry) => [entry.file, entry.hooks]));
+  const errors = actual
+    .filter(({ file }) => !approvedByFile.has(file))
+    .map(
+      ({ file, hooks }) =>
+        `Unapproved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
+    );
+  for (const { file, hooks } of actual) {
+    const expected = approvedByFile.get(file);
+    if (expected && JSON.stringify(expected) !== JSON.stringify(hooks)) {
+      errors.push(
+        `Changed hook lifetime callsite: ${file} expected ${JSON.stringify(expected)}, found ${JSON.stringify(hooks)}`
+      );
+    }
+  }
+  errors.push(
+    ...approved
+      .filter(({ file }) => !actualByFile.has(file))
+      .map(
+        ({ file, hooks }) =>
+          `Stale approved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
+      )
+  );
+  return errors;
+};
+
 export const validateExceptionSnapshot = ({
   actualOverrides,
   approvedOverrides,
@@ -118,7 +234,25 @@ export const validateExceptionSnapshot = ({
   ];
 };
 
-const sourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.css', '.html']);
+const sourceExtensions = new Set([
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.css',
+  '.html',
+  '.json',
+  '.jsonc',
+]);
+const excludedDirectories = new Set(['node_modules', 'dist', 'wailsjs', 'coverage']);
+const excludedFiles = new Set([
+  'package-lock.json',
+  'src/core/refresh/types.generated.ts',
+  'scripts/check-biome-exceptions.mjs',
+  'scripts/check-biome-exceptions.test.mjs',
+]);
 
 export const readSourceFiles = (projectRoot) => {
   const sources = [];
@@ -126,19 +260,17 @@ export const readSourceFiles = (projectRoot) => {
     if (!fs.existsSync(entryPath)) return;
     const stat = fs.statSync(entryPath);
     if (stat.isDirectory()) {
-      fs.readdirSync(entryPath).forEach((entry) => visit(path.join(entryPath, entry)));
+      fs.readdirSync(entryPath)
+        .filter((entry) => !excludedDirectories.has(entry))
+        .forEach((entry) => visit(path.join(entryPath, entry)));
       return;
     }
     if (!sourceExtensions.has(path.extname(entryPath))) return;
     const file = path.relative(projectRoot, entryPath).split(path.sep).join('/');
-    if (file === 'scripts/check-biome-exceptions.mjs' || file === 'scripts/check-biome-exceptions.test.mjs') {
-      return;
-    }
+    if (excludedFiles.has(file)) return;
     sources.push({ file, content: fs.readFileSync(entryPath, 'utf8') });
   };
-  ['src', '.storybook', 'styles', 'scripts'].forEach((directory) =>
-    visit(path.join(projectRoot, directory))
-  );
+  visit(projectRoot);
   return sources;
 };
 
@@ -147,15 +279,21 @@ export const validateProjectExceptions = (projectRoot) => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(projectRoot, 'biome-exceptions.json'), 'utf8')
   );
-  const collected = collectSuppressions(readSourceFiles(projectRoot));
+  const sources = readSourceFiles(projectRoot);
+  const collected = collectSuppressions(sources);
   return [
     ...collected.errors,
+    ...collectConfigPolicyErrors(config, manifest.strictness),
     ...validateExceptionSnapshot({
       actualOverrides: collectDisabledOverrides(config),
       approvedOverrides: manifest.overrides,
       actualSuppressions: collected.suppressions,
       approvedSuppressions: manifest.suppressions,
     }),
+    ...validateLifetimeHookSnapshot(
+      collectLifetimeHookCallsites(sources),
+      manifest.hookLifetimes ?? []
+    ),
   ];
 };
 

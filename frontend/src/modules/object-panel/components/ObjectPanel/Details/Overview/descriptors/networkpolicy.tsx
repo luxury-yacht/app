@@ -76,9 +76,9 @@ const RuleCard: React.FC<{
       <div className="overview-card-header">
         <span className="overview-card-title">Rule {index + 1}</span>
       </div>
-      {(hasPeers || hasPorts) && (
+      {!!(hasPeers || hasPorts) && (
         <div className="overview-card-rows">
-          {hasPeers && peers && (
+          {!!(hasPeers && peers) && (
             <div className="overview-row">
               <span className="overview-row-label">{peerLabel}</span>
               <span className="overview-row-value">
@@ -86,7 +86,7 @@ const RuleCard: React.FC<{
               </span>
             </div>
           )}
-          {hasPorts && rule.ports && (
+          {!!(hasPorts && rule.ports) && (
             <div className="overview-row">
               <span className="overview-row-label">Ports</span>
               <span className="overview-row-value">{rule.ports.map(formatPort).join(', ')}</span>

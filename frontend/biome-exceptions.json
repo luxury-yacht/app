@@ -1,4 +1,180 @@
 {
+  "strictness": {
+    "rulePreset": "recommended",
+    "requiredRules": [
+      "a11y.noAutofocus",
+      "a11y.noLabelWithoutControl",
+      "a11y.noNoninteractiveTabindex",
+      "a11y.noStaticElementInteractions",
+      "a11y.useAriaPropsForRole",
+      "a11y.useAriaPropsSupportedByRole",
+      "a11y.useFocusableInteractive",
+      "a11y.useKeyWithClickEvents",
+      "a11y.useSemanticElements",
+      "a11y.useValidAnchor",
+      "complexity.noImportantStyles",
+      "complexity.noStaticOnlyClass",
+      "correctness.noUnusedInstantiation",
+      "correctness.useExhaustiveDependencies",
+      "suspicious.noArrayIndexKey",
+      "suspicious.noConfusingVoidType",
+      "suspicious.noExplicitAny",
+      "suspicious.noImportCycles",
+      "suspicious.noLeakedRender",
+      "suspicious.noMisplacedAssertion",
+      "suspicious.noPrototypeBuiltins",
+      "suspicious.noSkippedTests",
+      "suspicious.noUnusedExpressions",
+      "suspicious.useIterableCallbackReturn",
+      "style.noDescendingSpecificity",
+      "style.noNonNullAssertion",
+      "style.noRestrictedImports"
+    ],
+    "requiredHooks": [
+      "useEffectWithInvalidation",
+      "useLayoutEffectWithInvalidation",
+      "useMemoWithInvalidation"
+    ],
+    "requiredPlugins": [
+      "./biome-plugins/no-direct-fetch.grit",
+      "./biome-plugins/no-direct-lifecycle-read.grit",
+      "./biome-plugins/no-direct-permission-read.grit",
+      "./biome-plugins/no-direct-refresh-orchestrator.grit"
+    ]
+  },
+  "hookLifetimes": [
+    {
+      "file": "src/core/capabilities/hooks.ts",
+      "hooks": { "useEffectWithInvalidation": 1, "useMemoWithInvalidation": 1 }
+    },
+    { "file": "src/core/contexts/ErrorContext.tsx", "hooks": { "useMountEffect": 1 } },
+    { "file": "src/core/events/useEventBus.ts", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/core/refresh/components/diagnostics/TableCapabilitesChecks.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/core/refresh/components/diagnostics/TableEffectivePermissions.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/core/refresh/hooks/useRefreshWatcher.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    { "file": "src/hooks/useTableSort.ts", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/modules/namespace/contexts/NamespaceContext.tsx",
+      "hooks": { "useMountEffect": 1 }
+    },
+    { "file": "src/modules/object-map/ObjectMap.tsx", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/modules/object-map/ObjectMapG6Renderer.tsx",
+      "hooks": { "useEffectWithInvalidation": 2 }
+    },
+    {
+      "file": "src/modules/object-map/useObjectMapG6Viewport.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-map/useObjectMapModel.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogScrollRestoration.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/hooks/useVirtualizedLogRows.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "hooks": { "useEffectWithInvalidation": 3 }
+    },
+    {
+      "file": "src/modules/port-forward/PortForwardModal.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/resource-grid/useResourceGridTable.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/resource-grid/useTypedResourceQuery.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "hooks": {
+        "useEffectWithInvalidation": 2,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1
+      }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useContainerWidthObserver.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableColumnLayout.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHoverFallback.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableKeyboardNavigation.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableVirtualization.ts",
+      "hooks": {
+        "useEffectWithInvalidation": 3,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1,
+        "useMountEffect": 1
+      }
+    },
+    {
+      "file": "src/shared/components/tables/persistence/useGridTablePersistence.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/useGridTableFilters.ts",
+      "hooks": { "useEffectWithInvalidation": 2 }
+    },
+    {
+      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+      "hooks": { "useMountEffect": 1 }
+    },
+    { "file": "src/shared/components/tabs/Tabs.tsx", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/shared/components/yaml/YamlEditor.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/hooks/useHookLifetimes.test.tsx",
+      "hooks": {
+        "useEffectWithInvalidation": 1,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1,
+        "useMountEffect": 1
+      }
+    },
+    { "file": "src/ui/modals/ObjectDiffModal.tsx", "hooks": { "useEffectWithInvalidation": 2 } },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "hooks": { "useLayoutEffectWithInvalidation": 1 }
+    },
+    { "file": "src/ui/settings/sections/KubeconfigsSection.tsx", "hooks": { "useMountEffect": 1 } },
+    { "file": "src/ui/shortcuts/context.test.tsx", "hooks": { "useMountEffect": 4 } },
+    { "file": "src/ui/shortcuts/hooks.ts", "hooks": { "useEffectWithInvalidation": 1 } }
+  ],
   "overrides": [
     {
       "includes": ["src/core/backend-api/**"],

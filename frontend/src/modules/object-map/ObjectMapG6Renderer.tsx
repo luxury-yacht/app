@@ -224,7 +224,7 @@ const ObjectMapDebugGridOverlay: React.FC<{ grid: ObjectMapDebugGridState }> = (
             y {Math.round(line.value)}
           </text>
         ))}
-      {originVisible && (
+      {!!originVisible && (
         <g transform={`translate(${grid.origin[0]} ${grid.origin[1]})`}>
           <circle className="object-map__debug-grid-origin" r={4} />
           <text className="object-map__debug-grid-origin-label" x={7} y={-7}>
@@ -681,9 +681,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   return (
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
-      {showDebugGrid && debugGrid && <ObjectMapDebugGridOverlay grid={debugGrid} />}
+      {!!(showDebugGrid && debugGrid) && <ObjectMapDebugGridOverlay grid={debugGrid} />}
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
-        {palette && tooltipText && tooltipPosition && (
+        {!!(palette && tooltipText && tooltipPosition) && (
           <ObjectMapG6TooltipOverlay
             palette={palette}
             tooltipLayout={tooltipText}

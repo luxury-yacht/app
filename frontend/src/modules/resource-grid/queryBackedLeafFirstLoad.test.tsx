@@ -396,14 +396,15 @@ describe('query-backed leaf first load', () => {
     }
     const props = await render(element, payload);
 
-    expect(props.data).toHaveLength(1);
-    expect(props.data[0]).toEqual(expect.objectContaining({ name: expectedName }));
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain,
-        scope: expectedScope,
-      })
+    if (props.data.length !== 1 || props.data[0]?.name !== expectedName) {
+      throw new Error(`Expected first query result to contain only ${expectedName}`);
+    }
+    const requestedExpectedScope = requestRefreshDomainStateMock.mock.calls.some(
+      ([request]) => request.domain === domain && request.scope === expectedScope
     );
+    if (!requestedExpectedScope) {
+      throw new Error(`Expected ${domain} query for scope ${expectedScope}`);
+    }
   };
 
   it.each([

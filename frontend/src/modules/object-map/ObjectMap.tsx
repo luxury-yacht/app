@@ -496,7 +496,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
-        {visibleState.normalizedSearchQuery && (
+        {!!visibleState.normalizedSearchQuery && (
           <span className="object-map__search-count">
             {visibleState.searchMatches.length === 0
               ? '0/0'
@@ -587,7 +587,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         <ResetFiltersIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      {onRefresh && (
+      {!!onRefresh && (
         <button
           type="button"
           className={`object-map__toolbar-button ${
@@ -657,7 +657,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onViewportControlsChange={setG6ViewportControls}
           />
         </Suspense>
-        {showLegend && (
+        {!!showLegend && (
           // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
           <section
             className="object-map__legend"
@@ -758,7 +758,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         />
       )}
       {objectActions.modals}
-      {payload.truncated && (
+      {!!payload.truncated && (
         <div className="object-map__banner object-map__banner--truncated">
           Showing {model.layout.nodes.length} of many. Increase the depth/node limits to see more.
         </div>

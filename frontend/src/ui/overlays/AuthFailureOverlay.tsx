@@ -64,7 +64,7 @@ export const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps>
         </p>
       ) : (
         <>
-          {detail && <p className="auth-failure-reason">{detail}</p>}
+          {!!detail && <p className="auth-failure-reason">{detail}</p>}
           <p className="auth-failure-message">
             The app will attempt to reconnect automatically, but you may need to refresh your
             credentials.

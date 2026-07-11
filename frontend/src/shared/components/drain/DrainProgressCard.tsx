@@ -80,7 +80,7 @@ export function DrainProgressCard({
           </span>
           <span>{phaseLabel(progress.phase, isActive)}</span>
         </div>
-        {showCancel && (
+        {!!showCancel && (
           <button
             type="button"
             className="button warning"
@@ -102,7 +102,7 @@ export function DrainProgressCard({
 
       <ProgressBar progress={progress} />
 
-      {progress.hasError && progress.errorMessage && (
+      {!!(progress.hasError && progress.errorMessage) && (
         <div className="drain-progress-error" role="alert">
           {progress.errorMessage}
         </div>

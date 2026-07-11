@@ -125,7 +125,7 @@ const renderRules = (d: IngressDetails, context: OverviewContext): React.ReactNo
                 <div key={JSON.stringify(path)} className="overview-row">
                   <span className="overview-row-label">{path.path || '/'}</span>
                   <span className="overview-row-value">
-                    {path.pathType && (
+                    {!!path.pathType && (
                       <>
                         <StatusChip variant="info" tooltip={pathTypeTooltip(path.pathType)}>
                           {path.pathType}
@@ -165,7 +165,7 @@ const renderTls = (d: IngressDetails, context: OverviewContext): React.ReactNode
                 </span>
               </div>
             )}
-            {tls.secretName && (
+            {!!tls.secretName && (
               <div className="overview-row">
                 <span className="overview-row-label">Secret</span>
                 <span className="overview-row-value">

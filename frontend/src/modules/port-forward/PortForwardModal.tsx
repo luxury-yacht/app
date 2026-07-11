@@ -325,10 +325,10 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
                   />
                   <span className="port-forward-port-option-label">
                     <span className="port-forward-port-number">{portInfo.port}</span>
-                    {portInfo.name && (
+                    {!!portInfo.name && (
                       <span className="port-forward-port-name">({portInfo.name})</span>
                     )}
-                    {portInfo.protocol && (
+                    {!!portInfo.protocol && (
                       <span className="port-forward-port-protocol">{portInfo.protocol}</span>
                     )}
                   </span>
@@ -378,7 +378,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       </div>
 
       {/* Error Message */}
-      {error && <div className="port-forward-error">{error}</div>}
+      {!!error && <div className="port-forward-error">{error}</div>}
 
       {/* Footer */}
       <div className="port-forward-footer">

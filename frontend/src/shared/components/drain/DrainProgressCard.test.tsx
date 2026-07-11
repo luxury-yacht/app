@@ -52,8 +52,10 @@ describe('DrainProgressCard status pill', () => {
       root.render(<DrainProgressCard job={buildJob(status)} isActive={false} />);
     });
     const pill = container.querySelector('[data-test="drain-job-status"]');
-    expect(pill).not.toBeNull();
-    return pill as HTMLElement;
+    if (!(pill instanceof HTMLElement)) {
+      throw new Error('Expected drain job status pill');
+    }
+    return pill;
   };
 
   it.each([

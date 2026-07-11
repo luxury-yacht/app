@@ -177,9 +177,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
       <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
-        {(showKindDropdown || showNamespaceDropdown) && (
+        {!!(showKindDropdown || showNamespaceDropdown) && (
           <div className="gridtable-filter-subcluster">
-            {showKindDropdown && (
+            {!!showKindDropdown && (
               <div className="gridtable-filter-group" data-gridtable-filter-role="kind">
                 <Dropdown
                   id={kindDropdownId}
@@ -199,7 +199,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 />
               </div>
             )}
-            {showNamespaceDropdown && (
+            {!!showNamespaceDropdown && (
               <div className="gridtable-filter-group" data-gridtable-filter-role="namespace">
                 <Dropdown
                   id={namespaceDropdownId}
@@ -235,7 +235,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           </div>
           <div className="gridtable-filter-actions">
             <IconBar items={iconBarItems} />
-            {customActions && (
+            {!!customActions && (
               <div
                 className="gridtable-filter-custom-actions"
                 data-gridtable-filter-role="custom-actions"
@@ -243,13 +243,13 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {customActions}
               </div>
             )}
-            {resultCount && hasNarrowingFilters && (
+            {!!(resultCount && hasNarrowingFilters) && (
               <span
                 className="gridtable-filter-result-count"
                 data-gridtable-filter-role="result-count"
               >
                 {formatResultCountLabel(resultCount)}
-                {resultCount.capped && (
+                {!!resultCount.capped && (
                   <Tooltip
                     content={
                       <>
@@ -259,7 +259,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                             after the configured exact-count budget.
                           </p>
                         )}
-                        {resultCount.partialDataLabel && (
+                        {!!resultCount.partialDataLabel && (
                           <p className="gridtable-filter-result-tooltip-paragraph">
                             {resultCount.partialDataLabel}
                           </p>
@@ -284,7 +284,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         </div>
       </div>
       <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="tertiary">
-        {showColumnsDropdown && columnOptions && columnValue && onColumnsChange && (
+        {!!(showColumnsDropdown && columnOptions && columnValue && onColumnsChange) && (
           <div className="gridtable-filter-group" data-gridtable-filter-role="columns">
             <Dropdown
               id={columnsDropdownId ?? `${searchInputId}-columns`}

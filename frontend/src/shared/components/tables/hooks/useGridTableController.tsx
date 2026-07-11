@@ -40,7 +40,6 @@ import {
   recordGridTablePerformanceSnapshot,
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { ReactElement, ReactNode, RefObject } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 
@@ -343,13 +342,9 @@ export function useGridTableController<T>({
     hideHeader,
   });
 
-  useEffectWithInvalidation(
-    () => {
-      markVisibleAutoColumnsDirty();
-    },
-    [markVisibleAutoColumnsDirty],
-    [virtualRange.end, virtualRange.start]
-  );
+  useEffect(() => {
+    markVisibleAutoColumnsDirty();
+  }, [markVisibleAutoColumnsDirty]);
 
   const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
     tableDataLength: tableData.length,

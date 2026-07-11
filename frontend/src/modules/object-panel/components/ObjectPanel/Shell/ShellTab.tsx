@@ -1167,13 +1167,13 @@ const ShellTab: React.FC<ShellTabProps> = ({
           Debug unavailable: <span>{debugDisabledReason}</span>
         </div>
       )}
-      {connectionErrorMessage && (
+      {!!connectionErrorMessage && (
         <div className="shell-tab__connection-error" role="status" aria-live="polite">
           Connection failed: <span>{connectionErrorMessage}</span>
         </div>
       )}
 
-      {disabledReason && (
+      {!!disabledReason && (
         <div className="shell-tab__notice">
           Shell access blocked: <span>{disabledReason}</span>
         </div>
@@ -1199,7 +1199,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         />
         {shellScrollbarElement}
       </div>
-      {contextMenu && (
+      {!!contextMenu && (
         <ContextMenu
           items={contextMenuItems}
           position={contextMenu.position}

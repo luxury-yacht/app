@@ -37,14 +37,14 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
 
     return (
       <>
-        {displayValue && (
+        {!!displayValue && (
           <OverviewItem
             label={customLabel}
             value={<span className={`status-text ${statusClass}`}>{displayValue}</span>}
           />
         )}
 
-        {ready && (
+        {!!ready && (
           <OverviewItem
             label="Ready"
             value={(() => {
@@ -81,7 +81,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
                     >
                       {condition.type}
                     </span>
-                    {condition.message && (
+                    {!!condition.message && (
                       <span className="condition-message">: {condition.message}</span>
                     )}
                   </div>

@@ -115,10 +115,10 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
             </table>
           </div>
         )}
-        {warning && <p className="confirmation-modal-warning">{warning}</p>}
+        {!!warning && <p className="confirmation-modal-warning">{warning}</p>}
       </div>
       <div className="confirmation-modal-footer">
-        {secondaryActionText && onSecondaryAction && (
+        {!!(secondaryActionText && onSecondaryAction) && (
           <button
             type="button"
             className={`button ${secondaryActionButtonClass} confirmation-modal-secondary-action`}

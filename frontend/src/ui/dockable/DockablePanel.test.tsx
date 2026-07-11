@@ -148,7 +148,7 @@ describe('DockablePanel', () => {
 
       return (
         <>
-          {openPanels.a && (
+          {!!openPanels.a && (
             <DockablePanel
               panelId="panel-a"
               title="A"
@@ -160,7 +160,7 @@ describe('DockablePanel', () => {
               <button type="button">Panel A body</button>
             </DockablePanel>
           )}
-          {openPanels.b && (
+          {!!openPanels.b && (
             <DockablePanel
               panelId="panel-b"
               title="B"
@@ -172,7 +172,7 @@ describe('DockablePanel', () => {
               <button type="button">Panel B body</button>
             </DockablePanel>
           )}
-          {openPanels.c && (
+          {!!openPanels.c && (
             <DockablePanel
               panelId="panel-c"
               title="C"

@@ -117,7 +117,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
                     </span>
                   </span>
                 </div>
-                {h.description && (
+                {!!h.description && (
                   <div className="metadata-value helm-history-description">{h.description}</div>
                 )}
               </div>
@@ -134,7 +134,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
       )}
 
       {/* Release Notes */}
-      {data.notes && (
+      {!!data.notes && (
         <div className="metadata-section">
           <div className="metadata-label">Release Notes</div>
           <div className="metadata-pairs">

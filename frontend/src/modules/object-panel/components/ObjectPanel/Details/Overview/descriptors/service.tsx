@@ -95,7 +95,7 @@ export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
                 <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
                 <span className="overview-row-value">
                   {port.port}/{port.protocol}
-                  {port.targetPort && ` → ${port.targetPort}`}
+                  {!!port.targetPort && ` → ${port.targetPort}`}
                   {port.nodePort && port.nodePort > 0 && ` (NodePort: ${port.nodePort})`}
                 </span>
               </div>

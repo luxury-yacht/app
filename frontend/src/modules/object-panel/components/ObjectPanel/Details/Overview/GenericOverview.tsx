@@ -91,7 +91,7 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
     <>
       <ResourceHeader kind={kind || ''} name={name || ''} namespace={namespace} />
 
-      {group && <OverviewItem label="API Group" value={group} />}
+      {!!group && <OverviewItem label="API Group" value={group} />}
 
       {/* Service fields */}
       <OverviewItem label="Type" value={type} />
@@ -112,9 +112,9 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
               `${port.name ?? ''}:${port.port ?? ''}:${port.protocol ?? ''}:${port.targetPort ?? ''}`
           ).map(({ key, value: port }) => (
             <div key={key}>
-              {port.name && `${port.name}: `}
+              {!!port.name && `${port.name}: `}
               {port.port}/{port.protocol}
-              {port.targetPort && ` → ${port.targetPort}`}
+              {!!port.targetPort && ` → ${port.targetPort}`}
             </div>
           ))}
           fullWidth
@@ -178,7 +178,9 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
       )}
 
       {/* Role/RoleBinding fields */}
-      {roleRef && <OverviewItem label="Role Reference" value={`${roleRef.kind}/${roleRef.name}`} />}
+      {!!roleRef && (
+        <OverviewItem label="Role Reference" value={`${roleRef.kind}/${roleRef.name}`} />
+      )}
       {subjects && subjects.length > 0 && (
         <OverviewItem
           label="Subjects"

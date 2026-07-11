@@ -1,29 +1,15 @@
-/**
- * frontend/src/ui/shortcuts/components/SearchShortcutHandler.test.tsx
- *
- * Test suite for SearchShortcutHandler.
- * Covers key behaviors and edge cases for SearchShortcutHandler.
- */
+/** Regression coverage for the built-in search shortcut registered by KeyboardProvider. */
 
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import SearchShortcutHandler from './SearchShortcutHandler';
-
-const hooksMocks = vi.hoisted(() => ({
-  useShortcut: vi.fn(),
-}));
+import { KeyboardProvider } from '../context';
 
 const registryMocks = vi.hoisted(() => ({
   focusRegisteredSearchShortcutTarget: vi.fn(),
 }));
 
 const isMacPlatformMock = vi.hoisted(() => vi.fn(() => true));
-
-vi.mock('../hooks', () => ({
-  useShortcut: (...args: unknown[]) => hooksMocks.useShortcut(...(args as [])),
-}));
 
 vi.mock('../searchShortcutRegistry', () => ({
   focusRegisteredSearchShortcutTarget: (...args: unknown[]) =>
@@ -34,7 +20,7 @@ vi.mock('@/utils/platform', () => ({
   isMacPlatform: () => isMacPlatformMock(),
 }));
 
-describe('SearchShortcutHandler', () => {
+describe('KeyboardProvider search shortcut', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -42,62 +28,53 @@ describe('SearchShortcutHandler', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    hooksMocks.useShortcut.mockClear();
     registryMocks.focusRegisteredSearchShortcutTarget.mockClear();
     isMacPlatformMock.mockReturnValue(true);
   });
 
   afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
+    act(() => root.unmount());
     container.remove();
   });
 
-  const renderHandler = async () => {
+  const renderProvider = async () => {
     await act(async () => {
-      root.render(<SearchShortcutHandler />);
+      root.render(<KeyboardProvider>{null}</KeyboardProvider>);
       await Promise.resolve();
     });
   };
 
-  it('registers Cmd or Ctrl+F shortcut that focuses the registered target', async () => {
+  it('registers Cmd or Ctrl+F and focuses the active search target', async () => {
     registryMocks.focusRegisteredSearchShortcutTarget.mockReturnValue(true);
-    await renderHandler();
+    await renderProvider();
 
-    expect(hooksMocks.useShortcut).toHaveBeenCalledTimes(1);
-    const primaryConfig = hooksMocks.useShortcut.mock.calls[0][0] as {
-      handler: () => boolean;
-      priority: number;
-      modifiers?: { meta?: boolean; ctrl?: boolean };
-    };
-    expect(primaryConfig.modifiers?.meta).toBe(true);
-    expect(primaryConfig.priority).toBe(1000);
-    const handled = primaryConfig.handler();
-    expect(handled).toBe(true);
+    const metaEvent = new KeyboardEvent('keydown', { key: 'f', metaKey: true, cancelable: true });
+    document.dispatchEvent(metaEvent);
+
+    expect(metaEvent.defaultPrevented).toBe(true);
     expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      root.unmount();
-    });
+    act(() => root.unmount());
     root = ReactDOM.createRoot(container);
-    hooksMocks.useShortcut.mockClear();
     registryMocks.focusRegisteredSearchShortcutTarget.mockClear();
     isMacPlatformMock.mockReturnValue(false);
-    await renderHandler();
-    expect(hooksMocks.useShortcut).toHaveBeenCalledTimes(1);
-    const ctrlConfig = hooksMocks.useShortcut.mock.calls[0][0] as {
-      modifiers?: { ctrl?: boolean };
-    };
-    expect(ctrlConfig.modifiers?.ctrl).toBe(true);
+    await renderProvider();
+
+    const ctrlEvent = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true });
+    document.dispatchEvent(ctrlEvent);
+
+    expect(ctrlEvent.defaultPrevented).toBe(true);
+    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back when registry has no active targets', async () => {
+  it('allows fallback browser search when the registry has no active target', async () => {
     registryMocks.focusRegisteredSearchShortcutTarget.mockReturnValue(false);
-    await renderHandler();
-    const metaConfig = hooksMocks.useShortcut.mock.calls[0][0] as { handler: () => boolean };
-    const result = metaConfig.handler();
-    expect(result).toBe(false);
-    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalled();
+    await renderProvider();
+
+    const event = new KeyboardEvent('keydown', { key: 'f', metaKey: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
   });
 });

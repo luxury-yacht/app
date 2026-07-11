@@ -112,7 +112,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
             {action.renderIcon()}
           </button>
         ))}
-      {allowMaximize && (
+      {!!allowMaximize && (
         <button
           type="button"
           className="dockable-panel__control-btn"

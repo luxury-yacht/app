@@ -88,8 +88,6 @@ describe('NodeLogsTab', () => {
     const filterInput = container.querySelector<HTMLInputElement>(
       'input[aria-label="Filter node logs"]'
     );
-    expect(filterInput).toBeTruthy();
-
     await act(async () => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setValue?.call(filterInput, value);
@@ -105,8 +103,6 @@ describe('NodeLogsTab', () => {
 
   const selectSource = async (label: string): Promise<void> => {
     const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
-    expect(trigger).toBeTruthy();
-
     await act(async () => {
       requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
@@ -117,8 +113,6 @@ describe('NodeLogsTab', () => {
     const option = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
       (node) => node.textContent?.includes(label)
     );
-    expect(option).toBeTruthy();
-
     await act(async () => {
       requireValue(option, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })

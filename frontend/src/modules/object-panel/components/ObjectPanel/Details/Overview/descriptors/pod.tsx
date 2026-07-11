@@ -234,7 +234,7 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
         hidden: (d) => !(d.hostNetwork || d.hostPID || d.hostIPC),
         render: (d) => (
           <div className="overview-condition-list">
-            {d.hostNetwork && (
+            {!!d.hostNetwork && (
               <StatusChip
                 variant="warning"
                 tooltip="Shares the host's network namespace. Bypasses network policies and can bind to host ports or sniff host traffic."
@@ -242,7 +242,7 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
                 Network
               </StatusChip>
             )}
-            {d.hostPID && (
+            {!!d.hostPID && (
               <StatusChip
                 variant="warning"
                 tooltip="Shares the host's process namespace. The pod can see, signal, and attach to every process running on the node."
@@ -250,7 +250,7 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
                 PID
               </StatusChip>
             )}
-            {d.hostIPC && (
+            {!!d.hostIPC && (
               <StatusChip
                 variant="warning"
                 tooltip="Shares the host's IPC namespace. The pod can access shared memory and message queues used by host processes."

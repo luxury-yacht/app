@@ -11,7 +11,6 @@ import {
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -333,51 +332,47 @@ export function useBrowseCatalog({
 
   // Apply query scope and refresh page 0 when the query changes
   const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);
-  useEffectWithInvalidation(
-    () => {
-      if (!enabled) {
-        return;
-      }
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
 
-      const scopeIdentityChanged = previousScopeIdentityRef.current !== plan.scopeIdentityKey;
-      previousScopeIdentityRef.current = plan.scopeIdentityKey;
+    const scopeIdentityChanged = previousScopeIdentityRef.current !== plan.scopeIdentityKey;
+    previousScopeIdentityRef.current = plan.scopeIdentityKey;
 
-      // Reset pagination state on query change.
-      setIsRequestingMore(false);
-      setPageIndex(1);
-      pageIndexRef.current = 1;
-      currentPageTokenRef.current = null;
-      setContinueToken(null);
-      setPreviousToken(null);
-      setPageError(null);
-      // Preserve the current dataset while filter-only queries refresh so the
-      // filter bar/dropdowns stay mounted and open menus don't lose their scroll
-      // position. We still clear eagerly when the structural scope changes
-      // (cluster/namespace mode) or before the first load.
-      if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
-        collectionRef.current = emptyBrowseCatalogCollection();
-        setItems([]);
-      }
-      if (scopeIdentityChanged) {
-        hasLoadedOnceRef.current = false;
-        setHasLoadedOnce(false);
-        lastFilterOptionsRef.current = null;
-      }
+    // Reset pagination state on query change.
+    setIsRequestingMore(false);
+    setPageIndex(1);
+    pageIndexRef.current = 1;
+    currentPageTokenRef.current = null;
+    setContinueToken(null);
+    setPreviousToken(null);
+    setPageError(null);
+    // Preserve the current dataset while filter-only queries refresh so the
+    // filter bar/dropdowns stay mounted and open menus don't lose their scroll
+    // position. We still clear eagerly when the structural scope changes
+    // (cluster/namespace mode) or before the first load.
+    if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
+      collectionRef.current = emptyBrowseCatalogCollection();
+      setItems([]);
+    }
+    if (scopeIdentityChanged) {
+      hasLoadedOnceRef.current = false;
+      setHasLoadedOnce(false);
+      lastFilterOptionsRef.current = null;
+    }
 
-      void refreshCatalogScope('startup');
-      if (!metadataUsesActiveScope) {
-        void refreshMetadataScope('startup');
-      }
-    },
-    [
-      enabled,
-      metadataUsesActiveScope,
-      plan.scopeIdentityKey,
-      refreshCatalogScope,
-      refreshMetadataScope,
-    ],
-    [catalogScope, metadataScope]
-  );
+    void refreshCatalogScope('startup');
+    if (!metadataUsesActiveScope) {
+      void refreshMetadataScope('startup');
+    }
+  }, [
+    enabled,
+    metadataUsesActiveScope,
+    plan.scopeIdentityKey,
+    refreshCatalogScope,
+    refreshMetadataScope,
+  ]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {

@@ -99,7 +99,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
     <div className="object-panel-section">
       <div className="data-section-header">
         <div className="object-panel-section-title">Data</div>
-        {isSecret && (
+        {!!isSecret && (
           <button
             type="button"
             className="button generic small"

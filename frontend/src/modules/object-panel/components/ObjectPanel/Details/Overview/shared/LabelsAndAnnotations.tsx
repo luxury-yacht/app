@@ -76,7 +76,7 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
                 ) : (
                   <span className="metadata-value">{displayValue}</span>
                 )}
-                {isSelector && (
+                {!!isSelector && (
                   <StatusChip
                     variant="info"
                     tooltip="This label/value pair is used to identify which pods belong to this workload."

@@ -85,7 +85,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
       <div className="error-notification-header">
         {isTop && stackSize > 1 && <span className="error-notification-count">{stackSize}</span>}
         <span className="error-notification-category">{error.title ?? error.category}</span>
-        {error.autoDismiss && (
+        {!!error.autoDismiss && (
           <span className="error-notification-auto-dismiss" title="Will auto-dismiss">
             ⏱️
           </span>
@@ -144,7 +144,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
         )}
       </div>
 
-      {error.retryable && (
+      {!!error.retryable && (
         <div className="error-notification-actions">
           <button
             type="button"
@@ -159,7 +159,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           </button>
         </div>
       )}
-      {error.autoDismiss && (
+      {!!error.autoDismiss && (
         <div className="error-notification-progress" aria-hidden="true">
           <span className="error-notification-progress-bar" />
         </div>

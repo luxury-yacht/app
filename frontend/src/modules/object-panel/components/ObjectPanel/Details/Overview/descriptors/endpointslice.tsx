@@ -71,7 +71,7 @@ const AddressRow: React.FC<{
 }> = ({ address, namespace, clusterMeta }) => (
   <div className="address-row">
     <span className="address-ip">{address.ip}</span>
-    {address.targetRef && (
+    {!!address.targetRef && (
       <>
         <span className="address-arrow">→</span>
         <TargetRefLink
@@ -81,7 +81,7 @@ const AddressRow: React.FC<{
         />
       </>
     )}
-    {address.nodeName && (
+    {!!address.nodeName && (
       <>
         <span className="address-on">on</span>
         <ObjectPanelLink

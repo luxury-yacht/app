@@ -186,7 +186,6 @@ describe('FavMenuDropdown', () => {
 
   const clickButton = async () => {
     const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(btn).toBeTruthy();
     await act(async () => {
       requireValue(btn, 'expected test value in FavMenuDropdown.test.tsx').click();
       await Promise.resolve();

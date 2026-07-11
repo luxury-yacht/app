@@ -166,7 +166,7 @@ const FavMenuDropdown: React.FC = () => {
         <FavoriteFilledIcon width={14} height={14} />
       </button>
 
-      {isOpen && (
+      {!!isOpen && (
         <div className="fav-dropdown-panel" role="menu">
           {/* Item list */}
           <div className="fav-dropdown-items">

@@ -319,7 +319,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
         </span>
       </div>
 
-      {hasConfigIssue && (
+      {!!hasConfigIssue && (
         <div className="rb-tooltip-row warning">
           <span>⚠️ Requests exceeds Limits</span>
         </div>

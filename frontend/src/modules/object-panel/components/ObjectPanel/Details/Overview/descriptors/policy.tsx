@@ -228,7 +228,7 @@ const renderMetric = (
     <div key={`metric:${metricName}`} className="policy-metric-block">
       <div className="policy-metric-name">
         {metricName}
-        {containerName && (
+        {!!containerName && (
           <span className="policy-detail-muted"> (container: {containerName})</span>
         )}
         {kind && kind !== 'resource' && kind !== 'containerresource' && (
@@ -236,13 +236,13 @@ const renderMetric = (
         )}
       </div>
       <div className="policy-metric-details">
-        {targetType && targetValue && (
+        {!!(targetType && targetValue) && (
           <div className="policy-detail-row">
             <span className="policy-detail-label--medium">Target:</span>
             {targetValue} ({targetType.toLowerCase()})
           </div>
         )}
-        {currentValue && (
+        {!!currentValue && (
           <div className="policy-detail-row">
             <span className="policy-detail-label--medium">Current:</span>
             {currentValue}

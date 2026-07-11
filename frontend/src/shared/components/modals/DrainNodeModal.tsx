@@ -340,7 +340,7 @@ const DrainNodeModal = ({
         <div className="drain-node-modal-target">
           <span className="drain-node-modal-label">Node:</span>
           <span className="drain-node-modal-value">{nodeName}</span>
-          {clusterName && (
+          {!!clusterName && (
             <>
               <span className="drain-node-modal-label">Cluster:</span>
               <span className="drain-node-modal-value">{clusterName}</span>
@@ -348,7 +348,7 @@ const DrainNodeModal = ({
           )}
         </div>
 
-        {primaryDrainJob && (
+        {!!primaryDrainJob && (
           <div className="drain-node-modal-current">
             <DrainProgressCard
               job={primaryDrainJob}
@@ -515,7 +515,7 @@ const DrainNodeModal = ({
           </div>
         )}
 
-        {drainError && <div className="drain-node-modal-error">{drainError}</div>}
+        {!!drainError && <div className="drain-node-modal-error">{drainError}</div>}
         {!activeDrainJob && startPermissionReason && (
           <div className="drain-node-modal-helper" data-test="drain-modal-permission-reason">
             {startPermissionReason}
@@ -525,7 +525,7 @@ const DrainNodeModal = ({
 
       <div className="modal-footer drain-node-modal-footer">
         <button type="button" className="button cancel" onClick={onClose}>
-          {activeDrainJob ? 'Close' : closeLabel}
+          {activeDrainJob ? 'Close' : (closeLabel ?? '')}
         </button>
         {!activeDrainJob && (
           <button

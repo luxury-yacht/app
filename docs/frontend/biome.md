@@ -11,6 +11,25 @@ The global configuration is `frontend/biome.json`.
   incompatible with the boundary's required behavior.
 - Test and production code inherit the same strict type-safety and hook-dependency rules.
 
+The repository uses Biome's `recommended` preset as its portable baseline and explicitly promotes
+additional applicable rules to errors. The explicit non-recommended rules currently include
+`noImportCycles`, `noLeakedRender`, `noMisplacedAssertion`, `noSkippedTests`,
+`noUnusedExpressions`, and `noUnusedInstantiation`. Explicit rules are also recorded in the
+exception manifest so removing or weakening one fails the policy check.
+
+Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
+do not describe this React application. Audit new Biome releases for newly applicable rules and
+promote them individually with their diagnostics resolved.
+
+`noUnnecessaryConditions` is the remaining high-signal candidate. Biome 2.5.3 currently panics in
+the module resolver while running it across this project (`module_resolver.rs:500`, index out of
+bounds), so it must not enter the required gate until the installed Biome version can run it to
+completion. Re-evaluate it after Biome upgrades with:
+
+```sh
+npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
+```
+
 ## React hook dependency lifetimes
 
 `reportUnnecessaryDependencies` is enabled. Ordinary React dependency arrays contain only values
@@ -33,6 +52,11 @@ separate invalidation list. Do not use these helpers to hide a missing dependenc
 redundant one. New lifecycle helpers require regression tests that prove rerun, cleanup, and stable
 lifetime behavior.
 
+`biome-exceptions.json` also snapshots every file and count that calls an invalidation or mount
+lifetime helper. Adding, removing, or changing a callsite fails the policy check. Treat that
+failure as a required lifecycle review: prove the separate invalidator or mount-only capture with
+a caller-level regression test before updating the inventory.
+
 The approved hook-rule suppression surface is intentionally narrow:
 
 - four suppressions inside `useHookLifetimes.ts`, where the helper APIs implement the explicit
@@ -48,6 +72,8 @@ All other hook dependency arrays must pass missing- and unnecessary-dependency r
 
 - every config override that disables a rule;
 - every inline `biome-ignore`, aggregated by file and exact rule.
+- every required explicit error rule, exhaustive-dependency hook, and Grit boundary plugin;
+- every approved invalidation or mount lifetime-helper callsite.
 
 `npm run check:biome-exceptions --prefix frontend` compares the code and config with that
 manifest. It fails for both new exceptions and stale entries, so removing an exception also
@@ -55,6 +81,19 @@ requires shrinking the manifest.
 
 The manifest is not permission to add an exception. It makes exceptional scope explicit and
 reviewable.
+
+The validator scans the whole frontend project for Biome-supported source/config extensions while
+excluding dependency, build, coverage, lockfile, and generated-binding trees. It rejects:
+
+- `biome-ignore-all`, `biome-ignore-start`, and `biome-ignore-end`;
+- inline suppressions without an exact rule and rationale;
+- disabled formatter, assist, or linter configuration;
+- global rule shutdowns, `preset: none`, and override-level linter shutdowns;
+- removal or weakening of required rules, hooks, or plugins.
+
+The Grit plugins have executable adversarial fixtures in
+`frontend/scripts/check-biome-boundaries.test.mjs`. Each fixture proves the boundary rejects its
+forbidden direct call and accepts a call through the approved facade.
 
 ## Reviewing a config override
 

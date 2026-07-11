@@ -98,7 +98,7 @@ export function useGridTableHeaderRow<T>({
                 {isSortable && renderSortIndicator(column.key)}
               </span>
             </span>
-            {showResizeHandle && (
+            {!!showResizeHandle && (
               // biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
               // biome-ignore lint/a11y/noStaticElementInteractions: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
               <div
@@ -112,7 +112,7 @@ export function useGridTableHeaderRow<T>({
                 }}
               />
             )}
-            {showKindSeparator && <div className="column-separator" aria-hidden="true" />}
+            {!!showKindSeparator && <div className="column-separator" aria-hidden="true" />}
           </div>
         );
       })}

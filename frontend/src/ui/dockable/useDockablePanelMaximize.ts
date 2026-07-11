@@ -5,7 +5,7 @@
  * Tracks maximized state, target bounds, and handles state restoration.
  */
 
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getContentBounds } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
 
@@ -27,7 +27,6 @@ interface DockablePanelMaximizeOptions {
   allowMaximize: boolean;
   maximizeTargetSelector?: string;
   onMaximizeChange?: (isMaximized: boolean) => void;
-  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**

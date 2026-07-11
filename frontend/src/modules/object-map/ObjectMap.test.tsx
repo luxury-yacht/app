@@ -88,7 +88,7 @@ vi.mock('@shared/components/ContextMenu', () => ({
             data-context-action-id={item.actionId}
             onClick={item.onClick}
           >
-            {item.icon && <span data-testid="mock-context-menu-icon">{item.icon}</span>}
+            {!!item.icon && <span data-testid="mock-context-menu-icon">{item.icon}</span>}
             {item.label}
           </button>
         )
@@ -212,7 +212,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
         >
           canvas menu
         </button>
-        {firstNode && (
+        {!!firstNode && (
           <button
             type="button"
             data-testid="mock-drag-first-node"

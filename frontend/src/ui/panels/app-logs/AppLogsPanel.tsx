@@ -927,7 +927,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
               title="Filter by text (searches message and source)"
               ref={textFilterInputRef}
             />
-            {textFilter && (
+            {!!textFilter && (
               <button
                 type="button"
                 className="app-logs-filter-clear"

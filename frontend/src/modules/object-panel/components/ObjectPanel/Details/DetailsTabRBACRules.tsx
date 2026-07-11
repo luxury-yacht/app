@@ -108,7 +108,7 @@ const Rules: React.FC<RBACRulesProps> = ({ policyRules }) => {
                   {hasResourceNames && (
                     <span className="rules-card-meta">named {rule.resourceNames?.join(', ')}</span>
                   )}
-                  {hasResources && hasNonResourceURLs && (
+                  {!!(hasResources && hasNonResourceURLs) && (
                     <span className="rules-card-meta">
                       and URLs: {joinRuleValues(nonResourceURLs)}
                     </span>
@@ -119,7 +119,7 @@ const Rules: React.FC<RBACRulesProps> = ({ policyRules }) => {
                     {withStableListKeys(rule.verbs, (verb) => verb).map(
                       ({ key: verbKey, value: v }) => (
                         <StatusChip key={verbKey} variant={verbVariant(v)}>
-                          {v === '*' ? '* (all)' : v}
+                          {v === '*' ? '* (all)' : (v ?? '')}
                         </StatusChip>
                       )
                     )}

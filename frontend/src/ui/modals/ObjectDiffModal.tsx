@@ -1104,7 +1104,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     }
     return (
       <>
-        {parts.clusterLabel && (
+        {!!parts.clusterLabel && (
           <span className="object-diff-column-meta">{parts.clusterLabel}/</span>
         )}
         <span className="object-diff-column-meta">{parts.namespaceLabel}/</span>
@@ -1131,8 +1131,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     if (leftYamlError || rightYamlError) {
       return (
         <div className="object-diff-empty object-diff-error">
-          {leftYamlError && <div>Left YAML error: {leftYamlError}</div>}
-          {rightYamlError && <div>Right YAML error: {rightYamlError}</div>}
+          {!!leftYamlError && <div>Left YAML error: {leftYamlError}</div>}
+          {!!rightYamlError && <div>Right YAML error: {rightYamlError}</div>}
         </div>
       );
     }
@@ -1212,7 +1212,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 </button>
               </div>
             </div>
-            {leftNoMatch && <div className="object-diff-match-message">No match found</div>}
+            {!!leftNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
               <label className="object-diff-label" htmlFor="object-diff-left-cluster">
                 Cluster
@@ -1280,7 +1280,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 ariaLabel="Left object"
               />
             </div>
-            {leftCatalogError && (
+            {!!leftCatalogError && (
               <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
             )}
           </div>
@@ -1311,7 +1311,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 </button>
               </div>
             </div>
-            {rightNoMatch && <div className="object-diff-match-message">No match found</div>}
+            {!!rightNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
               <label className="object-diff-label" htmlFor="object-diff-right-cluster">
                 Cluster
@@ -1379,7 +1379,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 ariaLabel="Right object"
               />
             </div>
-            {rightCatalogError && (
+            {!!rightCatalogError && (
               <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
             )}
           </div>
@@ -1415,7 +1415,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 {renderSelectionLabel(leftSelection)}
               </span>
               {/* Show per-side update indicators alongside each selection label. */}
-              {leftChangedAt && (
+              {!!leftChangedAt && (
                 <span
                   className="object-diff-column-update"
                   title={`Left updated ${formatFullDate(leftChangedAt)}`}
@@ -1428,7 +1428,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               <span className="object-diff-column-label">
                 {renderSelectionLabel(rightSelection)}
               </span>
-              {rightChangedAt && (
+              {!!rightChangedAt && (
                 <span
                   className="object-diff-column-update"
                   title={`Right updated ${formatFullDate(rightChangedAt)}`}

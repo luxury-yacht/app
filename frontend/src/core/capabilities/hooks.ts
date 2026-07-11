@@ -37,18 +37,12 @@ import { normalizeDescriptor } from './utils';
 
 export interface UseCapabilitiesOptions {
   enabled?: boolean;
-  ttlMs?: number;
   refreshKey?: unknown;
-  force?: boolean;
 }
 
 export interface UseCapabilitiesResult {
-  entries: CapabilityDescriptor[];
-  byId: Map<string, CapabilityDescriptor>;
   loading: boolean;
   ready: boolean;
-  refetch: () => void;
-  getEntry: (id: string) => CapabilityDescriptor | undefined;
   getState: (id: string) => CapabilityState;
   isAllowed: (id: string) => boolean;
 }
@@ -101,7 +95,7 @@ export const useCapabilities = (
   options: UseCapabilitiesOptions = {}
 ): UseCapabilitiesResult => {
   const enabled = options.enabled ?? true;
-  const { ttlMs, force, refreshKey } = options;
+  const { refreshKey } = options;
   const permissionMap = useUserPermissions();
   const clusterLifecycle = useOptionalClusterLifecycle();
 
@@ -296,7 +290,7 @@ export const useCapabilities = (
         });
     },
     [enabled, queryableNamedDescriptors],
-    [force, ttlMs, refreshKey, retryVersion]
+    [refreshKey, retryVersion]
   );
 
   // Build the unified state map from both sources.
@@ -399,16 +393,9 @@ export const useCapabilities = (
 
   const isAllowed = useCallback((id: string) => getState(id).allowed, [getState]);
 
-  const resultEntries: CapabilityDescriptor[] = [];
-  const resultMap = useMemo(() => new Map<string, CapabilityDescriptor>(), []);
-
   return {
-    entries: resultEntries,
-    byId: resultMap,
     loading,
     ready,
-    refetch: () => undefined,
-    getEntry: () => undefined,
     getState,
     isAllowed,
   };

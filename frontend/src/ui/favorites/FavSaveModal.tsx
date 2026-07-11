@@ -452,7 +452,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     <div
                       className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
                     >
-                      {option.metadata?.isFirstForFile && (
+                      {!!option.metadata?.isFirstForFile && (
                         <div className="kubeconfig-filename">{option.metadata.filename}</div>
                       )}
                       <div className="kubeconfig-context">

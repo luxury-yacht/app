@@ -95,7 +95,7 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
     <div className="containers-card">
       <div className="containers-card-header">
         <span className="containers-card-title">{container.name}</span>
-        {container.state && (
+        {!!container.state && (
           <StatusChip variant={variant} tooltip={container.stateMessage || undefined}>
             {stateLabel(container.state, container.stateReason)}
           </StatusChip>
@@ -157,13 +157,13 @@ function Containers({ containers = [], initContainers = [] }: ContainersProps) {
       <div className="containers-groups">
         {initContainers.length > 0 && (
           <div className="containers-group">
-            {hasBoth && <div className="containers-group-heading">Init Containers</div>}
+            {!!hasBoth && <div className="containers-group-heading">Init Containers</div>}
             <ContainerList containers={initContainers} />
           </div>
         )}
         {containers.length > 0 && (
           <div className="containers-group">
-            {hasBoth && <div className="containers-group-heading">Containers</div>}
+            {!!hasBoth && <div className="containers-group-heading">Containers</div>}
             <ContainerList containers={containers} />
           </div>
         )}

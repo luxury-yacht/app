@@ -440,50 +440,52 @@ const YamlTab: React.FC<YamlTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
-        {isEditing &&
-          (lintError || actionError || protectedEditMessage || showReloadMergeConflict) && (
-            <div className="yaml-validation-message">
-              {showReloadMergeConflict && (
-                <>
-                  <div className="yaml-notice-header">
-                    <p>
-                      Reload &amp; merge could not reconcile your draft with the latest YAML. Your
-                      draft is unchanged. Save will still patch your edited fields onto the live
-                      object, like kubectl edit.
-                    </p>
-                    {driftDiff &&
-                      renderYamlDiffToggle(
-                        driftDiff,
-                        driftDiffKey,
-                        Boolean(expandedDiffs[driftDiffKey]),
-                        toggleDiffExpansion
-                      )}
-                  </div>
+        {!!(
+          isEditing &&
+          (lintError || actionError || protectedEditMessage || showReloadMergeConflict)
+        ) && (
+          <div className="yaml-validation-message">
+            {!!showReloadMergeConflict && (
+              <>
+                <div className="yaml-notice-header">
+                  <p>
+                    Reload &amp; merge could not reconcile your draft with the latest YAML. Your
+                    draft is unchanged. Save will still patch your edited fields onto the live
+                    object, like kubectl edit.
+                  </p>
                   {driftDiff &&
-                    renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
-                  {driftDiff?.tooLarge && (
-                    <p className="yaml-drift-warning">
-                      {driftDiff.tooLargeMessage ??
-                        'This diff is too large to display in the current view.'}{' '}
-                      Reload the YAML to review the latest version before retrying.
-                    </p>
-                  )}
-                </>
-              )}
-              {lintError && <p>{lintError}</p>}
-              {protectedEditMessage && <p>{protectedEditMessage}</p>}
-              {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
-              {actionDetails.length > 0 && (
-                <ul className="yaml-error-details">
-                  {withStableListKeys(actionDetails, (detail) => detail).map(
-                    ({ key, value: detail }) => (
-                      <li key={key}>{detail}</li>
-                    )
-                  )}
-                </ul>
-              )}
-            </div>
-          )}
+                    renderYamlDiffToggle(
+                      driftDiff,
+                      driftDiffKey,
+                      Boolean(expandedDiffs[driftDiffKey]),
+                      toggleDiffExpansion
+                    )}
+                </div>
+                {driftDiff &&
+                  renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
+                {!!driftDiff?.tooLarge && (
+                  <p className="yaml-drift-warning">
+                    {driftDiff.tooLargeMessage ??
+                      'This diff is too large to display in the current view.'}{' '}
+                    Reload the YAML to review the latest version before retrying.
+                  </p>
+                )}
+              </>
+            )}
+            {!!lintError && <p>{lintError}</p>}
+            {!!protectedEditMessage && <p>{protectedEditMessage}</p>}
+            {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
+            {actionDetails.length > 0 && (
+              <ul className="yaml-error-details">
+                {withStableListKeys(actionDetails, (detail) => detail).map(
+                  ({ key, value: detail }) => (
+                    <li key={key}>{detail}</li>
+                  )
+                )}
+              </ul>
+            )}
+          </div>
+        )}
         {!isEditing && postApplyNotice && (
           <div
             className={`yaml-post-apply-notice yaml-post-apply-notice-${postApplyNotice.kind}`}
@@ -493,7 +495,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
             <div className="yaml-notice-header">
               <p>{postApplyNotice.message}</p>
               <div className="yaml-notice-actions">
-                {postApplyNotice.diff &&
+                {!!postApplyNotice.diff &&
                   renderYamlDiffToggle(
                     postApplyNotice.diff,
                     postApplyDiffKey,
@@ -510,13 +512,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 </button>
               </div>
             </div>
-            {postApplyNotice.diff &&
+            {!!postApplyNotice.diff &&
               renderYamlDiff(
                 postApplyNotice.diff,
                 postApplyDiffKey,
                 Boolean(expandedDiffs[postApplyDiffKey])
               )}
-            {postApplyNotice.diff?.tooLarge && (
+            {!!postApplyNotice.diff?.tooLarge && (
               <p className="yaml-drift-warning">
                 {postApplyNotice.diff.tooLargeMessage ??
                   'The post-apply diff is too large to display in the current view.'}
@@ -547,7 +549,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           toolbarActions={
             <>
               <IconBar items={yamlToolbarItems} />
-              {isEditing && hasRemoteDrift && (
+              {!!(isEditing && hasRemoteDrift) && (
                 <button
                   className="button secondary"
                   type="button"

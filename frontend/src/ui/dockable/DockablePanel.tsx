@@ -248,7 +248,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     allowMaximize,
     maximizeTargetSelector,
     onMaximizeChange,
-    panelRef,
   });
 
   // Resolve the correct min constraints for the current dock mode.
@@ -415,10 +414,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
     minWidth: resolvedMinWidth,
-    minHeight: resolvedMinHeight,
     isResizing,
     isMaximized,
-    panelRef,
   });
 
   // Handle position changes
@@ -841,7 +838,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       data-group-key={groupKey ?? undefined}
       data-active-panel-id={groupInfo?.activeTab ?? panelId}
     >
-      {isGroupLeader && (
+      {!!isGroupLeader && (
         <>
           <DockablePanelHeader
             title={activeTitle}

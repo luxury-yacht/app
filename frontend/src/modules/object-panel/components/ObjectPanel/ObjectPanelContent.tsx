@@ -149,7 +149,7 @@ export function ObjectPanelContent({
         <div className="object-panel-empty-state">
           <h3>Object not found</h3>
           <p>{deletedResourceName || 'Resource'} is no longer available.</p>
-          {onClosePanel && (
+          {!!onClosePanel && (
             <div>
               <button type="button" className="button generic" onClick={onClosePanel}>
                 Close
@@ -163,7 +163,7 @@ export function ObjectPanelContent({
 
   return (
     <div className="object-panel-content">
-      {showDetails && detailTabProps && (
+      {!!(showDetails && detailTabProps) && (
         <ErrorBoundary
           scope="panel-details"
           resetKeys={detailScope ? [detailScope] : undefined}
@@ -192,7 +192,7 @@ export function ObjectPanelContent({
         </ErrorBoundary>
       )}
 
-      {showShell && (
+      {!!showShell && (
         <ErrorBoundary
           scope="panel-shell"
           resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}

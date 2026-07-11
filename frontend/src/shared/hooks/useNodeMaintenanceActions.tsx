@@ -224,7 +224,7 @@ export const useNodeMaintenanceActions = ({
         onConfirm={confirmCordon}
         onCancel={() => setCordonTarget(null)}
       />
-      {drainTarget && (
+      {!!drainTarget && (
         <DrainNodeModal
           isOpen
           clusterId={drainTarget.clusterId}

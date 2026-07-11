@@ -31,7 +31,7 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
     <>
       <OverviewItem label="Kind" value={displayKind || kind} />
       <OverviewItem label="Name" value={name} />
-      {namespace && (
+      {!!namespace && (
         <OverviewItem
           label="Namespace"
           value={
@@ -53,12 +53,12 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
           }
         />
       )}
-      {creationTimestamp && (
+      {!!creationTimestamp && (
         <OverviewItem label="Age" value={<LiveAgeText timestamp={creationTimestamp} />} />
       )}
       {/* Last spec/metadata change (managedFields-derived); omitted when the
           backend can't determine it. Same relative format as Age. */}
-      {lastModified && <OverviewItem label="Last Modified" value={lastModified} />}
+      {!!lastModified && <OverviewItem label="Last Modified" value={lastModified} />}
       <div className="overview-separator" aria-hidden="true" />
     </>
   );

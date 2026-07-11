@@ -127,8 +127,8 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
             {snapshot.error}
           </div>
         )}
-        {loading && <div className="namespace-map__message">Loading namespace map...</div>}
-        {payload && (
+        {!!loading && <div className="namespace-map__message">Loading namespace map...</div>}
+        {!!payload && (
           <ObjectMap
             payload={payload}
             onRefresh={() => fetchMap('user')}

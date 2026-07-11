@@ -222,18 +222,18 @@ describe('CommandPalette component behaviour', () => {
       (modifiers ? findGlobalShortcut(modifiers) : undefined) ??
       findGlobalShortcut(defaultOpenShortcut) ??
       findGlobalShortcut(macPlatform ? { ctrl: true, shift: true } : { meta: true, shift: true });
-    expect(shortcut).toBeTruthy();
+    const registeredShortcut = requireValue(shortcut, 'expected command palette shortcut');
     await act(async () => {
-      shortcut?.handler();
+      registeredShortcut.handler();
       await Promise.resolve();
     });
   };
 
   const emitWailsEvent = async (event: string, ...args: unknown[]) => {
     const handler = wailsEventHandlers.get(event);
-    expect(handler).toBeTruthy();
+    const registeredHandler = requireValue(handler, `expected Wails event handler for ${event}`);
     await act(async () => {
-      handler?.(...args);
+      registeredHandler(...args);
       await Promise.resolve();
     });
   };

@@ -1492,7 +1492,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
           return (
             <div className="log-viewer-line">
-              {timestamp && (
+              {!!timestamp && (
                 <span
                   className="log-viewer-metadata pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
@@ -1564,8 +1564,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           const remainder = showContainerMeta && containerMatch ? containerMatch[2] : workingLine;
           return (
             <div className="log-viewer-line">
-              {timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
-              {showContainerMeta && (
+              {!!timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
+              {!!showContainerMeta && (
                 <span className="log-viewer-metadata">
                   [
                   <button
@@ -2042,7 +2042,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     className="logs-viewer-text-filter"
                     title="Filter logs by text (searches in log lines, pods, and containers)"
                   />
-                  {textFilter && (
+                  {!!textFilter && (
                     <button
                       type="button"
                       className="logs-viewer-filter-clear"
@@ -2215,7 +2215,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 }
               />
 
-              {hasActiveResultFilter && (
+              {!!hasActiveResultFilter && (
                 <span className="logs-viewer-count" title={countTitle}>
                   {countLabel}
                 </span>

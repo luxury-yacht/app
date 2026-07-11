@@ -735,8 +735,9 @@ function startOverlayScrollbarDrag(
   axis: 'horizontal' | 'vertical'
 ): void {
   event.preventDefault();
-  event.currentTarget instanceof HTMLElement &&
+  if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.setPointerCapture(event.pointerId);
+  }
   markScrollbarActive(element);
 
   const rect = getOverflowClipRect(element);
@@ -764,8 +765,9 @@ function startOverlayScrollbarDrag(
     thumbSize,
   };
 
-  event.currentTarget instanceof HTMLElement &&
+  if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.classList.add('scrollbar-overlay-thumb--dragging');
+  }
 }
 
 const getCurrentScrollbarOpacity = (element: Element): number => {

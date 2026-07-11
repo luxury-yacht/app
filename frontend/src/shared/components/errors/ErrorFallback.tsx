@@ -28,12 +28,12 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({
           {scope ? `Error in ${scope}` : 'An unexpected error occurred'}
         </p>
 
-        {isDev && (
+        {!!isDev && (
           <details className="error-details">
             <summary>Error Details (Development Only)</summary>
             <pre className="error-stack">
               <code>{error.toString()}</code>
-              {errorInfo && (
+              {!!errorInfo && (
                 <>
                   <br />
                   <br />

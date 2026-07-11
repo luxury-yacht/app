@@ -39,7 +39,7 @@ export const AppErrorBoundary: React.FC<AppErrorBoundaryProps> = ({ children }) 
               logged and will be investigated.
             </p>
 
-            {import.meta.env.DEV && (
+            {!!import.meta.env.DEV && (
               <details
                 style={{
                   background: '#000',

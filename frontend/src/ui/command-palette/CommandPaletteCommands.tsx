@@ -686,7 +686,7 @@ export function useCommandPaletteCommands() {
         renderLabel: (
           <span className="command-palette-kubeconfig-label">
             <span className="command-palette-kubeconfig-context">{config.context}</span>
-            {isInvalid && (
+            {!!isInvalid && (
               <span className="command-palette-kubeconfig-invalid" title={config.invalidReason}>
                 ⚠ invalid
               </span>

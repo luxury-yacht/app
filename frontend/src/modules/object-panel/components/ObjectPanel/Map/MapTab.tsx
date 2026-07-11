@@ -100,8 +100,8 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
         {snapshot.error && !payload && (
           <div className="map-tab__message map-tab__message--error">{snapshot.error}</div>
         )}
-        {loading && <div className="map-tab__message">Loading object map…</div>}
-        {payload && (
+        {!!loading && <div className="map-tab__message">Loading object map…</div>}
+        {!!payload && (
           <ObjectMap
             payload={payload}
             onRefresh={onRefresh}

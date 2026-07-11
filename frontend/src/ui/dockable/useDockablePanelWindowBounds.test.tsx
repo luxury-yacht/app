@@ -34,7 +34,6 @@ const Harness: React.FC<{
   };
   options: {
     minWidth: number;
-    minHeight: number;
     isResizing: boolean;
     isMaximized: boolean;
   };
@@ -133,7 +132,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 200,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });
@@ -163,7 +161,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 600,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });
@@ -192,7 +189,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 200,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });

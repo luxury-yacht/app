@@ -18,7 +18,7 @@ import {
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
-import { useEffectWithInvalidation, useMountEffect } from '@shared/hooks/useHookLifetimes';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
 import { formatAge } from '@utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
@@ -383,38 +383,33 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     });
   });
 
-  useEffectWithInvalidation(
-    () => {
-      const activeNamespaces =
-        namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
-      if (!activeNamespaces.length) {
-        if (namespaceDomain.status === 'ready') {
-          clearSelection();
-        }
-        lastEvaluatedNamespaceRef.current = null;
-        return;
-      }
-
-      const current = selectedNamespace;
-      if (current && activeNamespaces.some((item) => item.scope === current)) {
-        applySelection(current, clusterKey);
-        return;
-      }
-      if (current) {
-        // Avoid auto-selecting; clear stale selections and wait for explicit user choice.
+  useEffect(() => {
+    const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
+    if (!activeNamespaces.length) {
+      if (namespaceDomain.status === 'ready') {
         clearSelection();
       }
-    },
-    [
-      applySelection,
-      clusterKey,
-      clearSelection,
-      namespaces,
-      namespaceDomain.status,
-      selectedNamespace,
-    ],
-    [selectedClusterId]
-  );
+      lastEvaluatedNamespaceRef.current = null;
+      return;
+    }
+
+    const current = selectedNamespace;
+    if (current && activeNamespaces.some((item) => item.scope === current)) {
+      applySelection(current, clusterKey);
+      return;
+    }
+    if (current) {
+      // Avoid auto-selecting; clear stale selections and wait for explicit user choice.
+      clearSelection();
+    }
+  }, [
+    applySelection,
+    clusterKey,
+    clearSelection,
+    namespaces,
+    namespaceDomain.status,
+    selectedNamespace,
+  ]);
 
   useEffect(() => {
     const namespaceToEvaluate = selectedNamespace?.trim();

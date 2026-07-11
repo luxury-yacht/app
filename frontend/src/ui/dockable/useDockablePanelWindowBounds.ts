@@ -6,7 +6,7 @@
  */
 
 import { getZoomAwareViewport, useZoom } from '@core/contexts/ZoomContext';
-import { type RefObject, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
 
@@ -21,10 +21,8 @@ interface DockablePanelState {
 
 interface WindowBoundsOptions {
   minWidth: number;
-  minHeight: number;
   isResizing: boolean;
   isMaximized: boolean;
-  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**

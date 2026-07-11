@@ -270,7 +270,6 @@ const clickSegmentedOption = async (container: HTMLElement, label: string) => {
   const btn = Array.from(container.querySelectorAll('.segmented-button__option')).find(
     (el) => el.textContent === label
   );
-  expect(btn).toBeTruthy();
   await act(async () => {
     requireValue(btn, 'expected test value in ValuesTab.test.tsx').dispatchEvent(
       new MouseEvent('click', { bubbles: true })

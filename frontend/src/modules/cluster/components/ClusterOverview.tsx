@@ -864,7 +864,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 {showSkeleton ? '—' : displayOverview.clusterVersion || 'Unknown'}
               </span>
             </span>
-            {overviewStatus.summary && (
+            {!!overviewStatus.summary && (
               <span className="cluster-info-item">
                 <span className="cluster-info-label">Status</span>
                 <span className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}>
@@ -880,7 +880,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         </div>
       </div>
 
-      {errorMessage && (
+      {!!errorMessage && (
         <div className="cluster-overview-loading-inline">
           <ClusterOverviewRestrictionNotice
             restrictions={[
@@ -917,7 +917,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <div className="metric-header__title-group">
                 <h3>CPU</h3>
                 <span className="metric-header__usage">
-                  {showSkeleton ? DASH : cpuUsageSummary}
+                  {showSkeleton ? DASH : (cpuUsageSummary ?? '')}
                 </span>
               </div>
               <div
@@ -960,7 +960,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <div className="metric-header__title-group">
                 <h3>Memory</h3>
                 <span className="metric-header__usage">
-                  {showSkeleton ? DASH : memoryUsageSummary}
+                  {showSkeleton ? DASH : (memoryUsageSummary ?? '')}
                 </span>
               </div>
               <div
@@ -1016,7 +1016,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               />
               Legend
             </button>
-            {legendExpanded && (
+            {!!legendExpanded && (
               <div className="utilization-legend__items" data-testid="utilization-legend">
                 <div className="utilization-legend__item">
                   <span className="utilization-legend__swatch utilization-legend__swatch--usage-normal" />
@@ -1166,7 +1166,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <h3>By Type</h3>
               <div className="metric-legend__total">
                 <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : workloadTotal}
+                  {showSkeleton ? DASH : String(workloadTotal)}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>

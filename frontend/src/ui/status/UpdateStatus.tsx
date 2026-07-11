@@ -106,7 +106,7 @@ const UpdateStatus: React.FC = () => {
   const renderVersion = (version: string, date: string | null) => (
     <span>
       {version}
-      {date && <span className="update-status__tooltip-date"> ({date})</span>}
+      {!!date && <span className="update-status__tooltip-date"> ({date})</span>}
     </span>
   );
 
@@ -115,7 +115,7 @@ const UpdateStatus: React.FC = () => {
       <div className="update-status__tooltip-rows">
         <span className="update-status__tooltip-label">New:</span>
         {renderVersion(updateInfo.latestVersion, newDate)}
-        {updateInfo.currentVersion && (
+        {!!updateInfo.currentVersion && (
           <>
             <span className="update-status__tooltip-label">Current:</span>
             {renderVersion(updateInfo.currentVersion, currentDate)}

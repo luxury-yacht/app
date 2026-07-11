@@ -292,7 +292,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
         aria-label="Open Cluster"
         onClick={() => onOpenCluster?.()}
       >
-        {showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
+        {!!showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
         <PlusIcon width={14} height={14} />
       </button>
     </div>

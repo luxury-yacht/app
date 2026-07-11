@@ -53,7 +53,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       {/* Deleted Resource Warning */}
-      {resourceDeleted && (
+      {!!resourceDeleted && (
         <div className="resource-deleted-warning">
           <WarningIcon />
           <span>
@@ -65,7 +65,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
       {/* Details Content */}
       <div className="details-content">
         {/* Loading Overlay - only show on initial load */}
-        {detailsLoading && (
+        {!!detailsLoading && (
           <div className="loading-overlay">
             <div className="loading-spinner-wrapper">
               <div className="spinner"></div>
@@ -76,9 +76,11 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           </div>
         )}
 
-        {detailsError && <div className="error-message">Error loading details: {detailsError}</div>}
+        {!!detailsError && (
+          <div className="error-message">Error loading details: {detailsError}</div>
+        )}
 
-        {objectData && (
+        {!!objectData && (
           <Overview
             kind={objectData.kind ?? ''}
             name={objectData.name ?? ''}
@@ -136,7 +138,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           );
         })()}
 
-        {dataInfo && (
+        {!!dataInfo && (
           <div className="details-section-spaced">
             <DataSection
               data={dataInfo.data}

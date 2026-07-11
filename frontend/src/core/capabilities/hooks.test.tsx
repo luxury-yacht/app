@@ -190,17 +190,14 @@ describe('useCapabilities', () => {
   });
 
   it('returns idle state for descriptors not yet in the permission map', async () => {
-    const hook = await renderCapabilitiesHook(
-      [
-        {
-          id: 'namespace:pods:get:default',
-          resourceKind: 'Pod',
-          verb: 'get',
-          namespace: 'default',
-        },
-      ],
-      { ttlMs: 15000 }
-    );
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'namespace:pods:get:default',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+      },
+    ]);
 
     // Unnamed descriptor not in the map => idle/pending state.
     expect(hook.current.loading).toBe(true);
@@ -422,6 +419,35 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
+    restoreGo();
+  });
+
+  it('requeries named-resource descriptors when refreshKey changes', async () => {
+    const mockQueryPermissions = vi.fn().mockResolvedValue({ results: [] });
+    const restoreGo = installWindowProperty('go', {
+      backend: { App: { QueryPermissions: mockQueryPermissions } },
+    });
+    const descriptors: CapabilityDescriptor[] = [
+      {
+        id: 'named:pods:get:default:my-pod',
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+        name: 'my-pod',
+      },
+    ];
+    const hook = await renderCapabilitiesHook(descriptors, { refreshKey: 0 });
+
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+
+    await hook.rerender({ options: { refreshKey: 1 } });
+
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(2);
+
+    await hook.unmount();
     restoreGo();
   });
 

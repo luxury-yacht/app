@@ -131,7 +131,7 @@ vi.mock('./FavSaveModal', () => ({
         <button type="button" data-testid="modal-cancel" onClick={onClose}>
           Cancel
         </button>
-        {existingFavorite && (
+        {!!existingFavorite && (
           <button
             type="button"
             data-testid="modal-delete"
@@ -223,7 +223,6 @@ describe('useFavToggle', () => {
 
   const clickToggle = async () => {
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    expect(btn).toBeTruthy();
     await act(async () => {
       requireValue(btn, 'expected test value in FavToggle.test.tsx').click();
       await Promise.resolve();

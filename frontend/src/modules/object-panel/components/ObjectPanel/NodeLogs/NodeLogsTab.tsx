@@ -810,7 +810,7 @@ const NodeLogsTab = ({
                 placeholder="Filter logs..."
                 aria-label="Filter node logs"
               />
-              {textFilter && (
+              {!!textFilter && (
                 <button
                   type="button"
                   className="logs-viewer-filter-clear"

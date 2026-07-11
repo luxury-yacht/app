@@ -1140,7 +1140,7 @@ function AppearanceSection() {
                               else e.stopPropagation();
                             }}
                           />
-                          {themePatternError && (
+                          {!!themePatternError && (
                             <div id="theme-pattern-error-active" className="theme-pattern-error">
                               {themePatternError}
                             </div>
@@ -1244,7 +1244,7 @@ function AppearanceSection() {
                           else e.stopPropagation();
                         }}
                       />
-                      {themePatternError && (
+                      {!!themePatternError && (
                         <div id="theme-pattern-error-new" className="theme-pattern-error">
                           {themePatternError}
                         </div>

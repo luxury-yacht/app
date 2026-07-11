@@ -102,31 +102,34 @@ vi.mock('@ui/shortcuts', () => ({
 
 const openMenu = (container: HTMLElement) => {
   const trigger = container.querySelector<HTMLButtonElement>('.actions-menu-button');
-  expect(trigger).toBeTruthy();
   act(() => {
-    trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(trigger, 'expected actions menu trigger').dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
 };
 
 const clickMenuItem = (container: HTMLElement, text: string) => {
   const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
   const item = items.find((entry) => entry.textContent?.includes(text));
-  expect(item, `menu item "${text}"`).toBeTruthy();
   act(() => {
-    item?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(item, `expected menu item "${text}"`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
 };
 
 // Confirm a portaled ConfirmationModal by its exact button text.
 const confirmModal = async (buttonText: string) => {
   const modal = document.querySelector<HTMLElement>('.confirmation-modal');
-  expect(modal, `confirmation modal for "${buttonText}"`).toBeTruthy();
-  const button = Array.from(modal?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+  const confirmationModal = requireValue(modal, `expected confirmation modal for "${buttonText}"`);
+  const button = Array.from(confirmationModal.querySelectorAll<HTMLButtonElement>('button')).find(
     (entry) => entry.textContent === buttonText
   );
-  expect(button, `confirm button "${buttonText}"`).toBeTruthy();
   await act(async () => {
-    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(button, `expected confirm button "${buttonText}"`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
     await Promise.resolve();
   });
 };

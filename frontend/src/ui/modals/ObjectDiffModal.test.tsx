@@ -114,7 +114,7 @@ vi.mock('@shared/components/dropdowns/Dropdown/Dropdown', () => ({
             </option>
           ))}
       </select>
-      {searchable && (
+      {!!searchable && (
         <input
           aria-label={`${ariaLabel} search`}
           placeholder={searchPlaceholder}
@@ -740,9 +740,9 @@ describe('ObjectDiffModal', () => {
 });
 
 const setTextInputValue = async (input: HTMLInputElement | null, nextValue: string) => {
-  expect(input).toBeTruthy();
   const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-  descriptor?.set?.call(input, nextValue);
+  const textInput = requireValue(input, 'expected ObjectDiffModal text input');
+  descriptor?.set?.call(textInput, nextValue);
   await act(async () => {
     requireValue(input, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
       new Event('input', { bubbles: true })

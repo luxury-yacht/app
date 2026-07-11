@@ -403,7 +403,7 @@ const Dropdown = <TMetadata,>({
         >
           {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
             <div className="dropdown-menu-controls">
-              {searchable && (
+              {!!searchable && (
                 <div className="search-container">
                   <input
                     type="text"
@@ -519,7 +519,7 @@ const Dropdown = <TMetadata,>({
       )}
 
       {/* Hidden input for form integration */}
-      {name && (
+      {!!name && (
         <input type="hidden" name={name} value={Array.isArray(value) ? value.join(',') : value} />
       )}
 

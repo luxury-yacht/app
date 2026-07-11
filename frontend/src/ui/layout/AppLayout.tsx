@@ -146,7 +146,7 @@ export const AppLayout: React.FC = () => {
         className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}
       >
         <Sidebar />
-        {viewState.isSidebarVisible && (
+        {!!viewState.isSidebarVisible && (
           // biome-ignore lint/a11y/noStaticElementInteractions: The sidebar resize gutter is a pointer drag boundary owned by shared layout state and is not exposed as an activation control.
           <div
             className="sidebar-resizer"
@@ -281,19 +281,19 @@ export const AppLayout: React.FC = () => {
       </PanelErrorBoundary>
       <ErrorNotificationSystem />
       <CommandPalette commands={commands} />
-      {isPanelDebugOverlayVisible && (
+      {!!isPanelDebugOverlayVisible && (
         <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
       )}
-      {isFocusOverlayVisible && (
+      {!!isFocusOverlayVisible && (
         <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
       )}
-      {isErrorOverlayVisible && (
+      {!!isErrorOverlayVisible && (
         <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
       )}
-      {isMapDebugOverlayVisible && (
+      {!!isMapDebugOverlayVisible && (
         <MapDebugOverlay onClose={() => setIsMapDebugOverlayVisible(false)} />
       )}
-      {isIconDebugOverlayVisible && (
+      {!!isIconDebugOverlayVisible && (
         <IconDebugOverlay onClose={() => setIsIconDebugOverlayVisible(false)} />
       )}
     </div>

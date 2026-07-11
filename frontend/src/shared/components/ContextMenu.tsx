@@ -225,9 +225,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
             }}
             title={tooltip}
           >
-            {item.icon && <span className="context-menu-icon">{item.icon}</span>}
+            {!!item.icon && <span className="context-menu-icon">{item.icon}</span>}
             <span className="context-menu-label">{item.label}</span>
-            {item.disabled && item.disabledReason && (
+            {!!(item.disabled && item.disabledReason) && (
               <span className="context-menu-reason">{item.disabledReason}</span>
             )}
           </div>

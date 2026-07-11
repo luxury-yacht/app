@@ -363,7 +363,7 @@ const SessionsStatus: React.FC = () => {
                                 </span>
                               </div>
                             </div>
-                            {session.statusReason && (
+                            {!!session.statusReason && (
                               <div className="pf-session-reason as-pf-reason">
                                 {session.statusReason}
                               </div>

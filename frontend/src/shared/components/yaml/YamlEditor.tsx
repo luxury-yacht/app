@@ -709,9 +709,9 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
 
     return (
       <div className={`yaml-editor ${className ?? ''}`}>
-        {(showSearch || toolbarActions) && (
+        {!!(showSearch || toolbarActions) && (
           <div className="yaml-header yaml-editor-header">
-            {showSearch && (
+            {!!showSearch && (
               <div className="yaml-search-controls">
                 <div className="find-controls">
                   <input
@@ -727,11 +727,11 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
                 <IconBar items={searchIconBarItems} />
               </div>
             )}
-            {toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
+            {!!toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
           </div>
         )}
         <div className="yaml-editor-content">
-          {largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
+          {!!largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
           <div ref={editorSurfaceRef} className="codemirror-shell yaml-editor-shell">
             <CodeMirror
               ref={editorRef}
@@ -756,7 +756,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
               aria-label={ariaLabel}
             />
           </div>
-          {contextMenu && (
+          {!!contextMenu && (
             <ContextMenu
               items={contextMenu.items}
               position={contextMenu.position}

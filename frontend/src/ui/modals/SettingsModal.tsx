@@ -176,7 +176,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialT
               );
             })}
           </ul>
-          {appInfo?.version && (
+          {!!appInfo?.version && (
             <div className="settings-modal-version" role="status" aria-label="App version">
               {appInfo.version}
             </div>

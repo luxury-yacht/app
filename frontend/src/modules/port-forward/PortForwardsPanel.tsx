@@ -190,7 +190,7 @@ function PortForwardsPanel() {
               </div>
 
               {/* Show status reason for errors and reconnecting states */}
-              {session.statusReason && (
+              {!!session.statusReason && (
                 <div className="pf-session-reason" title={session.statusReason}>
                   {session.statusReason}
                 </div>

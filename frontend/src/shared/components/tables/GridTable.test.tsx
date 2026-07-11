@@ -578,62 +578,6 @@ describe('GridTable virtualization', () => {
       rectSpy.mockRestore();
     }
   });
-
-  // Skip: JSDOM doesn't properly simulate React's onMouseEnter synthetic events.
-  // Hover suppression is tested at the hook level in useGridTableHoverSync.test.tsx
-  it.skip('suspends hover overlay updates when hover suppression is active', async () => {
-    const { container, cleanup } = renderGridTable({
-      data: createRows(80),
-      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
-    });
-    cleanupRoot = cleanup;
-
-    const overlay = container.querySelector<HTMLDivElement>('.gridtable-hover-overlay');
-    expect(overlay).not.toBeNull();
-
-    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    expect(wrapper).not.toBeNull();
-
-    const rows = container.querySelectorAll<HTMLDivElement>('.gridtable-row');
-    expect(rows.length).toBeGreaterThan(1);
-
-    // Click the first row to give the table focus, then trigger hover
-    await act(async () => {
-      rows[0].click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      rows[0].dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(
-      requireValue(overlay, 'expected test value in GridTable.test.tsx').classList.contains(
-        'is-visible'
-      )
-    ).toBe(true);
-    const initialTransform = requireValue(overlay, 'expected test value in GridTable.test.tsx')
-      .style.transform;
-
-    document.body.classList.add('gridtable-disable-hover');
-
-    await act(async () => {
-      rows[1].dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(requireValue(overlay, 'expected test value in GridTable.test.tsx').style.transform).toBe(
-      initialTransform
-    );
-    expect(
-      requireValue(overlay, 'expected test value in GridTable.test.tsx').classList.contains(
-        'is-visible'
-      )
-    ).toBe(true);
-
-    document.body.classList.remove('gridtable-disable-hover');
-  });
 });
 
 describe('GridTable interactions (non-virtualized)', () => {

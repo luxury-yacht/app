@@ -281,20 +281,19 @@ describe('ShellTab', () => {
 
   const clickConnectButton = () => {
     const button = container.querySelector<HTMLButtonElement>('.shell-tab__button');
-    expect(button).toBeTruthy();
     act(() => {
-      button?.click();
+      requireValue(button, 'expected shell connect button').click();
     });
   };
 
   const setDebugContainerEnabled = (enabled: boolean) => {
     const checkbox = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
-    expect(checkbox).toBeTruthy();
-    if (checkbox?.checked === enabled) {
+    const debugCheckbox = requireValue(checkbox, 'expected shell debug toggle');
+    if (debugCheckbox.checked === enabled) {
       return;
     }
     act(() => {
-      checkbox?.click();
+      debugCheckbox.click();
     });
   };
 

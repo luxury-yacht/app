@@ -15,7 +15,8 @@ import type {
   ShortcutMap,
   ShortcutModifiers,
 } from '@/types/shortcuts';
-import SearchShortcutHandler from './components/SearchShortcutHandler';
+import { isMacPlatform } from '@/utils/platform';
+import { focusRegisteredSearchShortcutTarget } from './searchShortcutRegistry';
 import { getShortcutKey, isInputElement, modifiersMatch, resolveEventElement } from './utils';
 
 interface KeyboardProviderValue {
@@ -204,6 +205,18 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    const id = registerShortcut({
+      key: 'f',
+      modifiers: isMacPlatform() ? { meta: true } : { ctrl: true },
+      handler: () => Boolean(focusRegisteredSearchShortcutTarget()),
+      description: 'Focus active search',
+      category: 'Global',
+      priority: 1000,
+    });
+    return () => unregisterShortcut(id);
+  }, [registerShortcut, unregisterShortcut]);
 
   const getOrderedSurfaces = useCallback((): RegisteredKeyboardSurface[] => {
     return Array.from(surfacesRef.current.values())
@@ -647,10 +660,5 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     dispatchNativeAction,
   };
 
-  return (
-    <KeyboardContext.Provider value={value}>
-      <SearchShortcutHandler />
-      {children}
-    </KeyboardContext.Provider>
-  );
+  return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;
 };

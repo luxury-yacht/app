@@ -562,7 +562,7 @@ export const useObjectActionController = ({
           }
         />
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
-        {rollbackTarget?.clusterId && rollbackTarget.namespace && rollbackTarget.version && (
+        {!!(rollbackTarget?.clusterId && rollbackTarget.namespace && rollbackTarget.version) && (
           <RollbackModal
             isOpen={true}
             onClose={() => setRollbackTarget(null)}

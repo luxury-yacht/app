@@ -479,11 +479,12 @@ describe('NsViewPods', () => {
     const deleteItem = gridTablePropsRef.current
       .getCustomContextMenuItems(gridTablePropsRef.current.data[0], 'name')
       .find((item) => item.label === 'Delete');
-    expect(deleteItem).toBeTruthy();
     act(() => {
-      deleteItem?.onClick?.();
+      requireValue(deleteItem, 'expected Delete context menu item').onClick?.();
     });
-    expect(confirmationPropsRef.current?.isOpen).toBe(true);
+    if (!confirmationPropsRef.current?.isOpen) {
+      throw new Error('Expected delete confirmation to open');
+    }
   };
 
   it('passes pod data to GridTable and exposes key columns', async () => {

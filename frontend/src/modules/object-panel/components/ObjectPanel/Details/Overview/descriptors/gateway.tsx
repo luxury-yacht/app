@@ -171,7 +171,7 @@ const ListenerList: React.FC<{ listeners?: types.GatewayListenerDetails[] | null
             </div>
             {hasRows && (
               <div className="overview-card-rows">
-                {listener.hostname && (
+                {!!listener.hostname && (
                   <div className="overview-row">
                     <span className="overview-row-label">Hostname</span>
                     <span className="overview-row-value">
@@ -227,7 +227,7 @@ const RouteRulesList: React.FC<{
             <div className="overview-card-header">
               <span className="overview-card-title">Rule {index + 1}</span>
             </div>
-            {(hasMatches || hasBackends) && (
+            {!!(hasMatches || hasBackends) && (
               <div className="overview-card-rows">
                 {hasMatches && (
                   <div className="overview-row">
@@ -327,7 +327,9 @@ const ReferenceGrantDiagram: React.FC<{
             className="reference-grant-side"
             key={`to-ns-${group.namespace}:${JSON.stringify(group.refs)}`}
           >
-            {group.namespace && <div className="reference-grant-namespace">{group.namespace}</div>}
+            {!!group.namespace && (
+              <div className="reference-grant-namespace">{group.namespace}</div>
+            )}
             {group.refs.map((ref) => (
               <div
                 key={`to-${group.namespace}:${JSON.stringify(ref)}`}

@@ -109,13 +109,13 @@ const ScaleModal = ({
       />
       <div className="scale-modal-body">
         <div className="scale-modal-fields">
-          {namespace && (
+          {!!namespace && (
             <>
               <span className="scale-modal-label">Namespace:</span>
               <span className="scale-modal-value">{namespace}</span>
             </>
           )}
-          {name && (
+          {!!name && (
             <>
               <span className="scale-modal-label">{kind || 'Workload'}:</span>
               <span className="scale-modal-value">{name}</span>
@@ -141,12 +141,12 @@ const ScaleModal = ({
           </div>
         </div>
       </div>
-      {error && <div className="scale-modal-error">{error}</div>}
+      {!!error && <div className="scale-modal-error">{error}</div>}
       <div className="scale-modal-footer">
         <button type="button" className="button cancel" onClick={onCancel} disabled={loading}>
           Cancel
         </button>
-        {onScaleToZero && (
+        {!!onScaleToZero && (
           <button
             type="button"
             className="button generic"

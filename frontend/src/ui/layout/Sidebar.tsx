@@ -390,7 +390,7 @@ function Sidebar() {
                   <ClusterResourcesIcon width={14} height={14} />
                   <span>Resources</span>
                 </div>
-                {clusterResourcesExpanded && (
+                {!!clusterResourcesExpanded && (
                   <div className="sidebar-views">
                     {/* Animate Resources the same way as namespace views. */}
                     {resourceViews.map((view) => (
@@ -544,7 +544,7 @@ function Sidebar() {
                             </button>
                           ) : null}
                         </div>
-                        {isExpanded && (
+                        {!!isExpanded && (
                           <div className="sidebar-views">
                             {namespaceViews.map((view) => {
                               const label = view.label;

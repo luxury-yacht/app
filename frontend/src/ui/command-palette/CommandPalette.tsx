@@ -990,7 +990,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                               {command.renderLabel ?? command.label}
                             </div>
                           </div>
-                          {command.shortcut && (
+                          {!!command.shortcut && (
                             <div className="keycap">
                               {Array.isArray(command.shortcut) ? (
                                 withStableListKeys(command.shortcut, (key) => key).map(
@@ -1009,7 +1009,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                   </div>
                 ))}
 
-              {(catalogLoading || hasCatalogResults) && (
+              {!!(catalogLoading || hasCatalogResults) && (
                 <div>
                   <div className="command-palette-group-header">
                     Catalog Results

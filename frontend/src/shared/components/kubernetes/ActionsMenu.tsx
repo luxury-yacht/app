@@ -159,7 +159,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
             <span className="actions-menu-icon">⋯</span>
           </button>
 
-          {isOpen && (
+          {!!isOpen && (
             <div className="context-menu actions-menu-dropdown" ref={dropdownRef} role="menu">
               {withStableListKeys(menuItems, (item) =>
                 'divider' in item && item.divider
@@ -205,7 +205,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                       }
                     }}
                   >
-                    {menuItem.icon && <span className="context-menu-icon">{menuItem.icon}</span>}
+                    {!!menuItem.icon && <span className="context-menu-icon">{menuItem.icon}</span>}
                     <span className="context-menu-label">{menuItem.label}</span>
                   </button>
                 );

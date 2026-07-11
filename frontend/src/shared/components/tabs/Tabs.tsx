@@ -433,7 +433,7 @@ export function Tabs({
       style={style}
       id={id}
     >
-      {showIndicators && (
+      {!!showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--left"
@@ -483,7 +483,7 @@ export function Tabs({
             >
               {tab.leading}
               <span className="tab-item__label">{tab.label}</span>
-              {tab.onClose && (
+              {!!tab.onClose && (
                 <button
                   type="button"
                   className="tab-item__close"
@@ -504,7 +504,7 @@ export function Tabs({
       {dropInsertIndex === tabs.length && (
         <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
       )}
-      {showIndicators && (
+      {!!showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--right"

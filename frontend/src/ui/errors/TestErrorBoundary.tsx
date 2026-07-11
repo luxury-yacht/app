@@ -324,7 +324,7 @@ const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false 
           </button>
         ))}
 
-        {errorType && (
+        {!!errorType && (
           <button
             type="button"
             onClick={handleReset}
