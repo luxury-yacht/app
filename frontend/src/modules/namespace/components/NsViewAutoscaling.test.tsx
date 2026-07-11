@@ -11,6 +11,8 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -25,7 +27,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 const { gridTablePropsRef, openWithObjectMock } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as unknown },
+  gridTablePropsRef: { current: null as GridTableProps<AutoscalingData> | null },
   openWithObjectMock: vi.fn(),
 }));
 
@@ -57,7 +59,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: GridTableProps<AutoscalingData>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -108,7 +110,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: unknown) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -155,6 +157,12 @@ describe('NsViewAutoscaling', () => {
     ...overrides,
   });
 
+  const getContextMenuItems = (row: AutoscalingData) =>
+    requireValue(
+      requireValue(gridTablePropsRef.current, 'expected GridTable props').getCustomContextMenuItems,
+      'expected context-menu factory'
+    )(row, 'name');
+
   it('opens the Map for HorizontalPodAutoscaler rows', async () => {
     const entry = baseHpa();
 
@@ -163,9 +171,9 @@ describe('NsViewAutoscaling', () => {
       await Promise.resolve();
     });
 
-    const objectMapItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = getContextMenuItems(entry).find(
+      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    );
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

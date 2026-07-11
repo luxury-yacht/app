@@ -36,7 +36,7 @@ describe('RefreshManagerContext', () => {
     if (originalHiddenDescriptor) {
       Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
     } else {
-      delete (document as unknown).hidden;
+      Reflect.deleteProperty(document, 'hidden');
     }
 
     await act(async () => {});

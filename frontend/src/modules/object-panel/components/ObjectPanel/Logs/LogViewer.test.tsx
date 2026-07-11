@@ -201,7 +201,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
       >
         {withStableListKeys(options ?? [], (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`).map(
           ({ key, value: opt }) => (
-            <option key={key} value={opt?.value} disabled={Boolean((opt as unknown)?.disabled)}>
+            <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
               {opt?.label ?? opt?.value}
             </option>
           )

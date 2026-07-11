@@ -78,7 +78,9 @@ const renderTooltipInside = async (
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.mocked(ReactDOM.createPortal).mockImplementation((element: unknown) => element as unknown);
+  vi.mocked(ReactDOM.createPortal).mockImplementation(
+    ((element: React.ReactNode) => element) as unknown as typeof ReactDOM.createPortal
+  );
   vi.useRealTimers();
 });
 

@@ -9,6 +9,20 @@ import { act, createContext, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { requireValue } from '@/test-utils/requireValue';
+
+interface DetailsTabCapture {
+  onAfterDelete: () => void;
+  onAfterAction: () => void;
+  detailModel: {
+    activeDetail: unknown;
+    containerSection: unknown;
+    dataSection: unknown;
+    roleRules?: unknown;
+    desiredScaleReplicas: number;
+    activePodNames: unknown;
+  };
+}
 
 type CapabilityState = {
   allowed: boolean;
@@ -37,7 +51,7 @@ const {
   manifestTabPropsRef,
   valuesTabPropsRef,
 } = vi.hoisted(() => ({
-  detailsTabPropsRef: { current: null as unknown },
+  detailsTabPropsRef: { current: null as DetailsTabCapture | null },
   logViewerPropsRef: { current: null as unknown },
   shellTabPropsRef: { current: null as unknown },
   eventsTabPropsRef: { current: null as unknown },
@@ -45,6 +59,9 @@ const {
   manifestTabPropsRef: { current: null as unknown },
   valuesTabPropsRef: { current: null as unknown },
 }));
+
+const getDetailsTabProps = () =>
+  requireValue(detailsTabPropsRef.current, 'expected DetailsTab props in ObjectPanel.test.tsx');
 
 const mockClosePanel = vi.fn();
 const mockUseCapabilities = vi.fn();
@@ -129,7 +146,13 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: unknown) => (
+  DockablePanel: ({
+    children,
+    panelRef,
+  }: {
+    children: React.ReactNode;
+    panelRef?: React.Ref<HTMLDivElement>;
+  }) => (
     <div ref={panelRef}>
       <div data-testid="dockable-body">{children}</div>
     </div>
@@ -157,7 +180,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
-  default: (props: unknown) => {
+  default: (props: DetailsTabCapture) => {
     detailsTabPropsRef.current = props;
     return <div data-testid="details-tab" />;
   },
@@ -455,7 +478,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: 'team-a',
     });
 
-    const detailsProps = detailsTabPropsRef.current;
+    const detailsProps = getDetailsTabProps();
     expect(detailsProps).toBeTruthy();
 
     act(() => {
@@ -475,7 +498,7 @@ describe('ObjectPanel tab availability', () => {
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
-    const detailsProps = detailsTabPropsRef.current;
+    const detailsProps = getDetailsTabProps();
     expect(detailsProps).toBeTruthy();
 
     await act(async () => {
@@ -678,7 +701,7 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    expect(detailsTabPropsRef.current.detailModel.activeDetail).toEqual(detailsPayload);
+    expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
   });
 
   it('derives no typed detail sections for unknown kinds', async () => {
@@ -693,7 +716,7 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    const model = detailsTabPropsRef.current.detailModel;
+    const model = getDetailsTabProps().detailModel;
     expect(model.containerSection).toBeNull();
     expect(model.dataSection).toBeNull();
     expect(model.roleRules).toBeUndefined();

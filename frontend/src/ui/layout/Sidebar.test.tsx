@@ -112,7 +112,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
 describe('Sidebar', () => {
   beforeAll(() => {
     if (!Element.prototype.scrollIntoView) {
-      (Element.prototype as unknown).scrollIntoView = () => {};
+      Element.prototype.scrollIntoView = () => {};
     }
   });
 
@@ -388,7 +388,7 @@ describe('Sidebar', () => {
     renderSidebar();
     const originalScroll = Element.prototype.scrollIntoView;
     const scrollSpy = vi.fn();
-    (Element.prototype as unknown).scrollIntoView = scrollSpy;
+    Element.prototype.scrollIntoView = (options) => scrollSpy(options);
     const originalQuerySelector = document.querySelector;
     const fakeElement = {
       scrollIntoView: scrollSpy,

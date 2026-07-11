@@ -14,6 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 type Row = { id: string };
+type ApplyVisibilityChanges = (
+  updater: (next: Record<string, boolean | undefined>) => boolean
+) => void;
+let latestApplyVisibilityChanges: ReturnType<typeof vi.fn<ApplyVisibilityChanges>>;
 
 const columns: GridColumnDefinition<Row>[] = [
   { key: 'name', header: 'Name', render: (row) => row.id },
@@ -54,6 +58,7 @@ describe('useGridTableColumnsDropdown', () => {
         updater(obj);
       }
     );
+    latestApplyVisibilityChanges = applyVisibilityChanges;
     let result: CapturedResult = null;
 
     const Harness: React.FC = () => {
@@ -71,10 +76,6 @@ describe('useGridTableColumnsDropdown', () => {
       root.render(<Harness />);
     });
 
-    // Attach the mock for assertions.
-    if (result) {
-      (result as unknown)._applyVisibilityChanges = applyVisibilityChanges;
-    }
     return result;
   };
 
@@ -143,8 +144,7 @@ describe('useGridTableColumnsDropdown', () => {
       showAllValue,
     ]);
 
-    const mock = (result as unknown)._applyVisibilityChanges;
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
   });
 
   it('Hide All action calls applyVisibilityChanges to hide all hideable columns', () => {
@@ -156,8 +156,7 @@ describe('useGridTableColumnsDropdown', () => {
       hideAllValue,
     ]);
 
-    const mock = (result as unknown)._applyVisibilityChanges;
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
   });
 
   it('individual toggle calls applyVisibilityChanges with the correct column set', () => {
@@ -169,8 +168,7 @@ describe('useGridTableColumnsDropdown', () => {
       'name',
     ]);
 
-    const mock = (result as unknown)._applyVisibilityChanges;
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
   });
 
   it('ignores non-array values passed to onChange', () => {
@@ -182,7 +180,6 @@ describe('useGridTableColumnsDropdown', () => {
       'name'
     );
 
-    const mock = (result as unknown)._applyVisibilityChanges;
-    expect(mock).not.toHaveBeenCalled();
+    expect(latestApplyVisibilityChanges).not.toHaveBeenCalled();
   });
 });

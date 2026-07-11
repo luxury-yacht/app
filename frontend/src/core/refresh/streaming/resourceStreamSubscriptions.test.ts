@@ -16,8 +16,8 @@ describe('ResourceStreamSubscriptionStore', () => {
         writable: true,
       });
     }
-    (window as unknown).setTimeout = globalThis.setTimeout;
-    (window as unknown).clearTimeout = globalThis.clearTimeout;
+    window.setTimeout = globalThis.setTimeout;
+    window.clearTimeout = globalThis.clearTimeout;
   });
 
   it('resolves single-cluster resource stream scopes and rejects multi-cluster scopes', () => {
@@ -118,8 +118,8 @@ describe('ResourceStreamSubscriptionStore', () => {
 
   it('debounces and cancels pending unsubscribe work', () => {
     vi.useFakeTimers();
-    (window as unknown).setTimeout = globalThis.setTimeout;
-    (window as unknown).clearTimeout = globalThis.clearTimeout;
+    window.setTimeout = globalThis.setTimeout;
+    window.clearTimeout = globalThis.clearTimeout;
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
     const scope = buildClusterScope('cluster-a', '');
     const [subscription] = store.ensure('nodes', scope);

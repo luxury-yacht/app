@@ -10,10 +10,27 @@ import { types } from '@wailsjs/go/models';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 import { JobsTab } from './JobsTab';
 
+interface CapturedJobRow {
+  kind: string;
+  name: string;
+  namespace: string;
+  status: string;
+  statusPresentation?: string;
+  completions: string;
+  duration?: string;
+  age: string;
+  ageTimestamp?: number;
+  clusterId?: string | null;
+  clusterName?: string | null;
+}
+
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
-const gridTablePropsRef: { current: unknown } = { current: null };
+const gridTablePropsRef: { current: GridTableProps<CapturedJobRow> | null } = { current: null };
 const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   sortConfig: null,
   setSortConfig: vi.fn(),
@@ -75,12 +92,27 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: unknown) => {
+  default: (props: GridTableProps<CapturedJobRow>) => {
     gridTablePropsRef.current = props;
     return <div data-testid="grid-table" />;
   },
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
+
+const getGridTableProps = () =>
+  requireValue(gridTablePropsRef.current, 'expected captured GridTable props in JobsTab.test.tsx');
+
+const getGridColumn = (key: string) =>
+  requireValue(
+    getGridTableProps().columns.find((column) => column.key === key),
+    `expected ${key} column in JobsTab.test.tsx`
+  );
+
+const getContextMenuItems = (row: CapturedJobRow) =>
+  requireValue(
+    getGridTableProps().getCustomContextMenuItems,
+    'expected context-menu factory in JobsTab.test.tsx'
+  )(row, 'name');
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
@@ -181,8 +213,11 @@ describe('JobsTab', () => {
     });
 
     // fetchAllRows arms the scope toggle + Copy + Export trio in the filter bar.
-    expect(gridTablePropsRef.current.exportFilename).toBe('object-panel-jobs');
-    const allRows = await gridTablePropsRef.current.fetchAllRows();
+    expect(getGridTableProps().exportFilename).toBe('object-panel-jobs');
+    const allRows = await requireValue(
+      getGridTableProps().fetchAllRows,
+      'expected all-rows fetcher in JobsTab.test.tsx'
+    )();
     expect(allRows).toHaveLength(2);
   });
 
@@ -205,7 +240,7 @@ describe('JobsTab', () => {
       );
     });
 
-    expect(gridTablePropsRef.current.keyExtractor({ ...job, clusterId: PANEL_CLUSTER_ID })).toBe(
+    expect(getGridTableProps().keyExtractor({ ...job, clusterId: PANEL_CLUSTER_ID }, 0)).toBe(
       'panel-cluster-A|batch/v1/Job/ops/nightly'
     );
   });
@@ -219,10 +254,11 @@ describe('JobsTab', () => {
       );
     });
 
-    const statusColumn = gridTablePropsRef.current.columns.find(
-      (col: unknown) => col.key === 'status'
+    const jobRow = requireValue(getGridTableProps().data[0], 'expected job row');
+    const cell = requireReactElement<{ className?: string }>(
+      getGridColumn('status').render(jobRow),
+      'expected status cell element in JobsTab.test.tsx'
     );
-    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
     expect(cell.props.className).toBe('status-text error');
   });
 
@@ -235,9 +271,9 @@ describe('JobsTab', () => {
       );
     });
 
-    const sortableKeys = gridTablePropsRef.current.columns
-      .filter((column: unknown) => column.sortable !== false)
-      .map((column: unknown) => column.key)
+    const sortableKeys = getGridTableProps()
+      .columns.filter((column) => column.sortable !== false)
+      .map((column) => column.key)
       .sort((left: string, right: string) => left.localeCompare(right));
     expect(sortableKeys).toEqual(['age', 'completions', 'duration', 'name', 'namespace', 'status']);
   });
@@ -254,13 +290,15 @@ describe('JobsTab', () => {
       );
     });
 
-    const ageColumn = gridTablePropsRef.current.columns.find((col: unknown) => col.key === 'age');
+    const ageColumn = getGridColumn('age');
     const cellContainer = document.createElement('div');
     document.body.appendChild(cellContainer);
     const cellRoot = ReactDOM.createRoot(cellContainer);
     try {
       act(() => {
-        cellRoot.render(ageColumn.render(gridTablePropsRef.current.data[0]));
+        cellRoot.render(
+          ageColumn.render(requireValue(getGridTableProps().data[0], 'expected job row'))
+        );
       });
       expect(cellContainer.textContent).toBe('10s');
 
@@ -283,10 +321,10 @@ describe('JobsTab', () => {
       );
     });
 
-    const row = gridTablePropsRef.current.data[0];
-    const objectMapItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(row)
-      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const row = requireValue(getGridTableProps().data[0], 'expected job row');
+    const objectMapItem = getContextMenuItems(row).find(
+      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    );
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -311,6 +349,6 @@ describe('JobsTab', () => {
       root.render(<JobsTab jobs={[]} loading={false} isActive={true} />);
     });
 
-    expect(gridTablePropsRef.current.filters.options.searchPlaceholder).toBeUndefined();
+    expect(getGridTableProps().filters?.options?.searchPlaceholder).toBeUndefined();
   });
 });

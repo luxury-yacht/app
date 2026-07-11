@@ -20,7 +20,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -28,7 +28,7 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: unknown) => (
+  ResourceStatus: (props: { statusPresentation?: string; status?: string }) => (
     <div data-testid="resource-status" data-presentation={props.statusPresentation}>
       {props.status}
     </div>

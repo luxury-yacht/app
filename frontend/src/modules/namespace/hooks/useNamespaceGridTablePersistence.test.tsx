@@ -11,16 +11,25 @@ import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+
+type Row = { name: string };
+type GridPersistenceParams = Parameters<
+  typeof import('@shared/components/tables/persistence/useGridTablePersistence').useGridTablePersistence<Row>
+>[0];
+type NamespaceFilterOptions = Parameters<
+  typeof import('./useNamespaceGridTablePersistence').useNamespaceGridTablePersistence<Row>
+>[0]['filterOptions'];
 
 // Capture the params passed to useGridTablePersistence.
-const capturedParams: unknown[] = [];
+const capturedParams: GridPersistenceParams[] = [];
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: 'test-cluster' }),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: unknown) => {
+  useGridTablePersistence: (params: GridPersistenceParams) => {
     capturedParams.push(params);
     return {
       sortConfig: null,
@@ -42,7 +51,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 const { useNamespaceGridTablePersistence } = await import('./useNamespaceGridTablePersistence');
 
 describe('useNamespaceGridTablePersistence', () => {
-  const columns: GridColumnDefinition<{ name: string }>[] = [
+  const columns: GridColumnDefinition<Row>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name },
   ];
   const data = [{ name: 'a' }];
@@ -54,7 +63,7 @@ describe('useNamespaceGridTablePersistence', () => {
 
   const Harness: React.FC<{
     namespace: string;
-    filterOptions?: unknown;
+    filterOptions?: NamespaceFilterOptions;
   }> = ({ namespace, filterOptions }) => {
     useNamespaceGridTablePersistence({
       viewId: 'test-view',
@@ -78,7 +87,10 @@ describe('useNamespaceGridTablePersistence', () => {
 
     // The last captured call to useGridTablePersistence should have
     // isNamespaceScoped as a top-level param, NOT inside filterOptions.
-    const lastParams = capturedParams[capturedParams.length - 1];
+    const lastParams = requireValue(
+      capturedParams[capturedParams.length - 1],
+      'expected captured persistence params'
+    );
     expect(lastParams.isNamespaceScoped).toBe(true);
     expect(lastParams.filterOptions).toEqual({ kinds: ['Pod'] });
     // Crucially, filterOptions must not contain isNamespaceScoped.
@@ -99,7 +111,10 @@ describe('useNamespaceGridTablePersistence', () => {
       root.render(<Harness namespace="namespace:all" />);
     });
 
-    const lastParams = capturedParams[capturedParams.length - 1];
+    const lastParams = requireValue(
+      capturedParams[capturedParams.length - 1],
+      'expected captured persistence params'
+    );
     expect(lastParams.isNamespaceScoped).toBe(false);
     expect(lastParams.filterOptions).toBeUndefined();
 

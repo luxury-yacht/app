@@ -11,10 +11,14 @@ import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
 const stateMap: Record<string, unknown> = {};
+type PersistenceState = ReturnType<typeof useGridTablePersistence<{ id: string }>>;
+let latestState: PersistenceState | null = null;
+const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
 
 // Mock persistence layer. computeClusterHash returns a hash derived from input
 // so different clusterIdentity values produce different hashes.
@@ -43,6 +47,7 @@ vi.mock('./gridTablePersistence', () => {
 
 describe('useGridTablePersistence multi-cluster', () => {
   beforeEach(() => {
+    latestState = null;
     Object.keys(stateMap).forEach((key) => {
       delete stateMap[key];
     });
@@ -73,7 +78,7 @@ describe('useGridTablePersistence multi-cluster', () => {
     });
 
     useEffect(() => {
-      (globalThis as unknown).__LATEST_STATE__ = result;
+      latestState = result;
     }, [result]);
 
     return null;
@@ -114,19 +119,19 @@ describe('useGridTablePersistence multi-cluster', () => {
 
     // Render cluster A.
     await renderHarness(root, 'cluster-a');
-    const stateA = (globalThis as unknown).__LATEST_STATE__;
+    const stateA = getLatestState();
     expect(stateA.sortConfig?.key).toBe('name');
     expect(stateA.sortConfig?.direction).toBe('asc');
 
     // Switch to cluster B.
     await renderHarness(root, 'cluster-b');
-    const stateB = (globalThis as unknown).__LATEST_STATE__;
+    const stateB = getLatestState();
     expect(stateB.sortConfig?.key).toBe('age');
     expect(stateB.sortConfig?.direction).toBe('desc');
 
     // Switch back to cluster A — state is independent.
     await renderHarness(root, 'cluster-a');
-    const stateA2 = (globalThis as unknown).__LATEST_STATE__;
+    const stateA2 = getLatestState();
     expect(stateA2.sortConfig?.key).toBe('name');
     expect(stateA2.sortConfig?.direction).toBe('asc');
 
@@ -149,10 +154,10 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    expect((globalThis as unknown).__LATEST_STATE__.columnVisibility).toEqual({ age: false });
+    expect(getLatestState().columnVisibility).toEqual({ age: false });
 
     await renderHarness(root, 'cluster-b');
-    expect((globalThis as unknown).__LATEST_STATE__.columnVisibility).toEqual({ name: false });
+    expect(getLatestState().columnVisibility).toEqual({ name: false });
 
     await act(async () => root.unmount());
     container.remove();
@@ -171,11 +176,11 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    expect((globalThis as unknown).__LATEST_STATE__.sortConfig?.key).toBe('name');
+    expect(getLatestState().sortConfig?.key).toBe('name');
 
     // Switch to cluster with no persisted state.
     await renderHarness(root, 'cluster-c');
-    const stateC = (globalThis as unknown).__LATEST_STATE__;
+    const stateC = getLatestState();
     expect(stateC.sortConfig).toBeNull();
     expect(stateC.columnVisibility).toBeNull();
 
@@ -189,10 +194,10 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    const keyA = (globalThis as unknown).__LATEST_STATE__.storageKey;
+    const keyA = getLatestState().storageKey;
 
     await renderHarness(root, 'cluster-b');
-    const keyB = (globalThis as unknown).__LATEST_STATE__.storageKey;
+    const keyB = getLatestState().storageKey;
 
     expect(keyA).not.toBeNull();
     expect(keyB).not.toBeNull();

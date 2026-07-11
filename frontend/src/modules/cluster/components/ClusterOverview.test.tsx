@@ -10,7 +10,7 @@ import { act, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import type { ClusterOverviewPayload } from '@/core/refresh/types';
+import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';
 import ClusterOverview from './ClusterOverview';
 
 const {
@@ -511,7 +511,7 @@ describe('ClusterOverview', () => {
           totalNamespaces: 4,
           totalPods: 99,
         },
-      } as unknown,
+      },
       error: null,
     };
 
@@ -980,7 +980,7 @@ describe('ClusterOverview', () => {
           successCount: 0,
           failureCount: 0,
         },
-      } as unknown,
+      },
       error: null,
     };
 
@@ -1184,7 +1184,13 @@ function statValueFor(container: HTMLElement, label: string): string {
 function createDomainState(
   status: 'loading' | 'idle' | 'ready' | 'updating' | 'error',
   overrides: Partial<{ overview: ClusterOverviewPayload; error: string }> = {}
-) {
+): {
+  status: 'loading' | 'idle' | 'ready' | 'updating' | 'error';
+  data:
+    | (Partial<ClusterOverviewSnapshotPayload> & Pick<ClusterOverviewSnapshotPayload, 'overview'>)
+    | null;
+  error: string | null;
+} {
   if (status === 'ready' || status === 'updating') {
     if (!overrides.overview) {
       throw new Error('createDomainState requires overview data when status is ready or updating');

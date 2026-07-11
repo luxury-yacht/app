@@ -9,7 +9,7 @@ import { networkPolicyDescriptor } from './descriptors/networkpolicy';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>

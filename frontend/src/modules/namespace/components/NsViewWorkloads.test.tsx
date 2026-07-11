@@ -598,10 +598,7 @@ describe('NsViewWorkloads', () => {
       useTableSortMock.mock.calls[0]?.[3],
       'expected workload table sort options'
     );
-    const rowIdentity = requireValue(
-      options.rowIdentity,
-      'expected workload table row identity'
-    );
+    const rowIdentity = requireValue(options.rowIdentity, 'expected workload table row identity');
     expect(rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 

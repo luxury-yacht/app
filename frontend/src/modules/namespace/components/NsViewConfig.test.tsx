@@ -7,13 +7,13 @@
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type React from 'react';
-import { act } from 'react';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 import type { ConfigData } from './NsViewConfig';
 
 type CapturedGridTableProps = GridTableProps<ConfigData> & {
@@ -253,28 +253,32 @@ describe('NsViewConfig ConfigViewGrid', () => {
 
     expect(gridTablePropsRef.current).toBeTruthy();
     const { columns, getCustomContextMenuItems, onSort } = gridTablePropsRef.current;
-    expect(columns.map((col: unknown) => col.key)).toContain('namespace');
+    expect(columns.map((col) => col.key)).toContain('namespace');
 
     const resource = sampleData[0];
 
-    columns.forEach((col: unknown) => {
+    columns.forEach((col) => {
       if (typeof col.sortValue === 'function') {
         col.sortValue(resource);
       }
       if (typeof col.render === 'function') {
-        const element = col.render(resource) as unknown;
-        if (element?.props) {
-          element.props.onClick?.({ stopPropagation() {} } as unknown);
-          element.props.onKeyDown?.({ key: 'Enter', preventDefault: vi.fn() } as unknown);
+        const rendered = col.render(resource);
+        if (React.isValidElement(rendered)) {
+          const element = requireReactElement<{
+            onClick?: (event: { stopPropagation: () => void }) => void;
+            onKeyDown?: (event: { key: string; preventDefault: () => void }) => void;
+          }>(rendered, 'expected a configuration cell element');
+          element.props.onClick?.({ stopPropagation() {} });
+          element.props.onKeyDown?.({ key: 'Enter', preventDefault: vi.fn() });
         }
       }
     });
 
     const menuItems = getCustomContextMenuItems(resource, 'name');
-    expect(menuItems.map((item: unknown) => item.actionId)).toContain(OBJECT_ACTION_IDS.viewMap);
-    expect(menuItems.map((item: unknown) => item.label)).toContain('Delete');
+    expect(menuItems.map((item) => item.actionId)).toContain(OBJECT_ACTION_IDS.viewMap);
+    expect(menuItems.map((item) => item.label)).toContain('Delete');
     act(() => {
-      menuItems[0].onClick();
+      requireValue(menuItems[0]?.onClick, 'expected the configuration open action')();
     });
     expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -285,11 +289,12 @@ describe('NsViewConfig ConfigViewGrid', () => {
       })
     );
 
-    const objectMapAction = menuItems.find(
-      (item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    const objectMapAction = requireValue(
+      menuItems.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap),
+      'expected the configuration object-map action'
     );
     act(() => {
-      objectMapAction.onClick();
+      requireValue(objectMapAction.onClick, 'expected the object-map action handler')();
     });
     expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -301,9 +306,12 @@ describe('NsViewConfig ConfigViewGrid', () => {
       { initialTab: 'map' }
     );
 
-    const deleteAction = menuItems.find((item: unknown) => item.label === 'Delete');
+    const deleteAction = requireValue(
+      menuItems.find((item) => item.label === 'Delete'),
+      'expected the configuration delete action'
+    );
     await act(async () => {
-      deleteAction.onClick();
+      requireValue(deleteAction.onClick, 'expected the configuration delete handler')();
     });
 
     expect(modalPropsRef.current?.isOpen).toBe(true);
@@ -324,7 +332,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
       },
     });
 
-    onSort('name', 'desc');
+    requireValue(onSort, 'expected configuration table sort handler')('name', 'desc');
 
     await unmount();
   });
@@ -358,14 +366,15 @@ describe('NsViewConfig ConfigViewGrid', () => {
     const { unmount } = await createRoot(<ConfigView namespace="team-a" showNamespaceColumn />);
 
     const { getCustomContextMenuItems, keyExtractor } = gridTablePropsRef.current;
-    expect(keyExtractor(defensiveResource)).toBe('cluster-a|/v1/ConfigMap/default/app-config');
+    expect(keyExtractor(defensiveResource, 0)).toBe('cluster-a|/v1/ConfigMap/default/app-config');
 
     const menuItems = getCustomContextMenuItems(defensiveResource, 'name');
-    const openAction = menuItems.find(
-      (item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails
+    const openAction = requireValue(
+      menuItems.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails),
+      'expected the configuration details action'
     );
     act(() => {
-      openAction.onClick();
+      requireValue(openAction.onClick, 'expected the configuration details handler')();
     });
     expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -376,9 +385,12 @@ describe('NsViewConfig ConfigViewGrid', () => {
       })
     );
 
-    const deleteAction = menuItems.find((item: unknown) => item.label === 'Delete');
+    const deleteAction = requireValue(
+      menuItems.find((item) => item.label === 'Delete'),
+      'expected the configuration delete action'
+    );
     await act(async () => {
-      deleteAction.onClick();
+      requireValue(deleteAction.onClick, 'expected the configuration delete handler')();
     });
     await act(async () => {
       modalPropsRef.current.onConfirm();
@@ -413,15 +425,18 @@ describe('NsViewConfig ConfigViewGrid', () => {
 
     const { getCustomContextMenuItems } = gridTablePropsRef.current;
     const menuItems = getCustomContextMenuItems(sampleData[0], 'name');
-    expect(menuItems.map((item: unknown) => item.label)).not.toContain('Delete');
+    expect(menuItems.map((item) => item.label)).not.toContain('Delete');
 
     // Manually trigger delete confirmation state to exercise error branch
     permissionMap.set('ConfigMap:delete:default', { allowed: true, pending: false });
     const menuWithDelete = getCustomContextMenuItems(sampleData[0], 'name');
-    const deleteAction = menuWithDelete.find((item: unknown) => item.label === 'Delete');
+    const deleteAction = requireValue(
+      menuWithDelete.find((item) => item.label === 'Delete'),
+      'expected the configuration delete action'
+    );
 
     await act(async () => {
-      deleteAction.onClick();
+      requireValue(deleteAction.onClick, 'expected the configuration delete handler')();
     });
 
     await act(async () => {
@@ -451,10 +466,10 @@ describe('NsViewConfig ConfigViewGrid', () => {
     );
 
     const { columns, getCustomContextMenuItems } = gridTablePropsRef.current;
-    expect(columns.map((col: unknown) => col.key)).not.toContain('namespace');
+    expect(columns.map((col) => col.key)).not.toContain('namespace');
 
     const menuItems = getCustomContextMenuItems(sampleData[0], 'name');
-    expect(menuItems.map((item: unknown) => item.label)).not.toContain('Delete');
+    expect(menuItems.map((item) => item.label)).not.toContain('Delete');
 
     await act(async () => {
       modalPropsRef.current?.onConfirm?.();

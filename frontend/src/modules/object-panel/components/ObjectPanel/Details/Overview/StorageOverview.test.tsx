@@ -8,6 +8,8 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type React from 'react';
+import { persistentvolume, persistentvolumeclaim, storageclass } from '@wailsjs/go/models';
 import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 import { OverviewRenderer } from './OverviewRenderer';
 
@@ -33,11 +35,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: unknown) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -45,7 +47,11 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: unknown) =>
+  ResourceStatus: (props: {
+    status?: string;
+    statusState?: string;
+    statusPresentation?: string;
+  }) =>
     props.status ? (
       <div>
         <span className="overview-label">Status</span>
@@ -83,21 +89,26 @@ describe('StorageOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderPvc = async (data: unknown) => {
+  const renderPvc = async (
+    fixture: Partial<persistentvolumeclaim.PersistentVolumeClaimDetails>
+  ) => {
+    const data = persistentvolumeclaim.PersistentVolumeClaimDetails.createFrom(fixture);
     await act(async () => {
       root.render(<OverviewRenderer descriptor={pvcDescriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
 
-  const renderPv = async (data: unknown) => {
+  const renderPv = async (fixture: Partial<persistentvolume.PersistentVolumeDetails>) => {
+    const data = persistentvolume.PersistentVolumeDetails.createFrom(fixture);
     await act(async () => {
       root.render(<OverviewRenderer descriptor={pvDescriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
 
-  const renderStorageClass = async (data: unknown) => {
+  const renderStorageClass = async (fixture: Partial<storageclass.StorageClassDetails>) => {
+    const data = storageclass.StorageClassDetails.createFrom(fixture);
     await act(async () => {
       root.render(
         <OverviewRenderer descriptor={storageClassDescriptor} data={data} context={context} />

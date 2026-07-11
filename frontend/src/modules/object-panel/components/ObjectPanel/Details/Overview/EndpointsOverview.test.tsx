@@ -7,7 +7,7 @@
  * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
  */
 
-import type { endpointslice } from '@wailsjs/go/models';
+import { endpointslice } from '@wailsjs/go/models';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +15,7 @@ import { endpointSliceDescriptor } from './descriptors/endpointslice';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -44,7 +44,8 @@ describe('EndpointSliceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (dto: endpointslice.EndpointSliceDetails) => {
+  const renderComponent = async (fixture: Record<string, unknown>) => {
+    const dto = endpointslice.EndpointSliceDetails.createFrom(fixture);
     await act(async () => {
       root.render(
         <OverviewRenderer descriptor={endpointSliceDescriptor} data={dto} context={context} />
@@ -86,7 +87,7 @@ describe('EndpointSliceOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as unknown);
+    });
 
     const overview = container;
     expect(overview.textContent).toContain('IPv4');
@@ -114,7 +115,7 @@ describe('EndpointSliceOverview', () => {
       ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
       labels: {},
       annotations: {},
-    } as unknown);
+    });
 
     expect(container.textContent).toContain('IPv4');
     expect(container.textContent).toContain('2 ready');
@@ -134,7 +135,7 @@ describe('EndpointSliceOverview', () => {
       ports: [{ port: 8080, protocol: 'TCP' }],
       labels: {},
       annotations: {},
-    } as unknown);
+    });
 
     expect(container.textContent).toContain('2001:db8::1');
     expect(container.textContent).toContain('Pod/my-pod');

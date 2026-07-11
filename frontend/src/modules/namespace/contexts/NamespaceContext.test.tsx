@@ -24,6 +24,21 @@ let mockClusterLifecycleStates = new Map([
   ['cluster-b', 'loading'],
 ]);
 
+interface TestNamespaceDomain {
+  status: 'ready' | 'loading' | 'idle';
+  data: {
+    namespaces: Array<{
+      name: string;
+      phase: string;
+      resourceVersion: string;
+      creationTimestamp: number;
+      clusterId: string;
+      clusterName: string;
+    }>;
+  } | null;
+  error: null;
+}
+
 const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef } = vi.hoisted(
   () => {
     return {
@@ -654,7 +669,7 @@ describe('NamespaceProvider selection behaviour', () => {
       status: 'idle',
       data: null,
       error: null,
-    } as unknown;
+    };
 
     const { cleanup } = renderWithProvider();
     act(() => {
@@ -712,7 +727,10 @@ function getSelectedCluster(): string {
   return element?.textContent ?? '';
 }
 
-function createNamespaceDomain(status: 'ready' | 'loading' | 'idle', names: string[]) {
+function createNamespaceDomain(
+  status: 'ready' | 'loading' | 'idle',
+  names: string[]
+): TestNamespaceDomain {
   return createNamespaceDomainWithCluster(status, names, 'cluster-a', 'alpha');
 }
 
@@ -721,7 +739,7 @@ function createNamespaceDomainWithCluster(
   names: string[],
   clusterId: string,
   clusterName: string
-) {
+): TestNamespaceDomain {
   return {
     status,
     data: {
@@ -747,7 +765,7 @@ type ClusterNamespaceGroup = {
 function createNamespaceDomainMulti(
   status: 'ready' | 'loading' | 'idle',
   clusters: ClusterNamespaceGroup[]
-) {
+): TestNamespaceDomain {
   const namespaces = clusters.flatMap((cluster) =>
     cluster.names.map((name, index) => ({
       name,

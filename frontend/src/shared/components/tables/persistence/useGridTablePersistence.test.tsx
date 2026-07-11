@@ -11,10 +11,14 @@ import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
 const stateMap: Record<string, unknown> = {};
+type PersistenceState = ReturnType<typeof useGridTablePersistence<{ id: string }>>;
+let latestState: PersistenceState | null = null;
+const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
 
 vi.mock('./gridTablePersistence', () => {
   const buildGridTableStorageKey = ({
@@ -41,6 +45,7 @@ vi.mock('./gridTablePersistence', () => {
 
 describe('useGridTablePersistence', () => {
   beforeEach(() => {
+    latestState = null;
     Object.keys(stateMap).forEach((key) => {
       delete stateMap[key];
     });
@@ -69,7 +74,7 @@ describe('useGridTablePersistence', () => {
     });
 
     useEffect(() => {
-      (globalThis as unknown).__LATEST_STATE__ = result;
+      latestState = result;
     }, [result]);
 
     return null;
@@ -98,12 +103,12 @@ describe('useGridTablePersistence', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness('team-a', root);
-    const firstState = (globalThis as unknown).__LATEST_STATE__;
+    const firstState = getLatestState();
     expect(firstState.sortConfig?.key).toBe('name');
     expect(firstState.sortConfig?.direction).toBe('desc');
 
     await renderHarness('team-b', root);
-    const secondState = (globalThis as unknown).__LATEST_STATE__;
+    const secondState = getLatestState();
     expect(secondState.sortConfig?.key).toBe('age');
     expect(secondState.sortConfig?.direction).toBe('asc');
 
@@ -128,11 +133,11 @@ describe('useGridTablePersistence', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness('team-a', root);
-    const stateA = (globalThis as unknown).__LATEST_STATE__;
+    const stateA = getLatestState();
     expect(stateA.columnVisibility).toEqual({ age: false });
 
     await renderHarness('team-b', root);
-    const stateB = (globalThis as unknown).__LATEST_STATE__;
+    const stateB = getLatestState();
     expect(stateB.columnVisibility).toEqual({ name: false });
 
     await act(async () => {

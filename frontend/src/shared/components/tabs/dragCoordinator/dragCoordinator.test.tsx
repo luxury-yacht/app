@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 import { TabDragContext, TabDragProvider } from './TabDragProvider';
-import { TAB_DRAG_DATA_TYPE } from './types';
+import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
 import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
 
@@ -24,6 +24,28 @@ const requireClusterDropTarget = (value: ClusterDropTargetResult | null): Cluste
     value,
     'expected the cluster tab drop target after rendering'
   );
+
+type TestDataTransfer = {
+  getData: (format: string) => string;
+  types: string[];
+  dropEffect: string;
+};
+
+type TestDragEvent = Event & {
+  dataTransfer: TestDataTransfer;
+  relatedTarget: EventTarget | null;
+};
+
+const createTestDragEvent = (
+  type: string,
+  dataTransfer: TestDataTransfer,
+  relatedTarget: EventTarget | null = null
+): TestDragEvent => {
+  const event = new Event(type, { bubbles: true, cancelable: true }) as TestDragEvent;
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  Object.defineProperty(event, 'relatedTarget', { value: relatedTarget });
+  return event;
+};
 
 describe('TabDragProvider', () => {
   let container: HTMLDivElement;
@@ -276,7 +298,7 @@ describe('useTabDragSourceFactory', () => {
     // for an arbitrary number of tabs — more than any reasonable unrolled-hook
     // workaround would allow.
     const TAB_COUNT = 40;
-    const dragStartCallbacks: Array<(event: unknown) => void> = [];
+    const dragStartCallbacks: Array<React.DragEventHandler<HTMLElement>> = [];
 
     function Harness() {
       const makeDragSource = useTabDragSourceFactory();
@@ -365,7 +387,7 @@ describe('useTabDropTarget', () => {
   });
 
   it('fires onDrop with the matching payload when a drop event occurs', () => {
-    const onDrop = vi.fn();
+    const onDrop = vi.fn<(payload: TabDragPayload) => void>();
 
     function Probe() {
       const { ref } = useTabDropTarget({
@@ -379,7 +401,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: unknown) => void) | null = null;
+    let beginDragRef: ((payload: TabDragPayload) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -413,10 +435,8 @@ describe('useTabDropTarget', () => {
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dragEnter = new Event('dragenter', { bubbles: true }) as unknown;
-    dragEnter.dataTransfer = dataTransfer;
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as unknown;
-    dropEvent.dataTransfer = dataTransfer;
+    const dragEnter = createTestDragEvent('dragenter', dataTransfer);
+    const dropEvent = createTestDragEvent('drop', dataTransfer);
 
     act(() => {
       target.dispatchEvent(dragEnter);
@@ -426,7 +446,8 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    expect((payload as unknown).clusterId).toBe('c1');
+    if (payload.kind !== 'cluster-tab') throw new Error('expected a cluster-tab drop payload');
+    expect(payload.clusterId).toBe('c1');
   });
 
   it('calls preventDefault on dragover under HTML5 "protected mode" semantics', () => {
@@ -442,7 +463,7 @@ describe('useTabDropTarget', () => {
     // payload only at drop time. The hook must still mark the event as
     // accepted by calling preventDefault on dragenter AND dragover, and
     // must still fire onDrop with the correct payload at drop time.
-    const onDrop = vi.fn();
+    const onDrop = vi.fn<(payload: TabDragPayload) => void>();
 
     function Probe() {
       const { ref } = useTabDropTarget({
@@ -456,7 +477,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: unknown) => void) | null = null;
+    let beginDragRef: ((payload: TabDragPayload) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -486,16 +507,8 @@ describe('useTabDropTarget', () => {
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dragEnter = new Event('dragenter', {
-      bubbles: true,
-      cancelable: true,
-    }) as unknown;
-    dragEnter.dataTransfer = protectedDataTransfer;
-    const dragOver = new Event('dragover', {
-      bubbles: true,
-      cancelable: true,
-    }) as unknown;
-    dragOver.dataTransfer = protectedDataTransfer;
+    const dragEnter = createTestDragEvent('dragenter', protectedDataTransfer);
+    const dragOver = createTestDragEvent('dragover', protectedDataTransfer);
 
     const target = requireValue(
       container.querySelector<HTMLElement>('[data-testid="target"]'),
@@ -518,11 +531,7 @@ describe('useTabDropTarget', () => {
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dropEvent = new Event('drop', {
-      bubbles: true,
-      cancelable: true,
-    }) as unknown;
-    dropEvent.dataTransfer = readOnlyDataTransfer;
+    const dropEvent = createTestDragEvent('drop', readOnlyDataTransfer);
     act(() => {
       target.dispatchEvent(dropEvent);
     });
@@ -530,11 +539,12 @@ describe('useTabDropTarget', () => {
     expect(onDrop).toHaveBeenCalledTimes(1);
     const [payload] = onDrop.mock.calls[0];
     expect(payload.kind).toBe('cluster-tab');
-    expect((payload as unknown).clusterId).toBe('c1');
+    if (payload.kind !== 'cluster-tab') throw new Error('expected a cluster-tab drop payload');
+    expect(payload.clusterId).toBe('c1');
   });
 
   it('does not fire onDrop when the payload kind is not in accepts', () => {
-    const onDrop = vi.fn();
+    const onDrop = vi.fn<(payload: TabDragPayload) => void>();
 
     function Probe() {
       const { ref } = useTabDropTarget({
@@ -548,7 +558,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: unknown) => void) | null = null;
+    let beginDragRef: ((payload: TabDragPayload) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -580,8 +590,7 @@ describe('useTabDropTarget', () => {
       types: [TAB_DRAG_DATA_TYPE],
       dropEffect: 'move',
     };
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as unknown;
-    dropEvent.dataTransfer = dataTransfer;
+    const dropEvent = createTestDragEvent('drop', dataTransfer);
 
     act(() => {
       target.dispatchEvent(dropEvent);
@@ -591,8 +600,8 @@ describe('useTabDropTarget', () => {
   });
 
   it('stops drop-event propagation to ancestor drop targets when nested', () => {
-    const outerOnDrop = vi.fn();
-    const innerOnDrop = vi.fn();
+    const outerOnDrop = vi.fn<(payload: TabDragPayload) => void>();
+    const innerOnDrop = vi.fn<(payload: TabDragPayload) => void>();
 
     function Harness() {
       const { ref: outerRef } = useTabDropTarget({
@@ -660,7 +669,7 @@ describe('useTabDropTarget', () => {
       );
     }
 
-    let beginDragRef: ((p: unknown) => void) | null = null;
+    let beginDragRef: ((payload: TabDragPayload) => void) | null = null;
     function Capture() {
       const ctx = useContext(TabDragContext);
       beginDragRef = ctx.beginDrag;
@@ -703,8 +712,7 @@ describe('useTabDropTarget', () => {
     };
 
     // Enter the target initially.
-    const dragEnter = new Event('dragenter', { bubbles: true }) as unknown;
-    dragEnter.dataTransfer = dataTransfer;
+    const dragEnter = createTestDragEvent('dragenter', dataTransfer);
     act(() => {
       target.dispatchEvent(dragEnter);
     });
@@ -712,9 +720,7 @@ describe('useTabDropTarget', () => {
     expect(target.getAttribute('data-drag-over')).toBe('true');
 
     // Cursor moves from target into child A. dragleave fires with relatedTarget=childA.
-    const leaveToChildA = new Event('dragleave', { bubbles: true }) as unknown;
-    leaveToChildA.dataTransfer = dataTransfer;
-    leaveToChildA.relatedTarget = childA;
+    const leaveToChildA = createTestDragEvent('dragleave', dataTransfer, childA);
     act(() => {
       target.dispatchEvent(leaveToChildA);
     });
@@ -723,9 +729,7 @@ describe('useTabDropTarget', () => {
     expect(target.getAttribute('data-drag-over')).toBe('true');
 
     // Cursor moves from child A to child B (still inside target). Same behavior.
-    const leaveAtoB = new Event('dragleave', { bubbles: true }) as unknown;
-    leaveAtoB.dataTransfer = dataTransfer;
-    leaveAtoB.relatedTarget = childB;
+    const leaveAtoB = createTestDragEvent('dragleave', dataTransfer, childB);
     act(() => {
       target.dispatchEvent(leaveAtoB);
     });
@@ -735,9 +739,7 @@ describe('useTabDropTarget', () => {
     // Cursor leaves the target entirely (relatedTarget is some unrelated element).
     const unrelated = document.createElement('div');
     document.body.appendChild(unrelated);
-    const leaveToOutside = new Event('dragleave', { bubbles: true }) as unknown;
-    leaveToOutside.dataTransfer = dataTransfer;
-    leaveToOutside.relatedTarget = unrelated;
+    const leaveToOutside = createTestDragEvent('dragleave', dataTransfer, unrelated);
     act(() => {
       target.dispatchEvent(leaveToOutside);
     });

@@ -4,6 +4,14 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { YamlEditorProps } from './YamlEditor';
 
+interface CapturedCodeMirrorProps {
+  value: string;
+  onChange: (value: string) => void;
+  extensions?: unknown[];
+  onCreateEditor?: (view: unknown) => void;
+  'aria-label'?: string;
+}
+
 const shortcutMocks = vi.hoisted(() => ({
   useKeyboardSurface: vi.fn(),
   useSearchShortcutTarget: vi.fn(),
@@ -46,7 +54,10 @@ const searchMocks = vi.hoisted(() => {
 });
 
 const codeMirrorState = vi.hoisted(() => ({
-  props: null as unknown,
+  props: {
+    value: '',
+    onChange: () => undefined,
+  } as CapturedCodeMirrorProps,
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -65,8 +76,7 @@ vi.mock('@uiw/react-codemirror', async () => {
   const ExternalChange = {
     of: (value: boolean) => ({ type: 'externalChange', value }),
   };
-  const CodeMirrorMock = ReactModule.forwardRef((_props: unknown, ref) => {
-    const props = _props;
+  const CodeMirrorMock = ReactModule.forwardRef((props: CapturedCodeMirrorProps, ref) => {
     codeMirrorState.props = props;
     codeMirrorState.decorationRanges = [];
     props.extensions?.forEach((extension: unknown) => {
@@ -83,15 +93,16 @@ vi.mock('@uiw/react-codemirror', async () => {
         );
       }
     });
-    codeMirrorState.contextMenuHandler =
-      props.extensions?.find((extension: unknown) => {
-        return Boolean(
+    const contextMenuExtension = props.extensions?.find(
+      (extension): extension is { contextmenu: (event: MouseEvent, view: unknown) => boolean } =>
+        Boolean(
           extension &&
             typeof extension === 'object' &&
             'contextmenu' in extension &&
             typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
-        );
-      })?.contextmenu ?? null;
+        )
+    );
+    codeMirrorState.contextMenuHandler = contextMenuExtension?.contextmenu ?? null;
 
     if (ref && typeof ref === 'object') {
       (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
@@ -251,7 +262,7 @@ describe('YamlEditor', () => {
     wailsRuntimeMocks.ClipboardGetText.mockClear();
     searchMocks.findNext.mockClear();
     searchMocks.findPrevious.mockClear();
-    codeMirrorState.props = null;
+    codeMirrorState.props = { value: '', onChange: () => undefined };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     codeMirrorState.editorView.state.sliceDoc.mockClear();

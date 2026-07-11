@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRefreshBaseURL: vi.fn(async () => 'http://127.0.0.1:0'),
@@ -33,6 +34,12 @@ import {
 import { getScopedDomainState, resetScopedDomainState } from '../store';
 
 const SCOPE = 'default:pod:example';
+let restoreEventSource: (() => void) | undefined;
+
+const installEventSource = (eventSource: unknown) => {
+  restoreEventSource?.();
+  restoreEventSource = installWindowProperty('EventSource', eventSource);
+};
 
 beforeEach(() => {
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
@@ -55,7 +62,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete (globalThis as unknown).EventSource;
+  restoreEventSource?.();
+  restoreEventSource = undefined;
   vi.useRealTimers();
   if (typeof window !== 'undefined') {
     Object.assign(window, {
@@ -248,7 +256,7 @@ describe('ContainerLogsStreamManager', () => {
       removeEventListener(): void {}
       close(): void {}
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     ensureRefreshBaseURLMock.mockRejectedValueOnce(new Error('not ready yet'));
     ensureRefreshBaseURLMock.mockRejectedValueOnce(new Error('still failing'));
@@ -314,7 +322,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -352,7 +360,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -405,7 +413,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -456,7 +464,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
@@ -495,7 +503,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
@@ -536,7 +544,7 @@ describe('ContainerLogsStreamManager', () => {
       removeEventListener(): void {}
       close(): void {}
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const logScope = 'cluster-a|default:apps/v1:deployment:web';
     setContainerLogsStreamScopeParams(logScope, {
@@ -577,7 +585,7 @@ describe('ContainerLogsStreamManager', () => {
         this.listeners[type]?.(evt);
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -608,7 +616,7 @@ describe('ContainerLogsStreamManager', () => {
       removeEventListener(): void {}
       close(): void {}
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
@@ -654,7 +662,7 @@ describe('ContainerLogsStreamManager', () => {
         this.closed = true;
       }
     }
-    (globalThis as unknown).EventSource = MockEventSource as unknown;
+    installEventSource(MockEventSource);
 
     const { eventBus } = await import('@/core/events');
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');

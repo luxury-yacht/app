@@ -11,12 +11,13 @@ import { nodes } from '@wailsjs/go/models';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type React from 'react';
 import { nodeDescriptor } from './descriptors/node';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -24,7 +25,11 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: unknown) => (
+  ResourceStatus: (props: {
+    statusState?: string;
+    statusPresentation?: string;
+    status?: string;
+  }) => (
     <div
       data-testid="resource-status"
       data-state={props.statusState}
@@ -41,7 +46,7 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: unknown) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {

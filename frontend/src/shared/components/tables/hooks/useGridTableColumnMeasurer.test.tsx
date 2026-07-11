@@ -35,7 +35,7 @@ afterEach(() => {
   if (originalScrollWidthDescriptor) {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidthDescriptor);
   } else {
-    delete (HTMLElement.prototype as unknown).scrollWidth;
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth');
   }
   document.body.innerHTML = '';
   vi.restoreAllMocks();

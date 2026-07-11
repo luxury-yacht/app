@@ -46,14 +46,14 @@ describe('useGridTableColumnWidths', () => {
       cb(0);
       return 0;
     };
-    (globalThis as unknown).requestAnimationFrame = immediateRaf;
+    globalThis.requestAnimationFrame = immediateRaf;
     if (typeof window !== 'undefined') {
-      (window as unknown).requestAnimationFrame = immediateRaf;
+      window.requestAnimationFrame = immediateRaf;
     }
     const noop = () => {};
-    (globalThis as unknown).cancelAnimationFrame = noop;
+    globalThis.cancelAnimationFrame = noop;
     if (typeof window !== 'undefined') {
-      (window as unknown).cancelAnimationFrame = noop;
+      window.cancelAnimationFrame = noop;
     }
   });
 
@@ -71,9 +71,9 @@ describe('useGridTableColumnWidths', () => {
         window.requestAnimationFrame = originalRaf;
       }
     } else {
-      delete (globalThis as unknown).requestAnimationFrame;
+      Reflect.deleteProperty(globalThis, 'requestAnimationFrame');
       if (typeof window !== 'undefined') {
-        delete (window as unknown).requestAnimationFrame;
+        Reflect.deleteProperty(window, 'requestAnimationFrame');
       }
     }
     if (originalCancelRaf) {
@@ -82,9 +82,9 @@ describe('useGridTableColumnWidths', () => {
         window.cancelAnimationFrame = originalCancelRaf;
       }
     } else {
-      delete (globalThis as unknown).cancelAnimationFrame;
+      Reflect.deleteProperty(globalThis, 'cancelAnimationFrame');
       if (typeof window !== 'undefined') {
-        delete (window as unknown).cancelAnimationFrame;
+        Reflect.deleteProperty(window, 'cancelAnimationFrame');
       }
     }
   });

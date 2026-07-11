@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: unknown) => <>{children}</>,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 import { LabelsAndAnnotations } from './LabelsAndAnnotations';

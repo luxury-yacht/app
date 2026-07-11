@@ -11,6 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
 import { requireValue } from '@/test-utils/requireValue';
 
+interface CapturedCodeMirrorProps {
+  value: string;
+  onCreateEditor?: (view: unknown) => void;
+}
+
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
@@ -39,7 +44,7 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
 }));
 
 const codeMirrorState = {
-  latestProps: { current: null as unknown },
+  latestProps: { current: { value: '' } as CapturedCodeMirrorProps },
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -51,18 +56,17 @@ const codeMirrorState = {
   value: '',
 };
 
-const CodeMirrorMock = React.forwardRef((_props: unknown, ref) => {
-  const props = _props;
+const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as unknown,
+      view: codeMirrorState.editorView,
     };
   }
   React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView as unknown);
+    onCreateEditor?.(codeMirrorState.editorView);
   }, [onCreateEditor]);
   return (
     <div data-testid="code-mirror" data-value={props.value}>
@@ -287,7 +291,7 @@ describe('ValuesTab', () => {
       error: null,
     };
     codeMirrorState.value = '';
-    codeMirrorState.latestProps.current = null;
+    codeMirrorState.latestProps.current = { value: '' };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     refreshMocks.setScopedDomainEnabled.mockClear();

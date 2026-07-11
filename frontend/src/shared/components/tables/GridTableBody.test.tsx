@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe('GridTableBody', () => {
   type TestRow = { id: string };
-  type BodyProps = React.ComponentProps<typeof GridTableBody<unknown>>;
+  type BodyProps = React.ComponentProps<typeof GridTableBody<TestRow>>;
 
   const renderTableBody = async (props: Partial<BodyProps> = {}) => {
     const container = document.createElement('div');
@@ -46,15 +46,15 @@ describe('GridTableBody', () => {
       useShortNames: false,
       hoverState: { visible: false, selected: false, focused: false, top: 0, height: 0 },
       onWrapperContextMenu: vi.fn(),
-      tableData: [{ id: '1' }, { id: '2' }] as unknown as TestRow[],
-      keyExtractor: ((item: TestRow) => item.id) as unknown,
+      tableData: [{ id: '1' }, { id: '2' }],
+      keyExtractor: (item) => item.id,
       emptyMessage: 'No rows',
       shouldVirtualize: false,
       virtualRows: [],
       virtualRangeStart: 0,
       totalVirtualHeight: 0,
       virtualOffset: 0,
-      renderRowContent: defaultRenderRowContent as RenderRowContentFn<unknown>,
+      renderRowContent: defaultRenderRowContent,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
       contentWidth: 0,

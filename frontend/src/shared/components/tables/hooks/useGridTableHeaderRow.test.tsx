@@ -17,26 +17,28 @@ const handleHeaderContextMenu = vi.fn();
 const handleResizeStart = vi.fn();
 const autoSizeColumn = vi.fn();
 
-const columns: GridColumnDefinition<unknown>[] = [
+type Row = { name: string; age: string; role: string; kind?: string };
+
+const columns: GridColumnDefinition<Row>[] = [
   {
     key: 'name',
     header: 'Name',
     sortable: true,
     className: 'col-name',
-    render: (row: unknown) => row?.name ?? null,
+    render: (row) => row.name,
   },
   {
     key: 'age',
     header: 'Age',
     sortable: false,
     className: 'col-age',
-    render: (row: unknown) => row?.age ?? null,
+    render: (row) => row.age,
   },
   {
     key: 'role',
     header: 'Role',
     className: 'col-role',
-    render: (row: unknown) => row?.role ?? null,
+    render: (row) => row.role,
   },
 ];
 
@@ -140,9 +142,9 @@ describe('useGridTableHeaderRow', () => {
   });
 
   it('renders a passive separator after the Kind column when it is fixed', async () => {
-    const kindColumns: GridColumnDefinition<unknown>[] = [
-      { key: 'kind', header: 'Kind', sortable: true, render: (row: unknown) => row?.kind ?? null },
-      { key: 'name', header: 'Name', sortable: true, render: (row: unknown) => row?.name ?? null },
+    const kindColumns: GridColumnDefinition<Row>[] = [
+      { key: 'kind', header: 'Kind', sortable: true, render: (row) => row.kind ?? null },
+      { key: 'name', header: 'Name', sortable: true, render: (row) => row.name },
     ];
 
     const KindHarness: React.FC = () => {

@@ -11,6 +11,7 @@ import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
 import {
   getGridTablePersistenceSnapshot,
   resetGridTablePersistenceCacheForTesting,
@@ -29,9 +30,13 @@ const columns: GridColumnDefinition<Row>[] = [
 
 const data: Row[] = [{ id: 'a' }];
 const keyExtractor = (row: Row) => row.id;
+type PersistenceState = ReturnType<typeof useGridTablePersistence<Row>>;
+let latestState: PersistenceState | null = null;
+const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
 
 describe('useGridTablePersistence integration', () => {
   beforeEach(() => {
+    latestState = null;
     vi.useFakeTimers();
     resetAppPreferencesCacheForTesting();
     resetGridTablePersistenceCacheForTesting();
@@ -54,7 +59,7 @@ describe('useGridTablePersistence integration', () => {
     });
 
     useEffect(() => {
-      (globalThis as unknown).__LATEST_STATE__ = state;
+      latestState = state;
     }, [state]);
 
     return null;
@@ -74,13 +79,13 @@ describe('useGridTablePersistence integration', () => {
       await act(async () => {
         await Promise.resolve();
       });
-      const state = (globalThis as unknown).__LATEST_STATE__;
+      const state = latestState;
       if (state?.hydrated) {
         return state;
       }
       attempts += 1;
     }
-    return (globalThis as unknown).__LATEST_STATE__;
+    return getLatestState();
   };
 
   const snapshotStorage = (): Record<string, unknown> => getGridTablePersistenceSnapshot();
@@ -105,10 +110,10 @@ describe('useGridTablePersistence integration', () => {
     // First namespace: hide age
     await renderHarness('team-a', root);
     await waitForHydratedState();
-    const initialStateA = (globalThis as unknown).__LATEST_STATE__;
+    const initialStateA = getLatestState();
     expect(initialStateA.storageKey).toBeTruthy();
     await act(async () => {
-      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ status: false });
+      getLatestState().setColumnVisibility({ status: false });
     });
     await flushTimers();
     const afterNamespaceA = snapshotStorage();
@@ -118,7 +123,7 @@ describe('useGridTablePersistence integration', () => {
     await renderHarness('team-b', root);
     await waitForHydratedState();
     await act(async () => {
-      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ owner: false });
+      getLatestState().setColumnVisibility({ owner: false });
     });
     await flushTimers();
     const afterNamespaceB = snapshotStorage();
@@ -128,13 +133,13 @@ describe('useGridTablePersistence integration', () => {
     await renderHarness('team-a', root);
     await waitForHydratedState();
     await flushTimers();
-    const stateA = (globalThis as unknown).__LATEST_STATE__;
+    const stateA = getLatestState();
     expect(stateA.columnVisibility).toEqual({ status: false });
 
     await renderHarness('team-b', root);
     await waitForHydratedState();
     await flushTimers();
-    const stateB = (globalThis as unknown).__LATEST_STATE__;
+    const stateB = getLatestState();
     expect(stateB.columnVisibility).toEqual({ owner: false });
 
     await act(async () => {
@@ -152,11 +157,13 @@ describe('useGridTablePersistence integration', () => {
     await waitForHydratedState();
 
     await act(async () => {
-      (globalThis as unknown).__LATEST_STATE__.setColumnVisibility({ status: false });
-      (globalThis as unknown).__LATEST_STATE__.setFilters({
+      getLatestState().setColumnVisibility({ status: false });
+      getLatestState().setFilters({
         search: 'abc',
         kinds: ['Pod'],
         namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
       });
     });
 
@@ -165,7 +172,7 @@ describe('useGridTablePersistence integration', () => {
       await Promise.resolve();
     });
 
-    const stateAfterReset = (globalThis as unknown).__LATEST_STATE__;
+    const stateAfterReset = getLatestState();
     expect(stateAfterReset.columnVisibility).toEqual({});
     expect(stateAfterReset.filters).toEqual({
       search: '',

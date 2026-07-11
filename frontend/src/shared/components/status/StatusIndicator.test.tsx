@@ -45,7 +45,9 @@ const renderStatusIndicator = async () => {
 
 describe('StatusIndicator', () => {
   beforeEach(() => {
-    vi.mocked(ReactDOM.createPortal).mockImplementation((element: unknown) => element as unknown);
+    vi.mocked(ReactDOM.createPortal).mockImplementation(
+      ((element: React.ReactNode) => element) as unknown as typeof ReactDOM.createPortal
+    );
     vi.useFakeTimers();
   });
 

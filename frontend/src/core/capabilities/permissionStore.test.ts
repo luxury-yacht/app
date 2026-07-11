@@ -5,6 +5,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DataReadRequest } from '@/core/data-access';
+import type { QueryPayloadItem, QueryPermissionsResponse } from './permissionRead';
+
+type PermissionReadRequest = DataReadRequest<QueryPermissionsResponse>;
 
 const hoisted = vi.hoisted(() => ({
   readQueryPermissions: vi.fn(),
@@ -42,11 +46,11 @@ afterEach(() => {
 });
 
 const mockSuccessfulQueryPermissions = (): void => {
-  hoisted.requestData.mockImplementation(async (options: unknown) => ({
+  hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
     status: 'executed',
     data: await options.read(),
   }));
-  hoisted.readQueryPermissions.mockImplementation(async (queries: unknown[]) => {
+  hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => {
     const diagnosticKeys = Array.from(
       new Set(queries.map((query) => `${query.clusterId}|${query.namespace}`))
     );
@@ -269,12 +273,12 @@ describe('queryNamespacesPermissions', () => {
 
 describe('queryNamespacesPermissions transient errors', () => {
   const mockTransientThenSuccess = (): void => {
-    hoisted.requestData.mockImplementation(async (options: unknown) => ({
+    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
       status: 'executed',
       data: await options.read(),
     }));
     hoisted.readQueryPermissions
-      .mockImplementationOnce(async (queries: unknown[]) => ({
+      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
         results: queries.map((query) => ({
           ...query,
           allowed: false,
@@ -284,7 +288,7 @@ describe('queryNamespacesPermissions transient errors', () => {
         })),
         diagnostics: [],
       }))
-      .mockImplementation(async (queries: unknown[]) => ({
+      .mockImplementation(async (queries: QueryPayloadItem[]) => ({
         results: queries.map((query) => ({
           ...query,
           allowed: true,
@@ -325,7 +329,7 @@ describe('queryNamespacesPermissions transient errors', () => {
   });
 
   it('re-issues recorded namespace queries when their cluster becomes ready', async () => {
-    hoisted.requestData.mockImplementation(async (options: unknown) => ({
+    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
       status: 'executed',
       data: await options.read(),
     }));
@@ -333,7 +337,7 @@ describe('queryNamespacesPermissions transient errors', () => {
     // FIRST namespace batch hits a still-connecting cluster (transient),
     // later namespace batches succeed.
     let namespaceBatchCalls = 0;
-    hoisted.readQueryPermissions.mockImplementation(async (queries: unknown[]) => {
+    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => {
       const isNamespaceBatch = queries.some((query) => query.namespace === 'team-a');
       const transient = isNamespaceBatch && namespaceBatchCalls++ === 0;
       return {
@@ -378,11 +382,11 @@ describe('queryNamespacesPermissions transient errors', () => {
 
 describe('queryClusterPermissions', () => {
   it('does not cache cluster-not-active responses as permission errors', async () => {
-    hoisted.requestData.mockImplementation(async (options: unknown) => ({
+    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
       status: 'executed',
       data: await options.read(),
     }));
-    hoisted.readQueryPermissions.mockImplementation(async (queries: unknown[]) => ({
+    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
       results: queries.map((query) => ({
         ...query,
         allowed: false,
@@ -406,12 +410,12 @@ describe('queryClusterPermissions', () => {
   });
 
   it('retries cluster permissions when the selected cluster becomes ready', async () => {
-    hoisted.requestData.mockImplementation(async (options: unknown) => ({
+    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
       status: 'executed',
       data: await options.read(),
     }));
     hoisted.readQueryPermissions
-      .mockImplementationOnce(async (queries: unknown[]) => ({
+      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
         results: queries.map((query) => ({
           ...query,
           allowed: false,
@@ -421,7 +425,7 @@ describe('queryClusterPermissions', () => {
         })),
         diagnostics: [],
       }))
-      .mockImplementationOnce(async (queries: unknown[]) => ({
+      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
         results: queries.map((query) => ({
           ...query,
           allowed: true,

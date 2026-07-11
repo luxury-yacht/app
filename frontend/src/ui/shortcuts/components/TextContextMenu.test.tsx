@@ -21,7 +21,7 @@ let capturedMenuProps: {
 } | null = null;
 
 vi.mock('@shared/components/ContextMenu', () => ({
-  default: (props: unknown) => {
+  default: (props: NonNullable<typeof capturedMenuProps>) => {
     capturedMenuProps = props;
     return null;
   },

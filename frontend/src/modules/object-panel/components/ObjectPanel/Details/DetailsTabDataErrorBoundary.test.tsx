@@ -5,7 +5,7 @@
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 
@@ -20,7 +20,7 @@ const ThrowingChild = ({ shouldThrow }: { shouldThrow: boolean }) => {
 describe('DetailsTabDataErrorBoundary', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let consoleErrorSpy: unknown;
+  let consoleErrorSpy: MockInstance;
 
   const renderBoundary = async (child: React.ReactNode, fallback?: React.ReactNode) => {
     await act(async () => {

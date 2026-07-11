@@ -52,7 +52,10 @@ describe('ErrorNotificationSystem copy button', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     writeText = vi.fn().mockResolvedValue(undefined);
-    (navigator as unknown).clipboard = { writeText };
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
   });
 
   afterEach(() => {
@@ -88,7 +91,17 @@ describe('ErrorNotificationSystem copy button', () => {
   it('routes clipboard failures through the global error handler', async () => {
     const clipboardError = new Error('clipboard blocked');
     writeText.mockRejectedValueOnce(clipboardError);
-    const handleSpy = vi.spyOn(errorHandler, 'handle').mockReturnValue({} as unknown);
+    const handleSpy = vi.spyOn(errorHandler, 'handle').mockReturnValue({
+      message: 'clipboard blocked',
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      timestamp: new Date(),
+      retryable: false,
+      userMessage: 'clipboard blocked',
+      technicalMessage: 'clipboard blocked',
+      suggestions: [],
+      context: {},
+    });
     errorsRef.current = [makeError()];
 
     await act(async () => {

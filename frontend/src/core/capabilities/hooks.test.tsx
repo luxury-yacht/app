@@ -11,6 +11,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { eventBus } from '@/core/events';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 import { type UseCapabilitiesOptions, useCapabilities, useCapabilityDiagnostics } from './hooks';
 import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
 import type { CapabilityDescriptor } from './types';
@@ -385,14 +386,13 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as unknown).window = globalThis.window ?? {};
-    (window as unknown).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -422,7 +422,7 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
-    delete (window as unknown).go;
+    restoreGo();
   });
 
   it('waits for cluster readiness before querying named-resource descriptors', async () => {
@@ -447,14 +447,13 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as unknown).window = globalThis.window ?? {};
-    (window as unknown).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -501,7 +500,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as unknown).go;
+    restoreGo();
   });
 
   it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
@@ -543,14 +542,13 @@ describe('useCapabilities', () => {
         ],
       });
 
-    (globalThis as unknown).window = globalThis.window ?? {};
-    (window as unknown).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -593,7 +591,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as unknown).go;
+    restoreGo();
   });
 });
 

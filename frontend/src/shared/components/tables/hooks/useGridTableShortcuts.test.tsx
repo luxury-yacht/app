@@ -12,14 +12,21 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
+type UseShortcutsContract = typeof import('@ui/shortcuts').useShortcuts;
+type CapturedShortcut = Parameters<UseShortcutsContract>[0][number];
+type CapturedShortcutOptions = NonNullable<Parameters<UseShortcutsContract>[1]>;
+
 // Capture useShortcuts args so we can verify the registered shortcut keys and options.
-const capturedShortcuts: { shortcuts: unknown[]; options: unknown } = {
+const capturedShortcuts: {
+  shortcuts: CapturedShortcut[];
+  options: CapturedShortcutOptions | undefined;
+} = {
   shortcuts: [],
   options: undefined,
 };
 
 vi.mock('@ui/shortcuts', () => ({
-  useShortcuts: (shortcuts: unknown[], options: unknown) => {
+  useShortcuts: (shortcuts: CapturedShortcut[], options: CapturedShortcutOptions) => {
     capturedShortcuts.shortcuts = shortcuts;
     capturedShortcuts.options = options;
   },

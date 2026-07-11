@@ -6,6 +6,8 @@
  */
 
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -25,10 +27,15 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
 
+type CapturedGridTableProps = GridTableProps<RBACData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<RBACData>['getCustomContextMenuItems']>;
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+
 const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, runObjectActionMock } =
   vi.hoisted(() => ({
-    gridTablePropsRef: { current: null as unknown },
-    confirmationPropsRef: { current: null as unknown },
+    gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+    confirmationPropsRef: { current: null as unknown as ConfirmationProps },
     openWithObjectMock: vi.fn(),
     runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   }));
@@ -62,12 +69,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -90,7 +97,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: unknown) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -101,7 +108,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
+  useTableSort: (data: RBACData[]) => ({
     sortedData: data,
     sortConfig: { key: 'name', direction: 'asc' },
     handleSort: vi.fn(),
@@ -128,7 +135,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: unknown) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -156,8 +163,8 @@ describe('NsViewRBAC', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     runObjectActionMock.mockResolvedValue(undefined);
@@ -195,7 +202,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const openItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -217,7 +224,7 @@ describe('NsViewRBAC', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -247,7 +254,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

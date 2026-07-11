@@ -6,11 +6,15 @@
  */
 
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -26,6 +30,11 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewStorage, { type StorageData } from '@modules/namespace/components/NsViewStorage';
 
+type CapturedGridTableProps = GridTableProps<StorageData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<StorageData>['getCustomContextMenuItems']>;
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+
 const {
   gridTablePropsRef,
   confirmationPropsRef,
@@ -33,14 +42,14 @@ const {
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as unknown },
-  confirmationPropsRef: { current: null as unknown },
+  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
-const renderOutputToText = (output: unknown): string => {
+const renderOutputToText = (output: React.ReactNode): string => {
   if (typeof output === 'string') {
     return output;
   }
@@ -82,12 +91,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -110,7 +119,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: unknown) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -121,7 +130,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
+  useTableSort: (data: StorageData[]) => ({
     sortedData: data,
     sortConfig: { key: 'name', direction: 'asc' },
     handleSort: vi.fn(),
@@ -148,7 +157,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: unknown) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -179,8 +188,8 @@ describe('NsViewStorage', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     runObjectActionMock.mockResolvedValue(undefined);
@@ -220,7 +229,10 @@ describe('NsViewStorage', () => {
 
   const getColumn = (key: string) => {
     const props = gridTablePropsRef.current;
-    return props?.columns?.find((column: unknown) => column.key === key);
+    return requireValue(
+      props.columns.find((column) => column.key === key),
+      `expected the storage ${key} column`
+    );
   };
 
   it('invokes object panel for resource actions', async () => {
@@ -228,7 +240,7 @@ describe('NsViewStorage', () => {
     const props = await renderStorageView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -245,7 +257,7 @@ describe('NsViewStorage', () => {
       })
     );
 
-    const objectMapItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -277,7 +289,9 @@ describe('NsViewStorage', () => {
     const entry = baseStorage();
     const props = await renderStorageView();
 
-    expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/PersistentVolumeClaim/team-a/pvc-data');
+    expect(props.keyExtractor(entry, 0)).toBe(
+      'alpha:ctx|/v1/PersistentVolumeClaim/team-a/pvc-data'
+    );
   });
 
   it('exposes delete action and calls backend on confirmation', async () => {
@@ -286,7 +300,7 @@ describe('NsViewStorage', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -314,10 +328,15 @@ describe('NsViewStorage', () => {
     const entry = baseStorage();
     const props = await renderStorageView();
 
-    const storageColumn = props.columns.find((column: unknown) => column.key === 'storageClass');
-    expect(storageColumn).toBeTruthy();
+    const storageColumn = requireValue(
+      props.columns.find((column) => column.key === 'storageClass'),
+      'expected the storage-class column'
+    );
 
-    const renderedCell = storageColumn.render(entry);
+    const renderedCell = requireReactElement<{
+      className?: string;
+      onClick: (event: { stopPropagation: () => void }) => void;
+    }>(storageColumn.render(entry), 'expected the storage-class cell element');
     expect(renderedCell.props.className).toContain('storage-class-link');
 
     act(() => {
@@ -338,10 +357,17 @@ describe('NsViewStorage', () => {
     const entry = entryWithoutCluster as unknown as StorageData;
     const props = await renderStorageView();
 
-    expect(props.keyExtractor(entry)).toBe('cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data');
+    expect(props.keyExtractor(entry, 0)).toBe(
+      'cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data'
+    );
 
-    const storageColumn = props.columns.find((column: unknown) => column.key === 'storageClass');
-    const renderedCell = storageColumn.render(entry);
+    const storageColumn = requireValue(
+      props.columns.find((column) => column.key === 'storageClass'),
+      'expected the storage-class column'
+    );
+    const renderedCell = requireReactElement<{
+      onClick: (event: { stopPropagation: () => void }) => void;
+    }>(storageColumn.render(entry), 'expected the storage-class cell element');
 
     act(() => {
       renderedCell.props.onClick({ stopPropagation: () => {} });
@@ -376,13 +402,22 @@ describe('NsViewStorage', () => {
     const capacityColumn = getColumn('capacity');
     expect(capacityColumn).toBeTruthy();
 
-    const pendingStatus = statusColumn.render(pending);
-    const failedStatus = statusColumn.render(failed);
+    const pendingStatus = requireReactElement<{ className?: string }>(
+      statusColumn.render(pending),
+      'expected the pending storage status element'
+    );
+    const failedStatus = requireReactElement<{ className?: string }>(
+      statusColumn.render(failed),
+      'expected the failed storage status element'
+    );
     expect(renderOutputToText(pendingStatus)).toContain('Pending');
     expect(pendingStatus.props.className).toContain('warning');
     expect(failedStatus.props.className).toContain('error');
 
-    const capacityFilled = capacityColumn.render(baseStorage());
+    const capacityFilled = requireReactElement<{ className?: string }>(
+      capacityColumn.render(baseStorage()),
+      'expected the storage capacity element'
+    );
     expect(capacityFilled.props.className).toContain('capacity');
 
     const noCapacity = capacityColumn.render(pending);
@@ -393,7 +428,10 @@ describe('NsViewStorage', () => {
     const entry = baseStorage({ storageClass: undefined });
     await renderStorageView();
     const storageColumn = getColumn('storageClass');
-    const renderedCell = storageColumn.render(entry);
+    const renderedCell = requireReactElement<{
+      className?: string;
+      onClick?: (event: { stopPropagation: () => void }) => void;
+    }>(storageColumn.render(entry), 'expected the default storage-class cell element');
 
     expect(renderOutputToText(renderedCell)).toContain('default');
     expect(renderedCell.props.className).toContain('default-class');
@@ -412,7 +450,7 @@ describe('NsViewStorage', () => {
     const props = await renderStorageView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
 
     act(() => {
       deleteItem?.onClick?.();

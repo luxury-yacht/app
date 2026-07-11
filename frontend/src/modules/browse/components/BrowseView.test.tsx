@@ -5,14 +5,37 @@
  * Covers cluster scope, namespace scope, and all-namespaces scope scenarios.
  */
 
+import type { BrowseTableRow } from '@modules/browse/hooks/useBrowseColumns';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type { NamespaceGridTablePersistenceParams } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import BrowseView from '@/modules/browse/components/BrowseView';
+import { requireValue } from '@/test-utils/requireValue';
+
+type BaseGridTableProps = GridTableProps<BrowseTableRow>;
+type CapturedGridTableProps = BaseGridTableProps & {
+  getCustomContextMenuItems: NonNullable<BaseGridTableProps['getCustomContextMenuItems']>;
+  filters: NonNullable<BaseGridTableProps['filters']> & {
+    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
+  };
+  paginationControls?: React.ReactElement<{
+    pagination: {
+      pageIndex: number;
+      pageLimit: number;
+      totalCount: number;
+      totalIsExact: boolean;
+      hasPrevious: boolean;
+      hasMore: boolean;
+    };
+  }>;
+};
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -37,8 +60,13 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: unknown } = { current: null };
-const persistenceArgsRef: { cluster: unknown | null; namespace: unknown | null } = {
+const gridTablePropsRef: { current: CapturedGridTableProps } = {
+  current: null as unknown as CapturedGridTableProps,
+};
+const persistenceArgsRef: {
+  cluster: UseGridTablePersistenceParams<BrowseTableRow> | null;
+  namespace: NamespaceGridTablePersistenceParams<BrowseTableRow> | null;
+} = {
   cluster: null,
   namespace: null,
 };
@@ -54,7 +82,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -147,7 +175,12 @@ const refreshMocks = vi.hoisted(() => ({
 }));
 
 const persistenceMocks = vi.hoisted(() => ({
-  clusterSortConfig: { current: { key: 'kind', direction: 'asc' } as unknown },
+  clusterSortConfig: {
+    current: { key: 'kind', direction: 'asc' } as {
+      key: string;
+      direction: 'asc' | 'desc' | null;
+    } | null,
+  },
   clusterSetSortConfig: vi.fn(),
   namespaceOnSortChange: vi.fn(),
 }));
@@ -159,7 +192,7 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: unknown) => {
+  useGridTablePersistence: (params: UseGridTablePersistenceParams<BrowseTableRow>) => {
     persistenceArgsRef.cluster = params;
     return {
       sortConfig: persistenceMocks.clusterSortConfig.current,
@@ -180,7 +213,9 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: (params: unknown) => {
+  useNamespaceGridTablePersistence: (
+    params: NamespaceGridTablePersistenceParams<BrowseTableRow>
+  ) => {
     persistenceArgsRef.namespace = params;
     const persistence = {
       sortConfig: { key: 'kind', direction: 'asc' },
@@ -223,8 +258,8 @@ const catalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
 
 const sortableKeys = (): string[] =>
   (gridTablePropsRef.current?.columns ?? [])
-    .filter((column: unknown) => column.sortable !== false)
-    .map((column: unknown) => column.key)
+    .filter((column) => column.sortable !== false)
+    .map((column) => column.key)
     .sort((left: string, right: string) => left.localeCompare(right));
 
 const catalogPayload = (
@@ -267,7 +302,7 @@ describe('BrowseView', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
     refreshMocks.orchestrator.acquireScopedDomainLease.mockReset();
@@ -364,7 +399,7 @@ describe('BrowseView', () => {
 
       // Cluster scope only shows cluster-scoped objects, so namespace column is hidden
       const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((col: unknown) => col.key === 'namespace');
+      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
       expect(hasNamespaceColumn).toBe(false);
     });
 
@@ -399,8 +434,9 @@ describe('BrowseView', () => {
       });
 
       const row = gridTablePropsRef.current.data[0];
-      const ageColumn = gridTablePropsRef.current.columns.find(
-        (column: unknown) => column.key === 'age'
+      const ageColumn = requireValue(
+        gridTablePropsRef.current.columns.find((column) => column.key === 'age'),
+        'expected the browse age column'
       );
       const ageContainer = document.createElement('div');
       document.body.appendChild(ageContainer);
@@ -524,7 +560,7 @@ describe('BrowseView', () => {
 
       // Check that columns do not include namespace column
       const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((col: unknown) => col.key === 'namespace');
+      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
       expect(hasNamespaceColumn).toBe(false);
     });
 
@@ -622,7 +658,7 @@ describe('BrowseView', () => {
 
       // Check that columns include namespace column
       const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((col: unknown) => col.key === 'namespace');
+      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
       expect(hasNamespaceColumn).toBe(true);
     });
 
@@ -719,7 +755,7 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current.data).toHaveLength(1);
       expect(
         (gridTablePropsRef.current.filters.options.postActions ?? []).some(
-          (item: unknown) => item.title === 'Load more'
+          (item) => 'title' in item && item.title === 'Load more'
         )
       ).toBe(false);
       expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
@@ -835,25 +871,23 @@ describe('BrowseView', () => {
       });
 
       const rows = gridTablePropsRef.current?.data ?? [];
-      const byKind = new Map(rows.map((row: unknown) => [row.item.kind, row]));
+      const byKind = new Map(rows.map((row) => [row.item.kind, row]));
 
       const deploymentMenu = gridTablePropsRef.current.getCustomContextMenuItems(
-        byKind.get('Deployment')
+        requireValue(byKind.get('Deployment'), 'expected the Deployment browse row'),
+        'name'
       );
-      expect(
-        deploymentMenu.some((item: unknown) => item.actionId === OBJECT_ACTION_IDS.scaleToZero)
-      ).toBe(true);
-      expect(
-        deploymentMenu.some((item: unknown) => item.actionId === OBJECT_ACTION_IDS.scale)
-      ).toBe(false);
-
-      const cronMenu = gridTablePropsRef.current.getCustomContextMenuItems(byKind.get('CronJob'));
-      expect(cronMenu.some((item: unknown) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(
+      expect(deploymentMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.scaleToZero)).toBe(
         true
       );
-      const trigger = cronMenu.find(
-        (item: unknown) => item.actionId === OBJECT_ACTION_IDS.triggerNow
+      expect(deploymentMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.scale)).toBe(false);
+
+      const cronMenu = gridTablePropsRef.current.getCustomContextMenuItems(
+        requireValue(byKind.get('CronJob'), 'expected the CronJob browse row'),
+        'name'
       );
+      expect(cronMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(true);
+      const trigger = cronMenu.find((item) => item.actionId === OBJECT_ACTION_IDS.triggerNow);
       expect(trigger?.disabled).toBe(true);
     });
   });
@@ -880,7 +914,9 @@ describe('BrowseView', () => {
       // bar from this fetcher), not a server-side per-action catalog export.
       expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
       const postActions = gridTablePropsRef.current?.filters?.options?.postActions ?? [];
-      expect(postActions.some((item: unknown) => item.id === 'copy-browse-query-csv')).toBe(false);
+      expect(postActions.some((item) => 'id' in item && item.id === 'copy-browse-query-csv')).toBe(
+        false
+      );
     });
   });
 });

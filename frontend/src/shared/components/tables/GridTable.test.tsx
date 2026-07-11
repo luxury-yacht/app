@@ -14,6 +14,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
   type GridTableFilterConfig,
+  type GridTableProps,
 } from '@shared/components/tables/GridTable';
 import { KeyboardProvider } from '@ui/shortcuts';
 // GridTable Tests
@@ -182,7 +183,7 @@ describe('GridTable virtualization', () => {
     if (originalClientHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeightDescriptor);
     } else {
-      delete (HTMLElement.prototype as unknown).clientHeight;
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
     }
 
     // Restore scrollTo
@@ -508,7 +509,7 @@ describe('GridTable virtualization', () => {
     if (originalDescriptor) {
       Object.defineProperty(window, 'visualViewport', originalDescriptor);
     } else {
-      delete (window as unknown).visualViewport;
+      Reflect.deleteProperty(window, 'visualViewport');
     }
   });
 
@@ -905,8 +906,8 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(initialRows.length).toBeGreaterThan(1);
 
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    if (wrapper && !(wrapper as unknown).scrollTo) {
-      (wrapper as unknown).scrollTo = vi.fn();
+    if (wrapper && typeof wrapper.scrollTo !== 'function') {
+      wrapper.scrollTo = vi.fn();
     }
 
     await applyFilters({
@@ -1220,7 +1221,7 @@ function renderGridTable(options: RenderOptions = {}) {
     root.render(
       <ZoomProvider>
         <KeyboardProvider>
-          <GridTable<SimpleRow> {...(currentProps as unknown)} />
+          <GridTable<SimpleRow> {...(currentProps as GridTableProps<SimpleRow>)} />
         </KeyboardProvider>
       </ZoomProvider>
     );
@@ -1241,7 +1242,7 @@ function renderGridTable(options: RenderOptions = {}) {
       root.render(
         <ZoomProvider>
           <KeyboardProvider>
-            <GridTable<SimpleRow> {...(currentProps as unknown)} />
+            <GridTable<SimpleRow> {...(currentProps as GridTableProps<SimpleRow>)} />
           </KeyboardProvider>
         </ZoomProvider>
       );

@@ -4,7 +4,7 @@
  * Tests serialized G6 data and selection application behavior.
  */
 
-import type { GraphData } from '@antv/g6';
+import type { Graph, GraphData } from '@antv/g6';
 import { describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import { applyGraphData, createObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
@@ -49,7 +49,7 @@ const graph = () =>
     draw: vi.fn(() => Promise.resolve()),
     getViewportByCanvas: vi.fn(([x, y]: [number, number]) => [x * 2 + 10, y * 2 + 5]),
     translateBy: vi.fn(() => Promise.resolve()),
-  }) as unknown;
+  }) as unknown as Graph;
 
 const flushPromises = async () => {
   await Promise.resolve();
@@ -180,7 +180,8 @@ describe('createObjectMapG6ApplyQueue', () => {
   });
 
   it('ignores scheduling when the graph has been destroyed', () => {
-    const g = { ...graph(), destroyed: true };
+    const g = graph();
+    Object.defineProperty(g, 'destroyed', { configurable: true, value: true });
     const applyGraphDataFn = vi.fn();
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,

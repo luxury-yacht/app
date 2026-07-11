@@ -177,7 +177,7 @@ describe('useContainerLogsStreamFallback', () => {
 
   it('stops streaming and disables domain when inactive', () => {
     const { Harness } = createHarness();
-    const dispatch = vi.fn();
+    const dispatch = vi.fn<(action: { type: string; payload?: unknown }) => void>();
     const props = defaultProps({ isActive: false, dispatch });
 
     act(() => {
@@ -244,7 +244,7 @@ describe('useContainerLogsStreamFallback', () => {
     });
 
     const fallbackCalls = dispatch.mock.calls.filter(
-      (c: unknown[]) => c[0]?.type === 'SET_FALLBACK_ACTIVE' && c[0]?.payload === true
+      (call) => call[0]?.type === 'SET_FALLBACK_ACTIVE' && call[0]?.payload === true
     );
     expect(fallbackCalls.length).toBe(0);
   });
@@ -378,7 +378,17 @@ describe('useContainerLogsStreamFallback', () => {
     const latestCall =
       mockSetScopedDomainState.mock.calls[mockSetScopedDomainState.mock.calls.length - 1];
     const updater = latestCall?.[2] as
-      | ((previous: Record<string, unknown>) => Record<string, unknown>)
+      | ((previous: {
+          status: string;
+          error: string | null;
+          stats?: { warnings?: string[] };
+          scope: string;
+        }) => {
+          status: string;
+          error: string | null;
+          stats?: { warnings?: string[] };
+          scope: string;
+        })
       | undefined;
     expect(typeof updater).toBe('function');
 

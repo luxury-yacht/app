@@ -10,6 +10,7 @@ import type React from 'react';
 import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { ColumnWidthState } from '@shared/components/tables/GridTable.types';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -17,7 +18,7 @@ afterEach(() => {
 
 describe('useGridTableExternalWidths', () => {
   const renderHarness = async (
-    widths: Record<string, { width: number }> | null,
+    widths: Record<string, ColumnWidthState> | null,
     callback: (value: Record<string, number> | null) => void
   ) => {
     const container = document.createElement('div');
@@ -25,7 +26,7 @@ describe('useGridTableExternalWidths', () => {
     const root = ReactDOM.createRoot(container);
 
     const Harness: React.FC = () => {
-      const value = useGridTableExternalWidths(widths as unknown);
+      const value = useGridTableExternalWidths(widths);
       useEffect(() => {
         callback(value);
       }, [value]);
@@ -48,7 +49,10 @@ describe('useGridTableExternalWidths', () => {
   it('filters valid numeric widths', async () => {
     let captured: Record<string, number> | null = null;
     await renderHarness(
-      { name: { width: 120 }, kind: { width: Number.NaN } } as unknown,
+      {
+        name: { width: 120, unit: 'px', autoWidth: false, source: 'user', updatedAt: 0 },
+        kind: { width: Number.NaN, unit: 'px', autoWidth: false, source: 'user', updatedAt: 0 },
+      },
       (value) => {
         captured = value;
       }

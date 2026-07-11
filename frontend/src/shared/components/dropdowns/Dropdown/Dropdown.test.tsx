@@ -629,7 +629,7 @@ describe('Dropdown', () => {
     if (offsetHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDescriptor);
     } else {
-      delete (HTMLElement.prototype as unknown).offsetHeight;
+      Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
     }
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,

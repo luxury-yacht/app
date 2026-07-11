@@ -48,7 +48,9 @@ export interface TabDescriptor {
    * attribute. Used primarily by drag sources (draggable, onDragStart,
    * onDragEnd).
    */
-  extraProps?: HTMLAttributes<HTMLElement>;
+  extraProps?:
+    | HTMLAttributes<HTMLElement>
+    | (HTMLAttributes<HTMLElement> & Partial<Record<`data-${string}`, string | number | boolean>>);
 }
 
 // Keys owned by the base Tabs component. Wrappers must not override these via

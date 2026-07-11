@@ -15,6 +15,7 @@ import { GlobalShortcuts } from './GlobalShortcuts';
 // Capture event handlers registered via EventsOn so tests can invoke them.
 const wailsEventHandlers: Record<string, (...args: unknown[]) => void> = {};
 const QuitMock = vi.fn();
+type ShortcutOptions = Parameters<typeof import('../hooks').useShortcut>[0];
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOnMultiple: () => undefined,
@@ -30,7 +31,7 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
 const registeredShortcuts: Array<{
   key: string;
-  modifiers?: Record<string, boolean>;
+  modifiers?: ShortcutOptions['modifiers'];
   handler: (event?: KeyboardEvent) => void;
   enabled?: boolean;
 }> = [];
@@ -45,7 +46,7 @@ const kubeconfigState = {
 };
 
 vi.mock('../hooks', () => ({
-  useShortcut: (options: unknown) => {
+  useShortcut: (options: Parameters<typeof import('../hooks').useShortcut>[0]) => {
     registeredShortcuts.push({
       key: options.key,
       handler: options.handler,
@@ -122,7 +123,7 @@ describe('GlobalShortcuts', () => {
     });
   };
 
-  const findShortcut = (key: string, modifiers?: Record<string, boolean>) => {
+  const findShortcut = (key: string, modifiers?: ShortcutOptions['modifiers']) => {
     for (let i = registeredShortcuts.length - 1; i >= 0; i -= 1) {
       if (
         registeredShortcuts[i].key === key &&

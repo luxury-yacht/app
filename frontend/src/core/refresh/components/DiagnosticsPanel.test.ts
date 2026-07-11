@@ -22,6 +22,7 @@ import { makeTelemetrySummary } from '../refreshContractTestBuilders';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import type { TelemetrySummary } from '../types';
+import type { DiagnosticsPanelProps } from './diagnostics/diagnosticsPanelTypes';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -248,7 +249,7 @@ const flushAsync = async () => {
 const selectDiagnosticsTab = async (container: HTMLElement, index: number) => {
   const tabButtons = container.querySelectorAll<HTMLElement>('[role="tab"]');
   await act(async () => {
-    tabButtons[index].click();
+    requireValue(tabButtons[index], `expected diagnostics tab at index ${index}`).click();
     await Promise.resolve();
   });
   await flushAsync();
@@ -258,7 +259,7 @@ const selectRefreshDomainsTab = async (container: HTMLElement) =>
   selectDiagnosticsTab(container, 1);
 
 const renderDiagnosticsPanel = async (
-  DiagnosticsPanelComponent: React.ComponentType<unknown>,
+  DiagnosticsPanelComponent: React.ComponentType<DiagnosticsPanelProps>,
   props: Partial<{ isOpen: boolean; onClose: () => void }> = {},
   options: { keyboardDisabled?: boolean } = {}
 ) => {
@@ -1195,8 +1196,10 @@ describe('DiagnosticsPanel component', () => {
       firstBatchLatencyMs: 900,
     });
     catalogState.stats = {
+      itemCount: 0,
+      buildDurationMs: 0,
       timeToFirstRowMs: 450,
-    } as unknown;
+    };
     setDomainState('catalog', catalogState);
 
     scopedEntriesMap['container-logs'] = [

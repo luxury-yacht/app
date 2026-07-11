@@ -6,11 +6,15 @@
  */
 
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -26,6 +30,11 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewNetwork, { type NetworkData } from '@modules/namespace/components/NsViewNetwork';
 
+type CapturedGridTableProps = GridTableProps<NetworkData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<NetworkData>['getCustomContextMenuItems']>;
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+
 const {
   gridTablePropsRef,
   confirmationPropsRef,
@@ -35,8 +44,8 @@ const {
   errorHandlerMock,
   requestRefreshDomainStateMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as unknown },
-  confirmationPropsRef: { current: null as unknown },
+  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
@@ -44,7 +53,7 @@ const {
   requestRefreshDomainStateMock: vi.fn(),
 }));
 
-const renderOutputToText = (output: unknown): string => {
+const renderOutputToText = (output: React.ReactNode): string => {
   if (typeof output === 'string') {
     return output;
   }
@@ -86,12 +95,12 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {withStableListKeys(props.data, (row: unknown) => JSON.stringify(row)).map(
+            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
                   <td>{row.name}</td>
@@ -114,7 +123,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: unknown) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -125,7 +134,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
+  useTableSort: (data: NetworkData[]) => ({
     sortedData: data,
     sortConfig: { key: 'name', direction: 'asc' },
     handleSort: vi.fn(),
@@ -181,7 +190,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: unknown) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -198,13 +207,13 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
-  const state = { columnWidths: {} as Record<string, unknown> };
+  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
   return {
     useNamespaceGridTablePersistence: () => ({
       sortConfig: { key: 'name', direction: 'asc' },
       onSortChange: vi.fn(),
       columnWidths: state.columnWidths,
-      setColumnWidths: (next: unknown) => {
+      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
         state.columnWidths = next;
         if (gridTablePropsRef.current) {
           gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
@@ -232,8 +241,8 @@ describe('NsViewNetwork', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     runObjectActionMock.mockResolvedValue(undefined);
@@ -285,7 +294,10 @@ describe('NsViewNetwork', () => {
   };
 
   const getColumn = (key: string) =>
-    gridTablePropsRef.current.columns.find((column: unknown) => column.key === key);
+    requireValue(
+      gridTablePropsRef.current.columns.find((column) => column.key === key),
+      `expected the network ${key} column`
+    );
 
   it('opens object panel through context menu', async () => {
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
@@ -313,7 +325,7 @@ describe('NsViewNetwork', () => {
 
     expect(gridTablePropsRef.current.data).toHaveLength(1);
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -342,7 +354,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -368,7 +380,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
+    const deleteItem = menu.find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -399,7 +411,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
+    const deleteItem = menu.find((item) => item.label === 'Delete');
     expect(deleteItem).toBeUndefined();
   });
 
@@ -408,7 +420,7 @@ describe('NsViewNetwork', () => {
     // Simulate denied capability by not registering key
     const props = await renderNetworkView();
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item: unknown) => item.label === 'Delete');
+    const deleteItem = menu.find((item) => item.label === 'Delete');
     expect(deleteItem).toBeUndefined();
   });
 
@@ -417,7 +429,10 @@ describe('NsViewNetwork', () => {
     const entry = baseNetwork({ details: 'Hosts: example.com' });
     await renderNetworkView();
     const detailsColumn = getColumn('details');
-    const rendered = detailsColumn.render(entry);
+    const rendered = requireReactElement<{ className?: string }>(
+      detailsColumn.render(entry),
+      'expected the network details cell element'
+    );
     expect(renderOutputToText(rendered)).toContain('Hosts: example.com');
     expect(rendered.props.className).toContain('network-details');
   });
@@ -429,7 +444,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: unknown) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
 
     act(() => {
       deleteItem?.onClick?.();

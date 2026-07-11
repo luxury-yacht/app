@@ -12,6 +12,15 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import { requireValue } from '@/test-utils/requireValue';
+import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
+
+interface ConfirmationModalMockProps {
+  isOpen: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before importing the component under test.
@@ -104,8 +113,8 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 // Mock Dropdown to render a simple <select> so we can drive view changes.
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({ options, value, onChange, placeholder, disabled }: unknown) => {
-    const opts = (options ?? []).filter((o: unknown) => !o.group);
+  Dropdown: ({ options, value, onChange, placeholder, disabled }: DropdownProps) => {
+    const opts = options.filter((option) => !option.group);
     return (
       <select
         data-testid={`dropdown-${placeholder ?? 'select'}`}
@@ -113,9 +122,9 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
-        {opts.map((o: unknown) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
+        {opts.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -130,11 +139,9 @@ vi.mock('@shared/components/Tooltip', () => ({
 }));
 
 // Mock ConfirmationModal to a simple div that captures props.
-const confirmModalProps = { current: null as unknown };
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
-  default: (props: unknown) => {
-    confirmModalProps.current = props;
+  default: (props: ConfirmationModalMockProps) => {
     if (!props.isOpen) return null;
     return (
       <div data-testid="confirmation-modal">
@@ -151,7 +158,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 // Mock createPortal so modal content renders into the test container.
 vi.mock('react-dom', async (importOriginal) => {
-  const actual = (await importOriginal()) as unknown;
+  const actual = await importOriginal<typeof import('react-dom')>();
   return {
     ...actual,
     createPortal: (children: React.ReactNode) => children,
@@ -226,7 +233,6 @@ describe('FavSaveModal', () => {
   };
 
   beforeEach(() => {
-    confirmModalProps.current = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

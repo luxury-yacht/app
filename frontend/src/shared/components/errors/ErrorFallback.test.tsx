@@ -11,6 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorFallback } from './ErrorFallback';
 
+const setDevMode = (value: boolean) => {
+  Object.defineProperty(import.meta.env, 'DEV', { configurable: true, value });
+};
+
 describe('ErrorFallback', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -27,7 +31,7 @@ describe('ErrorFallback', () => {
       root.unmount();
     });
     container.remove();
-    (import.meta.env as unknown).DEV = originalEnv;
+    setDevMode(originalEnv);
   });
 
   it('renders scope-aware messaging and invokes reset callback', async () => {
@@ -57,13 +61,13 @@ describe('ErrorFallback', () => {
     const reloadMock = vi.fn();
     const locationGetter = vi.spyOn(window, 'location', 'get');
     locationGetter.mockReturnValue({ reload: reloadMock } as unknown as Location);
-    (import.meta.env as unknown).DEV = true;
+    setDevMode(true);
 
     await act(async () => {
       root.render(
         <ErrorFallback
           error={new Error('stack')}
-          errorInfo={{ componentStack: 'Component stack trace' } as unknown}
+          errorInfo={{ componentStack: 'Component stack trace' }}
           resetError={vi.fn()}
           scope={undefined}
         />

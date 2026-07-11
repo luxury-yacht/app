@@ -5,6 +5,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type React from 'react';
 import { secretDescriptor } from './descriptors/secret';
 import { OverviewRenderer } from './OverviewRenderer';
 
@@ -29,11 +30,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: unknown) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>

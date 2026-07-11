@@ -9,6 +9,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type React from 'react';
 import {
   crdDescriptor,
   ingressClassDescriptor,
@@ -16,9 +17,18 @@ import {
   validatingWebhookDescriptor,
 } from './descriptors/clusterresource';
 import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewDescriptor } from './schema';
+
+type DeepPartial<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? DeepPartial<Item>[]
+    : T extends object
+      ? { [Key in keyof T]?: DeepPartial<T[Key]> }
+      : T;
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: unknown) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -26,7 +36,9 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: unknown) => <div data-testid="resource-status">{props.status}</div>,
+  ResourceStatus: (props: { status?: string }) => (
+    <div data-testid="resource-status">{props.status}</div>
+  ),
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
@@ -36,12 +48,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: unknown) => <a href="/object">{children}</a>,
+  ObjectPanelLink: ({ children }: React.PropsWithChildren) => <a href="/object">{children}</a>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: unknown) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -55,10 +67,11 @@ describe('ClusterResourceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderOverview = async (descriptor: unknown, data: unknown) => {
+  const renderOverview = async <T,>(descriptor: OverviewDescriptor<T>, fixture: DeepPartial<T>) => {
+    const data = fixture as T;
     await act(async () => {
       root.render(
-        <OverviewRenderer
+        <OverviewRenderer<T>
           descriptor={descriptor}
           data={data}
           context={{ clusterId: 'test-cluster', clusterName: 'test' }}

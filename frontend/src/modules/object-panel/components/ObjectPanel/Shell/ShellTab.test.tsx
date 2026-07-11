@@ -233,18 +233,19 @@ describe('ShellTab', () => {
     class TestResizeObserver {
       callback: ResizeObserverCallback;
       observe = vi.fn();
+      unobserve = vi.fn();
       disconnect = vi.fn();
       constructor(callback: ResizeObserverCallback) {
         this.callback = callback;
       }
     }
-    (globalThis as unknown).ResizeObserver = TestResizeObserver;
+    globalThis.ResizeObserver = TestResizeObserver;
     const clipboardMock = {
       readText: vi.fn().mockResolvedValue(''),
       writeText: vi.fn().mockResolvedValue(undefined),
     };
     if (!navigator.clipboard) {
-      (navigator as unknown).clipboard = clipboardMock;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboardMock });
     } else {
       Object.assign(navigator.clipboard, clipboardMock);
     }

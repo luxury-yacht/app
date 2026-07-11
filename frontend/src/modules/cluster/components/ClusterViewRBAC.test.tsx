@@ -10,6 +10,10 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { requireValue } from '@/test-utils/requireValue';
+
+type RBACRow = Record<string, unknown>;
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -34,7 +38,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: unknown } = { current: null };
+const gridTablePropsRef: { current: GridTableProps<RBACRow> | null } = { current: null };
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -43,7 +47,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: unknown) => {
+    default: (props: GridTableProps<RBACRow>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -112,6 +116,15 @@ const baseRBAC = {
   age: '1d',
 };
 
+const getGridTableProps = () =>
+  requireValue(gridTablePropsRef.current, 'expected GridTable props in ClusterViewRBAC.test.tsx');
+
+const getContextMenuItems = (row: RBACRow) =>
+  requireValue(
+    getGridTableProps().getCustomContextMenuItems,
+    'expected context-menu factory in ClusterViewRBAC.test.tsx'
+  )(row, 'name');
+
 describe('ClusterViewRBAC', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -137,7 +150,7 @@ describe('ClusterViewRBAC', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.filters?.value).toEqual({
@@ -161,9 +174,9 @@ describe('ClusterViewRBAC', () => {
       await Promise.resolve();
     });
 
-    const objectMapItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(row, 'name')
-      .find((item: unknown) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const objectMapItem = getContextMenuItems(row).find(
+      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    );
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

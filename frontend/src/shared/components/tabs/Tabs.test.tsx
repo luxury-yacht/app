@@ -6,8 +6,23 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 
 import { Tabs } from './Tabs';
+
+const installResizeObserver = (observers: Array<() => void>) =>
+  installWindowProperty(
+    'ResizeObserver',
+    class implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        observers.push(() => callback([], this));
+      }
+
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  );
 
 describe('Tabs', () => {
   let container: HTMLDivElement;
@@ -618,7 +633,7 @@ describe('Tabs', () => {
               extraProps: {
                 'data-testid': 'cluster-id-1',
                 draggable: true,
-              } as unknown,
+              },
             },
           ]}
           activeId="a"
@@ -643,7 +658,7 @@ describe('Tabs', () => {
             {
               id: 'a',
               label: 'Alpha',
-              extraProps: { tabIndex: 99 } as unknown,
+              extraProps: { tabIndex: 99 },
             },
           ]}
           activeId="a"
@@ -804,14 +819,7 @@ describe('Tabs', () => {
   it('renders scroll buttons when overflow="scroll" and content overflows', () => {
     // Force overflow by mocking the scroll measurements.
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as unknown).ResizeObserver;
-    (globalThis as unknown).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     act(() => {
       root.render(
@@ -840,7 +848,7 @@ describe('Tabs', () => {
 
     expect(container.querySelector('.tab-strip__overflow-indicator')).toBeTruthy();
 
-    (globalThis as unknown).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 
   it('does not render scroll buttons when overflow="none"', () => {
@@ -861,14 +869,7 @@ describe('Tabs', () => {
 
   it('scrolls the strip when an overflow indicator is clicked', () => {
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as unknown).ResizeObserver;
-    (globalThis as unknown).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     // Spy on requestAnimationFrame so we can drive the manual scroll
     // animation synchronously from the test.
@@ -948,14 +949,14 @@ describe('Tabs', () => {
     expect(scrollContainer.scrollLeft).toBe(32);
 
     rafSpy.mockRestore();
-    (globalThis as unknown).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 
   it('scrolls the active tab into view when activeId changes', () => {
     const scrollIntoViewSpy = vi.fn();
     // Patch HTMLElement.prototype so all buttons share the spy.
     const original = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoViewSpy as unknown;
+    HTMLElement.prototype.scrollIntoView = (options) => scrollIntoViewSpy(options);
 
     act(() => {
       root.render(
@@ -1036,14 +1037,7 @@ describe('Tabs', () => {
 
   it('renders both overflow indicators together once the strip overflows', () => {
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as unknown).ResizeObserver;
-    (globalThis as unknown).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     act(() => {
       root.render(
@@ -1077,6 +1071,6 @@ describe('Tabs', () => {
     expect(rightInd).toBeTruthy();
     expect(container.querySelector('.tab-strip__overflow-count')).toBeNull();
 
-    (globalThis as unknown).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 });
