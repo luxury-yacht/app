@@ -9,8 +9,9 @@ import type {
   GridColumnDefinition,
   GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable.types';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { CSSProperties, RefObject } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 // Computes which columns to render (and their offsets/styles) when column
 // virtualization is enabled, while respecting sticky columns on both ends and
@@ -170,18 +171,17 @@ export function useGridTableColumnVirtualization<T>({
     wrapperRef,
   ]);
 
-  useEffect(() => {
-    if (!columnVirtualizationConfig.enabled) {
-      ensureFullColumnWindow();
-      return;
-    }
-    updateColumnWindowRange();
-  }, [
-    columnVirtualizationConfig.enabled,
-    ensureFullColumnWindow,
-    updateColumnWindowRange,
-    columnRenderModelsWithOffsets,
-  ]);
+  useEffectWithInvalidation(
+    () => {
+      if (!columnVirtualizationConfig.enabled) {
+        ensureFullColumnWindow();
+        return;
+      }
+      updateColumnWindowRange();
+    },
+    [columnVirtualizationConfig.enabled, ensureFullColumnWindow, updateColumnWindowRange],
+    [columnRenderModelsWithOffsets]
+  );
 
   return {
     columnVirtualizationConfig,

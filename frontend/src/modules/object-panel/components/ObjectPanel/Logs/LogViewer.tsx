@@ -498,7 +498,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         payload: [toPodFilterValue(pod), ...preservedContainerFilters],
       });
     },
-    [dispatch, selectedFilters]
+    [selectedFilters]
   );
   const handleSelectContainerFilter = useCallback(
     (container: string, isInit: boolean, isEphemeral: boolean) => {
@@ -513,7 +513,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         ],
       });
     },
-    [dispatch, selectedFilters]
+    [selectedFilters]
   );
   const highlightRegex = useMemo(
     () =>
@@ -1179,7 +1179,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return chips;
   }, [
     caseSensitiveMatches,
-    dispatch,
     hasInvalidRegex,
     highlightMatches,
     inverseMatches,
@@ -1210,7 +1209,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [
     caseSensitiveMatches,
-    dispatch,
     highlightMatches,
     inverseMatches,
     regexMatches,
@@ -1618,7 +1616,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
       750
     );
-  }, [dispatch]);
+  }, []);
 
   // Clean up copy timer on unmount
   useEffect(() => {
@@ -1920,7 +1918,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
       scheduleCopyReset();
     }
-  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
+  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset]);
 
   useKeyboardSurface({
     kind: 'editor',
@@ -1963,12 +1961,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     logsContentRef,
   });
 
-  const handleToggleParsedRow = useCallback(
-    (rowKey: string) => {
-      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
-    },
-    [dispatch]
-  );
+  const handleToggleParsedRow = useCallback((rowKey: string) => {
+    dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
+  }, []);
 
   // Loading state
   if (logsLoadingState.loading) {

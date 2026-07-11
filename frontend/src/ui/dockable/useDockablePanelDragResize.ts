@@ -156,7 +156,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     }
     pendingDragPositionRef.current = null;
     panelStateRef.current.setFloatingPosition(pending);
-  }, [panelStateRef]);
+  }, []);
 
   const scheduleFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
@@ -185,7 +185,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     if (currentPanelState.position === 'floating' && pending.position) {
       currentPanelState.setFloatingPosition(pending.position);
     }
-  }, [panelStateRef]);
+  }, []);
 
   const scheduleSizeUpdate = useCallback(
     (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
@@ -221,7 +221,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       }
       sizeFrameRef.current = window.requestAnimationFrame(flushSizeUpdate);
     },
-    [flushSizeUpdate, panelStateRef]
+    [flushSizeUpdate]
   );
 
   useEffect(() => {

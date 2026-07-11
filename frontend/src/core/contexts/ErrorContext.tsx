@@ -5,6 +5,7 @@
  * Provides a way to manage and display error notifications across the application.
  */
 
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
 import {
   type ErrorDetails,
   ErrorSeverity,
@@ -133,13 +134,12 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   );
 
   // Replay any errors captured before the provider mounted (once only)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: history is intentionally replayed once when the provider mounts
-  useEffect(() => {
+  useMountEffect(() => {
     const history = errorHandler.getHistory();
     history.forEach((error) => {
       addError(error);
     });
-  }, []);
+  });
 
   // Subscribe to future errors from the global handler
   useEffect(() => {

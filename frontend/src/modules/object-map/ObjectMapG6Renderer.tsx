@@ -10,6 +10,7 @@ import type { Graph, GraphData } from '@antv/g6';
 import { GraphEvent } from '@antv/g6';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -517,7 +518,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     } catch {
       setDebugGrid(null);
     }
-  }, [graphReady, graphRef, showDebugGrid]);
+  }, [graphReady, showDebugGrid]);
 
   const updateCardDetailLevel = useCallback(() => {
     if (!graphReady) return;
@@ -529,7 +530,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     } catch {
       setCardDetailLevel('full');
     }
-  }, [graphReady, graphRef]);
+  }, [graphReady]);
 
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
@@ -609,7 +610,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         graph.off(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
       }
     };
-  }, [graphReady, graphRef, updateCardDetailLevel]);
+  }, [graphReady, updateCardDetailLevel]);
 
   useEffect(() => {
     updateDebugGrid();
@@ -627,13 +628,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         graph.off(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
       }
     };
-  }, [graphReady, graphRef, showDebugGrid, updateDebugGrid]);
+  }, [graphReady, showDebugGrid, updateDebugGrid]);
 
-  useEffect(() => {
-    if (!showDebugGrid) return;
-    const frame = requestAnimationFrame(updateDebugGrid);
-    return () => cancelAnimationFrame(frame);
-  }, [data, showDebugGrid, updateDebugGrid]);
+  useEffectWithInvalidation(
+    () => {
+      if (!showDebugGrid) return;
+      const frame = requestAnimationFrame(updateDebugGrid);
+      return () => cancelAnimationFrame(frame);
+    },
+    [showDebugGrid, updateDebugGrid],
+    [data]
+  );
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -655,9 +660,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     updateTooltipPosition,
   });
 
-  useEffect(() => {
-    updateTooltipPosition();
-  }, [hoverEdge, updateTooltipPosition]);
+  useEffectWithInvalidation(
+    () => {
+      updateTooltipPosition();
+    },
+    [updateTooltipPosition],
+    [hoverEdge]
+  );
 
   const tooltipText = useMemo(() => {
     if (!palette || !hoverEdge) return null;

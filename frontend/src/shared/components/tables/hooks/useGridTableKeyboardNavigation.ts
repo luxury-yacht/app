@@ -1,4 +1,5 @@
 import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
@@ -66,42 +67,46 @@ export function useGridTableKeyboardNavigation({
     [focusByIndex, lastNavigationMethodRef, tableDataLength]
   );
 
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      getPageSizeRef.current = 1;
-      return;
-    }
-
-    const computePageSize = () => {
-      const height = wrapper.clientHeight || 1;
-      if (height <= 0) {
+  useEffectWithInvalidation(
+    () => {
+      const wrapper = wrapperRef.current;
+      if (!wrapper) {
         getPageSizeRef.current = 1;
         return;
       }
 
-      if (shouldVirtualize && virtualRowHeight > 0) {
-        getPageSizeRef.current = Math.max(1, Math.round(height / virtualRowHeight));
-        return;
+      const computePageSize = () => {
+        const height = wrapper.clientHeight || 1;
+        if (height <= 0) {
+          getPageSizeRef.current = 1;
+          return;
+        }
+
+        if (shouldVirtualize && virtualRowHeight > 0) {
+          getPageSizeRef.current = Math.max(1, Math.round(height / virtualRowHeight));
+          return;
+        }
+
+        const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
+        const rowHeight = firstRow?.getBoundingClientRect().height || 44;
+        getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
+      };
+
+      computePageSize();
+
+      const observer =
+        typeof ResizeObserver !== 'undefined' ? new ResizeObserver(computePageSize) : null;
+      if (observer) {
+        observer.observe(wrapper);
       }
 
-      const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
-      const rowHeight = firstRow?.getBoundingClientRect().height || 44;
-      getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
-    };
-
-    computePageSize();
-
-    const observer =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(computePageSize) : null;
-    if (observer) {
-      observer.observe(wrapper);
-    }
-
-    return () => {
-      observer?.disconnect();
-    };
-  }, [shouldVirtualize, tableDataLength, virtualRowHeight, wrapperRef]);
+      return () => {
+        observer?.disconnect();
+      };
+    },
+    [shouldVirtualize, virtualRowHeight, wrapperRef],
+    [tableDataLength]
+  );
 
   useEffect(() => {
     if (!shortcutsActive || !focusedRowKey) {

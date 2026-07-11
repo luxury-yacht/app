@@ -34,7 +34,7 @@ interface DockablePanelMaximizeOptions {
  * Manage maximize/restore behavior and track the target bounds for maximized panels.
  */
 export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) {
-  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange, panelRef } = options;
+  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange } = options;
   const isMaximized = panelState.isMaximized;
   const [maximizedRect, setMaximizedRect] = useState<DOMRect | null>(null);
   const restoreStateRef = useRef<{
@@ -124,7 +124,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
         resizeObserverRef.current = null;
       }
     };
-  }, [isMaximized, resolveMaximizeTarget, panelRef]);
+  }, [isMaximized, resolveMaximizeTarget]);
 
   useEffect(() => {
     if (panelState.isOpen) {

@@ -14,9 +14,10 @@ import {
 import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   normalizeQueryBackedNamespaceFilters,
   queryBackedFacetFilterOptions,
@@ -334,27 +335,30 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   );
 
   const persistenceHydrated = persistence.hydrated;
-  useEffect(() => {
-    const filters = normalizeTableFilters(persistenceFilters);
-    if (filters !== persistenceFilters) {
-      setPersistenceFilters(filters);
-    }
-    onTableStateChange?.({
-      filters,
-      sortConfig: sortConfig ?? null,
-    });
-    // persistenceHydrated is a deliberate dependency: hydration may commit
-    // WITHOUT changing the filters object identity, and the query lifecycle
-    // only arms itself on a post-hydration publish. Re-publishing the same
-    // value is safe (consumers dedupe by value).
-  }, [
-    normalizeTableFilters,
-    onTableStateChange,
-    persistenceFilters,
-    persistenceHydrated,
-    setPersistenceFilters,
-    sortConfig,
-  ]);
+  useEffectWithInvalidation(
+    () => {
+      const filters = normalizeTableFilters(persistenceFilters);
+      if (filters !== persistenceFilters) {
+        setPersistenceFilters(filters);
+      }
+      onTableStateChange?.({
+        filters,
+        sortConfig: sortConfig ?? null,
+      });
+      // persistenceHydrated is a deliberate dependency: hydration may commit
+      // WITHOUT changing the filters object identity, and the query lifecycle
+      // only arms itself on a post-hydration publish. Re-publishing the same
+      // value is safe (consumers dedupe by value).
+    },
+    [
+      normalizeTableFilters,
+      onTableStateChange,
+      persistenceFilters,
+      setPersistenceFilters,
+      sortConfig,
+    ],
+    [persistenceHydrated]
+  );
 
   const useMetadata = Boolean(metadataSearch);
   const getDefaultMetadataSearchValues = useCallback(

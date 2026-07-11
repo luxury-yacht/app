@@ -18,6 +18,7 @@ import {
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
+import { useEffectWithInvalidation, useMountEffect } from '@shared/hooks/useHookLifetimes';
 import { formatAge } from '@utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
@@ -371,48 +372,49 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   // Unmount-only teardown: release whatever scopes are currently held. Kept
   // separate from the reconciliation effect above so re-runs never release
   // still-active scopes.
-  useEffect(
-    () => () => {
-      namespaceScopesRef.current.forEach((scope) => {
-        setRefreshDomainEnabled({
-          domain: 'namespaces',
-          scope,
-          enabled: false,
-          preserveState: true,
-        });
+  useMountEffect(() => () => {
+    namespaceScopesRef.current.forEach((scope) => {
+      setRefreshDomainEnabled({
+        domain: 'namespaces',
+        scope,
+        enabled: false,
+        preserveState: true,
       });
-    },
-    []
-  );
+    });
+  });
 
-  useEffect(() => {
-    const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
-    if (!activeNamespaces.length) {
-      if (namespaceDomain.status === 'ready') {
+  useEffectWithInvalidation(
+    () => {
+      const activeNamespaces =
+        namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
+      if (!activeNamespaces.length) {
+        if (namespaceDomain.status === 'ready') {
+          clearSelection();
+        }
+        lastEvaluatedNamespaceRef.current = null;
+        return;
+      }
+
+      const current = selectedNamespace;
+      if (current && activeNamespaces.some((item) => item.scope === current)) {
+        applySelection(current, clusterKey);
+        return;
+      }
+      if (current) {
+        // Avoid auto-selecting; clear stale selections and wait for explicit user choice.
         clearSelection();
       }
-      lastEvaluatedNamespaceRef.current = null;
-      return;
-    }
-
-    const current = selectedNamespace;
-    if (current && activeNamespaces.some((item) => item.scope === current)) {
-      applySelection(current, clusterKey);
-      return;
-    }
-    if (current) {
-      // Avoid auto-selecting; clear stale selections and wait for explicit user choice.
-      clearSelection();
-    }
-  }, [
-    applySelection,
-    clusterKey,
-    clearSelection,
-    namespaces,
-    namespaceDomain.status,
-    selectedClusterId,
-    selectedNamespace,
-  ]);
+    },
+    [
+      applySelection,
+      clusterKey,
+      clearSelection,
+      namespaces,
+      namespaceDomain.status,
+      selectedNamespace,
+    ],
+    [selectedClusterId]
+  );
 
   useEffect(() => {
     const namespaceToEvaluate = selectedNamespace?.trim();

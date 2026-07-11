@@ -40,7 +40,8 @@
  * browser silently rejects the drop — drag-and-drop appears "broken" in
  * production with no errors or warnings.
  */
-import { type RefCallback, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
+import { type RefCallback, useCallback, useContext, useRef, useState } from 'react';
 
 import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
@@ -234,8 +235,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   );
 
   // Cleanup on unmount.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup intentionally uses the mount-time target registration and handlers
-  useEffect(() => {
+  useMountEffect(() => {
     // Capture refs to locals so the cleanup function uses the values that
     // existed when the effect ran, not whatever they happen to be at unmount.
     const id = idRef.current;
@@ -249,7 +249,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       }
       unregisterTarget(id);
     };
-  }, []);
+  });
 
   return { ref, isDragOver, dropInsertIndex };
 }

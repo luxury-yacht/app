@@ -240,7 +240,6 @@ export function useContainerLogsStreamFallback({
     };
   }, [
     autoRefresh,
-    dispatch,
     fallbackActive,
     fetchFallbackContainerLogs,
     isActive,

@@ -204,7 +204,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       observer?.disconnect();
       root.style.setProperty('--cluster-tabs-height', '0px');
     };
-  }, [orderedTabs.length]);
+  }, []);
 
   useEffect(() => {
     // Show "Open Cluster" beside the "+" while the bar has room; collapse to just
@@ -247,7 +247,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       observer.observe(strip);
     }
     return () => observer.disconnect();
-  }, [orderedTabs.length]);
+  }, []);
 
   // Note: `makeDragSource` produces a fresh closure every call (by design —
   // one call per tab per render). Do NOT wrap this .map() in useMemo with

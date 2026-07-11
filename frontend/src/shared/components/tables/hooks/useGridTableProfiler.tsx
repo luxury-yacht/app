@@ -88,7 +88,7 @@ export function useGridTableProfiler({
         },
       ]);
     },
-    [onRenderSample, profilerEnabled, profilerLoggingEnabled]
+    [onRenderSample, profilerEnabled]
   );
 
   const wrapWithProfiler = useCallback(

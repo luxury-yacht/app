@@ -20,6 +20,7 @@ import {
   useGridTableColumnVirtualization,
 } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type React from 'react';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -214,9 +215,13 @@ export function useGridTableColumnLayout<T>({
     return Number.isFinite(lastModel.end) ? lastModel.end : 0;
   }, [columnRenderModelsWithOffsets]);
 
-  useEffect(() => {
-    markAllAutoColumnsDirty();
-  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
+  useEffectWithInvalidation(
+    () => {
+      markAllAutoColumnsDirty();
+    },
+    [markAllAutoColumnsDirty],
+    [columnVirtualizationConfig.enabled, allowHorizontalOverflow]
+  );
 
   const visibleAutoColumnKeys = useMemo(
     () =>

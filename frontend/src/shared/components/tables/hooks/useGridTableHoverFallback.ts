@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { RefObject } from 'react';
-import { useEffect } from 'react';
 
 // When the hovered row is unmounted (e.g., virtualization window shifts),
 // find a focused/selected row in the DOM and restore the hover overlay to it.
@@ -23,19 +23,23 @@ export function useGridTableHoverFallback({
   updateHoverForElement,
   tableLength,
 }: UseGridTableHoverFallbackOptions) {
-  useEffect(() => {
-    if (hoverStateVisible) {
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-    const fallback = wrapper.querySelector<HTMLDivElement>(
-      '[data-row-focused="true"], [data-row-selected="true"]'
-    );
-    if (fallback) {
-      updateHoverForElement(fallback);
-    }
-  }, [hoverStateVisible, wrapperRef, updateHoverForElement, tableLength]);
+  useEffectWithInvalidation(
+    () => {
+      if (hoverStateVisible) {
+        return;
+      }
+      const wrapper = wrapperRef.current;
+      if (!wrapper) {
+        return;
+      }
+      const fallback = wrapper.querySelector<HTMLDivElement>(
+        '[data-row-focused="true"], [data-row-selected="true"]'
+      );
+      if (fallback) {
+        updateHoverForElement(fallback);
+      }
+    },
+    [hoverStateVisible, wrapperRef, updateHoverForElement],
+    [tableLength]
+  );
 }

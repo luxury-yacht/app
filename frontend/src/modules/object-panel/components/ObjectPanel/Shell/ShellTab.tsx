@@ -30,6 +30,7 @@ import ContextMenu from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { useDockablePanelState } from '@ui/dockable';
@@ -450,12 +451,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
     return () => observer.disconnect();
   }, [applyTerminalTheme]);
 
-  useEffect(() => {
-    if (!terminalReady || !isActive) {
-      return;
-    }
-    terminalRef.current?.focus();
-  }, [terminalReady, isActive, panelState.position, panelState.size.width, panelState.size.height]);
+  useEffectWithInvalidation(
+    () => {
+      if (!terminalReady || !isActive) {
+        return;
+      }
+      terminalRef.current?.focus();
+    },
+    [terminalReady, isActive],
+    [panelState.position, panelState.size.width, panelState.size.height]
+  );
 
   const activeContainer = containerOverride ?? session?.container ?? '';
 
@@ -560,59 +565,62 @@ const ShellTab: React.FC<ShellTabProps> = ({
     lastTargetRef.current = { namespace, resourceName };
   }, [disposeTerminal, namespace, resourceName]);
 
-  useEffect(() => {
-    if (!isActive || statusRef.current !== 'connecting' || !namespace || !resourceName) {
-      return;
-    }
-
-    let cancelled = false;
-    const start = async () => {
-      try {
-        const shellSession = await StartShellSession(resolvedClusterId, {
-          namespace,
-          podName: resourceName,
-          container: containerOverride ?? undefined,
-          command: resolvedShell ? [resolvedShell] : undefined,
-        });
-        if (cancelled) {
-          // If a superseding connect was started before this one returned, clean up this session.
-          await CloseShellSession(shellSession.sessionId);
-          return;
-        }
-        sessionIdRef.current = shellSession.sessionId;
-        sessionOpenedAtRef.current = Date.now();
-        setSession(shellSession);
-        statusRef.current = 'open';
-        setStatus('open');
-        setStatusReason(null);
-      } catch (error) {
-        if (!cancelled) {
-          const reason = error instanceof Error ? error.message : String(error);
-          sessionIdRef.current = null;
-          sessionOpenedAtRef.current = null;
-          setSession(null);
-          statusRef.current = 'error';
-          setStatus('error');
-          setStatusReason(reason);
-          disposeTerminal();
-        }
+  useEffectWithInvalidation(
+    () => {
+      if (!isActive || statusRef.current !== 'connecting' || !namespace || !resourceName) {
+        return;
       }
-    };
 
-    void start();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    resolvedShell,
-    containerOverride,
-    disposeTerminal,
-    isActive,
-    namespace,
-    reconnectToken,
-    resourceName,
-    resolvedClusterId,
-  ]);
+      let cancelled = false;
+      const start = async () => {
+        try {
+          const shellSession = await StartShellSession(resolvedClusterId, {
+            namespace,
+            podName: resourceName,
+            container: containerOverride ?? undefined,
+            command: resolvedShell ? [resolvedShell] : undefined,
+          });
+          if (cancelled) {
+            // If a superseding connect was started before this one returned, clean up this session.
+            await CloseShellSession(shellSession.sessionId);
+            return;
+          }
+          sessionIdRef.current = shellSession.sessionId;
+          sessionOpenedAtRef.current = Date.now();
+          setSession(shellSession);
+          statusRef.current = 'open';
+          setStatus('open');
+          setStatusReason(null);
+        } catch (error) {
+          if (!cancelled) {
+            const reason = error instanceof Error ? error.message : String(error);
+            sessionIdRef.current = null;
+            sessionOpenedAtRef.current = null;
+            setSession(null);
+            statusRef.current = 'error';
+            setStatus('error');
+            setStatusReason(reason);
+            disposeTerminal();
+          }
+        }
+      };
+
+      void start();
+      return () => {
+        cancelled = true;
+      };
+    },
+    [
+      resolvedShell,
+      containerOverride,
+      disposeTerminal,
+      isActive,
+      namespace,
+      resourceName,
+      resolvedClusterId,
+    ],
+    [reconnectToken]
+  );
 
   useEffect(() => {
     const offOutput = EventsOn('object-shell:output', (evt: ShellOutputEvent) => {
@@ -681,12 +689,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
     };
   }, [appendOutput, deriveConnectionFailureReason, disposeTerminal, ensureTerminal, writeLine]);
 
-  useEffect(() => {
-    if (!isActive || !terminalReady) {
-      return;
-    }
-    terminalRef.current?.focus();
-  }, [isActive, session, terminalReady]);
+  useEffectWithInvalidation(
+    () => {
+      if (!isActive || !terminalReady) {
+        return;
+      }
+      terminalRef.current?.focus();
+    },
+    [isActive, terminalReady],
+    [session]
+  );
 
   const handleReconnect = useCallback(() => {
     initiateConnection();
@@ -862,17 +874,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
   );
   const resolvedDebugImage = debugImage === '__custom__' ? customImage.trim() : debugImage;
 
-  const handleContainerChange = useCallback(
-    (value: string | string[]) => {
-      const nextValue = Array.isArray(value) ? value[0] : value;
-      if (!nextValue) {
-        setContainerOverride(null);
-      } else {
-        setContainerOverride(nextValue);
-      }
-    },
-    [setContainerOverride]
-  );
+  const handleContainerChange = useCallback((value: string | string[]) => {
+    const nextValue = Array.isArray(value) ? value[0] : value;
+    if (!nextValue) {
+      setContainerOverride(null);
+    } else {
+      setContainerOverride(nextValue);
+    }
+  }, []);
 
   const handleShellChange = useCallback((value: string | string[]) => {
     const nextValue = Array.isArray(value) ? value[0] : value;

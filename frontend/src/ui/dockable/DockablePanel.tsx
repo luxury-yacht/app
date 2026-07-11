@@ -501,7 +501,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.size.height,
     isMaximized,
     isGroupLeader,
-    groupTabCount,
   ]);
 
   // Content change notification:

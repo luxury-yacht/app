@@ -35,7 +35,7 @@ export function useWindowBoundsConstraint(
   panelState: DockablePanelState,
   options: WindowBoundsOptions
 ) {
-  const { minWidth, minHeight, isResizing, isMaximized, panelRef } = options;
+  const { minWidth, isResizing, isMaximized } = options;
   const panelStateRef = useRef(panelState);
   const { zoomLevel } = useZoom();
   // Store zoom level in a ref so the resize handler can access the latest value.
@@ -181,5 +181,5 @@ export function useWindowBoundsConstraint(
         resizeObserver.disconnect();
       }
     };
-  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef, zoomLevel]);
+  }, [minWidth, isResizing, isMaximized, panelState.isOpen]);
 }

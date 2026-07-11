@@ -12,14 +12,12 @@
 
 import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
 import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+  useEffectWithInvalidation,
+  useLayoutEffectWithInvalidation,
+  useMemoWithInvalidation,
+  useMountEffect,
+} from '@shared/hooks/useHookLifetimes';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Drives row virtualization: determines visible window, manages scroll offsets,
 // and coordinates hover/header sync during virtual scroll.
@@ -173,9 +171,13 @@ export function useGridTableVirtualization<T>({
     setScrollbarWidth((prev) => (Math.abs(prev - width) < 0.5 ? prev : width));
   }, [wrapperRef]);
 
-  useLayoutEffect(() => {
-    updateScrollbarWidth();
-  }, [updateScrollbarWidth, data.length, hideHeader]);
+  useLayoutEffectWithInvalidation(
+    () => {
+      updateScrollbarWidth();
+    },
+    [updateScrollbarWidth],
+    [data.length, hideHeader]
+  );
 
   const shouldVirtualize = useMemo(() => {
     if (!virtualizationConfig.enabled) {
@@ -202,124 +204,128 @@ export function useGridTableVirtualization<T>({
   // --- Prefix-sum positions array ---
   // positions[i] = top offset of row i. positions[data.length] = total height.
   // Unmeasured rows use estimateRowHeight as their height.
-  const rowPositions = useMemo(() => {
-    const n = data.length;
-    const pos = new Float64Array(n + 1);
-    const cache = rowHeightCacheRef.current;
-    const fallback = virtualizationConfig.estimateRowHeight;
-    for (let i = 0; i < n; i++) {
-      const key = keyExtractor(data[i], i);
-      const h = cache.get(key) ?? fallback;
-      pos[i + 1] = pos[i] + h;
-    }
-    return pos;
-    // heightCacheVersion is included so positions recompute after measurements.
-  }, [data, keyExtractor, virtualizationConfig.estimateRowHeight, heightCacheVersion]);
+  const rowPositions = useMemoWithInvalidation(
+    () => {
+      const n = data.length;
+      const pos = new Float64Array(n + 1);
+      const cache = rowHeightCacheRef.current;
+      const fallback = virtualizationConfig.estimateRowHeight;
+      for (let i = 0; i < n; i++) {
+        const key = keyExtractor(data[i], i);
+        const h = cache.get(key) ?? fallback;
+        pos[i + 1] = pos[i] + h;
+      }
+      return pos;
+      // heightCacheVersion is included so positions recompute after measurements.
+    },
+    [data, keyExtractor, virtualizationConfig.estimateRowHeight],
+    [heightCacheVersion]
+  );
 
   // --- Viewport and scroll tracking ---
 
-  useEffect(() => {
-    if (!shouldVirtualize) {
-      setVirtualViewportHeight(0);
-      setVirtualScrollTop(0);
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    const updateViewport = () => {
-      setVirtualViewportHeight(wrapper.clientHeight);
-      updateScrollbarWidth();
-      if (hoverRowRef.current) {
-        updateHoverForElement(hoverRowRef.current);
-      }
-    };
-
-    updateViewport();
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => updateViewport());
-      resizeObserver.observe(wrapper);
-    }
-
-    return () => {
-      resizeObserver?.disconnect();
-    };
-  }, [
-    shouldVirtualize,
-    data.length,
-    wrapperRef,
-    updateScrollbarWidth,
-    hoverRowRef,
-    updateHoverForElement,
-  ]);
-
-  useEffect(() => {
-    if (!shouldVirtualize) {
-      return;
-    }
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return;
-    }
-
-    // Flush pending scroll updates - called via rAF to coalesce rapid scroll events
-    const flushScrollUpdates = () => {
-      scrollRafRef.current = null;
-      const scrollTop = pendingScrollTopRef.current;
-      if (scrollTop === null) {
+  useEffectWithInvalidation(
+    () => {
+      if (!shouldVirtualize) {
+        setVirtualViewportHeight(0);
+        setVirtualScrollTop(0);
         return;
       }
-      pendingScrollTopRef.current = null;
-      setVirtualScrollTop(scrollTop);
-      scheduleHeaderSync();
-      if (hoverRowRef.current) {
-        updateHoverForElement(hoverRowRef.current);
+      const wrapper = wrapperRef.current;
+      if (!wrapper) {
+        return;
       }
-      updateColumnWindowRange();
-    };
 
-    const handleScroll = () => {
-      // Capture scroll position immediately
-      pendingScrollTopRef.current = wrapper.scrollTop;
-      startFrameSampler();
+      const updateViewport = () => {
+        setVirtualViewportHeight(wrapper.clientHeight);
+        updateScrollbarWidth();
+        if (hoverRowRef.current) {
+          updateHoverForElement(hoverRowRef.current);
+        }
+      };
 
-      // Coalesce updates via rAF - only one state update per frame
-      if (scrollRafRef.current === null) {
-        scrollRafRef.current = requestAnimationFrame(flushScrollUpdates);
+      updateViewport();
+
+      let resizeObserver: ResizeObserver | null = null;
+      if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => updateViewport());
+        resizeObserver.observe(wrapper);
       }
-    };
 
-    wrapper.addEventListener('scroll', handleScroll, { passive: true });
+      return () => {
+        resizeObserver?.disconnect();
+      };
+    },
+    [shouldVirtualize, wrapperRef, updateScrollbarWidth, hoverRowRef, updateHoverForElement],
+    [data.length]
+  );
 
-    // Initial sync without rAF
-    setVirtualScrollTop(wrapper.scrollTop);
-    scheduleHeaderSync();
-    updateColumnWindowRange();
+  useEffectWithInvalidation(
+    () => {
+      if (!shouldVirtualize) {
+        return;
+      }
+      const wrapper = wrapperRef.current;
+      if (!wrapper) {
+        return;
+      }
 
-    return () => {
-      wrapper.removeEventListener('scroll', handleScroll);
-      if (scrollRafRef.current !== null) {
-        cancelAnimationFrame(scrollRafRef.current);
+      // Flush pending scroll updates - called via rAF to coalesce rapid scroll events
+      const flushScrollUpdates = () => {
         scrollRafRef.current = null;
-      }
-      pendingScrollTopRef.current = null;
-      stopFrameSampler('manual');
-    };
-  }, [
-    shouldVirtualize,
-    data.length,
-    wrapperRef,
-    scheduleHeaderSync,
-    updateHoverForElement,
-    hoverRowRef,
-    updateColumnWindowRange,
-    startFrameSampler,
-    stopFrameSampler,
-  ]);
+        const scrollTop = pendingScrollTopRef.current;
+        if (scrollTop === null) {
+          return;
+        }
+        pendingScrollTopRef.current = null;
+        setVirtualScrollTop(scrollTop);
+        scheduleHeaderSync();
+        if (hoverRowRef.current) {
+          updateHoverForElement(hoverRowRef.current);
+        }
+        updateColumnWindowRange();
+      };
+
+      const handleScroll = () => {
+        // Capture scroll position immediately
+        pendingScrollTopRef.current = wrapper.scrollTop;
+        startFrameSampler();
+
+        // Coalesce updates via rAF - only one state update per frame
+        if (scrollRafRef.current === null) {
+          scrollRafRef.current = requestAnimationFrame(flushScrollUpdates);
+        }
+      };
+
+      wrapper.addEventListener('scroll', handleScroll, { passive: true });
+
+      // Initial sync without rAF
+      setVirtualScrollTop(wrapper.scrollTop);
+      scheduleHeaderSync();
+      updateColumnWindowRange();
+
+      return () => {
+        wrapper.removeEventListener('scroll', handleScroll);
+        if (scrollRafRef.current !== null) {
+          cancelAnimationFrame(scrollRafRef.current);
+          scrollRafRef.current = null;
+        }
+        pendingScrollTopRef.current = null;
+        stopFrameSampler('manual');
+      };
+    },
+    [
+      shouldVirtualize,
+      wrapperRef,
+      scheduleHeaderSync,
+      updateHoverForElement,
+      hoverRowRef,
+      updateColumnWindowRange,
+      startFrameSampler,
+      stopFrameSampler,
+    ],
+    [data.length]
+  );
 
   // Reset scroll position when filters change
   useEffect(() => {
@@ -351,15 +357,14 @@ export function useGridTableVirtualization<T>({
     };
   }, [filteringEnabled, filterSignature, shouldVirtualize, wrapperRef, updateColumnWindowRange]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup intentionally captures the mount-time sampler and hover callbacks
-  useEffect(() => {
+  useMountEffect(() => {
     return () => {
       // Clear any hover state unconditionally on unmount.
       updateHoverForElement(null);
       stopFrameSampler('unmount');
     };
     // We only need to run this on unmount
-  }, []);
+  });
 
   // --- Virtual range: binary-search the positions array ---
   const virtualRange = useMemo(() => {
@@ -400,19 +405,23 @@ export function useGridTableVirtualization<T>({
   }, [data, shouldVirtualize, virtualRange.end, virtualRange.start]);
 
   // Sync hover overlay when the virtual range shifts
-  useEffect(() => {
-    const current = hoverRowRef.current;
-    if (!current) {
-      return;
-    }
-    if (!current.isConnected) {
-      // Use force: true to bypass hover suppression — we need to clear the
-      // detached DOM node from hoverRowRef even while hover is suppressed.
-      updateHoverForElement(null, { force: true });
-      return;
-    }
-    updateHoverForElement(current);
-  }, [updateHoverForElement, hoverRowRef, virtualRange.start, virtualRange.end, data.length]);
+  useEffectWithInvalidation(
+    () => {
+      const current = hoverRowRef.current;
+      if (!current) {
+        return;
+      }
+      if (!current.isConnected) {
+        // Use force: true to bypass hover suppression — we need to clear the
+        // detached DOM node from hoverRowRef even while hover is suppressed.
+        updateHoverForElement(null, { force: true });
+        return;
+      }
+      updateHoverForElement(current);
+    },
+    [updateHoverForElement, hoverRowRef],
+    [virtualRange.start, virtualRange.end, data.length]
+  );
 
   // Handle resize for non-virtualized mode
   useEffect(() => {

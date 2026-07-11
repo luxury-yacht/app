@@ -7,7 +7,8 @@
  */
 
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useMemo, useRef, useState } from 'react';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -317,12 +318,16 @@ export function useTableSort<T>(
     return sorted;
   }, [data, disableLocalSort, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
 
-  useEffect(() => {
-    if (!diagnosticsLabel || sortDurationRef.current == null) {
-      return;
-    }
-    recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);
-  }, [diagnosticsLabel, sortedData]);
+  useEffectWithInvalidation(
+    () => {
+      if (!diagnosticsLabel || sortDurationRef.current == null) {
+        return;
+      }
+      recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);
+    },
+    [diagnosticsLabel],
+    [sortedData]
+  );
 
   return {
     sortedData,

@@ -5,8 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 
@@ -152,10 +153,14 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
     setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredTotalRows));
   }, [filteredTotalRows]);
 
-  useEffect(() => {
-    setVisibleLimit(INITIAL_VISIBLE_ROWS);
-    setExpandedRows(new Set());
-  }, [normalizedSearch]);
+  useEffectWithInvalidation(
+    () => {
+      setVisibleLimit(INITIAL_VISIBLE_ROWS);
+      setExpandedRows(new Set());
+    },
+    [],
+    [normalizedSearch]
+  );
 
   return (
     <div className="diagnostics-section">

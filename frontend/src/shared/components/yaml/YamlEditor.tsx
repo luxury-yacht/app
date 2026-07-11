@@ -19,6 +19,7 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import { YamlNextIcon, YamlPreviousIcon } from '@shared/components/icons/YamlIcons';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
@@ -576,15 +577,19 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       [clearSearchQuery, onCreateEditor]
     );
 
-    useEffect(() => {
-      const view = editorRef.current?.view;
-      if (view) {
-        editorViewRef.current = view;
-        setSearchTerm('');
-        clearSearchQuery(view);
-        closeSearchPanel(view);
-      }
-    }, [clearSearchQuery, value]);
+    useEffectWithInvalidation(
+      () => {
+        const view = editorRef.current?.view;
+        if (view) {
+          editorViewRef.current = view;
+          setSearchTerm('');
+          clearSearchQuery(view);
+          closeSearchPanel(view);
+        }
+      },
+      [clearSearchQuery],
+      [value]
+    );
 
     useEffect(() => {
       applySearchQuery(editorViewRef.current, searchTerm);

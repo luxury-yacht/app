@@ -96,6 +96,6 @@ export function useGridTableCsvFileExportAction<T>({
       disabled: disabled || exporting || !columns?.length,
       feedback,
     }),
-    [columns?.length, disabled, exporting, feedback, handleExport, title]
+    [columns?.length, disabled, exporting, feedback, handleExport]
   );
 }

@@ -7,8 +7,9 @@
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { KubeconfigFolderIcon } from '@shared/components/icons/SettingsIcons';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
 import { errorHandler } from '@utils/errorHandler';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@/core/backend-api';
 
@@ -19,10 +20,9 @@ function KubeconfigsSection() {
   const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: kubeconfig paths intentionally load once when the section mounts
-  useEffect(() => {
+  useMountEffect(() => {
     loadKubeconfigPaths();
-  }, []);
+  });
 
   const loadKubeconfigPaths = async () => {
     setKubeconfigPathsLoading(true);

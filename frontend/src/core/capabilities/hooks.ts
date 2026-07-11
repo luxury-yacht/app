@@ -6,6 +6,7 @@
  * and the `useCapabilityDiagnostics` hook for accessing diagnostics information.
  */
 
+import { useEffectWithInvalidation, useMemoWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useOptionalClusterLifecycle } from '@/core/contexts/ClusterLifecycleContext';
 import { eventBus } from '@/core/events';
@@ -190,173 +191,181 @@ export const useCapabilities = (
   }, [enabled, waitingForReadyNamedDescriptors]);
 
   // Query named-resource descriptors directly via QueryPermissions RPC.
-  useEffect(() => {
-    if (!enabled || queryableNamedDescriptors.length === 0) {
-      return;
-    }
-
-    // Multi-cluster rule (AGENTS.md): every backend permission query
-    // must carry a resolved clusterId. Drop descriptors that lack one
-    // and warn so the upstream producer surfaces the bug, rather than
-    // sending a garbage RPC the backend would reject anyway.
-    const payload: QueryPayloadItem[] = [];
-    for (const d of queryableNamedDescriptors) {
-      if (!d.clusterId) {
-        console.warn(
-          `capabilities: dropping named permission query for ${d.resourceKind}/${d.name ?? ''} — clusterId is missing`,
-          d
-        );
-        continue;
-      }
-      payload.push({
-        id: d.id,
-        clusterId: d.clusterId,
-        group: d.group,
-        version: d.version,
-        resourceKind: d.resourceKind,
-        verb: d.verb,
-        namespace: d.namespace ?? '',
-        subresource: d.subresource ?? '',
-        name: d.name ?? '',
-      });
-    }
-    if (payload.length === 0) {
-      return;
-    }
-
-    // Mark named descriptors as pending while the query is in-flight.
-    const nextPending = new Map(namedResultsRef.current);
-    for (const d of queryableNamedDescriptors) {
-      const existing = nextPending.get(d.id);
-      if (!existing || existing.status === 'idle') {
-        nextPending.set(d.id, { allowed: false, pending: true, status: 'loading' });
-      }
-    }
-    namedResultsRef.current = nextPending;
-    setNamedResultsVersion((v) => v + 1);
-
-    queryPermissions(payload)
-      .then((response) => {
-        const nextMap = new Map(namedResultsRef.current);
-        for (const r of response.results) {
-          if (!r.name) continue;
-          const isError = r.source === 'error' || !!r.error;
-          if (isTransientPermissionResultError(r)) {
-            nextMap.set(r.id, {
-              allowed: false,
-              pending: true,
-              status: 'loading',
-              reason: getPermissionResultErrorMessage(r),
-            });
-            continue;
-          }
-          if (isError) {
-            nextMap.set(r.id, {
-              allowed: false,
-              pending: false,
-              status: 'error',
-              reason: r.error || r.reason,
-            });
-          } else {
-            nextMap.set(r.id, {
-              allowed: r.allowed,
-              pending: false,
-              status: 'ready',
-              reason: r.reason || undefined,
-            });
-          }
-        }
-        namedResultsRef.current = nextMap;
-        setNamedResultsVersion((v) => v + 1);
-      })
-      .catch((err) => {
-        const errMsg = String(err);
-        const nextMap = new Map(namedResultsRef.current);
-        for (const d of queryableNamedDescriptors) {
-          if (isTransientClusterInactivePermissionError(errMsg)) {
-            nextMap.set(d.id, {
-              allowed: false,
-              pending: true,
-              status: 'loading',
-              reason: errMsg,
-            });
-            continue;
-          }
-          nextMap.set(d.id, {
-            allowed: false,
-            pending: false,
-            status: 'error',
-            reason: errMsg,
-          });
-        }
-        namedResultsRef.current = nextMap;
-        setNamedResultsVersion((v) => v + 1);
-      });
-  }, [enabled, force, queryableNamedDescriptors, ttlMs, refreshKey, retryVersion]);
-
-  // Build the unified state map from both sources.
-  const stateById = useMemo(() => {
-    const map = new Map<string, CapabilityState>();
-    if (!enabled) {
-      return map;
-    }
-
-    // Process all descriptors, checking namedResultsRef first, then the global permission map.
-    normalizedDescriptors.forEach((descriptor) => {
-      // Check hook-local named results first.
-      const namedState = namedResultsRef.current.get(descriptor.id);
-      if (namedState) {
-        map.set(descriptor.id, namedState);
+  useEffectWithInvalidation(
+    () => {
+      if (!enabled || queryableNamedDescriptors.length === 0) {
         return;
       }
 
-      // Fall back to the global permission map for unnamed descriptors.
-      const permissionKey = getPermissionKey(
-        descriptor.resourceKind,
-        descriptor.verb,
-        descriptor.namespace ?? null,
-        descriptor.subresource ?? null,
-        descriptor.clusterId ?? null,
-        descriptor.group ?? null,
-        descriptor.version ?? null
-      );
-      const permissionStatus = permissionMap.get(permissionKey);
-
-      let state: CapabilityState;
-      if (!permissionStatus) {
-        state = {
-          allowed: false,
-          pending: true,
-          status: 'idle',
-        };
-      } else if (permissionStatus.pending) {
-        state = {
-          allowed: false,
-          pending: true,
-          status: 'loading',
-        };
-      } else if (permissionStatus.error && !permissionStatus.allowed) {
-        state = {
-          allowed: false,
-          pending: false,
-          status: 'error',
-          reason: permissionStatus.error ?? permissionStatus.reason,
-        };
-      } else {
-        state = {
-          allowed: permissionStatus.allowed,
-          pending: false,
-          status: 'ready',
-          reason: permissionStatus.reason ?? undefined,
-        };
+      // Multi-cluster rule (AGENTS.md): every backend permission query
+      // must carry a resolved clusterId. Drop descriptors that lack one
+      // and warn so the upstream producer surfaces the bug, rather than
+      // sending a garbage RPC the backend would reject anyway.
+      const payload: QueryPayloadItem[] = [];
+      for (const d of queryableNamedDescriptors) {
+        if (!d.clusterId) {
+          console.warn(
+            `capabilities: dropping named permission query for ${d.resourceKind}/${d.name ?? ''} — clusterId is missing`,
+            d
+          );
+          continue;
+        }
+        payload.push({
+          id: d.id,
+          clusterId: d.clusterId,
+          group: d.group,
+          version: d.version,
+          resourceKind: d.resourceKind,
+          verb: d.verb,
+          namespace: d.namespace ?? '',
+          subresource: d.subresource ?? '',
+          name: d.name ?? '',
+        });
+      }
+      if (payload.length === 0) {
+        return;
       }
 
-      map.set(descriptor.id, state);
-    });
+      // Mark named descriptors as pending while the query is in-flight.
+      const nextPending = new Map(namedResultsRef.current);
+      for (const d of queryableNamedDescriptors) {
+        const existing = nextPending.get(d.id);
+        if (!existing || existing.status === 'idle') {
+          nextPending.set(d.id, { allowed: false, pending: true, status: 'loading' });
+        }
+      }
+      namedResultsRef.current = nextPending;
+      setNamedResultsVersion((v) => v + 1);
 
-    return map;
-    // namedResultsVersion triggers recomputation when named results update.
-  }, [enabled, normalizedDescriptors, permissionMap, namedResultsVersion]);
+      queryPermissions(payload)
+        .then((response) => {
+          const nextMap = new Map(namedResultsRef.current);
+          for (const r of response.results) {
+            if (!r.name) continue;
+            const isError = r.source === 'error' || !!r.error;
+            if (isTransientPermissionResultError(r)) {
+              nextMap.set(r.id, {
+                allowed: false,
+                pending: true,
+                status: 'loading',
+                reason: getPermissionResultErrorMessage(r),
+              });
+              continue;
+            }
+            if (isError) {
+              nextMap.set(r.id, {
+                allowed: false,
+                pending: false,
+                status: 'error',
+                reason: r.error || r.reason,
+              });
+            } else {
+              nextMap.set(r.id, {
+                allowed: r.allowed,
+                pending: false,
+                status: 'ready',
+                reason: r.reason || undefined,
+              });
+            }
+          }
+          namedResultsRef.current = nextMap;
+          setNamedResultsVersion((v) => v + 1);
+        })
+        .catch((err) => {
+          const errMsg = String(err);
+          const nextMap = new Map(namedResultsRef.current);
+          for (const d of queryableNamedDescriptors) {
+            if (isTransientClusterInactivePermissionError(errMsg)) {
+              nextMap.set(d.id, {
+                allowed: false,
+                pending: true,
+                status: 'loading',
+                reason: errMsg,
+              });
+              continue;
+            }
+            nextMap.set(d.id, {
+              allowed: false,
+              pending: false,
+              status: 'error',
+              reason: errMsg,
+            });
+          }
+          namedResultsRef.current = nextMap;
+          setNamedResultsVersion((v) => v + 1);
+        });
+    },
+    [enabled, queryableNamedDescriptors],
+    [force, ttlMs, refreshKey, retryVersion]
+  );
+
+  // Build the unified state map from both sources.
+  const stateById = useMemoWithInvalidation(
+    () => {
+      const map = new Map<string, CapabilityState>();
+      if (!enabled) {
+        return map;
+      }
+
+      // Process all descriptors, checking namedResultsRef first, then the global permission map.
+      normalizedDescriptors.forEach((descriptor) => {
+        // Check hook-local named results first.
+        const namedState = namedResultsRef.current.get(descriptor.id);
+        if (namedState) {
+          map.set(descriptor.id, namedState);
+          return;
+        }
+
+        // Fall back to the global permission map for unnamed descriptors.
+        const permissionKey = getPermissionKey(
+          descriptor.resourceKind,
+          descriptor.verb,
+          descriptor.namespace ?? null,
+          descriptor.subresource ?? null,
+          descriptor.clusterId ?? null,
+          descriptor.group ?? null,
+          descriptor.version ?? null
+        );
+        const permissionStatus = permissionMap.get(permissionKey);
+
+        let state: CapabilityState;
+        if (!permissionStatus) {
+          state = {
+            allowed: false,
+            pending: true,
+            status: 'idle',
+          };
+        } else if (permissionStatus.pending) {
+          state = {
+            allowed: false,
+            pending: true,
+            status: 'loading',
+          };
+        } else if (permissionStatus.error && !permissionStatus.allowed) {
+          state = {
+            allowed: false,
+            pending: false,
+            status: 'error',
+            reason: permissionStatus.error ?? permissionStatus.reason,
+          };
+        } else {
+          state = {
+            allowed: permissionStatus.allowed,
+            pending: false,
+            status: 'ready',
+            reason: permissionStatus.reason ?? undefined,
+          };
+        }
+
+        map.set(descriptor.id, state);
+      });
+
+      return map;
+      // namedResultsVersion triggers recomputation when named results update.
+    },
+    [enabled, normalizedDescriptors, permissionMap],
+    [namedResultsVersion]
+  );
 
   const loading =
     enabled &&

@@ -256,16 +256,6 @@
       "count": 2
     },
     {
-      "file": "src/core/contexts/ErrorContext.tsx",
-      "rule": "lint/correctness/useExhaustiveDependencies",
-      "count": 1
-    },
-    {
-      "file": "src/core/events/useEventBus.ts",
-      "rule": "lint/correctness/useExhaustiveDependencies",
-      "count": 1
-    },
-    {
       "file": "src/modules/browse/hooks/useBrowseCatalog.test.tsx",
       "rule": "lint/correctness/useHookAtTopLevel",
       "count": 1
@@ -316,14 +306,14 @@
       "count": 2
     },
     {
-      "file": "src/shared/components/tables/hooks/useGridTableVirtualization.ts",
+      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
       "rule": "lint/correctness/useExhaustiveDependencies",
       "count": 1
     },
     {
-      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+      "file": "src/shared/hooks/useHookLifetimes.ts",
       "rule": "lint/correctness/useExhaustiveDependencies",
-      "count": 2
+      "count": 4
     },
     {
       "file": "src/shared/components/yaml/YamlEditor.test.tsx",
@@ -334,16 +324,6 @@
       "file": "src/ui/layout/appFocusRegions.test.tsx",
       "rule": "lint/a11y/noNoninteractiveTabindex",
       "count": 3
-    },
-    {
-      "file": "src/ui/settings/sections/KubeconfigsSection.tsx",
-      "rule": "lint/correctness/useExhaustiveDependencies",
-      "count": 1
-    },
-    {
-      "file": "src/ui/shortcuts/context.test.tsx",
-      "rule": "lint/correctness/useExhaustiveDependencies",
-      "count": 4
     }
   ]
 }

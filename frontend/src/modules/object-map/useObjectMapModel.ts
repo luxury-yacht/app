@@ -5,6 +5,7 @@
  * manual positioning, and auto-fit.
  */
 
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   computeCollapseInfo,
@@ -126,10 +127,14 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
 
-  useEffect(() => {
-    setNodePositionOverrides(new Map());
-    nodeDragRef.current = null;
-  }, [filtered.nodes, filtered.edges]);
+  useEffectWithInvalidation(
+    () => {
+      setNodePositionOverrides(new Map());
+      nodeDragRef.current = null;
+    },
+    [],
+    [filtered.nodes, filtered.edges]
+  );
 
   const layout: ObjectMapLayout = useMemo(() => {
     if (nodePositionOverrides.size === 0) {

@@ -5,8 +5,9 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { RefObject } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 
 // Observes the GridTable wrapper width and reports changes so callers can
 // reconcile column widths to the available space. Supports custom containers
@@ -48,57 +49,54 @@ export function useContainerWidthObserver({
       tableElement?.closest('.gridtable-wrapper') as HTMLElement | null;
   }, [resolveContainer]);
 
-  useEffect(() => {
-    if (!targetWindow) {
-      return;
-    }
-
-    const getContainer = () => resolveTargetContainer(tableRef.current);
-    const handleResize = () => {
-      const container = getContainer();
-      if (!container) {
+  useEffectWithInvalidation(
+    () => {
+      if (!targetWindow) {
         return;
       }
-      const width = container.clientWidth;
-      if (typeof width === 'number' && width > 0) {
-        const lastWidth = lastWidthRef.current;
-        // Skip re-emitting when the width hasn't meaningfully changed to avoid resize loops.
-        if (lastWidth != null && Math.abs(width - lastWidth) < 1) {
+
+      const getContainer = () => resolveTargetContainer(tableRef.current);
+      const handleResize = () => {
+        const container = getContainer();
+        if (!container) {
           return;
         }
-        lastWidthRef.current = width;
-        onContainerWidth(width);
-      } else {
-        lastWidthRef.current = null;
+        const width = container.clientWidth;
+        if (typeof width === 'number' && width > 0) {
+          const lastWidth = lastWidthRef.current;
+          // Skip re-emitting when the width hasn't meaningfully changed to avoid resize loops.
+          if (lastWidth != null && Math.abs(width - lastWidth) < 1) {
+            return;
+          }
+          lastWidthRef.current = width;
+          onContainerWidth(width);
+        } else {
+          lastWidthRef.current = null;
+        }
+      };
+
+      handleResize();
+
+      targetWindow.addEventListener('resize', handleResize);
+
+      let resizeObserver: ResizeObserver | null = null;
+      const ObserverCtor =
+        resizeObserverImpl ?? (typeof ResizeObserver !== 'undefined' ? ResizeObserver : undefined);
+
+      if (ObserverCtor) {
+        resizeObserver = new ObserverCtor(() => handleResize());
+        const container = getContainer();
+        if (container) {
+          resizeObserver.observe(container);
+        }
       }
-    };
 
-    handleResize();
-
-    targetWindow.addEventListener('resize', handleResize);
-
-    let resizeObserver: ResizeObserver | null = null;
-    const ObserverCtor =
-      resizeObserverImpl ?? (typeof ResizeObserver !== 'undefined' ? ResizeObserver : undefined);
-
-    if (ObserverCtor) {
-      resizeObserver = new ObserverCtor(() => handleResize());
-      const container = getContainer();
-      if (container) {
-        resizeObserver.observe(container);
-      }
-    }
-
-    return () => {
-      targetWindow.removeEventListener('resize', handleResize);
-      resizeObserver?.disconnect();
-    };
-  }, [
-    targetWindow,
-    resolveTargetContainer,
-    tableRef,
-    onContainerWidth,
-    resizeObserverImpl,
-    tableDataLength,
-  ]);
+      return () => {
+        targetWindow.removeEventListener('resize', handleResize);
+        resizeObserver?.disconnect();
+      };
+    },
+    [targetWindow, resolveTargetContainer, tableRef, onContainerWidth, resizeObserverImpl],
+    [tableDataLength]
+  );
 }

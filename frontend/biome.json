@@ -54,7 +54,24 @@
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
-            "reportUnnecessaryDependencies": false
+            "hooks": [
+              {
+                "name": "useEffectWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              },
+              {
+                "name": "useLayoutEffectWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              },
+              {
+                "name": "useMemoWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              }
+            ],
+            "reportUnnecessaryDependencies": true
           }
         }
       },

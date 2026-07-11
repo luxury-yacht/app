@@ -303,7 +303,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     } else {
       setVisible(false);
     }
-  }, [interactive, INTERACTIVE_GRACE]);
+  }, [interactive]);
 
   const handleMouseEnter = useCallback(() => {
     if (disabled || trigger !== 'hover') return;

@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for context.
  */
 
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
 import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,8 +55,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
-      useEffect(() => {
+      useMountEffect(() => {
         const listId = ctx.registerShortcut({
           key: 'l',
           priority: 1,
@@ -65,7 +65,7 @@ describe('KeyboardProvider', () => {
         return () => {
           ctx.unregisterShortcut(listId);
         };
-      }, []);
+      });
 
       return null;
     };
@@ -95,8 +95,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
-      useEffect(() => {
+      useMountEffect(() => {
         const lowId = ctx.registerShortcut({
           key: 'k',
           priority: 1,
@@ -113,7 +112,7 @@ describe('KeyboardProvider', () => {
           ctx.unregisterShortcut(lowId);
           ctx.unregisterShortcut(highId);
         };
-      }, []);
+      });
 
       return null;
     };
@@ -216,8 +215,7 @@ describe('keyboard handling edge cases', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
-      useEffect(() => {
+      useMountEffect(() => {
         const plainId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true },
@@ -234,7 +232,7 @@ describe('keyboard handling edge cases', () => {
           ctx.unregisterShortcut(plainId);
           ctx.unregisterShortcut(extendedId);
         };
-      }, []);
+      });
 
       return null;
     };
@@ -319,11 +317,10 @@ describe('keyboard handling edge cases', () => {
 
     const Harness = () => {
       const ctx = useKeyboardContext();
-      // biome-ignore lint/correctness/useExhaustiveDependencies: this harness intentionally registers once for the test lifetime
-      useEffect(() => {
+      useMountEffect(() => {
         const id = ctx.registerSurface({ kind: 'editor', rootRef, onNativeAction });
         return () => ctx.unregisterSurface(id);
-      }, []);
+      });
       return null;
     };
 
