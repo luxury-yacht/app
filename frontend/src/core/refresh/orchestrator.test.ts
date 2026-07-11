@@ -47,7 +47,7 @@ type TestClusterRefreshRuntime = {
   streamingReady: Map<string, Promise<void>>;
   cancelledStreaming: Set<string>;
   inFlight: Map<string, unknown>;
-  streamHealth: Map<string, unknown>;
+  streamHealth: Map<string, { status: string }>;
   blockedStreaming: Set<string>;
 };
 
@@ -75,6 +75,8 @@ type RefreshOrchestratorInternals = {
   stopStreamingScope: (...args: unknown[]) => void;
   scheduleStreamingStart: (...args: unknown[]) => void;
   shouldStreamScope: (...args: unknown[]) => boolean;
+  teardownInFlight: (...args: unknown[]) => void;
+  stopAllStreaming: (reset: boolean) => void;
 };
 
 const refreshManagerMocks = vi.hoisted(() => ({
@@ -443,7 +445,7 @@ describe('refreshOrchestrator', () => {
     // 403. Permission is extremely unlikely to change mid-session, so this is
     // checked ONCE — recovery is an app restart.
     const denied = new Error('permission denied for domain namespaces (core/namespaces)');
-    (denied as unknown).permissionDenied = true;
+    (denied as Error & { permissionDenied?: boolean }).permissionDenied = true;
     clientMocks.fetchSnapshotMock.mockRejectedValueOnce(denied);
     await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(1);
@@ -484,10 +486,12 @@ describe('refreshOrchestrator', () => {
     // First doorbell's fetch hangs in flight.
     let resolveFirst: (value: unknown) => void = () => {};
     let firstSignal: AbortSignal | undefined;
-    clientMocks.fetchSnapshotMock.mockImplementationOnce((_domain: string, args: unknown) => {
-      firstSignal = args?.signal;
-      return new Promise((resolve) => (resolveFirst = resolve));
-    });
+    clientMocks.fetchSnapshotMock.mockImplementationOnce(
+      (_domain: string, args: { signal?: AbortSignal }) => {
+        firstSignal = args?.signal;
+        return new Promise((resolve) => (resolveFirst = resolve));
+      }
+    );
     const firstFetch = refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {
       isManual: false,
       streamSignal: true,
@@ -1499,7 +1503,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('cluster-overview', scopeA, (previous) => ({
       ...previous,
       status: 'ready',
-      data: { overview: { totalNodes: 1 } } as unknown,
+      data: previous.data,
       stats: { itemCount: 1, buildDurationMs: 0 },
       scope: scopeA,
     }));
@@ -1538,7 +1542,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('cluster-overview', firstScope, (previous) => ({
       ...previous,
       status: 'ready',
-      data: { clusterId: 'cluster-a' } as unknown,
+      data: previous.data,
       stats: { itemCount: 1, buildDurationMs: 0 },
       scope: firstScope,
     }));
@@ -1580,7 +1584,7 @@ describe('refreshOrchestrator', () => {
       setScopedDomainState(domain, firstScope, (previous) => ({
         ...previous,
         status: 'ready',
-        data: { value: 'first' } as unknown,
+        data: previous.data,
         stats: { itemCount: 1, buildDurationMs: 0 },
         scope: firstScope,
       }));
@@ -2819,7 +2823,7 @@ describe('refreshOrchestrator', () => {
     const runtimeA = orchestratorInternals.getRuntimeForScope('cluster-config', scopeA);
     const keyA = makeTestInFlightKey('cluster-config', scopeA);
     runtimeA.streamingReady.set(keyA, Promise.resolve());
-    runtimeA.pendingStreaming.set(keyA, Promise.resolve());
+    runtimeA.pendingStreaming.set(keyA, Promise.resolve(undefined));
     runtimeA.cancelledStreaming.add(keyA);
     runtimeA.inFlight.set(keyA, {
       controller: new AbortController(),
@@ -3025,14 +3029,8 @@ describe('refreshOrchestrator', () => {
 
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {
     const scope = 'cluster-a';
-    const teardownSpy = vi.spyOn(
-      orchestratorInternals as Record<string, unknown>,
-      'teardownInFlight'
-    );
-    const stopAllSpy = vi.spyOn(
-      orchestratorInternals as Record<string, unknown>,
-      'stopAllStreaming'
-    );
+    const teardownSpy = vi.spyOn(orchestratorInternals, 'teardownInFlight');
+    const stopAllSpy = vi.spyOn(orchestratorInternals, 'stopAllStreaming');
 
     refreshOrchestrator.registerDomain({
       domain: 'cluster-config',

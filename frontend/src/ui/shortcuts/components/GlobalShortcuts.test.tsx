@@ -113,8 +113,8 @@ describe('GlobalShortcuts', () => {
   const modifierKeys: Array<'ctrl' | 'meta' | 'shift' | 'alt'> = ['ctrl', 'meta', 'shift', 'alt'];
 
   const modifiersEqual = (
-    actual: Record<string, boolean> | undefined,
-    expected: Record<string, boolean>
+    actual: ShortcutOptions['modifiers'],
+    expected: NonNullable<ShortcutOptions['modifiers']>
   ) => {
     return modifierKeys.every((mod) => {
       const actualValue = actual?.[mod] ?? false;

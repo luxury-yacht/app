@@ -13,10 +13,10 @@ import {
   rolebinding,
   serviceaccount,
 } from '@wailsjs/go/models';
+import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type React from 'react';
 import {
   clusterRoleBindingDescriptor,
   clusterRoleDescriptor,

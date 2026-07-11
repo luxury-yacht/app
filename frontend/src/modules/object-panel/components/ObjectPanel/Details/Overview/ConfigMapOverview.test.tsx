@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.test.tsx
  */
 
+import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type React from 'react';
 import { configMapDescriptor } from './descriptors/configmap';
 import { OverviewRenderer } from './OverviewRenderer';
 

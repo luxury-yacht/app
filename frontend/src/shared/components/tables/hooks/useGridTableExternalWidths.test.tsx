@@ -5,12 +5,12 @@
  * Covers key behaviors and edge cases for useGridTableExternalWidths.
  */
 
+import type { ColumnWidthState } from '@shared/components/tables/GridTable.types';
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import type React from 'react';
 import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ColumnWidthState } from '@shared/components/tables/GridTable.types';
 
 afterEach(() => {
   document.body.innerHTML = '';

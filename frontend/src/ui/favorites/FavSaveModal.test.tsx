@@ -6,13 +6,13 @@
  * save-disabled-when-unchanged, and view dropdown scope changes.
  */
 
+import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
 import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import { requireValue } from '@/test-utils/requireValue';
-import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
 
 interface ConfirmationModalMockProps {
   isOpen: boolean;

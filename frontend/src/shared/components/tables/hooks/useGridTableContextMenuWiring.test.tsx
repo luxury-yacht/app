@@ -46,7 +46,7 @@ vi.mock('@shared/components/tables/hooks/useGridTableContextMenu', () => ({
 let capturedOnClose: (() => void) | null = null;
 
 vi.mock('@shared/components/ContextMenu', () => ({
-  default: (props: unknown) => {
+  default: (props: { onClose: () => void }) => {
     capturedOnClose = props.onClose;
     return <div data-testid="mock-context-menu" />;
   },
@@ -75,12 +75,12 @@ describe('useGridTableContextMenuWiring', () => {
   type HarnessResult = {
     openFocusedRowContextMenu: () => boolean;
     handleCellContextMenu: (
-      event: unknown,
+      event: React.MouseEvent,
       columnKey: string,
       item: Row | null,
       index: number
     ) => void;
-    handleWrapperContextMenu: (event: unknown) => void;
+    handleWrapperContextMenu: (event: React.MouseEvent) => void;
     contextMenuActiveRef: { current: boolean };
     isContextMenuVisible: boolean;
     contextMenuNode: React.ReactNode;
@@ -216,14 +216,14 @@ describe('useGridTableContextMenuWiring', () => {
 
   it('handleCellContextMenu does nothing when context menu is disabled', () => {
     const result = renderHook({ enableContextMenu: false });
-    const fakeEvent = { preventDefault: vi.fn() } as unknown;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown as React.MouseEvent;
     result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
     expect(mockOpenCellContextMenu).not.toHaveBeenCalled();
   });
 
   it('handleCellContextMenu opens without activating the row on right-click', () => {
     const result = renderHook({});
-    const fakeEvent = { preventDefault: vi.fn() } as unknown;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown as React.MouseEvent;
 
     result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
 
@@ -233,7 +233,7 @@ describe('useGridTableContextMenuWiring', () => {
 
   it('handleWrapperContextMenu does nothing when context menu is disabled', () => {
     const result = renderHook({ enableContextMenu: false });
-    const fakeEvent = { preventDefault: vi.fn() } as unknown;
+    const fakeEvent = { preventDefault: vi.fn() } as unknown as React.MouseEvent;
     result.handleWrapperContextMenu(fakeEvent);
     expect(mockOpenWrapperContextMenu).not.toHaveBeenCalled();
   });

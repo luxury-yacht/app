@@ -170,7 +170,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   }: {
     value?: string | string[];
     onChange?: (v: string | string[]) => void;
-    options?: Array<{ label?: string; value: string }>;
+    options?: Array<{ label?: string; value: string; disabled?: boolean }>;
     multiple?: boolean;
   }) => {
     const testId =

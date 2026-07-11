@@ -8,7 +8,7 @@ Progress:
 
 - ✅ Phase 1 completed 2026-07-10: exception snapshot validation, exact-rule enforcement, quality
   gate integration, and review guidance.
-- ⏳ Phase 2 in progress: test and Storybook type escapes.
+- ✅ Phase 2 completed 2026-07-10: test and Storybook type escapes eliminated.
 - ⬜ Phase 3 not started: accessibility and shared icon exceptions.
 - ⬜ Phase 4 not started: CSS cascade exceptions.
 - ⬜ Phase 5 not started: unnecessary hook dependency reporting.
@@ -33,21 +33,22 @@ documentation or agent guidance, then delete this file.
 
 ### Test and Storybook type safety
 
-`src/**/*.test.{ts,tsx}` and `.storybook/mocks/**` currently disable:
+`src/**/*.test.{ts,tsx}` and `.storybook/mocks/**` now inherit the global errors for:
 
 - `lint/style/noNonNullAssertion`
 - `lint/suspicious/noExplicitAny`
 
-These exceptions support partial browser, Wails, React, and third-party mocks, but they can also
-hide malformed fixtures and unsafe assertions. This is real technical debt rather than a permanent
-tool boundary.
+The former broad test override has been removed. Browser, Wails, React, and third-party mocks now
+use typed contracts, reversible property installers, fixture constructors, or fail-fast assertion
+helpers instead of explicit `any` and non-null assertions.
 
-Exit criteria:
+Completed exit criteria:
 
-- Tests and Storybook mocks pass both rules at error level.
-- Shared typed factories exist for frequently mocked Wails, browser, React, and third-party APIs.
-- Repeated non-null assertions are replaced by assertion helpers that fail with useful messages.
-- The test/Storybook override is removed from `frontend/biome.json`.
+- ✅ Tests and Storybook mocks pass both rules at error level.
+- ✅ Shared typed factories exist for frequently mocked Wails, browser, React, and third-party APIs.
+- ✅ Repeated non-null assertions use assertion helpers that fail with useful messages.
+- ✅ The test override and redundant incremental strict override are removed from
+  `frontend/biome.json` and `frontend/biome-exceptions.json`.
 
 ### React dependency reporting
 
@@ -198,16 +199,18 @@ Progress as of 2026-07-10:
 - ✅ `src/ui/command-palette` now enforces both rules; its 22 diagnostics were replaced with a shared
   required-input lookup, typed snapshot options, descriptor-safe property cleanup, and the typed
   window-property harness.
-- ✅ Current strict audit: 758 explicit-`any` and 882 non-null-assertion diagnostics remain. The
-  largest concentrations are shared tables, object-panel components, namespace components,
-  dockable panels, refresh streaming, and object-map tests.
-- ⏳ The next boundary should remain a narrow directory or file from the measured inventory; the
-  broad test override stays in place only for test paths not yet listed in the strict override.
+- ✅ Eliminated the measured 758 explicit-`any` and 882 non-null-assertion diagnostics from the
+  remaining tests, using production-derived component/hook types and typed capture boundaries.
+- ✅ `npm run check --prefix frontend` and `npm run typecheck --prefix frontend` pass with the two
+  rules inherited globally and no test-specific override.
+- ✅ Focused validation passes for 30 changed test files: 339 tests passed.
+- ✅ `mage qc:prerelease` passes: 413 frontend test files, 3,400 tests passed, 1 skipped,
+  and Trivy reported zero vulnerabilities.
 
 - ✅ Inventory explicit `any` by mock boundary and introduce shared typed factories.
 - ✅ Inventory non-null assertions by pattern and introduce assertion helpers.
-- [ ] Enable the two rules for one test area at a time.
-- [ ] Remove the broad test and Storybook override.
+- ✅ Enable the two rules for all test and Storybook areas.
+- ✅ Remove the broad test override and its exception-manifest entry.
 
 ### Phase 3: Narrow accessibility exceptions
 

@@ -6,10 +6,10 @@
  */
 
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { requireValue } from '@/test-utils/requireValue';
 
 type CRDRow = Record<string, unknown>;

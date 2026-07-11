@@ -96,6 +96,8 @@ describe('useGridTableProfiler', () => {
     });
     Object.defineProperty(import.meta.env, 'VITE_GRIDTABLE_PROFILE_LOGS', {
       configurable: true,
+      enumerable: true,
+      writable: true,
       value: 'true',
     });
     const harness = await createHarness();

@@ -12,7 +12,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorFallback } from './ErrorFallback';
 
 const setDevMode = (value: boolean) => {
-  Object.defineProperty(import.meta.env, 'DEV', { configurable: true, value });
+  Object.defineProperty(import.meta.env, 'DEV', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value,
+  });
 };
 
 describe('ErrorFallback', () => {

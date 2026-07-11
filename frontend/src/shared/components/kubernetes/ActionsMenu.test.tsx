@@ -269,7 +269,11 @@ describe('ActionsMenu', () => {
         return undefined;
       }
       const fiberKey = Object.keys(input).find((key) => key.startsWith('__reactFiber$'));
-      return fiberKey ? (input as unknown)[fiberKey]?.memoizedProps?.onChange : undefined;
+      const fiber = fiberKey
+        ? (input as HTMLInputElement & Record<string, unknown>)[fiberKey]
+        : undefined;
+      return (fiber as { memoizedProps?: { onChange?: (event: unknown) => void } } | undefined)
+        ?.memoizedProps?.onChange;
     })();
     expect(typeof onChange).toBe('function');
 

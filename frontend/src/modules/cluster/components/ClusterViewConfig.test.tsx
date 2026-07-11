@@ -7,10 +7,10 @@
 
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { requireValue } from '@/test-utils/requireValue';
 
 type ConfigRow = Record<string, unknown>;

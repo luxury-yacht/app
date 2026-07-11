@@ -8,10 +8,10 @@
  */
 
 import { nodes } from '@wailsjs/go/models';
+import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type React from 'react';
 import { nodeDescriptor } from './descriptors/node';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext } from './schema';

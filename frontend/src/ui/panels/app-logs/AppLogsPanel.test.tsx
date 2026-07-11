@@ -5,13 +5,13 @@
  * Covers key behaviors and edge cases for AppLogsPanel.
  */
 
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { act, type ReactNode, type Ref } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 
 interface CapturedDropdownProps {
   options: DropdownOption[];

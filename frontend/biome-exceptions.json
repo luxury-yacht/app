@@ -6,11 +6,6 @@
       "reason": "The approved Wails backend facade must import the generated binding it isolates from application code."
     },
     {
-      "includes": ["src/**/*.test.{ts,tsx}"],
-      "rules": ["style.noNonNullAssertion", "suspicious.noExplicitAny"],
-      "reason": "Legacy tests still require typed factory and assertion-helper migration; tracked in docs/plans/biome-tech-debt.md."
-    },
-    {
       "includes": [
         "src/modules/port-forward/PortForwardModal.tsx",
         "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",

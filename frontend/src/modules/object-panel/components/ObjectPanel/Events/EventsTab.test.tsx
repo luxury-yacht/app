@@ -5,13 +5,13 @@
  * openRelatedObject, preferring it over the parent panel's cluster.
  */
 
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { requireValue } from '@/test-utils/requireValue';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 
 type CapturedEventRow = Record<string, unknown>;
 interface CapturedGridTableProps

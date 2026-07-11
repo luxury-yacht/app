@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.test.tsx
  */
 
+import type React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type React from 'react';
 import { secretDescriptor } from './descriptors/secret';
 import { OverviewRenderer } from './OverviewRenderer';
 
