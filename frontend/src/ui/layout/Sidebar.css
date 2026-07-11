@@ -138,11 +138,13 @@
 .sidebar-item-row {
   display: flex;
   align-items: center;
+  margin: 0.2rem 0;
 }
 
 .sidebar-item-row > .sidebar-item {
   flex: 1;
   min-width: 0;
+  margin: 0;
 }
 
 .sidebar-item span {
@@ -310,6 +312,9 @@
 
 .sidebar-resizer {
   width: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background-color: var(--color-bg-secondary);
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,

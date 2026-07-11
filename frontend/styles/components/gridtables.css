@@ -265,6 +265,7 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   background: transparent;
   color: inherit;
   font: inherit;
+  text-transform: inherit;
   text-align: left;
 }
 
