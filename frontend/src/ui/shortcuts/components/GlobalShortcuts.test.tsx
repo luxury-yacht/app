@@ -5,33 +5,33 @@
  * Covers key behaviors and edge cases for GlobalShortcuts.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { GlobalShortcuts } from './GlobalShortcuts';
-import { KeyCodes } from '../constants';
 import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyCodes } from '../constants';
+import { GlobalShortcuts } from './GlobalShortcuts';
 
 // Capture event handlers registered via EventsOn so tests can invoke them.
-const wailsEventHandlers: Record<string, (...args: any[]) => void> = {};
+const wailsEventHandlers: Record<string, (...args: unknown[]) => void> = {};
 const QuitMock = vi.fn();
+type ShortcutOptions = Parameters<typeof import('../hooks').useShortcut>[0];
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOnMultiple: () => undefined,
   EventsOff: (eventName: string) => {
     delete wailsEventHandlers[eventName];
   },
-  EventsOn: (eventName: string, handler: (...args: any[]) => void) => {
+  EventsOn: (eventName: string, handler: (...args: unknown[]) => void) => {
     wailsEventHandlers[eventName] = handler;
   },
-  Quit: (...args: any[]) => QuitMock(...args),
+  Quit: (...args: unknown[]) => QuitMock(...args),
 }));
 
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
 const registeredShortcuts: Array<{
   key: string;
-  modifiers?: Record<string, boolean>;
+  modifiers?: ShortcutOptions['modifiers'];
   handler: (event?: KeyboardEvent) => void;
   enabled?: boolean;
 }> = [];
@@ -46,7 +46,7 @@ const kubeconfigState = {
 };
 
 vi.mock('../hooks', () => ({
-  useShortcut: (options: any) => {
+  useShortcut: (options: Parameters<typeof import('../hooks').useShortcut>[0]) => {
     registeredShortcuts.push({
       key: options.key,
       handler: options.handler,
@@ -113,8 +113,8 @@ describe('GlobalShortcuts', () => {
   const modifierKeys: Array<'ctrl' | 'meta' | 'shift' | 'alt'> = ['ctrl', 'meta', 'shift', 'alt'];
 
   const modifiersEqual = (
-    actual: Record<string, boolean> | undefined,
-    expected: Record<string, boolean>
+    actual: ShortcutOptions['modifiers'],
+    expected: NonNullable<ShortcutOptions['modifiers']>
   ) => {
     return modifierKeys.every((mod) => {
       const actualValue = actual?.[mod] ?? false;
@@ -123,7 +123,7 @@ describe('GlobalShortcuts', () => {
     });
   };
 
-  const findShortcut = (key: string, modifiers?: Record<string, boolean>) => {
+  const findShortcut = (key: string, modifiers?: ShortcutOptions['modifiers']) => {
     for (let i = registeredShortcuts.length - 1; i >= 0; i -= 1) {
       if (
         registeredShortcuts[i].key === key &&
@@ -136,10 +136,6 @@ describe('GlobalShortcuts', () => {
       `Shortcut for key "${key}"${modifiers ? ` with modifiers ${JSON.stringify(modifiers)}` : ''} not registered`
     );
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     registeredShortcuts.length = 0;

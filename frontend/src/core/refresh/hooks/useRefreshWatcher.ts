@@ -5,11 +5,12 @@
  * Encapsulates state and side effects for the core layer.
  */
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { eventBus } from '@/core/events';
 import { useRefreshManagerContext } from '../contexts/RefreshManagerContext';
 import type { RefresherState } from '../RefreshManager';
 import type { RefresherName } from '../refresherTypes';
-import { eventBus } from '@/core/events';
 
 interface UseRefreshWatcherOptions {
   /**
@@ -30,7 +31,7 @@ interface UseRefreshWatcherOptions {
   /**
    * Dependencies that trigger re-subscription
    */
-  dependencies?: any[];
+  dependencies?: unknown[];
 }
 
 /**
@@ -60,67 +61,71 @@ export const useRefreshWatcher = (options: UseRefreshWatcherOptions) => {
   }, []);
 
   // Subscribe to refresh events
-  useEffect(() => {
-    // Unsubscribe previous subscription
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
-
-    // Only subscribe if enabled
-    if (!enabled || !refresherName) {
-      setState(null);
-      return;
-    }
-
-    // Function to subscribe
-    const subscribe = () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-      if (!refresherName) {
-        return;
-      }
-      unsubscribeRef.current = manager.subscribe(refresherName, handleRefresh);
-    };
-
-    // Subscribe initially
-    subscribe();
-
-    const updateState = () => {
-      if (!refresherName) {
-        setState(null);
-        return;
-      }
-      const newState = manager.getState(refresherName);
-      setState(newState);
-    };
-
-    updateState();
-
-    // Re-subscribe when the refresher is registered
-    const unsubRegistered = eventBus.on('refresh:registered', ({ name }) => {
-      if (refresherName && name === refresherName) {
-        subscribe();
-        updateState();
-      }
-    });
-
-    const unsubStateChange = eventBus.on('refresh:state-change', ({ name, state: newState }) => {
-      if (name === refresherName) {
-        setState(newState ?? null);
-      }
-    });
-
-    return () => {
+  useEffectWithInvalidation(
+    () => {
+      // Unsubscribe previous subscription
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
-      unsubRegistered();
-      unsubStateChange();
-    };
-  }, [manager, refresherName, enabled, handleRefresh, dependenciesSignature]);
+
+      // Only subscribe if enabled
+      if (!enabled || !refresherName) {
+        setState(null);
+        return;
+      }
+
+      // Function to subscribe
+      const subscribe = () => {
+        if (unsubscribeRef.current) {
+          unsubscribeRef.current();
+        }
+        if (!refresherName) {
+          return;
+        }
+        unsubscribeRef.current = manager.subscribe(refresherName, handleRefresh);
+      };
+
+      // Subscribe initially
+      subscribe();
+
+      const updateState = () => {
+        if (!refresherName) {
+          setState(null);
+          return;
+        }
+        const newState = manager.getState(refresherName);
+        setState(newState);
+      };
+
+      updateState();
+
+      // Re-subscribe when the refresher is registered
+      const unsubRegistered = eventBus.on('refresh:registered', ({ name }) => {
+        if (refresherName && name === refresherName) {
+          subscribe();
+          updateState();
+        }
+      });
+
+      const unsubStateChange = eventBus.on('refresh:state-change', ({ name, state: newState }) => {
+        if (name === refresherName) {
+          setState(newState ?? null);
+        }
+      });
+
+      return () => {
+        if (unsubscribeRef.current) {
+          unsubscribeRef.current();
+          unsubscribeRef.current = null;
+        }
+        unsubRegistered();
+        unsubStateChange();
+      };
+    },
+    [manager, refresherName, enabled, handleRefresh],
+    [dependenciesSignature]
+  );
 
   // Manual refresh trigger
   const triggerRefresh = useCallback(async () => {

@@ -4,9 +4,11 @@
  * Context for sharing authentication error state across the application.
  * Subscribes to backend auth events and provides auth state to all consumers.
  */
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { RetryClusterAuth } from '@wailsjs/go/backend/App';
+
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { readAllClusterAuthStates, requestAppState } from '@/core/app-state-access';
+import { RetryClusterAuth } from '@/core/backend-api';
 import { eventBus } from '@/core/events';
 
 /**
@@ -361,7 +363,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ];
 
     return () => {
-      disposers.forEach((dispose) => dispose());
+      disposers.forEach((dispose) => {
+        dispose();
+      });
     };
   }, []);
 

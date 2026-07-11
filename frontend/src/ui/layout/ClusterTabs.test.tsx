@@ -4,16 +4,17 @@
  * Test suite for ClusterTabs.
  * Covers tab rendering, ordering, and close/select behaviors.
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ClusterTabs from '@ui/layout/ClusterTabs';
 import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import ClusterTabs from '@ui/layout/ClusterTabs';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 
 type MockState = {
   selectedKubeconfigs: string[];
@@ -42,10 +43,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 describe('ClusterTabs', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -125,6 +122,63 @@ describe('ClusterTabs', () => {
     expect(addButton?.textContent).toContain('Open Cluster');
   });
 
+  it('remeasures Open Cluster label fit when the number of tabs changes', async () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth'
+    );
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        return this.classList.contains('cluster-tabs-wrapper') ? 300 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get() {
+        if (this.classList.contains('cluster-tabs-add')) return 100;
+        if (this.classList.contains('tab-item')) return 80;
+        return 0;
+      },
+    });
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+
+    try {
+      mockState.selectedKubeconfigs = ['a'];
+      mockState.selectedKubeconfig = 'a';
+      await renderTabs({ onOpenCluster: vi.fn() });
+      expect(container.querySelector('.cluster-tabs-add__label')).not.toBeNull();
+
+      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
+      await renderTabs({ onOpenCluster: vi.fn() });
+
+      expect(container.querySelector('.cluster-tabs-add__label')).toBeNull();
+    } finally {
+      restoreResizeObserver();
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+      }
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
+      }
+    }
+  });
+
   it('orders tabs by persisted drag order with selection-order fallback', async () => {
     setClusterTabOrder(['b']);
     mockState.selectedKubeconfigs = ['a', 'b', 'c'];
@@ -156,7 +210,8 @@ describe('ClusterTabs', () => {
 
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     const target = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as
-      HTMLElement | undefined;
+      | HTMLElement
+      | undefined;
     expect(target).toBeTruthy();
 
     act(() => {

@@ -5,6 +5,11 @@
  * live reload/merge, apply, post-apply verification, and refresh ordering.
  */
 
+import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
+import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
+import type { DiffLine } from '@shared/components/diff/lineDiff';
+import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
+import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   readObjectYAMLForRef,
@@ -12,11 +17,6 @@ import {
   requestRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import type { DiffLine } from '@shared/components/diff/lineDiff';
-import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
-import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
-import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
-import { errorHandler } from '@utils/errorHandler';
 import { parseObjectYamlError } from './yamlErrors';
 import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
@@ -25,14 +25,14 @@ import {
   checkYamlOwnershipOnServer,
   mergeYamlWithLatestOnServer,
   normalizeYamlString,
-  sanitizeYamlForSemanticCompare,
   type ObjectYamlOwnershipConflict,
+  sanitizeYamlForSemanticCompare,
 } from './yamlTabUtils';
 import {
-  parseObjectIdentity,
-  validateYamlDraft,
   type ObjectIdentity,
+  parseObjectIdentity,
   type ValidationSuccess,
+  validateYamlDraft,
 } from './yamlValidation';
 
 export type YamlTransactionDiffResult = {
@@ -312,7 +312,7 @@ export const useYamlTransaction = ({
   ]);
 
   useEffect(() => {
-    if (!postApplyNotice || postApplyNotice.kind !== 'warning' || manualYamlOverride) {
+    if (postApplyNotice?.kind !== 'warning' || manualYamlOverride) {
       return;
     }
     setPostApplyNotice(null);

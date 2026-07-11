@@ -5,11 +5,14 @@
  * Covers key behaviors and edge cases for ClusterViewStorage.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -34,7 +37,20 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+interface StorageRow {
+  kind: string;
+  name: string;
+  clusterId: string;
+  capacity: string;
+  accessModes: string;
+  status: string;
+  statusState: string;
+  statusPresentation: string;
+  claim: string;
+  storageClass: string;
+  age: string;
+}
+const gridTablePropsRef: { current: GridTableProps<StorageRow> | null } = { current: null };
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -43,7 +59,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: GridTableProps<StorageRow>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -113,13 +129,15 @@ const basePV = {
   age: '1d',
 };
 
+const getGridTableProps = () =>
+  requireValue(
+    gridTablePropsRef.current,
+    'expected captured GridTable props in ClusterViewStorage.test.tsx'
+  );
+
 describe('ClusterViewStorage', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -142,7 +160,7 @@ describe('ClusterViewStorage', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.columnVisibility).toBe(null);
@@ -161,8 +179,8 @@ describe('ClusterViewStorage', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
-    expect(props.keyExtractor({ ...basePV, clusterId: 'alpha:ctx' })).toBe(
+    const props = getGridTableProps();
+    expect(props.keyExtractor({ ...basePV, clusterId: 'alpha:ctx' }, 0)).toBe(
       'alpha:ctx|/v1/PersistentVolume//pv-1'
     );
   });
@@ -177,7 +195,7 @@ describe('ClusterViewStorage', () => {
     // (only the empty row-derived fallback): the kind options come ONLY from
     // the backend capabilities on the payload (see the NsViewWorkloads
     // end-to-end pin), never from a frontend constant.
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props.filters?.options?.kinds).toEqual([]);
   });
 
@@ -187,15 +205,19 @@ describe('ClusterViewStorage', () => {
       await Promise.resolve();
     });
 
-    const statusColumn = gridTablePropsRef.current.columns.find(
-      (column: any) => column.key === 'status'
+    const statusColumn = requireValue(
+      getGridTableProps().columns.find((column) => column.key === 'status'),
+      'expected status column in ClusterViewStorage.test.tsx'
     );
-    const cell = statusColumn.render({
-      ...basePV,
-      status: 'Released',
-      statusState: 'Released',
-      statusPresentation: 'warning',
-    });
+    const cell = requireReactElement<{ className?: string }>(
+      statusColumn.render({
+        ...basePV,
+        status: 'Released',
+        statusState: 'Released',
+        statusPresentation: 'warning',
+      }),
+      'expected status cell in ClusterViewStorage.test.tsx'
+    );
     expect(cell.props.className).toBe('status-text warning');
   });
 
@@ -205,10 +227,11 @@ describe('ClusterViewStorage', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
-    const objectMapItem = props
-      .getCustomContextMenuItems(basePV, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const props = getGridTableProps();
+    const objectMapItem = requireValue(
+      props.getCustomContextMenuItems,
+      'expected context-menu factory in ClusterViewStorage.test.tsx'
+    )(basePV, 'name').find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

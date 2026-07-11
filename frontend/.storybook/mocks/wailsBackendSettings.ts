@@ -22,10 +22,10 @@ const defaultOptions: Required<SettingsMockOptions> = {
  */
 export function setMockSettingsBackend(options: SettingsMockOptions = {}): void {
   const merged = { ...defaultOptions, ...options };
-  const overrides = ((window as any).__storybookGoOverrides =
-    (window as any).__storybookGoOverrides || {});
+  const overrides = window.__storybookGoOverrides || {};
+  window.__storybookGoOverrides = overrides;
 
-  overrides['GetAppSettings'] = () =>
+  overrides.GetAppSettings = () =>
     Promise.resolve({
       appearanceMode: merged.appearanceMode,
       useShortResourceNames: false,
@@ -35,14 +35,14 @@ export function setMockSettingsBackend(options: SettingsMockOptions = {}): void 
       gridTablePersistenceMode: 'shared',
       defaultObjectPanelPosition: 'right',
     });
-  overrides['GetKubeconfigSearchPaths'] = () => Promise.resolve(merged.kubeconfigSearchPaths);
+  overrides.GetKubeconfigSearchPaths = () => Promise.resolve(merged.kubeconfigSearchPaths);
   // Stub mutating calls so they resolve without errors.
-  overrides['SetKubeconfigSearchPaths'] = () => Promise.resolve();
-  overrides['OpenKubeconfigSearchPathDialog'] = () => Promise.resolve('');
+  overrides.SetKubeconfigSearchPaths = () => Promise.resolve();
+  overrides.OpenKubeconfigSearchPathDialog = () => Promise.resolve('');
   // Stub kubeconfig list calls used by KubeconfigProvider.
-  overrides['GetKubeconfigs'] = () => Promise.resolve([]);
-  overrides['GetSelectedKubeconfigs'] = () => Promise.resolve([]);
-  overrides['SetSelectedKubeconfigs'] = () => Promise.resolve();
+  overrides.GetKubeconfigs = () => Promise.resolve([]);
+  overrides.GetSelectedKubeconfigs = () => Promise.resolve([]);
+  overrides.SetSelectedKubeconfigs = () => Promise.resolve();
 }
 
 // Install defaults immediately so the component works without explicit setup.

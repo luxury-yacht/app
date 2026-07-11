@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/constants.ts
  */
 
-import type { ResourceCapability } from './types';
 import type {
   ObjectDetailsRefresherName,
   ObjectEventsRefresherName,
 } from '@/core/refresh/refresherTypes';
+import type { ResourceCapability } from './types';
 
 export const CLUSTER_SCOPE = '__cluster__';
 export const INACTIVE_SCOPE = '__inactive__';

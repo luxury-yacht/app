@@ -5,19 +5,17 @@
  * Covers key behaviors and edge cases for useRefreshHooks.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { RefreshCallback, RefreshContext, RefresherState, Refresher } from '../RefreshManager';
+import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
+import type { RefreshCallback, RefreshContext, Refresher, RefresherState } from '../RefreshManager';
 import type { RefresherName } from '../refresherTypes';
 import { useRefreshContext } from './useRefreshContext';
 import { useRefreshManager } from './useRefreshManager';
 import { useRefreshWatcher } from './useRefreshWatcher';
-import { eventBus } from '@/core/events';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 type RefreshManagerLike = {
   register: (refresher: Refresher) => void;
@@ -246,7 +244,10 @@ describe('useRefreshWatcher', () => {
 
     const abortController = new AbortController();
     await act(async () => {
-      await subscription!(false, abortController.signal);
+      await requireValue(subscription, 'expected test value in useRefreshHooks.test.tsx')(
+        false,
+        abortController.signal
+      );
     });
 
     expect(onRefresh).toHaveBeenCalledWith(false, abortController.signal);

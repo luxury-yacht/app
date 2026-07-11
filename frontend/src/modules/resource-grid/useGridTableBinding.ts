@@ -5,15 +5,15 @@
  * sorting, persistence-backed table state, virtualization, and canonical row keys.
  */
 
-import { useMemo } from 'react';
-import { useTableSort, type SortConfig, type SortDirection } from '@/hooks/useTableSort';
 import {
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type ColumnWidthState,
+  GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
   type GridTableFilterConfig,
   type GridTableVirtualizationOptions,
 } from '@shared/components/tables/GridTable';
+import { useMemo } from 'react';
+import { type SortConfig, type SortDirection, useTableSort } from '@/hooks/useTableSort';
 import type { ResourceGridTableMode } from './resourceGridTableTypes';
 import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
 

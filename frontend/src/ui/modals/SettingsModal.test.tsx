@@ -4,12 +4,12 @@
  * Test suite for SettingsModal — tabbed shell behavior + section switching.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import SettingsModal from './SettingsModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -77,10 +77,6 @@ vi.mock('@/core/refresh/RefreshManager', () => ({
 describe('SettingsModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset();
@@ -197,7 +193,7 @@ describe('SettingsModal', () => {
     expect(kubeconfigTab).toBeTruthy();
 
     await act(async () => {
-      kubeconfigTab!.click();
+      requireValue(kubeconfigTab, 'expected test value in SettingsModal.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -224,7 +220,7 @@ describe('SettingsModal', () => {
     ) as HTMLButtonElement[];
     const displayTab = tabs.find((t) => t.textContent?.includes('Display'));
     await act(async () => {
-      displayTab!.click();
+      requireValue(displayTab, 'expected test value in SettingsModal.test.tsx').click();
       await Promise.resolve();
     });
     expect(localStorage.getItem('app-settings-last-tab')).toBe('display');

@@ -5,10 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useCallback } from 'react';
-import type { RefObject } from 'react';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import type { RefObject } from 'react';
+import { useCallback } from 'react';
 
 interface GridTableKeyboardOptions {
   filteringEnabled: boolean;
@@ -65,7 +65,9 @@ export const useGridTableKeyboardScopes = ({
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
     container
       .querySelectorAll<HTMLElement>('.gridtable-filter-actions .icon-bar-button')
-      .forEach((element) => addTarget(element));
+      .forEach((element) => {
+        addTarget(element);
+      });
     addTarget(
       container.querySelector<HTMLElement>(
         '[data-gridtable-filter-role="columns"] .dropdown-trigger'

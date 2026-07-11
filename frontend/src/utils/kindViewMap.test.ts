@@ -5,7 +5,7 @@
  * map to the correct view destinations.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getViewForKind, isNamespaceScopedKind } from './kindViewMap';
 
 describe('getViewForKind', () => {

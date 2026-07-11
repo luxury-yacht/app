@@ -5,12 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // Auto-width measurement queue for GridTable.
 // - When a column is marked autoWidth, we keep an eye on its rendered text/content.
@@ -146,7 +145,7 @@ export function useDirtyQueue<T>({
       for (const key of keys) {
         if (!key) continue;
         const column = columns.find((col) => col.key === key);
-        if (!column || !column.autoWidth) {
+        if (!column?.autoWidth) {
           continue;
         }
         if (manuallyResizedColumnsRef.current.has(key)) {
@@ -272,7 +271,7 @@ export function useDirtyQueue<T>({
 
     dirtyKeys.forEach((key) => {
       const column = renderedColumnsRef.current.find((col) => col.key === key);
-      if (!column || !column.autoWidth) {
+      if (!column?.autoWidth) {
         columnHashesRef.current.delete(key);
         allowShrinkColumnsRef.current.delete(key);
         return;
@@ -312,7 +311,9 @@ export function useDirtyQueue<T>({
 
     // If cells are not yet rendered, retry a moment later.
     if (retryKeys.length > 0) {
-      retryKeys.forEach((key) => dirtyColumnsRef.current.add(key));
+      retryKeys.forEach((key) => {
+        dirtyColumnsRef.current.add(key);
+      });
       pendingRetryRef.current = true;
       scheduleDirtyFlush(50);
     } else {

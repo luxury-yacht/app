@@ -96,7 +96,9 @@ export function buildGridTableFilterOptions<T>({
   ) => {
     const map = new Map<string, DropdownOption>();
     if (provided?.length) {
-      provided.forEach((value) => addOption(map, value, normalize));
+      provided.forEach((value) => {
+        addOption(map, value, normalize);
+      });
     } else if (!queryBacked) {
       for (const row of data) {
         addOption(map, getValue(row), normalize);

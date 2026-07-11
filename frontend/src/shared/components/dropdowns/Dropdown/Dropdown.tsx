@@ -5,20 +5,20 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { DropdownProps } from './types';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
+import type { DropdownProps } from './types';
 import '@styles/components/dropdowns.css';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import {
   DropdownArrowIcon,
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
+import { useKeyboardSurface } from '@ui/shortcuts';
 
-const Dropdown: React.FC<DropdownProps> = ({
+const Dropdown = <TMetadata,>({
   options,
   value,
   onChange,
@@ -47,7 +47,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   id,
   onOpen,
   onClose,
-}) => {
+}: DropdownProps<TMetadata>) => {
   const {
     isOpen,
     highlightedIndex,
@@ -316,7 +316,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       return false;
     }
     const active = document.activeElement as HTMLElement | null;
-    return Boolean(active && active.classList.contains('search-input'));
+    return Boolean(active?.classList.contains('search-input'));
   };
 
   useKeyboardSurface({
@@ -354,6 +354,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
+      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action. */}
       <div
         ref={triggerRef}
         className="dropdown-trigger"
@@ -373,6 +374,7 @@ const Dropdown: React.FC<DropdownProps> = ({
 
         {clearable && !multiple && value && !disabled && (
           <button
+            type="button"
             className="clear-button"
             onClick={(e) => {
               e.stopPropagation();
@@ -401,7 +403,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         >
           {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
             <div className="dropdown-menu-controls">
-              {searchable && (
+              {!!searchable && (
                 <div className="search-container">
                   <input
                     type="text"
@@ -412,6 +414,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                     onClick={(e) => e.stopPropagation()}
                     onFocus={() => setIsSearchFocused(true)}
                     onBlur={() => setIsSearchFocused(false)}
+                    // biome-ignore lint/a11y/noAutofocus: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
                     autoFocus
                   />
                 </div>
@@ -474,6 +477,9 @@ const Dropdown: React.FC<DropdownProps> = ({
               const isSeparator = isGroupHeader && option.label.trim().length === 0;
 
               return (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
+                // biome-ignore lint/a11y/noStaticElementInteractions: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
+                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: The registered dropdown surface owns trigger and option keyboard behavior; conditional presentation rows share the option renderer and the search field receives focus only after an explicit open action.
                 <div
                   key={option.value}
                   className={[
@@ -490,8 +496,8 @@ const Dropdown: React.FC<DropdownProps> = ({
                     !option.disabled && !isGroupHeader && setHighlightedIndex(index)
                   }
                   role={isGroupHeader ? 'presentation' : 'option'}
-                  aria-selected={optionIsSelected}
-                  aria-disabled={option.disabled}
+                  aria-selected={isGroupHeader ? undefined : optionIsSelected}
+                  aria-disabled={isGroupHeader ? undefined : option.disabled}
                 >
                   {renderOption ? (
                     renderOption(option, optionIsSelected)
@@ -513,7 +519,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       )}
 
       {/* Hidden input for form integration */}
-      {name && (
+      {!!name && (
         <input type="hidden" name={name} value={Array.isArray(value) ? value.join(',') : value} />
       )}
 

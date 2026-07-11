@@ -1,19 +1,32 @@
 /**
  * frontend/src/shared/components/tabs/Tabs.test.tsx
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 
 import { Tabs } from './Tabs';
+
+const installResizeObserver = (observers: Array<() => void>) =>
+  installWindowProperty(
+    'ResizeObserver',
+    class implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        observers.push(() => callback([], this));
+      }
+
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  );
 
 describe('Tabs', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -525,7 +538,9 @@ describe('Tabs', () => {
     const closeButton = container.querySelector<HTMLElement>('.tab-item__close');
     expect(closeButton).toBeTruthy();
     act(() => {
-      closeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(closeButton, 'expected test value in Tabs.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -549,7 +564,9 @@ describe('Tabs', () => {
     tab?.focus();
 
     act(() => {
-      tab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      requireValue(tab, 'expected test value in Tabs.test.tsx').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })
+      );
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -572,7 +589,9 @@ describe('Tabs', () => {
     tab?.focus();
 
     act(() => {
-      tab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      requireValue(tab, 'expected test value in Tabs.test.tsx').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true })
+      );
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -595,7 +614,9 @@ describe('Tabs', () => {
 
     // Should not throw or do anything.
     act(() => {
-      tab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      requireValue(tab, 'expected test value in Tabs.test.tsx').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })
+      );
     });
 
     // No assertion needed beyond "doesn't throw" — no onClose to call.
@@ -612,7 +633,7 @@ describe('Tabs', () => {
               extraProps: {
                 'data-testid': 'cluster-id-1',
                 draggable: true,
-              } as any,
+              },
             },
           ]}
           activeId="a"
@@ -637,7 +658,7 @@ describe('Tabs', () => {
             {
               id: 'a',
               label: 'Alpha',
-              extraProps: { tabIndex: 99 } as any,
+              extraProps: { tabIndex: 99 },
             },
           ]}
           activeId="a"
@@ -681,7 +702,9 @@ describe('Tabs', () => {
     expect(leading).toBeTruthy();
     // leading should appear before label in the DOM
     expect(
-      leading!.compareDocumentPosition(label!) & Node.DOCUMENT_POSITION_FOLLOWING
+      requireValue(leading, 'expected test value in Tabs.test.tsx').compareDocumentPosition(
+        requireValue(label, 'expected test value in Tabs.test.tsx')
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 
@@ -693,6 +716,89 @@ describe('Tabs', () => {
     const tablist = container.querySelector('[role="tablist"]');
     expect(tablist).toBeTruthy();
     expect(tablist?.querySelectorAll('[role="tab"]').length).toBe(0);
+  });
+
+  it('does not recreate the scroll observer when only the tabs array identity changes', async () => {
+    let observeCount = 0;
+    let disconnectCount = 0;
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {
+          observeCount += 1;
+        }
+        unobserve() {}
+        disconnect() {
+          disconnectCount += 1;
+        }
+      }
+    );
+    const render = (tabs: Array<{ id: string; label: string }>) => {
+      root.render(
+        <Tabs
+          tabs={tabs}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+          overflow="scroll"
+        />
+      );
+    };
+
+    try {
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+      const initialObserveCount = observeCount;
+
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+
+      expect(observeCount).toBe(initialObserveCount);
+      expect(disconnectCount).toBe(0);
+    } finally {
+      restoreResizeObserver();
+    }
+  });
+
+  it('remeasures overflow when the tab list changes without recreating the observer', async () => {
+    const restoreResizeObserver = installWindowProperty(
+      'ResizeObserver',
+      class implements ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const render = (tabs: Array<{ id: string; label: string }>) => {
+      root.render(
+        <Tabs
+          tabs={tabs}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+          overflow="scroll"
+        />
+      );
+    };
+
+    try {
+      await act(async () => render([{ id: 'a', label: 'Alpha' }]));
+      const tablist = requireValue(
+        container.querySelector<HTMLElement>('[role="tablist"]'),
+        'expected scrollable tab list'
+      );
+      Object.defineProperty(tablist, 'clientWidth', { configurable: true, value: 100 });
+      Object.defineProperty(tablist, 'scrollWidth', { configurable: true, value: 240 });
+
+      await act(async () =>
+        render([
+          { id: 'a', label: 'Alpha' },
+          { id: 'b', label: 'Beta' },
+        ])
+      );
+
+      expect(container.querySelector('[aria-label="Scroll tabs right"]')).not.toBeNull();
+    } finally {
+      restoreResizeObserver();
+    }
   });
 
   it('keeps the strip keyboard-reachable when activeId does not match any tab', () => {
@@ -796,14 +902,7 @@ describe('Tabs', () => {
   it('renders scroll buttons when overflow="scroll" and content overflows', () => {
     // Force overflow by mocking the scroll measurements.
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as any).ResizeObserver;
-    (globalThis as any).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     act(() => {
       root.render(
@@ -825,12 +924,14 @@ describe('Tabs', () => {
 
     // Trigger the observer callback.
     act(() => {
-      observers.forEach((cb) => cb());
+      observers.forEach((cb) => {
+        cb();
+      });
     });
 
     expect(container.querySelector('.tab-strip__overflow-indicator')).toBeTruthy();
 
-    (globalThis as any).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 
   it('does not render scroll buttons when overflow="none"', () => {
@@ -851,14 +952,7 @@ describe('Tabs', () => {
 
   it('scrolls the strip when an overflow indicator is clicked', () => {
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as any).ResizeObserver;
-    (globalThis as any).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     // Spy on requestAnimationFrame so we can drive the manual scroll
     // animation synchronously from the test.
@@ -879,7 +973,10 @@ describe('Tabs', () => {
       );
     });
 
-    const scrollContainer = container.querySelector<HTMLDivElement>('[role="tablist"]')!;
+    const scrollContainer = requireValue(
+      container.querySelector<HTMLDivElement>('[role="tablist"]'),
+      'expected test value in Tabs.test.tsx'
+    );
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 1000, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 200, configurable: true });
     // Make scrollLeft writable so the manual animation can set it.
@@ -899,7 +996,11 @@ describe('Tabs', () => {
       Object.defineProperty(btn, 'offsetWidth', { value: 100, configurable: true });
     });
 
-    act(() => observers.forEach((cb) => cb()));
+    act(() =>
+      observers.forEach((cb) => {
+        cb();
+      })
+    );
 
     const rightButton = container.querySelector<HTMLButtonElement>(
       '.tab-strip__overflow-indicator--right'
@@ -907,7 +1008,9 @@ describe('Tabs', () => {
     expect(rightButton).toBeTruthy();
 
     act(() => {
-      rightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(rightButton, 'expected test value in Tabs.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
     });
 
     // Click should have scheduled a rAF to start the manual scroll animation.
@@ -929,14 +1032,14 @@ describe('Tabs', () => {
     expect(scrollContainer.scrollLeft).toBe(32);
 
     rafSpy.mockRestore();
-    (globalThis as any).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 
   it('scrolls the active tab into view when activeId changes', () => {
     const scrollIntoViewSpy = vi.fn();
     // Patch HTMLElement.prototype so all buttons share the spy.
     const original = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoViewSpy as any;
+    HTMLElement.prototype.scrollIntoView = (options) => scrollIntoViewSpy(options);
 
     act(() => {
       root.render(
@@ -1017,14 +1120,7 @@ describe('Tabs', () => {
 
   it('renders both overflow indicators together once the strip overflows', () => {
     const observers: Array<() => void> = [];
-    const OriginalResizeObserver = (globalThis as any).ResizeObserver;
-    (globalThis as any).ResizeObserver = class {
-      constructor(public cb: () => void) {
-        observers.push(cb);
-      }
-      observe() {}
-      disconnect() {}
-    };
+    const restoreResizeObserver = installResizeObserver(observers);
 
     act(() => {
       root.render(
@@ -1037,11 +1133,18 @@ describe('Tabs', () => {
       );
     });
 
-    const scrollContainer = container.querySelector<HTMLDivElement>('[role="tablist"]')!;
+    const scrollContainer = requireValue(
+      container.querySelector<HTMLDivElement>('[role="tablist"]'),
+      'expected test value in Tabs.test.tsx'
+    );
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 500, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 300, configurable: true });
 
-    act(() => observers.forEach((cb) => cb()));
+    act(() =>
+      observers.forEach((cb) => {
+        cb();
+      })
+    );
 
     // Both indicators render together whenever the strip overflows, even
     // at scrollLeft = 0. No per-side conditional rendering, no count badge.
@@ -1051,6 +1154,6 @@ describe('Tabs', () => {
     expect(rightInd).toBeTruthy();
     expect(container.querySelector('.tab-strip__overflow-count')).toBeNull();
 
-    (globalThis as any).ResizeObserver = OriginalResizeObserver;
+    restoreResizeObserver();
   });
 });

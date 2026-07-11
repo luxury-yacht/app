@@ -5,14 +5,37 @@
  * clusters, namespaces, kinds, and catalog matches.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectDiffModal.css';
+import { useRefreshScopedDomain } from '@core/refresh';
+import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
+import type { DomainStatus } from '@core/refresh/store';
+import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import {
+  CLUSTER_SCOPE,
+  INACTIVE_SCOPE,
+} from '@modules/object-panel/components/ObjectPanel/constants';
+import DiffViewer from '@shared/components/diff/DiffViewer';
+import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
+import {
+  countVisibleDiffRows,
+  formatTooLargeDiffMessage,
+  mergeDiffLines,
+} from '@shared/components/diff/diffUtils';
+import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
+import type {
+  ObjectDiffOpenRequest,
+  ObjectDiffSelectionSeed,
+} from '@shared/components/diff/objectDiffSelection';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
-import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import ModalSurface from '@shared/components/modals/ModalSurface';
+import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import {
   readCatalogObjectMatchForRef,
   requestData,
@@ -20,35 +43,14 @@ import {
   resetRefreshDomain,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
-import { useRefreshScopedDomain } from '@core/refresh';
-import type { DomainStatus } from '@core/refresh/store';
-import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
-import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
-import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
-import {
-  countVisibleDiffRows,
-  formatTooLargeDiffMessage,
-  mergeDiffLines,
-} from '@shared/components/diff/diffUtils';
-import DiffViewer from '@shared/components/diff/DiffViewer';
+import { useShortNames } from '@/hooks/useShortNames';
+import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import {
   buildIgnoredMetadataLineSet,
   maskMutedMetadataLines,
   sanitizeYamlForDiff,
 } from './objectDiffUtils';
-import {
-  CLUSTER_SCOPE,
-  INACTIVE_SCOPE,
-} from '@modules/object-panel/components/ObjectPanel/constants';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { useShortNames } from '@/hooks/useShortNames';
-import type {
-  ObjectDiffOpenRequest,
-  ObjectDiffSelectionSeed,
-} from '@shared/components/diff/objectDiffSelection';
 
 interface ObjectDiffModalProps {
   isOpen: boolean;
@@ -771,17 +773,25 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     rightYaml.state.status === 'loading' || rightYaml.state.status === 'initialising';
 
   // Reset change tracking when the user swaps objects.
-  useEffect(() => {
-    leftChecksumRef.current = null;
-    setLeftChangedAt(null);
-    setLeftYamlStable('');
-  }, [leftObjectUid]);
+  useEffectWithInvalidation(
+    () => {
+      leftChecksumRef.current = null;
+      setLeftChangedAt(null);
+      setLeftYamlStable('');
+    },
+    [],
+    [leftObjectUid]
+  );
 
-  useEffect(() => {
-    rightChecksumRef.current = null;
-    setRightChangedAt(null);
-    setRightYamlStable('');
-  }, [rightObjectUid]);
+  useEffectWithInvalidation(
+    () => {
+      rightChecksumRef.current = null;
+      setRightChangedAt(null);
+      setRightYamlStable('');
+    },
+    [],
+    [rightObjectUid]
+  );
 
   useEffect(() => {
     if (!leftObjectUid) {
@@ -1094,7 +1104,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     }
     return (
       <>
-        {parts.clusterLabel && (
+        {!!parts.clusterLabel && (
           <span className="object-diff-column-meta">{parts.clusterLabel}/</span>
         )}
         <span className="object-diff-column-meta">{parts.namespaceLabel}/</span>
@@ -1121,8 +1131,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     if (leftYamlError || rightYamlError) {
       return (
         <div className="object-diff-empty object-diff-error">
-          {leftYamlError && <div>Left YAML error: {leftYamlError}</div>}
-          {rightYamlError && <div>Right YAML error: {rightYamlError}</div>}
+          {!!leftYamlError && <div>Left YAML error: {leftYamlError}</div>}
+          {!!rightYamlError && <div>Right YAML error: {rightYamlError}</div>}
         </div>
       );
     }
@@ -1202,7 +1212,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 </button>
               </div>
             </div>
-            {leftNoMatch && <div className="object-diff-match-message">No match found</div>}
+            {!!leftNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
               <label className="object-diff-label" htmlFor="object-diff-left-cluster">
                 Cluster
@@ -1270,7 +1280,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 ariaLabel="Left object"
               />
             </div>
-            {leftCatalogError && (
+            {!!leftCatalogError && (
               <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
             )}
           </div>
@@ -1301,7 +1311,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 </button>
               </div>
             </div>
-            {rightNoMatch && <div className="object-diff-match-message">No match found</div>}
+            {!!rightNoMatch && <div className="object-diff-match-message">No match found</div>}
             <div className="object-diff-field">
               <label className="object-diff-label" htmlFor="object-diff-right-cluster">
                 Cluster
@@ -1369,7 +1379,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 ariaLabel="Right object"
               />
             </div>
-            {rightCatalogError && (
+            {!!rightCatalogError && (
               <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
             )}
           </div>
@@ -1382,6 +1392,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 <div className="object-diff-viewer-title">Diff Viewer</div>
                 <span
                   className="object-diff-info-indicator"
+                  role="img"
                   title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
                   aria-label="Diff metadata field info"
                 >
@@ -1404,7 +1415,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
                 {renderSelectionLabel(leftSelection)}
               </span>
               {/* Show per-side update indicators alongside each selection label. */}
-              {leftChangedAt && (
+              {!!leftChangedAt && (
                 <span
                   className="object-diff-column-update"
                   title={`Left updated ${formatFullDate(leftChangedAt)}`}
@@ -1417,7 +1428,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               <span className="object-diff-column-label">
                 {renderSelectionLabel(rightSelection)}
               </span>
-              {rightChangedAt && (
+              {!!rightChangedAt && (
                 <span
                   className="object-diff-column-update"
                   title={`Right updated ${formatFullDate(rightChangedAt)}`}

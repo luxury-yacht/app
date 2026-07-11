@@ -5,14 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
-import {
-  type ColumnWidthInput,
-  type GridColumnDefinition,
-} from '@shared/components/tables/GridTable';
-import ResourceBar from '@shared/components/ResourceBar';
-import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
+import ResourceBar from '@shared/components/ResourceBar';
+import type { ColumnWidthInput, GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type React from 'react';
+import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
 /**
  * Column factory functions for GridTable
@@ -69,7 +66,7 @@ export interface CreateResourceBarColumnOptions<T> {
   getShowEmptyState?: (item: T) => boolean;
   className?: string;
   sortable?: boolean;
-  sortValue?: (item: T) => any;
+  sortValue?: (item: T) => unknown;
 }
 
 export function createResourceBarColumn<T>(
@@ -324,6 +321,7 @@ export function createTextColumn<T>(
       const className = ['gridtable-link', dynamicClass].filter(Boolean).join(' ');
 
       return (
+        // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
         <span
           className={className}
           style={{ cursor: 'pointer' }}
@@ -485,6 +483,7 @@ export const createKindColumn = <T,>(
       };
 
       return (
+        // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
         <span
           data-kind-value={kindValue}
           data-kind-interactive="true"

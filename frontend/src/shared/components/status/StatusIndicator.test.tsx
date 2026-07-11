@@ -1,6 +1,6 @@
-import ReactDOMClient from 'react-dom/client';
-import * as ReactDOM from 'react-dom';
 import { act } from 'react';
+import * as ReactDOM from 'react-dom';
+import ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StatusIndicator from './StatusIndicator';
@@ -9,7 +9,7 @@ vi.mock('react-dom', async () => {
   const actual = await vi.importActual<typeof import('react-dom')>('react-dom');
   return {
     ...actual,
-    createPortal: vi.fn((element: any) => element),
+    createPortal: vi.fn((element: unknown) => element),
   };
 });
 
@@ -45,7 +45,9 @@ const renderStatusIndicator = async () => {
 
 describe('StatusIndicator', () => {
   beforeEach(() => {
-    vi.mocked(ReactDOM.createPortal).mockImplementation((element: any) => element as any);
+    vi.mocked(ReactDOM.createPortal).mockImplementation(
+      ((element: React.ReactNode) => element) as unknown as typeof ReactDOM.createPortal
+    );
     vi.useFakeTimers();
   });
 

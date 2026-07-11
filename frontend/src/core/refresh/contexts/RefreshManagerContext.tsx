@@ -5,9 +5,10 @@
  * Defines shared state and accessors for the core layer.
  */
 
-import React, { createContext, useContext, useEffect, ReactNode } from 'react';
-import { refreshManager } from '../RefreshManager';
+import type React from 'react';
+import { createContext, type ReactNode, useContext, useEffect } from 'react';
 import { eventBus } from '@/core/events';
+import { refreshManager } from '../RefreshManager';
 
 interface RefreshManagerContextType {
   manager: typeof refreshManager;

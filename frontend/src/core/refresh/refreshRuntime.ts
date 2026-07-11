@@ -85,7 +85,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
 export class ClusterRefreshRuntime {
   private readonly inFlight = new Map<string, InFlightRequest>();
   private readonly streamingCleanup = new Map<string, () => void>();
-  private readonly pendingStreaming = new Map<string, Promise<(() => void) | void>>();
+  private readonly pendingStreaming = new Map<string, Promise<(() => void) | undefined>>();
   private readonly streamingReady = new Map<string, Promise<void>>();
   private readonly cancelledStreaming = new Set<string>();
   private readonly streamHealth = new Map<string, AppEvents['refresh:resource-stream-health']>();
@@ -192,7 +192,9 @@ export class ClusterRefreshRuntime {
         staleScopes.push(scope);
       }
     });
-    staleScopes.forEach((scope) => scopedMap.set(scope, false));
+    staleScopes.forEach((scope) => {
+      scopedMap.set(scope, false);
+    });
     return staleScopes;
   }
 
@@ -243,7 +245,9 @@ export class ClusterRefreshRuntime {
 
   forEachScopedDomain(callback: (domain: RefreshDomain, scope: string) => void): void {
     this.scopedEnabledState.forEach((scopedMap, domain) => {
-      scopedMap.forEach((_enabled, scope) => callback(domain, scope));
+      scopedMap.forEach((_enabled, scope) => {
+        callback(domain, scope);
+      });
     });
   }
 
@@ -268,7 +272,9 @@ export class ClusterRefreshRuntime {
   }
 
   forEachInFlight(callback: (request: InFlightRequest, key: string) => void): void {
-    Array.from(this.inFlight.entries()).forEach(([key, request]) => callback(request, key));
+    Array.from(this.inFlight.entries()).forEach(([key, request]) => {
+      callback(request, key);
+    });
   }
 
   isStreamingBlocked(domain: RefreshDomain, scope: string): boolean {
@@ -305,8 +311,12 @@ export class ClusterRefreshRuntime {
 
   getStreamingLifecycleKeys(): string[] {
     const keys = new Set<string>();
-    this.streamingCleanup.forEach((_cleanup, key) => keys.add(key));
-    this.pendingStreaming.forEach((_promise, key) => keys.add(key));
+    this.streamingCleanup.forEach((_cleanup, key) => {
+      keys.add(key);
+    });
+    this.pendingStreaming.forEach((_promise, key) => {
+      keys.add(key);
+    });
     return Array.from(keys);
   }
 
@@ -334,14 +344,18 @@ export class ClusterRefreshRuntime {
   beginStreamingStart(
     domain: RefreshDomain,
     scope: string,
-    startPromise: Promise<(() => void) | void>
+    startPromise: Promise<(() => void) | undefined>
   ): void {
     const key = makeInFlightKey(domain, scope);
     this.cancelledStreaming.delete(key);
     this.pendingStreaming.set(key, startPromise);
   }
 
-  finishStreamingStart(domain: RefreshDomain, scope: string, cleanup: (() => void) | void): void {
+  finishStreamingStart(
+    domain: RefreshDomain,
+    scope: string,
+    cleanup: (() => void) | undefined
+  ): void {
     const key = makeInFlightKey(domain, scope);
     this.pendingStreaming.delete(key);
     if (typeof cleanup === 'function') {
@@ -355,7 +369,10 @@ export class ClusterRefreshRuntime {
     this.pendingStreaming.delete(makeInFlightKey(domain, scope));
   }
 
-  cancelStreamingStart(domain: RefreshDomain, scope: string): Promise<(() => void) | void> | null {
+  cancelStreamingStart(
+    domain: RefreshDomain,
+    scope: string
+  ): Promise<(() => void) | undefined> | null {
     const key = makeInFlightKey(domain, scope);
     this.cancelledStreaming.add(key);
     this.clearStreamingReady(domain, scope);

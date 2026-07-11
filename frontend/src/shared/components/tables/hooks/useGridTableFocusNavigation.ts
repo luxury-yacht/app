@@ -5,9 +5,9 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
 import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Centralizes focus management for GridTable rows: tracks the focused row,
 // handles wrapper focus/blur, pointer vs keyboard navigation, and keeps hover

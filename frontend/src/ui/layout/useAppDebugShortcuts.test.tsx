@@ -1,6 +1,6 @@
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppDebugShortcuts } from './useAppDebugShortcuts';
 
 const platformMocks = vi.hoisted(() => ({
@@ -57,10 +57,6 @@ const renderHookHost = (handlers?: Partial<Parameters<typeof useAppDebugShortcut
 };
 
 describe('useAppDebugShortcuts', () => {
-  beforeAll(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     runtimeHandlers.clear();
     runtimeEventsOn.mockClear();

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-import { getTabbableElements } from './getTabbableElements';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type { KeyboardSurfaceKeyResult } from '@ui/shortcuts/context';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { getTabbableElements } from './getTabbableElements';
 
 interface UseModalFocusTrapOptions {
   ref: RefObject<HTMLElement | null>;
@@ -10,7 +10,7 @@ interface UseModalFocusTrapOptions {
   disabled?: boolean;
   suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
-  onEscape?: (event: KeyboardEvent) => boolean | void;
+  onEscape?: (event: KeyboardEvent) => boolean | undefined;
 }
 
 interface OpenModalEntry {
@@ -31,7 +31,7 @@ const getTrackedBodyChildren = () =>
 const pruneDisconnectedModalEntries = () => {
   for (let i = openModalStack.length - 1; i >= 0; i -= 1) {
     const surface = openModalStack[i]?.surface;
-    if (!surface || !surface.isConnected) {
+    if (!surface?.isConnected) {
       openModalStack.splice(i, 1);
     }
   }
@@ -133,7 +133,8 @@ export const useModalFocusTrap = ({
       return false;
     }
     const items = getFocusableItems();
-    const target = items[0] ?? root;
+    const target =
+      items.find((item) => item.hasAttribute('data-modal-initial-focus')) ?? items[0] ?? root;
     target.focus();
     return true;
   }, [getFocusableItems, ref]);
@@ -157,7 +158,7 @@ export const useModalFocusTrap = ({
 
       const previous = previouslyFocusedRef.current;
       previouslyFocusedRef.current = null;
-      if (!previous || !previous.isConnected) {
+      if (!previous?.isConnected) {
         return;
       }
 

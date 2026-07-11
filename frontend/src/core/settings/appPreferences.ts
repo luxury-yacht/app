@@ -5,28 +5,28 @@
  */
 
 import {
-  SaveTheme,
-  DeleteTheme,
-  ReorderThemes,
-  ApplyTheme,
-  MatchThemeForCluster,
-  ValidateThemeClusterPattern,
-  UpdateAppPreferences,
-} from '@wailsjs/go/backend/App';
-import { types } from '@wailsjs/go/models';
+  DEFAULT_TABLE_PAGE_SIZE,
+  normalizeTablePageSize,
+  TABLE_PAGE_SIZE_OPTIONS,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
+import type { types } from '@wailsjs/go/models';
 import {
   readAppSettings,
   readAppSettingsSchema,
   readThemes,
   requestAppState,
 } from '@/core/app-state-access';
-import { eventBus } from '@/core/events';
 import {
-  DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
-  normalizeTablePageSize,
-  type TablePageSize,
-} from '@shared/components/tables/pageSizeOptions';
+  ApplyTheme,
+  DeleteTheme,
+  MatchThemeForCluster,
+  ReorderThemes,
+  SaveTheme,
+  UpdateAppPreferences,
+  ValidateThemeClusterPattern,
+} from '@/core/backend-api';
+import { eventBus } from '@/core/events';
 import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
   saveAppearanceBootstrapToLocalStorage,
@@ -746,7 +746,7 @@ const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
 };
 
 const wailsRuntimeAvailable = (): boolean => {
-  return Boolean((window as any)?.go?.backend?.App);
+  return Boolean(window.go?.backend?.App);
 };
 
 interface LocalStorageSnapshot {

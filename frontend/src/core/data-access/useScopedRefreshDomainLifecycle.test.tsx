@@ -4,13 +4,12 @@
  * Verifies scoped refresh-domain leasing, initial fetch, and release-on-unmount.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 
 const mocks = vi.hoisted(() => ({
   acquireScopedDomainLease: vi.fn(),
@@ -72,10 +71,6 @@ const renderHook = (initialProps: HookProps) => {
 };
 
 describe('useScopedRefreshDomainLifecycle', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     mocks.acquireScopedDomainLease.mockClear();
     mocks.releaseScopedDomainLease.mockClear();

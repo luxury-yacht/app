@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
-import type { ObjectMapLayout } from './objectMapLayout';
 import {
   findObjectMapG6Edge,
   findObjectMapG6Node,
@@ -15,6 +14,7 @@ import {
   objectMapG6EndpointLabel,
   objectMapG6NodeOptions,
 } from './objectMapG6RendererOptions';
+import type { ObjectMapLayout } from './objectMapLayout';
 
 const palette = {
   accent: '#2563eb',

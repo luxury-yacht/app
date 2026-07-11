@@ -1,0 +1,182 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "root": "..",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**/*.{js,jsx,ts,tsx,mjs,cjs,css,json,jsonc,html}",
+      "!!dist",
+      "!!wailsjs",
+      "!!package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "assist": {
+    "enabled": true,
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "actions": {
+      "preset": "recommended"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        "noAutofocus": "error",
+        "noLabelWithoutControl": "error",
+        "noNoninteractiveTabindex": "error",
+        "noStaticElementInteractions": "error",
+        "useAriaPropsForRole": "error",
+        "useAriaPropsSupportedByRole": "error",
+        "useFocusableInteractive": "error",
+        "useKeyWithClickEvents": "error",
+        "useSemanticElements": "error",
+        "useValidAnchor": "error"
+      },
+      "complexity": {
+        "noImportantStyles": "error",
+        "noStaticOnlyClass": "error"
+      },
+      "correctness": {
+        "noUnusedInstantiation": "error",
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "hooks": [
+              {
+                "name": "useEffectWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              },
+              {
+                "name": "useLayoutEffectWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              },
+              {
+                "name": "useMemoWithInvalidation",
+                "closureIndex": 0,
+                "dependenciesIndex": 1
+              }
+            ],
+            "reportUnnecessaryDependencies": true
+          }
+        }
+      },
+      "suspicious": {
+        "noArrayIndexKey": "error",
+        "noConfusingVoidType": "error",
+        "noExplicitAny": "error",
+        "noImportCycles": "error",
+        "noLeakedRender": "error",
+        "noMisplacedAssertion": "error",
+        "noPrototypeBuiltins": "error",
+        "noSkippedTests": "error",
+        "noUnusedExpressions": "error",
+        "useIterableCallbackReturn": {
+          "level": "error",
+          "options": {
+            "checkForEach": true
+          }
+        }
+      },
+      "style": {
+        "noDescendingSpecificity": "error",
+        "noNonNullAssertion": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api."
+            },
+            "patterns": [
+              {
+                "group": ["**/wailsjs/go/backend/App"],
+                "message": "Import generated backend bindings only through @/core/backend-api."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "jsxQuoteStyle": "double",
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "es5"
+    }
+  },
+  "html": {
+    "experimentalFullSupportEnabled": true
+  },
+  "plugins": [
+    {
+      "path": "./biome-plugins/no-direct-fetch.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-lifecycle-read.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-permission-read.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
+    },
+    {
+      "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
+    }
+  ],
+  "overrides": [
+    {
+      "includes": ["src/core/backend-api/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noControlCharactersInRegex": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["index.html"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noInnerDeclarations": "off"
+          }
+        }
+      }
+    }
+  ]
+}

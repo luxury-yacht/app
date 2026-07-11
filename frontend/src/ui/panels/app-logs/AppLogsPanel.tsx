@@ -5,29 +5,30 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  useLayoutEffect,
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-} from 'react';
-import { ClearAppLogs, SetAppLogsPanelVisible } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
-import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { useLayoutEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { DockablePanel } from '@ui/dockable';
+import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
+import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { errorHandler } from '@utils/errorHandler';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
-import { subscribeAppLogsAdded, type AppLogsAddedEvent } from '@/core/logging/appLogsClient';
+import { ClearAppLogs, SetAppLogsPanelVisible } from '@/core/backend-api';
+import { type AppLogsAddedEvent, subscribeAppLogsAdded } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 
 interface LogEntry {
@@ -263,9 +264,12 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const renderHeaderCell = useCallback(
     (column: LogColumnKey | 'message', label: string, className: string) => (
+      // biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
+      // biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
       <span className={`app-logs-header-cell ${className}`} role="columnheader">
         <span className="app-logs-header-label">{label}</span>
         {column !== 'message' && (
+          // biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries.
           <span
             className="app-logs-column-resizer"
             role="separator"
@@ -295,7 +299,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     prevScrollTopRef.current = container.scrollTop;
     prevScrollHeightRef.current = container.scrollHeight;
     offsetFromBottomRef.current = Math.max(distanceFromBottom, 0);
-  }, [SCROLL_THRESHOLD]);
+  }, []);
 
   const handleLogsScroll = useCallback(() => {
     updatePinnedState();
@@ -311,31 +315,35 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   }, []);
 
   // Auto-scroll when logs change
-  useLayoutEffect(() => {
-    const container = logsContainerRef.current;
-    if (!container) {
-      return;
-    }
+  useLayoutEffectWithInvalidation(
+    () => {
+      const container = logsContainerRef.current;
+      if (!container) {
+        return;
+      }
 
-    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
 
-    if (isAutoScroll && isPinnedToBottomRef.current && logs.length > 0) {
-      container.scrollTop = maxScrollTop;
-      prevScrollTopRef.current = container.scrollTop;
-      prevScrollHeightRef.current = container.scrollHeight;
-      offsetFromBottomRef.current = 0;
-    } else {
-      const previousTop = prevScrollTopRef.current;
-      const clampedTop = Math.max(0, Math.min(previousTop, maxScrollTop));
-      container.scrollTop = clampedTop;
-      prevScrollTopRef.current = container.scrollTop;
-      prevScrollHeightRef.current = container.scrollHeight;
-      offsetFromBottomRef.current = Math.max(
-        container.scrollHeight - container.scrollTop - container.clientHeight,
-        0
-      );
-    }
-  }, [logs, logLevelFilter, componentFilter, clusterFilter, textFilter, isAutoScroll]);
+      if (isAutoScroll && isPinnedToBottomRef.current && logs.length > 0) {
+        container.scrollTop = maxScrollTop;
+        prevScrollTopRef.current = container.scrollTop;
+        prevScrollHeightRef.current = container.scrollHeight;
+        offsetFromBottomRef.current = 0;
+      } else {
+        const previousTop = prevScrollTopRef.current;
+        const clampedTop = Math.max(0, Math.min(previousTop, maxScrollTop));
+        container.scrollTop = clampedTop;
+        prevScrollTopRef.current = container.scrollTop;
+        prevScrollHeightRef.current = container.scrollHeight;
+        offsetFromBottomRef.current = Math.max(
+          container.scrollHeight - container.scrollTop - container.clientHeight,
+          0
+        );
+      }
+    },
+    [logs, isAutoScroll],
+    [logLevelFilter, componentFilter, clusterFilter, textFilter]
+  );
 
   useEffect(() => {
     if (!isAutoScroll) {
@@ -402,13 +410,14 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const formatTimestamp = useCallback((timestamp: string) => {
     try {
-      const formatter = new Intl.DateTimeFormat('en-US', {
+      const options: Intl.DateTimeFormatOptions & { fractionalSecondDigits: number } = {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
         hour12: false,
         fractionalSecondDigits: 3,
-      } as any);
+      };
+      const formatter = new Intl.DateTimeFormat('en-US', options);
 
       return formatter.format(new Date(timestamp));
     } catch {
@@ -866,6 +875,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       contentClassName="app-logs-panel-content"
     >
       {/* Panel-specific controls toolbar (moved from header for tab support) */}
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
       <div className="app-logs-panel-toolbar" onMouseDown={(e) => e.stopPropagation()}>
         <div className="app-logs-panel-controls">
           <Dropdown
@@ -917,8 +927,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
               title="Filter by text (searches message and source)"
               ref={textFilterInputRef}
             />
-            {textFilter && (
+            {!!textFilter && (
               <button
+                type="button"
                 className="app-logs-filter-clear"
                 onClick={() => setTextFilter('')}
                 title="Clear filter"
@@ -937,6 +948,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         </div>
       </div>
 
+      {/** biome-ignore lint/a11y/useFocusableInteractive: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
+      {/** biome-ignore lint/a11y/useSemanticElements: The virtualized app-log grid and focus region delegate keyboard navigation to the shared grid and panel surfaces while retaining pointer selection boundaries. */}
       <div
         className="app-logs-header"
         role="row"
@@ -964,8 +977,10 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         ) : filteredLogs.length === 0 ? (
           <div className="app-logs-empty">No logs match the selected filter</div>
         ) : (
-          filteredLogs.map((log, index) => (
-            <div key={index} className={`log-entry ${getLevelClass(log.level)}`}>
+          withStableListKeys(filteredLogs, (log) =>
+            String(log.sequence ?? `${log.timestamp}:${log.source ?? ''}:${log.message}`)
+          ).map(({ key, value: log }) => (
+            <div key={key} className={`log-entry ${getLevelClass(log.level)}`}>
               <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
               <span className={`log-level ${log.level.toUpperCase()}`}>{log.level}</span>
               <span className="log-source">{log.source ? `[${log.source}]` : ''}</span>

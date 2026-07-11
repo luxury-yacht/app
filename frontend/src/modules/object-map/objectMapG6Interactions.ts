@@ -11,12 +11,12 @@ import {
   beginObjectMapNodeGesture,
   consumeObjectMapSuppressedClick,
   endObjectMapNodeGesture,
-  updateObjectMapNodeGesture,
   type ObjectMapNodeGestureState,
+  updateObjectMapNodeGesture,
 } from './objectMapNodeGesture';
 import type {
-  ObjectMapContextMenuAction,
   ObjectMapCanvasContextMenuAction,
+  ObjectMapContextMenuAction,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,

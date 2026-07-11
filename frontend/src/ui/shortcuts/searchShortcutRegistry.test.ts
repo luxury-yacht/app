@@ -5,12 +5,12 @@
  * Covers key behaviors and edge cases for searchShortcutRegistry.
  */
 
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  __clearSearchShortcutTargetsForTest,
+  focusRegisteredSearchShortcutTarget,
   registerSearchShortcutTarget,
   unregisterSearchShortcutTarget,
-  focusRegisteredSearchShortcutTarget,
-  __clearSearchShortcutTargetsForTest,
 } from './searchShortcutRegistry';
 
 describe('searchShortcutRegistry', () => {

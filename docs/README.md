@@ -44,6 +44,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How do shared tabs and tab dragging work? | [frontend/tabs.md](frontend/tabs.md) |
 | How do docked/floating object panels work? | [frontend/dockable-panels.md](frontend/dockable-panels.md) |
 | How should shared YAML editors work? | [frontend/yaml-editor.md](frontend/yaml-editor.md) |
+| How are Biome rules and exceptions governed? | [frontend/biome.md](frontend/biome.md) |
 
 ## Workflow Contracts
 

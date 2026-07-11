@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for useWorkloadTableColumns.
  */
 
-import React from 'react';
+import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { requireReactElement } from '@/test-utils/requireReactElement';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -18,8 +18,8 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   }),
 }));
 
-import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };
@@ -54,11 +54,8 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useWorkloadTableColumns', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   const workload: WorkloadData = {
+    clusterId: 'cluster-a',
     kind: 'Deployment',
     name: 'api',
     namespace: 'team-a',
@@ -88,7 +85,9 @@ describe('useWorkloadTableColumns', () => {
     expect(kindColumn).toBeDefined();
     kindColumn?.render(workload);
     const nameColumn = columns.find((column) => column.key === 'name');
-    const nameElement = nameColumn?.render(workload) as React.ReactElement<any>;
+    const nameElement = requireReactElement<{
+      onClick?: (event: { stopPropagation: () => void }) => void;
+    }>(nameColumn?.render(workload), 'expected workload name element');
     nameElement.props.onClick?.({ stopPropagation() {} });
     expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
     hook.cleanup();
@@ -107,7 +106,9 @@ describe('useWorkloadTableColumns', () => {
     const statusColumn = columns.find((column) => column.key === 'status');
     const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-text warning');
+    expect(
+      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
+    ).toBe('status-text warning');
     hook.cleanup();
   });
 
@@ -128,7 +129,9 @@ describe('useWorkloadTableColumns', () => {
       statusPresentation: undefined,
     });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-text unknown');
+    expect(
+      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
+    ).toBe('status-text unknown');
     hook.cleanup();
   });
 });

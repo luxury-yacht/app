@@ -5,15 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableCellCache.
  */
 
-import React from 'react';
-import { act } from 'react';
-import ReactDOM from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it } from 'vitest';
 
 type SampleRow = { id: string; kind?: string };
 

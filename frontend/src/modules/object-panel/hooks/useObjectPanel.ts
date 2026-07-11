@@ -7,14 +7,15 @@
  * Also provides CurrentObjectPanelContext so child components inside an ObjectPanel
  * instance can access the correct objectData for their specific panel.
  */
-import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { useDockablePanelContext } from '@ui/dockable';
-import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import type { KubernetesObjectReference } from '@/types/view-state';
-import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import { getGroupForPanel } from '@ui/dockable/tabGroupState';
+
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
+import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { assertObjectRefHasRequiredIdentity } from '@shared/utils/objectIdentity';
+import { useDockablePanelContext } from '@ui/dockable';
+import { getGroupForPanel } from '@ui/dockable/tabGroupState';
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface OpenWithObjectOptions {
   /**

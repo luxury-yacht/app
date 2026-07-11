@@ -9,8 +9,8 @@
  * fuller message is available on hover.
  */
 
-import React from 'react';
 import Tooltip from '@shared/components/Tooltip';
+import type React from 'react';
 import './StatusChip.css';
 
 export type StatusChipVariant = 'healthy' | 'unhealthy' | 'warning' | 'info';

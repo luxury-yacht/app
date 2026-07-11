@@ -8,17 +8,17 @@ import { describe, expect, it } from 'vitest';
 
 import { refreshDomainContract } from '../domainRegistry';
 import {
-  DOORBELL_STREAM_DOMAINS,
   COMPLETE_RESYNC_STREAM_DOMAINS,
-  RESOURCE_STREAM_DOMAINS,
+  DOORBELL_STREAM_DOMAINS,
+  type DoorbellDomain,
   domainSupportsSourceClock,
-  isCompleteResyncStreamDomain,
   isClusterScopedDomain,
+  isCompleteResyncStreamDomain,
   isSupportedDomain,
   normalizeResourceScope,
-  resourceStreamDomainDescriptors,
-  type DoorbellDomain,
+  RESOURCE_STREAM_DOMAINS,
   type ResourceDomain,
+  resourceStreamDomainDescriptors,
 } from './resourceStreamDomains';
 
 const EXPECTED_DOMAINS: ResourceDomain[] = [

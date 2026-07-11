@@ -6,15 +6,16 @@
  * per-kind UI, so they ride along as `widget` items reusing the existing JobTimeline component.
  */
 
-import React, { useCallback } from 'react';
-import { job, cronjob } from '@wailsjs/go/models';
-import { OverviewItem } from '../shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import type { OverviewContext, OverviewDescriptor } from '../schema';
+import { cronjob, job } from '@wailsjs/go/models';
+import type React from 'react';
+import { useCallback } from 'react';
 import { JobTimeline } from '../JobTimeline';
+import type { OverviewContext, OverviewDescriptor } from '../schema';
+import { OverviewItem } from '../shared/OverviewItem';
 import '../shared/OverviewBlocks.css';
 import '../JobOverview.css';
 
@@ -34,7 +35,7 @@ const normalizeTime = (t: unknown): string | undefined => {
  *  locale conventions. */
 const formatLocalDateTime = (iso: string): string => {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) return '-';
   const pad = (n: number) => n.toString().padStart(2, '0');
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
@@ -69,7 +70,7 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
   const iso = normalizeTime(value);
   if (!iso) return <>{missing}</>;
   const t = new Date(iso).getTime();
-  if (isNaN(t)) return <>{missing}</>;
+  if (Number.isNaN(t)) return <>{missing}</>;
   const elapsed = Date.now() - t;
   const label = elapsed <= 0 ? 'just now' : `${formatDuration(elapsed)} ago`;
   return <span title={formatLocalDateTime(iso)}>{label}</span>;
@@ -81,7 +82,7 @@ const formatRelative = (raw: unknown): string => {
   const iso = normalizeTime(raw);
   if (!iso) return '—';
   const t = new Date(iso).getTime();
-  if (isNaN(t)) return '—';
+  if (Number.isNaN(t)) return '—';
   const ms = t - Date.now();
   if (ms > 0) return `in ${formatDuration(ms)}`;
   if (ms === 0) return 'just now';

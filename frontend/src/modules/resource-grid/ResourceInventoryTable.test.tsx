@@ -5,16 +5,21 @@
  * visible error banner — never just the generic "No data available" empty
  * table (which is indistinguishable from a healthy empty result).
  */
+import type { GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const gridTablePropsRef: { current: any } = { current: null };
+interface Row {
+  name: string;
+}
+
+const gridTablePropsRef: { current: GridTableProps<Row> | null } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: GridTableProps<Row>) => {
     gridTablePropsRef.current = props;
     return (
       <div data-testid="grid-table">
@@ -33,13 +38,9 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 
 import ResourceInventoryTable from './ResourceInventoryTable';
 import {
-  resetResourceInventoryRowCache,
   type ResourceInventorySourceState,
+  resetResourceInventoryRowCache,
 } from './useResourceInventoryTable';
-
-interface Row {
-  name: string;
-}
 
 const columns = [{ key: 'name', header: 'Name', render: (row: Row) => row.name }];
 
@@ -68,10 +69,6 @@ const renderTable = (source: ResourceInventorySourceState<Row>) => {
     );
   });
 };
-
-beforeAll(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
 beforeEach(() => {
   container = document.createElement('div');

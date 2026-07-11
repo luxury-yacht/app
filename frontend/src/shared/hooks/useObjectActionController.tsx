@@ -6,7 +6,9 @@
  * port-forward setup, and destructive action confirmation.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
+import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import {
   buildObjectActionTarget,
   runCronJobSuspend,
@@ -21,14 +23,11 @@ import {
   OBJECT_ACTION_IDS,
   type ObjectActionPermissionDescriptor,
 } from '@shared/actions/objectActionContract';
-import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
-import { errorHandler } from '@/utils/errorHandler';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
-import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
-import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { resolveNodeActionPermissionStatuses } from '@shared/hooks/nodeActionPermissions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildObjectActionItems,
@@ -36,9 +35,10 @@ import {
   type ObjectActionData,
   type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
-import { resolveNodeActionPermissionStatuses } from '@shared/hooks/nodeActionPermissions';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { useCallback, useMemo, useState } from 'react';
+import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import { errorHandler } from '@/utils/errorHandler';
 
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
@@ -317,10 +317,10 @@ export const useObjectActionController = ({
             (useDefaultHandlers ? () => setDeleteTarget(object) : undefined),
           onCordon:
             handlerOverrides?.onCordon ??
-            (perObjectHandlers?.onCordon ? () => perObjectHandlers.onCordon!(object) : undefined),
+            (perObjectHandlers?.onCordon ? () => perObjectHandlers.onCordon?.(object) : undefined),
           onDrain:
             handlerOverrides?.onDrain ??
-            (perObjectHandlers?.onDrain ? () => perObjectHandlers.onDrain!(object) : undefined),
+            (perObjectHandlers?.onDrain ? () => perObjectHandlers.onDrain?.(object) : undefined),
           onPortForward:
             handlerOverrides?.onPortForward ??
             (useDefaultHandlers
@@ -562,7 +562,7 @@ export const useObjectActionController = ({
           }
         />
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
-        {rollbackTarget?.clusterId && rollbackTarget.namespace && rollbackTarget.version && (
+        {!!(rollbackTarget?.clusterId && rollbackTarget.namespace && rollbackTarget.version) && (
           <RollbackModal
             isOpen={true}
             onClose={() => setRollbackTarget(null)}

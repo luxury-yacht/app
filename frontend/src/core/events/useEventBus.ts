@@ -5,8 +5,9 @@
  * Simplifies event subscription in functional components.
  */
 
-import { useEffect } from 'react';
-import { eventBus, type AppEvents } from './eventBus';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useRef } from 'react';
+import { type AppEvents, eventBus } from './eventBus';
 
 type EventCallback<T> = (payload: T) => void;
 
@@ -18,9 +19,15 @@ export function useEventBus<K extends keyof AppEvents>(
   callback: EventCallback<AppEvents[K]>,
   deps: React.DependencyList = []
 ): void {
-  useEffect(() => {
-    const unsubscribe = eventBus.on(event, callback);
-    return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event, ...deps]);
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffectWithInvalidation(
+    () => {
+      const unsubscribe = eventBus.on(event, (payload) => callbackRef.current(payload));
+      return unsubscribe;
+    },
+    [event],
+    deps
+  );
 }

@@ -4,8 +4,9 @@
  * Tests ReplicaSet collapse grouping and expansion behavior for object maps.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 
 const node = (id: string, kind: string, name: string): ObjectMapNode => ({
@@ -71,7 +72,10 @@ describe('computeCollapseInfo', () => {
     expect(info.visibleNodeIds.has('pod-1')).toBe(true);
     expect(info.visibleNodeIds.has('pod-2')).toBe(true);
 
-    const group = info.groupsByCurrentRs.get('rs-current')!;
+    const group = requireValue(
+      info.groupsByCurrentRs.get('rs-current'),
+      'expected test value in objectMapCollapse.test.ts'
+    );
     expect(group.deploymentId).toBe('dep');
     expect(group.collapsibleRsIds).toEqual(['rs-old']);
   });
@@ -92,7 +96,12 @@ describe('computeCollapseInfo', () => {
     expect(info.visibleNodeIds.has('rs-old')).toBe(true);
     // Even when expanded, the badge metadata still reports collapsible
     // count so the UI knows it can offer a collapse action.
-    expect(info.groupsByCurrentRs.get('rs-current')!.collapsibleRsIds).toEqual(['rs-old']);
+    expect(
+      requireValue(
+        info.groupsByCurrentRs.get('rs-current'),
+        'expected test value in objectMapCollapse.test.ts'
+      ).collapsibleRsIds
+    ).toEqual(['rs-old']);
   });
 
   it('anchors the collapse badge on the RS with more owned Pods', () => {

@@ -160,12 +160,6 @@
   padding-right: 1.2rem;
 }
 
-.tab-item--closeable .tab-item__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Shared view content wrapper -- standard layout for all gridtable views.
    Provides the positioning context for the absolute-positioned gridtable-container. */
 .view-content {

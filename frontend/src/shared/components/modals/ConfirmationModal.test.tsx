@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for ConfirmationModal.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ConfirmationModal from './ConfirmationModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import ConfirmationModal from './ConfirmationModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -25,10 +24,6 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 describe('ConfirmationModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -108,6 +103,15 @@ describe('ConfirmationModal', () => {
       cancelButton.click();
     });
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('initially focuses the non-destructive action', async () => {
+    await renderModal({});
+
+    const cancelButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.cancel'
+    );
+    expect(document.activeElement).toBe(cancelButton);
   });
 
   it('supports escape key and ignores backdrop clicks', async () => {

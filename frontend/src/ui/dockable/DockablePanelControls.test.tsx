@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for DockablePanelControls.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DockablePanelControls } from './DockablePanelControls';
 
@@ -35,10 +35,6 @@ const renderControls = async (ui: React.ReactElement) => {
 };
 
 describe('DockablePanelControls', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   afterEach(() => {
     document.body.innerHTML = '';
   });
@@ -87,7 +83,7 @@ describe('DockablePanelControls', () => {
     const parentMouseDown = vi.fn();
 
     const { host, unmount } = await renderControls(
-      <div onMouseDown={parentMouseDown}>
+      <form aria-label="Panel controls propagation harness" onMouseDown={parentMouseDown}>
         <DockablePanelControls
           position="right"
           isMaximized={false}
@@ -96,7 +92,7 @@ describe('DockablePanelControls', () => {
           onToggleMaximize={onToggleMaximize}
           onClose={onClose}
         />
-      </div>
+      </form>
     );
 
     // Ensure the controls container intercepts mouse down events.

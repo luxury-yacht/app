@@ -79,7 +79,7 @@ const normalizeResourceStreamScope = (
     return trimmed.toLowerCase() === 'cluster' ? '' : trimmed;
   };
 
-  if (!value || !value.trim()) {
+  if (!value?.trim()) {
     if (!allowEmpty) {
       return undefined;
     }

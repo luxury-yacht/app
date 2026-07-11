@@ -30,7 +30,7 @@ export const isValidRegexPattern = (pattern: string): boolean => {
   }
 
   try {
-    new RegExp(trimmed, 'i');
+    RegExp(trimmed, 'i');
     return true;
   } catch {
     return false;

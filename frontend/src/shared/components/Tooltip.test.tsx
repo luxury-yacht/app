@@ -5,10 +5,9 @@
  * Covers trigger modes, placement, delay, variants, disabled state, and portal rendering.
  */
 
-import React from 'react';
-import ReactDOMClient from 'react-dom/client';
+import React, { act } from 'react';
 import * as ReactDOM from 'react-dom';
-import { act } from 'react';
+import ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock createPortal so tooltip content renders inline for assertions
@@ -16,7 +15,7 @@ vi.mock('react-dom', async () => {
   const actual = await vi.importActual<typeof import('react-dom')>('react-dom');
   return {
     ...actual,
-    createPortal: vi.fn((element: any) => element),
+    createPortal: vi.fn((element: unknown) => element),
   };
 });
 
@@ -79,7 +78,9 @@ const renderTooltipInside = async (
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.mocked(ReactDOM.createPortal).mockImplementation((element: any) => element as any);
+  vi.mocked(ReactDOM.createPortal).mockImplementation(
+    ((element: React.ReactNode) => element) as unknown as typeof ReactDOM.createPortal
+  );
   vi.useRealTimers();
 });
 
@@ -107,7 +108,11 @@ describe('Tooltip', () => {
   it('renders children as the trigger element', async () => {
     const { container, cleanup } = await renderTooltip({
       content: 'Tip',
-      children: <button data-testid="btn">Hover me</button>,
+      children: (
+        <button type="button" data-testid="btn">
+          Hover me
+        </button>
+      ),
     });
 
     const trigger = container.querySelector('.tooltip-trigger');

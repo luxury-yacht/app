@@ -4,7 +4,6 @@
  * Coordinates shared resource-grid table state, identity, and context menus.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import {
@@ -15,9 +14,10 @@ import {
 import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { useGridTableBinding } from './useGridTableBinding';
+import { useCallback, useMemo } from 'react';
 import {
   normalizeQueryBackedNamespaceFilters,
   queryBackedFacetFilterOptions,
@@ -33,6 +33,7 @@ import type {
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
 import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
+import { useGridTableBinding } from './useGridTableBinding';
 
 const resourceGridPartialDataLabel = (tableMode: ResourceGridTableMode) =>
   tableMode === 'Local Partial'
@@ -334,27 +335,30 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   );
 
   const persistenceHydrated = persistence.hydrated;
-  useEffect(() => {
-    const filters = normalizeTableFilters(persistenceFilters);
-    if (filters !== persistenceFilters) {
-      setPersistenceFilters(filters);
-    }
-    onTableStateChange?.({
-      filters,
-      sortConfig: sortConfig ?? null,
-    });
-    // persistenceHydrated is a deliberate dependency: hydration may commit
-    // WITHOUT changing the filters object identity, and the query lifecycle
-    // only arms itself on a post-hydration publish. Re-publishing the same
-    // value is safe (consumers dedupe by value).
-  }, [
-    normalizeTableFilters,
-    onTableStateChange,
-    persistenceFilters,
-    persistenceHydrated,
-    setPersistenceFilters,
-    sortConfig,
-  ]);
+  useEffectWithInvalidation(
+    () => {
+      const filters = normalizeTableFilters(persistenceFilters);
+      if (filters !== persistenceFilters) {
+        setPersistenceFilters(filters);
+      }
+      onTableStateChange?.({
+        filters,
+        sortConfig: sortConfig ?? null,
+      });
+      // persistenceHydrated is a deliberate dependency: hydration may commit
+      // WITHOUT changing the filters object identity, and the query lifecycle
+      // only arms itself on a post-hydration publish. Re-publishing the same
+      // value is safe (consumers dedupe by value).
+    },
+    [
+      normalizeTableFilters,
+      onTableStateChange,
+      persistenceFilters,
+      setPersistenceFilters,
+      sortConfig,
+    ],
+    [persistenceHydrated]
+  );
 
   const useMetadata = Boolean(metadataSearch);
   const getDefaultMetadataSearchValues = useCallback(

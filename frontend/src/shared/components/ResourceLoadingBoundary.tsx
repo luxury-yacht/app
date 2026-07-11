@@ -5,11 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect } from 'react';
+import type React from 'react';
+import { useEffect } from 'react';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import LoadingSpinner from './LoadingSpinner';
 import ClusterDataPausedState from './ClusterDataPausedState';
+import LoadingSpinner from './LoadingSpinner';
 import './ResourceLoadingBoundary.css';
 
 interface ResourceLoadingBoundaryProps {

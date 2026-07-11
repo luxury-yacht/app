@@ -59,7 +59,9 @@
 
       /* Backend-owned shared contracts */
       "@yaml-field-policy-contract": ["../backend/objectyaml/field-policy-contract.json"],
-      "@builtin-resource-identities": ["../backend/resourcecontract/builtin-resource-identities.json"]
+      "@builtin-resource-identities": [
+        "../backend/resourcecontract/builtin-resource-identities.json"
+      ]
     }
   },
   "include": [

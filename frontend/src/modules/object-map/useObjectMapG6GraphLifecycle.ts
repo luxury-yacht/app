@@ -5,20 +5,20 @@
  * teardown for the object-map renderer.
  */
 
-import { Graph } from '@antv/g6';
 import type { GraphData } from '@antv/g6';
-import { useEffect } from 'react';
+import { Graph } from '@antv/g6';
 import type { MutableRefObject, RefObject } from 'react';
-import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
-import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
+import { useEffect } from 'react';
 import type { ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { objectMapG6Behaviors } from './objectMapG6Behaviors';
+import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { bindObjectMapG6Events, type ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
+import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
 import type { ObjectMapLayout } from './objectMapLayout';
-import { clearObjectMapNodeGesture } from './objectMapNodeGesture';
 import type { ObjectMapNodeGestureState } from './objectMapNodeGesture';
+import { clearObjectMapNodeGesture } from './objectMapNodeGesture';
 import type {
   ObjectMapSelectionState,
   ObjectMapViewportChangeAction,

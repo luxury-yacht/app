@@ -2,24 +2,24 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { buildObjectDetailModel } from '@modules/object-panel/components/ObjectPanel/Details/objectDetailModel';
+import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const hoistedRefs = vi.hoisted(() => ({
   detailsTabProps: { current: null as DetailsTabProps | null },
-  logViewerProps: { current: null as any },
-  eventsTabProps: { current: null as any },
-  yamlTabProps: { current: null as any },
-  manifestTabProps: { current: null as any },
-  valuesTabProps: { current: null as any },
-  shellTabProps: { current: null as any },
-  nodeLogsTabProps: { current: null as any },
-  podsTabProps: { current: null as any },
+  logViewerProps: { current: null as unknown },
+  eventsTabProps: { current: null as unknown },
+  yamlTabProps: { current: null as unknown },
+  manifestTabProps: { current: null as unknown },
+  valuesTabProps: { current: null as unknown },
+  shellTabProps: { current: null as unknown },
+  nodeLogsTabProps: { current: null as unknown },
+  podsTabProps: { current: null as unknown },
   setScopedDomainEnabled: vi.fn(),
 }));
 
@@ -148,10 +148,6 @@ describe('ObjectPanelContent', () => {
     panelId: 'obj:test:deployment:team-a:api',
   };
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -179,7 +175,9 @@ describe('ObjectPanelContent', () => {
 
   it('renders details tab content when active', () => {
     renderContent();
-    expect(hoistedRefs.detailsTabProps.current).toMatchObject(baseProps.detailTabProps!);
+    expect(hoistedRefs.detailsTabProps.current).toMatchObject(
+      requireValue(baseProps.detailTabProps, 'expected test value in ObjectPanelContent.test.tsx')
+    );
   });
 
   it('renders logs viewer when logs tab is active and capability present', () => {

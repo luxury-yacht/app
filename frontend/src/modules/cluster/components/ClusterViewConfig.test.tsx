@@ -5,11 +5,22 @@
  * Covers key behaviors and edge cases for ClusterViewConfig.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+
+type ConfigRow = Record<string, unknown>;
+interface LoadingBoundaryCapture {
+  children: React.ReactNode;
+  loading?: boolean;
+  hasLoaded?: boolean;
+  dataLength?: number;
+  spinnerMessage?: string;
+}
 
 const requestRefreshDomainStateMock = vi.hoisted(() => vi.fn());
 
@@ -36,8 +47,8 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
-const loadingBoundaryPropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: GridTableProps<ConfigRow> | null } = { current: null };
+const loadingBoundaryPropsRef: { current: LoadingBoundaryCapture | null } = { current: null };
 const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -46,7 +57,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: GridTableProps<ConfigRow>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -67,7 +78,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   __esModule: true,
-  default: (props: { children: React.ReactNode }) => {
+  default: (props: LoadingBoundaryCapture) => {
     loadingBoundaryPropsRef.current = props;
     return <>{props.children}</>;
   },
@@ -125,13 +136,18 @@ const baseConfig = {
   age: '1d',
 };
 
+const getGridTableProps = () =>
+  requireValue(gridTablePropsRef.current, 'expected GridTable props in ClusterViewConfig.test.tsx');
+
+const getContextMenuItems = (row: ConfigRow, columnKey: string) =>
+  requireValue(
+    getGridTableProps().getCustomContextMenuItems,
+    'expected context-menu factory in ClusterViewConfig.test.tsx'
+  )(row, columnKey);
+
 describe('ClusterViewConfig', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -169,7 +185,7 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.filters?.value).toEqual({
@@ -207,7 +223,7 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current?.filters?.options?.partialDataLabel).toBeUndefined();
+    expect(getGridTableProps().filters?.options?.partialDataLabel).toBeUndefined();
   });
 
   it('opens a StorageClass directly to the map tab from the context menu', async () => {
@@ -216,9 +232,9 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
-    const contextItems = props.getCustomContextMenuItems(baseConfig, 'kind');
+    const contextItems = getContextMenuItems(baseConfig, 'kind');
     const mapItem = contextItems.find(
       (item: { actionId?: string; onClick?: () => void }) =>
         item.actionId === OBJECT_ACTION_IDS.viewMap
@@ -247,9 +263,9 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
-    const contextItems = props.getCustomContextMenuItems(ingressClass, 'kind');
+    const contextItems = getContextMenuItems(ingressClass, 'kind');
     const mapItem = contextItems.find(
       (item: { actionId?: string; onClick?: () => void }) =>
         item.actionId === OBJECT_ACTION_IDS.viewMap
@@ -276,9 +292,9 @@ describe('ClusterViewConfig', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
-    const contextItems = props.getCustomContextMenuItems(
+    const contextItems = getContextMenuItems(
       { ...baseConfig, kind: 'ValidatingWebhookConfiguration' },
       'kind'
     );

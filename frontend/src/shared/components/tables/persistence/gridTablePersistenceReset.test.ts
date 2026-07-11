@@ -6,12 +6,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { clearAllGridTableState, subscribeGridTableResetAll } from './gridTablePersistenceReset';
 import {
   getGridTablePersistenceSnapshot,
   resetGridTablePersistenceCacheForTesting,
   setGridTablePersistenceCacheForTesting,
 } from './gridTablePersistence';
+import { clearAllGridTableState, subscribeGridTableResetAll } from './gridTablePersistenceReset';
 
 describe('gridTablePersistenceReset', () => {
   it('clears all cached gridtable entries', async () => {

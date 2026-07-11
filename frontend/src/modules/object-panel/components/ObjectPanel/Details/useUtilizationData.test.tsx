@@ -1,18 +1,17 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   makeClusterNodeSnapshotEntry,
   makeClusterNodeSnapshotPayload,
-  makeNamespaceWorkloadSummary,
   makeNamespaceWorkloadSnapshotPayload,
+  makeNamespaceWorkloadSummary,
   makePodSnapshotEntry,
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import type { UtilizationData } from './detailsTabTypes';
 import { useUtilizationData } from './useUtilizationData';
 
@@ -28,8 +27,7 @@ vi.mock('@/core/refresh', () => ({
       refreshMocks.acquireScopedDomainLease(...args),
     releaseScopedDomainLease: (...args: unknown[]) =>
       refreshMocks.releaseScopedDomainLease(...args),
-    fetchScopedDomain: (domain: unknown, scope: unknown, options: unknown) =>
-      refreshMocks.fetchScopedDomain(domain, scope, options),
+    fetchScopedDomain: refreshMocks.fetchScopedDomain,
   },
 }));
 
@@ -76,10 +74,6 @@ const renderUtilizationHook = async (initialProps: HookProps) => {
 };
 
 describe('useUtilizationData', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     refreshMocks.acquireScopedDomainLease.mockClear();
     refreshMocks.releaseScopedDomainLease.mockClear();
@@ -237,71 +231,71 @@ describe('useUtilizationData', () => {
     hook.cleanup();
   });
 
-  it.each(['DaemonSet', 'StatefulSet'] as const)(
-    'updates %s utilization from namespace-workloads metric rows',
-    async (kind) => {
-      const objectData = {
-        clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
-        kind,
-        namespace: 'team-a',
-        name: 'api',
-      };
-      const detail = {
-        podMetricsSummary: {
-          cpuUsage: '100m',
-          cpuRequest: '50m',
-          cpuLimit: '500m',
-          memUsage: '128Mi',
-          memRequest: '64Mi',
-          memLimit: '256Mi',
-          pods: 1,
-          readyPods: 1,
-        },
-      };
-      const hook = await renderUtilizationHook({ objectData, detail });
+  it.each([
+    'DaemonSet',
+    'StatefulSet',
+  ] as const)('updates %s utilization from namespace-workloads metric rows', async (kind) => {
+    const objectData = {
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind,
+      namespace: 'team-a',
+      name: 'api',
+    };
+    const detail = {
+      podMetricsSummary: {
+        cpuUsage: '100m',
+        cpuRequest: '50m',
+        cpuLimit: '500m',
+        memUsage: '128Mi',
+        memRequest: '64Mi',
+        memLimit: '256Mi',
+        pods: 1,
+        readyPods: 1,
+      },
+    };
+    const hook = await renderUtilizationHook({ objectData, detail });
 
-      await act(async () => {
-        setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
-          ...previous,
-          status: 'ready',
-          scope: 'cluster-a|namespace:team-a',
-          data: makeNamespaceWorkloadSnapshotPayload({
-            clusterId: 'cluster-a',
-            rows: [
-              makeNamespaceWorkloadSummary({
-                kind,
-                name: 'api',
-                namespace: 'team-a',
-                ready: '1/2',
-                status: 'Available',
-                restarts: 0,
-                age: '2m',
-                cpuUsage: '320m',
-                cpuRequest: '160m',
-                cpuLimit: '800m',
-                memUsage: '384Mi',
-                memRequest: '192Mi',
-                memLimit: '768Mi',
-              }),
-            ],
-            metrics: { stale: false, successCount: 1, failureCount: 0 },
-          }),
-        }));
-        await Promise.resolve();
-      });
+    await act(async () => {
+      setScopedDomainState('namespace-workloads', 'cluster-a|namespace:team-a', (previous) => ({
+        ...previous,
+        status: 'ready',
+        scope: 'cluster-a|namespace:team-a',
+        data: makeNamespaceWorkloadSnapshotPayload({
+          clusterId: 'cluster-a',
+          rows: [
+            makeNamespaceWorkloadSummary({
+              kind,
+              name: 'api',
+              namespace: 'team-a',
+              ready: '1/2',
+              status: 'Available',
+              restarts: 0,
+              age: '2m',
+              cpuUsage: '320m',
+              cpuRequest: '160m',
+              cpuLimit: '800m',
+              memUsage: '384Mi',
+              memRequest: '192Mi',
+              memLimit: '768Mi',
+            }),
+          ],
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
+        }),
+      }));
+      await Promise.resolve();
+    });
 
-      expect(hook.latest.current).toMatchObject({
-        cpu: { usage: '320m', request: '160m', limit: '800m' },
-        memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
-        podCount: 2,
-        readyPodCount: 1,
-      });
+    expect(hook.latest.current).toMatchObject({
+      cpu: { usage: '320m', request: '160m', limit: '800m' },
+      memory: { usage: '384Mi', request: '192Mi', limit: '768Mi' },
+      podCount: 2,
+      readyPodCount: 1,
+    });
 
-      hook.cleanup();
-    }
-  );
+    hook.cleanup();
+  });
 
   it('updates Node utilization from nodes metric rows', async () => {
     const objectData = {

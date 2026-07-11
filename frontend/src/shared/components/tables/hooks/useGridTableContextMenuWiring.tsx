@@ -5,17 +5,17 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { useGridTableContextMenuItems } from '@shared/components/tables/hooks/useGridTableContextMenuItems';
-import { useGridTableContextMenu } from '@shared/components/tables/hooks/useGridTableContextMenu';
+import ContextMenu from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
   findGridTableCellByColumnKey,
   findGridTableRowByKey,
 } from '@shared/components/tables/GridTable.utils';
+import { useGridTableContextMenu } from '@shared/components/tables/hooks/useGridTableContextMenu';
+import { useGridTableContextMenuItems } from '@shared/components/tables/hooks/useGridTableContextMenuItems';
 import type { MouseEvent, RefObject } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 // Owns GridTable's context menu lifecycle: builds items, opens from pointer or
 // keyboard, tracks active state/restore target, and exposes the rendered node

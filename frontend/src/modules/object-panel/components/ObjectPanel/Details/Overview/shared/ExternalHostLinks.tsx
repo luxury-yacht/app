@@ -8,8 +8,8 @@
  * that can't be opened (empty or a wildcard) shows just the label.
  */
 
-import React from 'react';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import type React from 'react';
 import { buildHostUrl, type UrlScheme } from './hostLink';
 
 export interface HostSchemeLink {

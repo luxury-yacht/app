@@ -9,11 +9,11 @@
  * namespace value on the DTO).
  */
 
-import React from 'react';
-import { admission, apiextensions, ingressclass, namespaces } from '@wailsjs/go/models';
-import { StatusChip } from '@shared/components/StatusChip';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { admission, apiextensions, ingressclass, namespaces } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '@styles/components/badges.css';
 
@@ -189,7 +189,7 @@ export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {
           // Built-in kinds resolve through GVK lookup; CRD-backed parameters (the common case for
           // cloud providers) only have an apiGroup on the wire and can't build a strict ref. Fall
           // back to plain text in that case rather than throwing.
-          let ref;
+          let ref: ReturnType<typeof buildRequiredObjectReference> | null;
           try {
             ref = buildRequiredObjectReference({
               kind: params.kind.toLowerCase(),

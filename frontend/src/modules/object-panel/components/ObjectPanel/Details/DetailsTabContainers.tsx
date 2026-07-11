@@ -11,8 +11,9 @@
  * spec/shell view.
  */
 
-import React from 'react';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import type React from 'react';
 import '../shared.css';
 import './DetailsTabContainers.css';
 
@@ -95,7 +96,7 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
     <div className="containers-card">
       <div className="containers-card-header">
         <span className="containers-card-title">{container.name}</span>
-        {container.state && (
+        {!!container.state && (
           <StatusChip variant={variant} tooltip={container.stateMessage || undefined}>
             {stateLabel(container.state, container.stateReason)}
           </StatusChip>
@@ -135,9 +136,11 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
 
 const ContainerList: React.FC<{ containers: Container[] }> = ({ containers }) => (
   <div className="containers-card-list">
-    {containers.map((c, i) => (
-      <ContainerCard key={`${c.name}-${i}`} container={c} />
-    ))}
+    {withStableListKeys(containers, (container) => container.name).map(
+      ({ key, value: container }) => (
+        <ContainerCard key={key} container={container} />
+      )
+    )}
   </div>
 );
 
@@ -157,13 +160,13 @@ function Containers({ containers = [], initContainers = [] }: ContainersProps) {
       <div className="containers-groups">
         {initContainers.length > 0 && (
           <div className="containers-group">
-            {hasBoth && <div className="containers-group-heading">Init Containers</div>}
+            {!!hasBoth && <div className="containers-group-heading">Init Containers</div>}
             <ContainerList containers={initContainers} />
           </div>
         )}
         {containers.length > 0 && (
           <div className="containers-group">
-            {hasBoth && <div className="containers-group-heading">Containers</div>}
+            {!!hasBoth && <div className="containers-group-heading">Containers</div>}
             <ContainerList containers={containers} />
           </div>
         )}

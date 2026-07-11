@@ -4,8 +4,8 @@
  * Secret Overview descriptor (X1 P3a). Presentation ported verbatim from SecretOverview.tsx.
  */
 
-import { secret } from '@wailsjs/go/models';
 import { StatusChip } from '@shared/components/StatusChip';
+import { secret } from '@wailsjs/go/models';
 import type { OverviewDescriptor } from '../schema';
 import { renderUsedByLinks } from './shared';
 

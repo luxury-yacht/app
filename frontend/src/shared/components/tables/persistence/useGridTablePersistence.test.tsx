@@ -5,15 +5,20 @@
  * Covers key behaviors and edge cases for useGridTablePersistence.
  */
 
-import React, { act, useEffect } from 'react';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGridTablePersistence } from './useGridTablePersistence';
-import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
+import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
+import { useGridTablePersistence } from './useGridTablePersistence';
 
-const stateMap: Record<string, any> = {};
+const stateMap: Record<string, unknown> = {};
+type PersistenceState = ReturnType<typeof useGridTablePersistence<{ id: string }>>;
+let latestState: PersistenceState | null = null;
+const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
 
 vi.mock('./gridTablePersistence', () => {
   const buildGridTableStorageKey = ({
@@ -31,7 +36,7 @@ vi.mock('./gridTablePersistence', () => {
     computeClusterHash: vi.fn(async () => 'clusterhash'),
     hydrateGridTablePersistence: vi.fn(async () => undefined),
     loadPersistedState: vi.fn((key: string | null) => (key ? (stateMap[key] ?? null) : null)),
-    prunePersistedState: vi.fn((state: any) => state ?? null),
+    prunePersistedState: vi.fn((state: unknown) => state ?? null),
     buildPersistedStateForSave: vi.fn(() => null),
     savePersistedState: vi.fn(),
     clearPersistedState: vi.fn(),
@@ -40,7 +45,10 @@ vi.mock('./gridTablePersistence', () => {
 
 describe('useGridTablePersistence', () => {
   beforeEach(() => {
-    Object.keys(stateMap).forEach((key) => delete stateMap[key]);
+    latestState = null;
+    Object.keys(stateMap).forEach((key) => {
+      delete stateMap[key];
+    });
     resetAppPreferencesCacheForTesting();
     setGridTablePersistenceMode('namespaced');
   });
@@ -66,7 +74,7 @@ describe('useGridTablePersistence', () => {
     });
 
     useEffect(() => {
-      (globalThis as any).__LATEST_STATE__ = result;
+      latestState = result;
     }, [result]);
 
     return null;
@@ -95,12 +103,12 @@ describe('useGridTablePersistence', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness('team-a', root);
-    const firstState = (globalThis as any).__LATEST_STATE__;
+    const firstState = getLatestState();
     expect(firstState.sortConfig?.key).toBe('name');
     expect(firstState.sortConfig?.direction).toBe('desc');
 
     await renderHarness('team-b', root);
-    const secondState = (globalThis as any).__LATEST_STATE__;
+    const secondState = getLatestState();
     expect(secondState.sortConfig?.key).toBe('age');
     expect(secondState.sortConfig?.direction).toBe('asc');
 
@@ -125,11 +133,11 @@ describe('useGridTablePersistence', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness('team-a', root);
-    const stateA = (globalThis as any).__LATEST_STATE__;
+    const stateA = getLatestState();
     expect(stateA.columnVisibility).toEqual({ age: false });
 
     await renderHarness('team-b', root);
-    const stateB = (globalThis as any).__LATEST_STATE__;
+    const stateB = getLatestState();
     expect(stateB.columnVisibility).toEqual({ name: false });
 
     await act(async () => {

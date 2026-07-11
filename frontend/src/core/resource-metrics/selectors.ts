@@ -1,16 +1,16 @@
+import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type {
   ClusterNodeSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
   PodSnapshotPayload,
 } from '@/core/refresh/types';
-import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
+import type { ResourceMetricsData } from './types';
 import {
   hasResourceMetricData,
   nodeRowResourceMetrics,
   podRowResourceMetrics,
   workloadRowResourceMetrics,
 } from './valueAdapters';
-import type { ResourceMetricsData } from './types';
 
 const sameText = (left: string | null | undefined, right: string | null | undefined): boolean =>
   (left ?? '') === (right ?? '');

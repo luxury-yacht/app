@@ -10,19 +10,20 @@
  * functions read `context.clusterId`/`context.clusterName`.
  */
 
-import React from 'react';
-import {
-  clusterrole,
-  clusterrolebinding,
-  resourcemodel,
-  role,
-  rolebinding,
-  serviceaccount,
-  types,
-} from '@wailsjs/go/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import {
+  clusterrole,
+  clusterrolebinding,
+  type resourcemodel,
+  role,
+  rolebinding,
+  serviceaccount,
+  type types,
+} from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import { renderUsedByLinks } from './shared';
 import '../shared/OverviewBlocks.css';
@@ -98,39 +99,41 @@ const SubjectGroups: React.FC<{
         <div key={heading} className="rbac-subjects-group">
           <div className="rbac-subjects-group-heading">{heading}</div>
           <div className="rbac-subjects-names">
-            {items.map((subject, index) => {
-              const isSA = subject.kind === 'ServiceAccount';
-              const displayName =
-                isSA && subject.namespace ? `${subject.namespace}/${subject.name}` : subject.name;
-              const nameNode =
-                isSA && subject.namespace ? (
-                  <ObjectPanelLink
-                    objectRef={buildRequiredObjectReference({
-                      kind: 'serviceaccount',
-                      name: subject.name,
-                      namespace: subject.namespace,
-                      ...clusterMeta,
-                    })}
-                  >
-                    {displayName}
-                  </ObjectPanelLink>
-                ) : (
-                  displayName
-                );
-              return (
-                <div key={`${subject.name}-${index}`} className="rbac-subjects-name-row">
-                  <span className="rbac-subjects-name">{nameNode}</span>
-                  {isSystemSA(subject) && (
-                    <StatusChip
-                      variant="warning"
-                      tooltip="ServiceAccount lives in a Kubernetes-managed namespace. Granting permissions here can have cluster-wide impact via the system controllers and pods that run there."
+            {withStableListKeys(items, (subject) => JSON.stringify(subject)).map(
+              ({ key, value: subject }) => {
+                const isSA = subject.kind === 'ServiceAccount';
+                const displayName =
+                  isSA && subject.namespace ? `${subject.namespace}/${subject.name}` : subject.name;
+                const nameNode =
+                  isSA && subject.namespace ? (
+                    <ObjectPanelLink
+                      objectRef={buildRequiredObjectReference({
+                        kind: 'serviceaccount',
+                        name: subject.name,
+                        namespace: subject.namespace,
+                        ...clusterMeta,
+                      })}
                     >
-                      system
-                    </StatusChip>
-                  )}
-                </div>
-              );
-            })}
+                      {displayName}
+                    </ObjectPanelLink>
+                  ) : (
+                    displayName
+                  );
+                return (
+                  <div key={key} className="rbac-subjects-name-row">
+                    <span className="rbac-subjects-name">{nameNode}</span>
+                    {isSystemSA(subject) && (
+                      <StatusChip
+                        variant="warning"
+                        tooltip="ServiceAccount lives in a Kubernetes-managed namespace. Granting permissions here can have cluster-wide impact via the system controllers and pods that run there."
+                      >
+                        system
+                      </StatusChip>
+                    )}
+                  </div>
+                );
+              }
+            )}
           </div>
         </div>
       ))}
@@ -166,9 +169,13 @@ const renderRoleRef = (
  */
 const renderUsedByBindings = (bindings: resourcemodel.ResourceRef[]): React.ReactNode => (
   <div className="overview-stacked">
-    {bindings.map((bindingRef, index) => (
+    {withStableListKeys(
+      bindings,
+      (bindingRef) =>
+        `${bindingRef.clusterId}-${bindingRef.group}-${bindingRef.version}-${bindingRef.kind}-${bindingRef.namespace ?? ''}-${bindingRef.name ?? ''}`
+    ).map(({ key, value: bindingRef }) => (
       <ObjectPanelLink
-        key={`${bindingRef.clusterId}-${bindingRef.group}-${bindingRef.version}-${bindingRef.kind}-${bindingRef.namespace ?? ''}-${bindingRef.name ?? index}`}
+        key={key}
         objectRef={{
           ...bindingRef,
           group: bindingRef.group,
@@ -194,15 +201,17 @@ const renderAggregation = (aggregationRule: clusterrole.AggregationRule): React.
   }
   return (
     <div className="overview-stacked">
-      {selectors.map((selector, si) => (
-        <div key={si} className="overview-condition-list">
-          {Object.entries(selector).map(([k, v]) => (
-            <StatusChip key={`${si}-${k}`} variant="info">
-              {k}={v}
-            </StatusChip>
-          ))}
-        </div>
-      ))}
+      {withStableListKeys(selectors, (selector) => JSON.stringify(selector)).map(
+        ({ key, value: selector }) => (
+          <div key={key} className="overview-condition-list">
+            {Object.entries(selector).map(([k, v]) => (
+              <StatusChip key={`${k}:${v}`} variant="info">
+                {k}={v}
+              </StatusChip>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 };

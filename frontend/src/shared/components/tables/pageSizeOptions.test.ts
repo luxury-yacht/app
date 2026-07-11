@@ -9,9 +9,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
   isTablePageSize,
   normalizeTablePageSize,
+  TABLE_PAGE_SIZE_OPTIONS,
 } from './pageSizeOptions';
 
 describe('pageSizeOptions', () => {

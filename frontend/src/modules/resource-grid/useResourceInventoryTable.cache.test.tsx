@@ -7,16 +7,17 @@
  * the live source refetches in the background. A settled-empty result, a blocked
  * source, and a different view key must NOT replay stale rows.
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { eventBus } from '@/core/events';
 import {
-  resetResourceInventoryRowCache,
-  useResourceInventoryTable,
   type ResourceInventoryRenderState,
   type ResourceInventorySourceState,
+  resetResourceInventoryRowCache,
+  useResourceInventoryTable,
 } from './useResourceInventoryTable';
 
 interface Row {
@@ -53,10 +54,6 @@ const remount = () => {
   });
   root = ReactDOM.createRoot(container);
 };
-
-beforeAll(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
 beforeEach(() => {
   container = document.createElement('div');

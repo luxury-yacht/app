@@ -4,12 +4,11 @@
  * Test suite for the global input typing-assist policy utility.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
-
 import {
   applyTypingAssistPolicy,
   installTypingAssistPolicyObserver,
 } from '@utils/inputAssistPolicy';
+import { afterEach, describe, expect, it } from 'vitest';
 
 describe('inputAssistPolicy', () => {
   afterEach(() => {

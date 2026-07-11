@@ -4,7 +4,8 @@
  * Reusable search/filter text input.
  */
 
-import React, { useState, useCallback } from 'react';
+import type React from 'react';
+import { useCallback, useState } from 'react';
 
 export interface SearchInputProps {
   /** Current input value (controlled). */
@@ -19,8 +20,6 @@ export interface SearchInputProps {
   id?: string;
   /** HTML name applied to the inner input element. */
   name?: string;
-  /** Whether the input should receive focus on mount. */
-  autoFocus?: boolean;
   /** Disables the input and all action buttons. */
   disabled?: boolean;
   /** Ref forwarded to the inner input element for external focus management. */
@@ -36,7 +35,6 @@ const SearchInput: React.FC<SearchInputProps> = ({
   className,
   id,
   name,
-  autoFocus = false,
   disabled = false,
   inputRef,
   onKeyDown,
@@ -77,7 +75,6 @@ const SearchInput: React.FC<SearchInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={onKeyDown}
-        autoFocus={autoFocus}
         disabled={disabled}
       />
     </div>

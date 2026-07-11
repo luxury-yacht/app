@@ -7,24 +7,24 @@
  * with history loaded from a full object ref.
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { buildObjectActionTarget, runObjectRollback } from '@shared/actions/objectActionClient';
-import { readRevisionHistoryForRef, requestData } from '@/core/data-access';
-import type { backend } from '@wailsjs/go/models';
-import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
+import DiffViewer from '@shared/components/diff/DiffViewer';
 import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import {
   countVisibleDiffRows,
+  type DisplayDiffLine,
   formatTooLargeDiffMessage,
   mergeDiffLines,
-  type DisplayDiffLine,
 } from '@shared/components/diff/diffUtils';
-import DiffViewer from '@shared/components/diff/DiffViewer';
-import ConfirmationModal from './ConfirmationModal';
-import ModalSurface from './ModalSurface';
-import ModalHeader from './ModalHeader';
-import { useModalFocusTrap } from './useModalFocusTrap';
+import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { RollbackIcon } from '@shared/components/icons/SharedIcons';
+import type { backend } from '@wailsjs/go/models';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readRevisionHistoryForRef, requestData } from '@/core/data-access';
+import ConfirmationModal from './ConfirmationModal';
+import ModalHeader from './ModalHeader';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -257,7 +257,7 @@ const RollbackModal = ({
       />
 
       {/* Body */}
-      {loading && (
+      {!!loading && (
         <div className="rollback-loading" data-testid="rollback-loading">
           <div className="loading-spinner">
             <div className="spinner" />
@@ -304,10 +304,10 @@ const RollbackModal = ({
                 >
                   <div className="rollback-revision-item-header">
                     <span className="rollback-revision-number">Revision {entry.revision}</span>
-                    {isCurrent && <span className="rollback-revision-badge">current</span>}
+                    {!!isCurrent && <span className="rollback-revision-badge">current</span>}
                   </div>
                   <span className="rollback-revision-age">{formatAge(entry.createdAt)}</span>
-                  {entry.changeCause && (
+                  {!!entry.changeCause && (
                     <span className="rollback-revision-cause" title={entry.changeCause}>
                       {entry.changeCause}
                     </span>
@@ -354,15 +354,21 @@ const RollbackModal = ({
 
       {/* Footer */}
       <div className="rollback-modal-footer">
-        {rollbackError && (
+        {!!rollbackError && (
           <span className="rollback-modal-footer-error" title={rollbackError}>
             {rollbackError}
           </span>
         )}
-        <button className="button cancel" onClick={onClose} disabled={rollbackLoading}>
+        <button
+          type="button"
+          className="button cancel"
+          onClick={onClose}
+          disabled={rollbackLoading}
+        >
           Cancel
         </button>
         <button
+          type="button"
           className="button warning"
           disabled={selectedRevision === null || rollbackLoading || loading}
           onClick={() => setConfirmOpen(true)}

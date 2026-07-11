@@ -1,11 +1,12 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
   __resetTopLevelAppRegionTrackingForTests,
   useTopLevelAppRegionTracking,
 } from '@ui/layout/appFocusRegions';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { usePanelSurfaceCycling } from './usePanelSurfaceCycling';
 
 const dispatchShortcut = (target: HTMLElement, key: string) => {
@@ -23,10 +24,6 @@ const dispatchShortcut = (target: HTMLElement, key: string) => {
 describe('usePanelSurfaceCycling', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -107,12 +104,15 @@ describe('usePanelSurfaceCycling', () => {
     expect(contentButton).toBeTruthy();
 
     await act(async () => {
-      contentButton!.focus();
+      requireValue(contentButton, 'expected test value in usePanelSurfaceCycling.test.tsx').focus();
       await Promise.resolve();
     });
 
     await act(async () => {
-      dispatchShortcut(contentButton!, 'ArrowRight');
+      dispatchShortcut(
+        requireValue(contentButton, 'expected test value in usePanelSurfaceCycling.test.tsx'),
+        'ArrowRight'
+      );
       await Promise.resolve();
     });
 
@@ -200,12 +200,15 @@ describe('usePanelSurfaceCycling', () => {
     expect(sidebarButton).toBeTruthy();
 
     await act(async () => {
-      sidebarButton!.focus();
+      requireValue(sidebarButton, 'expected test value in usePanelSurfaceCycling.test.tsx').focus();
       await Promise.resolve();
     });
 
     await act(async () => {
-      dispatchShortcut(sidebarButton!, 'ArrowRight');
+      dispatchShortcut(
+        requireValue(sidebarButton, 'expected test value in usePanelSurfaceCycling.test.tsx'),
+        'ArrowRight'
+      );
       await Promise.resolve();
     });
 

@@ -5,10 +5,13 @@
  * Covers key behaviors and edge cases for NsViewRBAC.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -24,10 +27,15 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
 
+type CapturedGridTableProps = GridTableProps<RBACData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<RBACData>['getCustomContextMenuItems']>;
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+
 const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, runObjectActionMock } =
   vi.hoisted(() => ({
-    gridTablePropsRef: { current: null as any },
-    confirmationPropsRef: { current: null as any },
+    gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+    confirmationPropsRef: { current: null as unknown as ConfirmationProps },
     openWithObjectMock: vi.fn(),
     runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   }));
@@ -61,16 +69,18 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {props.data.map((row: any, index: number) => (
-              <tr key={index}>
-                <td>{row.name}</td>
-              </tr>
-            ))}
+            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
+              ({ key, value: row }) => (
+                <tr key={key}>
+                  <td>{row.name}</td>
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       );
@@ -87,7 +97,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -98,7 +108,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
+  useTableSort: (data: RBACData[]) => ({
     sortedData: data,
     sortConfig: { key: 'name', direction: 'asc' },
     handleSort: vi.fn(),
@@ -125,7 +135,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -149,16 +159,12 @@ describe('NsViewRBAC', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     runObjectActionMock.mockResolvedValue(undefined);
@@ -181,7 +187,7 @@ describe('NsViewRBAC', () => {
     ...overrides,
   });
 
-  const renderRBACView = async (options: { stats?: any; namespace?: string } = {}) => {
+  const renderRBACView = async (options: { stats?: unknown; namespace?: string } = {}) => {
     await act(async () => {
       root.render(
         <NsViewRBAC namespace={options.namespace ?? 'team-a'} showNamespaceColumn={true} />
@@ -196,7 +202,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const openItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -218,7 +224,7 @@ describe('NsViewRBAC', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -248,7 +254,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

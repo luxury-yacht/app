@@ -4,7 +4,7 @@
  * SVG icons for log viewer toggle buttons.
  */
 
-import React from 'react';
+import type React from 'react';
 
 interface IconProps {
   width?: number;
@@ -19,6 +19,8 @@ export const AutoScrollIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 256 256"
     width={width}
@@ -40,6 +42,8 @@ export const AutoRefreshIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     width={width}
@@ -63,6 +67,8 @@ export const PreviousLogsIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 32 32"
     width={width}
@@ -80,6 +86,8 @@ export const TimestampIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     width={width}
@@ -102,6 +110,8 @@ export const WrapTextIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     width={width}
@@ -119,6 +129,8 @@ export const AnsiColorIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     width={width}
@@ -140,6 +152,8 @@ export const ParseJsonIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 20 20"
     width={width}
@@ -157,6 +171,8 @@ export const PrettyJsonIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     width={width}
@@ -174,6 +190,8 @@ export const CopyIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 32 32"
     width={width}
@@ -191,6 +209,8 @@ export const HighlightSearchIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     width={width}
@@ -214,6 +234,8 @@ export const InverseSearchIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     width={width}
@@ -232,6 +254,8 @@ export const RegexSearchIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     width={width}

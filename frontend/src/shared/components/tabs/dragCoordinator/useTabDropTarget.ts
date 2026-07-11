@@ -40,9 +40,10 @@
  * browser silently rejects the drop — drag-and-drop appears "broken" in
  * production with no errors or warnings.
  */
-import { useCallback, useContext, useEffect, useRef, useState, type RefCallback } from 'react';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
+import { type RefCallback, useCallback, useContext, useRef, useState } from 'react';
 
-import { TabDragContext, type DropTargetRegistration } from './TabDragProvider';
+import { type DropTargetRegistration, TabDragContext } from './TabDragProvider';
 import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
@@ -200,6 +201,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable handlers intentionally do not churn the ref callback identity
   const ref = useCallback<RefCallback<HTMLElement>>(
     (el) => {
       // Detach from old element
@@ -229,12 +231,11 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     },
     // The handler functions are stable (empty deps) so they don't need
     // to be listed; including them would churn the ref callback identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [registerTarget, unregisterTarget]
   );
 
   // Cleanup on unmount.
-  useEffect(() => {
+  useMountEffect(() => {
     // Capture refs to locals so the cleanup function uses the values that
     // existed when the effect ran, not whatever they happen to be at unmount.
     const id = idRef.current;
@@ -248,8 +249,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       }
       unregisterTarget(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   return { ref, isDragOver, dropInsertIndex };
 }

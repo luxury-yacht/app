@@ -5,9 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { backendStatusClass } from '@shared/utils/backendStatusPresentation';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import React from 'react';
 
 interface ResourceStatusProps {
   status?: string;
@@ -36,23 +37,27 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
 
     return (
       <>
-        {displayValue && (
+        {!!displayValue && (
           <OverviewItem
             label={customLabel}
             value={<span className={`status-text ${statusClass}`}>{displayValue}</span>}
           />
         )}
 
-        {ready && (
+        {!!ready && (
           <OverviewItem
             label="Ready"
             value={(() => {
               // Parse ready string if it's in "X/Y" format
               const parts = ready.split('/');
               if (parts.length === 2) {
-                const readyCount = parseInt(parts[0]);
-                const totalCount = parseInt(parts[1]);
-                if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
+                const readyCount = parseInt(parts[0], 10);
+                const totalCount = parseInt(parts[1], 10);
+                if (
+                  !Number.isNaN(readyCount) &&
+                  !Number.isNaN(totalCount) &&
+                  readyCount !== totalCount
+                ) {
                   return <span className="status-text warning">{ready}</span>;
                 }
               }
@@ -66,14 +71,17 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
             label="Conditions"
             value={
               <div className="conditions-list">
-                {conditions.map((condition, index) => (
-                  <div key={index} className="condition-item">
+                {withStableListKeys(
+                  conditions,
+                  (condition) => `${condition.type}:${condition.status}:${condition.reason ?? ''}`
+                ).map(({ key, value: condition }) => (
+                  <div key={key} className="condition-item">
                     <span
                       className={`condition-type ${condition.status === 'True' ? 'true' : 'false'}`}
                     >
                       {condition.type}
                     </span>
-                    {condition.message && (
+                    {!!condition.message && (
                       <span className="condition-message">: {condition.message}</span>
                     )}
                   </div>

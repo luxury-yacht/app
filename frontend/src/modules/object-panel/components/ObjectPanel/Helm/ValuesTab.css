@@ -47,8 +47,8 @@
   padding-right: 1rem;
   text-align: right;
   color: #858585;
-  user-select: none !important;
-  -webkit-user-select: none !important;
+  user-select: none;
+  -webkit-user-select: none;
   flex-shrink: 0;
 }
 
@@ -75,6 +75,6 @@
 
 /* Highlighting for overridden values */
 .values-line-overridden {
-  background-color: var(--helm-values-override-bg) !important;
+  background-color: var(--helm-values-override-bg);
   position: relative;
 }

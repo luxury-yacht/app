@@ -2,8 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.tsx
  */
 
-import React, { useState } from 'react';
 import { StatusChip } from '@shared/components/StatusChip';
+import type React from 'react';
+import { useState } from 'react';
 import './LabelsAndAnnotations.css';
 
 interface LabelsAndAnnotationsProps {
@@ -52,7 +53,7 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
 
             let displayValue = value;
             if (shouldTruncate) {
-              displayValue = value.substring(0, TRUNCATE_LENGTH) + '... (click to expand)';
+              displayValue = `${value.substring(0, TRUNCATE_LENGTH)}... (click to expand)`;
             }
 
             const isSelector =
@@ -63,22 +64,19 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
                 className={`metadata-pair${isSelector ? ' metadata-pair--selector' : ''}`}
               >
                 <span className="metadata-key">{key}:</span>
-                <span
-                  className={`metadata-value ${isAnnotation && isLongValue ? 'clickable' : ''}`}
-                  onClick={
-                    isAnnotation && isLongValue ? () => toggleAnnotationExpanded(key) : undefined
-                  }
-                  title={
-                    shouldTruncate
-                      ? 'Click to expand'
-                      : isExpanded
-                        ? 'Click to collapse'
-                        : undefined
-                  }
-                >
-                  {displayValue}
-                </span>
-                {isSelector && (
+                {isAnnotation && isLongValue ? (
+                  <button
+                    type="button"
+                    className="metadata-value clickable"
+                    onClick={() => toggleAnnotationExpanded(key)}
+                    title={shouldTruncate ? 'Click to expand' : 'Click to collapse'}
+                  >
+                    {displayValue}
+                  </button>
+                ) : (
+                  <span className="metadata-value">{displayValue}</span>
+                )}
+                {!!isSelector && (
                   <StatusChip
                     variant="info"
                     tooltip="This label/value pair is used to identify which pods belong to this workload."

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { type RefObject, useCallback, useEffect, useRef } from 'react';
 
 interface LogScrollRestorationOptions {
   rootRef: RefObject<HTMLElement | null>;
@@ -95,49 +96,53 @@ export const useLogScrollRestoration = ({
     forceTailRestoreRef.current = false;
   }, [cacheKey, getScrollContainer, getScrollTop, rowCount]);
 
-  useEffect(() => {
-    void tailFollowSignal;
-    if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
-      return;
-    }
-
-    const scrollEl = getScrollContainer();
-    if (!scrollEl) {
-      return;
-    }
-
-    let rafId: number | undefined;
-    const scrollToBottom = () => {
-      const element = getScrollContainer();
-      if (!element) {
+  useEffectWithInvalidation(
+    () => {
+      void tailFollowSignal;
+      if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
         return;
       }
-      element.scrollTop = element.scrollHeight;
-    };
 
-    if (isParsedView) {
-      let attempts = 0;
-      const maxAttempts = 20;
-      const checkAndScroll = () => {
+      const scrollEl = getScrollContainer();
+      if (!scrollEl) {
+        return;
+      }
+
+      let rafId: number | undefined;
+      const scrollToBottom = () => {
         const element = getScrollContainer();
-        if (element && element.scrollHeight > element.clientHeight) {
-          rafId = requestAnimationFrame(scrollToBottom);
-        } else if (attempts < maxAttempts) {
-          attempts += 1;
-          rafId = requestAnimationFrame(checkAndScroll);
+        if (!element) {
+          return;
+        }
+        element.scrollTop = element.scrollHeight;
+      };
+
+      if (isParsedView) {
+        let attempts = 0;
+        const maxAttempts = 20;
+        const checkAndScroll = () => {
+          const element = getScrollContainer();
+          if (element && element.scrollHeight > element.clientHeight) {
+            rafId = requestAnimationFrame(scrollToBottom);
+          } else if (attempts < maxAttempts) {
+            attempts += 1;
+            rafId = requestAnimationFrame(checkAndScroll);
+          }
+        };
+        rafId = requestAnimationFrame(checkAndScroll);
+      } else {
+        rafId = requestAnimationFrame(scrollToBottom);
+      }
+
+      return () => {
+        if (rafId !== undefined) {
+          cancelAnimationFrame(rafId);
         }
       };
-      rafId = requestAnimationFrame(checkAndScroll);
-    } else {
-      rafId = requestAnimationFrame(scrollToBottom);
-    }
-
-    return () => {
-      if (rafId !== undefined) {
-        cancelAnimationFrame(rafId);
-      }
-    };
-  }, [getScrollContainer, isParsedView, rowCount, tailFollowSignal]);
+    },
+    [getScrollContainer, isParsedView, tailFollowSignal],
+    [rowCount]
+  );
 
   return { getScrollContainer, resetScrollRestoration };
 };

@@ -2,13 +2,17 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.test.tsx
  */
 
-import { act } from 'react';
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.test.tsx
+ */
 
-import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import type { ResourceCapability } from '../types';
+import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
 type HookResult = ReturnType<typeof useObjectPanelFeatureSupport>;
 
@@ -34,12 +38,11 @@ describe('useObjectPanelFeatureSupport', () => {
       await Promise.resolve();
     });
 
-    return resultRef.current!;
+    return requireValue(
+      resultRef.current,
+      'expected test value in useObjectPanelFeatureSupport.test.tsx'
+    );
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

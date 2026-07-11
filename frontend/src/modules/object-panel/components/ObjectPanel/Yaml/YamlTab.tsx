@@ -6,35 +6,37 @@
  * in yamlTransaction.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as YAML from 'yaml';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 import './YamlTab.css';
-import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
-import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
-import { prepareDraftYaml } from './yamlTabUtils';
-import {
-  buildYamlTransactionDiff,
-  useYamlTransaction,
-  type YamlTransactionDiffResult,
-} from './yamlTransaction';
-import type { YamlTabProps } from './yamlTabTypes';
 import {
   YamlCancelIcon,
   YamlEditIcon,
   YamlManagedFieldsIcon,
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
+import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
+import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
+import type { YamlTabProps } from './yamlTabTypes';
+import { prepareDraftYaml } from './yamlTabUtils';
+import {
+  buildYamlTransactionDiff,
+  useYamlTransaction,
+  type YamlTransactionDiffResult,
+} from './yamlTransaction';
 
 export type { YamlTabProps } from './yamlTabTypes';
 
@@ -438,48 +440,52 @@ const YamlTab: React.FC<YamlTabProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
-        {isEditing &&
-          (lintError || actionError || protectedEditMessage || showReloadMergeConflict) && (
-            <div className="yaml-validation-message">
-              {showReloadMergeConflict && (
-                <>
-                  <div className="yaml-notice-header">
-                    <p>
-                      Reload &amp; merge could not reconcile your draft with the latest YAML. Your
-                      draft is unchanged. Save will still patch your edited fields onto the live
-                      object, like kubectl edit.
-                    </p>
-                    {driftDiff &&
-                      renderYamlDiffToggle(
-                        driftDiff,
-                        driftDiffKey,
-                        Boolean(expandedDiffs[driftDiffKey]),
-                        toggleDiffExpansion
-                      )}
-                  </div>
+        {!!(
+          isEditing &&
+          (lintError || actionError || protectedEditMessage || showReloadMergeConflict)
+        ) && (
+          <div className="yaml-validation-message">
+            {!!showReloadMergeConflict && (
+              <>
+                <div className="yaml-notice-header">
+                  <p>
+                    Reload &amp; merge could not reconcile your draft with the latest YAML. Your
+                    draft is unchanged. Save will still patch your edited fields onto the live
+                    object, like kubectl edit.
+                  </p>
                   {driftDiff &&
-                    renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
-                  {driftDiff?.tooLarge && (
-                    <p className="yaml-drift-warning">
-                      {driftDiff.tooLargeMessage ??
-                        'This diff is too large to display in the current view.'}{' '}
-                      Reload the YAML to review the latest version before retrying.
-                    </p>
-                  )}
-                </>
-              )}
-              {lintError && <p>{lintError}</p>}
-              {protectedEditMessage && <p>{protectedEditMessage}</p>}
-              {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
-              {actionDetails.length > 0 && (
-                <ul className="yaml-error-details">
-                  {actionDetails.map((detail, index) => (
-                    <li key={`detail-${index}`}>{detail}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+                    renderYamlDiffToggle(
+                      driftDiff,
+                      driftDiffKey,
+                      Boolean(expandedDiffs[driftDiffKey]),
+                      toggleDiffExpansion
+                    )}
+                </div>
+                {driftDiff &&
+                  renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
+                {!!driftDiff?.tooLarge && (
+                  <p className="yaml-drift-warning">
+                    {driftDiff.tooLargeMessage ??
+                      'This diff is too large to display in the current view.'}{' '}
+                    Reload the YAML to review the latest version before retrying.
+                  </p>
+                )}
+              </>
+            )}
+            {!!lintError && <p>{lintError}</p>}
+            {!!protectedEditMessage && <p>{protectedEditMessage}</p>}
+            {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
+            {actionDetails.length > 0 && (
+              <ul className="yaml-error-details">
+                {withStableListKeys(actionDetails, (detail) => detail).map(
+                  ({ key, value: detail }) => (
+                    <li key={key}>{detail}</li>
+                  )
+                )}
+              </ul>
+            )}
+          </div>
+        )}
         {!isEditing && postApplyNotice && (
           <div
             className={`yaml-post-apply-notice yaml-post-apply-notice-${postApplyNotice.kind}`}
@@ -489,7 +495,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
             <div className="yaml-notice-header">
               <p>{postApplyNotice.message}</p>
               <div className="yaml-notice-actions">
-                {postApplyNotice.diff &&
+                {!!postApplyNotice.diff &&
                   renderYamlDiffToggle(
                     postApplyNotice.diff,
                     postApplyDiffKey,
@@ -506,13 +512,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 </button>
               </div>
             </div>
-            {postApplyNotice.diff &&
+            {!!postApplyNotice.diff &&
               renderYamlDiff(
                 postApplyNotice.diff,
                 postApplyDiffKey,
                 Boolean(expandedDiffs[postApplyDiffKey])
               )}
-            {postApplyNotice.diff?.tooLarge && (
+            {!!postApplyNotice.diff?.tooLarge && (
               <p className="yaml-drift-warning">
                 {postApplyNotice.diff.tooLargeMessage ??
                   'The post-apply diff is too large to display in the current view.'}
@@ -543,7 +549,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           toolbarActions={
             <>
               <IconBar items={yamlToolbarItems} />
-              {isEditing && hasRemoteDrift && (
+              {!!(isEditing && hasRemoteDrift) && (
                 <button
                   className="button secondary"
                   type="button"

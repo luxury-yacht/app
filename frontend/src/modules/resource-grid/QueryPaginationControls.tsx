@@ -4,10 +4,11 @@
  * Shared cursor pagination controls for query-backed resource tables.
  */
 
-import React, { useMemo } from 'react';
+import type React from 'react';
+import { useMemo } from 'react';
 import './QueryPaginationControls.css';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 
 interface QueryPaginationControlsProps {
   idPrefix: string;
@@ -109,7 +110,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   };
 
   return (
-    <div className="query-pagination-controls" aria-label="Table pagination">
+    <nav className="query-pagination-controls" aria-label="Table pagination">
       <div className="query-pagination-page-size">
         <span className="query-pagination-page-size-label">Rows per page</span>
         <Dropdown
@@ -139,6 +140,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
         </span>
         <span
           className="query-pagination-progress"
+          role="status"
           aria-label={loading ? 'Page request in progress' : undefined}
           aria-hidden={loading ? undefined : true}
         />
@@ -190,7 +192,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           <PaginationArrowIcon direction="next" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 };
 

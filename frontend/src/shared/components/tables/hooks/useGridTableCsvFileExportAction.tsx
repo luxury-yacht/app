@@ -6,14 +6,14 @@
  * from the table's displayed columns, and saves it to a file. It is the single
  * export mechanism shared by typed-resource and catalog-backed tables.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 
 import { saveCsvFile } from '@core/data-access';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { YamlSaveIcon } from '@shared/components/icons/YamlIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { buildCsvExportFilename, buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const FEEDBACK_RESET_MS = 750;
 
@@ -96,6 +96,6 @@ export function useGridTableCsvFileExportAction<T>({
       disabled: disabled || exporting || !columns?.length,
       feedback,
     }),
-    [columns?.length, disabled, exporting, feedback, handleExport, title]
+    [columns?.length, disabled, exporting, feedback, handleExport]
   );
 }

@@ -5,10 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { Component, ErrorInfo } from 'react';
 import { errorHandler } from '@utils/errorHandler';
+import { Component, type ErrorInfo } from 'react';
 import { ErrorFallback } from './ErrorFallback';
-import { ErrorBoundaryProps, ErrorBoundaryState } from './types';
+import type { ErrorBoundaryProps, ErrorBoundaryState } from './types';
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {

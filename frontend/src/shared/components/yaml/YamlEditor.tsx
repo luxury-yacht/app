@@ -1,4 +1,31 @@
-import React, {
+import { yaml as yamlLang } from '@codemirror/lang-yaml';
+import {
+  findNext,
+  findPrevious,
+  getSearchQuery,
+  SearchQuery,
+  setSearchQuery,
+} from '@codemirror/search';
+import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  type KeyBinding,
+  keymap,
+} from '@codemirror/view';
+import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
+import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
+import { YamlNextIcon, YamlPreviousIcon } from '@shared/components/icons/YamlIcons';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
+import { deriveCopyText } from '@ui/shortcuts/context';
+import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { ClipboardGetText } from '@wailsjs/runtime/runtime';
+import type React from 'react';
+import {
   forwardRef,
   useCallback,
   useEffect,
@@ -7,39 +34,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { yaml as yamlLang } from '@codemirror/lang-yaml';
-import {
-  Decoration,
-  EditorView,
-  keymap,
-  type DecorationSet,
-  type KeyBinding,
-} from '@codemirror/view';
-import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
-import {
-  SearchQuery,
-  findNext,
-  findPrevious,
-  getSearchQuery,
-  setSearchQuery,
-} from '@codemirror/search';
-import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
-import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
-import { YamlNextIcon, YamlPreviousIcon } from '@shared/components/icons/YamlIcons';
-import { deriveCopyText } from '@ui/shortcuts/context';
-import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
-import { buildCodeTheme } from '@/core/codemirror/theme';
 import {
   copyCodeMirrorSelection,
   cutCodeMirrorSelection,
   getCodeMirrorSelectedText,
   selectCodeMirrorContent,
 } from '@/core/codemirror/nativeActions';
-import { ClipboardGetText } from '@wailsjs/runtime/runtime';
 import { closeSearchPanel, createSearchExtensions } from '@/core/codemirror/search';
+import { buildCodeTheme } from '@/core/codemirror/theme';
 import './YamlEditor.css';
 
 export interface ProtectedYamlRange {
@@ -575,15 +577,19 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
       [clearSearchQuery, onCreateEditor]
     );
 
-    useEffect(() => {
-      const view = editorRef.current?.view;
-      if (view) {
-        editorViewRef.current = view;
-        setSearchTerm('');
-        clearSearchQuery(view);
-        closeSearchPanel(view);
-      }
-    }, [clearSearchQuery, value]);
+    useEffectWithInvalidation(
+      () => {
+        const view = editorRef.current?.view;
+        if (view) {
+          editorViewRef.current = view;
+          setSearchTerm('');
+          clearSearchQuery(view);
+          closeSearchPanel(view);
+        }
+      },
+      [clearSearchQuery],
+      [value]
+    );
 
     useEffect(() => {
       applySearchQuery(editorViewRef.current, searchTerm);
@@ -703,9 +709,9 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
 
     return (
       <div className={`yaml-editor ${className ?? ''}`}>
-        {(showSearch || toolbarActions) && (
+        {!!(showSearch || toolbarActions) && (
           <div className="yaml-header yaml-editor-header">
-            {showSearch && (
+            {!!showSearch && (
               <div className="yaml-search-controls">
                 <div className="find-controls">
                   <input
@@ -721,11 +727,11 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
                 <IconBar items={searchIconBarItems} />
               </div>
             )}
-            {toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
+            {!!toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
           </div>
         )}
         <div className="yaml-editor-content">
-          {largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
+          {!!largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
           <div ref={editorSurfaceRef} className="codemirror-shell yaml-editor-shell">
             <CodeMirror
               ref={editorRef}
@@ -750,7 +756,7 @@ const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
               aria-label={ariaLabel}
             />
           </div>
-          {contextMenu && (
+          {!!contextMenu && (
             <ContextMenu
               items={contextMenu.items}
               position={contextMenu.position}

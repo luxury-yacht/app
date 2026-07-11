@@ -5,10 +5,11 @@
  * Covers key behaviors and edge cases for useDockablePanelState.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
@@ -17,12 +18,12 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
+import { DockablePanelProvider } from './DockablePanelProvider';
 import {
-  useDockablePanelState,
   getAllPanelStates,
   restorePanelStates,
+  useDockablePanelState,
 } from './useDockablePanelState';
-import { DockablePanelProvider } from './DockablePanelProvider';
 
 type HookResult = ReturnType<typeof useDockablePanelState>;
 
@@ -63,7 +64,9 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
     },
     update: async (updater) => {
       await act(async () => {
-        await updater(result.current!);
+        await updater(
+          requireValue(result.current, 'expected test value in useDockablePanelState.test.tsx')
+        );
         await Promise.resolve();
       });
     },
@@ -87,10 +90,6 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
 };
 
 describe('useDockablePanelState', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
 

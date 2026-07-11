@@ -1,9 +1,9 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useNamespaceFilterOptions } from './useNamespaceFilterOptions';
 
 const namespaceMock = {
@@ -61,10 +61,6 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useNamespaceFilterOptions', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     namespaceMock.namespaces = [];
   });

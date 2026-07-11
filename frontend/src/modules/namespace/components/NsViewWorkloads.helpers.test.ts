@@ -5,16 +5,16 @@
  * Covers key behaviors and edge cases for NsViewWorkloads.helpers.
  */
 
-import { describe, expect, it } from 'vitest';
 import {
-  normalizeWorkloadKind,
+  appendWorkloadTokens,
+  buildWorkloadKey,
   clampReplicas,
   extractDesiredReplicas,
-  buildWorkloadKey,
+  normalizeWorkloadKind,
   parseWorkloadKeyValue,
-  appendWorkloadTokens,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import { describe, expect, it } from 'vitest';
 
 describe('NsViewWorkloads helpers', () => {
   it('normalizes workload kinds with canonical casing', () => {
@@ -42,6 +42,7 @@ describe('NsViewWorkloads helpers', () => {
 
   it('builds and parses workload keys with namespace context', () => {
     const workload: WorkloadData = {
+      clusterId: 'cluster-a',
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -66,6 +67,7 @@ describe('NsViewWorkloads helpers', () => {
   it('appends workload tokens for search filtering', () => {
     const tokens: string[] = [];
     appendWorkloadTokens(tokens, {
+      clusterId: 'cluster-a',
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',

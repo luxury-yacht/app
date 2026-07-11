@@ -4,12 +4,14 @@
  * Store implementation for dockable panel runtime layout state.
  */
 
-import { getContentBounds } from './dockablePanelLayout';
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
-import { createInitialTabGroupState } from './tabGroupState';
-import { getGroupForPanel } from './tabGroupState';
-import { getGroupTabs } from './tabGroupState';
-import { removePanelFromGroup } from './tabGroupState';
+import { getContentBounds } from './dockablePanelLayout';
+import {
+  createInitialTabGroupState,
+  getGroupForPanel,
+  getGroupTabs,
+  removePanelFromGroup,
+} from './tabGroupState';
 import type { TabGroupState } from './tabGroupTypes';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
@@ -127,26 +129,30 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     // a consistent iteration order. Without this, a listener that
     // re-enters could cause some listeners to fire twice for one
     // logical update while others are skipped.
-    new Set(tabGroupsListeners).forEach((listener) => listener());
+    new Set(tabGroupsListeners).forEach((listener) => {
+      listener();
+    });
   };
 
   const getInitialState = (panelId: string): PanelLayoutState => {
-    if (!panelStates.has(panelId)) {
-      const layout = getObjectPanelLayoutDefaults();
-
-      panelStates.set(panelId, {
-        position: 'right',
-        floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
-        rightSize: { width: layout.dockedRightWidth, height: 300 },
-        bottomSize: { width: 400, height: layout.dockedBottomHeight },
-        floatingPosition: { x: layout.floatingX, y: layout.floatingY },
-        isMaximized: false,
-        isOpen: false,
-        isInitialized: false,
-        zIndex: zIndexCounter++,
-      });
+    const existing = panelStates.get(panelId);
+    if (existing) {
+      return existing;
     }
-    return panelStates.get(panelId)!;
+    const layout = getObjectPanelLayoutDefaults();
+    const initialState: PanelLayoutState = {
+      position: 'right',
+      floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
+      rightSize: { width: layout.dockedRightWidth, height: 300 },
+      bottomSize: { width: 400, height: layout.dockedBottomHeight },
+      floatingPosition: { x: layout.floatingX, y: layout.floatingY },
+      isMaximized: false,
+      isOpen: false,
+      isInitialized: false,
+      zIndex: zIndexCounter++,
+    };
+    panelStates.set(panelId, initialState);
+    return initialState;
   };
 
   const notifyListeners = (panelId: string) => {
@@ -154,7 +160,9 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     if (!listeners) {
       return;
     }
-    listeners.forEach((listener) => listener());
+    listeners.forEach((listener) => {
+      listener();
+    });
   };
 
   const updateState = (panelId: string, updates: Partial<PanelLayoutState>) => {
@@ -172,10 +180,11 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     getState: (panelId: string) => panelStates.get(panelId),
     updateState,
     subscribe: (panelId: string, listener: PanelListener) => {
-      if (!panelListeners.has(panelId)) {
-        panelListeners.set(panelId, new Set());
+      let listeners = panelListeners.get(panelId);
+      if (!listeners) {
+        listeners = new Set();
+        panelListeners.set(panelId, listeners);
       }
-      const listeners = panelListeners.get(panelId)!;
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
@@ -264,7 +273,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
       if (!panelCloseHandlers.has(panelId)) {
         panelCloseHandlers.set(panelId, new Set());
       }
-      panelCloseHandlers.get(panelId)!.add(handler);
+      panelCloseHandlers.get(panelId)?.add(handler);
     },
     unregisterPanelCloseHandler: (panelId: string, handler: (reason: PanelCloseReason) => void) => {
       const handlers = panelCloseHandlers.get(panelId);

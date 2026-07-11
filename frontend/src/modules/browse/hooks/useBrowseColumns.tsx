@@ -5,13 +5,13 @@
  * Supports both cluster-scoped (with namespace column) and namespace-scoped (without) views.
  */
 
-import { useMemo } from 'react';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { getDisplayKind } from '@/utils/kindAliasMap';
+import { useMemo } from 'react';
 import type { CatalogItem } from '@/core/refresh/types';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /**
  * Row type for the Browse table.

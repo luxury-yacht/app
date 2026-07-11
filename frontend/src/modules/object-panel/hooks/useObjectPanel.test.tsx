@@ -4,14 +4,15 @@
  * Covers key behaviors for the multi-tab object panel system.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ObjectPanelStateProvider,
   objectPanelId,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();
@@ -39,10 +40,6 @@ vi.mock('@ui/dockable/useDockablePanelState', () => ({
   handoffLayoutBeforeClose: vi.fn(),
 }));
 
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
-
 describe('useObjectPanel', () => {
   type UseObjectPanelExports = typeof import('./useObjectPanel');
   let useObjectPanel: UseObjectPanelExports['useObjectPanel'];
@@ -52,7 +49,7 @@ describe('useObjectPanel', () => {
   let hookResult: ReturnType<UseObjectPanelExports['useObjectPanel']>;
 
   function TestComponent() {
-    hookResult = useObjectPanel!();
+    hookResult = requireValue(useObjectPanel, 'expected test value in useObjectPanel.test.tsx')();
     return null;
   }
 

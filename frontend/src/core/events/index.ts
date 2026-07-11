@@ -5,5 +5,5 @@
  * Re-exports public APIs for the core layer.
  */
 
-export { eventBus, type AppEvents, type UnsubscribeFn } from './eventBus';
+export { type AppEvents, eventBus, type UnsubscribeFn } from './eventBus';
 export { useEventBus } from './useEventBus';

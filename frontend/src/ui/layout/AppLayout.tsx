@@ -5,55 +5,55 @@
  * Implements AppLayout logic for the UI layer.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import captainK8s from '@assets/captain-k8s-color.png';
 // Assets
 import logo from '@assets/luxury-yacht-logo.png';
-import captainK8s from '@assets/captain-k8s-color.png';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 // App Stuff
 import '@/App.css';
-import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
-import { DebugOverlay } from '@ui/layout/DebugOverlay';
-import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import { eventBus } from '@/core/events';
-import { isMacPlatform } from '@/utils/platform';
-// Content Components
-import AppHeader from '@ui/layout/AppHeader';
-import ClusterTabs from '@ui/layout/ClusterTabs';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
-import type { NamespaceViewType } from '@ui/navigation/types';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
-import BrowseView from '@/modules/browse/components/BrowseView';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
-import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
+import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { isAllNamespaces } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { NamespaceResourcesProvider } from '@modules/namespace/contexts/NsResourcesContext';
+import {
+  type ObjectMapDebugSnapshot,
+  setObjectMapDebugOverlayVisible,
+  useObjectMapDebugSnapshots,
+} from '@modules/object-map/objectMapDebugStore';
+import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+// Error Handling
+import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
+import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
 // Command Palette
 import { CommandPalette } from '@ui/command-palette/CommandPalette';
 import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCommands';
-// Error Handling
-import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
-import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
-import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
 import { useDockablePanelEmptySpaceDropTarget } from '@ui/dockable/DockablePanelContentArea';
 import { usePanelSurfaceCycling } from '@ui/dockable/usePanelSurfaceCycling';
-// Auth Failure Overlay
-import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
-import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
-import { IconDebugOverlay } from '@ui/layout/IconDebugOverlay';
+import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
+// Content Components
+import AppHeader from '@ui/layout/AppHeader';
 import {
   useContentRegionShiftTabHandoff,
   useTopLevelAppRegionTracking,
 } from '@ui/layout/appFocusRegions';
-import {
-  setObjectMapDebugOverlayVisible,
-  useObjectMapDebugSnapshots,
-  type ObjectMapDebugSnapshot,
-} from '@modules/object-map/objectMapDebugStore';
+import ClusterTabs from '@ui/layout/ClusterTabs';
+import { DebugOverlay } from '@ui/layout/DebugOverlay';
+import { IconDebugOverlay } from '@ui/layout/IconDebugOverlay';
+import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
+import type { NamespaceViewType } from '@ui/navigation/types';
+// Auth Failure Overlay
+import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
+import { eventBus } from '@/core/events';
+import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
+import BrowseView from '@/modules/browse/components/BrowseView';
+import { isMacPlatform } from '@/utils/platform';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -70,10 +70,12 @@ const AppLogsPanel = withLazyBoundary(
   () => import('@ui/panels/app-logs/AppLogsPanel'),
   'Loading Application Logs Panel...'
 );
+
 // ObjectPanel is imported eagerly because panels are only rendered on-demand
 // (when openPanels has entries). A lazy boundary would flash a loading spinner
 // on the first click before the chunk loads.
 import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
+
 const DevTestErrorBoundaryLazy = React.lazy(() => import('@ui/errors/TestErrorBoundary'));
 
 export const AppLayout: React.FC = () => {
@@ -144,7 +146,8 @@ export const AppLayout: React.FC = () => {
         className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}
       >
         <Sidebar />
-        {viewState.isSidebarVisible && (
+        {!!viewState.isSidebarVisible && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: The sidebar resize gutter is a pointer drag boundary owned by shared layout state and is not exposed as an activation control.
           <div
             className="sidebar-resizer"
             onMouseDown={(e) => {
@@ -278,19 +281,19 @@ export const AppLayout: React.FC = () => {
       </PanelErrorBoundary>
       <ErrorNotificationSystem />
       <CommandPalette commands={commands} />
-      {isPanelDebugOverlayVisible && (
+      {!!isPanelDebugOverlayVisible && (
         <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
       )}
-      {isFocusOverlayVisible && (
+      {!!isFocusOverlayVisible && (
         <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
       )}
-      {isErrorOverlayVisible && (
+      {!!isErrorOverlayVisible && (
         <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
       )}
-      {isMapDebugOverlayVisible && (
+      {!!isMapDebugOverlayVisible && (
         <MapDebugOverlay onClose={() => setIsMapDebugOverlayVisible(false)} />
       )}
-      {isIconDebugOverlayVisible && (
+      {!!isIconDebugOverlayVisible && (
         <IconDebugOverlay onClose={() => setIsIconDebugOverlayVisible(false)} />
       )}
     </div>
@@ -475,7 +478,7 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
     const handlePointerDown = (event: PointerEvent) => {
       const overlayElement = overlayRef.current;
       overlayPointerInteractionRef.current = Boolean(
-        overlayElement && overlayElement.contains(event.target as Node)
+        overlayElement?.contains(event.target as Node)
       );
     };
 
@@ -623,12 +626,16 @@ const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   }, []);
 
   const assignedGroupsByPanelId = new Map<string, string>();
-  tabGroups.right.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'right'));
-  tabGroups.bottom.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'bottom'));
+  tabGroups.right.tabs.forEach((panelId) => {
+    assignedGroupsByPanelId.set(panelId, 'right');
+  });
+  tabGroups.bottom.tabs.forEach((panelId) => {
+    assignedGroupsByPanelId.set(panelId, 'bottom');
+  });
   tabGroups.floating.forEach((group) => {
-    group.tabs.forEach((panelId) =>
-      assignedGroupsByPanelId.set(panelId, `floating:${group.groupId}`)
-    );
+    group.tabs.forEach((panelId) => {
+      assignedGroupsByPanelId.set(panelId, `floating:${group.groupId}`);
+    });
   });
 
   const registeredPanels = Array.from(panelRegistrations.values()).sort((a, b) =>

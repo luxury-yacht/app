@@ -7,8 +7,8 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import AppHeader from './AppHeader';
 import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
+import AppHeader from './AppHeader';
 
 const meta: Meta<typeof AppHeader> = {
   title: 'Layout/AppHeader',

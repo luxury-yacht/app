@@ -4,11 +4,11 @@
  * Tests SVG rendering for object-map connection tooltip overlays.
  */
 
-import { describe, expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
-import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
+import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapTooltipLayout } from './objectMapG6Tooltip';
 
 const palette: ObjectMapG6Palette = {
@@ -131,6 +131,7 @@ describe('ObjectMapG6TooltipOverlay', () => {
   it('renders tooltip background, arrow, relationship text, and kind badges', () => {
     const html = renderToStaticMarkup(
       <svg>
+        <title>Object map tooltip</title>
         <ObjectMapG6TooltipOverlay
           palette={palette}
           tooltipLayout={tooltipLayout}

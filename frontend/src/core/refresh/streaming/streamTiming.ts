@@ -12,7 +12,7 @@ export const streamReconnectDelay = (
   const baseMs = options.baseMs ?? 1000;
   const maxMs = options.maxMs ?? 30_000;
   const minMs = options.minMs ?? 0;
-  const backoff = Math.min(maxMs, baseMs * Math.pow(2, attempt));
+  const backoff = Math.min(maxMs, baseMs * 2 ** attempt);
   const absoluteJitter = options.jitterMs ? Math.random() * options.jitterMs : 0;
   const proportionalJitter = options.jitterFactor
     ? backoff * ((Math.random() * 2 - 1) * options.jitterFactor)

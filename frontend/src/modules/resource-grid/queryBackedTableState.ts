@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import type { SortConfig } from '@hooks/useTableSort';
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type {
@@ -6,7 +6,7 @@ import type {
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import type { SortConfig } from '@hooks/useTableSort';
+import { useCallback, useState } from 'react';
 
 export interface QueryBackedTableState {
   filters: GridTableFilterState;

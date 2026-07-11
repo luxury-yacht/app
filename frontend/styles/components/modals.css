@@ -240,7 +240,7 @@
 }
 
 .modal-input-error {
-  border-color: var(--status-error-text) !important;
+  border-color: var(--status-error-text);
   outline: 1px solid var(--status-error-text);
 }
 

@@ -32,10 +32,11 @@
  * synthetic kinds that never resolve to a real Kubernetes GVK (e.g.
  * Helm releases).
  */
+
 import fs from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 interface CallSite {
   file: string;
@@ -49,7 +50,7 @@ interface CallSite {
 function* walkSourceFiles(root: string): Generator<string> {
   const stack: string[] = [root];
   while (stack.length > 0) {
-    const current = stack.pop()!;
+    const current = requireValue(stack.pop(), 'expected test value in openWithObjectAudit.test.ts');
     const entries = fs.readdirSync(current, { withFileTypes: true });
     for (const entry of entries) {
       const full = path.join(current, entry.name);
@@ -94,17 +95,17 @@ function findObjectLiteralsAfter(
     let depth = 0;
     let i = openBrace;
     let inString: '"' | "'" | '`' | null = null;
-    let escape = false;
+    let isEscaped = false;
     let closeBrace = -1;
     for (; i < source.length; i++) {
       const ch = source[i];
-      if (escape) {
-        escape = false;
+      if (isEscaped) {
+        isEscaped = false;
         continue;
       }
       if (inString) {
         if (ch === '\\') {
-          escape = true;
+          isEscaped = true;
           continue;
         }
         if (ch === inString) {

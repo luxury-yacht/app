@@ -48,12 +48,12 @@ const EXEMPT_PATH_PREFIXES = ['src/core/refresh/'];
 // bug. Prefer wiring useStreamSignalRefetch over adding entries here.
 const EXEMPT_FILES = new Map<string, string>([]);
 
-export type StreamReaderViolation = {
+type StreamReaderViolation = {
   path: string;
   domains: string[];
 };
 
-export const findUnguardedStreamReaders = (
+const findUnguardedStreamReaders = (
   files: Array<{ path: string; content: string }>,
   domains: readonly string[] = streamClassDomains
 ): StreamReaderViolation[] => {

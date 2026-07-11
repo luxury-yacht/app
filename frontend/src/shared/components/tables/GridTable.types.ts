@@ -5,14 +5,16 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import type React from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type React from 'react';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
 export type ColumnWidthInput =
-  number | `${number}${'px' | 'em' | 'rem' | '%'}` /* explicit unit */ | 'auto';
+  | number
+  | `${number}${'px' | 'em' | 'rem' | '%'}` /* explicit unit */
+  | 'auto';
 
 export interface ColumnWidthState {
   width: number;
@@ -29,7 +31,7 @@ export interface GridColumnDefinition<T> {
   header: string;
   render: (item: T) => React.ReactNode;
   sortable?: boolean;
-  sortValue?: (item: T) => any;
+  sortValue?: (item: T) => unknown;
   className?: string;
   width?: ColumnWidthInput;
   minWidth?: ColumnWidthInput;

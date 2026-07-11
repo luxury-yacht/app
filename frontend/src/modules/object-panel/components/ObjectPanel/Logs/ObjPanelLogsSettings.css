@@ -7,6 +7,10 @@
 }
 
 .obj-panel-logs-settings-format-link {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
   color: var(--color-accent);
   text-decoration-color: var(--color-accent);
   white-space: nowrap;
@@ -101,6 +105,10 @@
   background-color: var(--color-bg);
   color: var(--color-text);
   width: 30ch;
+}
+
+.obj-panel-logs-settings-timestamp-grid input[type="text"].modal-input-error {
+  border-color: var(--status-error-text);
 }
 
 .obj-panel-logs-settings-timestamp-control {

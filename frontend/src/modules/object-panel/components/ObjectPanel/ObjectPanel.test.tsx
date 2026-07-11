@@ -2,14 +2,27 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.test.tsx
  */
 
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { act, createContext, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
-import { createContext, useSyncExternalStore } from 'react';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
-import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { requireValue } from '@/test-utils/requireValue';
+
+interface DetailsTabCapture {
+  onAfterDelete: () => void;
+  onAfterAction: () => void;
+  detailModel: {
+    activeDetail: unknown;
+    containerSection: unknown;
+    dataSection: unknown;
+    roleRules?: unknown;
+    desiredScaleReplicas: number;
+    activePodNames: unknown;
+  };
+}
 
 type CapabilityState = {
   allowed: boolean;
@@ -38,14 +51,17 @@ const {
   manifestTabPropsRef,
   valuesTabPropsRef,
 } = vi.hoisted(() => ({
-  detailsTabPropsRef: { current: null as any },
-  logViewerPropsRef: { current: null as any },
-  shellTabPropsRef: { current: null as any },
-  eventsTabPropsRef: { current: null as any },
-  yamlTabPropsRef: { current: null as any },
-  manifestTabPropsRef: { current: null as any },
-  valuesTabPropsRef: { current: null as any },
+  detailsTabPropsRef: { current: null as DetailsTabCapture | null },
+  logViewerPropsRef: { current: null as unknown },
+  shellTabPropsRef: { current: null as unknown },
+  eventsTabPropsRef: { current: null as unknown },
+  yamlTabPropsRef: { current: null as unknown },
+  manifestTabPropsRef: { current: null as unknown },
+  valuesTabPropsRef: { current: null as unknown },
 }));
+
+const getDetailsTabProps = () =>
+  requireValue(detailsTabPropsRef.current, 'expected DetailsTab props in ObjectPanel.test.tsx');
 
 const mockClosePanel = vi.fn();
 const mockUseCapabilities = vi.fn();
@@ -100,11 +116,15 @@ const tabStore = vi.hoisted(() => {
       const next = new Map(tabs);
       next.set(panelId, tab);
       tabs = next;
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
     reset: () => {
       tabs = new Map();
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
   };
 });
@@ -117,7 +137,7 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
     onRowClick: vi.fn(),
     onCloseObjectPanel: vi.fn(),
     setShowObjectPanel: vi.fn(),
-    hydrateClusterMeta: vi.fn((d: any) => d),
+    hydrateClusterMeta: vi.fn((d: unknown) => d),
     setObjectPanelActiveTab: tabStore.set,
   }),
   useObjectPanelActiveTab: (panelId: string) =>
@@ -126,7 +146,13 @@ vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: any) => (
+  DockablePanel: ({
+    children,
+    panelRef,
+  }: {
+    children: React.ReactNode;
+    panelRef?: React.Ref<HTMLDivElement>;
+  }) => (
     <div ref={panelRef}>
       <div data-testid="dockable-body">{children}</div>
     </div>
@@ -154,49 +180,49 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
-  default: (props: any) => {
+  default: (props: DetailsTabCapture) => {
     detailsTabPropsRef.current = props;
     return <div data-testid="details-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     logViewerPropsRef.current = props;
     return <div data-testid="logs-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     shellTabPropsRef.current = props;
     return <div data-testid="shell-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     eventsTabPropsRef.current = props;
     return <div data-testid="events-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     yamlTabPropsRef.current = props;
     return <div data-testid="yaml-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ManifestTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     manifestTabPropsRef.current = props;
     return <div data-testid="manifest-tab" />;
   },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
-  default: (props: any) => {
+  default: (props: unknown) => {
     valuesTabPropsRef.current = props;
     return <div data-testid="values-tab" />;
   },
@@ -261,7 +287,6 @@ mockUseUserPermission.mockImplementation(() => currentLogPermission);
 mockUseRefreshScopedDomain.mockImplementation(() => currentScopedDomain);
 
 beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   return import('./ObjectPanel').then((module) => {
     ObjectPanel = module.default;
   });
@@ -453,7 +478,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: 'team-a',
     });
 
-    const detailsProps = detailsTabPropsRef.current;
+    const detailsProps = getDetailsTabProps();
     expect(detailsProps).toBeTruthy();
 
     act(() => {
@@ -473,7 +498,7 @@ describe('ObjectPanel tab availability', () => {
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
-    const detailsProps = detailsTabPropsRef.current;
+    const detailsProps = getDetailsTabProps();
     expect(detailsProps).toBeTruthy();
 
     await act(async () => {
@@ -662,23 +687,22 @@ describe('ObjectPanel tab availability', () => {
     ['ValidatingWebhookConfiguration', { webhooks: [] }],
   ] as const;
 
-  it.each(detailMappingCases)(
-    'exposes the detail payload as the active detail for %s resources',
-    async (kind, detailsPayload) => {
-      await renderObjectPanel({
-        kind,
-        name: 'resource',
-        namespace: 'team-a',
-        scopedDomain: {
-          data: { details: detailsPayload },
-          status: 'ready',
-          error: null,
-        },
-      });
+  it.each(
+    detailMappingCases
+  )('exposes the detail payload as the active detail for %s resources', async (kind, detailsPayload) => {
+    await renderObjectPanel({
+      kind,
+      name: 'resource',
+      namespace: 'team-a',
+      scopedDomain: {
+        data: { details: detailsPayload },
+        status: 'ready',
+        error: null,
+      },
+    });
 
-      expect(detailsTabPropsRef.current.detailModel.activeDetail).toEqual(detailsPayload);
-    }
-  );
+    expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
+  });
 
   it('derives no typed detail sections for unknown kinds', async () => {
     await renderObjectPanel({
@@ -692,7 +716,7 @@ describe('ObjectPanel tab availability', () => {
       },
     });
 
-    const model = detailsTabPropsRef.current.detailModel;
+    const model = getDetailsTabProps().detailModel;
     expect(model.containerSection).toBeNull();
     expect(model.dataSection).toBeNull();
     expect(model.roleRules).toBeUndefined();

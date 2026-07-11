@@ -5,10 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useKeyboardSurface } from '@ui/shortcuts';
 import { useZoom } from '@core/contexts/ZoomContext';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type React from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './ContextMenu.css';
 
 export interface ContextMenuItem {
@@ -52,7 +54,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     if (selectableIndexes.length === 0) {
       return;
     }
-    const currentPosition = selectableIndexes.findIndex((idx) => idx === focusedIndex);
+    const currentPosition = selectableIndexes.indexOf(focusedIndex);
     const fallbackPosition = currentPosition === -1 ? 0 : currentPosition;
     const nextPosition =
       (fallbackPosition + direction + selectableIndexes.length) % selectableIndexes.length;
@@ -178,14 +180,18 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
       role="menu"
       tabIndex={-1}
     >
-      {items.map((item, index) => {
+      {withStableListKeys(items, (item) =>
+        item.divider
+          ? 'divider'
+          : item.actionId || `${item.header ? 'header' : 'item'}:${item.label}`
+      ).map(({ key, value: item }, index) => {
         if (item.divider) {
-          return <div key={index} className="context-menu-divider" />;
+          return <div key={key} className="context-menu-divider" />;
         }
         // Render non-interactive headers (e.g., permission pending state).
         if (item.header) {
           return (
-            <div key={index} className="context-menu-header" role="presentation">
+            <div key={key} className="context-menu-header" role="presentation">
               {item.label}
             </div>
           );
@@ -195,8 +201,10 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         const isFocused = index === focusedIndex;
 
         return (
+          // biome-ignore lint/a11y/useFocusableInteractive: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
+          // biome-ignore lint/a11y/useKeyWithClickEvents: The menu container owns roving selection and keyboard activation, so individual menuitem descendants intentionally remain outside the tab order.
           <div
-            key={index}
+            key={key}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
               item.danger ? 'danger' : ''
             } ${isFocused ? 'is-focused' : ''}`}
@@ -217,9 +225,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
             }}
             title={tooltip}
           >
-            {item.icon && <span className="context-menu-icon">{item.icon}</span>}
+            {!!item.icon && <span className="context-menu-icon">{item.icon}</span>}
             <span className="context-menu-label">{item.label}</span>
-            {item.disabled && item.disabledReason && (
+            {!!(item.disabled && item.disabledReason) && (
               <span className="context-menu-reason">{item.disabledReason}</span>
             )}
           </div>

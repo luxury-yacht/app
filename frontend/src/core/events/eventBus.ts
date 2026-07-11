@@ -8,10 +8,10 @@
  * Includes error handling in event callbacks to prevent crashes.
  */
 
-import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
-import type { RefresherState } from '@/core/refresh/RefreshManager';
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
+import type { RefresherState } from '@/core/refresh/RefreshManager';
 
 type ResourceStreamDomain =
   | 'pods'
@@ -48,21 +48,21 @@ export interface AppEvents {
   // Kubeconfig events
   'kubeconfig:changing': string; // config name
   'kubeconfig:changed': string; // config name
-  'kubeconfig:selection-changed': void;
+  'kubeconfig:selection-changed': undefined;
 
   // Open the command palette directly in kubeconfig-select mode — the entry
   // points for opening a cluster (the "+" in the cluster tab bar, ⌘O, and
   // File → Open Cluster).
-  'command-palette:open-kubeconfigs': void;
+  'command-palette:open-kubeconfigs': undefined;
 
   // Open the command palette directly in namespace-select mode — the search
   // button in the sidebar's Namespaces header (⇧⌘N reaches the same mode via
   // the frontend shortcut system).
-  'command-palette:open-namespaces': void;
+  'command-palette:open-namespaces': undefined;
 
   // Open the command palette in its normal (search) mode — the header search
   // button.
-  'command-palette:open': void;
+  'command-palette:open': undefined;
 
   // Auth events — bridged from Wails runtime by AuthErrorContext.
   'cluster:auth:failed': { clusterId: string };
@@ -75,9 +75,9 @@ export interface AppEvents {
   'cluster:scope-changed': { clusterId: string };
 
   // View events
-  'view:reset': void;
-  'view:toggle-diagnostics': void;
-  'view:toggle-app-logs-panel': void;
+  'view:reset': undefined;
+  'view:toggle-diagnostics': undefined;
+  'view:toggle-app-logs-panel': undefined;
   'view:open-object-diff': ObjectDiffOpenRequest;
   'cluster-tabs:order': string[];
 
@@ -160,8 +160,8 @@ export interface AppEvents {
   'cluster:lifecycle': { clusterId: string; state: ClusterLifecycleState };
 
   // App visibility events
-  'app:visibility-hidden': void;
-  'app:visibility-visible': void;
+  'app:visibility-hidden': undefined;
+  'app:visibility-visible': undefined;
 }
 
 type EventCallback<T> = (payload: T) => void;
@@ -196,7 +196,9 @@ class EventBus {
       }
     });
 
-    toRemove.forEach((sub) => subs.delete(sub));
+    toRemove.forEach((sub) => {
+      subs.delete(sub);
+    });
   }
 
   on<K extends keyof AppEvents>(event: K, callback: EventCallback<AppEvents[K]>): UnsubscribeFn {
@@ -233,7 +235,7 @@ class EventBus {
       once,
     };
 
-    this.listeners.get(event)!.add(subscription);
+    this.listeners.get(event)?.add(subscription);
 
     return () => {
       const subs = this.listeners.get(event);

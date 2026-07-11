@@ -1,7 +1,7 @@
 import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
 import type { ResourceStreamServerMessage } from '../types';
-import { normalizeResourceScope, type DoorbellDomain } from './resourceStreamDomains';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
+import { type DoorbellDomain, normalizeResourceScope } from './resourceStreamDomains';
 export type ResourceStreamUpdateMessage = Partial<ResourceStreamServerMessage> & {
   domain: DoorbellDomain;
   scope: string;
@@ -137,7 +137,7 @@ export class ResourceStreamSubscriptionStore {
       )
       .filter(
         (subscription): subscription is StreamSubscription =>
-          subscription !== undefined && subscription.reportScopes.has(resolved.reportScope)
+          subscription?.reportScopes.has(resolved.reportScope) === true
       );
   }
 
@@ -156,7 +156,7 @@ export class ResourceStreamSubscriptionStore {
         )
       )
       .filter((subscription): subscription is StreamSubscription => {
-        if (!subscription || !subscription.reportScopes.has(resolved.reportScope)) {
+        if (!subscription?.reportScopes.has(resolved.reportScope)) {
           return false;
         }
         subscription.reportScopes.delete(resolved.reportScope);
@@ -221,7 +221,9 @@ export class ResourceStreamSubscriptionStore {
   }
 
   clearPendingUnsubscribes(): void {
-    this.pendingUnsubscribes.forEach((pending) => window.clearTimeout(pending.timerId));
+    this.pendingUnsubscribes.forEach((pending) => {
+      window.clearTimeout(pending.timerId);
+    });
     this.pendingUnsubscribes.clear();
   }
 

@@ -5,12 +5,15 @@
  * Covers key behaviors and edge cases for useGridTableRowRenderer.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+
+type Row = { name: string };
+type RowRendererOptions = Parameters<typeof useGridTableRowRenderer<Row>>[0];
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };
@@ -29,7 +32,8 @@ const renderHook = <T,>(hook: () => T) => {
   });
 
   return {
-    get: () => result.current!,
+    get: () =>
+      requireValue(result.current, 'expected test value in useGridTableRowRenderer.test.tsx'),
     cleanup: () => {
       act(() => {
         root.unmount();
@@ -40,9 +44,9 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useGridTableRowRenderer', () => {
-  const baseColumns = [
+  const baseColumns: RowRendererOptions['columnRenderModelsWithOffsets'] = [
     {
-      column: { key: 'name' } as any,
+      column: { key: 'name', header: 'Name', render: (row) => row.name },
       key: 'name',
       className: 'name-col',
       cellStyle: { width: 100 },
@@ -51,7 +55,7 @@ describe('useGridTableRowRenderer', () => {
       width: 100,
     },
     {
-      column: { key: 'age' } as any,
+      column: { key: 'age', header: 'Age', render: (row) => row.name },
       key: 'age',
       className: 'age-col',
       cellStyle: { width: 50 },
@@ -81,7 +85,7 @@ describe('useGridTableRowRenderer', () => {
         },
         columnWindowRange: { startIndex: 0, endIndex: 0 },
         handleContextMenu: vi.fn(),
-        getCachedCellContent: (column: any, item: any) => ({
+        getCachedCellContent: (column, item) => ({
           content: `${column.key}-${item.name}`,
           text: item.name,
         }),
@@ -94,7 +98,7 @@ describe('useGridTableRowRenderer', () => {
     const rowProps = rowElement.props as {
       className: string;
       onClick: (event: React.MouseEvent<HTMLDivElement>) => void;
-      [key: string]: any;
+      [key: string]: unknown;
     };
     expect(rowProps.className).toContain('gridtable-row');
     expect(rowProps['data-row-selected']).toBe('true');
@@ -148,7 +152,12 @@ describe('useGridTableRowRenderer', () => {
       'row-beta',
       'slot-1'
     ) as React.ReactElement;
-    const rowProps = rowElement.props as Record<string, any>;
+    const rowProps = rowElement.props as {
+      className: string;
+      children: React.ReactNode[];
+      onClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+      'data-grid-slot'?: string;
+    };
     expect(rowProps['data-grid-slot']).toBe('slot-1');
     expect(rowProps.className).toContain('gridtable-row');
     expect(rowProps.children.length).toBe(2);

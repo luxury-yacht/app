@@ -2,8 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
-import { validateYamlDraft, parseObjectIdentity, type ObjectIdentity } from './yamlValidation';
+import { describe, expect, it } from 'vitest';
+import { type ObjectIdentity, parseObjectIdentity, validateYamlDraft } from './yamlValidation';
 
 const baseIdentity: ObjectIdentity = {
   apiVersion: 'apps/v1',

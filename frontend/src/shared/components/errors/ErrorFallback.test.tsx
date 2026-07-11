@@ -5,20 +5,25 @@
  * Covers key behaviors and edge cases for ErrorFallback.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorFallback } from './ErrorFallback';
+
+const setDevMode = (value: boolean) => {
+  Object.defineProperty(import.meta.env, 'DEV', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value,
+  });
+};
 
 describe('ErrorFallback', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   const originalEnv = import.meta.env.DEV;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -31,7 +36,7 @@ describe('ErrorFallback', () => {
       root.unmount();
     });
     container.remove();
-    (import.meta.env as any).DEV = originalEnv;
+    setDevMode(originalEnv);
   });
 
   it('renders scope-aware messaging and invokes reset callback', async () => {
@@ -61,13 +66,13 @@ describe('ErrorFallback', () => {
     const reloadMock = vi.fn();
     const locationGetter = vi.spyOn(window, 'location', 'get');
     locationGetter.mockReturnValue({ reload: reloadMock } as unknown as Location);
-    (import.meta.env as any).DEV = true;
+    setDevMode(true);
 
     await act(async () => {
       root.render(
         <ErrorFallback
           error={new Error('stack')}
-          errorInfo={{ componentStack: 'Component stack trace' } as any}
+          errorInfo={{ componentStack: 'Component stack trace' }}
           resetError={vi.fn()}
           scope={undefined}
         />

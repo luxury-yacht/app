@@ -5,17 +5,16 @@
  * Covers key behaviors and edge cases for hooks.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-
-import type { CapabilityDescriptor } from './types';
-import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
-import { useCapabilities, type UseCapabilitiesOptions, useCapabilityDiagnostics } from './hooks';
 import { eventBus } from '@/core/events';
+import { installWindowProperty } from '@/test-utils/windowProperty';
+import { type UseCapabilitiesOptions, useCapabilities, useCapabilityDiagnostics } from './hooks';
+import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
+import type { CapabilityDescriptor } from './types';
 
 const lifecycleMock = vi.hoisted(() => ({
   current: undefined as
@@ -40,7 +39,9 @@ const setDiagnosticsSnapshot = (next: PermissionQueryDiagnostics[]) => {
   diagnosticsSnapshot = next;
 };
 const emitDiagnosticsUpdate = () => {
-  diagnosticListeners.forEach((listener) => listener());
+  diagnosticListeners.forEach((listener) => {
+    listener();
+  });
 };
 
 vi.mock('./permissionStore', () => {
@@ -116,10 +117,7 @@ const renderCapabilitiesHook = async (
       return result.current;
     },
     async rerender(
-      update: {
-        descriptors?: CapabilityDescriptor[];
-        options?: UseCapabilitiesOptions;
-      } = {}
+      update: { descriptors?: CapabilityDescriptor[]; options?: UseCapabilitiesOptions } = {}
     ) {
       if (update.descriptors) {
         props.descriptors = update.descriptors;
@@ -192,17 +190,14 @@ describe('useCapabilities', () => {
   });
 
   it('returns idle state for descriptors not yet in the permission map', async () => {
-    const hook = await renderCapabilitiesHook(
-      [
-        {
-          id: 'namespace:pods:get:default',
-          resourceKind: 'Pod',
-          verb: 'get',
-          namespace: 'default',
-        },
-      ],
-      { ttlMs: 15000 }
-    );
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'namespace:pods:get:default',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+      },
+    ]);
 
     // Unnamed descriptor not in the map => idle/pending state.
     expect(hook.current.loading).toBe(true);
@@ -388,14 +383,13 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -425,7 +419,36 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
-    delete (window as any).go;
+    restoreGo();
+  });
+
+  it('requeries named-resource descriptors when refreshKey changes', async () => {
+    const mockQueryPermissions = vi.fn().mockResolvedValue({ results: [] });
+    const restoreGo = installWindowProperty('go', {
+      backend: { App: { QueryPermissions: mockQueryPermissions } },
+    });
+    const descriptors: CapabilityDescriptor[] = [
+      {
+        id: 'named:pods:get:default:my-pod',
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+        name: 'my-pod',
+      },
+    ];
+    const hook = await renderCapabilitiesHook(descriptors, { refreshKey: 0 });
+
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+
+    await hook.rerender({ options: { refreshKey: 1 } });
+
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(2);
+
+    await hook.unmount();
+    restoreGo();
   });
 
   it('waits for cluster readiness before querying named-resource descriptors', async () => {
@@ -450,14 +473,13 @@ describe('useCapabilities', () => {
       ],
     });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -504,7 +526,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as any).go;
+    restoreGo();
   });
 
   it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
@@ -546,14 +568,13 @@ describe('useCapabilities', () => {
         ],
       });
 
-    (globalThis as any).window = globalThis.window ?? {};
-    (window as any).go = {
+    const restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           QueryPermissions: mockQueryPermissions,
         },
       },
-    };
+    });
 
     const hook = await renderCapabilitiesHook([
       {
@@ -596,7 +617,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    delete (window as any).go;
+    restoreGo();
   });
 });
 

@@ -5,9 +5,9 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import type React from 'react';
 
 export interface UseGridTableHeaderRowParams<T> {
   renderedColumns: GridColumnDefinition<T>[];
@@ -35,6 +35,8 @@ export function useGridTableHeaderRow<T>({
   sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
   return (
+    // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+    // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
     <div className="gridtable-header" role="row">
       {renderedColumns.map((column, index) => {
         const isSortable = isSortableColumn(column);
@@ -54,6 +56,8 @@ export function useGridTableHeaderRow<T>({
         })();
 
         return (
+          // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+          // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
           <div
             key={column.key}
             className={`grid-cell grid-cell-header ${column.className || ''}`}
@@ -72,6 +76,8 @@ export function useGridTableHeaderRow<T>({
             }}
           >
             <span className="header-content">
+              {/** biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
               <span
                 onClick={() => isSortable && handleHeaderClick(column)}
                 {...(isSortable
@@ -92,7 +98,9 @@ export function useGridTableHeaderRow<T>({
                 {isSortable && renderSortIndicator(column.key)}
               </span>
             </span>
-            {showResizeHandle && (
+            {!!showResizeHandle && (
+              // biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+              // biome-ignore lint/a11y/noStaticElementInteractions: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
               <div
                 className="resize-handle"
                 onMouseDown={(e) => handleResizeStart(e, column.key, nextColumn.key)}
@@ -104,7 +112,7 @@ export function useGridTableHeaderRow<T>({
                 }}
               />
             )}
-            {showKindSeparator && <div className="column-separator" aria-hidden="true" />}
+            {!!showKindSeparator && <div className="column-separator" aria-hidden="true" />}
           </div>
         );
       })}

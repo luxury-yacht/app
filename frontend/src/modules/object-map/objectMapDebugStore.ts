@@ -4,13 +4,13 @@
  * Lightweight external store for object-map debug overlay snapshots.
  */
 
-import { useSyncExternalStore } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
-import type { ObjectMapLayout } from './objectMapLayout';
+import { useSyncExternalStore } from 'react';
 import type {
   ObjectMapG6CardDetailLevel,
   ObjectMapG6EdgeDetailLevel,
 } from './objectMapG6Constants';
+import type { ObjectMapLayout } from './objectMapLayout';
 
 export interface ObjectMapRendererDebugSnapshot {
   graphReady: boolean;
@@ -81,7 +81,9 @@ let isDebugOverlayVisible = false;
 
 const emit = () => {
   snapshotCache = Array.from(snapshots.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-  listeners.forEach((listener) => listener());
+  listeners.forEach((listener) => {
+    listener();
+  });
 };
 
 export const createObjectMapDebugId = (): string => {
@@ -117,7 +119,9 @@ export const removeObjectMapDebugSnapshot = (id: string): void => {
 export const setObjectMapDebugOverlayVisible = (isVisible: boolean): void => {
   if (isDebugOverlayVisible === isVisible) return;
   isDebugOverlayVisible = isVisible;
-  overlayVisibilityListeners.forEach((listener) => listener());
+  overlayVisibilityListeners.forEach((listener) => {
+    listener();
+  });
 };
 
 const subscribeObjectMapDebugSnapshots = (listener: () => void): (() => void) => {

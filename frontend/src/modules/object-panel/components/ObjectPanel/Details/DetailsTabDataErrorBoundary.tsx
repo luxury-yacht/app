@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.tsx
  */
 
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;

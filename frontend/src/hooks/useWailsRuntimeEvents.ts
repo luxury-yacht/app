@@ -5,9 +5,9 @@
  * Subscribes to Wails runtime events for UI actions (menu items, etc.), connection status updates,
  * and per-cluster health events.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ConnectionStatusEvent,
+  type ConnectionStatusEvent,
   useConnectionStatusActions,
 } from '@/core/connection/connectionStatus';
 
@@ -92,7 +92,9 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     );
 
     return () => {
-      disposers.forEach((dispose) => dispose());
+      disposers.forEach((dispose) => {
+        dispose();
+      });
     };
   }, [
     onOpenSettings,
@@ -158,10 +160,11 @@ export function useClusterHealthListener(
         console.warn('[ClusterHealthListener] Received health:healthy without clusterId');
         return;
       }
+      const clusterId = payload.clusterId;
 
       setClusterHealth((prev) => {
         const next = new Map(prev);
-        next.set(payload.clusterId!, 'healthy');
+        next.set(clusterId, 'healthy');
         return next;
       });
     };
@@ -173,10 +176,11 @@ export function useClusterHealthListener(
         console.warn('[ClusterHealthListener] Received health:degraded without clusterId');
         return;
       }
+      const clusterId = payload.clusterId;
 
       setClusterHealth((prev) => {
         const next = new Map(prev);
-        next.set(payload.clusterId!, 'degraded');
+        next.set(clusterId, 'degraded');
         return next;
       });
     };

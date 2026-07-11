@@ -5,10 +5,10 @@
  * Handles debouncing, dock positions, and respects user resize operations.
  */
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { getZoomAwareViewport, useZoom } from '@core/contexts/ZoomContext';
+import { useEffect, useRef } from 'react';
+import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getContentBounds } from './dockablePanelLayout';
-import { useZoom, getZoomAwareViewport } from '@core/contexts/ZoomContext';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -21,10 +21,8 @@ interface DockablePanelState {
 
 interface WindowBoundsOptions {
   minWidth: number;
-  minHeight: number;
   isResizing: boolean;
   isMaximized: boolean;
-  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -35,7 +33,7 @@ export function useWindowBoundsConstraint(
   panelState: DockablePanelState,
   options: WindowBoundsOptions
 ) {
-  const { minWidth, minHeight, isResizing, isMaximized, panelRef } = options;
+  const { minWidth, isResizing, isMaximized } = options;
   const panelStateRef = useRef(panelState);
   const { zoomLevel } = useZoom();
   // Store zoom level in a ref so the resize handler can access the latest value.
@@ -77,8 +75,8 @@ export function useWindowBoundsConstraint(
         const currentSize = currentPanelState.size;
         const currentPosition = currentPanelState.floatingPosition;
         let needsUpdate = false;
-        let newSize = { ...currentSize };
-        let newPosition = { ...currentPosition };
+        const newSize = { ...currentSize };
+        const newPosition = { ...currentPosition };
 
         // Use content bounds instead of viewport dimensions.
         const viewport = getZoomAwareViewport(zoomLevelRef.current);
@@ -181,5 +179,5 @@ export function useWindowBoundsConstraint(
         resizeObserver.disconnect();
       }
     };
-  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef, zoomLevel]);
+  }, [minWidth, isResizing, isMaximized, panelState.isOpen]);
 }

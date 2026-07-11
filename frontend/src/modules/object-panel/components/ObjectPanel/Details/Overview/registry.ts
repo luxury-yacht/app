@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { GenericOverview } from './GenericOverview';
+import { GenericOverview, type GenericOverviewProps } from './GenericOverview';
 
 interface OverviewCapabilities {
   delete?: boolean;
@@ -82,8 +82,10 @@ const CAPABILITIES_BY_KIND: Record<string, OverviewCapabilities> = {
  * and anything not yet covered). Renders the generic, field-agnostic overview.
  */
 export const overviewRegistry = {
-  renderComponent(props: any): React.ReactElement {
-    return React.createElement(GenericOverview, props);
+  renderComponent(props: unknown): React.ReactElement {
+    const overviewProps =
+      props !== null && typeof props === 'object' ? (props as GenericOverviewProps) : {};
+    return React.createElement(GenericOverview, overviewProps);
   },
 };
 

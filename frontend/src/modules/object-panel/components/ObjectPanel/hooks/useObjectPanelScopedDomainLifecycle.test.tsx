@@ -2,16 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type ObjectPanelScopedDomainRef,
   resetObjectPanelScopedDomain,
   useObjectPanelScopedDomainCleanups,
   useObjectPanelScopedDomainLifecycle,
-  type ObjectPanelScopedDomainRef,
 } from './useObjectPanelScopedDomainLifecycle';
 
 const mocks = vi.hoisted(() => ({
@@ -98,10 +98,6 @@ const renderLifecycleHook = (initialProps: LifecycleProps) => {
 };
 
 describe('object-panel scoped domain lifecycle', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     mocks.setScopedDomainEnabled.mockClear();
     mocks.resetScopedDomain.mockClear();

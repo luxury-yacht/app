@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableHeaderRow.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const renderSortIndicator = vi.fn((key: string) => <span data-testid={`sort-${key}`} />);
 const handleHeaderClick = vi.fn();
@@ -17,26 +17,28 @@ const handleHeaderContextMenu = vi.fn();
 const handleResizeStart = vi.fn();
 const autoSizeColumn = vi.fn();
 
-const columns: GridColumnDefinition<any>[] = [
+type Row = { name: string; age: string; role: string; kind?: string };
+
+const columns: GridColumnDefinition<Row>[] = [
   {
     key: 'name',
     header: 'Name',
     sortable: true,
     className: 'col-name',
-    render: (row: any) => row?.name ?? null,
+    render: (row) => row.name,
   },
   {
     key: 'age',
     header: 'Age',
     sortable: false,
     className: 'col-age',
-    render: (row: any) => row?.age ?? null,
+    render: (row) => row.age,
   },
   {
     key: 'role',
     header: 'Role',
     className: 'col-role',
-    render: (row: any) => row?.role ?? null,
+    render: (row) => row.role,
   },
 ];
 
@@ -64,10 +66,6 @@ const HeaderHarness: React.FC<{
 describe('useGridTableHeaderRow', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -144,9 +142,9 @@ describe('useGridTableHeaderRow', () => {
   });
 
   it('renders a passive separator after the Kind column when it is fixed', async () => {
-    const kindColumns: GridColumnDefinition<any>[] = [
-      { key: 'kind', header: 'Kind', sortable: true, render: (row: any) => row?.kind ?? null },
-      { key: 'name', header: 'Name', sortable: true, render: (row: any) => row?.name ?? null },
+    const kindColumns: GridColumnDefinition<Row>[] = [
+      { key: 'kind', header: 'Kind', sortable: true, render: (row) => row.kind ?? null },
+      { key: 'name', header: 'Name', sortable: true, render: (row) => row.name },
     ];
 
     const KindHarness: React.FC = () => {

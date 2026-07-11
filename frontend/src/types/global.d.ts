@@ -17,5 +17,10 @@ declare global {
 
   interface Window {
     runtime?: WailsRuntime;
+    go?: {
+      backend?: {
+        App?: typeof import('@wailsjs/go/backend/App');
+      };
+    };
   }
 }

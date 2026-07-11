@@ -12,16 +12,16 @@
  * - onClose: Callback to close the panel.
  */
 
-import React from 'react';
-import type { DockPosition } from './useDockablePanelState';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import {
-  DockRightIcon,
   DockBottomIcon,
+  DockRightIcon,
   FloatPanelIcon,
   MaximizePanelIcon,
   RestorePanelIcon,
 } from '@shared/components/icons/DockableIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import type { DockPosition } from './useDockablePanelState';
 
 interface DockablePanelControlsProps {
   position: DockPosition;
@@ -96,11 +96,13 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   const dockActions = dockActionsByPosition[position];
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
     <div className="dockable-panel__controls" onMouseDown={(e) => e.stopPropagation()}>
       {/* Dock-position controls are data-driven; order stays position-specific. */}
       {!isMaximized &&
         dockActions.map((action) => (
           <button
+            type="button"
             key={`${position}-${action.target}`}
             className="dockable-panel__control-btn"
             onClick={() => onDock(action.target)}
@@ -110,8 +112,9 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
             {action.renderIcon()}
           </button>
         ))}
-      {allowMaximize && (
+      {!!allowMaximize && (
         <button
+          type="button"
           className="dockable-panel__control-btn"
           onClick={onToggleMaximize}
           title={isMaximized ? 'Restore panel' : 'Maximize panel'}
@@ -125,6 +128,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
         </button>
       )}
       <button
+        type="button"
         className="dockable-panel__control-btn dockable-panel__control-btn--close"
         onClick={onClose}
         title="Close all tabs in this panel"

@@ -14,19 +14,21 @@
  * adds no keyboard, focus, virtualization, filtering-UI, or context-menu
  * behavior of its own.
  */
+
+import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import {
-  useResourceInventoryTable,
   type ResourceInventorySourceState,
+  useResourceInventoryTable,
 } from './useResourceInventoryTable';
 
-interface ResourceInventoryTableProps<T> extends Omit<
-  GridTableProps<T>,
-  'data' | 'keyExtractor' | 'loading' | 'emptyMessage' | 'loadingOverlay'
-> {
+interface ResourceInventoryTableProps<T>
+  extends Omit<
+    GridTableProps<T>,
+    'data' | 'keyExtractor' | 'loading' | 'emptyMessage' | 'loadingOverlay'
+  > {
   /** Normalized source state from `boundedRowsSource` or `backendQuerySource`. */
   source: ResourceInventorySourceState<T>;
   /** GridTable binding (keyExtractor required; data is supplied from the source). */

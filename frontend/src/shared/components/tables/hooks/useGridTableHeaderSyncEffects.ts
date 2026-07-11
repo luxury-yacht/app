@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useEffect } from 'react';
 import type { RefObject } from 'react';
+import { useEffect } from 'react';
 
 // Couples header scroll/hover state with the body: when the body scrolls, it
 // triggers header sync and keeps the hover overlay aligned; also updates column

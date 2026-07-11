@@ -1,25 +1,27 @@
+import type { SortConfig } from '@hooks/useTableSort';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable';
+import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import type {
-  GridTableFilterState,
-  GridTableFilterOptions,
-} from '@shared/components/tables/GridTable';
-import type { SortConfig } from '@hooks/useTableSort';
-import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
 import type {
   RefreshDomain,
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,
   ResourceQueryDynamicRef,
 } from '@/core/refresh/types';
-import { errorHandler } from '@utils/errorHandler';
 import { walkQueryCursorPages } from './cursorPageWalk';
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
-  typedResourceQueryLifecycleIdentity,
   type TypedQueryPayload,
+  typedResourceQueryLifecycleIdentity,
 } from './typedResourceQueryScope';
+
 export type { TypedQueryPayload } from './typedResourceQueryScope';
 
 export interface UseTypedResourceQueryParams<TPayload extends TypedQueryPayload, TRow> {
@@ -411,108 +413,101 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }, WARMUP_RETRY_MS);
   }, []);
 
-  useEffect(() => {
-    if (!enabled || !scope) {
-      return;
-    }
-    let cancelled = false;
-    const identityAtRequest = queryIdentityRef.current;
+  useEffectWithInvalidation(
+    () => {
+      if (!enabled || !scope) {
+        return;
+      }
+      let cancelled = false;
+      const identityAtRequest = queryIdentityRef.current;
 
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
 
-    void (async () => {
-      try {
-        const result = await requestRefreshDomainState({
-          domain,
-          scope,
-          reason: 'user',
-          label,
-          cleanup: true,
-          preserveState: false,
-        });
-        if (cancelled || queryIdentityRef.current !== identityAtRequest) {
-          return;
-        }
-        if (result.status !== 'executed') {
-          // A blocked refresh (cluster still connecting, auto-refresh paused) is a
-          // warm-up condition, not a failure: stay not-loaded so the table keeps its
-          // loading (or paused) presentation. Schedule a self-healing retry (the
-          // next live-data identity change also retries, but never comes for an
-          // empty domain). Persistent causes surface through the refresh error
-          // toasts — never as a fabricated table error.
-          revertFailedNavigation();
-          scheduleWarmupRetry();
-          return;
-        }
-        const payload = result.data?.data as TPayload | null | undefined;
-        if (!payload) {
-          if (result.data?.permissionDenied) {
-            // The backend refused this domain with a typed 403 — a SETTLED
-            // answer, not a warm-up: retrying cannot succeed until RBAC or
-            // the namespace scope changes (which rebuilds the subsystem and
-            // resets this state). Settle so the table renders the permission
-            // state instead of an endless first-load spinner.
-            revertFailedNavigation();
-            setError(result.data.error ?? 'Insufficient permissions');
-            setLoaded(true);
+      void (async () => {
+        try {
+          const result = await requestRefreshDomainState({
+            domain,
+            scope,
+            reason: 'user',
+            label,
+            cleanup: true,
+            preserveState: false,
+          });
+          if (cancelled || queryIdentityRef.current !== identityAtRequest) {
             return;
           }
-          // Executed but the scoped state carries no payload yet (backend caches
-          // still syncing) — same warm-up treatment as a blocked request.
-          revertFailedNavigation();
-          scheduleWarmupRetry();
-          return;
-        }
-        if (payload.cursorInvalid) {
-          setRequestToken(null);
-          setContinueToken(null);
-          setPreviousToken(null);
-          setStartRankIntent(null);
-          pendingNavigationRef.current = null;
-          if (anchorIntentRef.current) {
-            // The page identity died under a held jump intent — retry the
-            // anchor, not page 1: the object's page is still the user's goal.
-            setAnchorArmed(true);
-          } else {
-            setPageIndex(1);
+          if (result.status !== 'executed') {
+            // A blocked refresh (cluster still connecting, auto-refresh paused) is a
+            // warm-up condition, not a failure: stay not-loaded so the table keeps its
+            // loading (or paused) presentation. Schedule a self-healing retry (the
+            // next live-data identity change also retries, but never comes for an
+            // empty domain). Persistent causes surface through the refresh error
+            // toasts — never as a fabricated table error.
+            revertFailedNavigation();
+            scheduleWarmupRetry();
+            return;
           }
-          return;
+          const payload = result.data?.data as TPayload | null | undefined;
+          if (!payload) {
+            if (result.data?.permissionDenied) {
+              // The backend refused this domain with a typed 403 — a SETTLED
+              // answer, not a warm-up: retrying cannot succeed until RBAC or
+              // the namespace scope changes (which rebuilds the subsystem and
+              // resets this state). Settle so the table renders the permission
+              // state instead of an endless first-load spinner.
+              revertFailedNavigation();
+              setError(result.data.error ?? 'Insufficient permissions');
+              setLoaded(true);
+              return;
+            }
+            // Executed but the scoped state carries no payload yet (backend caches
+            // still syncing) — same warm-up treatment as a blocked request.
+            revertFailedNavigation();
+            scheduleWarmupRetry();
+            return;
+          }
+          if (payload.cursorInvalid) {
+            setRequestToken(null);
+            setContinueToken(null);
+            setPreviousToken(null);
+            setStartRankIntent(null);
+            pendingNavigationRef.current = null;
+            if (anchorIntentRef.current) {
+              // The page identity died under a held jump intent — retry the
+              // anchor, not page 1: the object's page is still the user's goal.
+              setAnchorArmed(true);
+            } else {
+              setPageIndex(1);
+            }
+            return;
+          }
+          applyPayload(payload);
+        } catch (caught) {
+          if (!cancelled && queryIdentityRef.current === identityAtRequest) {
+            revertFailedNavigation();
+            setError(caught instanceof Error ? caught.message : String(caught));
+            setLoaded(true);
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+            setIsRequestingMore(false);
+          }
         }
-        applyPayload(payload);
-      } catch (caught) {
-        if (!cancelled && queryIdentityRef.current === identityAtRequest) {
-          revertFailedNavigation();
-          setError(caught instanceof Error ? caught.message : String(caught));
-          setLoaded(true);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setIsRequestingMore(false);
-        }
-      }
-    })();
+      })();
 
-    return () => {
-      cancelled = true;
-      if (warmupTimerRef.current !== null) {
-        window.clearTimeout(warmupTimerRef.current);
-        warmupTimerRef.current = null;
-      }
-    };
-  }, [
-    applyPayload,
-    domain,
-    enabled,
-    label,
-    queryIdentity,
-    requestTokenForScope,
-    revertFailedNavigation,
-    scheduleWarmupRetry,
-    scope,
-    warmupAttempt,
-  ]);
+      return () => {
+        cancelled = true;
+        if (warmupTimerRef.current !== null) {
+          window.clearTimeout(warmupTimerRef.current);
+          warmupTimerRef.current = null;
+        }
+      };
+    },
+    [applyPayload, domain, enabled, label, revertFailedNavigation, scheduleWarmupRetry, scope],
+    [queryIdentity, requestTokenForScope, warmupAttempt]
+  );
 
   const loadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {

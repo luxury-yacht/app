@@ -9,10 +9,11 @@
  * and the Node cordon/drain openers.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { type ObjectActionData } from '@shared/hooks/useObjectActions';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
@@ -148,6 +149,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       <>
         <div className="actions-menu" ref={menuRef}>
           <button
+            type="button"
             className="actions-menu-button"
             onClick={() => setIsOpen(!isOpen)}
             disabled={actionLoading}
@@ -157,19 +159,25 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
             <span className="actions-menu-icon">⋯</span>
           </button>
 
-          {isOpen && (
-            <div className="context-menu actions-menu-dropdown" ref={dropdownRef}>
-              {menuItems.map((item, index) => {
+          {!!isOpen && (
+            <div className="context-menu actions-menu-dropdown" ref={dropdownRef} role="menu">
+              {withStableListKeys(menuItems, (item) =>
+                'divider' in item && item.divider
+                  ? 'divider'
+                  : 'actionId' in item && item.actionId
+                    ? item.actionId
+                    : `${'header' in item && item.header ? 'header' : 'item'}:${item.label}`
+              ).map(({ key, value: item }) => {
                 if ('header' in item && item.header) {
                   return (
-                    <div key={index} className="context-menu-header">
+                    <div key={key} className="context-menu-header">
                       {item.label}
                     </div>
                   );
                 }
 
                 if ('divider' in item && item.divider) {
-                  return <div key={index} className="context-menu-divider" />;
+                  return <div key={key} className="context-menu-divider" />;
                 }
 
                 const menuItem = item as {
@@ -182,11 +190,13 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 };
 
                 return (
-                  <div
-                    key={index}
+                  <button
+                    type="button"
+                    key={key}
                     className={`context-menu-item${menuItem.disabled ? ' disabled' : ''}${menuItem.danger ? ' danger' : ''}`}
                     role="menuitem"
                     aria-disabled={menuItem.disabled ? 'true' : 'false'}
+                    disabled={menuItem.disabled}
                     data-context-action-id={menuItem.actionId}
                     onClick={() => {
                       if (!menuItem.disabled && menuItem.onClick) {
@@ -195,9 +205,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                       }
                     }}
                   >
-                    {menuItem.icon && <span className="context-menu-icon">{menuItem.icon}</span>}
+                    {!!menuItem.icon && <span className="context-menu-icon">{menuItem.icon}</span>}
                     <span className="context-menu-label">{menuItem.label}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>

@@ -5,16 +5,15 @@
  * Covers key behaviors and edge cases for DockablePanel.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { KeyboardProvider } from '@ui/shortcuts/context';
-
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -85,12 +84,10 @@ const getVisiblePanelSection = (selector: string) =>
   }) ?? null;
 
 describe('DockablePanel', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   afterEach(() => {
-    document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
+    document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
+      node.remove();
+    });
   });
 
   it('invokes onClose and removes the panel when the close control is clicked', async () => {
@@ -118,9 +115,10 @@ describe('DockablePanel', () => {
     const layer = document.querySelector('.dockable-panel-layer');
     expect(layer).toBeTruthy();
 
-    const closeButton = layer!.querySelector(
-      '[aria-label="Close all tabs in this panel"]'
-    ) as HTMLButtonElement;
+    const closeButton = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('[aria-label="Close all tabs in this panel"]') as HTMLButtonElement;
     expect(closeButton).toBeTruthy();
 
     act(() => {
@@ -150,7 +148,7 @@ describe('DockablePanel', () => {
 
       return (
         <>
-          {openPanels.a && (
+          {!!openPanels.a && (
             <DockablePanel
               panelId="panel-a"
               title="A"
@@ -162,7 +160,7 @@ describe('DockablePanel', () => {
               <button type="button">Panel A body</button>
             </DockablePanel>
           )}
-          {openPanels.b && (
+          {!!openPanels.b && (
             <DockablePanel
               panelId="panel-b"
               title="B"
@@ -174,7 +172,7 @@ describe('DockablePanel', () => {
               <button type="button">Panel B body</button>
             </DockablePanel>
           )}
-          {openPanels.c && (
+          {!!openPanels.c && (
             <DockablePanel
               panelId="panel-c"
               title="C"
@@ -263,9 +261,10 @@ describe('DockablePanel', () => {
     const layer = document.querySelector('.dockable-panel-layer');
     expect(layer).toBeTruthy();
 
-    const dockRightButton = layer!.querySelector(
-      '[aria-label="Dock panel to right side"]'
-    ) as HTMLButtonElement;
+    const dockRightButton = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('[aria-label="Dock panel to right side"]') as HTMLButtonElement;
     expect(dockRightButton).toBeTruthy();
 
     act(() => {
@@ -274,9 +273,14 @@ describe('DockablePanel', () => {
 
     expect(onPositionChange).toHaveBeenCalledWith('right');
 
-    const panelElement = layer!.querySelector('.dockable-panel');
+    const panelElement = requireValue(
+      layer,
+      'expected test value in DockablePanel.test.tsx'
+    ).querySelector('.dockable-panel');
     expect(panelElement).toBeTruthy();
-    expect(panelElement!.className).toMatch(/dockable-panel--right/);
+    expect(
+      requireValue(panelElement, 'expected test value in DockablePanel.test.tsx').className
+    ).toMatch(/dockable-panel--right/);
 
     const maximizeButton = layer
       ?.querySelector('.dockable-panel__control-btn')
@@ -463,7 +467,7 @@ describe('DockablePanel', () => {
         <div className="object-panel-header">
           <span>{title} header</span>
         </div>
-        <div aria-label="Object Panel Tabs">
+        <div role="tablist" aria-label="Object Panel Tabs">
           <div role="tab" tabIndex={-1}>
             {tabPrefix} Details
           </div>

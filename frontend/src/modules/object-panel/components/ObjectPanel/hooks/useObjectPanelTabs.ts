@@ -4,17 +4,16 @@
  * Computes available object-panel tabs from capabilities, object identity, and
  * object type, then wires keyboard shortcuts for tab navigation.
  */
-import { useEffect, useMemo } from 'react';
-
-import { useShortcuts } from '@ui/shortcuts';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
-import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
 import type {
   ComputedCapabilities,
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
+import { useShortcuts } from '@ui/shortcuts';
+import { useEffect, useMemo } from 'react';
 
 interface UseObjectPanelTabsArgs {
   capabilities: ComputedCapabilities;

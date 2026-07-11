@@ -5,11 +5,13 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef } from 'react';
-import { useModalFocusTrap } from './useModalFocusTrap';
-import ModalSurface from './ModalSurface';
-import ModalHeader from './ModalHeader';
 import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import type React from 'react';
+import { useRef } from 'react';
+import ModalHeader from './ModalHeader';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './ConfirmationModal.css';
 
 export interface ConfirmationModalTableColumn {
@@ -93,39 +95,42 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
                 </tr>
               </thead>
               <tbody>
-                {detailsTable.rows.map((row, rowIndex) => (
-                  <tr key={`${rowIndex}-${row.join('|')}`}>
-                    {row.map((cell, columnIndex) => (
-                      <td
-                        key={detailsTable.columns[columnIndex]?.header ?? columnIndex}
-                        className={
-                          detailsTable.columns[columnIndex]?.monospace ? 'monospace' : undefined
-                        }
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {withStableListKeys(detailsTable.rows, (row) => row.join('|')).map(
+                  ({ key, value: row }) => (
+                    <tr key={key}>
+                      {row.map((cell, columnIndex) => (
+                        <td
+                          key={detailsTable.columns[columnIndex]?.header ?? columnIndex}
+                          className={
+                            detailsTable.columns[columnIndex]?.monospace ? 'monospace' : undefined
+                          }
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
         )}
-        {warning && <p className="confirmation-modal-warning">{warning}</p>}
+        {!!warning && <p className="confirmation-modal-warning">{warning}</p>}
       </div>
       <div className="confirmation-modal-footer">
-        {secondaryActionText && onSecondaryAction && (
+        {!!(secondaryActionText && onSecondaryAction) && (
           <button
+            type="button"
             className={`button ${secondaryActionButtonClass} confirmation-modal-secondary-action`}
             onClick={onSecondaryAction}
           >
             {secondaryActionText}
           </button>
         )}
-        <button className="button cancel" onClick={onCancel}>
+        <button type="button" className="button cancel" onClick={onCancel} data-modal-initial-focus>
           {cancelText}
         </button>
-        <button className={`button ${confirmButtonClass}`} onClick={onConfirm} autoFocus>
+        <button type="button" className={`button ${confirmButtonClass}`} onClick={onConfirm}>
           {confirmText}
         </button>
       </div>

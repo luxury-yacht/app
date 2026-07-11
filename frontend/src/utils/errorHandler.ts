@@ -447,7 +447,9 @@ class ErrorHandler {
    * Notify all listeners of an error
    */
   private notifyListeners(error: ErrorDetails): void {
-    this.errorListeners.forEach((listener) => listener(error));
+    this.errorListeners.forEach((listener) => {
+      listener(error);
+    });
   }
 
   /**

@@ -1,0 +1,540 @@
+{
+  "strictness": {
+    "rulePreset": "recommended",
+    "requiredRules": [
+      "a11y.noAutofocus",
+      "a11y.noLabelWithoutControl",
+      "a11y.noNoninteractiveTabindex",
+      "a11y.noStaticElementInteractions",
+      "a11y.useAriaPropsForRole",
+      "a11y.useAriaPropsSupportedByRole",
+      "a11y.useFocusableInteractive",
+      "a11y.useKeyWithClickEvents",
+      "a11y.useSemanticElements",
+      "a11y.useValidAnchor",
+      "complexity.noImportantStyles",
+      "complexity.noStaticOnlyClass",
+      "correctness.noUnusedInstantiation",
+      "correctness.useExhaustiveDependencies",
+      "suspicious.noArrayIndexKey",
+      "suspicious.noConfusingVoidType",
+      "suspicious.noExplicitAny",
+      "suspicious.noImportCycles",
+      "suspicious.noLeakedRender",
+      "suspicious.noMisplacedAssertion",
+      "suspicious.noPrototypeBuiltins",
+      "suspicious.noSkippedTests",
+      "suspicious.noUnusedExpressions",
+      "suspicious.useIterableCallbackReturn",
+      "style.noDescendingSpecificity",
+      "style.noNonNullAssertion",
+      "style.noRestrictedImports"
+    ],
+    "requiredHooks": [
+      "useEffectWithInvalidation",
+      "useLayoutEffectWithInvalidation",
+      "useMemoWithInvalidation"
+    ],
+    "requiredFileExtensions": ["mjs", "cjs"],
+    "requiredPlugins": [
+      {
+        "path": "./biome-plugins/no-direct-fetch.grit",
+        "includes": [
+          "**/src/**/*.{ts,tsx}",
+          "!**/src/core/refresh/**",
+          "!**/src/core/data-access/**"
+        ]
+      },
+      {
+        "path": "./biome-plugins/no-direct-lifecycle-read.grit",
+        "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
+      },
+      {
+        "path": "./biome-plugins/no-direct-permission-read.grit",
+        "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
+      },
+      {
+        "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
+        "includes": [
+          "**/src/**/*.{ts,tsx}",
+          "!**/src/core/refresh/**",
+          "!**/src/core/data-access/**"
+        ]
+      }
+    ]
+  },
+  "hookLifetimes": [
+    {
+      "file": "src/core/capabilities/hooks.ts",
+      "hooks": { "useEffectWithInvalidation": 1, "useMemoWithInvalidation": 1 }
+    },
+    { "file": "src/core/contexts/ErrorContext.tsx", "hooks": { "useMountEffect": 1 } },
+    { "file": "src/core/events/useEventBus.ts", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/core/refresh/components/diagnostics/TableCapabilitesChecks.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/core/refresh/components/diagnostics/TableEffectivePermissions.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/core/refresh/hooks/useRefreshWatcher.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    { "file": "src/hooks/useTableSort.ts", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/modules/namespace/contexts/NamespaceContext.tsx",
+      "hooks": { "useMountEffect": 1 }
+    },
+    { "file": "src/modules/object-map/ObjectMap.tsx", "hooks": { "useEffectWithInvalidation": 1 } },
+    {
+      "file": "src/modules/object-map/ObjectMapG6Renderer.tsx",
+      "hooks": { "useEffectWithInvalidation": 2 }
+    },
+    {
+      "file": "src/modules/object-map/useObjectMapG6Viewport.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-map/useObjectMapModel.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogScrollRestoration.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/hooks/useVirtualizedLogRows.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "hooks": { "useEffectWithInvalidation": 3 }
+    },
+    {
+      "file": "src/modules/port-forward/PortForwardModal.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/resource-grid/useResourceGridTable.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/modules/resource-grid/useTypedResourceQuery.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "hooks": {
+        "useEffectWithInvalidation": 2,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1
+      }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useContainerWidthObserver.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableColumnLayout.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHoverFallback.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableKeyboardNavigation.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableVirtualization.ts",
+      "hooks": {
+        "useEffectWithInvalidation": 3,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1,
+        "useMountEffect": 1
+      }
+    },
+    {
+      "file": "src/shared/components/tables/persistence/useGridTablePersistence.ts",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/components/tables/useGridTableFilters.ts",
+      "hooks": { "useEffectWithInvalidation": 2 }
+    },
+    {
+      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+      "hooks": { "useMountEffect": 1 }
+    },
+    {
+      "file": "src/shared/components/yaml/YamlEditor.tsx",
+      "hooks": { "useEffectWithInvalidation": 1 }
+    },
+    {
+      "file": "src/shared/hooks/useHookLifetimes.test.tsx",
+      "hooks": {
+        "useEffectWithInvalidation": 1,
+        "useLayoutEffectWithInvalidation": 1,
+        "useMemoWithInvalidation": 1,
+        "useMountEffect": 1
+      }
+    },
+    { "file": "src/ui/modals/ObjectDiffModal.tsx", "hooks": { "useEffectWithInvalidation": 2 } },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "hooks": { "useLayoutEffectWithInvalidation": 1 }
+    },
+    { "file": "src/ui/settings/sections/KubeconfigsSection.tsx", "hooks": { "useMountEffect": 1 } },
+    { "file": "src/ui/shortcuts/context.test.tsx", "hooks": { "useMountEffect": 4 } },
+    { "file": "src/ui/shortcuts/hooks.ts", "hooks": { "useEffectWithInvalidation": 1 } }
+  ],
+  "overrides": [
+    {
+      "includes": ["src/core/backend-api/**"],
+      "rules": ["style.noRestrictedImports"],
+      "reason": "The approved Wails backend facade must import the generated binding it isolates from application code."
+    },
+    {
+      "includes": [
+        "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
+        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
+      ],
+      "rules": ["suspicious.noControlCharactersInRegex"],
+      "reason": "ANSI terminal parsing intentionally matches escape and control sequences."
+    },
+    {
+      "includes": ["index.html"],
+      "rules": ["correctness.noInnerDeclarations"],
+      "reason": "The appearance bootstrap must execute inline before the React bundle to establish first-paint theme state."
+    }
+  ],
+  "suppressions": [
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 3
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 6
+    },
+    {
+      "file": "src/ui/layout/Sidebar.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 2
+    },
+    {
+      "file": "styles/utilities/motion.css",
+      "rule": "lint/complexity/noImportantStyles",
+      "count": 3
+    },
+    {
+      "file": "src/modules/browse/components/BrowseView.stories.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 1
+    },
+    {
+      "file": "src/modules/browse/components/BrowseView.stories.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-map/ObjectMap.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-map/ObjectMap.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/ContextMenu.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/ContextMenu.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/noAutofocus",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/useAriaPropsSupportedByRole",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/modals/ModalSurface.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/modals/ModalSurface.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/columnFactories.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/GridTableBody.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableHeaderRow.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableRowRenderer.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/Tooltip.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/command-palette/CommandPalette.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 3
+    },
+    {
+      "file": "src/ui/command-palette/CommandPalette.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 2
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 8
+    },
+    {
+      "file": "src/ui/dockable/DockablePanel.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 2
+    },
+    {
+      "file": "src/ui/dockable/DockablePanelControls.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/dockable/DockablePanelHeader.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/dockable/DockableTabBar.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/AppHeader.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/ui/layout/AppLayout.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/Sidebar.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 5
+    },
+    {
+      "file": "src/ui/layout/Sidebar.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 5
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/useFocusableInteractive",
+      "count": 2
+    },
+    {
+      "file": "src/ui/panels/app-logs/AppLogsPanel.tsx",
+      "rule": "lint/a11y/useSemanticElements",
+      "count": 3
+    },
+    {
+      "file": "src/ui/settings/sections/AppearanceSection.tsx",
+      "rule": "lint/a11y/noAutofocus",
+      "count": 1
+    },
+    {
+      "file": "src/ui/settings/sections/AppearanceSection.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/modules/browse/hooks/useBrowseCatalog.test.tsx",
+      "rule": "lint/correctness/useHookAtTopLevel",
+      "count": 1
+    },
+    {
+      "file": "src/modules/cluster/components/ClusterOverview.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 2
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Logs/ParsedLogTable.tsx",
+      "rule": "lint/a11y/useKeyWithClickEvents",
+      "count": 1
+    },
+    {
+      "file": "src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/diff/DiffViewer.tsx",
+      "rule": "lint/a11y/noStaticElementInteractions",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableFocusNavigation.test.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 2
+    },
+    {
+      "file": "src/shared/components/tables/hooks/useGridTableController.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/shared/components/tabs/Tabs.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 1
+    },
+    {
+      "file": "src/shared/hooks/useHookLifetimes.ts",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 4
+    },
+    {
+      "file": "src/shared/components/yaml/YamlEditor.test.tsx",
+      "rule": "lint/complexity/noStaticOnlyClass",
+      "count": 1
+    },
+    {
+      "file": "src/ui/layout/appFocusRegions.test.tsx",
+      "rule": "lint/a11y/noNoninteractiveTabindex",
+      "count": 3
+    },
+    {
+      "file": "src/ui/layout/ClusterTabs.tsx",
+      "rule": "lint/correctness/useExhaustiveDependencies",
+      "count": 2
+    }
+  ]
+}

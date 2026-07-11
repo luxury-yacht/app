@@ -12,14 +12,14 @@
  * Provides a centralized entry point for importing dockable panel functionality.
  */
 
-export { default as DockablePanel } from './DockablePanel';
 export type { DockPosition } from './DockablePanel';
+export { default as DockablePanel } from './DockablePanel';
+export { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+export type { TabInfo } from './DockableTabBar';
+export { DockableTabBar } from './DockableTabBar';
+export type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 export {
-  useDockablePanelState,
   getAllPanelStates,
   restorePanelStates,
+  useDockablePanelState,
 } from './useDockablePanelState';
-export { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-export { DockableTabBar } from './DockableTabBar';
-export type { TabInfo } from './DockableTabBar';
-export type { PanelRegistration, TabGroupState, GroupKey } from './tabGroupTypes';

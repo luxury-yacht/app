@@ -5,10 +5,13 @@
  * Covers key behaviors and edge cases for NsViewQuotas.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -24,6 +27,11 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 import NsViewQuotas, { type QuotaData } from '@modules/namespace/components/NsViewQuotas';
 
+type CapturedGridTableProps = GridTableProps<QuotaData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<QuotaData>['getCustomContextMenuItems']>;
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+
 const {
   gridTablePropsRef,
   confirmationPropsRef,
@@ -32,8 +40,8 @@ const {
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
   openWithObjectMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<
@@ -72,16 +80,18 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return (
         <table data-testid="grid-table">
           <tbody>
-            {props.data.map((row: any, index: number) => (
-              <tr key={index}>
-                <td>{row.name}</td>
-              </tr>
-            ))}
+            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
+              ({ key, value: row }) => (
+                <tr key={key}>
+                  <td>{row.name}</td>
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       );
@@ -98,7 +108,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -109,7 +119,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
+  useTableSort: (data: QuotaData[]) => ({
     sortedData: data,
     sortConfig: { key: 'name', direction: 'asc' },
     handleSort: vi.fn(),
@@ -136,7 +146,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: any) => children,
+  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@shared/components/icons/SharedIcons', () => ({
@@ -159,16 +169,12 @@ describe('NsViewQuotas', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     runObjectActionMock.mockReset();
     runObjectActionMock.mockResolvedValue(undefined);
@@ -212,7 +218,7 @@ describe('NsViewQuotas', () => {
   };
 
   const getColumn = (key: string) =>
-    gridTablePropsRef.current.columns.find((column: any) => column.key === key);
+    gridTablePropsRef.current.columns.find((column) => column.key === key);
 
   it('opens quota resources through context menu', async () => {
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
@@ -220,7 +226,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
 
     const items = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
+    const openItem = items.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -242,7 +248,7 @@ describe('NsViewQuotas', () => {
     const entry = baseQuota();
     const props = await renderQuotaView();
 
-    expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/ResourceQuota/team-a/rq-default');
+    expect(props.keyExtractor(entry, 0)).toBe('alpha:ctx|/v1/ResourceQuota/team-a/rq-default');
   });
 
   it('omits Resources, Status, and Scope columns', async () => {
@@ -259,7 +265,7 @@ describe('NsViewQuotas', () => {
 
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -291,7 +297,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
     const deleteItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
     expect(deleteItem).toBeTruthy();
 
     act(() => {
@@ -319,7 +325,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView();
     const deleteItem = props
       .getCustomContextMenuItems(baseQuota(), 'name')
-      .find((item: any) => item.label === 'Delete');
+      .find((item) => item.label === 'Delete');
 
     expect(deleteItem).toBeUndefined();
   });

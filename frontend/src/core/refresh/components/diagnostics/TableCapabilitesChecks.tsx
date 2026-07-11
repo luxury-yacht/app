@@ -5,9 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
+import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];
@@ -71,7 +73,8 @@ const CapabilityRow: React.FC<{
     <td>{row.ssarFallbackCount ?? '—'}</td>
     <td>
       {row.descriptorsByFeature && row.descriptorsByFeature.length > 0 ? (
-        <span
+        <button
+          type="button"
           className={
             `diagnostics-table-descriptor` +
             (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
@@ -92,7 +95,7 @@ const CapabilityRow: React.FC<{
                 </div>
               ))
             : 'Click to expand'}
-        </span>
+        </button>
       ) : (
         <span className="diagnostics-table-descriptor">—</span>
       )}
@@ -150,10 +153,14 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
     setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredTotalRows));
   }, [filteredTotalRows]);
 
-  useEffect(() => {
-    setVisibleLimit(INITIAL_VISIBLE_ROWS);
-    setExpandedRows(new Set());
-  }, [normalizedSearch]);
+  useEffectWithInvalidation(
+    () => {
+      setVisibleLimit(INITIAL_VISIBLE_ROWS);
+      setExpandedRows(new Set());
+    },
+    [],
+    [normalizedSearch]
+  );
 
   return (
     <div className="diagnostics-section">

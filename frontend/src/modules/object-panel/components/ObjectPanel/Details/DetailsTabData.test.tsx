@@ -2,9 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import DataSection from './DetailsTabData';
 
 vi.mock('@ui/shortcuts', () => ({
@@ -64,7 +65,10 @@ describe('DetailsTabData', () => {
       <DataSection data={{ password: 'super-secret' }} isSecret />
     );
 
-    const decodeButton = container.querySelector('button')!;
+    const decodeButton = requireValue(
+      container.querySelector('button'),
+      'expected test value in DetailsTabData.test.tsx'
+    );
     expect(container.textContent).toContain(btoa('super-secret'));
 
     await act(async () => {
@@ -86,7 +90,10 @@ describe('DetailsTabData', () => {
 
     const { container, cleanup } = await render(<DataSection data={{ token: 'abc123' }} />);
 
-    const value = container.querySelector('.data-value')!;
+    const value = requireValue(
+      container.querySelector('.data-value'),
+      'expected test value in DetailsTabData.test.tsx'
+    );
     await act(async () => {
       value.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

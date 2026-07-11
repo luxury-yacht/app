@@ -36,10 +36,10 @@ const parseCpuValue = (value: string | undefined): number => {
   try {
     if (value.endsWith('m')) {
       const parsed = parseFloat(value.slice(0, -1));
-      return isNaN(parsed) ? 0 : parsed;
+      return Number.isNaN(parsed) ? 0 : parsed;
     } else {
       const parsed = parseFloat(value) * 1000; // Convert cores to millicores
-      return isNaN(parsed) ? 0 : parsed;
+      return Number.isNaN(parsed) ? 0 : parsed;
     }
   } catch {
     return 0;
@@ -53,7 +53,7 @@ const parseMemoryValue = (value: string | undefined): number => {
 
   try {
     const num = parseFloat(value);
-    if (isNaN(num)) return 0;
+    if (Number.isNaN(num)) return 0;
 
     if (value.endsWith('Ki')) {
       return num / 1024; // Convert Ki to Mi

@@ -5,14 +5,10 @@
  * Covers key behaviors and edge cases for useGridTableHoverFallback.
  */
 
-import { forwardRef } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { act, forwardRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   document.body.innerHTML = '';

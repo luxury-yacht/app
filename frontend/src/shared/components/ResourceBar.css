@@ -12,14 +12,6 @@
   padding: 2px 0;
 }
 
-.resource-bar-compact .resource-bar {
-  height: 0.4rem;
-}
-
-.resource-bar-compact .resource-bar-track {
-  height: 0.4rem;
-}
-
 /* Overcommit bar shown below main bar for nodes */
 .resource-bar-overcommit {
   margin-top: 2px;
@@ -140,6 +132,11 @@
   border-radius: 6px;
 }
 
+.resource-bar-compact .resource-bar,
+.resource-bar-compact .resource-bar-track {
+  height: 0.4rem;
+}
+
 /* Usage bar */
 .resource-bar-usage {
   position: absolute;
@@ -178,13 +175,6 @@
   animation: unbounded-pulse 4s ease-in-out infinite;
 }
 
-.resource-bar-no-animation .resource-bar-usage,
-.resource-bar-no-animation .resource-bar-reserved,
-.resource-bar-no-animation .resource-bar-overcommit-fill,
-.resource-bar-no-animation .resource-bar-marker {
-  transition: none !important;
-}
-
 @keyframes unbounded-pulse {
   0%,
   100% {
@@ -219,6 +209,13 @@
   height: 140%;
   top: -20%;
   z-index: 5;
+}
+
+.resource-bar-no-animation .resource-bar-usage,
+.resource-bar-no-animation .resource-bar-reserved,
+.resource-bar-no-animation .resource-bar-overcommit-fill,
+.resource-bar-no-animation .resource-bar-marker {
+  transition: none;
 }
 
 /* Adjust markers for compact variant */
@@ -372,7 +369,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--color-text-secondary);
-  margin-bottom: 0.25rem !important;
+  margin-bottom: 0.25rem;
 }
 
 .metric-legend {

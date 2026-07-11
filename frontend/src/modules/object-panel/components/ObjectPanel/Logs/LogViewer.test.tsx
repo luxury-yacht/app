@@ -5,37 +5,34 @@
  * parsing, container selection, lifecycle cleanup, and persisted viewer prefs.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import LogViewer from './LogViewer';
-import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   getScopedDomainState,
   resetScopedDomainState,
   setScopedDomainState,
 } from '@/core/refresh/store';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
-import { GetContainerLogsScopeContainers, FetchContainerLogs } from '@wailsjs/go/backend/App';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
+import {
+  getContainerLogsStreamScopeParams,
+  resetContainerLogsStreamScopeParamsCacheForTesting,
+} from './containerLogsStreamScopeParamsCache';
+import LogViewer from './LogViewer';
 import {
   getLogViewerPrefs,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
-import {
-  getContainerLogsStreamScopeParams,
-  resetContainerLogsStreamScopeParamsCacheForTesting,
-} from './containerLogsStreamScopeParamsCache';
-
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
 const flushAsync = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 type ViMock = ReturnType<typeof vi.fn>;
@@ -173,7 +170,7 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   }: {
     value?: string | string[];
     onChange?: (v: string | string[]) => void;
-    options?: Array<{ label?: string; value: string }>;
+    options?: Array<{ label?: string; value: string; disabled?: boolean }>;
     multiple?: boolean;
   }) => {
     const testId =
@@ -202,11 +199,13 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
           );
         }}
       >
-        {options?.map((opt, index) => (
-          <option key={index} value={opt?.value} disabled={Boolean((opt as any)?.disabled)}>
-            {opt?.label ?? opt?.value}
-          </option>
-        ))}
+        {withStableListKeys(options ?? [], (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`).map(
+          ({ key, value: opt }) => (
+            <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
+              {opt?.label ?? opt?.value}
+            </option>
+          )
+        )}
       </select>
     );
   },
@@ -429,7 +428,10 @@ describe('LogViewer active pod synchronisation', () => {
 
     let result = false;
     act(() => {
-      result = getLatestShortcut('r')!.handler();
+      result = requireValue(
+        getLatestShortcut('r'),
+        'expected test value in LogViewer.test.tsx'
+      ).handler();
     });
     expect(result).toBe(true);
 
@@ -591,7 +593,7 @@ describe('LogViewer active pod synchronisation', () => {
       expect(shortcut).toBeTruthy();
       let result = true;
       act(() => {
-        result = shortcut!.handler();
+        result = requireValue(shortcut, 'expected test value in LogViewer.test.tsx').handler();
       });
       expect(result).toBe(false);
     };
@@ -661,7 +663,8 @@ describe('LogViewer active pod synchronisation', () => {
       registerCalls.length > 0 ? registerCalls[registerCalls.length - 1] : undefined;
     expect(registerCall).toBeTruthy();
     const fallbackFetcher = registerCall?.[1] as
-      ((isManual?: boolean) => Promise<void>) | undefined;
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
     expect(typeof fallbackFetcher).toBe('function');
 
     (FetchContainerLogs as unknown as ViMock).mockClear();
@@ -713,7 +716,8 @@ describe('LogViewer active pod synchronisation', () => {
 
     const registerCalls = mockModules.fallbackManager.register.mock.calls;
     const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
-      ((isManual?: boolean) => Promise<void>) | undefined;
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
 
     await act(async () => {
       await fallbackFetcher?.(true);
@@ -1034,7 +1038,10 @@ describe('LogViewer active pod synchronisation', () => {
       '[data-testid="pod-container-dropdown"]'
     );
     expect(containerSelect).not.toBeNull();
-    await setMultiSelectValues(containerSelect!, ['container:app']);
+    await setMultiSelectValues(
+      requireValue(containerSelect, 'expected test value in LogViewer.test.tsx'),
+      ['container:app']
+    );
 
     const filteredMetadataSpans = Array.from(
       container.querySelectorAll('.log-viewer-line .log-viewer-metadata')
@@ -1100,14 +1107,18 @@ describe('LogViewer active pod synchronisation', () => {
     expect(parsedButton).toBeTruthy();
 
     await act(async () => {
-      prettyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(prettyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(prettyButton?.getAttribute('aria-pressed')).toBe('true');
     expect(container.textContent).toContain('"nested": {');
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(prettyButton?.getAttribute('aria-pressed')).toBe('false');
@@ -1115,7 +1126,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeTruthy();
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(parsedButton?.getAttribute('aria-pressed')).toBe('false');
@@ -1162,12 +1175,16 @@ describe('LogViewer active pod synchronisation', () => {
     expect(copyButton).toBeTruthy();
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -1280,7 +1297,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(parsedButton).toBeTruthy();
 
     await act(async () => {
-      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(writeTextMock).toHaveBeenLastCalledWith(
@@ -1288,11 +1307,15 @@ describe('LogViewer active pod synchronisation', () => {
     );
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     await act(async () => {
-      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -1373,7 +1396,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
 
     await act(async () => {
-      timestampButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(timestampButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(timestampButton?.getAttribute('aria-pressed')).toBe('false');
@@ -1381,7 +1406,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('hello world');
 
     await act(async () => {
-      timestampButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(timestampButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(timestampButton?.getAttribute('aria-pressed')).toBe('true');
@@ -1407,7 +1434,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(timestampButton).toBeTruthy();
 
     await act(async () => {
-      timestampButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(timestampButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -1458,7 +1487,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
 
     await act(async () => {
-      ansiButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(ansiButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -1633,7 +1664,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(copyButton).toBeTruthy();
 
     await act(async () => {
-      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(copyButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2146,7 +2179,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'panic');
-      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2159,7 +2194,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(inverseButton).toBeTruthy();
 
     await act(async () => {
-      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2204,7 +2241,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'Error');
-      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2212,7 +2251,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('error connecting to db');
 
     await act(async () => {
-      caseSensitiveButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(caseSensitiveButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2226,7 +2267,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(regexButton).toBeTruthy();
 
     await act(async () => {
-      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(regexButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2273,7 +2316,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'panic|timeout');
-      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2291,8 +2336,12 @@ describe('LogViewer active pod synchronisation', () => {
     expect(inverseButton).toBeTruthy();
 
     await act(async () => {
-      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(regexButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
+      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2303,7 +2352,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('steady state');
 
     await act(async () => {
-      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2340,7 +2391,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(inverseButton).toBeTruthy();
 
     await act(async () => {
-      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2348,7 +2401,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(highlightButton?.hasAttribute('disabled')).toBe(false);
 
     await act(async () => {
-      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2530,7 +2585,9 @@ describe('LogViewer active pod synchronisation', () => {
     )?.set;
     await act(async () => {
       nativeValueSetter?.call(filterInput, 'fatal');
-      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      requireValue(filterInput, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2541,7 +2598,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(highlightButton).toBeTruthy();
     await act(async () => {
-      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(highlightButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2552,7 +2611,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(inverseButton).toBeTruthy();
     await act(async () => {
-      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(inverseButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2563,7 +2624,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(caseSensitiveButton).toBeTruthy();
     await act(async () => {
-      caseSensitiveButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(caseSensitiveButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2574,7 +2637,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(regexButton).toBeTruthy();
     await act(async () => {
-      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(regexButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2584,7 +2649,10 @@ describe('LogViewer active pod synchronisation', () => {
       '[data-testid="pod-container-dropdown"]'
     );
     expect(workloadFilter).toBeTruthy();
-    await setMultiSelectValues(workloadFilter!, ['pod:web-1', 'container:app']);
+    await setMultiSelectValues(
+      requireValue(workloadFilter, 'expected test value in LogViewer.test.tsx'),
+      ['pod:web-1', 'container:app']
+    );
 
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
   });
@@ -2819,7 +2887,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(removePreviousButton).toBeTruthy();
 
     await act(async () => {
-      removePreviousButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(removePreviousButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -2868,13 +2938,19 @@ describe('LogViewer active pod synchronisation', () => {
     expect(removeHighlightButton).toBeTruthy();
 
     await act(async () => {
-      removeTextFilterButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        removeTextFilterButton,
+        'expected test value in LogViewer.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('');
 
     await act(async () => {
-      removeHighlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        removeHighlightButton,
+        'expected test value in LogViewer.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
     expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(false);
@@ -2883,7 +2959,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(clearAllButton).toBeTruthy();
     await act(async () => {
-      clearAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(clearAllButton, 'expected test value in LogViewer.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
     expect(getLogViewerPrefs(panelId)?.showPreviousContainerLogs).toBe(false);
@@ -2905,8 +2983,9 @@ describe('LogViewer active pod synchronisation', () => {
     // store stay in lockstep — this is what happens in production when
     // ContainerLogsStreamConnection.handleLogEvent calls applyPayload on the
     // module-scoped containerLogsStreamManager instance.
-    const { containerLogsStreamManager } =
-      await import('@/core/refresh/streaming/containerLogsStreamManager');
+    const { containerLogsStreamManager } = await import(
+      '@/core/refresh/streaming/containerLogsStreamManager'
+    );
 
     // Seed via applyPayload (not seedLogSnapshot) so the manager's
     // internal buffers AND the scoped store both have the entries. Use

@@ -7,7 +7,7 @@
  * and serializable context).
  */
 
-import { ErrorDetails } from '@utils/errorHandler';
+import type { ErrorDetails } from '@utils/errorHandler';
 
 /**
  * Serializes the error context, dropping non-serializable values (e.g. the

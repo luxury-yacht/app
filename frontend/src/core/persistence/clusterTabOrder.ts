@@ -4,8 +4,8 @@
  * Persistence helpers for cluster tab ordering backed by the backend store.
  */
 
-import { eventBus } from '@/core/events';
 import { requestAppState } from '@/core/app-state-access';
+import { eventBus } from '@/core/events';
 
 let cachedOrder: string[] = [];
 let hydrated = false;
@@ -15,7 +15,7 @@ const getRuntimeApp = () => {
   if (typeof window === 'undefined') {
     return undefined;
   }
-  return (window as any)?.go?.backend?.App;
+  return window.go?.backend?.App;
 };
 
 const normalizeOrder = (order: string[]): string[] => {

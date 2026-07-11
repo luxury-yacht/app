@@ -4,7 +4,7 @@
  * Hook for useSidebarResize.
  * Handles sidebar resize drag behavior with document-level mouse tracking.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface SidebarResizeOptions {
   isResizing: boolean;

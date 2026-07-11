@@ -5,10 +5,14 @@
  * Covers key behaviors and edge cases for ClusterViewCRDs.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CRDRow = Record<string, unknown>;
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -33,7 +37,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: GridTableProps<CRDRow> | null } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -41,7 +45,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: GridTableProps<CRDRow>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -113,13 +117,12 @@ const baseCRD = {
   age: '1d',
 };
 
+const getGridTableProps = () =>
+  requireValue(gridTablePropsRef.current, 'expected GridTable props in ClusterViewCRDs.test.tsx');
+
 describe('ClusterViewCRDs', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -141,7 +144,7 @@ describe('ClusterViewCRDs', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.filters?.value).toEqual({
@@ -160,7 +163,7 @@ describe('ClusterViewCRDs', () => {
       await Promise.resolve();
     });
 
-    const props = gridTablePropsRef.current;
+    const props = getGridTableProps();
     expect(props.filters?.options?.showKindDropdown).toBeFalsy();
   });
 
@@ -169,8 +172,11 @@ describe('ClusterViewCRDs', () => {
   // CRD also serves additional versions. See
 
   describe('Version column', () => {
-    const findVersionColumn = (props: any) =>
-      props.columns.find((col: any) => col.key === 'version');
+    const findVersionColumn = (props: GridTableProps<CRDRow>) =>
+      requireValue(
+        props.columns.find((col) => col.key === 'version'),
+        'expected version column in ClusterViewCRDs.test.tsx'
+      );
 
     it('renders bare storage version when there are no extra served versions', async () => {
       const singleVersion = {
@@ -184,7 +190,7 @@ describe('ClusterViewCRDs', () => {
         await Promise.resolve();
       });
 
-      const props = gridTablePropsRef.current;
+      const props = getGridTableProps();
       const versionCol = findVersionColumn(props);
       expect(versionCol).toBeTruthy();
 
@@ -210,7 +216,7 @@ describe('ClusterViewCRDs', () => {
         await Promise.resolve();
       });
 
-      const props = gridTablePropsRef.current;
+      const props = getGridTableProps();
       const versionCol = findVersionColumn(props);
       const rendered = versionCol.render(multiVersion);
       const text = JSON.stringify(rendered);
@@ -227,7 +233,7 @@ describe('ClusterViewCRDs', () => {
         await Promise.resolve();
       });
 
-      const props = gridTablePropsRef.current;
+      const props = getGridTableProps();
       const versionCol = findVersionColumn(props);
       const rendered = versionCol.render(noVersion);
       const text = JSON.stringify(rendered);
@@ -249,10 +255,12 @@ describe('ClusterViewCRDs', () => {
         await Promise.resolve();
       });
 
-      const props = gridTablePropsRef.current;
+      const props = getGridTableProps();
       const versionCol = findVersionColumn(props);
       expect(versionCol.sortValue).toBeDefined();
-      expect(versionCol.sortValue(multiVersion)).toBe('v1');
+      expect(
+        requireValue(versionCol.sortValue, 'expected version sort accessor')(multiVersion)
+      ).toBe('v1');
     });
   });
 });

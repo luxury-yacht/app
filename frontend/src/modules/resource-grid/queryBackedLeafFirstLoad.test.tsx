@@ -1,12 +1,19 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SortConfig, SortDirection, UseTableSortOptions } from '@/hooks/useTableSort';
+import { requireValue } from '@/test-utils/requireValue';
+
+interface CapturedGridTableProps {
+  columns?: Array<{ key: string; sortable?: boolean }>;
+  data: Array<Record<string, unknown>>;
+  emptyMessage?: string;
+}
 
 const { gridTablePropsRef, persistedSortRef, requestRefreshDomainStateMock } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  persistedSortRef: { current: null as any },
+  gridTablePropsRef: { current: null as CapturedGridTableProps | null },
+  persistedSortRef: { current: null as SortConfig | null },
   requestRefreshDomainStateMock: vi.fn(),
 }));
 
@@ -38,7 +45,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -73,7 +80,12 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[], defaultKey?: string, defaultDir?: any, opts?: any) => ({
+  useTableSort: (
+    data: unknown[],
+    defaultKey?: string,
+    defaultDir?: SortDirection,
+    opts?: UseTableSortOptions<unknown>
+  ) => ({
     sortedData: data,
     sortConfig:
       opts?.controlledSort ??
@@ -220,6 +232,12 @@ vi.mock('@shared/components/icons/SharedIcons', () => ({
   WarningTriangleIcon: () => <span>warning</span>,
 }));
 
+import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
+import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
+import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
+import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
@@ -230,12 +248,6 @@ import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
-import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
-import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
-import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
-import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
-import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 
 const typedQueryPayload = (data: Record<string, unknown>) => ({
   status: 'executed',
@@ -327,10 +339,6 @@ describe('query-backed leaf first load', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -354,7 +362,10 @@ describe('query-backed leaf first load', () => {
       await Promise.resolve();
     });
     await flushQueryEffects();
-    return gridTablePropsRef.current;
+    return requireValue(
+      gridTablePropsRef.current,
+      'Expected GridTable props after rendering the query-backed view'
+    );
   };
 
   const expectQueryFirstLoad = async ({
@@ -371,22 +382,29 @@ describe('query-backed leaf first load', () => {
     expectedScope: string;
   }) => {
     const expectedSort = expectedScope.match(/[?&]sort=([^&]+)&sortDirection=([^&]+)/);
-    persistedSortRef.current = expectedSort
-      ? {
-          key: decodeURIComponent(expectedSort[1]),
-          direction: decodeURIComponent(expectedSort[2]),
-        }
-      : null;
+    if (expectedSort) {
+      const direction = decodeURIComponent(expectedSort[2]);
+      if (direction !== 'asc' && direction !== 'desc') {
+        throw new Error(`Unexpected query sort direction: ${direction}`);
+      }
+      persistedSortRef.current = {
+        key: decodeURIComponent(expectedSort[1]),
+        direction,
+      };
+    } else {
+      persistedSortRef.current = null;
+    }
     const props = await render(element, payload);
 
-    expect(props.data).toHaveLength(1);
-    expect(props.data[0]).toEqual(expect.objectContaining({ name: expectedName }));
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain,
-        scope: expectedScope,
-      })
+    if (props.data.length !== 1 || props.data[0]?.name !== expectedName) {
+      throw new Error(`Expected first query result to contain only ${expectedName}`);
+    }
+    const requestedExpectedScope = requestRefreshDomainStateMock.mock.calls.some(
+      ([request]) => request.domain === domain && request.scope === expectedScope
     );
+    if (!requestedExpectedScope) {
+      throw new Error(`Expected ${domain} query for scope ${expectedScope}`);
+    }
   };
 
   it.each([
@@ -581,9 +599,12 @@ describe('query-backed leaf first load', () => {
       expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
       // GridTable is stubbed in this harness; the rendered message is its
       // emptyMessage prop (GridTable's own contract displays it when empty).
-      expect(gridTablePropsRef.current).not.toBeNull();
-      expect(gridTablePropsRef.current.emptyMessage).toBe('Insufficient permissions');
-      expect(gridTablePropsRef.current.data).toHaveLength(0);
+      const props = requireValue(
+        gridTablePropsRef.current,
+        'Expected GridTable props after rendering the permission error state'
+      );
+      expect(props.emptyMessage).toBe('Insufficient permissions');
+      expect(props.data).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
@@ -1013,10 +1034,10 @@ describe('query-backed leaf first load', () => {
     });
   });
 
-  const sortableKeys = (props: any): string[] =>
+  const sortableKeys = (props: CapturedGridTableProps): string[] =>
     (props.columns ?? [])
-      .filter((column: any) => column.sortable !== false)
-      .map((column: any) => column.key)
+      .filter((column) => column.sortable !== false)
+      .map((column) => column.key)
       .sort((left: string, right: string) => left.localeCompare(right));
 
   it.each([

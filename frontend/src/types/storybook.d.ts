@@ -10,12 +10,12 @@
 declare module '@storybook/react' {
   import type { ComponentType, ReactNode } from 'react';
 
-  export type Decorator<TArgs = any> = (
+  export type Decorator<TArgs = unknown> = (
     Story: ComponentType,
     context?: { args: TArgs }
   ) => ReactNode;
 
-  export interface Meta<T = any> {
+  export interface Meta<T = unknown> {
     title?: string;
     component?: T;
     decorators?: Decorator[];
@@ -23,9 +23,13 @@ declare module '@storybook/react' {
     [key: string]: unknown;
   }
 
-  export type StoryObj<T = any> = {
+  export type StoryObj<T = unknown> = {
     args?: Partial<T extends ComponentType<infer P> ? P : Record<string, unknown>>;
     decorators?: Decorator[];
     [key: string]: unknown;
   };
+}
+
+interface Window {
+  __storybookGoOverrides: Record<string, (...args: unknown[]) => unknown>;
 }

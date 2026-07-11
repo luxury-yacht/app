@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   initialRuntimeOperationStatusState,
-  runtimeOperationStatusReducer,
-  selectRuntimeOperationRows,
   type PortForwardSession,
   type RuntimeOperationStatusState,
+  runtimeOperationStatusReducer,
+  selectRuntimeOperationRows,
 } from './runtimeOperationStatusAdapter';
 
 const shellSession = {

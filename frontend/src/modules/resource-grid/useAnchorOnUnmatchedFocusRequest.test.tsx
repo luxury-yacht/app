@@ -7,10 +7,10 @@
  * global focus request and issue a spurious anchor / false not-found.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const peek = vi.fn();
 
@@ -47,10 +47,6 @@ const Harness = ({ viewId, anchorTo }: { viewId: string; anchorTo: (anchor: unkn
 describe('useAnchorOnUnmatchedFocusRequest — destination scoping', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

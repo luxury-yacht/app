@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
+  REFRESH_DOMAIN_DESCRIPTORS,
   refreshDomainContract,
   refreshDomainDescriptors,
 } from './domainRegistry';
@@ -96,7 +97,7 @@ type RegisteredDomain = {
   category: DomainCategory;
   refresherName: string;
   streaming?: {
-    start?: (scope: string) => Promise<(() => void) | void> | (() => void);
+    start?: (scope: string) => Promise<(() => void) | undefined> | (() => void);
   };
 };
 
@@ -209,11 +210,16 @@ const enforcedCoverageProofs = (): Record<string, Set<RefreshDomain>> => {
     const family = COVERAGE_PROOF_FAMILIES.find((candidate) =>
       candidate.behaviorClasses.has(inventory.behaviorClass)
     );
-    expect(family, `${domain} behavior-class coverage proof`).toBeDefined();
-    expect(inventory.coverageContract, `${domain} coverage contract`).toBe(
-      family?.coverageContract
+    const coverageFamily = requireValue(
+      family,
+      `${domain} must have a behavior-class coverage proof`
     );
-    proofs[family!.coverageContract].add(domain as RefreshDomain);
+    if (inventory.coverageContract !== coverageFamily.coverageContract) {
+      throw new Error(
+        `${domain} coverage contract must be ${coverageFamily.coverageContract}; received ${inventory.coverageContract}`
+      );
+    }
+    proofs[coverageFamily.coverageContract].add(domain as RefreshDomain);
   }
 
   return proofs;

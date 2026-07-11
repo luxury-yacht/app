@@ -6,9 +6,6 @@
  * via the OverviewContext.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   clusterrole,
   clusterrolebinding,
@@ -16,7 +13,10 @@ import {
   rolebinding,
   serviceaccount,
 } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clusterRoleBindingDescriptor,
   clusterRoleDescriptor,
@@ -24,10 +24,11 @@ import {
   roleDescriptor,
   serviceAccountDescriptor,
 } from './descriptors/rbac';
+import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -41,12 +42,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: any) => <span>{children}</span>,
+  ObjectPanelLink: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const context: OverviewContext = { clusterId: 'test-cluster', clusterName: 'test' };

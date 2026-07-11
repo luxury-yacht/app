@@ -1,9 +1,9 @@
 import {
+  type CSSProperties,
+  type PointerEvent,
   useCallback,
   useRef,
   useState,
-  type CSSProperties,
-  type PointerEvent,
   type WheelEvent,
 } from 'react';
 

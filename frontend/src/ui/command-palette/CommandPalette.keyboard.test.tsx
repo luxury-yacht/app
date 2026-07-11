@@ -1,14 +1,14 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '@ui/shortcuts/context';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import type { Command } from './CommandPaletteCommands';
+import { KeyboardProvider } from '@ui/shortcuts/context';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
 import { CommandPalette } from './CommandPalette';
+import type { Command } from './CommandPaletteCommands';
 
 const openWithObjectMock = vi.fn();
 
@@ -103,7 +103,7 @@ function SharedModalHarness() {
         <h2 id="blocking-modal-title">Blocking modal</h2>
       </div>
       <div className="modal-content">
-        <button>Inside modal</button>
+        <button type="button">Inside modal</button>
       </div>
     </ModalSurface>
   );
@@ -114,7 +114,6 @@ describe('CommandPalette keyboard integration', () => {
   let root: ReactDOM.Root;
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     if (!Element.prototype.scrollIntoView) {
       Element.prototype.scrollIntoView = vi.fn();
     }
@@ -274,9 +273,11 @@ describe('CommandPalette keyboard integration', () => {
       await Promise.resolve();
     });
 
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(input!.placeholder).toBe('Select a namespace...');
+    const input = requireValue(
+      document.querySelector<HTMLInputElement>('.command-palette-input'),
+      'expected the command-palette input'
+    );
+    expect(input.placeholder).toBe('Select a namespace...');
     const labels = Array.from(
       document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
     ).map((el) => el.textContent);

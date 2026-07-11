@@ -5,14 +5,29 @@
  * Covers key behaviors and edge cases for NsViewWorkloads.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { UseTableSortOptions } from '@/hooks/useTableSort';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CapturedGridTableProps = GridTableProps<WorkloadData> & {
+  getCustomContextMenuItems: NonNullable<GridTableProps<WorkloadData>['getCustomContextMenuItems']>;
+  paginationControls?: React.ReactElement<Record<string, unknown>>;
+};
 
 const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(
-    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+    (
+      data: WorkloadData[],
+      _defaultKey?: string,
+      _defaultDir?: unknown,
+      opts?: UseTableSortOptions<WorkloadData>
+    ) => ({
       sortedData: data,
       sortConfig: opts?.controlledSort ?? { key: '', direction: null },
       handleSort: vi.fn(),
@@ -54,7 +69,9 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: CapturedGridTableProps } = {
+  current: null as unknown as CapturedGridTableProps,
+};
 const openWithObjectMock = vi.fn();
 const navigateToViewMock = vi.fn();
 const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
@@ -65,7 +82,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -94,7 +111,12 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+  useTableSort: (
+    data: WorkloadData[],
+    defaultKey?: string,
+    defaultDirection?: unknown,
+    options?: UseTableSortOptions<WorkloadData>
+  ) => useTableSortMock(data, defaultKey, defaultDirection, options),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -193,15 +215,11 @@ describe('NsViewWorkloads', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
     scopedDomainCallsRef.current = [];
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
@@ -563,25 +581,29 @@ describe('NsViewWorkloads', () => {
   });
 
   it('passes rowIdentity into useTableSort for workload reuse', async () => {
-    const workload = {
+    const workload: WorkloadData = {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
       clusterId: 'alpha:ctx',
-    } as any;
+      status: 'Running',
+    };
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    const options = useTableSortMock.mock.calls[0]?.[3];
-    expect(options?.rowIdentity).toBeTypeOf('function');
-    expect(options.rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
+    const options = requireValue(
+      useTableSortMock.mock.calls[0]?.[3],
+      'expected workload table sort options'
+    );
+    const rowIdentity = requireValue(options.rowIdentity, 'expected workload table row identity');
+    expect(rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 
   it('passes numeric Ready, CPU, and memory sort values into useTableSort', async () => {
-    const workload = {
+    const workload: WorkloadData = {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -592,14 +614,17 @@ describe('NsViewWorkloads', () => {
       memUsage: '20Mi',
       clusterId: 'alpha:ctx',
       clusterName: 'alpha',
-    } as any;
+    };
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    const options = useTableSortMock.mock.calls[0]?.[3];
+    const options = requireValue(
+      useTableSortMock.mock.calls[0]?.[3],
+      'expected workload table sort options'
+    );
     const columns = options.columns as Array<{
       key: string;
       sortValue?: (item: typeof workload) => unknown;
@@ -651,8 +676,13 @@ describe('NsViewWorkloads', () => {
     });
 
     const props = gridTablePropsRef.current;
-    const nameColumn = props.columns.find((column: any) => column.key === 'name');
-    const cell = nameColumn.render(props.data[0]);
+    const nameColumn = requireValue(
+      props.columns.find((column) => column.key === 'name'),
+      'expected the workload name column'
+    );
+    const cell = requireReactElement<{
+      onClick?: (event: { stopPropagation: () => void }) => void;
+    }>(nameColumn.render(props.data[0]), 'expected the workload name cell element');
 
     // Use the name column click handler to verify object panel routing.
     act(() => {
@@ -707,9 +737,10 @@ describe('NsViewWorkloads', () => {
     });
 
     const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+      gridTablePropsRef.current.data[0],
+      'name'
     );
-    const portForwardItem = items.find((item: any) => item.label?.includes('Port Forward'));
+    const portForwardItem = items.find((item) => item.label?.includes('Port Forward'));
     expect(portForwardItem).toMatchObject({
       label: 'Port Forward',
       disabled: true,
@@ -736,10 +767,10 @@ describe('NsViewWorkloads', () => {
       });
 
       const props = gridTablePropsRef.current;
-      const menuItems = props.getCustomContextMenuItems(cronjob);
+      const menuItems = props.getCustomContextMenuItems(cronjob, 'name');
 
-      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
-      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+      const triggerItem = menuItems.find((item) => item.label === 'Trigger Now');
+      const suspendItem = menuItems.find((item) => item.label === 'Suspend');
 
       expect(triggerItem).toBeDefined();
       expect(suspendItem).toBeDefined();
@@ -754,10 +785,10 @@ describe('NsViewWorkloads', () => {
       });
 
       const props = gridTablePropsRef.current;
-      const menuItems = props.getCustomContextMenuItems(suspendedCronjob);
+      const menuItems = props.getCustomContextMenuItems(suspendedCronjob, 'name');
 
-      const resumeItem = menuItems.find((item: any) => item.label === 'Resume');
-      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+      const resumeItem = menuItems.find((item) => item.label === 'Resume');
+      const suspendItem = menuItems.find((item) => item.label === 'Suspend');
 
       expect(resumeItem).toBeDefined();
       expect(suspendItem).toBeUndefined();
@@ -772,9 +803,9 @@ describe('NsViewWorkloads', () => {
       });
 
       const props = gridTablePropsRef.current;
-      const menuItems = props.getCustomContextMenuItems(suspendedCronjob);
+      const menuItems = props.getCustomContextMenuItems(suspendedCronjob, 'name');
 
-      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
+      const triggerItem = menuItems.find((item) => item.label === 'Trigger Now');
       expect(triggerItem?.disabled).toBe(true);
     });
 
@@ -797,10 +828,10 @@ describe('NsViewWorkloads', () => {
       });
 
       const props = gridTablePropsRef.current;
-      const menuItems = props.getCustomContextMenuItems(deployment);
+      const menuItems = props.getCustomContextMenuItems(deployment, 'name');
 
-      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
-      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+      const triggerItem = menuItems.find((item) => item.label === 'Trigger Now');
+      const suspendItem = menuItems.find((item) => item.label === 'Suspend');
 
       expect(triggerItem).toBeUndefined();
       expect(suspendItem).toBeUndefined();
@@ -821,8 +852,8 @@ describe('NsViewWorkloads', () => {
       const props = gridTablePropsRef.current;
 
       for (const workload of workloads) {
-        const menuItems = props.getCustomContextMenuItems(workload);
-        const scaleItem = menuItems.find((item: any) => item.label === 'Scale');
+        const menuItems = props.getCustomContextMenuItems(workload as WorkloadData, 'name');
+        const scaleItem = menuItems.find((item) => item.label === 'Scale');
         expect(scaleItem).toBeUndefined();
       }
     });
@@ -853,8 +884,8 @@ describe('NsViewWorkloads', () => {
       const props = gridTablePropsRef.current;
 
       for (const workload of workloads) {
-        const menuItems = props.getCustomContextMenuItems(workload);
-        const scaleItem = menuItems.find((item: any) => item.label === 'Scale');
+        const menuItems = props.getCustomContextMenuItems(workload as WorkloadData, 'name');
+        const scaleItem = menuItems.find((item) => item.label === 'Scale');
         expect(scaleItem).toBeDefined();
       }
     });

@@ -1,7 +1,16 @@
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { YamlEditorProps } from './YamlEditor';
+
+interface CapturedCodeMirrorProps {
+  value: string;
+  onChange: (value: string) => void;
+  extensions?: unknown[];
+  onCreateEditor?: (view: unknown) => void;
+  'aria-label'?: string;
+}
 
 const shortcutMocks = vi.hoisted(() => ({
   useKeyboardSurface: vi.fn(),
@@ -45,7 +54,10 @@ const searchMocks = vi.hoisted(() => {
 });
 
 const codeMirrorState = vi.hoisted(() => ({
-  props: null as any,
+  props: {
+    value: '',
+    onChange: () => undefined,
+  } as CapturedCodeMirrorProps,
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -55,7 +67,7 @@ const codeMirrorState = vi.hoisted(() => ({
     focus: vi.fn(),
   },
   contextMenuHandler: null as ((event: MouseEvent, view: unknown) => boolean) | null,
-  transactionFilters: [] as Array<(transaction: any) => unknown>,
+  transactionFilters: [] as Array<(transaction: unknown) => unknown>,
   decorationRanges: [] as Array<{ from: number; to: number; spec: Record<string, unknown> }>,
 }));
 
@@ -64,8 +76,7 @@ vi.mock('@uiw/react-codemirror', async () => {
   const ExternalChange = {
     of: (value: boolean) => ({ type: 'externalChange', value }),
   };
-  const CodeMirrorMock = ReactModule.forwardRef((_props: any, ref) => {
-    const props = _props;
+  const CodeMirrorMock = ReactModule.forwardRef((props: CapturedCodeMirrorProps, ref) => {
     codeMirrorState.props = props;
     codeMirrorState.decorationRanges = [];
     props.extensions?.forEach((extension: unknown) => {
@@ -82,15 +93,16 @@ vi.mock('@uiw/react-codemirror', async () => {
         );
       }
     });
-    codeMirrorState.contextMenuHandler =
-      props.extensions?.find((extension: unknown) => {
-        return Boolean(
+    const contextMenuExtension = props.extensions?.find(
+      (extension): extension is { contextmenu: (event: MouseEvent, view: unknown) => boolean } =>
+        Boolean(
           extension &&
-          typeof extension === 'object' &&
-          'contextmenu' in extension &&
-          typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
-        );
-      })?.contextmenu ?? null;
+            typeof extension === 'object' &&
+            'contextmenu' in extension &&
+            typeof (extension as { contextmenu?: unknown }).contextmenu === 'function'
+        )
+    );
+    codeMirrorState.contextMenuHandler = contextMenuExtension?.contextmenu ?? null;
 
     if (ref && typeof ref === 'object') {
       (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
@@ -145,6 +157,7 @@ vi.mock('@codemirror/view', () => ({
       return ranges;
     },
   },
+  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
   EditorView: class {
     static decorations = {
       of: (decorations: unknown) => ({ type: 'decorations', decorations }),
@@ -175,7 +188,7 @@ vi.mock('@codemirror/state', () => ({
   },
   EditorState: {
     transactionFilter: {
-      of: (filter: (transaction: any) => unknown) => {
+      of: (filter: (transaction: unknown) => unknown) => {
         codeMirrorState.transactionFilters.push(filter);
         return { type: 'transactionFilter', filter };
       },
@@ -249,7 +262,7 @@ describe('YamlEditor', () => {
     wailsRuntimeMocks.ClipboardGetText.mockClear();
     searchMocks.findNext.mockClear();
     searchMocks.findPrevious.mockClear();
-    codeMirrorState.props = null;
+    codeMirrorState.props = { value: '', onChange: () => undefined };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     codeMirrorState.editorView.state.sliceDoc.mockClear();
@@ -707,7 +720,8 @@ describe('YamlEditor', () => {
     const computedDecorations = (
       codeMirrorState.props.extensions as Array<Record<string, unknown>>
     ).find((extension) => extension.type === 'computedDecorations') as
-      { compute: (state: { doc: { toString: () => string } }) => unknown } | undefined;
+      | { compute: (state: { doc: { toString: () => string } }) => unknown }
+      | undefined;
     expect(computedDecorations).toBeTruthy();
 
     codeMirrorState.decorationRanges = [];

@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const FavoriteOutlineIcon: React.FC<IconProps> = ({
@@ -7,6 +7,8 @@ export const FavoriteOutlineIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -23,6 +25,8 @@ export const FavoriteFilledIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 32 32"
     fill={fill}
@@ -35,6 +39,8 @@ export const FavoriteFilledIcon: React.FC<IconProps> = ({
 
 export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="currentColor"
@@ -55,6 +61,8 @@ export const FavoriteGenericIcon: React.FC<IconProps> = ({ width = 24, height = 
 
 export const FavoritePinIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="currentColor"
@@ -71,6 +79,8 @@ export const ChevronUpIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -87,6 +97,8 @@ export const ChevronDownIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}

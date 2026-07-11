@@ -7,10 +7,10 @@
  * separate TabsWithDrag.stories.tsx file.
  */
 
-import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { Tabs, type TabsProps } from './';
+import { useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { Tabs, type TabsProps } from './';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
 // so we log to the browser console instead — Storybook's controls panel still

@@ -5,41 +5,41 @@
  * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
  */
 
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import React, {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
-  useCallback,
-  memo,
-  useMemo,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { DockablePanelControls } from './DockablePanelControls';
+import { DockablePanelHeader } from './DockablePanelHeader';
+import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
+import type { TabInfo } from './DockableTabBar';
+import type { PanelSizeConstraints } from './dockablePanelLayout';
+import { getContentBounds, getPanelSizeConstraints, PANEL_DEFAULTS } from './dockablePanelLayout';
+import { getGroupForPanel, getGroupTabs } from './tabGroupState';
+import type { GroupKey } from './tabGroupTypes';
+import { useDockablePanelDragResize } from './useDockablePanelDragResize';
+import { useDockablePanelMaximize } from './useDockablePanelMaximize';
+import type { DockPosition } from './useDockablePanelState';
 import {
-  copyPanelLayoutState,
   clearGroupLeader,
+  copyPanelLayoutState,
+  type PanelCloseReason,
   registerPanelCloseHandler,
   setGroupLeader,
   unregisterPanelCloseHandler,
   useDockablePanelState,
-  PanelCloseReason,
 } from './useDockablePanelState';
-import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
-import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
-import { DockablePanelControls } from './DockablePanelControls';
-import { DockablePanelHeader } from './DockablePanelHeader';
-import { useDockablePanelDragResize } from './useDockablePanelDragResize';
-import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getPanelSizeConstraints, getContentBounds } from './dockablePanelLayout';
-import { getGroupForPanel, getGroupTabs } from './tabGroupState';
-import type { PanelSizeConstraints } from './dockablePanelLayout';
-import type { TabInfo } from './DockableTabBar';
-import type { GroupKey } from './tabGroupTypes';
-import type { DockPosition } from './useDockablePanelState';
-import { useKeyboardSurface } from '@ui/shortcuts';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
-import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import './DockablePanel.css';
 
 export type { DockPosition };
@@ -248,7 +248,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     allowMaximize,
     maximizeTargetSelector,
     onMaximizeChange,
-    panelRef,
   });
 
   // Resolve the correct min constraints for the current dock mode.
@@ -415,10 +414,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
     minWidth: resolvedMinWidth,
-    minHeight: resolvedMinHeight,
     isResizing,
     isMaximized,
-    panelRef,
   });
 
   // Handle position changes
@@ -501,7 +498,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.size.height,
     isMaximized,
     isGroupLeader,
-    groupTabCount,
   ]);
 
   // Content change notification:
@@ -842,7 +838,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       data-group-key={groupKey ?? undefined}
       data-active-panel-id={groupInfo?.activeTab ?? panelId}
     >
-      {isGroupLeader && (
+      {!!isGroupLeader && (
         <>
           <DockablePanelHeader
             title={activeTitle}
@@ -867,7 +863,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
             }
           />
 
-          <div className="dockable-panel__content" role="main">
+          <div className="dockable-panel__content">
             {groupInfo && groupInfo.tabs.length > 1 ? (
               // Multi-tab: render each tab's content, showing only the active one.
               groupInfo.tabs.map((tabId) => {
@@ -897,56 +893,70 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
           {/* Resize handles */}
           {!isMaximized && panelState.position === 'right' && (
+            // biome-ignore lint/a11y/useSemanticElements: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
             <div
               className="dockable-panel__resize-handle dockable-panel__resize-handle--left"
               onMouseDown={(e) => handleMouseDownResize(e, 'w')}
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize panel width"
+              aria-valuemin={constraints.right.minWidth}
+              aria-valuenow={panelState.size.width}
               tabIndex={0}
             />
           )}
           {!isMaximized && panelState.position === 'bottom' && (
+            // biome-ignore lint/a11y/useSemanticElements: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
             <div
               className="dockable-panel__resize-handle dockable-panel__resize-handle--top"
               onMouseDown={(e) => handleMouseDownResize(e, 'n')}
               role="separator"
               aria-orientation="horizontal"
               aria-label="Resize panel height"
+              aria-valuemin={constraints.bottom.minHeight}
+              aria-valuenow={panelState.size.height}
               tabIndex={0}
             />
           )}
           {!isMaximized && panelState.position === 'floating' && (
             <>
               {/* Invisible resize zones for floating panels */}
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--top"
                 onMouseDown={(e) => handleMouseDownResize(e, 'n')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom"
                 onMouseDown={(e) => handleMouseDownResize(e, 's')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--left"
                 onMouseDown={(e) => handleMouseDownResize(e, 'w')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--right"
                 onMouseDown={(e) => handleMouseDownResize(e, 'e')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--top-left"
                 onMouseDown={(e) => handleMouseDownResize(e, 'nw')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--top-right"
                 onMouseDown={(e) => handleMouseDownResize(e, 'ne')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-left"
                 onMouseDown={(e) => handleMouseDownResize(e, 'sw')}
               />
+              {/** biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners. */}
               <div
                 className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-right"
                 onMouseDown={(e) => handleMouseDownResize(e, 'se')}

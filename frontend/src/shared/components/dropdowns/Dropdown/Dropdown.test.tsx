@@ -5,14 +5,14 @@
  * Covers key behaviors and edge cases for Dropdown.
  */
 
-import React, { useState } from 'react';
+import { KeyboardProvider } from '@ui/shortcuts';
+import type React from 'react';
+import { act, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { requireValue } from '@/test-utils/requireValue';
 import Dropdown from './Dropdown';
 import type { DropdownOption } from './types';
-import { KeyboardProvider } from '@ui/shortcuts';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -35,7 +35,6 @@ describe('Dropdown', () => {
   let root: ReactDOM.Root;
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     if (!Element.prototype.scrollIntoView) {
       Element.prototype.scrollIntoView = vi.fn();
     }
@@ -131,7 +130,10 @@ describe('Dropdown', () => {
       const [firstValue, setFirstValue] = useState<string[]>([]);
       const [secondValue, setSecondValue] = useState<string[]>([]);
       return (
-        <div onMouseDown={(event) => event.stopPropagation()}>
+        <form
+          aria-label="Dropdown propagation harness"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <Dropdown
             options={OPTIONS}
             value={firstValue}
@@ -148,7 +150,7 @@ describe('Dropdown', () => {
             showBulkActions
             renderValue={() => 'Second'}
           />
-        </div>
+        </form>
       );
     };
 
@@ -194,7 +196,7 @@ describe('Dropdown', () => {
 
     await setTextInputValue(searchInput, 'gam');
 
-    expect(searchInput!.value).toBe('gam');
+    expect(requireValue(searchInput, 'expected test value in Dropdown.test.tsx').value).toBe('gam');
 
     const clearButton = container.querySelector<HTMLButtonElement>('.clear-button');
     expect(clearButton).not.toBeNull();
@@ -627,7 +629,7 @@ describe('Dropdown', () => {
     if (offsetHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDescriptor);
     } else {
-      delete (HTMLElement.prototype as any).offsetHeight;
+      Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
     }
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,

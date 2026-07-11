@@ -5,26 +5,26 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useCallback } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import React, { useCallback, useMemo } from 'react';
 import type { ClusterStorageSnapshotPayload } from '@/core/refresh/types';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Define the data structure for Persistent Volumes
 interface StorageData {

@@ -42,15 +42,19 @@ const codeMirrorState = {
   },
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
-  const props = _props;
+interface CapturedCodeMirrorProps {
+  value: string;
+  onCreateEditor?: (view: unknown) => void;
+}
+
+const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView,
     };
   }
   React.useEffect(() => {
-    props.onCreateEditor?.(codeMirrorState.editorView as any);
+    props.onCreateEditor?.(codeMirrorState.editorView);
   }, [props]);
   return <div data-testid="code-mirror">{props.value}</div>;
 });
@@ -121,6 +125,7 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
+  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
   EditorView: class {
     static contentAttributes = {
       of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),

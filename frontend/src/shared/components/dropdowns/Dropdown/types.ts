@@ -5,19 +5,19 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-export interface DropdownOption {
+export interface DropdownOption<TMetadata = unknown> {
   value: string;
   label: string;
   disabled?: boolean;
   group?: string;
-  metadata?: any;
+  metadata?: TMetadata;
 }
 
-export interface DropdownProps {
+export interface DropdownProps<TMetadata = unknown> {
   // Core props
-  options: DropdownOption[];
+  options: DropdownOption<TMetadata>[];
   value: string | string[];
   onChange: (value: string | string[]) => void;
 
@@ -43,8 +43,8 @@ export interface DropdownProps {
   showBulkActions?: boolean;
 
   // Customization props
-  renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;
-  renderValue?: (value: string | string[], options: DropdownOption[]) => ReactNode;
+  renderOption?: (option: DropdownOption<TMetadata>, isSelected: boolean) => ReactNode;
+  renderValue?: (value: string | string[], options: DropdownOption<TMetadata>[]) => ReactNode;
   className?: string;
   dropdownClassName?: string;
 

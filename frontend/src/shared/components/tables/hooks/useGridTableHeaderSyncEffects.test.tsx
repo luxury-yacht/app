@@ -5,14 +5,10 @@
  * Covers key behaviors and edge cases for useGridTableHeaderSyncEffects.
  */
 
-import { forwardRef } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { act, forwardRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   document.body.innerHTML = '';

@@ -5,14 +5,11 @@
  * Covers key behaviors and edge cases for useGridTableAutoGrow.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   document.body.innerHTML = '';

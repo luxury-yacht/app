@@ -5,7 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
 
 interface PermissionsTableProps {
@@ -66,10 +68,14 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
     setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredRows.length));
   }, [filteredRows.length]);
 
-  useEffect(() => {
-    setVisibleLimit(INITIAL_VISIBLE_ROWS);
-    setExpandedRows(new Set());
-  }, [normalizedSearch]);
+  useEffectWithInvalidation(
+    () => {
+      setVisibleLimit(INITIAL_VISIBLE_ROWS);
+      setExpandedRows(new Set());
+    },
+    [],
+    [normalizedSearch]
+  );
 
   return (
     <div className="diagnostics-section">

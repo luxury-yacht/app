@@ -524,7 +524,7 @@
 
 .metric-header--usage h3 {
   color: var(--color-text-secondary);
-  margin-bottom: 0.2rem !important;
+  margin-bottom: 0.2rem;
 }
 
 .metric-header__title-group {

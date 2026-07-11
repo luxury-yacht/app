@@ -1,6 +1,6 @@
-import { useContext, useMemo } from 'react';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
+import { useContext, useMemo } from 'react';
 
 const normalizeNamespaces = (values: Array<string | null | undefined>): string[] =>
   [...new Set(values.map((value) => value?.trim() ?? '').filter(Boolean))].sort((a, b) =>

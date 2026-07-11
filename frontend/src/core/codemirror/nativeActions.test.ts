@@ -5,8 +5,8 @@
  * Covers key behaviors and edge cases for nativeActions.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorView } from '@codemirror/view';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cutCodeMirrorSelection, selectCodeMirrorContent } from './nativeActions';
 
 type FakeView = EditorView & {

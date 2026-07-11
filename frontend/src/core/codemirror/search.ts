@@ -5,19 +5,19 @@
  * Implements search logic for the core layer.
  */
 
-import { keymap, EditorView } from '@codemirror/view';
-import type { KeyBinding } from '@codemirror/view';
 import {
-  SearchQuery,
   closeSearchPanel as cmCloseSearchPanel,
+  openSearchPanel as cmOpenSearchPanel,
   getSearchQuery,
   highlightSelectionMatches,
-  openSearchPanel as cmOpenSearchPanel,
+  SearchQuery,
   search,
   searchKeymap,
   setSearchQuery,
 } from '@codemirror/search';
 import type { Extension } from '@codemirror/state';
+import type { KeyBinding } from '@codemirror/view';
+import { type EditorView, keymap } from '@codemirror/view';
 
 export interface SearchExtensionOptions {
   // When true, show the search panel at the top of the editor.
@@ -157,7 +157,9 @@ const getSearchPanel = (view: EditorView): HTMLElement | null => {
 };
 
 const layoutSearchPanel = (panel: HTMLElement): void => {
-  panel.querySelectorAll('br').forEach((br) => br.remove());
+  panel.querySelectorAll('br').forEach((br) => {
+    br.remove();
+  });
 
   const mode = (panel.dataset.mode as PanelMode | undefined) ?? 'find';
   panel.querySelector<HTMLButtonElement>('button[name="close"]')?.remove();

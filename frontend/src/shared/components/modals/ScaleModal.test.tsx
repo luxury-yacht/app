@@ -1,8 +1,9 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import ScaleModal from './ScaleModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import ScaleModal from './ScaleModal';
 
 describe('ScaleModal', () => {
   let container: HTMLDivElement;
@@ -21,12 +22,6 @@ describe('ScaleModal', () => {
     onScaleToZero: vi.fn(),
     onValueChange: vi.fn(),
   };
-
-  beforeAll(() => {
-    (
-      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -90,7 +85,9 @@ describe('ScaleModal', () => {
     expect(input?.value).toBe('5');
 
     await act(async () => {
-      input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      requireValue(input, 'expected test value in ScaleModal.test.tsx').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
       await Promise.resolve();
     });
 

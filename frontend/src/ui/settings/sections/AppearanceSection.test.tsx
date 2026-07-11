@@ -4,10 +4,11 @@
  * Tests for Appearance settings interactions and preference workflow wiring.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { types } from '@wailsjs/go/models';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import AppearanceSection from './AppearanceSection';
 
 const setInputValue = (input: HTMLInputElement, value: string): void => {
@@ -142,10 +143,6 @@ describe('AppearanceSection', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(async () => {
     appPreferenceMocks.getThemes.mockResolvedValue([
       new types.Theme({ id: 'default', name: 'default', clusterPattern: '' }),
@@ -188,12 +185,15 @@ describe('AppearanceSection', () => {
     expect(buttons.map((button) => button.textContent)).toEqual(['System', 'Light', 'Dark']);
 
     const lightButton = buttons.find((button) => button.textContent === 'Light');
-    const darkButton = buttons.find((button) => button.textContent === 'Dark');
+    const darkButton = requireValue(
+      buttons.find((button) => button.textContent === 'Dark'),
+      'expected the Dark appearance button'
+    );
     expect(lightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(darkButton?.getAttribute('aria-pressed')).toBe('false');
 
     await act(async () => {
-      darkButton!.click();
+      darkButton.click();
       await Promise.resolve();
     });
 
@@ -201,22 +201,26 @@ describe('AppearanceSection', () => {
   });
 
   it('prompts to save live appearance changes as the default theme', async () => {
-    const hueInput = container.querySelector('#palette-hue') as HTMLInputElement | null;
-    expect(hueInput).toBeTruthy();
+    const hueInput = requireValue(
+      container.querySelector<HTMLInputElement>('#palette-hue'),
+      'expected the palette hue input'
+    );
 
     await act(async () => {
-      setInputValue(hueInput!, '30');
+      setInputValue(hueInput, '30');
     });
 
     expect(container.textContent).toContain('There are unsaved changes. Save as default?');
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Save'
-    ) as HTMLButtonElement | undefined;
-    expect(saveButton).toBeTruthy();
+    const saveButton = requireValue(
+      Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Save'
+      ),
+      'expected the default-theme Save button'
+    );
 
     await act(async () => {
-      saveButton!.click();
+      saveButton.click();
       await Promise.resolve();
     });
 
@@ -239,14 +243,14 @@ describe('AppearanceSection', () => {
   });
 
   it('prompts when tint values are reset', async () => {
-    const hueReset = container.querySelector(
-      'button[title="Reset Hue"]'
-    ) as HTMLButtonElement | null;
-    expect(hueReset).toBeTruthy();
-    expect(hueReset!.disabled).toBe(false);
+    const hueReset = requireValue(
+      container.querySelector<HTMLButtonElement>('button[title="Reset Hue"]'),
+      'expected the Reset Hue button'
+    );
+    expect(hueReset.disabled).toBe(false);
 
     await act(async () => {
-      hueReset!.click();
+      hueReset.click();
       await Promise.resolve();
     });
 
@@ -254,34 +258,36 @@ describe('AppearanceSection', () => {
   });
 
   it('prompts when color swatches are reset', async () => {
-    const accentReset = container.querySelector(
-      'button[title="Reset Accent Color"]'
-    ) as HTMLButtonElement | null;
-    const linkReset = container.querySelector(
-      'button[title="Reset Link Color"]'
-    ) as HTMLButtonElement | null;
-    expect(accentReset).toBeTruthy();
-    expect(linkReset).toBeTruthy();
+    const accentReset = requireValue(
+      container.querySelector<HTMLButtonElement>('button[title="Reset Accent Color"]'),
+      'expected the Reset Accent Color button'
+    );
+    const linkReset = requireValue(
+      container.querySelector<HTMLButtonElement>('button[title="Reset Link Color"]'),
+      'expected the Reset Link Color button'
+    );
 
     await act(async () => {
-      accentReset!.click();
+      accentReset.click();
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain('There are unsaved changes. Save as default?');
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Save'
-    ) as HTMLButtonElement | undefined;
-    expect(saveButton).toBeTruthy();
+    const saveButton = requireValue(
+      Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Save'
+      ),
+      'expected the default-theme Save button'
+    );
 
     await act(async () => {
-      saveButton!.click();
+      saveButton.click();
       await Promise.resolve();
     });
 
     await act(async () => {
-      linkReset!.click();
+      linkReset.click();
       await Promise.resolve();
     });
 
@@ -294,47 +300,53 @@ describe('AppearanceSection', () => {
       message: 'Invalid cluster pattern: missing closing bracket.',
     });
 
-    const newThemeButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Save new theme'
-    ) as HTMLButtonElement | undefined;
-    expect(newThemeButton).toBeTruthy();
+    const newThemeButton = requireValue(
+      Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Save new theme'
+      ),
+      'expected the Save new theme button'
+    );
 
     await act(async () => {
-      newThemeButton!.click();
+      newThemeButton.click();
       await Promise.resolve();
     });
 
-    const nameInput = container.querySelector('.theme-name-input') as HTMLInputElement | null;
-    const patternInput = container.querySelector('.theme-pattern-input') as HTMLInputElement | null;
-    expect(nameInput).toBeTruthy();
-    expect(patternInput).toBeTruthy();
+    const nameInput = requireValue(
+      container.querySelector<HTMLInputElement>('.theme-name-input'),
+      'expected the theme name input'
+    );
+    const patternInput = requireValue(
+      container.querySelector<HTMLInputElement>('.theme-pattern-input'),
+      'expected the theme cluster-pattern input'
+    );
 
     await act(async () => {
-      setInputValue(nameInput!, 'Prod');
-      setInputValue(patternInput!, 'prod-[');
+      setInputValue(nameInput, 'Prod');
+      setInputValue(patternInput, 'prod-[');
     });
 
-    const saveButton = container.querySelector(
-      'button[aria-label="Save new theme"]'
-    ) as HTMLButtonElement | null;
-    expect(saveButton).toBeTruthy();
+    const saveButton = requireValue(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Save new theme"]'),
+      'expected the open theme editor Save button'
+    );
 
     await act(async () => {
-      saveButton!.click();
+      saveButton.click();
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain('Invalid cluster pattern: missing closing bracket.');
-    expect(patternInput!.getAttribute('aria-invalid')).toBe('true');
+    expect(patternInput.getAttribute('aria-invalid')).toBe('true');
     expect(appPreferenceMocks.validateThemeClusterPattern).toHaveBeenCalledWith('prod-[');
     expect(appPreferenceMocks.saveTheme).not.toHaveBeenCalled();
     expect(errorHandlerMocks.handle).not.toHaveBeenCalled();
 
     await act(async () => {
-      setInputValue(patternInput!, 'prod-*');
+      setInputValue(patternInput, 'prod-*');
     });
 
     expect(container.textContent).not.toContain('Invalid cluster pattern');
-    expect(patternInput!.hasAttribute('aria-invalid')).toBe(false);
+    expect(patternInput.hasAttribute('aria-invalid')).toBe(false);
   });
 });

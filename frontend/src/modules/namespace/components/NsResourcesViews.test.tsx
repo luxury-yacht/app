@@ -5,9 +5,9 @@
  * Covers key behaviors and edge cases for NsResourcesViews.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   podsViewMock,
@@ -53,15 +53,11 @@ vi.mock('@modules/namespace/components/NsViewEvents', () => ({ default: eventsVi
 vi.mock('@modules/browse/components/BrowseView', () => ({ default: browseViewMock }));
 
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
-import { NamespaceViewType } from '@/types/navigation/views';
+import type { NamespaceViewType } from '@/types/navigation/views';
 
 describe('NamespaceResourcesViews', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     podsViewMock.mockClear();

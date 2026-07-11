@@ -10,13 +10,15 @@
  * active tab lives in ViewStateContext, which publishes it to the
  * orchestrator itself.
  */
-import React, { useEffect } from 'react';
-import type { ReactNode } from 'react';
-import { queryNamespacePermissions } from '@/core/capabilities';
-import { refreshOrchestrator } from '@/core/refresh';
-import { useViewState } from '@/core/contexts/ViewStateContext';
+
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+import { queryNamespacePermissions } from '@/core/capabilities';
+import { useViewState } from '@/core/contexts/ViewStateContext';
+import { refreshOrchestrator } from '@/core/refresh';
 
 // Extracts the concrete namespace name for capability checks; the
 // all-namespaces sentinel has no single namespace to query.

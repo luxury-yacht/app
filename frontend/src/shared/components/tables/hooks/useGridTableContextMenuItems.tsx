@@ -5,12 +5,12 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback } from 'react';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { useCallback } from 'react';
 
 // Builds context menu item lists for GridTable cells/headers/empty areas,
 // combining custom items with sort actions while avoiding duplicates.

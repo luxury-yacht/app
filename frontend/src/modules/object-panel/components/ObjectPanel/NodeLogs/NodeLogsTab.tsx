@@ -1,18 +1,8 @@
-import {
-  startTransition,
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
-  AutoRefreshIcon,
   AnsiColorIcon,
+  AutoRefreshIcon,
   CopyIcon,
   HighlightSearchIcon,
   InverseSearchIcon,
@@ -22,27 +12,37 @@ import {
   WrapTextIcon,
 } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
-import type { LogDisplayMode, CapabilityState } from '../types';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
+import { buildCsv } from '../Logs/logExport';
+import { buildLogSearchRegex } from '../Logs/logSearch';
+import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
+import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
   formatRawOrPrettyJsonLine,
   tryParseJSONObject,
 } from '../Logs/parsedLogUtils';
-import { buildCsv } from '../Logs/logExport';
-import { buildLogSearchRegex } from '../Logs/logSearch';
-import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
-import type { ParsedLogEntry } from '../Logs/logViewerReducer';
+import type { CapabilityState, LogDisplayMode } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
-import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
+import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
+import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
 import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
-import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
-import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
+import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
@@ -810,8 +810,9 @@ const NodeLogsTab = ({
                 placeholder="Filter logs..."
                 aria-label="Filter node logs"
               />
-              {textFilter && (
+              {!!textFilter && (
                 <button
+                  type="button"
                   className="logs-viewer-filter-clear"
                   onClick={() => setTextFilter('')}
                   title="Clear filter"
@@ -945,6 +946,7 @@ const NodeLogsTab = ({
 
             <span
               className="logs-viewer-count"
+              role="status"
               aria-label="Selected node log source"
               title={selectedSource?.path || '/'}
             >

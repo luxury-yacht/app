@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 
 type IconProps = {
   width?: number;
@@ -6,7 +6,14 @@ type IconProps = {
 };
 
 export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 16 16">
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    width={width}
+    height={height}
+    viewBox="0 0 16 16"
+  >
     <path
       fill="currentColor"
       fillRule="evenodd"
@@ -17,7 +24,14 @@ export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 24, height 
 );
 
 export const YamlEditIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+  >
     <path
       fill="none"
       stroke="currentColor"
@@ -31,6 +45,8 @@ export const YamlEditIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =
 
 export const YamlCancelIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     width={width}
@@ -46,7 +62,14 @@ export const YamlCancelIcon: React.FC<IconProps> = ({ width = 24, height = 24 })
 );
 
 export const YamlSaveIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+  >
     <path
       fill="currentColor"
       d="M5 21h14c1.1 0 2-.9 2-2V8c0-.27-.11-.52-.29-.71l-4-4A1 1 0 0 0 16 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2m10-2H9v-5h6zM11 5h2v2h-2zM5 5h2v4h8V5h.59L19 8.41V19h-2v-5c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v5H5z"
@@ -55,13 +78,27 @@ export const YamlSaveIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =
 );
 
 export const YamlPreviousIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    width={width}
+    height={height}
+  >
     <path fill="currentColor" d="m4 10l9 9l1.4-1.5L7 10l7.4-7.5L13 1z" />
   </svg>
 );
 
 export const YamlNextIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    width={width}
+    height={height}
+  >
     <path fill="currentColor" d="M7 1L5.6 2.5L13 10l-7.4 7.5L7 19l9-9z" />
   </svg>
 );

@@ -2,13 +2,13 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useObjectPanelRefresh } from './useObjectPanelRefresh';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import type { PanelObjectData } from '../types';
+import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
 const hoistedMocks = vi.hoisted(() => ({
   refreshManager: {
@@ -97,7 +97,8 @@ describe('useObjectPanelRefresh', () => {
     });
 
     return {
-      getResult: () => resultRef.current!,
+      getResult: () =>
+        requireValue(resultRef.current, 'expected test value in useObjectPanelRefresh.test.tsx'),
       rerender: async (next?: Partial<Parameters<typeof useObjectPanelRefresh>[0]>) => {
         propsRef.current = { ...propsRef.current, ...next };
         await act(async () => {
@@ -107,10 +108,6 @@ describe('useObjectPanelRefresh', () => {
       },
     };
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -265,11 +262,7 @@ describe('useObjectPanelRefresh', () => {
 
     // Unmounting one panel must only unregister ITS refresher.
     await act(async () => {
-      root.render(
-        <>
-          <PanelHarness key="api" panelId={basePanelId} name="api" />
-        </>
-      );
+      root.render(<PanelHarness key="api" panelId={basePanelId} name="api" />);
       await Promise.resolve();
     });
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith(`object-deployment:${otherPanelId}`);

@@ -4,11 +4,13 @@
  * Unified header status indicator for shell sessions and port forwards.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { StopPortForward } from '@wailsjs/go/backend/App';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { errorHandler } from '@utils/errorHandler';
-import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import {
+  getRequestedObjectPanelTab,
+  requestObjectPanelTab,
+} from '@modules/object-panel/objectPanelTabRequests';
 import {
   CloseIcon,
   OpenIcon,
@@ -16,15 +18,13 @@ import {
   StatusDotIcon,
   StopSquareIcon,
 } from '@shared/components/icons/SharedIcons';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import {
-  getRequestedObjectPanelTab,
-  requestObjectPanelTab,
-} from '@modules/object-panel/objectPanelTabRequests';
-import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { useRuntimeOperationStatus, type ShellSessionInfo } from './runtimeOperationStatus';
+import { errorHandler } from '@utils/errorHandler';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { StopPortForward } from '@/core/backend-api';
+import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
@@ -255,7 +255,7 @@ const SessionsStatus: React.FC = () => {
                   ) : (
                     filteredShellSessions.map((session) => {
                       const status = session.status || 'active';
-                      const shellPath = (session.command && session.command[0]) || '/bin/sh';
+                      const shellPath = session.command?.[0] || '/bin/sh';
                       const fields = [
                         {
                           label: 'cluster',
@@ -363,7 +363,7 @@ const SessionsStatus: React.FC = () => {
                                 </span>
                               </div>
                             </div>
-                            {session.statusReason && (
+                            {!!session.statusReason && (
                               <div className="pf-session-reason as-pf-reason">
                                 {session.statusReason}
                               </div>

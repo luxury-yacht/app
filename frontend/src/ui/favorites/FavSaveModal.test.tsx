@@ -6,11 +6,21 @@
  * save-disabled-when-unchanged, and view dropdown scope changes.
  */
 
-import ReactDOM from 'react-dom/client';
-import React from 'react';
+import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import { requireValue } from '@/test-utils/requireValue';
+
+interface ConfirmationModalMockProps {
+  isOpen: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before importing the component under test.
@@ -103,8 +113,8 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 // Mock Dropdown to render a simple <select> so we can drive view changes.
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({ options, value, onChange, placeholder, disabled }: any) => {
-    const opts = (options ?? []).filter((o: any) => !o.group);
+  Dropdown: ({ options, value, onChange, placeholder, disabled }: DropdownProps) => {
+    const opts = options.filter((option) => !option.group);
     return (
       <select
         data-testid={`dropdown-${placeholder ?? 'select'}`}
@@ -112,9 +122,9 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
-        {opts.map((o: any) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
+        {opts.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -129,18 +139,16 @@ vi.mock('@shared/components/Tooltip', () => ({
 }));
 
 // Mock ConfirmationModal to a simple div that captures props.
-const confirmModalProps = { current: null as any };
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
-  default: (props: any) => {
-    confirmModalProps.current = props;
+  default: (props: ConfirmationModalMockProps) => {
     if (!props.isOpen) return null;
     return (
       <div data-testid="confirmation-modal">
-        <button data-testid="confirm-delete" onClick={props.onConfirm}>
+        <button type="button" data-testid="confirm-delete" onClick={props.onConfirm}>
           {props.confirmText}
         </button>
-        <button data-testid="cancel-delete" onClick={props.onCancel}>
+        <button type="button" data-testid="cancel-delete" onClick={props.onCancel}>
           {props.cancelText}
         </button>
       </div>
@@ -150,16 +158,16 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 // Mock createPortal so modal content renders into the test container.
 vi.mock('react-dom', async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
+  const actual = await importOriginal<typeof import('react-dom')>();
   return {
     ...actual,
     createPortal: (children: React.ReactNode) => children,
   };
 });
 
+import type { FavSaveModalProps } from './FavSaveModal';
 // Import after all mocks are established.
 import FavSaveModal from './FavSaveModal';
-import type { FavSaveModalProps } from './FavSaveModal';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -224,12 +232,7 @@ describe('FavSaveModal', () => {
     });
   };
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
-    confirmModalProps.current = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -298,7 +301,9 @@ describe('FavSaveModal', () => {
 
     const input = container.querySelector<HTMLInputElement>('#fav-name');
     expect(input).toBeTruthy();
-    expect(input!.value).toBe('Test Default Name');
+    expect(requireValue(input, 'expected test value in FavSaveModal.test.tsx').value).toBe(
+      'Test Default Name'
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -315,7 +320,7 @@ describe('FavSaveModal', () => {
     expect(saveBtn).toBeTruthy();
 
     await act(async () => {
-      saveBtn!.click();
+      requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -346,7 +351,7 @@ describe('FavSaveModal', () => {
     expect(cancelBtn).toBeTruthy();
 
     await act(async () => {
-      cancelBtn!.click();
+      requireValue(cancelBtn, 'expected test value in FavSaveModal.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -376,7 +381,9 @@ describe('FavSaveModal', () => {
 
     const deleteBtn = container.querySelector<HTMLButtonElement>('button.danger');
     expect(deleteBtn).toBeTruthy();
-    expect(deleteBtn!.textContent).toBe('Delete');
+    expect(
+      requireValue(deleteBtn, 'expected test value in FavSaveModal.test.tsx').textContent
+    ).toBe('Delete');
   });
 
   // -----------------------------------------------------------------------
@@ -392,13 +399,15 @@ describe('FavSaveModal', () => {
       viewType: existingFav.viewType,
       viewLabel: 'Pods',
       namespace: existingFav.namespace,
-      filters: existingFav.filters!,
+      filters: requireValue(existingFav.filters, 'expected test value in FavSaveModal.test.tsx'),
     });
     await renderComponent(props);
 
     const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
     expect(saveBtn).toBeTruthy();
-    expect(saveBtn!.disabled).toBe(true);
+    expect(requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').disabled).toBe(
+      true
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -422,15 +431,20 @@ describe('FavSaveModal', () => {
         window.HTMLSelectElement.prototype,
         'value'
       )?.set;
-      nativeInputValueSetter?.call(viewSelect!, 'cluster:nodes');
-      viewSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+      nativeInputValueSetter?.call(
+        requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx'),
+        'cluster:nodes'
+      );
+      requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx').dispatchEvent(
+        new Event('change', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     // Save and verify the scope changed to cluster.
     const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
     await act(async () => {
-      saveBtn!.click();
+      requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').click();
       await Promise.resolve();
     });
 

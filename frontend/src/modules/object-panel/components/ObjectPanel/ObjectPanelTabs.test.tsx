@@ -2,11 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('ObjectPanelTabs', () => {
   let container: HTMLDivElement;
@@ -17,10 +16,6 @@ describe('ObjectPanelTabs', () => {
     { id: 'logs', label: 'Logs' },
     { id: 'events', label: 'Events' },
   ];
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

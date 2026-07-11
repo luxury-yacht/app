@@ -46,7 +46,7 @@ const logToAppLogs = (
   if (!trimmed) {
     return;
   }
-  const api = (window as any)?.go?.backend?.App;
+  const api = window.go?.backend?.App;
   if (!api || typeof api.LogAppLogsFromFrontend !== 'function') {
     return;
   }

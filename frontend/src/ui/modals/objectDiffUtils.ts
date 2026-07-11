@@ -5,8 +5,8 @@
  * Normalizes YAML and strips noisy metadata fields for diffing.
  */
 
-import * as YAML from 'yaml';
 import { YAML_STRINGIFY_OPTIONS } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlTabConfig';
+import * as YAML from 'yaml';
 
 // Ignored fields are removed entirely; muted fields remain but render dimmed in the diff.
 const IGNORED_METADATA_FIELDS = new Set(['managedFields']);

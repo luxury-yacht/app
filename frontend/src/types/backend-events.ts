@@ -46,7 +46,9 @@ export interface BackendStderrError {
  * depends on the error source.
  */
 export type BackendErrorPayload =
-  BackendResourceError | BackendResourceListError | BackendStderrError;
+  | BackendResourceError
+  | BackendResourceListError
+  | BackendStderrError;
 
 /**
  * Type guard to check if a value is a valid BackendErrorPayload.

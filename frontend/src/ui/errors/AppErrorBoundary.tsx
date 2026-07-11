@@ -5,8 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { ReactNode } from 'react';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import type React from 'react';
+import type { ReactNode } from 'react';
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -38,7 +39,7 @@ export const AppErrorBoundary: React.FC<AppErrorBoundaryProps> = ({ children }) 
               logged and will be investigated.
             </p>
 
-            {import.meta.env.DEV && (
+            {!!import.meta.env.DEV && (
               <details
                 style={{
                   background: '#000',
@@ -66,6 +67,7 @@ export const AppErrorBoundary: React.FC<AppErrorBoundaryProps> = ({ children }) 
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
               <button
+                type="button"
                 onClick={reset}
                 style={{
                   padding: '0.75rem 2rem',
@@ -80,6 +82,7 @@ export const AppErrorBoundary: React.FC<AppErrorBoundaryProps> = ({ children }) 
                 Try Recovery
               </button>
               <button
+                type="button"
                 onClick={() => window.location.reload()}
                 style={{
                   padding: '0.75rem 2rem',

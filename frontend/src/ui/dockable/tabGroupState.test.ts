@@ -5,20 +5,19 @@
  * All helpers are pure functions operating on immutable TabGroupState.
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
-
-import type { TabGroupState } from './tabGroupTypes';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  createInitialTabGroupState,
-  addPanelToGroup,
-  removePanelFromGroup,
-  setActiveTab,
-  getGroupForPanel,
-  reorderTab,
-  movePanelToGroup,
   addPanelToFloatingGroup,
+  addPanelToGroup,
+  createInitialTabGroupState,
+  getGroupForPanel,
   getGroupTabs,
+  movePanelToGroup,
+  removePanelFromGroup,
+  reorderTab,
+  setActiveTab,
 } from './tabGroupState';
+import type { TabGroupState } from './tabGroupTypes';
 
 // ---------------------------------------------------------------------------
 // createInitialTabGroupState

@@ -6,36 +6,35 @@
  * rendering to focused helpers.
  */
 
-import { GraphEvent } from '@antv/g6';
 import type { Graph, GraphData } from '@antv/g6';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GraphEvent } from '@antv/g6';
 import { useZoom } from '@core/contexts/ZoomContext';
-import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock';
-import type { ObjectMapLayout } from './objectMapLayout';
-import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
-import { toObjectMapG6Data } from './objectMapG6Data';
-import {
-  publishObjectMapRendererDebugSnapshot,
-  type ObjectMapRendererDebugSnapshot,
-} from './objectMapDebugStore';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
+import {
+  type ObjectMapRendererDebugSnapshot,
+  publishObjectMapRendererDebugSnapshot,
+} from './objectMapDebugStore';
+import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
+import {
+  type ObjectMapG6CardDetailLevel,
+  type ObjectMapG6EdgeDetailLevel,
+  objectMapG6CardDetailLevelForZoom,
+} from './objectMapG6Constants';
+import { toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
 import { computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
+import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
-import { useObjectMapG6GraphLifecycle } from './useObjectMapG6GraphLifecycle';
-import { useObjectMapG6Palette } from './useObjectMapG6Palette';
-import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';
-import {
-  objectMapG6CardDetailLevelForZoom,
-  type ObjectMapG6CardDetailLevel,
-  type ObjectMapG6EdgeDetailLevel,
-} from './objectMapG6Constants';
 import type {
-  ObjectMapHoverEdge,
-  ObjectMapContextMenuAction,
   ObjectMapCanvasContextMenuAction,
+  ObjectMapContextMenuAction,
+  ObjectMapHoverEdge,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,
@@ -45,6 +44,9 @@ import type {
   ObjectMapViewportChangeAction,
   ObjectMapViewportControls,
 } from './objectMapRendererTypes';
+import { useObjectMapG6GraphLifecycle } from './useObjectMapG6GraphLifecycle';
+import { useObjectMapG6Palette } from './useObjectMapG6Palette';
+import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';
 
 const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,
@@ -222,7 +224,7 @@ const ObjectMapDebugGridOverlay: React.FC<{ grid: ObjectMapDebugGridState }> = (
             y {Math.round(line.value)}
           </text>
         ))}
-      {originVisible && (
+      {!!originVisible && (
         <g transform={`translate(${grid.origin[0]} ${grid.origin[1]})`}>
           <circle className="object-map__debug-grid-origin" r={4} />
           <text className="object-map__debug-grid-origin-label" x={7} y={-7}>
@@ -516,7 +518,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     } catch {
       setDebugGrid(null);
     }
-  }, [graphReady, graphRef, showDebugGrid]);
+  }, [graphReady, showDebugGrid]);
 
   const updateCardDetailLevel = useCallback(() => {
     if (!graphReady) return;
@@ -528,7 +530,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     } catch {
       setCardDetailLevel('full');
     }
-  }, [graphReady, graphRef]);
+  }, [graphReady]);
 
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
@@ -608,7 +610,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         graph.off(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
       }
     };
-  }, [graphReady, graphRef, updateCardDetailLevel]);
+  }, [graphReady, updateCardDetailLevel]);
 
   useEffect(() => {
     updateDebugGrid();
@@ -626,13 +628,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         graph.off(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
       }
     };
-  }, [graphReady, graphRef, showDebugGrid, updateDebugGrid]);
+  }, [graphReady, showDebugGrid, updateDebugGrid]);
 
-  useEffect(() => {
-    if (!showDebugGrid) return;
-    const frame = requestAnimationFrame(updateDebugGrid);
-    return () => cancelAnimationFrame(frame);
-  }, [data, showDebugGrid, updateDebugGrid]);
+  useEffectWithInvalidation(
+    () => {
+      if (!showDebugGrid) return;
+      const frame = requestAnimationFrame(updateDebugGrid);
+      return () => cancelAnimationFrame(frame);
+    },
+    [showDebugGrid, updateDebugGrid],
+    [data]
+  );
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -654,9 +660,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     updateTooltipPosition,
   });
 
-  useEffect(() => {
-    updateTooltipPosition();
-  }, [hoverEdge, updateTooltipPosition]);
+  useEffectWithInvalidation(
+    () => {
+      updateTooltipPosition();
+    },
+    [updateTooltipPosition],
+    [hoverEdge]
+  );
 
   const tooltipText = useMemo(() => {
     if (!palette || !hoverEdge) return null;
@@ -671,9 +681,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   return (
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
-      {showDebugGrid && debugGrid && <ObjectMapDebugGridOverlay grid={debugGrid} />}
+      {!!(showDebugGrid && debugGrid) && <ObjectMapDebugGridOverlay grid={debugGrid} />}
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
-        {palette && tooltipText && tooltipPosition && (
+        {!!(palette && tooltipText && tooltipPosition) && (
           <ObjectMapG6TooltipOverlay
             palette={palette}
             tooltipLayout={tooltipText}

@@ -5,32 +5,33 @@
  * Defines shared state and accessors for the kubernetes feature.
  */
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useMemo,
-  useEffect,
-  useRef,
-  ReactNode,
-} from 'react';
-import { SetSelectedKubeconfigs, SetVisibleCluster } from '@wailsjs/go/backend/App';
-import { EventsOn } from '@wailsjs/runtime/runtime';
-import { errorHandler } from '@utils/errorHandler';
-import { types } from '@wailsjs/go/models';
-import { readKubeconfigs, readSelectedKubeconfigs, requestAppState } from '@/core/app-state-access';
-import {
-  computeClusterHashes,
-  runGridTableGC,
-} from '@shared/components/tables/persistence/gridTablePersistenceGC';
-import { eventBus } from '@/core/events';
-import { logAppLogsInfo } from '@/core/logging/appLogsClient';
-import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import {
   getClusterTabOrder,
   getNextClusterTabSelectionAfterClose,
 } from '@core/persistence/clusterTabOrder';
+import {
+  computeClusterHashes,
+  runGridTableGC,
+} from '@shared/components/tables/persistence/gridTablePersistenceGC';
+import { errorHandler } from '@utils/errorHandler';
+import type { types } from '@wailsjs/go/models';
+import { EventsOn } from '@wailsjs/runtime/runtime';
+import type React from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { readKubeconfigs, readSelectedKubeconfigs, requestAppState } from '@/core/app-state-access';
+import { SetSelectedKubeconfigs, SetVisibleCluster } from '@/core/backend-api';
+import { eventBus } from '@/core/events';
+import { logAppLogsInfo } from '@/core/logging/appLogsClient';
+import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
@@ -608,7 +609,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           identities.add(`${config.name}:${config.context}`);
         }
       });
-      selectedClusterIds.forEach((id) => identities.add(id));
+      selectedClusterIds.forEach((id) => {
+        identities.add(id);
+      });
       const hashes = await computeClusterHashes(Array.from(identities));
       await runGridTableGC({ activeClusterHashes: hashes });
     };

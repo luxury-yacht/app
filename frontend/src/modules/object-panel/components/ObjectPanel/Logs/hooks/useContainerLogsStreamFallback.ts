@@ -11,11 +11,12 @@
  * Calling both creates a race condition with the orchestrator's
  * deduplication during React Strict Mode.
  */
-import { useEffect } from 'react';
+
 import type { Dispatch, MutableRefObject } from 'react';
+import { useEffect } from 'react';
 import { setRefreshDomainEnabled } from '@/core/data-access';
-import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { containerLogsFallbackManager } from '@/core/refresh/fallbacks/containerLogsFallbackManager';
+import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState } from '@/core/refresh/store';
 import type { LogViewerAction } from '../logViewerReducer';
 
@@ -239,7 +240,6 @@ export function useContainerLogsStreamFallback({
     };
   }, [
     autoRefresh,
-    dispatch,
     fallbackActive,
     fetchFallbackContainerLogs,
     isActive,
@@ -363,7 +363,7 @@ export function useContainerLogsStreamFallback({
       if (cancelled || attempt >= MAX_RECOVERY_ATTEMPTS) {
         return;
       }
-      const delay = Math.min(INITIAL_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+      const delay = Math.min(INITIAL_DELAY_MS * 2 ** attempt, MAX_DELAY_MS);
       timerId = window.setTimeout(async () => {
         attempt++;
         await attemptRecovery();

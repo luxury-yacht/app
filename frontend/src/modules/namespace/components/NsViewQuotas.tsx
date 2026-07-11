@@ -6,26 +6,26 @@
  */
 
 import './NsViewQuotas.css';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useCallback } from 'react';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import React, { useCallback, useMemo } from 'react';
 import type { NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -38,7 +38,7 @@ export interface QuotaData {
   details?: string;
   hard?: Record<string, string | number>;
   used?: Record<string, string | number>;
-  limits?: any;
+  limits?: unknown;
   // PDB values can be absolute numbers or percentage strings.
   minAvailable?: string | number;
   maxUnavailable?: string | number;
@@ -51,7 +51,6 @@ export interface QuotaData {
   };
   scopes?: string[];
   age?: string;
-  [key: string]: any; // Allow additional fields for flexibility
 }
 
 interface QuotasViewProps {

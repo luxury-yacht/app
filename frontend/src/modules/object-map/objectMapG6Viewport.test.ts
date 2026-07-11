@@ -6,13 +6,13 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
-  OBJECT_MAP_FIT_VIEW_MAX_ZOOM,
   fitObjectMapG6GraphToView,
   isObjectMapMacPlatform,
   isObjectMapZoomWheelEvent,
+  OBJECT_MAP_FIT_VIEW_MAX_ZOOM,
+  type ObjectMapG6ViewportGraph,
   objectMapWheelZoomRatio,
   resetObjectMapG6GraphZoom,
-  type ObjectMapG6ViewportGraph,
 } from './objectMapG6Viewport';
 
 const graph = (overrides: Partial<ObjectMapG6ViewportGraph> = {}): ObjectMapG6ViewportGraph => ({

@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for RefreshManagerContext.
  */
 
-import React, { useEffect } from 'react';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 vi.mock('../RefreshManager', () => {
   const pause = vi.fn();
@@ -21,15 +21,11 @@ vi.mock('../RefreshManager', () => {
   };
 });
 
-import { RefreshManagerProvider, useRefreshManagerContext } from './RefreshManagerContext';
 import { refreshManager } from '../RefreshManager';
+import { RefreshManagerProvider, useRefreshManagerContext } from './RefreshManagerContext';
 
 describe('RefreshManagerContext', () => {
   let originalHiddenDescriptor: PropertyDescriptor | undefined;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,7 +36,7 @@ describe('RefreshManagerContext', () => {
     if (originalHiddenDescriptor) {
       Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
     } else {
-      delete (document as any).hidden;
+      Reflect.deleteProperty(document, 'hidden');
     }
 
     await act(async () => {});

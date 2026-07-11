@@ -5,19 +5,16 @@
  * Covers key behaviors and edge cases for useGridTableContextMenu.
  */
 
-import React, { forwardRef, useImperativeHandle } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import {
-  useGridTableContextMenu,
   type GridTableContextMenuState,
+  useGridTableContextMenu,
 } from '@shared/components/tables/hooks/useGridTableContextMenu';
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+import React, { act, forwardRef, useImperativeHandle } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type SampleRow = { id: string; name: string };
 
@@ -100,7 +97,9 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
         openWrapperMenu(opts) {
           const target = document.createElement('div');
           target.classList.add('gridtable-wrapper');
-          opts?.classList?.forEach((cls) => target.classList.add(cls));
+          opts?.classList?.forEach((cls) => {
+            target.classList.add(cls);
+          });
           const event = buildMouseEvent({
             ctrlKey: opts?.enable === false,
             clientX: 16,
@@ -164,8 +163,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.source).toBe('cell');
-    expect(menu!.columnKey).toBe('name');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
+    ).toBe('cell');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').columnKey
+    ).toBe('name');
 
     await act(async () => {
       harness.getHandle().close();
@@ -204,8 +207,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.source).toBe('empty');
-    expect(menu!.itemsOverride).toEqual(wrapperItems);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').source
+    ).toBe('empty');
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').itemsOverride
+    ).toEqual(wrapperItems);
 
     await harness.unmount();
   });
@@ -228,8 +235,12 @@ describe('useGridTableContextMenu', () => {
 
     const menu = harness.getHandle().getContextMenu();
     expect(menu).not.toBeNull();
-    expect(menu!.position.x).toBeCloseTo(50);
-    expect(menu!.position.y).toBeCloseTo(40);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').position.x
+    ).toBeCloseTo(50);
+    expect(
+      requireValue(menu, 'expected test value in useGridTableContextMenu.test.tsx').position.y
+    ).toBeCloseTo(40);
 
     await harness.unmount();
   });

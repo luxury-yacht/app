@@ -223,7 +223,9 @@ const getOverlayResizeObserver = (): ResizeObserver | undefined => {
   }
 
   overlayResizeObserver ??= new ResizeObserver((entries) => {
-    entries.forEach((entry) => scheduleOverlayGeometryUpdate(entry.target));
+    entries.forEach((entry) => {
+      scheduleOverlayGeometryUpdate(entry.target);
+    });
   });
   return overlayResizeObserver;
 };
@@ -733,8 +735,9 @@ function startOverlayScrollbarDrag(
   axis: 'horizontal' | 'vertical'
 ): void {
   event.preventDefault();
-  event.currentTarget instanceof HTMLElement &&
+  if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.setPointerCapture(event.pointerId);
+  }
   markScrollbarActive(element);
 
   const rect = getOverflowClipRect(element);
@@ -762,8 +765,9 @@ function startOverlayScrollbarDrag(
     thumbSize,
   };
 
-  event.currentTarget instanceof HTMLElement &&
+  if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.classList.add('scrollbar-overlay-thumb--dragging');
+  }
 }
 
 const getCurrentScrollbarOpacity = (element: Element): number => {
@@ -820,7 +824,7 @@ const animateScrollbarOpacity = (
   const startedAt = window.performance.now();
   const step = (now: number) => {
     const progress = Math.min(1, (now - startedAt) / duration);
-    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const easedProgress = 1 - (1 - progress) ** 3;
     const value = startOpacity + (targetOpacity - startOpacity) * easedProgress;
     setScrollbarOpacity(element, value);
 
@@ -1110,9 +1114,9 @@ export const initializeScrollbarActivityTracking = (): void => {
     'pointerup',
     (event) => {
       const draggedElement = activeDrag?.element;
-      document
-        .querySelectorAll('.scrollbar-overlay-thumb--dragging')
-        .forEach((element) => element.classList.remove('scrollbar-overlay-thumb--dragging'));
+      document.querySelectorAll('.scrollbar-overlay-thumb--dragging').forEach((element) => {
+        element.classList.remove('scrollbar-overlay-thumb--dragging');
+      });
       activeDrag = undefined;
       if (draggedElement) {
         updateOverlayHoverFromPointer(event);

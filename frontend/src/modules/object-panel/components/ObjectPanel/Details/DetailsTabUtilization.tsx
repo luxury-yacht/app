@@ -7,15 +7,15 @@
  * overview's Resource Usage block.
  */
 
-import React from 'react';
-import ResourceBar from '@shared/components/ResourceBar';
 import ResourceBarErrorBoundary from '@shared/components/errors/ResourceBarErrorBoundary';
+import ResourceBar from '@shared/components/ResourceBar';
 import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
   formatCpuValue,
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
+import type React from 'react';
 import '../shared.css';
 import './DetailsTabUtilization.css';
 
@@ -125,7 +125,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
     <div className="resource-group">
       <div className="metric-header">
         <h3>{title}</h3>
-        {data.allocatable && (
+        {!!data.allocatable && (
           <div className="metric-legend__total">
             <span className="metric-legend__total-value">{data.allocatable}</span>
             <span className="metric-legend__total-label"> total</span>
@@ -171,7 +171,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             }
             label="used"
           />
-          {showAllocatableRow && (
+          {!!showAllocatableRow && (
             <LegendItem count={data.allocatable as string} label="allocatable" />
           )}
           <LegendItem
@@ -187,7 +187,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             count={
               <>
                 {data.limit || 'not set'}
-                {limitSuffix && (
+                {!!limitSuffix && (
                   <span className={metrics.limitPercent > 100 ? 'overcommitted-text' : ''}>
                     {limitSuffix}
                   </span>
@@ -196,7 +196,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             }
             label="limits"
           />
-          {showOvercommittedRow && (
+          {!!showOvercommittedRow && (
             <LegendItem
               count={
                 metrics.overcommittedAmount > 0 ? (
@@ -238,8 +238,8 @@ const Utilization: React.FC<UtilizationProps> = ({
       <div className="utilization-content">
         {cpu || memory || pods ? (
           <div className="utilization-resources-grid">
-            {cpu && <ResourceSection title="CPU" data={cpu} type="cpu" mode={mode} />}
-            {memory && <ResourceSection title="Memory" data={memory} type="memory" mode={mode} />}
+            {!!cpu && <ResourceSection title="CPU" data={cpu} type="cpu" mode={mode} />}
+            {!!memory && <ResourceSection title="Memory" data={memory} type="memory" mode={mode} />}
           </div>
         ) : (
           <div className="utilization-empty">No resource utilization data available</div>

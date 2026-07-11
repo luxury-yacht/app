@@ -7,10 +7,6 @@
   z-index: 999;
 }
 
-.dockable-panel-layer .dockable-panel {
-  pointer-events: auto;
-}
-
 .dockable-panel {
   position: absolute;
   background: var(--color-bg);
@@ -26,6 +22,7 @@
   --dockable-panel-floating-min-width: 450;
   --dockable-panel-floating-min-height: 200;
   transition: filter 150ms ease;
+  pointer-events: auto;
 }
 
 /* Inactive group: dim non-focused panels */
@@ -69,11 +66,6 @@
   max-height: none;
 }
 
-.dockable-panel--maximized .dockable-panel__header {
-  cursor: default;
-  border-radius: 8px 8px 0 0;
-}
-
 /* Header */
 .dockable-panel__header {
   display: flex;
@@ -87,6 +79,11 @@
   overflow: visible;
   position: relative;
   z-index: 1;
+}
+
+.dockable-panel--maximized .dockable-panel__header {
+  cursor: default;
+  border-radius: 8px 8px 0 0;
 }
 
 .dockable-panel--floating .dockable-panel__header {
@@ -329,12 +326,12 @@
 
 /* Dragging state */
 .dockable-panel--dragging {
-  cursor: move !important;
+  cursor: move;
 }
 
 .dockable-panel--dragging * {
-  cursor: move !important;
-  user-select: none !important;
+  cursor: move;
+  user-select: none;
 }
 
 /* Resizing state */
@@ -343,8 +340,8 @@
 }
 
 .dockable-panel--resizing * {
-  user-select: none !important;
-  pointer-events: none !important;
+  user-select: none;
+  pointer-events: none;
 }
 
 /* Body overrides during drag/resize - disable text selection */
@@ -352,6 +349,7 @@ body.dockable-panel-dragging,
 body.dockable-panel-dragging *,
 body.dockable-panel-resizing,
 body.dockable-panel-resizing * {
+  /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
   user-select: none !important;
 }
 
@@ -359,6 +357,7 @@ body.dockable-panel-resizing * {
    This stops tooltips/popups from triggering when moving panel edges. */
 body.dockable-panel-dragging .app,
 body.dockable-panel-resizing .app {
+  /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
   pointer-events: none !important;
 }
 
@@ -368,6 +367,7 @@ body.dockable-panel-resizing-s,
 body.dockable-panel-resizing-s * {
   cursor:
     url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
+    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
     row-resize !important;
 }
 
@@ -377,6 +377,7 @@ body.dockable-panel-resizing-w,
 body.dockable-panel-resizing-w * {
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
+    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
     col-resize !important;
 }
 
@@ -386,6 +387,7 @@ body.dockable-panel-resizing-se,
 body.dockable-panel-resizing-se * {
   cursor:
     url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
+    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
     nwse-resize !important;
 }
 
@@ -395,6 +397,7 @@ body.dockable-panel-resizing-sw,
 body.dockable-panel-resizing-sw * {
   cursor:
     url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
+    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
     nesw-resize !important;
 }
 
@@ -425,7 +428,7 @@ body.dockable-panel-resizing-sw * {
   border-bottom: none;
 }
 
-.dockable-tab__kind-indicator.kind-badge {
+.dockable-tab-bar .dockable-tab__kind-indicator.kind-badge {
   display: inline-block;
   width: 10px;
   height: 10px;
@@ -434,8 +437,8 @@ body.dockable-panel-resizing-sw * {
   box-sizing: border-box;
   padding: 0;
   border-radius: 6px;
-  background-color: currentColor !important;
-  border-color: currentColor !important;
+  background-color: currentColor;
+  border-color: currentColor;
   font-size: 0;
   line-height: 0;
   flex-shrink: 0;
@@ -471,7 +474,7 @@ body.dockable-panel-resizing-sw * {
   white-space: nowrap;
 }
 
-.dockable-tab-drag-preview__kind.kind-badge {
+.dockable-tab-drag-preview .dockable-tab-drag-preview__kind.kind-badge {
   width: 10px;
   height: 10px;
   min-width: 10px;
@@ -479,8 +482,8 @@ body.dockable-panel-resizing-sw * {
   box-sizing: border-box;
   border-radius: 6px;
   padding: 0;
-  background-color: currentColor !important;
-  border-color: currentColor !important;
+  background-color: currentColor;
+  border-color: currentColor;
   flex-shrink: 0;
 }
 

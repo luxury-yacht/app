@@ -8,8 +8,9 @@
  * but both render the same ContextMenu component for visual consistency.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { deriveCopyText } from '../context';
 
 interface TextContextMenuState {

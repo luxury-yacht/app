@@ -2,11 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { secretDescriptor } from './descriptors/secret';
+import { OverviewRenderer } from './OverviewRenderer';
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
@@ -29,11 +30,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -97,7 +98,7 @@ describe('SecretOverview', () => {
         usedBy: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const typeValue = getValueForLabel(container, 'Type');
@@ -118,7 +119,7 @@ describe('SecretOverview', () => {
         usedBy: [podRef('pod-x', 'team')],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const podLink = getLinkByText(container, 'pod-x');
@@ -149,7 +150,7 @@ describe('SecretOverview', () => {
         usedBy: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     const usedByValue = getValueForLabel(container, 'Used By');

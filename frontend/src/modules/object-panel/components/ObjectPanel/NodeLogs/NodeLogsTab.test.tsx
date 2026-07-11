@@ -1,10 +1,10 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts';
-
-import NodeLogsTab from './NodeLogsTab';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
+import NodeLogsTab from './NodeLogsTab';
 
 const mockFetchNodeLogs = vi.fn();
 
@@ -36,7 +36,6 @@ describe('NodeLogsTab', () => {
   ];
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     if (!Element.prototype.scrollIntoView) {
       Element.prototype.scrollIntoView = vi.fn();
     }
@@ -89,33 +88,35 @@ describe('NodeLogsTab', () => {
     const filterInput = container.querySelector<HTMLInputElement>(
       'input[aria-label="Filter node logs"]'
     );
-    expect(filterInput).toBeTruthy();
-
     await act(async () => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setValue?.call(filterInput, value);
-      filterInput!.dispatchEvent(new Event('change', { bubbles: true }));
-      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      requireValue(filterInput, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new Event('change', { bubbles: true })
+      );
+      requireValue(filterInput, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
       await Promise.resolve();
     });
   };
 
   const selectSource = async (label: string): Promise<void> => {
     const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
-    expect(trigger).toBeTruthy();
-
     await act(async () => {
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     const option = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
       (node) => node.textContent?.includes(label)
     );
-    expect(option).toBeTruthy();
-
     await act(async () => {
-      option!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(option, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -204,7 +205,9 @@ describe('NodeLogsTab', () => {
     ).toBe('Select log source');
 
     await act(async () => {
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -252,7 +255,9 @@ describe('NodeLogsTab', () => {
     expect(inverseButton).toBeTruthy();
 
     await act(async () => {
-      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(inverseButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -276,7 +281,9 @@ describe('NodeLogsTab', () => {
     expect(highlightButton).toBeTruthy();
 
     await act(async () => {
-      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(highlightButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -301,7 +308,9 @@ describe('NodeLogsTab', () => {
     expect(highlightButton).toBeTruthy();
 
     await act(async () => {
-      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(highlightButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -325,7 +334,9 @@ describe('NodeLogsTab', () => {
     expect(wrapButton).toBeTruthy();
 
     await act(async () => {
-      wrapButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(wrapButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -350,7 +361,9 @@ describe('NodeLogsTab', () => {
     expect(regexButton).toBeTruthy();
 
     await act(async () => {
-      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(regexButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -375,7 +388,9 @@ describe('NodeLogsTab', () => {
     expect(prettyButton).toBeTruthy();
 
     await act(async () => {
-      prettyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(prettyButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -403,7 +418,9 @@ describe('NodeLogsTab', () => {
     expect(parsedButton).toBeTruthy();
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -430,7 +447,9 @@ describe('NodeLogsTab', () => {
     expect(parsedButton).toBeTruthy();
 
     await act(async () => {
-      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(parsedButton, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -440,14 +459,18 @@ describe('NodeLogsTab', () => {
     expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
 
     await act(async () => {
-      row!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(row, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
     expect(row?.classList.contains('parsed-row-expanded')).toBe(true);
 
     await act(async () => {
-      row!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(row, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -535,7 +558,9 @@ describe('NodeLogsTab', () => {
 
     const content = container.querySelector<HTMLElement>('.logs-viewer-content');
     expect(content).toBeTruthy();
-    expect(content!.scrollTop).toBe(500);
+    expect(requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop).toBe(
+      500
+    );
 
     if (originalScrollHeight) {
       Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
@@ -583,8 +608,10 @@ describe('NodeLogsTab', () => {
     expect(content).toBeTruthy();
 
     await act(async () => {
-      content!.scrollTop = 40;
-      content!.dispatchEvent(new Event('scroll', { bubbles: true }));
+      requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop = 40;
+      requireValue(content, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new Event('scroll', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -593,7 +620,9 @@ describe('NodeLogsTab', () => {
     await selectSource('containerd');
     await waitForAnimationFrames(6);
 
-    expect(content!.scrollTop).toBe(500);
+    expect(requireValue(content, 'expected test value in NodeLogsTab.test.tsx').scrollTop).toBe(
+      500
+    );
 
     if (originalScrollHeight) {
       Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
@@ -631,7 +660,9 @@ describe('NodeLogsTab', () => {
 
     await act(async () => {
       const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(trigger, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -641,7 +672,9 @@ describe('NodeLogsTab', () => {
     expect(secondOption).toBeTruthy();
 
     await act(async () => {
-      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(secondOption, 'expected test value in NodeLogsTab.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 

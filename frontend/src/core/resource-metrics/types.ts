@@ -6,7 +6,11 @@ import type {
 } from '@/core/refresh/types';
 
 export type ResourceMetricsSource =
-  'pods' | 'namespace-workloads' | 'nodes' | 'cluster-overview' | 'detail-replicaset';
+  | 'pods'
+  | 'namespace-workloads'
+  | 'nodes'
+  | 'cluster-overview'
+  | 'detail-replicaset';
 
 export type ResourceMetricsDomain = Extract<
   RefreshDomain,
@@ -37,7 +41,11 @@ export interface ResourceMetricsFreshness {
 }
 
 export type ResourceMetricsFreshnessInput =
-  PodMetricsInfo | NodeMetricsInfo | ClusterOverviewMetrics | null | undefined;
+  | PodMetricsInfo
+  | NodeMetricsInfo
+  | ClusterOverviewMetrics
+  | null
+  | undefined;
 
 export interface ResourceMetricsData {
   source: ResourceMetricsSource;
@@ -82,7 +90,13 @@ export type ResourceMetricsResolution =
   | InvalidResourceMetricsResolution;
 
 export type ResourceMetricsStatus =
-  'available' | 'loading' | 'missing' | 'error' | 'unsupported' | 'invalid' | 'detail-exception';
+  | 'available'
+  | 'loading'
+  | 'missing'
+  | 'error'
+  | 'unsupported'
+  | 'invalid'
+  | 'detail-exception';
 
 export interface ResourceMetricsResult {
   status: ResourceMetricsStatus;

@@ -4,16 +4,15 @@
  * Verifies object action menu construction from the shared action contract.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
-
-import { eventBus } from '@/core/events';
-import { buildObjectActionItems } from './useObjectActions';
 import {
   OBJECT_ACTION_IDS,
-  objectActionLabel,
   type ObjectActionId,
+  objectActionLabel,
 } from '@shared/actions/objectActionContract';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { afterEach, describe, expect, it } from 'vitest';
+import { eventBus } from '@/core/events';
+import { buildObjectActionItems } from './useObjectActions';
 
 const findAction = (
   items: ContextMenuItem[],

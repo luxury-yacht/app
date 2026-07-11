@@ -8,9 +8,9 @@
  * registered, GC will silently delete the persisted state for that view.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
 import { listRegisteredGridTableViews } from './gridTableViewRegistry';
 
 const TABLE_MODES = [
@@ -212,7 +212,8 @@ function findProductionDirectGridTableUsages(sourceRoot: string): string[] {
     })
     .filter(
       (relativePath) =>
-        !Object.prototype.hasOwnProperty.call(DIRECT_GRIDTABLE_USAGE_EXCEPTIONS, relativePath)
+        Object.getOwnPropertyDescriptor(DIRECT_GRIDTABLE_USAGE_EXCEPTIONS, relativePath) ===
+        undefined
     )
     .sort();
 }
@@ -227,7 +228,8 @@ function findProductionDirectUseTableSortUsages(sourceRoot: string): string[] {
     })
     .filter(
       (relativePath) =>
-        !Object.prototype.hasOwnProperty.call(DIRECT_USE_TABLE_SORT_EXCEPTIONS, relativePath)
+        Object.getOwnPropertyDescriptor(DIRECT_USE_TABLE_SORT_EXCEPTIONS, relativePath) ===
+        undefined
     )
     .sort();
 }

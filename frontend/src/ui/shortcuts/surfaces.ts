@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useOptionalKeyboardContext, type KeyboardSurfaceOptions } from './context';
+import { type KeyboardSurfaceOptions, useOptionalKeyboardContext } from './context';
 
 export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const keyboardContext = useOptionalKeyboardContext();

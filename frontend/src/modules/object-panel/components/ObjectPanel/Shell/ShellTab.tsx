@@ -2,13 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
+import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
 import {
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type MouseEvent,
   type WheelEvent,
 } from 'react';
 import {
@@ -17,31 +20,29 @@ import {
   requestAppState,
 } from '@/core/app-state-access';
 import { readPodContainers, requestData } from '@/core/data-access';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
-import ContextMenu from '@shared/components/ContextMenu';
+import {
+  buildObjectActionTarget,
+  runCreateDebugContainer,
+} from '@shared/actions/objectActionClient';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
+import { useDockablePanelState } from '@ui/dockable';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type { types } from '@wailsjs/go/models';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
   ResizeShellSession,
   SendShellInput,
   StartShellSession,
-} from '@wailsjs/go/backend/App';
-import {
-  buildObjectActionTarget,
-  runCreateDebugContainer,
-} from '@shared/actions/objectActionClient';
-import { types } from '@wailsjs/go/models';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
-import { useDockablePanelState } from '@ui/dockable';
-import { useKeyboardSurface } from '@ui/shortcuts';
+} from '@/core/backend-api';
 import './ShellTab.css';
 
 interface ShellTabProps {
@@ -285,7 +286,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
           refresh?: (start: number, end: number) => void;
         })
       | null;
-    if (!terminal || !terminal.options) {
+    if (!terminal?.options) {
       return;
     }
 
@@ -450,12 +451,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
     return () => observer.disconnect();
   }, [applyTerminalTheme]);
 
-  useEffect(() => {
-    if (!terminalReady || !isActive) {
-      return;
-    }
-    terminalRef.current?.focus();
-  }, [terminalReady, isActive, panelState.position, panelState.size.width, panelState.size.height]);
+  useEffectWithInvalidation(
+    () => {
+      if (!terminalReady || !isActive) {
+        return;
+      }
+      terminalRef.current?.focus();
+    },
+    [terminalReady, isActive],
+    [panelState.position, panelState.size.width, panelState.size.height]
+  );
 
   const activeContainer = containerOverride ?? session?.container ?? '';
 
@@ -560,59 +565,62 @@ const ShellTab: React.FC<ShellTabProps> = ({
     lastTargetRef.current = { namespace, resourceName };
   }, [disposeTerminal, namespace, resourceName]);
 
-  useEffect(() => {
-    if (!isActive || statusRef.current !== 'connecting' || !namespace || !resourceName) {
-      return;
-    }
-
-    let cancelled = false;
-    const start = async () => {
-      try {
-        const shellSession = await StartShellSession(resolvedClusterId, {
-          namespace,
-          podName: resourceName,
-          container: containerOverride ?? undefined,
-          command: resolvedShell ? [resolvedShell] : undefined,
-        });
-        if (cancelled) {
-          // If a superseding connect was started before this one returned, clean up this session.
-          await CloseShellSession(shellSession.sessionId);
-          return;
-        }
-        sessionIdRef.current = shellSession.sessionId;
-        sessionOpenedAtRef.current = Date.now();
-        setSession(shellSession);
-        statusRef.current = 'open';
-        setStatus('open');
-        setStatusReason(null);
-      } catch (error) {
-        if (!cancelled) {
-          const reason = error instanceof Error ? error.message : String(error);
-          sessionIdRef.current = null;
-          sessionOpenedAtRef.current = null;
-          setSession(null);
-          statusRef.current = 'error';
-          setStatus('error');
-          setStatusReason(reason);
-          disposeTerminal();
-        }
+  useEffectWithInvalidation(
+    () => {
+      if (!isActive || statusRef.current !== 'connecting' || !namespace || !resourceName) {
+        return;
       }
-    };
 
-    void start();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    resolvedShell,
-    containerOverride,
-    disposeTerminal,
-    isActive,
-    namespace,
-    reconnectToken,
-    resourceName,
-    resolvedClusterId,
-  ]);
+      let cancelled = false;
+      const start = async () => {
+        try {
+          const shellSession = await StartShellSession(resolvedClusterId, {
+            namespace,
+            podName: resourceName,
+            container: containerOverride ?? undefined,
+            command: resolvedShell ? [resolvedShell] : undefined,
+          });
+          if (cancelled) {
+            // If a superseding connect was started before this one returned, clean up this session.
+            await CloseShellSession(shellSession.sessionId);
+            return;
+          }
+          sessionIdRef.current = shellSession.sessionId;
+          sessionOpenedAtRef.current = Date.now();
+          setSession(shellSession);
+          statusRef.current = 'open';
+          setStatus('open');
+          setStatusReason(null);
+        } catch (error) {
+          if (!cancelled) {
+            const reason = error instanceof Error ? error.message : String(error);
+            sessionIdRef.current = null;
+            sessionOpenedAtRef.current = null;
+            setSession(null);
+            statusRef.current = 'error';
+            setStatus('error');
+            setStatusReason(reason);
+            disposeTerminal();
+          }
+        }
+      };
+
+      void start();
+      return () => {
+        cancelled = true;
+      };
+    },
+    [
+      resolvedShell,
+      containerOverride,
+      disposeTerminal,
+      isActive,
+      namespace,
+      resourceName,
+      resolvedClusterId,
+    ],
+    [reconnectToken]
+  );
 
   useEffect(() => {
     const offOutput = EventsOn('object-shell:output', (evt: ShellOutputEvent) => {
@@ -681,12 +689,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
     };
   }, [appendOutput, deriveConnectionFailureReason, disposeTerminal, ensureTerminal, writeLine]);
 
-  useEffect(() => {
-    if (!isActive || !terminalReady) {
-      return;
-    }
-    terminalRef.current?.focus();
-  }, [isActive, session, terminalReady]);
+  useEffectWithInvalidation(
+    () => {
+      if (!isActive || !terminalReady) {
+        return;
+      }
+      terminalRef.current?.focus();
+    },
+    [isActive, terminalReady],
+    [session]
+  );
 
   const handleReconnect = useCallback(() => {
     initiateConnection();
@@ -862,17 +874,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
   );
   const resolvedDebugImage = debugImage === '__custom__' ? customImage.trim() : debugImage;
 
-  const handleContainerChange = useCallback(
-    (value: string | string[]) => {
-      const nextValue = Array.isArray(value) ? value[0] : value;
-      if (!nextValue) {
-        setContainerOverride(null);
-      } else {
-        setContainerOverride(nextValue);
-      }
-    },
-    [setContainerOverride]
-  );
+  const handleContainerChange = useCallback((value: string | string[]) => {
+    const nextValue = Array.isArray(value) ? value[0] : value;
+    if (!nextValue) {
+      setContainerOverride(null);
+    } else {
+      setContainerOverride(nextValue);
+    }
+  }, []);
 
   const handleShellChange = useCallback((value: string | string[]) => {
     const nextValue = Array.isArray(value) ? value[0] : value;
@@ -1155,23 +1164,23 @@ const ShellTab: React.FC<ShellTabProps> = ({
       )}
       {startDebugContainer && !hasActiveSession && debugDisabledReason && (
         <div className="shell-tab__debug-warning">
-          <>
-            Debug unavailable: <span>{debugDisabledReason}</span>
-          </>
+          Debug unavailable: <span>{debugDisabledReason}</span>
         </div>
       )}
-      {connectionErrorMessage && (
+      {!!connectionErrorMessage && (
         <div className="shell-tab__connection-error" role="status" aria-live="polite">
           Connection failed: <span>{connectionErrorMessage}</span>
         </div>
       )}
 
-      {disabledReason && (
+      {!!disabledReason && (
         <div className="shell-tab__notice">
           Shell access blocked: <span>{disabledReason}</span>
         </div>
       )}
 
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
+      {/** biome-ignore lint/a11y/useKeyWithClickEvents: The terminal wrapper forwards pointer activity to xterm scrollbar and focus behavior; xterm owns keyboard interaction inside the wrapper. */}
       <div
         className="shell-tab__terminal-wrapper"
         data-tab-native="true"
@@ -1184,12 +1193,13 @@ const ShellTab: React.FC<ShellTabProps> = ({
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}
+          role="application"
           aria-label="Shell terminal"
           data-tab-native="true"
         />
         {shellScrollbarElement}
       </div>
-      {contextMenu && (
+      {!!contextMenu && (
         <ContextMenu
           items={contextMenuItems}
           position={contextMenu.position}

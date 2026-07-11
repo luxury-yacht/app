@@ -32,17 +32,7 @@
 
 .command-palette.hide-cursor,
 .command-palette.hide-cursor * {
-  cursor: none !important;
-}
-
-.command-palette.hide-cursor .command-palette-item {
-  pointer-events: none;
-}
-
-.command-palette.hide-cursor .command-palette-item:hover:not(.selected),
-.command-palette:not(.mouse-selection-armed) .command-palette-item:hover:not(.selected) {
-  background-color: transparent;
-  border-left-color: transparent;
+  cursor: none;
 }
 
 .command-palette-header {
@@ -134,6 +124,16 @@
   background-color: var(--color-bg-tertiary);
   border-left-color: var(--color-accent);
   position: relative;
+}
+
+.command-palette.hide-cursor .command-palette-item {
+  pointer-events: none;
+}
+
+.command-palette.hide-cursor .command-palette-item:hover:not(.selected),
+.command-palette:not(.mouse-selection-armed) .command-palette-item:hover:not(.selected) {
+  background-color: transparent;
+  border-left-color: transparent;
 }
 
 .command-palette-item-icon {

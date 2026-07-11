@@ -4,13 +4,11 @@
  * Converts object-map layout data into G6 nodes, edges, and element states.
  */
 
-import type { EdgeData, GraphData, NodeData } from '@antv/g6';
-import type { PathArray } from '@antv/g6';
+import type { EdgeData, GraphData, NodeData, PathArray } from '@antv/g6';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
-import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import {
   OBJECT_MAP_G6_CARD_NODE,
@@ -18,6 +16,7 @@ import {
   type ObjectMapG6CardDetailLevel,
   type ObjectMapG6EdgeDetailLevel,
 } from './objectMapG6Constants';
+import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const NODE_NAMESPACE_MAX_CHARS = 28;

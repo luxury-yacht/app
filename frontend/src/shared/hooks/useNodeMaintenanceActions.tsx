@@ -11,21 +11,21 @@
  *   - openDrainFor / activeDrainFor: helpers for the drain status icon
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
 import {
   buildObjectActionTarget,
   runNodeCordon,
   runNodeUncordon,
 } from '@shared/actions/objectActionClient';
-import { errorHandler } from '@/utils/errorHandler';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
+import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { useRefreshScopedDomainEntries, type DomainSnapshotState } from '@/core/refresh/store';
+import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
-import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
+import { errorHandler } from '@/utils/errorHandler';
 
 export interface NodeActionTarget {
   clusterId: string;
@@ -224,7 +224,7 @@ export const useNodeMaintenanceActions = ({
         onConfirm={confirmCordon}
         onCancel={() => setCordonTarget(null)}
       />
-      {drainTarget && (
+      {!!drainTarget && (
         <DrainNodeModal
           isOpen
           clusterId={drainTarget.clusterId}

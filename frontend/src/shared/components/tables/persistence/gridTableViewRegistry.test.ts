@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for gridTableViewRegistry.
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   isRegisteredGridTableView,
   listRegisteredGridTableViews,

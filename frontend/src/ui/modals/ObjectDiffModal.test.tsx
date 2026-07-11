@@ -5,12 +5,12 @@
  * Covers basic modal behavior and shortcut handling.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import ObjectDiffModal from './ObjectDiffModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import ObjectDiffModal from './ObjectDiffModal';
 
 const refreshMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
@@ -114,7 +114,7 @@ vi.mock('@shared/components/dropdowns/Dropdown/Dropdown', () => ({
             </option>
           ))}
       </select>
-      {searchable && (
+      {!!searchable && (
         <input
           aria-label={`${ariaLabel} search`}
           placeholder={searchPlaceholder}
@@ -291,10 +291,6 @@ describe('ObjectDiffModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset();
     runtimeMocks.eventsOff.mockReset();
@@ -384,8 +380,10 @@ describe('ObjectDiffModal', () => {
       ) as HTMLSelectElement | null;
       expect(select).toBeTruthy();
       await act(async () => {
-        select!.value = nextValue;
-        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').value = nextValue;
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
         await Promise.resolve();
       });
     };
@@ -409,7 +407,9 @@ describe('ObjectDiffModal', () => {
     expect(toggle).toBeTruthy();
 
     await act(async () => {
-      toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(toggle, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -434,8 +434,10 @@ describe('ObjectDiffModal', () => {
       ) as HTMLSelectElement | null;
       expect(select).toBeTruthy();
       await act(async () => {
-        select!.value = nextValue;
-        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').value = nextValue;
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
         await Promise.resolve();
       });
     };
@@ -473,8 +475,10 @@ describe('ObjectDiffModal', () => {
       ) as HTMLSelectElement | null;
       expect(select).toBeTruthy();
       await act(async () => {
-        select!.value = nextValue;
-        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').value = nextValue;
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
         await Promise.resolve();
       });
     };
@@ -517,8 +521,10 @@ describe('ObjectDiffModal', () => {
       ) as HTMLSelectElement | null;
       expect(select).toBeTruthy();
       await act(async () => {
-        select!.value = nextValue;
-        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').value = nextValue;
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
         await Promise.resolve();
       });
     };
@@ -566,8 +572,10 @@ describe('ObjectDiffModal', () => {
       ) as HTMLSelectElement | null;
       expect(select).toBeTruthy();
       await act(async () => {
-        select!.value = nextValue;
-        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').value = nextValue;
+        requireValue(select, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
         await Promise.resolve();
       });
     };
@@ -588,7 +596,9 @@ describe('ObjectDiffModal', () => {
     expect(matchButton).toBeTruthy();
 
     await act(async () => {
-      matchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(matchButton, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
       await Promise.resolve();
     });
 
@@ -730,11 +740,13 @@ describe('ObjectDiffModal', () => {
 });
 
 const setTextInputValue = async (input: HTMLInputElement | null, nextValue: string) => {
-  expect(input).toBeTruthy();
   const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-  descriptor?.set?.call(input, nextValue);
+  const textInput = requireValue(input, 'expected ObjectDiffModal text input');
+  descriptor?.set?.call(textInput, nextValue);
   await act(async () => {
-    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    requireValue(input, 'expected test value in ObjectDiffModal.test.tsx').dispatchEvent(
+      new Event('input', { bubbles: true })
+    );
     await Promise.resolve();
   });
 };

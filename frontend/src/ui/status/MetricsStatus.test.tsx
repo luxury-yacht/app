@@ -5,11 +5,12 @@
  * StatusIndicator severity/message — in particular that a permanently disabled
  * poller reads as amber (degraded) with its reason, not a stuck "collecting".
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReactNode } from 'react';
+
 import type { MetricsAvailability, MetricsBannerInfo } from '@shared/utils/metricsAvailability';
+import type { ReactNode } from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let mockMetricsInfo: MetricsAvailability | null = null;
 let mockBannerInfo: MetricsBannerInfo | null = null;
@@ -36,10 +37,6 @@ import MetricsStatus from './MetricsStatus';
 describe('MetricsStatus', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

@@ -5,8 +5,8 @@
  * read from CSS variables.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { readObjectMapG6Palette, sameObjectMapG6Palette } from './objectMapG6Palette';
 

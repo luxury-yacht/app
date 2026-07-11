@@ -4,12 +4,12 @@
  * Test suite for ErrorContext.
  * Validates timer cleanup on unmount (#3) and history replay runs once (#4).
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ErrorCategory, type ErrorDetails, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorProvider, useErrorContext } from './ErrorContext';
-import { ErrorCategory, ErrorSeverity, ErrorDetails, errorHandler } from '@utils/errorHandler';
 
 // Stable factory for creating test error details
 function makeError(overrides: Partial<ErrorDetails> = {}): ErrorDetails {
@@ -32,10 +32,6 @@ describe('ErrorContext', () => {
     stateRef.current = useErrorContext();
     return null;
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.useFakeTimers();

@@ -5,9 +5,8 @@
  * Covers the plain-text representation copied from error notifications.
  */
 
+import { ErrorCategory, type ErrorDetails, ErrorSeverity } from '@utils/errorHandler';
 import { describe, expect, it } from 'vitest';
-
-import { ErrorCategory, ErrorDetails, ErrorSeverity } from '@utils/errorHandler';
 import { formatErrorForClipboard } from './formatErrorForClipboard';
 
 const baseError = (overrides: Partial<ErrorDetails> = {}): ErrorDetails => ({

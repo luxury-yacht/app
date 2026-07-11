@@ -6,7 +6,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
+import RawDockablePanel from './DockablePanel';
+import {
+  DockablePanelProvider as RawProvider,
+  useDockablePanelContext as rawUseContext,
+} from './DockablePanelProvider';
+import { DockableTabBar as RawDockableTabBar } from './DockableTabBar';
 import {
   DockablePanel,
   DockablePanelProvider,
@@ -16,17 +21,11 @@ import {
   useDockablePanelContext,
   useDockablePanelState,
 } from './index';
-import RawDockablePanel from './DockablePanel';
 import {
-  DockablePanelProvider as RawProvider,
-  useDockablePanelContext as rawUseContext,
-} from './DockablePanelProvider';
-import {
-  useDockablePanelState as rawUseState,
   getAllPanelStates as rawGetAll,
   restorePanelStates as rawRestore,
+  useDockablePanelState as rawUseState,
 } from './useDockablePanelState';
-import { DockableTabBar as RawDockableTabBar } from './DockableTabBar';
 
 describe('components/dockable index exports', () => {
   it('re-exports DockablePanel and provider utilities', () => {

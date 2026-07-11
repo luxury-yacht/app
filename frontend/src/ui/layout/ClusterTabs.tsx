@@ -3,15 +3,7 @@
  *
  * Cluster tab strip for multi-cluster navigation.
  */
-import React, {
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  type HTMLAttributes,
-} from 'react';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
@@ -19,9 +11,18 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import React, {
+  type HTMLAttributes,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -105,7 +106,9 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
 
   const tabsById = useMemo(() => {
     const map = new Map<string, ClusterTab>();
-    tabs.forEach((tab) => map.set(tab.id, tab));
+    tabs.forEach((tab) => {
+      map.set(tab.id, tab);
+    });
     return map;
   }, [tabs]);
 
@@ -177,6 +180,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     [dropRef]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Adding or removing tabs can change the tab-strip height without a reliable observed-box resize notification.
   useEffect(() => {
     // Expose the tab strip height so dockable panels can respect the top chrome.
     if (typeof document === 'undefined') {
@@ -203,6 +207,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     };
   }, [orderedTabs.length]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Adding or removing tabs changes measured strip content without necessarily resizing either observed box.
   useEffect(() => {
     // Show "Open Cluster" beside the "+" while the bar has room; collapse to just
     // "+" when the tabs need the space. The test compares the tabs' full content
@@ -289,7 +294,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
         aria-label="Open Cluster"
         onClick={() => onOpenCluster?.()}
       >
-        {showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
+        {!!showAddLabel && <span className="cluster-tabs-add__label">Open Cluster</span>}
         <PlusIcon width={14} height={14} />
       </button>
     </div>

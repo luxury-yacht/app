@@ -4,12 +4,13 @@
  * Exercises the Job and CronJob Overviews through the descriptor-driven renderer (X1).
  */
 
-import ReactDOM from 'react-dom/client';
+import { cronjob, job } from '@wailsjs/go/models';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { job, cronjob } from '@wailsjs/go/models';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
 import { OverviewRenderer } from './OverviewRenderer';
-import { jobDescriptor, cronJobDescriptor } from './descriptors/job';
 
 const defaultClusterId = 'alpha:ctx';
 const defaultClusterName = 'alpha';
@@ -22,7 +23,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -35,7 +36,7 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {

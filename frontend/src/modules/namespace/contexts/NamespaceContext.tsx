@@ -7,35 +7,38 @@
  * - Includes error handling and integration with the refresh orchestrator.
  * - Exposes a custom hook `useNamespace` for easy access to the context.
  */
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  ReactNode,
-} from 'react';
-import { formatAge } from '@utils/ageFormatter';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { errorHandler } from '@utils/errorHandler';
-import { queryNamespacePermissions } from '@/core/capabilities';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { eventBus } from '@/core/events';
-import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
-  ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_DETAILS,
+  ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_RESOURCE_VERSION,
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
-import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
+import { formatAge } from '@utils/ageFormatter';
+import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { queryNamespacePermissions } from '@/core/capabilities';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { eventBus } from '@/core/events';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 
 export interface NamespaceListItem {
   name: string;
@@ -369,19 +372,16 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   // Unmount-only teardown: release whatever scopes are currently held. Kept
   // separate from the reconciliation effect above so re-runs never release
   // still-active scopes.
-  useEffect(
-    () => () => {
-      namespaceScopesRef.current.forEach((scope) => {
-        setRefreshDomainEnabled({
-          domain: 'namespaces',
-          scope,
-          enabled: false,
-          preserveState: true,
-        });
+  useMountEffect(() => () => {
+    namespaceScopesRef.current.forEach((scope) => {
+      setRefreshDomainEnabled({
+        domain: 'namespaces',
+        scope,
+        enabled: false,
+        preserveState: true,
       });
-    },
-    []
-  );
+    });
+  });
 
   useEffect(() => {
     const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
@@ -408,7 +408,6 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     clearSelection,
     namespaces,
     namespaceDomain.status,
-    selectedClusterId,
     selectedNamespace,
   ]);
 
@@ -530,7 +529,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unsubChanging();
       unsubChanged();
       unsubScopeChanged();
-      scopeRefetchTimers.forEach((timer) => window.clearTimeout(timer));
+      scopeRefetchTimers.forEach((timer) => {
+        window.clearTimeout(timer);
+      });
     };
   }, [clearSelection, namespaceScopes, namespacesScope, updateNamespaces]);
 

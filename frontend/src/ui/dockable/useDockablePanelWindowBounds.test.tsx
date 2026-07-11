@@ -5,13 +5,12 @@
  * Covers key behaviors and edge cases for useDockablePanelWindowBounds.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -35,7 +34,6 @@ const Harness: React.FC<{
   };
   options: {
     minWidth: number;
-    minHeight: number;
     isResizing: boolean;
     isMaximized: boolean;
   };
@@ -44,7 +42,10 @@ const Harness: React.FC<{
   return null;
 };
 
-const renderHarness = async (panelState: any, options: any) => {
+const renderHarness = async (
+  panelState: React.ComponentProps<typeof Harness>['panelState'],
+  options: React.ComponentProps<typeof Harness>['options']
+) => {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = ReactDOM.createRoot(host);
@@ -72,10 +73,6 @@ const renderHarness = async (panelState: any, options: any) => {
 describe('useWindowBoundsConstraint', () => {
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -135,7 +132,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 200,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });
@@ -165,7 +161,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 600,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });
@@ -194,7 +189,6 @@ describe('useWindowBoundsConstraint', () => {
 
     const { unmount } = await renderHarness(panelState, {
       minWidth: 200,
-      minHeight: 150,
       isResizing: false,
       isMaximized: false,
     });

@@ -4,8 +4,11 @@
  * Manages sidebar-specific state including visibility, width, and selection.
  * Provides context for components to access and modify sidebar state.
  */
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { SetSidebarVisible } from '@/core/backend-api';
 
 export type SidebarSelectionType =
   | { type: 'cluster'; value: 'cluster' }
@@ -45,7 +48,7 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
 };
 
 const canUpdateSidebarVisible = () =>
-  typeof window !== 'undefined' && Boolean((window as any).go?.backend?.App?.SetSidebarVisible);
+  typeof window !== 'undefined' && Boolean(window.go?.backend?.App?.SetSidebarVisible);
 
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
@@ -66,18 +69,14 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
     if (!canUpdateSidebarVisible()) {
       return;
     }
-    import('@wailsjs/go/backend/App').then(({ SetSidebarVisible }) => {
-      SetSidebarVisible(isSidebarVisible);
-    });
+    void SetSidebarVisible(isSidebarVisible);
   }, [isSidebarVisible]);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarVisible((prev) => {
       const newState = !prev;
       if (canUpdateSidebarVisible()) {
-        import('@wailsjs/go/backend/App').then(({ SetSidebarVisible }) => {
-          SetSidebarVisible(newState);
-        });
+        void SetSidebarVisible(newState);
       }
       return newState;
     });

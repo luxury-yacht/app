@@ -2,9 +2,8 @@
  * frontend/src/shared/constants/builtinGroupVersions.test.ts
  */
 
-import { describe, expect, it } from 'vitest';
-
 import builtinResourceIdentityContract from '@builtin-resource-identities';
+import { describe, expect, it } from 'vitest';
 
 import { parseApiVersion, resolveBuiltinGroupVersion } from './builtinGroupVersions';
 

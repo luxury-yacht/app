@@ -5,14 +5,35 @@
  * Covers key behaviors and edge cases for NsViewPods.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CapturedGridTableProps = GridTableProps<PodSnapshotEntry> & {
+  getCustomContextMenuItems: NonNullable<
+    GridTableProps<PodSnapshotEntry>['getCustomContextMenuItems']
+  >;
+  onColumnWidthsChange: NonNullable<GridTableProps<PodSnapshotEntry>['onColumnWidthsChange']>;
+  paginationControls?: React.ReactElement<{
+    pageIndex: number;
+    pageSize: number;
+    totalCount: number;
+    totalIsExact: boolean;
+    hasPrevious: boolean;
+    hasNext: boolean;
+  }>;
+};
+
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
 
 const {
   gridTablePropsRef,
@@ -27,8 +48,8 @@ const {
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
+  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
   openWithObjectMock: vi.fn(),
   navigateToViewMock: vi.fn(),
   namespaceColumnLinkMock: {
@@ -72,7 +93,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) =
   };
 });
 
-const clusterMetricsMock = vi.hoisted(() => ({ current: null as any }));
+const clusterMetricsMock = vi.hoisted(() => ({ current: null as PodMetricsInfo | null }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -101,13 +122,13 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: any) => {
+  default: (props: CapturedGridTableProps) => {
     gridTablePropsRef.current = props;
     const preActions = props.filters?.options?.preActions ?? [];
     return (
       <div>
         <div data-testid="mock-gridtable-filters">
-          {preActions.map((item: any, index: number) => {
+          {preActions.map((item, index) => {
             if (!item || item.type === 'separator') {
               return null;
             }
@@ -128,7 +149,7 @@ vi.mock('@shared/components/tables/GridTable', () => ({
         </div>
         <table data-testid="grid-table">
           <tbody>
-            {props.data.map((row: any) => (
+            {props.data.map((row) => (
               <tr key={row.name}>
                 <td>{row.name}</td>
               </tr>
@@ -146,13 +167,13 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
-  const state = { columnWidths: {} as Record<string, any> };
+  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
   return {
     useNamespaceGridTablePersistence: () => ({
       sortConfig: { key: 'name', direction: 'asc' },
       onSortChange: vi.fn(),
       columnWidths: state.columnWidths,
-      setColumnWidths: (next: any) => {
+      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
         state.columnWidths = next;
         if (gridTablePropsRef.current) {
           gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
@@ -178,14 +199,14 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
 });
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
-  const state = { columnWidths: {} as Record<string, any> };
+  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
   return {
     useGridTablePersistence: () => ({
       storageKey: 'gridtable:v1:alpha:namespace-pods',
       sortConfig: { key: 'name', direction: 'asc' },
       setSortConfig: vi.fn(),
       columnWidths: state.columnWidths,
-      setColumnWidths: (next: any) => {
+      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
         state.columnWidths = next;
         if (gridTablePropsRef.current) {
           gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
@@ -222,7 +243,7 @@ vi.mock('@/hooks/useTableSort', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
+  default: (props: ConfirmationProps) => {
     confirmationPropsRef.current = props;
     return null;
   },
@@ -310,16 +331,12 @@ describe('NsViewPods', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    confirmationPropsRef.current = null as unknown as ConfirmationProps;
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     runObjectActionMock.mockClear();
@@ -460,13 +477,14 @@ describe('NsViewPods', () => {
 
   const openDeleteConfirmation = () => {
     const deleteItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
-      .find((item: any) => item.label === 'Delete');
-    expect(deleteItem).toBeTruthy();
+      .getCustomContextMenuItems(gridTablePropsRef.current.data[0], 'name')
+      .find((item) => item.label === 'Delete');
     act(() => {
-      deleteItem?.onClick?.();
+      requireValue(deleteItem, 'expected Delete context menu item').onClick?.();
     });
-    expect(confirmationPropsRef.current?.isOpen).toBe(true);
+    if (!confirmationPropsRef.current?.isOpen) {
+      throw new Error('Expected delete confirmation to open');
+    }
   };
 
   it('passes pod data to GridTable and exposes key columns', async () => {
@@ -475,7 +493,7 @@ describe('NsViewPods', () => {
     const gridProps = gridTablePropsRef.current;
     expect(gridProps.data).toEqual(pods);
     expect(gridProps.enableContextMenu).toBe(true);
-    expect(gridProps.columns.map((col: any) => col.key)).toEqual(
+    expect(gridProps.columns.map((col) => col.key)).toEqual(
       expect.arrayContaining(['name', 'status', 'cpu', 'memory'])
     );
     // Single-namespace pod tables are query-backed now, so they issue a typed query.
@@ -546,9 +564,14 @@ describe('NsViewPods', () => {
     ];
     await renderPods({ data: pods });
 
-    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
-    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
-    expect(React.isValidElement(cell)).toBe(true);
+    const statusColumn = requireValue(
+      gridTablePropsRef.current.columns.find((col) => col.key === 'status'),
+      'expected the pod status column'
+    );
+    const cell = requireReactElement<{ className?: string }>(
+      statusColumn.render(gridTablePropsRef.current.data[0]),
+      'expected the pod status cell element'
+    );
     expect(cell.props.className).toBe('status-text warning');
   });
 
@@ -575,9 +598,13 @@ describe('NsViewPods', () => {
     await renderPods();
     const gridProps = gridTablePropsRef.current;
 
-    const nameColumn = gridProps.columns.find((col: any) => col.key === 'name');
-    const cell = nameColumn.render(gridProps.data[0]);
-    expect(React.isValidElement(cell)).toBe(true);
+    const nameColumn = requireValue(
+      gridProps.columns.find((col) => col.key === 'name'),
+      'expected the pod name column'
+    );
+    const cell = requireReactElement<{
+      onClick?: (event: { stopPropagation: () => void }) => void;
+    }>(nameColumn.render(gridProps.data[0]), 'expected the pod name cell element');
 
     act(() => {
       cell.props.onClick?.({ stopPropagation: () => {} });
@@ -655,7 +682,7 @@ describe('NsViewPods', () => {
       root.unmount();
     });
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
     await renderPods({
       namespace: 'team-b',
       data: [createPod({ name: 'other', namespace: 'team-b' })],
@@ -679,7 +706,9 @@ describe('NsViewPods', () => {
 
   it('updates column widths when resized', async () => {
     await renderPods();
-    const nextWidths = { name: { width: 280 } };
+    const nextWidths = { name: { width: 280 } } as unknown as NonNullable<
+      CapturedGridTableProps['columnWidths']
+    >;
 
     await act(async () => {
       gridTablePropsRef.current.onColumnWidthsChange(nextWidths);
@@ -701,9 +730,10 @@ describe('NsViewPods', () => {
     await renderPods();
 
     const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+      gridTablePropsRef.current.data[0],
+      'name'
     );
-    expect(items.find((item: any) => item.label === 'Delete')).toBeUndefined();
+    expect(items.find((item) => item.label === 'Delete')).toBeUndefined();
   });
 
   it('disables port forward in the context menu when the pod exposes no forwardable ports', async () => {
@@ -712,9 +742,10 @@ describe('NsViewPods', () => {
     });
 
     const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+      gridTablePropsRef.current.data[0],
+      'name'
     );
-    const portForwardItem = items.find((item: any) => item.label?.includes('Port Forward'));
+    const portForwardItem = items.find((item) => item.label?.includes('Port Forward'));
     expect(portForwardItem).toMatchObject({
       label: 'Port Forward',
       disabled: true,
@@ -727,25 +758,27 @@ describe('NsViewPods', () => {
     );
     await renderPods();
     const pendingItems = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+      gridTablePropsRef.current.data[0],
+      'name'
     );
-    expect(pendingItems.find((item: any) => item.label === 'Delete')).toBeUndefined();
+    expect(pendingItems.find((item) => item.label === 'Delete')).toBeUndefined();
 
     useUserPermissionsMock.mockReturnValue(
       new Map([['Pod:delete:team-a', { allowed: false, pending: false }]])
     );
     await renderPods();
     const deniedItems = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+      gridTablePropsRef.current.data[0],
+      'name'
     );
-    expect(deniedItems.find((item: any) => item.label === 'Delete')).toBeUndefined();
+    expect(deniedItems.find((item) => item.label === 'Delete')).toBeUndefined();
   });
 
   it('exposes namespace column and prefixed keys when namespace visibility is enabled', async () => {
     const pods = await renderPods({ showNamespaceColumn: true });
     const columns = gridTablePropsRef.current.columns;
-    expect(columns.find((col: any) => col.key === 'namespace')).toBeTruthy();
-    const key = gridTablePropsRef.current.keyExtractor(pods[0]);
+    expect(columns.find((col) => col.key === 'namespace')).toBeTruthy();
+    const key = gridTablePropsRef.current.keyExtractor(pods[0], 0);
     expect(key).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
 
@@ -760,10 +793,15 @@ describe('NsViewPods', () => {
       },
     });
 
-    const cpuColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'cpu');
-    expect(cpuColumn).toBeTruthy();
-    const cpuElement = cpuColumn.render(gridTablePropsRef.current.data[0]);
-    expect(React.isValidElement(cpuElement)).toBe(true);
+    const cpuColumn = requireValue(
+      gridTablePropsRef.current.columns.find((col) => col.key === 'cpu'),
+      'expected the pod CPU column'
+    );
+    const cpuElement = requireReactElement<{
+      metricsStale?: boolean;
+      metricsError?: string;
+      metricsLastUpdated?: Date;
+    }>(cpuColumn.render(gridTablePropsRef.current.data[0]), 'expected the pod CPU cell element');
     expect(cpuElement.props.metricsStale).toBe(true);
     expect(cpuElement.props.metricsError).toBe('cpu metrics unavailable');
     expect(cpuElement.props.metricsLastUpdated).toEqual(new Date(1700001000 * 1000));

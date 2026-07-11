@@ -6,10 +6,10 @@
  * No click action — popover is informational only.
  */
 
-import React from 'react';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
-import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
+import React from 'react';
+import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 
 const MetricsStatus: React.FC = () => {
   const metricsInfo = useClusterMetricsAvailability();

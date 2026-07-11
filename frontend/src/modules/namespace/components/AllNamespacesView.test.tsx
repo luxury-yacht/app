@@ -8,12 +8,11 @@
  * nobody rendered).
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NamespaceViewType } from '@/types/navigation/views';
 
 const clientMocks = vi.hoisted(() => ({
@@ -33,7 +32,7 @@ const hoistedMocks = vi.hoisted(() => {
     renderers[id] = renderer;
     return {
       __esModule: true,
-      default: (props: any) => {
+      default: (props: unknown) => {
         renderer(props);
         return null;
       },
@@ -64,13 +63,11 @@ describe('AllNamespacesView', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     clientMocks.fetchSnapshotMock.mockReset();
-    Object.values(viewRenderers).forEach((mock) => mock.mockReset());
+    Object.values(viewRenderers).forEach((mock) => {
+      mock.mockReset();
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -109,17 +106,16 @@ describe('AllNamespacesView', () => {
     ['events', 'events-view'],
   ];
 
-  it.each(tableTabs)(
-    'renders the %s tab directly with the all-namespaces scope and no extra fetch',
-    async (tab, rendererKey) => {
-      await renderView(tab);
+  it.each(
+    tableTabs
+  )('renders the %s tab directly with the all-namespaces scope and no extra fetch', async (tab, rendererKey) => {
+    await renderView(tab);
 
-      expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
-      const props = getLatestProps(rendererKey);
-      expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
-      expect(props.showNamespaceColumn).toBe(true);
-    }
-  );
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    const props = getLatestProps(rendererKey);
+    expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
+    expect(props.showNamespaceColumn).toBe(true);
+  });
 
   it('renders the custom tab with its catalog-backed props', async () => {
     await renderView('custom');

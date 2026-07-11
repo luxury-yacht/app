@@ -7,10 +7,11 @@
  * drop zone, and assert against `ctx.tabGroups`.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: vi.fn(() => ({
@@ -19,9 +20,9 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   })),
 }));
 
-import { DockableTabBar } from './DockableTabBar';
+import { TAB_DRAG_DATA_TYPE, TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
-import { TabDragProvider, TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
+import { DockableTabBar } from './DockableTabBar';
 
 const renderWithProvider = async (ui: React.ReactElement) => {
   const host = document.createElement('div');
@@ -123,10 +124,6 @@ const registerDockedTab = async (
 };
 
 describe('DockableTabBar drag-and-drop (provider mode)', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     const contentEl = document.createElement('div');
     contentEl.className = 'content';
@@ -161,7 +158,12 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
 
     const { host, unmount } = await renderWithProvider(<Harness />);
 
-    await registerDockedTab(ctxRef.current!, 'p1', 'Logs', 'right');
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p1',
+      'Logs',
+      'right'
+    );
 
     const tab = host.querySelector('[role="tab"]') as HTMLElement;
     const dataTransfer = createDataTransfer();
@@ -209,9 +211,24 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
 
     const { host, unmount } = await renderWithProvider(<Harness />);
 
-    await registerDockedTab(ctxRef.current!, 'p1', 'One', 'bottom');
-    await registerDockedTab(ctxRef.current!, 'p2', 'Two', 'bottom');
-    await registerDockedTab(ctxRef.current!, 'p3', 'Three', 'bottom');
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p1',
+      'One',
+      'bottom'
+    );
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p2',
+      'Two',
+      'bottom'
+    );
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p3',
+      'Three',
+      'bottom'
+    );
 
     const bar = host.querySelector('.dockable-tab-bar-shell') as HTMLElement;
     const tabs = host.querySelectorAll('[role="tab"]');
@@ -232,7 +249,10 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
       await Promise.resolve();
     });
 
-    expect(ctxRef.current!.tabGroups.bottom.tabs).toEqual(['p2', 'p3', 'p1']);
+    expect(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx').tabGroups
+        .bottom.tabs
+    ).toEqual(['p2', 'p3', 'p1']);
 
     await unmount();
   });
@@ -273,9 +293,24 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
 
     const { host, unmount } = await renderWithProvider(<Harness />);
 
-    await registerDockedTab(ctxRef.current!, 'p1', 'One', 'bottom');
-    await registerDockedTab(ctxRef.current!, 'p2', 'Two', 'bottom');
-    await registerDockedTab(ctxRef.current!, 'r1', 'Right One', 'right');
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p1',
+      'One',
+      'bottom'
+    );
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'p2',
+      'Two',
+      'bottom'
+    );
+    await registerDockedTab(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx'),
+      'r1',
+      'Right One',
+      'right'
+    );
 
     const shells = host.querySelectorAll('.dockable-tab-bar-shell');
     const bottomShell = shells[0] as HTMLElement;
@@ -296,8 +331,14 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
       await Promise.resolve();
     });
 
-    expect(ctxRef.current!.tabGroups.bottom.tabs).toEqual(['p2']);
-    expect(ctxRef.current!.tabGroups.right.tabs).toEqual(['r1', 'p1']);
+    expect(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx').tabGroups
+        .bottom.tabs
+    ).toEqual(['p2']);
+    expect(
+      requireValue(ctxRef.current, 'expected test value in DockableTabBar.drag.test.tsx').tabGroups
+        .right.tabs
+    ).toEqual(['r1', 'p1']);
 
     await unmount();
   });

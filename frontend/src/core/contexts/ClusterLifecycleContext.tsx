@@ -6,11 +6,13 @@
  * Hydrates from the backend on mount, then keeps state in sync via Wails
  * runtime events. Cleans up entries when clusters are deselected.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { requestAppState, readAllClusterLifecycleStates } from '@/core/app-state-access';
-import { eventBus } from '@/core/events';
+
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { parseClusterLifecycleState, type ClusterLifecycleState } from './clusterLifecycleState';
+import type React from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { readAllClusterLifecycleStates, requestAppState } from '@/core/app-state-access';
+import { eventBus } from '@/core/events';
+import { type ClusterLifecycleState, parseClusterLifecycleState } from './clusterLifecycleState';
 
 // ---------- Types ----------
 
@@ -51,7 +53,7 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
   // emitted between the hydration RPC call and its response aren't lost.
   useEffect(() => {
     let active = true;
-    const runtime = (window as any).runtime;
+    const runtime = window.runtime;
     // Clusters whose state arrived via a LIVE event. Hydration backfills the
     // rest — and must backfill eventBus consumers too (clusterReadiness,
     // capability hooks), or the refresh layer stays split-brained from the UI
@@ -62,7 +64,8 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
     // 1. Subscribe to live events.
     const handleLifecycleEvent = (...args: unknown[]) => {
       const payload = args[0] as
-        { clusterId?: string; state?: string; previousState?: string } | undefined;
+        | { clusterId?: string; state?: string; previousState?: string }
+        | undefined;
       if (!active || !payload?.clusterId) {
         return;
       }
@@ -112,7 +115,9 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
         setStates((prev) => {
           const merged = new Map(hydrated);
           // Events received after the RPC was sent take precedence.
-          prev.forEach((state, id) => merged.set(id, state));
+          prev.forEach((state, id) => {
+            merged.set(id, state);
+          });
           return merged;
         });
         // Backfill eventBus consumers for clusters the relay hasn't spoken

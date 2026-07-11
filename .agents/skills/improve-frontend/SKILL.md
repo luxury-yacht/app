@@ -131,7 +131,7 @@ After the list, ask: **"Which one should we fix? (pick a number, or say 'rescan'
 
 ## What NOT to Do
 
-- Don't report style-only issues (formatting, import order) — Prettier handles style.
+- Don't report style-only issues (formatting, import order) — Biome handles style.
 - Don't suggest adding comments, JSDoc, or type annotations as an "improvement."
 - Don't flag things that are intentional patterns documented in AGENTS.md.
 - Don't propose large-scale refactors as a single finding — break them down.

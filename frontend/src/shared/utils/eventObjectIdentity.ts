@@ -1,3 +1,4 @@
+import type { ResourceLink } from '@core/refresh/types';
 import {
   parseApiVersion,
   resolveBuiltinGroupVersion,
@@ -6,10 +7,9 @@ import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { ResourceLink } from '@core/refresh/types';
 import {
-  resourceLinkToObjectReference,
   resolveCatalogObjectByUID,
+  resourceLinkToObjectReference,
   validateResourceLink,
 } from '@shared/utils/resourceLinkIdentity';
 
@@ -112,7 +112,7 @@ export function canResolveEventObjectReference(input: EventObjectReferenceInput)
 
   return Boolean(
     buildEventObjectReference(input) ||
-    (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
+      (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
   );
 }
 

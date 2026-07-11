@@ -6,53 +6,53 @@
  */
 
 import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-  type CSSProperties,
-  type ReactElement,
-  type RefObject,
-} from 'react';
-import { types } from '@wailsjs/go/models';
-import { errorHandler } from '@utils/errorHandler';
-import { changeAppearanceMode } from '@/utils/appearanceMode';
-import {
-  getIntegerPreferenceMetadata,
-  getPreferenceMetadata,
-  hydrateAppPreferences,
-  normalizeIntegerPreferenceValue,
-  createPaletteTintPreferenceWorkflow,
-  getPaletteTint,
-  getAccentColor,
-  createAccentColorPreferenceWorkflow,
-  getLinkColor,
-  createLinkColorPreferenceWorkflow,
-  type AppearanceMode,
-} from '@/core/settings/appPreferences';
-import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
-import {
-  applyTintedPalette,
-  isPaletteActive,
-  MAX_SATURATION,
-  MAX_BRIGHTNESS_OFFSET,
-} from '@utils/paletteTint';
-import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
-import { applyLinkColor } from '@utils/linkColor';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import {
-  EditIcon,
-  DeleteIcon,
-  CheckIcon,
-  CloseIcon,
-  PlusIcon,
-} from '@shared/components/icons/SharedIcons';
-import {
   AppearanceModeIcon,
   DarkModeIcon,
   LightModeIcon,
 } from '@shared/components/icons/SettingsIcons';
+import {
+  CheckIcon,
+  CloseIcon,
+  DeleteIcon,
+  EditIcon,
+  PlusIcon,
+} from '@shared/components/icons/SharedIcons';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { applyAccentBg, applyAccentColor } from '@utils/accentColor';
+import { errorHandler } from '@utils/errorHandler';
+import { applyLinkColor } from '@utils/linkColor';
+import {
+  applyTintedPalette,
+  isPaletteActive,
+  MAX_BRIGHTNESS_OFFSET,
+  MAX_SATURATION,
+} from '@utils/paletteTint';
+import { types } from '@wailsjs/go/models';
+import {
+  type CSSProperties,
+  type ReactElement,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useAppearanceMode } from '@/core/contexts/AppearanceModeContext';
+import {
+  type AppearanceMode,
+  createAccentColorPreferenceWorkflow,
+  createLinkColorPreferenceWorkflow,
+  createPaletteTintPreferenceWorkflow,
+  getAccentColor,
+  getIntegerPreferenceMetadata,
+  getLinkColor,
+  getPaletteTint,
+  getPreferenceMetadata,
+  hydrateAppPreferences,
+  normalizeIntegerPreferenceValue,
+} from '@/core/settings/appPreferences';
+import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { useThemes } from './useThemes';
 
 const DEFAULT_THEME_ID = 'default';
@@ -92,7 +92,7 @@ function AppearanceModeSelector({
         </div>
       </div>
       <div className="settings-row-control">
-        <div className="settings-choice-buttons" role="group" aria-label="Appearance mode">
+        <fieldset className="settings-choice-buttons" aria-label="Appearance mode">
           {options.map((option) => {
             const Icon = option.icon;
             const isSelected = mode === option.value;
@@ -109,7 +109,7 @@ function AppearanceModeSelector({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       </div>
     </div>
   );
@@ -298,13 +298,14 @@ function ColorControl({
               maxLength={7}
             />
           ) : (
-            <span
+            <button
+              type="button"
               className="color-swatch-value palette-hex-clickable"
               onClick={onHexClick}
               title="Click to edit hex value"
             >
               {value || defaultColor}
-            </span>
+            </button>
           )}
           <button
             type="button"
@@ -538,9 +539,9 @@ function AppearanceSection() {
 
   const handleAccentHexCommit = () => {
     let trimmed = accentHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
     if (validHexRe.test(trimmed)) {
       handleAccentColorChange(trimmed);
@@ -581,9 +582,9 @@ function AppearanceSection() {
 
   const handleLinkHexCommit = () => {
     let trimmed = linkHexDraft.trim().toLowerCase();
-    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    if (!trimmed.startsWith('#')) trimmed = `#${trimmed}`;
     if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+      trimmed = `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
     }
     if (validHexRe.test(trimmed)) {
       handleLinkColorChange(trimmed);
@@ -603,7 +604,7 @@ function AppearanceSection() {
   const handlePaletteValueCommit = () => {
     if (!editingPaletteField) return;
     const parsed = parseInt(paletteDraft, 10);
-    if (isNaN(parsed)) {
+    if (Number.isNaN(parsed)) {
       setEditingPaletteField(null);
       return;
     }
@@ -940,7 +941,8 @@ function AppearanceSection() {
       );
     }
     return (
-      <span
+      <button
+        type="button"
         className="palette-slider-value palette-hex-clickable"
         onClick={() => handlePaletteValueClick(field)}
         title="Click to edit value"
@@ -948,7 +950,7 @@ function AppearanceSection() {
         {value > 0 && field === 'brightness' ? '+' : ''}
         {value}
         {suffix}
-      </span>
+      </button>
     );
   };
 
@@ -1067,6 +1069,7 @@ function AppearanceSection() {
                   const isDropTarget =
                     theme.id === dropTargetThemeId && theme.id !== draggingThemeId && !isDefault;
                   return (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                     <div
                       key={theme.id}
                       className={`setting-item setting-item-surface themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
@@ -1086,6 +1089,7 @@ function AppearanceSection() {
                       {isDefault ? (
                         <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
                       ) : (
+                        // biome-ignore lint/a11y/noStaticElementInteractions: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                         <span
                           className="themes-drag-handle"
                           draggable
@@ -1136,7 +1140,7 @@ function AppearanceSection() {
                               else e.stopPropagation();
                             }}
                           />
-                          {themePatternError && (
+                          {!!themePatternError && (
                             <div id="theme-pattern-error-active" className="theme-pattern-error">
                               {themePatternError}
                             </div>
@@ -1213,6 +1217,7 @@ function AppearanceSection() {
                         value={themeDraft.name}
                         onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
                         placeholder="Name"
+                        // biome-ignore lint/a11y/noAutofocus: Theme rows use pointer drag boundaries without activation semantics, and a newly requested editor focuses its name field after the explicit Add Theme action.
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleThemeSave();
@@ -1239,7 +1244,7 @@ function AppearanceSection() {
                           else e.stopPropagation();
                         }}
                       />
-                      {themePatternError && (
+                      {!!themePatternError && (
                         <div id="theme-pattern-error-new" className="theme-pattern-error">
                           {themePatternError}
                         </div>
@@ -1270,7 +1275,7 @@ function AppearanceSection() {
                     className="button generic settings-add-button themes-save-new-row"
                     onClick={handleSaveCurrentAsTheme}
                   >
-                    <PlusIcon width={12} height={12} ariaHidden />
+                    <PlusIcon width={12} height={12} />
                     Save new theme
                   </button>
                 )}

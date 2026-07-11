@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
 import { getVisibleAutoColumnKeys } from '@shared/components/tables/hooks/useGridTableColumnLayout';
 import type { ColumnRenderModel } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 
 interface Row {
   name: string;
@@ -15,15 +15,17 @@ const columns: GridColumnDefinition<Row>[] = [
   { key: 'age', header: 'Age', autoWidth: true, render: (row) => row.name },
 ];
 
-const models = columns.map((column, index): ColumnRenderModel<Row> => ({
-  column,
-  key: column.key,
-  className: '',
-  cellStyle: { width: '100px' },
-  start: index * 100,
-  end: (index + 1) * 100,
-  width: 100,
-}));
+const models = columns.map(
+  (column, index): ColumnRenderModel<Row> => ({
+    column,
+    key: column.key,
+    className: '',
+    cellStyle: { width: '100px' },
+    start: index * 100,
+    end: (index + 1) * 100,
+    width: 100,
+  })
+);
 
 describe('getVisibleAutoColumnKeys', () => {
   it('returns every auto-width column when column virtualization is disabled', () => {

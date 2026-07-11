@@ -5,16 +5,17 @@
  * Covers key behaviors and edge cases for NamespaceContext.
  */
 
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
-import { NamespaceProvider, useNamespace } from './NamespaceContext';
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
 import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
+import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
+import { NamespaceProvider, useNamespace } from './NamespaceContext';
 
 let mockClusterId = 'cluster-a';
 let mockClusterIds = ['cluster-a'];
@@ -22,6 +23,21 @@ let mockClusterLifecycleStates = new Map([
   ['cluster-a', 'loading'],
   ['cluster-b', 'loading'],
 ]);
+
+interface TestNamespaceDomain {
+  status: 'ready' | 'loading' | 'idle';
+  data: {
+    namespaces: Array<{
+      name: string;
+      phase: string;
+      resourceVersion: string;
+      creationTimestamp: number;
+      clusterId: string;
+      clusterName: string;
+    }>;
+  } | null;
+  error: null;
+}
 
 const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef } = vi.hoisted(
   () => {
@@ -34,7 +50,7 @@ const { mockRefreshOrchestrator, namespaceDomainRef, namespaceDomainsByScopeRef 
         updateContext: vi.fn(),
       },
       namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
-      namespaceDomainsByScopeRef: { current: {} as Record<string, any> },
+      namespaceDomainsByScopeRef: { current: {} as Record<string, unknown> },
     };
   }
 );
@@ -92,10 +108,6 @@ const Harness: React.FC = () => {
 };
 
 describe('NamespaceProvider selection behaviour', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     vi.useFakeTimers();
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
@@ -657,7 +669,7 @@ describe('NamespaceProvider selection behaviour', () => {
       status: 'idle',
       data: null,
       error: null,
-    } as any;
+    };
 
     const { cleanup } = renderWithProvider();
     act(() => {
@@ -715,7 +727,10 @@ function getSelectedCluster(): string {
   return element?.textContent ?? '';
 }
 
-function createNamespaceDomain(status: 'ready' | 'loading' | 'idle', names: string[]) {
+function createNamespaceDomain(
+  status: 'ready' | 'loading' | 'idle',
+  names: string[]
+): TestNamespaceDomain {
   return createNamespaceDomainWithCluster(status, names, 'cluster-a', 'alpha');
 }
 
@@ -724,7 +739,7 @@ function createNamespaceDomainWithCluster(
   names: string[],
   clusterId: string,
   clusterName: string
-) {
+): TestNamespaceDomain {
   return {
     status,
     data: {
@@ -750,7 +765,7 @@ type ClusterNamespaceGroup = {
 function createNamespaceDomainMulti(
   status: 'ready' | 'loading' | 'idle',
   clusters: ClusterNamespaceGroup[]
-) {
+): TestNamespaceDomain {
   const namespaces = clusters.flatMap((cluster) =>
     cluster.names.map((name, index) => ({
       name,

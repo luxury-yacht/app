@@ -1,7 +1,7 @@
 import { getRefreshDomainDescriptor } from './domainRegistry';
+import type { RefreshDomainRegistrar, StreamingRegistration } from './refreshRegistration';
 import { containerLogsStreamManager } from './streaming/containerLogsStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
-import type { RefreshDomainRegistrar, StreamingRegistration } from './refreshRegistration';
 import type { RefreshDomain } from './types';
 
 // Helper for the common resource-stream domain pattern. Registry metadata
@@ -21,7 +21,10 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
 
   const resourceStreamDomain = (domain: RefreshDomain & ResourceStreamDomainName) => {
     registerRefreshDomain(domain, {
-      start: (scope) => resourceStreamManager.start(domain, scope),
+      start: async (scope) => {
+        await resourceStreamManager.start(domain, scope);
+        return undefined;
+      },
       stop: (scope, opts) => resourceStreamManager.stop(domain, scope, opts?.reset ?? false),
       refreshOnce: (scope) => resourceStreamManager.refreshOnce(domain, scope),
       pauseRefresherWhenStreaming: true,
@@ -35,14 +38,19 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   const registerContainerLogsDomain = () => {
     registerRefreshDomain('container-logs', {
       snapshotless: true,
-      start: (scope) => containerLogsStreamManager.startStream(scope),
+      start: async (scope) => {
+        await containerLogsStreamManager.startStream(scope);
+        return undefined;
+      },
       stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
       refreshOnce: (scope) => containerLogsStreamManager.refreshOnce(scope),
     });
   };
 
   const registerSnapshotDomains = (...domains: RefreshDomain[]) => {
-    domains.forEach((domain) => registerRefreshDomain(domain));
+    domains.forEach((domain) => {
+      registerRefreshDomain(domain);
+    });
   };
 
   /*

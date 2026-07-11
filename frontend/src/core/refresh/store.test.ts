@@ -6,7 +6,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import {
+  makeClusterConfigSnapshotPayload,
+  makeNamespaceConfigSnapshotPayload,
+} from './refreshContractTestBuilders';
 import {
   getDomainState,
   getRefreshState,
@@ -22,10 +25,6 @@ import {
   setScopedDomainState,
   subscribe,
 } from './store';
-import {
-  makeClusterConfigSnapshotPayload,
-  makeNamespaceConfigSnapshotPayload,
-} from './refreshContractTestBuilders';
 
 describe('refresh store helpers', () => {
   afterEach(() => {

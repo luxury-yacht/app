@@ -15,16 +15,16 @@ vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: vi.fn(),
 }));
 
+import { requestRefreshDomain } from '@/core/data-access';
 import {
   getClusterAllowedNamespaces,
   setClusterAllowedNamespaces,
 } from '@/core/settings/clusterAllowedNamespaces';
-import { requestRefreshDomain } from '@/core/data-access';
 import {
-  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   addNamespaceToScope,
   isValidNamespaceName,
   loadNamespaceScope,
+  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   removeNamespaceFromScope,
   saveNamespaceScope,
 } from './namespaceScope';

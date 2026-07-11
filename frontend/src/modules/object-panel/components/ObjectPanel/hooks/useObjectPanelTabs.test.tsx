@@ -2,17 +2,17 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
 import type {
+  ComputedCapabilities,
   PanelObjectData,
   ViewType,
-  ComputedCapabilities,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const hoistedShortcuts = vi.hoisted(() => ({
   useShortcut: vi.fn(),
@@ -78,12 +78,8 @@ describe('useObjectPanelTabs', () => {
       await Promise.resolve();
     });
 
-    return resultRef.current!;
+    return requireValue(resultRef.current, 'expected test value in useObjectPanelTabs.test.tsx');
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -325,7 +321,8 @@ describe('useObjectPanelTabs', () => {
     // Tab shortcuts registered via useShortcuts (plural), keyed by position.
     // Deployment tabs: Details, Map, Pods, Logs, Events, YAML → keys 1–6.
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      Array<{ key: string; description: string }> | undefined;
+      | Array<{ key: string; description: string }>
+      | undefined;
     expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
@@ -345,7 +342,8 @@ describe('useObjectPanelTabs', () => {
     });
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      Array<{ key: string; description: string }> | undefined;
+      | Array<{ key: string; description: string }>
+      | undefined;
     expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
@@ -370,7 +368,8 @@ describe('useObjectPanelTabs', () => {
     ]);
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      Array<{ key: string; description: string }> | undefined;
+      | Array<{ key: string; description: string }>
+      | undefined;
     expect(tabShortcuts).toHaveLength(5);
     // Key '2' now maps to Map (second visible tab), not to a disabled Logs shortcut.
     expect(tabShortcuts?.[1]?.description).toBe('Switch to Map tab');
@@ -380,7 +379,8 @@ describe('useObjectPanelTabs', () => {
     await renderHook({ isOpen: false });
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      Array<{ key: string; handler: () => boolean; enabled: boolean }> | undefined;
+      | Array<{ key: string; handler: () => boolean; enabled: boolean }>
+      | undefined;
     expect(tabShortcuts?.[0]?.enabled).toBe(false);
     expect(tabShortcuts?.[0]?.handler()).toBe(false);
     expect(setActiveTabMock).not.toHaveBeenCalled();
@@ -390,7 +390,8 @@ describe('useObjectPanelTabs', () => {
     await renderHook();
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
-      Array<{ key: string; handler: () => boolean }> | undefined;
+      | Array<{ key: string; handler: () => boolean }>
+      | undefined;
 
     // Key '1' → Details (first visible tab).
     expect(tabShortcuts?.[0]?.handler()).toBe(true);

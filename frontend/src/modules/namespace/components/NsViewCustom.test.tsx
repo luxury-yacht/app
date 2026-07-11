@@ -5,13 +5,17 @@
  * Covers key behaviors and edge cases for NsViewCustom.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -23,12 +27,21 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
 
 import NsViewCustom, { type CustomResourceData } from '@modules/namespace/components/NsViewCustom';
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+type BaseGridTableProps = GridTableProps<CustomResourceData>;
+type CapturedGridTableProps = BaseGridTableProps & {
+  getCustomContextMenuItems: NonNullable<BaseGridTableProps['getCustomContextMenuItems']>;
+  filters: NonNullable<BaseGridTableProps['filters']> & {
+    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
+  };
+};
+type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
 
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
-const gridTableMock = vi.fn();
-const modalProps: { current: any } = { current: null };
+const gridTableMock = vi.fn<(props: CapturedGridTableProps) => void>();
+const modalProps: { current: ConfirmationProps } = {
+  current: null as unknown as ConfirmationProps,
+};
 const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
@@ -62,7 +75,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 vi.mock('@shared/components/tables/GridTable', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: CapturedGridTableProps) => {
     gridTableMock(props);
     return <div data-testid="grid-table" />;
   },
@@ -76,7 +89,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: ConfirmationProps) => {
     modalProps.current = props;
     return <div data-testid="confirmation-modal" />;
   },
@@ -258,7 +271,7 @@ describe('NsViewCustom', () => {
     runObjectActionMock.mockReset();
     useBrowseCatalogMock.mockReset();
     useHydratedCustomCatalogRowsMock.mockReset();
-    modalProps.current = null;
+    modalProps.current = null as unknown as ConfirmationProps;
     useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
       sortedData: data,
       sortConfig: { key: 'name', direction: 'asc' },
@@ -326,13 +339,13 @@ describe('NsViewCustom', () => {
       }),
     ]);
     const row = gridProps.data[0];
-    expect(gridProps.keyExtractor(row)).toBe('alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup');
+    expect(gridProps.keyExtractor(row, 0)).toBe('alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup');
     gridProps.onSort?.('name');
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
     const contextItems = gridProps.getCustomContextMenuItems(row, 'kind');
     expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
-    contextItems[0].onClick();
+    requireValue(contextItems[0]?.onClick, 'expected the custom-resource details action')();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'CronJob',
@@ -439,7 +452,7 @@ describe('NsViewCustom', () => {
     expect(typeof gridProps.fetchAllRows).toBe('function');
     expect(
       (gridProps.filters.options.postActions ?? []).some(
-        (item: any) => item.id === 'copy-namespace-custom-query-csv'
+        (item) => 'id' in item && item.id === 'copy-namespace-custom-query-csv'
       )
     ).toBe(false);
   });
@@ -555,7 +568,7 @@ describe('NsViewCustom', () => {
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
     expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
-    contextItems[0].onClick();
+    requireValue(contextItems[0]?.onClick, 'expected the custom-resource details action')();
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -777,15 +790,18 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
 
-    const generatedKey = gridProps.keyExtractor({
-      kind: 'CronJob',
-      name: 'svc',
-      namespace: 'tools',
-      kindAlias: 'CR',
-      clusterId: 'alpha:ctx',
-      group: 'batch',
-      version: 'v1',
-    } as CustomResourceData);
+    const generatedKey = gridProps.keyExtractor(
+      {
+        kind: 'CronJob',
+        name: 'svc',
+        namespace: 'tools',
+        kindAlias: 'CR',
+        clusterId: 'alpha:ctx',
+        group: 'batch',
+        version: 'v1',
+      } as CustomResourceData,
+      0
+    );
     expect(generatedKey).toBe('alpha:ctx|batch/v1/CronJob/tools/svc');
   });
 
@@ -799,8 +815,11 @@ describe('NsViewCustom', () => {
   // tests drive the behavior by inspecting / calling the rendered
   // element's `onClick` prop directly.
   describe('CRD column', () => {
-    const findColumn = (props: any, key: string) =>
-      props.columns.find((col: any) => col.key === key);
+    const findColumn = (props: CapturedGridTableProps, key: string) =>
+      requireValue(
+        props.columns.find((column) => column.key === key),
+        `expected the custom-resource ${key} column`
+      );
 
     it('adds a CRD column that renders the row crdName', async () => {
       const resource: CustomResourceData = {
@@ -820,12 +839,15 @@ describe('NsViewCustom', () => {
 
       // Interactive cells render as a `<span role="button">` with the
       // CRD name as their child text.
-      const rendered = crdCol.render(resource) as React.ReactElement<any>;
-      expect(rendered).toBeTruthy();
-      expect((rendered as any).type).toBe('span');
-      expect((rendered as any).props.role).toBe('button');
-      expect((rendered as any).props.children).toBe('dbinstances.rds.services.k8s.aws');
-      expect((rendered as any).props.title).toBe('Open dbinstances.rds.services.k8s.aws');
+      const rendered = requireReactElement<{
+        role?: string;
+        children?: React.ReactNode;
+        title?: string;
+      }>(crdCol.render(resource), 'expected the CRD link element');
+      expect(rendered.type).toBe('span');
+      expect(rendered.props.role).toBe('button');
+      expect(rendered.props.children).toBe('dbinstances.rds.services.k8s.aws');
+      expect(rendered.props.title).toBe('Open dbinstances.rds.services.k8s.aws');
     });
 
     it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
@@ -841,14 +863,19 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const crdCol = findColumn(gridProps, 'crd');
-      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+      const rendered = requireReactElement<{
+        onClick?: (event: {
+          altKey: boolean;
+          preventDefault: () => void;
+          stopPropagation: () => void;
+        }) => void;
+      }>(crdCol.render(resource), 'expected the CRD link element');
 
       // The rendered span carries the click handler. Drive it directly
       // with a synthetic event that doesn't have altKey set (so the
       // primary onClick fires, not onAltClick).
       openWithObjectMock.mockClear();
-      const onClick = (rendered as any).props.onClick as (e: any) => void;
-      expect(onClick).toBeTypeOf('function');
+      const onClick = requireValue(rendered.props.onClick, 'expected the CRD link click handler');
       onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
 
       expect(openWithObjectMock).toHaveBeenCalledTimes(1);
@@ -887,10 +914,11 @@ describe('NsViewCustom', () => {
       // make this a query-backed sortable column.
       expect(crdCol.sortValue).toBeTypeOf('function');
 
-      expect(crdCol.sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
+      const sortValue = requireValue(crdCol.sortValue, 'expected the CRD sort accessor');
+      expect(sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
 
       const noCRD: CustomResourceData = { ...baseResource };
-      expect(crdCol.sortValue(noCRD)).toBe('');
+      expect(sortValue(noCRD)).toBe('');
     });
 
     it('publishes only catalog-backed sortable keys', async () => {
@@ -898,8 +926,8 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const sortableKeys = gridProps.columns
-        .filter((column: any) => column.sortable !== false)
-        .map((column: any) => column.key)
+        .filter((column) => column.sortable !== false)
+        .map((column) => column.key)
         .sort((left: string, right: string) => left.localeCompare(right));
 
       expect(sortableKeys).toEqual(['age', 'kind', 'name', 'namespace']);
@@ -945,10 +973,13 @@ describe('NsViewCustom', () => {
 
       const gridProps = gridTableMock.mock.calls[0][0];
       const statusCol = findColumn(gridProps, 'status');
-      const rendered = statusCol.render(resource) as React.ReactElement<any>;
+      const rendered = requireReactElement<{
+        children?: React.ReactNode;
+        className?: string;
+      }>(statusCol.render(resource), 'expected the custom-resource status element');
 
-      expect((rendered as any).props.children).toBe('Not Ready');
-      expect((rendered as any).props.className).toBe('status-text warning');
+      expect(rendered.props.children).toBe('Not Ready');
+      expect(rendered.props.className).toBe('status-text warning');
     });
   });
 });

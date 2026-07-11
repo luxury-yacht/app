@@ -5,6 +5,21 @@
   --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
 }
 
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
+  }
+
+  .scrollbar-active * {
+    scrollbar-color: var(--scrollbar-thumb-idle-bg) transparent;
+  }
+
+  .scrollbar-active {
+    scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+  }
+}
+
 .scrollbar-active * {
   --scrollbar-thumb-current-bg: var(--scrollbar-thumb-idle-bg);
   --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
@@ -50,21 +65,6 @@
 
 *::-webkit-scrollbar-corner {
   background: var(--scrollbar-corner-bg);
-}
-
-@supports not selector(::-webkit-scrollbar) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
-  }
-
-  .scrollbar-active * {
-    scrollbar-color: var(--scrollbar-thumb-idle-bg) transparent;
-  }
-
-  .scrollbar-active {
-    scrollbar-color: var(--scrollbar-thumb-bg) transparent;
-  }
 }
 
 :where(body *) {
@@ -226,7 +226,8 @@
 .scrollbar-virtual--vertical.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
   right: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
   width: calc(
-    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) *
+    var(--scrollbar-hover-scale)
   );
 }
 
@@ -234,7 +235,8 @@
 .scrollbar-virtual--horizontal.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
   bottom: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
   height: calc(
-    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) *
+    var(--scrollbar-hover-scale)
   );
 }
 

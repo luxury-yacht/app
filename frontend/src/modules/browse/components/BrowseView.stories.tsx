@@ -8,10 +8,10 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import '@styles/components/gridtables.css';
 import './BrowseView.css';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/FavoriteIcons';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
 // Column widths matching the real BrowseView (from useBrowseColumns.tsx)
@@ -137,10 +137,13 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
 
   const bodyNode = (
     <div className="gridtable-wrapper">
+      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
       <div className="gridtable gridtable--body gridtable-browse" role="grid">
-        {ROWS.map((row, i) => (
+        {ROWS.map((row) => (
+          // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+          // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
           <div
-            key={i}
+            key={`${row.kind}:${row.ns}:${row.name}`}
             className={`gridtable-row${row.focused ? ' gridtable-row--focused' : ''}`}
             role="row"
           >

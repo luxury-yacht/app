@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 import { buildCsvExportFilename, buildGridTableCsv } from './gridTableCsv';
 
 interface Row {

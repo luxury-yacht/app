@@ -6,11 +6,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 import type { ErrorHandlerOptions } from './errorHandler';
+import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 
 describe('ErrorHandler', () => {
-  const ErrorHandlerClass = (errorHandler as any).constructor as new (
+  const ErrorHandlerClass = errorHandler.constructor as unknown as new (
     options?: ErrorHandlerOptions
   ) => typeof errorHandler;
   let handler: typeof errorHandler;
@@ -26,7 +26,6 @@ describe('ErrorHandler', () => {
       logToConsole: true,
       logToServer: false,
     });
-    vi.spyOn(handler as any, 'logError');
     console.groupCollapsed = vi.fn();
     console.error = vi.fn();
     console.groupEnd = vi.fn();

@@ -4,10 +4,15 @@
  * Tests conversion from object-map layout data into G6 graph data.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapReference } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
 import { formatAge } from '@/utils/ageFormatter';
-import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
+import {
+  OBJECT_MAP_G6_CARD_NODE,
+  OBJECT_MAP_G6_PATH_EDGE,
+  objectMapG6CardDetailLevelForZoom,
+} from './objectMapG6Constants';
+import type { ObjectMapG6Palette } from './objectMapG6Data';
 import {
   objectMapG6EdgeState,
   objectMapG6EdgeStroke,
@@ -15,12 +20,7 @@ import {
   parseObjectMapG6Path,
   toObjectMapG6Data,
 } from './objectMapG6Data';
-import {
-  OBJECT_MAP_G6_CARD_NODE,
-  OBJECT_MAP_G6_PATH_EDGE,
-  objectMapG6CardDetailLevelForZoom,
-} from './objectMapG6Constants';
-import type { ObjectMapG6Palette } from './objectMapG6Data';
+import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const ref = (kind: string, name: string, namespace?: string): ObjectMapReference => ({

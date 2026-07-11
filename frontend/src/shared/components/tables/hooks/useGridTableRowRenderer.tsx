@@ -5,11 +5,11 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback } from 'react';
-import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
+import type React from 'react';
+import { useCallback } from 'react';
 
 // Returns row/cell render callbacks for GridTable, wiring hover handlers,
 // context menus, and slotting for virtualization measurements.
@@ -100,6 +100,9 @@ export function useGridTableRowRenderer<T>({
       const rowId = getStableRowId(rowKey);
 
       return (
+        // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+        // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+        // biome-ignore lint/a11y/useKeyWithClickEvents: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
         <div
           key={elementKey}
           id={rowId}
@@ -138,6 +141,8 @@ export function useGridTableRowRenderer<T>({
                 : model.column.disableShortcuts === true;
 
             return (
+              // biome-ignore lint/a11y/useFocusableInteractive: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
+              // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
               <div
                 key={model.key}
                 className={`grid-cell ${model.className}`}

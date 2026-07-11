@@ -4,22 +4,22 @@
  * Tests G6 node event translation for object-map interactions.
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference } from '@core/refresh/types';
-import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6Drag,
   handleObjectMapG6DragEnd,
-  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
   handleObjectMapG6PointerUp,
   isObjectMapG6BadgeEvent,
+  type ObjectMapG6NodeInteractionContext,
   objectMapG6TooltipPoint,
   toObjectMapG6Pointer,
-  type ObjectMapG6NodeInteractionContext,
 } from './objectMapG6Interactions';
+import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
 import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
 
 const ref = (kind: string, name: string): ObjectMapReference => ({

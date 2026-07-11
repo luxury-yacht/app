@@ -5,8 +5,10 @@
  * Provides sorting functionality for tables, including special handling for age and timestamp columns.
  * Supports both controlled and uncontrolled sorting states.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useMemo, useRef, useState } from 'react';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -15,17 +17,17 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export interface UseTableSortOptions {
+export interface UseTableSortOptions<T> {
   controlledSort?: SortConfig | null;
   onChange?: (config: SortConfig) => void;
   diagnosticsLabel?: string;
   disableLocalSort?: boolean;
   // When provided, columns with a `sortValue` accessor are used to extract
   // comparison values instead of direct property access on the row.
-  columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
+  columns?: ReadonlyArray<{ key: string; sortValue?: (item: T) => unknown }>;
   // Optional stable row identity used to skip full resorting when a live table
   // rerenders but the active sort values and row set are unchanged.
-  rowIdentity?: (item: any, index: number) => string;
+  rowIdentity?: (item: T, index: number) => string;
 }
 
 const getNow = (): number =>
@@ -34,6 +36,37 @@ const getNow = (): number =>
     : Date.now();
 
 const areSortValuesEqual = (a: unknown, b: unknown): boolean => Object.is(a, b);
+
+// Parse Kubernetes-style age strings into seconds for sorting.
+const parseAge = (ageStr: string): number => {
+  if (!ageStr || ageStr === '-') return 0;
+
+  const units: Record<string, number> = {
+    y: 365 * 86400,
+    mo: 30 * 86400,
+    d: 86400,
+    h: 3600,
+    m: 60,
+    s: 1,
+  };
+
+  let totalSeconds = 0;
+  const matches = ageStr.match(/(\d+)(y|mo|d|h|m|s)/g);
+
+  if (matches) {
+    for (const match of matches) {
+      const matchResult = match.match(/(\d+)(y|mo|d|h|m|s)/);
+      if (matchResult) {
+        const [, num, unit] = matchResult;
+        if (num && unit && units[unit]) {
+          totalSeconds += Number.parseInt(num, 10) * units[unit];
+        }
+      }
+    }
+  }
+
+  return totalSeconds;
+};
 
 interface SortCacheEntry<T> {
   key: string;
@@ -47,7 +80,7 @@ export function useTableSort<T>(
   data: T[],
   defaultSortKey?: string,
   defaultDirection: SortDirection = 'asc',
-  options?: UseTableSortOptions
+  options?: UseTableSortOptions<T>
 ) {
   const controlledSort = options?.controlledSort;
   const onChange = options?.onChange;
@@ -91,49 +124,14 @@ export function useTableSort<T>(
     setSortConfig((prevConfig) => computeNext(prevConfig));
   };
 
-  // Helper function to parse age strings to seconds for sorting
-  const parseAge = (ageStr: string): number => {
-    if (!ageStr || ageStr === '-') return 0;
-
-    // Parse age strings like "2y", "3mo", "2d", "5h", "30m", "45s", "2d5h", etc.
-    // Note: Kubernetes uses 'y' for years, 'mo' for months, 'd' for days, 'h' for hours, 'm' for minutes, 's' for seconds
-    const units: Record<string, number> = {
-      y: 365 * 86400, // years (approximate: 365 days)
-      mo: 30 * 86400, // months (approximate: 30 days)
-      d: 86400, // days
-      h: 3600, // hours
-      m: 60, // minutes
-      s: 1, // seconds
-    };
-
-    let totalSeconds = 0;
-
-    // Updated regex to handle 'mo' for months and 'y' for years
-    const matches = ageStr.match(/(\d+)(y|mo|d|h|m|s)/g);
-
-    if (matches) {
-      matches.forEach((match) => {
-        const matchResult = match.match(/(\d+)(y|mo|d|h|m|s)/);
-        if (matchResult) {
-          const [, num, unit] = matchResult;
-          if (num && unit && units[unit]) {
-            totalSeconds += parseInt(num) * units[unit];
-          }
-        }
-      });
-    }
-
-    return totalSeconds;
-  };
-
   // Build a lookup from column key → sortValue extractor. When a column
   // defines sortValue, that function is used instead of row[key].
   const sortValueExtractors = useMemo(() => {
     if (!columns) return null;
-    const map: Record<string, (item: T) => any> = {};
+    const map: Record<string, (item: T) => unknown> = {};
     for (const col of columns) {
       if (col.sortValue) {
-        map[col.key] = col.sortValue as (item: T) => any;
+        map[col.key] = col.sortValue as (item: T) => unknown;
       }
     }
     return Object.keys(map).length > 0 ? map : null;
@@ -169,7 +167,9 @@ export function useTableSort<T>(
     const directionMultiplier = effectiveSort.direction === 'asc' ? 1 : -1;
     const keyByItem = new Map<T, string>();
     const decorated = data.map((item, index) => {
-      const rawValue = extractor ? extractor(item) : (item as any)[effectiveSort.key];
+      const rawValue = extractor
+        ? extractor(item)
+        : (item as Record<string, unknown>)[effectiveSort.key];
       const normalizedValue =
         effectiveSort.key.toLowerCase() === 'age' && typeof rawValue === 'string'
           ? parseAge(rawValue)
@@ -318,12 +318,16 @@ export function useTableSort<T>(
     return sorted;
   }, [data, disableLocalSort, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
 
-  useEffect(() => {
-    if (!diagnosticsLabel || sortDurationRef.current == null) {
-      return;
-    }
-    recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);
-  }, [diagnosticsLabel, sortedData]);
+  useEffectWithInvalidation(
+    () => {
+      if (!diagnosticsLabel || sortDurationRef.current == null) {
+        return;
+      }
+      recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);
+    },
+    [diagnosticsLabel],
+    [sortedData]
+  );
 
   return {
     sortedData,

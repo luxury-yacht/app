@@ -6,24 +6,24 @@
  * focused on panel layout and tab wiring.
  */
 
-import type { ResourceStreamTelemetrySummary } from '../../streaming/resourceStreamManager';
+import {
+  getPermissionKey,
+  PERMISSION_FEATURES,
+  type PermissionFeatureKey,
+  type PermissionQueryDiagnostics,
+  type PermissionStatus,
+  permissionFeatureLabel,
+} from '@/core/capabilities';
+import type { BrokerReadDiagnosticsEntry } from '@/core/read-diagnostics';
+import type { KubernetesAPIClientDiagnostics, SelectionDiagnostics } from '../../client';
 import type { DomainSnapshotState } from '../../store';
+import type { ResourceStreamTelemetrySummary } from '../../streaming/resourceStreamManager';
 import type {
   CatalogSnapshotPayload,
   TelemetryMetricsStatus,
   TelemetryStreamStatus,
   TelemetrySummary,
 } from '../../types';
-import type { KubernetesAPIClientDiagnostics, SelectionDiagnostics } from '../../client';
-import {
-  getPermissionKey,
-  PERMISSION_FEATURES,
-  permissionFeatureLabel,
-  type PermissionFeatureKey,
-  type PermissionQueryDiagnostics,
-  type PermissionStatus,
-} from '@/core/capabilities';
-import type { BrokerReadDiagnosticsEntry } from '@/core/read-diagnostics';
 import type {
   BrokerReadRow,
   CapabilityBatchRow,
@@ -847,7 +847,7 @@ export const buildEventStreamSummary = (params: {
 };
 
 export const buildCatalogSummary = (params: {
-  catalogState: DomainSnapshotState<any>;
+  catalogState: DomainSnapshotState<unknown>;
   catalogStreamTelemetry?: TelemetryStreamStatus;
   telemetrySummary: TelemetrySummary | null;
   telemetryError: string | null;
@@ -906,7 +906,7 @@ export const buildCatalogSummary = (params: {
 };
 
 export const buildContainerLogsSummary = (params: {
-  containerLogsScopeEntries: Array<[string, DomainSnapshotState<any>]>;
+  containerLogsScopeEntries: Array<[string, DomainSnapshotState<unknown>]>;
   containerLogsStreamTelemetry?: TelemetryStreamStatus;
 }): SummaryCardData => {
   const { containerLogsScopeEntries, containerLogsStreamTelemetry } = params;

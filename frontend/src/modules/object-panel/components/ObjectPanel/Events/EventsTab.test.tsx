@@ -5,10 +5,28 @@
  * openRelatedObject, preferring it over the parent panel's cluster.
  */
 
-import ReactDOM from 'react-dom/client';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectEventSummary } from '@/core/refresh/types';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CapturedEventRow = Record<string, unknown>;
+interface CapturedGridTableProps
+  extends Pick<GridTableProps<CapturedEventRow>, 'columns' | 'data' | 'sortConfig'> {
+  onRowClick: (item: CapturedEventRow) => void;
+}
+
+interface RefreshOrchestratorMock {
+  setScopedDomainEnabled: ReturnType<typeof vi.fn>;
+}
+
+interface RefreshManagerMock {
+  register: ReturnType<typeof vi.fn>;
+  unregister: ReturnType<typeof vi.fn>;
+}
 
 // Capture the openWithObject calls so we can inspect clusterId.
 const mockOpenWithObject = vi.fn();
@@ -50,14 +68,14 @@ vi.mock('@/core/refresh/clusterScope', () => ({
 }));
 
 const hoistedSnapshot = vi.hoisted(() => ({
-  data: null as any,
-  stats: null as any,
+  data: null as { events: ObjectEventSummary[] } | null,
+  stats: null as import('@/core/refresh/types').SnapshotStats | null,
   status: 'ready' as string,
   error: null as string | null,
 }));
 
 const gridTableState = vi.hoisted(() => ({
-  lastProps: null as any,
+  lastProps: null as CapturedGridTableProps | null,
 }));
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -104,13 +122,18 @@ vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: { data: any[]; onRowClick: (item: any) => void }) => {
+  default: (props: CapturedGridTableProps) => {
     gridTableState.lastProps = props;
     const { data, onRowClick } = props;
     return (
       <div data-testid="grid-table">
-        {data.map((item: any, i: number) => (
-          <button key={i} data-testid={`row-${i}`} onClick={() => onRowClick(item)} />
+        {withStableListKeys(data, (item) => JSON.stringify(item)).map(({ key, value: item }, i) => (
+          <button
+            type="button"
+            key={key}
+            data-testid={`row-${i}`}
+            onClick={() => onRowClick(item)}
+          />
         ))}
       </div>
     );
@@ -151,20 +174,18 @@ function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSumm
   };
 }
 
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
-
 describe('EventsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let EventsTab: React.FC<any>;
-  let refreshOrchestrator: { setScopedDomainEnabled: any };
-  let refreshManagerMock: { register: any; unregister: any };
+  let EventsTab: typeof import('./EventsTab').default;
+  let refreshOrchestrator: RefreshOrchestratorMock;
+  let refreshManagerMock: RefreshManagerMock;
 
   beforeAll(async () => {
     ({ default: EventsTab } = await import('./EventsTab'));
-    ({ refreshOrchestrator, refreshManager: refreshManagerMock } = await import('@/core/refresh'));
+    const refreshModule = await import('@/core/refresh');
+    refreshOrchestrator = refreshModule.refreshOrchestrator as unknown as RefreshOrchestratorMock;
+    refreshManagerMock = refreshModule.refreshManager as unknown as RefreshManagerMock;
   });
 
   beforeEach(() => {
@@ -266,13 +287,21 @@ describe('EventsTab', () => {
       );
     });
 
-    const ageColumn = gridTableState.lastProps.columns.find((column: any) => column.key === 'age');
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    const ageColumn = requireValue(
+      gridProps.columns.find((column) => column.key === 'age'),
+      'expected age column in EventsTab.test.tsx'
+    );
+    const firstRow = requireValue(gridProps.data[0], 'expected event row in EventsTab.test.tsx');
     const cellContainer = document.createElement('div');
     document.body.appendChild(cellContainer);
     const cellRoot = ReactDOM.createRoot(cellContainer);
     try {
       act(() => {
-        cellRoot.render(ageColumn.render(gridTableState.lastProps.data[0]));
+        cellRoot.render(ageColumn.render(firstRow));
       });
       expect(cellContainer.textContent).toBe('10s');
 
@@ -366,7 +395,10 @@ describe('EventsTab', () => {
     // Manual refresh — orchestrator should see isManual: true.
     mockFetchScopedDomain.mockClear();
     await act(async () => {
-      await refreshWatcherState.onRefresh!(true);
+      await requireValue(
+        refreshWatcherState.onRefresh,
+        'expected test value in EventsTab.test.tsx'
+      )(true);
     });
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: true,
@@ -376,7 +408,10 @@ describe('EventsTab', () => {
     // Scheduled refresh — orchestrator should see isManual: false.
     mockFetchScopedDomain.mockClear();
     await act(async () => {
-      await refreshWatcherState.onRefresh!(false);
+      await requireValue(
+        refreshWatcherState.onRefresh,
+        'expected test value in EventsTab.test.tsx'
+      )(false);
     });
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: false,

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { describe, expect, it } from 'vitest';
 import {
   buildTypedResourceQueryScope,
   typedResourceQueryIdentity,

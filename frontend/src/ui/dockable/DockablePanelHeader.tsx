@@ -7,9 +7,9 @@
  * Otherwise renders the title as a simple span.
  */
 
-import React from 'react';
-import { DockableTabBar } from './DockableTabBar';
+import type React from 'react';
 import type { TabInfo } from './DockableTabBar';
+import { DockableTabBar } from './DockableTabBar';
 
 interface DockablePanelHeaderProps {
   title: string;
@@ -44,7 +44,8 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   const showTabBar = tabs && tabs.length > 0 && groupKey;
 
   return (
-    <div className="dockable-panel__header" onMouseDown={onMouseDown} role="banner">
+    // biome-ignore lint/a11y/noStaticElementInteractions: The panel header is the pointer drag handle, while its nested tab and control buttons retain their own native keyboard interactions.
+    <header className="dockable-panel__header" onMouseDown={onMouseDown}>
       <div className="dockable-panel__header-content">
         {showTabBar ? (
           <DockableTabBar
@@ -58,6 +59,6 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
         )}
       </div>
       {controls}
-    </div>
+    </header>
   );
 };

@@ -5,89 +5,90 @@
  * lifecycle, fallback reads, filtering, parsing, keyboard shortcuts, and viewer
  * preference persistence.
  */
-import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import {
+  AnsiColorIcon,
+  AutoRefreshIcon,
+  CopyIcon,
+  HighlightSearchIcon,
+  InverseSearchIcon,
+  ParseJsonIcon,
+  PrettyJsonIcon,
+  PreviousLogsIcon,
+  RegexSearchIcon,
+  TimestampIcon,
+  WrapTextIcon,
+} from '@shared/components/icons/LogIcons';
+import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import {
   readContainerLogs,
   readContainerLogsScopeContainers,
   requestData,
   setRefreshDomainEnabled,
 } from '@/core/data-access';
-import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
-import { useLogFiltering } from './hooks/useLogFiltering';
 import {
-  useContainerLogsStreamFallback,
-  isLogDataUnavailable,
   getLogDataUnavailableMessage,
+  isLogDataUnavailable,
+  useContainerLogsStreamFallback,
 } from './hooks/useContainerLogsStreamFallback';
-import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import {
-  AutoRefreshIcon,
-  PreviousLogsIcon,
-  TimestampIcon,
-  WrapTextIcon,
-  AnsiColorIcon,
-  CopyIcon,
-  ParseJsonIcon,
-  PrettyJsonIcon,
-  HighlightSearchIcon,
-  InverseSearchIcon,
-  RegexSearchIcon,
-} from '@shared/components/icons/LogIcons';
-import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/SharedIcons';
+import { useLogFiltering } from './hooks/useLogFiltering';
+import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import './LogViewer.css';
-import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import type { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
+import type { ContainerLogsEntry } from '@/core/refresh/types';
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
-import type { ContainerLogsEntry } from '@/core/refresh/types';
-import type { types } from '@wailsjs/go/models';
 import {
-  ALL_CONTAINERS,
-  logViewerReducer,
-  initialLogViewerState,
-  applyLogViewerPrefs,
-  extractLogViewerPrefs,
-  type ParsedLogEntry,
-} from './logViewerReducer';
+  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  formatDefaultObjPanelLogsApiTimestamp,
+  formatObjPanelLogsApiTimestamp,
+} from '@/utils/objPanelLogsApiTimestampFormat';
+import { INACTIVE_SCOPE } from '../constants';
+import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
+import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
+import { useTerminalTheme } from './hooks/useTerminalTheme';
+import { buildCsv } from './logExport';
+import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
 import {
   getLogViewerPrefs,
   getLogViewerScrollTop,
   setLogViewerPrefs,
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
-import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import {
+  ALL_CONTAINERS,
+  applyLogViewerPrefs,
+  extractLogViewerPrefs,
+  initialLogViewerState,
+  logViewerReducer,
+  type ParsedLogEntry,
+} from './logViewerReducer';
+import ParsedLogTable from './ParsedLogTable';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
   formatRawOrPrettyJsonLine,
 } from './parsedLogUtils';
-import { buildCsv } from './logExport';
-import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
-import ParsedLogTable from './ParsedLogTable';
-import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { buildStablePodColorMap } from './podColors';
-import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
-import { INACTIVE_SCOPE } from '../constants';
-import {
-  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
-  formatDefaultObjPanelLogsApiTimestamp,
-  formatObjPanelLogsApiTimestamp,
-} from '@/utils/objPanelLogsApiTimestampFormat';
-import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
-import { useKeyboardSurface } from '@ui/shortcuts';
+import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
-import { useTerminalTheme } from './hooks/useTerminalTheme';
-import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 
 interface LogViewerProps {
   namespace: string;
@@ -211,7 +212,7 @@ const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
 const TARGET_LIMIT_WARNING_PATTERN =
   /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
-const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^\/]+)\/([^\]]+)\]\s*(.*)/;
+const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^/]+)\/([^\]]+)\]\s*(.*)/;
 const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
 
 const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
@@ -260,6 +261,8 @@ const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
 const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
+const getActualContainerName = (displayName: string): string =>
+  displayName.replace(' (init)', '').replace(' (debug)', '');
 
 const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
 const toInitContainerFilterValue = (container: string): string =>
@@ -337,10 +340,14 @@ const formatSelectedFilterLabel = (
 };
 
 type LogEmptyState =
-  'none' | 'no_logs_yet' | 'no_previous_logs' | 'no_filter_matches' | 'unavailable';
+  | 'none'
+  | 'no_logs_yet'
+  | 'no_previous_logs'
+  | 'no_filter_matches'
+  | 'unavailable';
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
-  resourceKind: resourceKind,
+  resourceKind,
   containerLogsScope,
   isActive = false,
   activePodNames = null,
@@ -403,9 +410,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // state (containers, availablePods, parsedContainerLogs, view mode, etc.)
   // don't trigger an unnecessary writeback. The previous-logs view is the only
   // mode that persists, so depend on that boolean (not the loading sub-state).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: individual persistent fields intentionally control preference writeback
   useEffect(() => {
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only persistent fields trigger writeback; `state` is read inside
   }, [
     panelId,
     state.selectedContainer,
@@ -491,7 +498,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         payload: [toPodFilterValue(pod), ...preservedContainerFilters],
       });
     },
-    [dispatch, selectedFilters]
+    [selectedFilters]
   );
   const handleSelectContainerFilter = useCallback(
     (container: string, isInit: boolean, isEphemeral: boolean) => {
@@ -506,7 +513,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         ],
       });
     },
-    [dispatch, selectedFilters]
+    [selectedFilters]
   );
   const highlightRegex = useMemo(
     () =>
@@ -994,10 +1001,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [isWorkload, logEntries, normalizedActivePods]);
 
-  const getActualContainerName = (displayName: string) => {
-    return displayName.replace(' (init)', '').replace(' (debug)', '');
-  };
-
   const selectorOptions = useMemo(() => {
     const options: DropdownOption[] = [];
 
@@ -1176,7 +1179,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return chips;
   }, [
     caseSensitiveMatches,
-    dispatch,
     hasInvalidRegex,
     highlightMatches,
     inverseMatches,
@@ -1207,7 +1209,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [
     caseSensitiveMatches,
-    dispatch,
     highlightMatches,
     inverseMatches,
     regexMatches,
@@ -1487,11 +1488,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         const match = line.match(WORKLOAD_RAW_LOG_PREFIX_PATTERN);
         if (match) {
           const [, timestamp = '', pod, container, logLine] = match;
-          const podColor = podColors[pod] || podColors['__fallback__'];
+          const podColor = podColors[pod] || podColors.__fallback__;
 
           return (
             <div className="log-viewer-line">
-              {timestamp && (
+              {!!timestamp && (
                 <span
                   className="log-viewer-metadata pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
@@ -1563,8 +1564,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           const remainder = showContainerMeta && containerMatch ? containerMatch[2] : workingLine;
           return (
             <div className="log-viewer-line">
-              {timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
-              {showContainerMeta && (
+              {!!timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
+              {!!showContainerMeta && (
                 <span className="log-viewer-metadata">
                   [
                   <button
@@ -1615,7 +1616,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
       750
     );
-  }, [dispatch]);
+  }, []);
 
   // Clean up copy timer on unmount
   useEffect(() => {
@@ -1721,7 +1722,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               className="pod-color-text"
               style={
                 {
-                  '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+                  '--pod-color': podColors[item.pod || ''] || podColors.__fallback__,
                 } as React.CSSProperties
               }
             >
@@ -1739,28 +1740,30 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
         autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) =>
-          item.pod ? (
+        render: (item: ParsedLogEntry) => {
+          const pod = item.pod;
+          return pod ? (
             <button
               type="button"
               className="log-viewer-metadata-button pod-color-text"
               style={
                 {
-                  '--pod-color': podColors[item.pod] || podColors['__fallback__'],
+                  '--pod-color': podColors[pod] || podColors.__fallback__,
                 } as React.CSSProperties
               }
               onClick={(event) => {
                 event.stopPropagation();
-                handleSelectPodFilter(item.pod!);
+                handleSelectPodFilter(pod);
               }}
-              title={`Show only logs from pod ${item.pod}`}
-              aria-label={`Show only logs from pod ${item.pod}`}
+              title={`Show only logs from pod ${pod}`}
+              aria-label={`Show only logs from pod ${pod}`}
             >
-              {item.pod}
+              {pod}
             </button>
           ) : (
             '-'
-          ),
+          );
+        },
       });
     }
 
@@ -1770,32 +1773,34 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
       autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
-      render: (item: ParsedLogEntry) =>
-        item.container ? (
+      render: (item: ParsedLogEntry) => {
+        const container = item.container;
+        return container ? (
           <button
             type="button"
             className="log-viewer-metadata-button pod-color-text"
             style={
               {
-                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+                '--pod-color': podColors[item.pod || ''] || podColors.__fallback__,
               } as React.CSSProperties
             }
             onClick={(event) => {
               event.stopPropagation();
               handleSelectContainerFilter(
-                item.container!,
+                container,
                 Boolean(item.isInit),
                 Boolean(item.isEphemeral)
               );
             }}
-            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
-            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
+            title={`Show only logs from container ${formatContainerLabel(container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
+            aria-label={`Show only logs from container ${formatContainerLabel(container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
           >
-            {item.container}
+            {container}
           </button>
         ) : (
           '-'
-        ),
+        );
+      },
     });
 
     // Promote well-known timestamp and level fields to appear first
@@ -1913,7 +1918,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
       scheduleCopyReset();
     }
-  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
+  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset]);
 
   useKeyboardSurface({
     kind: 'editor',
@@ -1956,12 +1961,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     logsContentRef,
   });
 
-  const handleToggleParsedRow = useCallback(
-    (rowKey: string) => {
-      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
-    },
-    [dispatch]
-  );
+  const handleToggleParsedRow = useCallback((rowKey: string) => {
+    dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: rowKey });
+  }, []);
 
   // Loading state
   if (logsLoadingState.loading) {
@@ -2040,8 +2042,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     className="logs-viewer-text-filter"
                     title="Filter logs by text (searches in log lines, pods, and containers)"
                   />
-                  {textFilter && (
+                  {!!textFilter && (
                     <button
+                      type="button"
                       className="logs-viewer-filter-clear"
                       onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
                       title="Clear filter"
@@ -2212,7 +2215,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 }
               />
 
-              {hasActiveResultFilter && (
+              {!!hasActiveResultFilter && (
                 <span className="logs-viewer-count" title={countTitle}>
                   {countLabel}
                 </span>
@@ -2221,7 +2224,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
 
           {activeFilterChips.length > 0 && (
-            <div className="logs-viewer-active-filters" aria-label="Active log filters">
+            // biome-ignore lint/a11y/useSemanticElements: The virtualized filter summary uses an ARIA group so existing flex layout remains intact without fieldset presentation semantics.
+            <div
+              className="logs-viewer-active-filters"
+              role="group"
+              aria-label="Active log filters"
+            >
               {activeFilterChips.length > 0 && (
                 <button
                   type="button"
@@ -2251,7 +2259,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           )}
 
           {visibleLogWarnings.length > 0 && (
-            <div className="logs-viewer-warning-bar" aria-label="Log warnings">
+            <div className="logs-viewer-warning-bar" role="status" aria-label="Log warnings">
               {visibleLogWarnings.join(' ')}
             </div>
           )}
@@ -2264,23 +2272,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 expandedRows={expandedRows}
                 onToggleRow={handleToggleParsedRow}
               />
+            ) : displayLogs ? (
+              <RawLogViewer
+                rows={renderedDisplayRows}
+                scrollContainerRef={logsContentRef}
+                wrapText={wrapText}
+                renderRow={renderRawLogRow}
+                virtualizationThreshold={RAW_LOG_VIRTUALIZATION_THRESHOLD}
+                virtualizationOverscan={RAW_LOG_VIRTUALIZATION_OVERSCAN}
+                estimateRowHeight={RAW_LOG_ESTIMATE_ROW_HEIGHT}
+                verticalPaddingPx={RAW_LOG_VERTICAL_PADDING_PX}
+              />
             ) : (
-              <>
-                {displayLogs ? (
-                  <RawLogViewer
-                    rows={renderedDisplayRows}
-                    scrollContainerRef={logsContentRef}
-                    wrapText={wrapText}
-                    renderRow={renderRawLogRow}
-                    virtualizationThreshold={RAW_LOG_VIRTUALIZATION_THRESHOLD}
-                    virtualizationOverscan={RAW_LOG_VIRTUALIZATION_OVERSCAN}
-                    estimateRowHeight={RAW_LOG_ESTIMATE_ROW_HEIGHT}
-                    verticalPaddingPx={RAW_LOG_VERTICAL_PADDING_PX}
-                  />
-                ) : (
-                  emptyStateMessage
-                )}
-              </>
+              emptyStateMessage
             )}
           </div>
         </div>

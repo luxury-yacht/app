@@ -6,36 +6,39 @@
  */
 
 import './ClusterViewNodes.css';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ClusterNodeRow } from '@/core/refresh/types';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { DrainIcon } from '@shared/components/icons/SharedIcons';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type {
+  ClusterNodeRow,
+  ClusterNodeSnapshotPayload,
+  NodeMetricsInfo,
+} from '@/core/refresh/types';
+import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
   parseCpuToMillicores,
   parseMemToMB,
 } from '@/utils/resourceCalculations';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { DrainIcon } from '@shared/components/icons/SharedIcons';
-import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
-import type { ClusterNodeSnapshotPayload, NodeMetricsInfo } from '@/core/refresh/types';
 
 // Define props for NodesViewGrid component. The table is query-backed (sourced from
 // the typed query + replay cache); only `error` is consumed, for the empty-state text.

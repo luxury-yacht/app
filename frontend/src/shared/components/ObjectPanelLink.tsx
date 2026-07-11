@@ -7,9 +7,10 @@
  * - Keyboard: Enter/Space with alt key variant
  */
 
-import React, { useCallback } from 'react';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import type React from 'react';
+import { useCallback } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface ObjectPanelLinkProps {
@@ -68,10 +69,9 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
   const combinedClassName = ['object-panel-link', className].filter(Boolean).join(' ');
 
   return (
-    <span
+    <button
+      type="button"
       className={combinedClassName}
-      role="button"
-      tabIndex={0}
       title={title}
       data-gridtable-shortcut-optout="true"
       data-gridtable-rowclick="allow"
@@ -79,6 +79,6 @@ export const ObjectPanelLink: React.FC<ObjectPanelLinkProps> = ({
       onKeyDown={handleKeyDown}
     >
       {children}
-    </span>
+    </button>
   );
 };

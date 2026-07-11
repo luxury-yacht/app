@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const DockRightIcon: React.FC<IconProps> = ({
@@ -7,6 +7,8 @@ export const DockRightIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -23,6 +25,8 @@ export const DockBottomIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -39,6 +43,8 @@ export const FloatPanelIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -55,6 +61,8 @@ export const MaximizePanelIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -71,6 +79,8 @@ export const RestorePanelIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}

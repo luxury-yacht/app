@@ -6,11 +6,12 @@
  * Tooltip. Owns the app-info fetch and the `app-update` runtime event (previously
  * embedded in ClusterOverview).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+
 import Tooltip from '@shared/components/Tooltip';
-import { readAppInfo, requestAppState } from '@/core/app-state-access';
+import type { backend } from '@wailsjs/go/models';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { backend } from '@wailsjs/go/models';
+import React, { useCallback, useEffect, useState } from 'react';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { toPlainReleaseNotes } from './releaseNotesText';
 import './UpdateStatus.css';
 
@@ -105,7 +106,7 @@ const UpdateStatus: React.FC = () => {
   const renderVersion = (version: string, date: string | null) => (
     <span>
       {version}
-      {date && <span className="update-status__tooltip-date"> ({date})</span>}
+      {!!date && <span className="update-status__tooltip-date"> ({date})</span>}
     </span>
   );
 
@@ -114,7 +115,7 @@ const UpdateStatus: React.FC = () => {
       <div className="update-status__tooltip-rows">
         <span className="update-status__tooltip-label">New:</span>
         {renderVersion(updateInfo.latestVersion, newDate)}
-        {updateInfo.currentVersion && (
+        {!!updateInfo.currentVersion && (
           <>
             <span className="update-status__tooltip-label">Current:</span>
             {renderVersion(updateInfo.currentVersion, currentDate)}

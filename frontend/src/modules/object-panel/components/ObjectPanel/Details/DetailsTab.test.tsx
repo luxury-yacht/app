@@ -8,9 +8,9 @@
  * sections appear.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DetailsTabProps } from './DetailsTab';
 import { buildObjectDetailModel } from './objectDetailModel';
 
@@ -85,17 +85,35 @@ const renderDetailsTab = async (props: DetailsTabProps) => {
   };
 };
 
-const createBaseProps = (objectData: any, detail: unknown = null): DetailsTabProps => ({
-  objectData,
-  detailModel: buildObjectDetailModel(objectData, objectData?.kind?.toLowerCase() ?? null, detail),
-  isActive: true,
-  detailsLoading: false,
-  detailsError: null,
-  resourceDeleted: false,
-  deletedResourceName: '',
-  onAfterDelete: vi.fn(),
-  onAfterAction: vi.fn(),
-});
+type TestObjectData = Pick<NonNullable<DetailsTabProps['objectData']>, 'kind' | 'name'> &
+  Partial<NonNullable<DetailsTabProps['objectData']>>;
+
+const createBaseProps = (
+  objectData: TestObjectData,
+  detail: Parameters<typeof buildObjectDetailModel>[2] = null
+): DetailsTabProps => {
+  const completeObjectData: NonNullable<DetailsTabProps['objectData']> = {
+    clusterId: 'test-cluster',
+    group: '',
+    version: 'v1',
+    ...objectData,
+  };
+  return {
+    objectData: completeObjectData,
+    detailModel: buildObjectDetailModel(
+      completeObjectData,
+      completeObjectData.kind.toLowerCase(),
+      detail ?? null
+    ),
+    isActive: true,
+    detailsLoading: false,
+    detailsError: null,
+    resourceDeleted: false,
+    deletedResourceName: '',
+    onAfterDelete: vi.fn(),
+    onAfterAction: vi.fn(),
+  };
+};
 
 const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, unknown>;
 

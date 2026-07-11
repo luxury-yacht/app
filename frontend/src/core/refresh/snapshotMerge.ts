@@ -6,11 +6,11 @@
  * stream and table surfaces.
  */
 
-import { getScopedDomainState } from './store';
 import {
   buildCatalogResourceRowKey,
   buildClusterNameRowKey,
 } from '@shared/utils/resourceRowIdentity';
+import { getScopedDomainState } from './store';
 import type {
   CatalogSnapshotPayload,
   DomainPayloadMap,
@@ -106,7 +106,9 @@ const mergePollingPayloadWithDescriptor = <P extends object, R extends object>(
 const pollingListMergeDescriptors = {
   namespaces: {
     previous: (scope?: string) =>
-      getScopedDomainState('namespaces', scope!).data as NamespaceSnapshotPayload | null,
+      scope
+        ? (getScopedDomainState('namespaces', scope).data as NamespaceSnapshotPayload | null)
+        : null,
     rows: (payload: NamespaceSnapshotPayload) => payload.namespaces ?? [],
     withRows: (payload: NamespaceSnapshotPayload, rows: NamespaceRow[]) => ({
       ...payload,
@@ -166,6 +168,7 @@ export const mergePollingListPayload = <K extends RefreshDomain>(
   scope?: string
 ): DomainPayloadMap[K] => {
   const descriptor = pollingListMergeDescriptors[domain as PollingListMergeDomain] as unknown as
-    PollingListMergeDescriptor<DomainPayloadMap[K] & object, object> | undefined;
+    | PollingListMergeDescriptor<DomainPayloadMap[K] & object, object>
+    | undefined;
   return descriptor ? mergePollingPayloadWithDescriptor(payload, scope, descriptor) : payload;
 };

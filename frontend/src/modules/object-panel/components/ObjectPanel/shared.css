@@ -12,6 +12,10 @@
 
 /* Shared link style for clickable objects */
 .object-panel-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
   color: var(--color-object-panel-link);
   cursor: pointer;
   text-decoration: none;

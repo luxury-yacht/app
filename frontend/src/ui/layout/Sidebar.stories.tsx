@@ -5,8 +5,8 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import Sidebar from './Sidebar';
 import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
+import Sidebar from './Sidebar';
 
 const meta: Meta<typeof Sidebar> = {
   title: 'Layout/Sidebar',

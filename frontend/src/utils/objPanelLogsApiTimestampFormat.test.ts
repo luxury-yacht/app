@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
   DEFAULT_LOCAL_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
   formatDefaultObjPanelLogsApiTimestamp,
   formatObjPanelLogsApiTimestamp,
   getObjPanelLogsApiTimestampFormatValidationError,

@@ -7,9 +7,10 @@
  * the rest of the app.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './DebugOverlay.css';
 
 interface DebugOverlayProps {
@@ -282,8 +283,6 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
         <div
           className="debug-overlay__resize-handle"
           onPointerDown={(event) => startInteraction(event, 'resize')}
-          role="separator"
-          aria-label="Resize debug overlay"
         />
       </div>
     </div>,

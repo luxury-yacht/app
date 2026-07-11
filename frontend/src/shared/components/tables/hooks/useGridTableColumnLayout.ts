@@ -1,7 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type React from 'react';
-import type { RefObject } from 'react';
-
 import type {
   ColumnWidthInput,
   ColumnWidthState,
@@ -15,15 +11,19 @@ import {
   normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
-import {
-  useGridTableColumnVirtualization,
-  type ColumnRenderModel,
-} from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
-import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
-import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
-import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
 import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
 import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
+import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
+import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
+import {
+  type ColumnRenderModel,
+  useGridTableColumnVirtualization,
+} from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
+import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import type React from 'react';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const getColumnMinWidth = <T>(column: GridColumnDefinition<T>) => {
   const parsed = parseWidthInputToNumber(column.minWidth);
@@ -215,9 +215,13 @@ export function useGridTableColumnLayout<T>({
     return Number.isFinite(lastModel.end) ? lastModel.end : 0;
   }, [columnRenderModelsWithOffsets]);
 
-  useEffect(() => {
-    markAllAutoColumnsDirty();
-  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
+  useEffectWithInvalidation(
+    () => {
+      markAllAutoColumnsDirty();
+    },
+    [markAllAutoColumnsDirty],
+    [columnVirtualizationConfig.enabled, allowHorizontalOverflow]
+  );
 
   const visibleAutoColumnKeys = useMemo(
     () =>

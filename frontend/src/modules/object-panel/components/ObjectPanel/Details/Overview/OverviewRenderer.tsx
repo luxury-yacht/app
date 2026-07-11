@@ -6,12 +6,13 @@
  * between. No per-kind logic lives here.
  */
 
-import React from 'react';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
-import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { OverviewItem } from './shared/OverviewItem';
+import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import React from 'react';
 import type { OverviewContext, OverviewDescriptor, OverviewField, OverviewWidget } from './schema';
+import { OverviewItem } from './shared/OverviewItem';
 
 /** Frame fields read off any DTO (optional so T is not over-constrained). */
 interface FrameAccess {
@@ -78,12 +79,16 @@ export function OverviewRenderer<T>({
         namespace={frame.namespace}
       />
 
-      {descriptor.schema.items.map((item, index) => {
+      {withStableListKeys(descriptor.schema.items, (item) => {
+        if (item.kind === 'status') return 'status';
+        if (item.kind === 'widget') return `widget:${item.consumes?.join(',') ?? ''}`;
+        return `field:${item.field ?? String(item.label)}`;
+      }).map(({ key, value: item }) => {
         const itemKind = (item as { kind?: string }).kind;
         if (itemKind === 'status') {
           return (
             <ResourceStatus
-              key={`status-${index}`}
+              key={key}
               status={frame.status}
               statusState={frame.statusState}
               statusPresentation={frame.statusPresentation}
@@ -92,13 +97,13 @@ export function OverviewRenderer<T>({
         }
         if (itemKind === 'widget') {
           return (
-            <React.Fragment key={`widget-${index}`}>
+            <React.Fragment key={key}>
               {(item as OverviewWidget<T>).render(data, context)}
             </React.Fragment>
           );
         }
         const field = item as OverviewField<T>;
-        return renderField(field, data, context, field.field ?? `field-${index}`);
+        return renderField(field, data, context, key);
       })}
 
       <ResourceMetadata

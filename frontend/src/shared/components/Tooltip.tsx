@@ -14,10 +14,11 @@
  *  - Default circled "i" icon when no children are provided
  */
 
-import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { TooltipInfoIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
 export interface TooltipProps {
@@ -302,7 +303,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     } else {
       setVisible(false);
     }
-  }, [interactive, INTERACTIVE_GRACE]);
+  }, [interactive]);
 
   const handleMouseEnter = useCallback(() => {
     if (disabled || trigger !== 'hover') return;
@@ -392,6 +393,7 @@ const Tooltip: React.FC<TooltipProps> = ({
         !disabled &&
         portalTarget &&
         createPortal(
+          // biome-ignore lint/a11y/noStaticElementInteractions: Interactive tooltip hover persistence uses pointer enter and leave on the tooltip surface and does not expose an activation action.
           <div
             ref={tooltipRef}
             className={tooltipClasses}

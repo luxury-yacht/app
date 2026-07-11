@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.shortcuts.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import YamlTab from './YamlTab';
 
@@ -54,10 +54,6 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 describe('YamlTab shortcuts', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(async () => {
     shortcutMocks.useShortcut.mockClear();

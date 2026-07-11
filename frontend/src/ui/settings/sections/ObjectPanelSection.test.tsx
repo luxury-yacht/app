@@ -1,6 +1,7 @@
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import ObjectPanelSection from './ObjectPanelSection';
 
 const appPreferenceMocks = vi.hoisted(() => ({
@@ -76,10 +77,6 @@ describe('ObjectPanelSection', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -107,12 +104,15 @@ describe('ObjectPanelSection', () => {
     expect(buttons.map((button) => button.textContent)).toEqual(['Right', 'Bottom', 'Floating']);
 
     const rightButton = buttons.find((button) => button.textContent === 'Right');
-    const bottomButton = buttons.find((button) => button.textContent === 'Bottom');
+    const bottomButton = requireValue(
+      buttons.find((button) => button.textContent === 'Bottom'),
+      'expected the Bottom object-panel position button'
+    );
     expect(rightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(bottomButton?.getAttribute('aria-pressed')).toBe('false');
 
     act(() => {
-      bottomButton!.click();
+      bottomButton.click();
     });
 
     expect(appPreferenceMocks.setDefaultObjectPanelPosition).toHaveBeenCalledWith('bottom');

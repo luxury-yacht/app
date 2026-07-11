@@ -2,10 +2,10 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx
  */
 
-import React from 'react';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { YamlEditor } from '@shared/components/yaml';
+import type React from 'react';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';

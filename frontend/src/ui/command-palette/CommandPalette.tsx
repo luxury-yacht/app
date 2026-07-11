@@ -5,24 +5,26 @@
  * Implements CommandPalette logic for the UI layer.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { useShortcut, useKeyboardContext, useShortcuts } from '@ui/shortcuts';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import { EventsOn } from '@wailsjs/runtime/runtime';
+import type React from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEventBus } from '@/core/events';
 import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
-import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { useShortNames } from '@/hooks/useShortNames';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { Command } from './CommandPaletteCommands';
+import { aliasToKindMap, canonicalKinds, getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
-import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
-import { EventsOn } from '@wailsjs/runtime/runtime';
-import { useEventBus } from '@/core/events';
+import type { Command } from './CommandPaletteCommands';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -884,16 +886,17 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
           <div className="command-palette-error">
             <h4>Command Palette Error</h4>
             <p>An error occurred. Please try again.</p>
-            <button className="button generic" onClick={reset}>
+            <button type="button" className="button generic" onClick={reset}>
               Retry
             </button>
-            <button className="button generic" onClick={close}>
+            <button type="button" className="button generic" onClick={close}>
               Close
             </button>
           </div>
         </div>
       )}
     >
+      {/** biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface. */}
       <div
         className={[
           'command-palette',
@@ -912,8 +915,9 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
             setHideCursor(false);
           }
           const targetElement = event.target instanceof HTMLElement ? event.target : null;
-          const targetItem = targetElement?.closest('.command-palette-item');
-          const targetIndex = itemRefs.current.findIndex((item) => item === targetItem);
+          const targetItem =
+            targetElement?.closest<HTMLDivElement>('.command-palette-item') ?? null;
+          const targetIndex = itemRefs.current.indexOf(targetItem);
           if (targetIndex !== -1 && targetIndex !== selectedIndexRef.current) {
             updateSelection(targetIndex);
           }
@@ -957,6 +961,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                       const currentIndex = commandIndexMap.get(command.id) ?? 0;
                       const isSelected = currentIndex === selectedIndex;
                       return (
+                        // biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
+                        // biome-ignore lint/a11y/useKeyWithClickEvents: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
                         <div
                           key={command.id}
                           ref={(el) => {
@@ -984,10 +990,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                               {command.renderLabel ?? command.label}
                             </div>
                           </div>
-                          {command.shortcut && (
+                          {!!command.shortcut && (
                             <div className="keycap">
                               {Array.isArray(command.shortcut) ? (
-                                command.shortcut.map((key, idx) => <kbd key={idx}>{key}</kbd>)
+                                withStableListKeys(command.shortcut, (key) => key).map(
+                                  ({ key: stableKey, value: shortcutKey }) => (
+                                    <kbd key={stableKey}>{shortcutKey}</kbd>
+                                  )
+                                )
                               ) : (
                                 <kbd>{command.shortcut}</kbd>
                               )}
@@ -999,7 +1009,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                   </div>
                 ))}
 
-              {(catalogLoading || hasCatalogResults) && (
+              {!!(catalogLoading || hasCatalogResults) && (
                 <div>
                   <div className="command-palette-group-header">
                     Catalog Results
@@ -1014,6 +1024,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                     const currentIndex = catalogBaseIndex + idx;
                     const isSelected = currentIndex === selectedIndex;
                     return (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
+                      // biome-ignore lint/a11y/useKeyWithClickEvents: The palette input retains focus and owns keyboard selection while result rows provide pointer selection inside the registered blocking palette surface.
                       <div
                         key={entry.item.uid}
                         ref={(el) => {

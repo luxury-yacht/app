@@ -1,17 +1,36 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { createAgeColumn } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import type React from 'react';
+import { act, isValidElement } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import type {
+  ClusterResourceGridTableParams,
+  NamespaceResourceGridTableParams,
+} from './resourceGridTableTypes';
+import type { TypedQueryPayload } from './typedResourceQueryScope';
 import {
   useQueryBackedClusterResourceGridTable,
   useQueryBackedNamespaceResourceGridTable,
 } from './useQueryBackedResourceGridTable';
-import type { TypedQueryPayload } from './typedResourceQueryScope';
+import type { UseTypedResourceQueryParams } from './useTypedResourceQuery';
+
+interface TestRow {
+  kind: string;
+  name: string;
+  namespace?: string;
+  clusterId: string;
+  cpuUsage?: string;
+  age?: string;
+  ageTimestamp?: number;
+}
+
+interface TestPayload extends TypedQueryPayload {
+  rows?: TestRow[];
+}
 
 const {
   liveDomainStateRef,
@@ -61,9 +80,12 @@ const {
   },
   lifecycleCallsRef: { current: [] as unknown[] },
   scopedDomainCallsRef: { current: [] as Array<[string, string]> },
-  useTypedResourceQueryMock: vi.fn(),
-  useClusterResourceGridTableMock: vi.fn(),
-  useNamespaceResourceGridTableMock: vi.fn(),
+  useTypedResourceQueryMock:
+    vi.fn<(params: UseTypedResourceQueryParams<TestPayload, TestRow>) => unknown>(),
+  useClusterResourceGridTableMock:
+    vi.fn<(params: ClusterResourceGridTableParams<TestRow>) => unknown>(),
+  useNamespaceResourceGridTableMock:
+    vi.fn<(params: NamespaceResourceGridTableParams<TestRow>) => unknown>(),
   persistedPageSizeRef: { current: null as number | null },
   persistenceHydratedRef: { current: true },
   persistedFiltersRef: { current: null as Record<string, unknown> | null },
@@ -88,12 +110,15 @@ vi.mock('@/core/data-access', () => ({
 }));
 
 vi.mock('./useTypedResourceQuery', () => ({
-  useTypedResourceQuery: (params: unknown) => useTypedResourceQueryMock(params),
+  useTypedResourceQuery: (params: UseTypedResourceQueryParams<TestPayload, TestRow>) =>
+    useTypedResourceQueryMock(params),
 }));
 
 vi.mock('./useResourceGridTable', () => ({
-  useClusterResourceGridTable: (params: any) => useClusterResourceGridTableMock(params),
-  useNamespaceResourceGridTable: (params: any) => useNamespaceResourceGridTableMock(params),
+  useClusterResourceGridTable: (params: ClusterResourceGridTableParams<TestRow>) =>
+    useClusterResourceGridTableMock(params),
+  useNamespaceResourceGridTable: (params: NamespaceResourceGridTableParams<TestRow>) =>
+    useNamespaceResourceGridTableMock(params),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -113,20 +138,6 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     resetState: vi.fn(),
   }),
 }));
-
-interface TestRow {
-  kind: string;
-  name: string;
-  namespace?: string;
-  clusterId: string;
-  cpuUsage?: string;
-  age?: string;
-  ageTimestamp?: number;
-}
-
-interface TestPayload extends TypedQueryPayload {
-  rows?: TestRow[];
-}
 
 const columns: GridColumnDefinition<TestRow>[] = [
   {
@@ -149,11 +160,35 @@ const publishedTableState = {
   sortConfig: { key: 'name', direction: 'asc' } as const,
 };
 
+const requireTableStatePublisher = (
+  params:
+    | Pick<ClusterResourceGridTableParams<TestRow>, 'onTableStateChange'>
+    | Pick<NamespaceResourceGridTableParams<TestRow>, 'onTableStateChange'>
+    | undefined
+) => requireValue(params?.onTableStateChange, 'expected the resource table state publisher');
+
+interface TestPaginationControlProps {
+  loading?: boolean;
+  onPageSizeChange?: (value: number) => void;
+}
+
+const paginationControlProps = (
+  result:
+    | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+    | undefined
+): TestPaginationControlProps | undefined => {
+  const tableProps = result?.gridTableProps as { paginationControls?: unknown } | undefined;
+  const paginationControls = tableProps?.paginationControls;
+  return isValidElement<TestPaginationControlProps>(paginationControls)
+    ? paginationControls.props
+    : undefined;
+};
+
 const paginationLoading = (
   result:
-    ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined
-): boolean | undefined =>
-  ((result?.gridTableProps as any)?.paginationControls as any)?.props?.loading;
+    | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+    | undefined
+): boolean | undefined => paginationControlProps(result)?.loading;
 
 describe('useQueryBackedResourceGridTable live invalidation', () => {
   let container: HTMLDivElement;
@@ -246,7 +281,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useNamespaceResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(cpuSortState);
+      requireTableStatePublisher(params)(cpuSortState);
       await Promise.resolve();
     });
 
@@ -254,10 +289,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     // serve-time joined usage); there is no metric-domain query and no
     // rowKeys hydration leg.
     const callsPerRender = useTypedResourceQueryMock.mock.calls;
-    expect(callsPerRender.every(([params]: any[]) => params.domain === 'pods')).toBe(true);
-    expect(callsPerRender.some(([params]: any[]) => params.predicates?.rowKeys !== undefined)).toBe(
-      false
-    );
+    expect(callsPerRender.every(([params]) => params.domain === 'pods')).toBe(true);
+    expect(callsPerRender.some(([params]) => params.predicates?.rowKeys !== undefined)).toBe(false);
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
@@ -268,7 +301,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     // Exactly one typed query per render: total calls == render count. Two
     // renders happened (initial + sort publish), each may re-render once for
     // state settles; every call must target the base domain with no siblings.
-    const distinctParamsPerRender = new Set(callsPerRender.map(([params]: any[]) => params.label));
+    const distinctParamsPerRender = new Set(callsPerRender.map(([params]) => params.label));
     expect(distinctParamsPerRender).toEqual(new Set(['Namespace Pods']));
   });
 
@@ -436,7 +469,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         domain: 'pods',
-        liveDataVersion: 'object: metric:' + doorbellRevision,
+        liveDataVersion: `object: metric:${doorbellRevision}`,
       })
     );
   });
@@ -558,7 +591,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('keeps cluster tables in initial loading until the typed query can run', () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -592,7 +626,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('keeps namespace tables in initial loading until the typed query can run', () => {
     let result:
-      ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -627,7 +662,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('does not run the first typed query while the live base domain is still initialising', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -662,7 +698,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -697,7 +733,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('allows the first cluster query when the live base domain is idle', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -749,7 +786,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -763,7 +800,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('allows the first namespace query when the live base domain is idle', async () => {
     let result:
-      ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -816,7 +854,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useNamespaceResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -830,7 +868,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('does not expose table loading during a query refresh that already has rows', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -875,7 +914,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -885,7 +924,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('exposes table loading during a query load with no rows yet', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -930,7 +970,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -940,7 +980,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('uses empty query results by default when local rows exist', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -985,7 +1026,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -997,7 +1038,8 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
 
   it('exposes pagination loading only while a pagination request is in flight', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -1042,7 +1084,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -1066,7 +1108,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     const publish = async (state: typeof publishedTableState) => {
       await act(async () => {
         const calls = useClusterResourceGridTableMock.mock.calls;
-        calls[calls.length - 1]?.[0].onTableStateChange(state);
+        requireTableStatePublisher(calls[calls.length - 1]?.[0])(state);
         await Promise.resolve();
       });
     };
@@ -1077,7 +1119,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       root.render(<Probe />);
     });
     await publish(publishedTableState);
-    expect(useTypedResourceQueryMock.mock.calls.some((call: any[]) => call[0].enabled)).toBe(false);
+    expect(useTypedResourceQueryMock.mock.calls.some(([params]) => params.enabled)).toBe(false);
 
     // Hydration commits, but the post-hydration publish has not run yet (it is
     // an effect). The query must NOT fire with the stale default filters.
@@ -1085,7 +1127,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     act(() => {
       root.render(<Probe />);
     });
-    expect(useTypedResourceQueryMock.mock.calls.some((call: any[]) => call[0].enabled)).toBe(false);
+    expect(useTypedResourceQueryMock.mock.calls.some(([params]) => params.enabled)).toBe(false);
 
     // The post-hydration publish lands with the persisted filters — only now
     // does the query run, and with those filters.
@@ -1094,16 +1136,15 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       sortConfig: { key: 'name', direction: 'asc' } as const,
     };
     await publish(hydratedState);
-    const enabledCalls = useTypedResourceQueryMock.mock.calls.filter(
-      (call: any[]) => call[0].enabled
-    );
+    const enabledCalls = useTypedResourceQueryMock.mock.calls.filter(([params]) => params.enabled);
     expect(enabledCalls.length).toBeGreaterThan(0);
     expect(enabledCalls[0][0].filters).toEqual(hydratedState.filters);
   });
 
   it('uses persisted rows per page for the query and saves page size changes', async () => {
     let result:
-      ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>> | undefined;
+      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
+      | undefined;
     const Probe: React.FC = () => {
       result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
@@ -1149,7 +1190,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useClusterResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 
@@ -1157,8 +1198,14 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       expect.objectContaining({ pageLimit: 250 })
     );
 
-    const paginationControls = (result?.gridTableProps as any)?.paginationControls;
-    paginationControls.props.onPageSizeChange(500);
+    const paginationProps = requireValue(
+      paginationControlProps(result),
+      'expected query-backed pagination controls'
+    );
+    requireValue(
+      paginationProps.onPageSizeChange,
+      'expected page-size callback on pagination controls'
+    )(500);
 
     expect(setPageSizeMock).toHaveBeenCalledWith(500);
   });
@@ -1174,8 +1221,9 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     const ageColumns: GridColumnDefinition<TestRow>[] = [
       createAgeColumn<TestRow>('age', 'Age', (item) => item.age ?? '-'),
     ];
+    let renderedAgeCell: React.ReactNode = null;
     const Probe: React.FC = () => {
-      const table = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
+      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
         clusterId: 'cluster-a',
         domain: 'pods',
         label: 'Namespace Pods',
@@ -1185,7 +1233,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
         columns: ageColumns,
         keyExtractor: (item) => item.name,
       });
-      return <>{(table.gridTableProps as any).ageCell}</>;
+      return <>{renderedAgeCell}</>;
     };
 
     useTypedResourceQueryMock.mockImplementation(() => ({
@@ -1208,13 +1256,15 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       dynamic: null,
       fetchAllRows: vi.fn().mockResolvedValue([ageRow]),
     }));
-    useNamespaceResourceGridTableMock.mockImplementation((params) => ({
-      gridTableProps: {
-        data: params.data,
-        ageCell: params.data[0] ? params.columns[0]?.render(params.data[0]) : null,
-      },
-      favModal: null,
-    }));
+    useNamespaceResourceGridTableMock.mockImplementation((params) => {
+      renderedAgeCell = params.data[0] ? params.columns[0]?.render(params.data[0]) : null;
+      return {
+        gridTableProps: {
+          data: params.data,
+        },
+        favModal: null,
+      };
+    });
 
     await act(async () => {
       root.render(<Probe />);
@@ -1223,7 +1273,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     await act(async () => {
       const calls = useNamespaceResourceGridTableMock.mock.calls;
       const params = calls[calls.length - 1]?.[0];
-      params.onTableStateChange(publishedTableState);
+      requireTableStatePublisher(params)(publishedTableState);
       await Promise.resolve();
     });
 

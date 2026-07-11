@@ -1,12 +1,11 @@
+import type { ResourceGridPersistence } from '@modules/resource-grid/resourceGridTableTypes';
 import { useCallback } from 'react';
-
+import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 import { useBrowseCatalog } from './useBrowseCatalog';
 import {
   hydrateCustomCatalogRows,
   useHydratedCustomCatalogRows,
 } from './useHydratedCustomCatalogRows';
-import type { ResourceGridPersistence } from '@modules/resource-grid/resourceGridTableTypes';
-import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 
 export interface UseCatalogBackedCustomResourceRowsOptions {
   clusterId?: string | null;

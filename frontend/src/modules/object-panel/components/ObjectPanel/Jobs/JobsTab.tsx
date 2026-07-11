@@ -5,30 +5,31 @@
  * Modeled after PodsTab but without metrics bars.
  */
 
-import React, { useCallback, useMemo } from 'react';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useViewState } from '@core/contexts/ViewStateContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import {
   applyColumnSizing,
+  type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
   createTextColumn,
   upsertNamespaceColumn,
-  type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import type { types } from '@wailsjs/go/models';
-import { useViewState } from '@core/contexts/ViewStateContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import { useCallback, useMemo } from 'react';
 import '../shared.css';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { ObjectPanelResourceGridTableSurface } from '@modules/resource-grid/ObjectPanelResourceGridTableSurface';
 import { useObjectPanelResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -43,7 +44,7 @@ interface JobRow {
   succeeded: number;
   failed: number;
   active: number;
-  startTime?: any;
+  startTime?: unknown;
   duration?: string;
   age: string;
   ageTimestamp?: number;

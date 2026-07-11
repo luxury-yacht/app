@@ -5,9 +5,9 @@
  * Tracks maximized state, target bounds, and handles state restoration.
  */
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import type { DockPosition } from './useDockablePanelState';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getContentBounds } from './dockablePanelLayout';
+import type { DockPosition } from './useDockablePanelState';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -27,14 +27,13 @@ interface DockablePanelMaximizeOptions {
   allowMaximize: boolean;
   maximizeTargetSelector?: string;
   onMaximizeChange?: (isMaximized: boolean) => void;
-  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
  * Manage maximize/restore behavior and track the target bounds for maximized panels.
  */
 export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) {
-  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange, panelRef } = options;
+  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange } = options;
   const isMaximized = panelState.isMaximized;
   const [maximizedRect, setMaximizedRect] = useState<DOMRect | null>(null);
   const restoreStateRef = useRef<{
@@ -124,7 +123,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
         resizeObserverRef.current = null;
       }
     };
-  }, [isMaximized, resolveMaximizeTarget, panelRef]);
+  }, [isMaximized, resolveMaximizeTarget]);
 
   useEffect(() => {
     if (panelState.isOpen) {

@@ -5,17 +5,16 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RefObject } from 'react';
-
-import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import type {
   ColumnWidthInput,
   ColumnWidthState,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
-import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import { buildInitialMeasuredColumnWidthPlan } from '@shared/components/tables/hooks/gridTableColumnWidthMath';
+import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const getAutoSizeMaxWidth = <T>(
   column: GridColumnDefinition<T>,
@@ -215,7 +214,9 @@ export function useSyncRenderedColumns<T>({
         currentManual.delete(key);
       }
     });
-    controlledManualKeys.forEach((key) => currentManual.add(key));
+    controlledManualKeys.forEach((key) => {
+      currentManual.add(key);
+    });
 
     const currentHashes = columnHashesRef.current;
     Array.from(currentHashes.keys()).forEach((key) => {

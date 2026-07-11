@@ -4,8 +4,9 @@
  * Tests visible object-map state derivation for filters, focus, search, and legend.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
+import { describe, expect, it } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import { computeObjectMapLayout } from './objectMapLayout';
 import {
   deriveObjectMapVisibleState,
@@ -235,7 +236,12 @@ describe('deriveObjectMapVisibleState', () => {
 describe('object map visible state pruning', () => {
   it('prunes edge and kind selections against available options', () => {
     expect(
-      Array.from(pruneObjectMapEnabledEdgeTypes(new Set(['owner', 'stale']), new Set(['owner']))!)
+      Array.from(
+        requireValue(
+          pruneObjectMapEnabledEdgeTypes(new Set(['owner', 'stale']), new Set(['owner'])),
+          'expected test value in objectMapVisibleState.test.ts'
+        )
+      )
     ).toEqual(['owner']);
     expect(
       pruneObjectMapSelectedKinds(

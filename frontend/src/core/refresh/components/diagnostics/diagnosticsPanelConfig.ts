@@ -6,18 +6,19 @@
  * second list of domain behavior rules.
  */
 
-import { doorbellPollingContinues } from '@/core/refresh/streaming/resourceStreamDomains';
-import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 import {
   PERMISSION_FEATURES,
   type PermissionFeatureKey,
 } from '@/core/capabilities/permissionFeatures';
+import { doorbellPollingContinues } from '@/core/refresh/streaming/resourceStreamDomains';
+import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 import {
   refreshDomainContract,
   refreshDomainDescriptors,
   type StreamTelemetryName,
 } from '../../domainRegistry';
 import type { RefreshDomain } from '../../types';
+
 export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP, PRIORITY_DOMAINS } from '../../domainRegistry';
 
 export const STALE_THRESHOLD_MS = 45_000;

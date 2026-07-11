@@ -1,20 +1,19 @@
 import { describe, expect, it } from 'vitest';
-
-import {
-  CLUSTER_REFRESHERS,
-  NAMESPACE_REFRESHERS,
-  SYSTEM_REFRESHERS,
-  type StaticRefresherName,
-} from './refresherTypes';
 import {
   DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
-  PRIORITY_DOMAINS,
-  REFRESHER_TIMING_BY_NAME,
-  REFRESH_DOMAIN_DESCRIPTORS,
   getRefreshDomainDescriptor,
+  PRIORITY_DOMAINS,
+  REFRESH_DOMAIN_DESCRIPTORS,
+  REFRESHER_TIMING_BY_NAME,
   refreshDomainDescriptors,
 } from './domainRegistry';
+import {
+  CLUSTER_REFRESHERS,
+  NAMESPACE_REFRESHERS,
+  type StaticRefresherName,
+  SYSTEM_REFRESHERS,
+} from './refresherTypes';
 
 describe('refresh domain registry', () => {
   it('covers every static refresher name with registry timing', () => {

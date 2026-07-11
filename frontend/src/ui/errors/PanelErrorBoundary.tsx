@@ -5,8 +5,9 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { ReactNode } from 'react';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import type React from 'react';
+import type { ReactNode } from 'react';
 
 interface PanelErrorBoundaryProps {
   children: ReactNode;
@@ -26,10 +27,10 @@ export const PanelErrorBoundary: React.FC<PanelErrorBoundaryProps> = ({
         <h3>Panel Error</h3>
         <p>Unable to display this content</p>
         <div className="panel-error-actions">
-          <button onClick={reset} className="btn-reset">
+          <button type="button" onClick={reset} className="btn-reset">
             Retry
           </button>
-          <button onClick={onClose} className="btn-reload">
+          <button type="button" onClick={onClose} className="btn-reload">
             Close Panel
           </button>
         </div>

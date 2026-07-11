@@ -5,13 +5,13 @@
  * Covers key behaviors and edge cases for utils.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   formatShortcut,
-  modifiersMatch,
   getShortcutKey,
   isInputElement,
+  modifiersMatch,
   resolveEventElement,
 } from './utils';
 

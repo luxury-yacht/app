@@ -5,15 +5,20 @@
  * Verifies that sort, visibility, and filters are scoped per cluster.
  */
 
-import React, { act, useEffect } from 'react';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type React from 'react';
+import { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGridTablePersistence } from './useGridTablePersistence';
-import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
+import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
+import { useGridTablePersistence } from './useGridTablePersistence';
 
-const stateMap: Record<string, any> = {};
+const stateMap: Record<string, unknown> = {};
+type PersistenceState = ReturnType<typeof useGridTablePersistence<{ id: string }>>;
+let latestState: PersistenceState | null = null;
+const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
 
 // Mock persistence layer. computeClusterHash returns a hash derived from input
 // so different clusterIdentity values produce different hashes.
@@ -33,7 +38,7 @@ vi.mock('./gridTablePersistence', () => {
     computeClusterHash: vi.fn(async (identity: string) => `hash-${identity}`),
     hydrateGridTablePersistence: vi.fn(async () => undefined),
     loadPersistedState: vi.fn((key: string | null) => (key ? (stateMap[key] ?? null) : null)),
-    prunePersistedState: vi.fn((state: any) => state ?? null),
+    prunePersistedState: vi.fn((state: unknown) => state ?? null),
     buildPersistedStateForSave: vi.fn(() => null),
     savePersistedState: vi.fn(),
     clearPersistedState: vi.fn(),
@@ -42,7 +47,10 @@ vi.mock('./gridTablePersistence', () => {
 
 describe('useGridTablePersistence multi-cluster', () => {
   beforeEach(() => {
-    Object.keys(stateMap).forEach((key) => delete stateMap[key]);
+    latestState = null;
+    Object.keys(stateMap).forEach((key) => {
+      delete stateMap[key];
+    });
     resetAppPreferencesCacheForTesting();
     setGridTablePersistenceMode('namespaced');
   });
@@ -70,7 +78,7 @@ describe('useGridTablePersistence multi-cluster', () => {
     });
 
     useEffect(() => {
-      (globalThis as any).__LATEST_STATE__ = result;
+      latestState = result;
     }, [result]);
 
     return null;
@@ -111,19 +119,19 @@ describe('useGridTablePersistence multi-cluster', () => {
 
     // Render cluster A.
     await renderHarness(root, 'cluster-a');
-    const stateA = (globalThis as any).__LATEST_STATE__;
+    const stateA = getLatestState();
     expect(stateA.sortConfig?.key).toBe('name');
     expect(stateA.sortConfig?.direction).toBe('asc');
 
     // Switch to cluster B.
     await renderHarness(root, 'cluster-b');
-    const stateB = (globalThis as any).__LATEST_STATE__;
+    const stateB = getLatestState();
     expect(stateB.sortConfig?.key).toBe('age');
     expect(stateB.sortConfig?.direction).toBe('desc');
 
     // Switch back to cluster A — state is independent.
     await renderHarness(root, 'cluster-a');
-    const stateA2 = (globalThis as any).__LATEST_STATE__;
+    const stateA2 = getLatestState();
     expect(stateA2.sortConfig?.key).toBe('name');
     expect(stateA2.sortConfig?.direction).toBe('asc');
 
@@ -146,10 +154,10 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    expect((globalThis as any).__LATEST_STATE__.columnVisibility).toEqual({ age: false });
+    expect(getLatestState().columnVisibility).toEqual({ age: false });
 
     await renderHarness(root, 'cluster-b');
-    expect((globalThis as any).__LATEST_STATE__.columnVisibility).toEqual({ name: false });
+    expect(getLatestState().columnVisibility).toEqual({ name: false });
 
     await act(async () => root.unmount());
     container.remove();
@@ -168,11 +176,11 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    expect((globalThis as any).__LATEST_STATE__.sortConfig?.key).toBe('name');
+    expect(getLatestState().sortConfig?.key).toBe('name');
 
     // Switch to cluster with no persisted state.
     await renderHarness(root, 'cluster-c');
-    const stateC = (globalThis as any).__LATEST_STATE__;
+    const stateC = getLatestState();
     expect(stateC.sortConfig).toBeNull();
     expect(stateC.columnVisibility).toBeNull();
 
@@ -186,10 +194,10 @@ describe('useGridTablePersistence multi-cluster', () => {
     const root = ReactDOM.createRoot(container);
 
     await renderHarness(root, 'cluster-a');
-    const keyA = (globalThis as any).__LATEST_STATE__.storageKey;
+    const keyA = getLatestState().storageKey;
 
     await renderHarness(root, 'cluster-b');
-    const keyB = (globalThis as any).__LATEST_STATE__.storageKey;
+    const keyB = getLatestState().storageKey;
 
     expect(keyA).not.toBeNull();
     expect(keyB).not.toBeNull();

@@ -5,18 +5,18 @@
  * Covers key behaviors and edge cases for Sidebar.
  */
 
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import Sidebar from './Sidebar';
-import { KeyboardProvider } from '@ui/shortcuts';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { eventBus } from '@/core/events';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
+import { requireValue } from '@/test-utils/requireValue';
+import Sidebar from './Sidebar';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -112,7 +112,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
 describe('Sidebar', () => {
   beforeAll(() => {
     if (!Element.prototype.scrollIntoView) {
-      (Element.prototype as any).scrollIntoView = () => {};
+      Element.prototype.scrollIntoView = () => {};
     }
   });
 
@@ -141,7 +141,7 @@ describe('Sidebar', () => {
       Object.assign(viewStateMock, viewState);
     }
     act(() => {
-      root!.render(
+      requireValue(root, 'expected test value in Sidebar.test.tsx').render(
         <KeyboardProvider>
           <Sidebar />
         </KeyboardProvider>
@@ -182,7 +182,7 @@ describe('Sidebar', () => {
     const openNamespaces = vi.fn();
     const unsubscribe = eventBus.on('command-palette:open-namespaces', openNamespaces);
     act(() => {
-      button!.click();
+      requireValue(button, 'expected test value in Sidebar.test.tsx').click();
     });
     unsubscribe();
 
@@ -204,9 +204,17 @@ describe('Sidebar', () => {
     namespaceState.namespaces = [];
     renderSidebar();
 
-    expect(container!.textContent).toContain('Insufficient permission to list namespaces.');
-    expect(container!.textContent).toContain('Add namespace');
-    expect(container!.querySelector('[data-sidebar-target-kind="namespace-toggle"]')).toBeNull();
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
+    ).toContain('Insufficient permission to list namespaces.');
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
+    ).toContain('Add namespace');
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
+        '[data-sidebar-target-kind="namespace-toggle"]'
+      )
+    ).toBeNull();
   });
 
   it('does not expand inaccessible scope namespaces', () => {
@@ -235,34 +243,60 @@ describe('Sidebar', () => {
     renderSidebar();
 
     const rows = Array.from(
-      container!.querySelectorAll<HTMLElement>('[data-sidebar-target-kind="namespace-toggle"]')
+      requireValue(
+        container,
+        'expected test value in Sidebar.test.tsx'
+      ).querySelectorAll<HTMLElement>('[data-sidebar-target-kind="namespace-toggle"]')
     );
     const ghostRow = rows.find((row) => row.textContent?.includes('ghost'));
     const defaultRow = rows.find((row) => row.textContent?.includes('default'));
     expect(ghostRow).toBeDefined();
     expect(defaultRow).toBeDefined();
 
-    expect(ghostRow!.getAttribute('data-sidebar-focusable')).toBeNull();
-    expect(ghostRow!.querySelector('.namespace-scope-flag')).not.toBeNull();
-    expect(defaultRow!.getAttribute('data-sidebar-focusable')).toBe('true');
+    expect(
+      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').getAttribute(
+        'data-sidebar-focusable'
+      )
+    ).toBeNull();
+    expect(
+      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').querySelector(
+        '.namespace-scope-flag'
+      )
+    ).not.toBeNull();
+    expect(
+      requireValue(defaultRow, 'expected test value in Sidebar.test.tsx').getAttribute(
+        'data-sidebar-focusable'
+      )
+    ).toBe('true');
 
     act(() => {
-      ghostRow!.click();
+      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').click();
     });
-    expect(container!.querySelector('.namespaces-section .sidebar-views')).toBeNull();
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
+        '.namespaces-section .sidebar-views'
+      )
+    ).toBeNull();
 
     act(() => {
-      defaultRow!.click();
+      requireValue(defaultRow, 'expected test value in Sidebar.test.tsx').click();
     });
-    expect(container!.querySelector('.namespaces-section .sidebar-views')).not.toBeNull();
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
+        '.namespaces-section .sidebar-views'
+      )
+    ).not.toBeNull();
   });
 
   it('toggles the sidebar when the toolbar button is pressed', () => {
     renderSidebar();
-    const toggleButton = container!.querySelector<HTMLButtonElement>('.sidebar-toggle');
+    const toggleButton = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLButtonElement>('.sidebar-toggle');
     expect(toggleButton).not.toBeNull();
     act(() => {
-      toggleButton!.click();
+      requireValue(toggleButton, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(viewStateMock.toggleSidebar).toHaveBeenCalledTimes(1);
   });
@@ -270,11 +304,14 @@ describe('Sidebar', () => {
   it('activates the browse cluster view when clicked', () => {
     renderSidebar();
     const browseItem = Array.from(
-      container!.querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="cluster-view"]')
+      requireValue(
+        container,
+        'expected test value in Sidebar.test.tsx'
+      ).querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="cluster-view"]')
     ).find((item) => item.dataset.sidebarTargetView === 'browse');
     expect(browseItem).not.toBeNull();
     act(() => {
-      browseItem!.click();
+      requireValue(browseItem, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
     expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('browse');
@@ -286,12 +323,13 @@ describe('Sidebar', () => {
 
   it('selects the overview entry when clicked', () => {
     renderSidebar();
-    const overviewItem = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="overview"]'
-    );
+    const overviewItem = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>('[data-sidebar-target-kind="overview"]');
     expect(overviewItem).not.toBeNull();
     act(() => {
-      overviewItem!.click();
+      requireValue(overviewItem, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(viewStateMock.setViewType).toHaveBeenCalledWith('overview');
     expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
@@ -302,33 +340,43 @@ describe('Sidebar', () => {
 
   it('collapses cluster resources when toggled', () => {
     renderSidebar();
-    const nodesItemBefore = container!.querySelector<HTMLElement>(
+    const nodesItemBefore = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLElement>(
       '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]'
     );
     expect(nodesItemBefore).not.toBeNull();
 
-    const toggle = container!.querySelector<HTMLDivElement>(
+    const toggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
     );
     expect(toggle).not.toBeNull();
     act(() => {
-      toggle!.click();
+      requireValue(toggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
-    const nodesItemAfter = container!.querySelector(
-      '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]'
-    );
+    const nodesItemAfter = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector('[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]');
     expect(nodesItemAfter).toBeNull();
   });
 
   it('activates a specific cluster resource view when clicked', () => {
     renderSidebar();
-    const nodesItem = container!.querySelector<HTMLDivElement>(
+    const nodesItem = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]'
     );
     expect(nodesItem).not.toBeNull();
     act(() => {
-      nodesItem!.click();
+      requireValue(nodesItem, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
     expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('nodes');
@@ -340,7 +388,7 @@ describe('Sidebar', () => {
     renderSidebar();
     const originalScroll = Element.prototype.scrollIntoView;
     const scrollSpy = vi.fn();
-    (Element.prototype as any).scrollIntoView = scrollSpy;
+    Element.prototype.scrollIntoView = (options) => scrollSpy(options);
     const originalQuerySelector = document.querySelector;
     const fakeElement = {
       scrollIntoView: scrollSpy,
@@ -363,14 +411,17 @@ describe('Sidebar', () => {
 
     vi.useFakeTimers();
 
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+    const namespaceToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     vi.runAllTimers();
@@ -404,12 +455,15 @@ describe('Sidebar', () => {
     vi.useFakeTimers();
 
     const namespaceToggle = Array.from(
-      container!.querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="namespace-toggle"]')
+      requireValue(
+        container,
+        'expected test value in Sidebar.test.tsx'
+      ).querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="namespace-toggle"]')
     ).find((element) => element.dataset.sidebarTargetNamespace === `${testClusterId}|default"bad`);
     expect(namespaceToggle).not.toBeUndefined();
 
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     vi.runAllTimers();
@@ -424,7 +478,10 @@ describe('Sidebar', () => {
 
   it('toggles namespace expansion without selecting a view', () => {
     renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+    const namespaceToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
@@ -432,10 +489,13 @@ describe('Sidebar', () => {
     expect(namespaceToggle).not.toBeNull();
 
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
-    const namespaceViews = container!.querySelector(
+    const namespaceViews = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
@@ -448,7 +508,10 @@ describe('Sidebar', () => {
 
   it('collapses a namespace when clicked repeatedly', () => {
     renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+    const namespaceToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
@@ -456,11 +519,11 @@ describe('Sidebar', () => {
     expect(namespaceToggle).not.toBeNull();
 
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     const namespaceViews = () =>
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'default'
         )}"]`
@@ -468,7 +531,7 @@ describe('Sidebar', () => {
     expect(namespaceViews()).not.toBeNull();
 
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(namespaceViews()).toBeNull();
@@ -495,12 +558,18 @@ describe('Sidebar', () => {
     ];
     renderSidebar();
 
-    const defaultToggle = container!.querySelector<HTMLDivElement>(
+    const defaultToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
     );
-    const kubeSystemToggle = container!.querySelector<HTMLDivElement>(
+    const kubeSystemToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'kube-system'
       )}"]`
@@ -509,10 +578,10 @@ describe('Sidebar', () => {
     expect(kubeSystemToggle).not.toBeNull();
 
     act(() => {
-      defaultToggle!.click();
+      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'default'
         )}"]`
@@ -520,18 +589,18 @@ describe('Sidebar', () => {
     ).not.toBeNull();
 
     act(() => {
-      kubeSystemToggle!.click();
+      requireValue(kubeSystemToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'default'
         )}"]`
       )
     ).toBeNull();
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'kube-system'
         )}"]`
@@ -561,12 +630,18 @@ describe('Sidebar', () => {
     ];
     renderSidebar();
 
-    const defaultToggle = container!.querySelector<HTMLDivElement>(
+    const defaultToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
     );
-    const kubeSystemToggle = container!.querySelector<HTMLDivElement>(
+    const kubeSystemToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'kube-system'
       )}"]`
@@ -575,19 +650,19 @@ describe('Sidebar', () => {
     expect(kubeSystemToggle).not.toBeNull();
 
     act(() => {
-      defaultToggle!.click();
-      kubeSystemToggle!.click();
+      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
+      requireValue(kubeSystemToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'default'
         )}"]`
       )
     ).not.toBeNull();
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'kube-system'
         )}"]`
@@ -607,7 +682,10 @@ describe('Sidebar', () => {
       },
     ];
     renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+    const namespaceToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         ALL_NAMESPACES_SCOPE
       )}"]`
@@ -615,7 +693,7 @@ describe('Sidebar', () => {
     expect(namespaceToggle).not.toBeNull();
 
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
@@ -643,34 +721,40 @@ describe('Sidebar', () => {
     ];
     renderSidebar();
 
-    const allNamespacesToggle = container!.querySelector<HTMLDivElement>(
+    const allNamespacesToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         ALL_NAMESPACES_SCOPE
       )}"]`
     );
     expect(allNamespacesToggle).not.toBeNull();
     act(() => {
-      allNamespacesToggle!.click();
+      requireValue(allNamespacesToggle, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           ALL_NAMESPACES_SCOPE
         )}"][data-sidebar-target-view="map"]`
       )
     ).toBeNull();
 
-    const defaultToggle = container!.querySelector<HTMLDivElement>(
+    const defaultToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
     );
     expect(defaultToggle).not.toBeNull();
     act(() => {
-      defaultToggle!.click();
+      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
     });
     expect(
-      container!.querySelector(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
         `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
           'default'
         )}"][data-sidebar-target-view="map"]`
@@ -694,7 +778,10 @@ describe('Sidebar', () => {
       await Promise.resolve();
     });
 
-    const podsView = container!.querySelector<HTMLDivElement>(
+    const podsView = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"][data-sidebar-target-view="pods"]`
@@ -702,7 +789,7 @@ describe('Sidebar', () => {
     expect(podsView).not.toBeNull();
 
     act(() => {
-      podsView!.click();
+      requireValue(podsView, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
@@ -715,17 +802,23 @@ describe('Sidebar', () => {
 
   it('selects a namespace view and notifies the namespace context', () => {
     renderSidebar();
-    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+    const namespaceToggle = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
     act(() => {
-      namespaceToggle!.click();
+      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
-    const podsView = container!.querySelector<HTMLDivElement>(
+    const podsView = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"][data-sidebar-target-view="pods"]`
@@ -733,7 +826,7 @@ describe('Sidebar', () => {
     expect(podsView).not.toBeNull();
 
     act(() => {
-      podsView!.click();
+      requireValue(podsView, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
@@ -743,11 +836,14 @@ describe('Sidebar', () => {
 
   it('allows modified navigation keys to bubble to global handlers', () => {
     renderSidebar();
-    const focusable = container!.querySelector<HTMLElement>('[data-sidebar-focusable="true"]');
+    const focusable = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLElement>('[data-sidebar-focusable="true"]');
     expect(focusable).not.toBeNull();
 
     act(() => {
-      focusable!.focus();
+      requireValue(focusable, 'expected test value in Sidebar.test.tsx').focus();
     });
 
     const plainArrowEvent = new KeyboardEvent('keydown', {
@@ -756,7 +852,9 @@ describe('Sidebar', () => {
       cancelable: true,
     });
     act(() => {
-      focusable!.dispatchEvent(plainArrowEvent);
+      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
+        plainArrowEvent
+      );
     });
     expect(plainArrowEvent.defaultPrevented).toBe(true);
 
@@ -767,7 +865,9 @@ describe('Sidebar', () => {
       metaKey: true,
     });
     act(() => {
-      focusable!.dispatchEvent(metaArrowEvent);
+      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
+        metaArrowEvent
+      );
     });
     expect(metaArrowEvent.defaultPrevented).toBe(false);
 
@@ -779,7 +879,9 @@ describe('Sidebar', () => {
       shiftKey: true,
     });
     act(() => {
-      focusable!.dispatchEvent(shiftSpaceEvent);
+      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
+        shiftSpaceEvent
+      );
     });
     expect(shiftSpaceEvent.defaultPrevented).toBe(false);
   });
@@ -788,7 +890,10 @@ describe('Sidebar', () => {
     namespaceState.namespaceLoading = true;
     namespaceState.namespaces = [];
     renderSidebar();
-    const spinnerText = container!.querySelector('.loading-spinner p')?.textContent;
+    const spinnerText = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector('.loading-spinner p')?.textContent;
     expect(spinnerText).toBe('Loading namespaces...');
   });
 
@@ -799,7 +904,9 @@ describe('Sidebar', () => {
 
     renderSidebar();
 
-    expect(container!.textContent).toContain('Auto-refresh is disabled');
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
+    ).toContain('Auto-refresh is disabled');
   });
 
   it('renders unknown-workload namespaces exactly like normal ones and dims only confirmed-empty', () => {
@@ -831,18 +938,36 @@ describe('Sidebar', () => {
     ];
     renderSidebar();
     const itemFor = (name: string) =>
-      container!.querySelector(`[data-sidebar-target-namespace="${namespaceKey(name)}"]`);
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
+        `[data-sidebar-target-namespace="${namespaceKey(name)}"]`
+      );
 
     // Confirmed absence of workloads is the ONLY state that changes presentation.
-    expect(itemFor('empty')!.className).toContain('dimmed');
+    expect(
+      requireValue(itemFor('empty'), 'expected test value in Sidebar.test.tsx').className
+    ).toContain('dimmed');
 
     // Not-yet-known must be indistinguishable from a normal namespace: the transient
     // startup state (ingest stores not settled) must not draw the eye.
-    expect(itemFor('pending')!.className).toBe(itemFor('active')!.className);
-    expect(itemFor('pending')!.className).not.toContain('dimmed');
-    expect(itemFor('pending')!.className).not.toContain('workloads-unknown');
-    expect(container!.querySelector('.status-text.warning')).toBeNull();
-    expect(itemFor('pending')!.getAttribute('title') ?? '').not.toContain('Unable to determine');
+    expect(
+      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
+    ).toBe(requireValue(itemFor('active'), 'expected test value in Sidebar.test.tsx').className);
+    expect(
+      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
+    ).not.toContain('dimmed');
+    expect(
+      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
+    ).not.toContain('workloads-unknown');
+    expect(
+      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
+        '.status-text.warning'
+      )
+    ).toBeNull();
+    expect(
+      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').getAttribute(
+        'title'
+      ) ?? ''
+    ).not.toContain('Unable to determine');
   });
 
   it('does not dim inactive namespaces when the display setting is disabled', () => {
@@ -860,11 +985,14 @@ describe('Sidebar', () => {
 
     renderSidebar();
 
-    const inactiveItem = container!.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('inactive')}"]`
-    );
+    const inactiveItem = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector(`[data-sidebar-target-namespace="${namespaceKey('inactive')}"]`);
     expect(inactiveItem).not.toBeNull();
-    expect(inactiveItem!.className).not.toContain('dimmed');
+    expect(
+      requireValue(inactiveItem, 'expected test value in Sidebar.test.tsx').className
+    ).not.toContain('dimmed');
   });
 
   it('renders in collapsed state when the sidebar is hidden', () => {
@@ -873,12 +1001,26 @@ describe('Sidebar', () => {
         isSidebarVisible: false,
       },
     });
-    const sidebar = container!.querySelector('.sidebar');
+    const sidebar = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector('.sidebar');
     expect(sidebar).not.toBeNull();
-    expect(sidebar!.classList.contains('collapsed')).toBe(true);
-    expect(sidebar!.getAttribute('tabindex')).toBe('-1');
-    expect(sidebar!.getAttribute('style')).toContain('width: 50px');
-    const toggleButton = container!.querySelector<HTMLButtonElement>('.sidebar-toggle');
+    expect(
+      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').classList.contains(
+        'collapsed'
+      )
+    ).toBe(true);
+    expect(
+      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').getAttribute('tabindex')
+    ).toBe('-1');
+    expect(
+      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').getAttribute('style')
+    ).toContain('width: 50px');
+    const toggleButton = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLButtonElement>('.sidebar-toggle');
     expect(toggleButton?.getAttribute('aria-label')).toBe('Show Sidebar');
   });
 
@@ -895,7 +1037,10 @@ describe('Sidebar', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    const podsView = container!.querySelector<HTMLDivElement>(
+    const podsView = requireValue(
+      container,
+      'expected test value in Sidebar.test.tsx'
+    ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
       )}"][data-sidebar-target-view="pods"]`

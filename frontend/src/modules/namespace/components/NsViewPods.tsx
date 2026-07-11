@@ -5,47 +5,46 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { eventBus } from '@/core/events';
-import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import * as cf from '@shared/components/tables/columnFactories';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getPodsUnhealthyStorageKey,
-  parsePodsFilterRequest,
   type PodsFilterMode,
   type PodsFilterRequest,
+  parsePodsFilterRequest,
 } from '@modules/namespace/components/podsFilterSignals';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import {
-  POD_PERMISSIONS,
-  queryNamespacesPermissions,
-  type PermissionSpecList,
-} from '@/core/capabilities';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
-import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type PermissionSpecList,
+  POD_PERMISSIONS,
+  queryNamespacesPermissions,
+} from '@/core/capabilities';
+import { eventBus } from '@/core/events';
+import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
+import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
-import type { PodSnapshotPayload } from '@/core/refresh/types';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 interface PodsViewProps {
   namespace: string;
@@ -480,7 +479,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       return {
         type: 'toggle',
         id: 'pods-unhealthy-toggle',
-        icon: <WarningTriangleIcon width={18} height={18} ariaHidden />,
+        icon: <WarningTriangleIcon width={18} height={18} />,
         active: activePodFilter !== null,
         onClick: handleToggleUnhealthy,
         title,

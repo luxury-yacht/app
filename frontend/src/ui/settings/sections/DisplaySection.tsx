@@ -4,16 +4,15 @@
  * Display tab content: display-related preferences.
  */
 
-import { useState, useEffect } from 'react';
-import { errorHandler } from '@utils/errorHandler';
-import ToggleSwitch from '@/shared/components/ToggleSwitch';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
   DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
   normalizeTablePageSize,
+  TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
+import { errorHandler } from '@utils/errorHandler';
+import { useEffect, useState } from 'react';
 import {
   hydrateAppPreferences,
   setDefaultTablePageSize as persistDefaultTablePageSize,
@@ -21,6 +20,7 @@ import {
   setExclusiveNamespaces as persistExclusiveNamespaces,
   setUseShortResourceNames as persistUseShortResourceNames,
 } from '@/core/settings/appPreferences';
+import ToggleSwitch from '@/shared/components/ToggleSwitch';
 
 // The same list every pagination footer renders — one source for both.
 const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({

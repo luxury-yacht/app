@@ -1,8 +1,11 @@
 .segmented-button {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
   display: inline-flex;
   background-color: var(--segmented-bg);
   border-radius: 6px;
-  padding: 0;
   position: relative;
   overflow: hidden;
 }

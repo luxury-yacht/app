@@ -5,10 +5,16 @@
  * Renders merged diff lines with expand/collapse, selection, and truncation detection.
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import type { DisplayDiffLine, TruncationMap } from '@shared/components/diff/diffUtils';
 import { areTruncationMapsEqual } from '@shared/components/diff/diffUtils';
+import {
+  useEffectWithInvalidation,
+  useLayoutEffectWithInvalidation,
+  useMemoWithInvalidation,
+} from '@shared/hooks/useHookLifetimes';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import './DiffViewer.css';
 
 export interface DiffViewerProps {
@@ -90,17 +96,20 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const virtualizationCandidate = visibleLines.length >= DIFF_VIRTUALIZATION_THRESHOLD;
   const shouldVirtualize = virtualizationCandidate && !forceFullRender;
 
-  const rowPositions = useMemo(() => {
-    const positions = new Float64Array(visibleLines.length + 1);
-    const cache = rowHeightCacheRef.current;
-    for (let index = 0; index < visibleLines.length; index += 1) {
-      positions[index + 1] = positions[index] + (cache.get(index) ?? DIFF_ESTIMATED_ROW_HEIGHT);
-    }
-    return positions;
-    // rowHeightCacheVersion is load-bearing here: it forces recomputation when
-    // measured row heights change even though the cache itself lives in a ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowHeightCacheVersion, visibleLines.length]);
+  const rowPositions = useMemoWithInvalidation(
+    () => {
+      const positions = new Float64Array(visibleLines.length + 1);
+      const cache = rowHeightCacheRef.current;
+      for (let index = 0; index < visibleLines.length; index += 1) {
+        positions[index + 1] = positions[index] + (cache.get(index) ?? DIFF_ESTIMATED_ROW_HEIGHT);
+      }
+      return positions;
+      // rowHeightCacheVersion is load-bearing here: it forces recomputation when
+      // measured row heights change even though the cache itself lives in a ref.
+    },
+    [visibleLines.length],
+    [rowHeightCacheVersion]
+  );
 
   const totalVirtualHeight = useMemo(
     () => (shouldVirtualize ? rowPositions[visibleLines.length] : 0),
@@ -157,17 +166,23 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     truncatedRowsRef.current = truncatedRows;
   }, [truncatedRows]);
 
-  useEffect(() => {
-    setExpandedRows(new Set());
-    setTruncatedRows({});
-    setForceFullRender(false);
-    rowHeightCacheRef.current.clear();
-    setRowHeightCacheVersion((current) => current + 1);
-  }, [visibleLines]);
+  useEffectWithInvalidation(
+    () => {
+      setExpandedRows(new Set());
+      setTruncatedRows({});
+      setForceFullRender(false);
+      rowHeightCacheRef.current.clear();
+      setRowHeightCacheVersion((current) => current + 1);
+    },
+    [],
+    [visibleLines]
+  );
 
   useEffect(
     () => () => {
-      rowObserverMapRef.current.forEach((observer) => observer.disconnect());
+      rowObserverMapRef.current.forEach((observer) => {
+        observer.disconnect();
+      });
       rowObserverMapRef.current.clear();
     },
     []
@@ -327,31 +342,37 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     });
   };
 
-  useLayoutEffect(() => {
-    const table = diffTableRef.current;
-    if (!shouldVirtualize || !table) {
-      setVirtualViewportHeight(DIFF_DEFAULT_VIEWPORT_HEIGHT);
-      return;
-    }
+  useLayoutEffectWithInvalidation(
+    () => {
+      const table = diffTableRef.current;
+      if (!shouldVirtualize || !table) {
+        setVirtualViewportHeight(DIFF_DEFAULT_VIEWPORT_HEIGHT);
+        return;
+      }
 
-    const updateViewport = () => {
-      const nextHeight =
-        table.clientHeight || table.getBoundingClientRect().height || DIFF_DEFAULT_VIEWPORT_HEIGHT;
-      setVirtualViewportHeight((current) =>
-        Math.abs(current - nextHeight) < 0.5 ? current : nextHeight
-      );
-    };
+      const updateViewport = () => {
+        const nextHeight =
+          table.clientHeight ||
+          table.getBoundingClientRect().height ||
+          DIFF_DEFAULT_VIEWPORT_HEIGHT;
+        setVirtualViewportHeight((current) =>
+          Math.abs(current - nextHeight) < 0.5 ? current : nextHeight
+        );
+      };
 
-    updateViewport();
+      updateViewport();
 
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => updateViewport());
-      observer.observe(table);
-      return () => observer.disconnect();
-    }
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => updateViewport());
+        observer.observe(table);
+        return () => observer.disconnect();
+      }
 
-    return undefined;
-  }, [renderedLineEntries.length, shouldVirtualize]);
+      return undefined;
+    },
+    [shouldVirtualize],
+    [renderedLineEntries.length]
+  );
 
   useEffect(() => {
     const table = diffTableRef.current;
@@ -456,13 +477,17 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     setTruncatedRows((current) => (areTruncationMapsEqual(current, next) ? current : next));
   }, [expandedRows]);
 
-  useEffect(() => {
-    if (!diffTableRef.current) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => computeTruncation());
-    return () => cancelAnimationFrame(frame);
-  }, [computeTruncation, renderedLineEntries, visibleLines]);
+  useEffectWithInvalidation(
+    () => {
+      if (!diffTableRef.current) {
+        return;
+      }
+      const frame = requestAnimationFrame(() => computeTruncation());
+      return () => cancelAnimationFrame(frame);
+    },
+    [computeTruncation],
+    [renderedLineEntries, visibleLines]
+  );
 
   useEffect(() => {
     const table = diffTableRef.current;
@@ -584,6 +609,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     .join(' ');
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: this scroll region is keyboard-focusable and implements its own scrolling keys.
     <div
       className={rootClassName}
       ref={diffTableRef}
@@ -624,6 +650,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         selectSideText(side);
       }}
       onKeyDown={handleKeyScroll}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: The diff scroll region is intentionally focusable and owns keyboard scrolling; a native interactive element would give the region incorrect semantics.
       tabIndex={0}
     >
       {shouldVirtualize ? (

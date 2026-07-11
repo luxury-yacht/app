@@ -6,10 +6,9 @@
  */
 
 import { useSyncExternalStore } from 'react';
-
-import type { DomainPayloadMap, RefreshDomain } from './types';
 import type { SnapshotStats } from './client';
 import type { RefreshSourceClock } from './domainRegistry';
+import type { DomainPayloadMap, RefreshDomain } from './types';
 
 export type DomainStatus = 'idle' | 'loading' | 'initialising' | 'updating' | 'ready' | 'error';
 
@@ -74,17 +73,19 @@ const createInitialDomainState = <TPayload>(): DomainSnapshotState<TPayload> => 
   scope: undefined,
 });
 
-const EMPTY_SCOPED_STATE: DomainSnapshotState<any> = Object.freeze({
+const EMPTY_SCOPED_STATE: DomainSnapshotState<unknown> = Object.freeze({
   status: 'idle',
   data: null,
   stats: null,
   error: null,
   droppedAutoRefreshes: 0,
   scope: undefined,
-}) as DomainSnapshotState<any>;
+}) as DomainSnapshotState<unknown>;
 
-const EMPTY_SCOPED_MAP: Record<string, DomainSnapshotState<any>> = Object.freeze({});
-const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<any>]> = Object.freeze([]);
+const EMPTY_SCOPED_MAP: Record<string, DomainSnapshotState<unknown>> = Object.freeze({});
+const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<unknown>]> = Object.freeze(
+  []
+);
 
 const state: RefreshStoreState = {
   domains: {
@@ -154,7 +155,8 @@ export const getScopedDomainState = <K extends RefreshDomain>(
   scope: string
 ): DomainSnapshotState<DomainPayloadMap[K]> => {
   const domainMap = state.scopedDomains[domain] as
-    Record<string, DomainSnapshotState<DomainPayloadMap[K]>> | undefined;
+    | Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
+    | undefined;
   if (!domainMap) {
     return EMPTY_SCOPED_STATE as DomainSnapshotState<DomainPayloadMap[K]>;
   }
@@ -165,7 +167,8 @@ export const getScopedDomainStates = <K extends RefreshDomain>(
   domain: K
 ): Record<string, DomainSnapshotState<DomainPayloadMap[K]>> => {
   const domainMap = state.scopedDomains[domain] as
-    Record<string, DomainSnapshotState<DomainPayloadMap[K]>> | undefined;
+    | Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
+    | undefined;
   return domainMap
     ? domainMap
     : (EMPTY_SCOPED_MAP as unknown as Record<string, DomainSnapshotState<DomainPayloadMap[K]>>);
@@ -175,7 +178,8 @@ export const getScopedDomainEntries = <K extends RefreshDomain>(
   domain: K
 ): Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]> => {
   const entries = state.scopedDomainEntries[domain] as
-    Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]> | undefined;
+    | Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]>
+    | undefined;
   return entries
     ? entries
     : (EMPTY_SCOPED_ENTRIES as unknown as Array<
@@ -220,7 +224,8 @@ export const setScopedDomainState = <K extends RefreshDomain>(
   ) => DomainSnapshotState<DomainPayloadMap[K]>
 ): void => {
   const currentMap = state.scopedDomains[domain] as
-    Record<string, DomainSnapshotState<DomainPayloadMap[K]>> | undefined;
+    | Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
+    | undefined;
   const previousState = (currentMap?.[scope] ?? EMPTY_SCOPED_STATE) as DomainSnapshotState<
     DomainPayloadMap[K]
   >;
@@ -250,7 +255,8 @@ export const setScopedDomainState = <K extends RefreshDomain>(
 
 export const resetScopedDomainState = <K extends RefreshDomain>(domain: K, scope: string): void => {
   const currentMap = state.scopedDomains[domain] as
-    Record<string, DomainSnapshotState<DomainPayloadMap[K]>> | undefined;
+    | Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
+    | undefined;
 
   if (!currentMap || !(scope in currentMap)) {
     return;

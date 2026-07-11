@@ -5,16 +5,22 @@
  * Covers key behaviors and edge cases for ClusterResourcesManager.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import { ClusterResourcesManager } from './ClusterResourcesManager';
 
 type ClusterKey = 'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
+interface CapturedViewProps {
+  activeTab: ClusterKey;
+  nodesError?: string | null;
+  eventsError?: string | null;
+}
 
 const { viewPropsRef, permissionState } = vi.hoisted(() => ({
-  viewPropsRef: { current: null as any },
+  viewPropsRef: { current: null as CapturedViewProps | null },
   permissionState: new Map<
     string,
     { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
@@ -23,7 +29,7 @@ const { viewPropsRef, permissionState } = vi.hoisted(() => ({
 
 vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
   __esModule: true,
-  default: (props: any) => {
+  default: (props: CapturedViewProps) => {
     viewPropsRef.current = props;
     return <div data-testid="cluster-resources-view" />;
   },
@@ -51,10 +57,6 @@ vi.mock('@/core/capabilities', () => ({
 describe('ClusterResourcesManager', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -114,7 +116,7 @@ describe('ClusterResourcesManager', () => {
 
     await renderManager('nodes');
 
-    const props = viewPropsRef.current;
+    const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
     expect(props).toBeTruthy();
     expect(props.activeTab).toBe('nodes');
     expect(props.nodesError).toBe('nodes denied');
@@ -128,7 +130,7 @@ describe('ClusterResourcesManager', () => {
     });
     await renderManager('events');
 
-    const props = viewPropsRef.current;
+    const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
     expect(props.eventsError).toBe('forbidden');
   });
 });

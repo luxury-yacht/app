@@ -5,17 +5,16 @@
  * Covers key behaviors and edge cases for DockablePanel.behavior.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts/context';
-
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
-import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
 import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { type DockPosition, getAllPanelStates, restorePanelStates } from './useDockablePanelState';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
@@ -30,7 +29,9 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 const removePanelLayers = () => {
-  document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
+  document.querySelectorAll('.dockable-panel-layer').forEach((node) => {
+    node.remove();
+  });
 };
 
 const ensureContentElement = () => {
@@ -107,10 +108,6 @@ const renderPanel = async (element: React.ReactElement) => {
 describe('DockablePanel behaviour (real hook)', () => {
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     setActivePanelLayoutStore(createPanelLayoutStore());
@@ -226,9 +223,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(resizeHandle).toBeTruthy();
 
     await act(async () => {
-      resizeHandle!.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 600, clientY: 200 })
-      );
+      requireValue(
+        resizeHandle,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 600, clientY: 200 }));
     });
     await act(async () => {
       document.dispatchEvent(
@@ -371,7 +369,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(dockRightButton).toBeTruthy();
 
     await act(async () => {
-      dockRightButton!.click();
+      requireValue(
+        dockRightButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).click();
       await Promise.resolve();
     });
 
@@ -409,7 +410,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(dockBottomButtonWhileRight).toBeTruthy();
 
     await act(async () => {
-      dockBottomButtonWhileRight!.click();
+      requireValue(
+        dockBottomButtonWhileRight,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).click();
       await Promise.resolve();
     });
     await flushEffects();
@@ -421,7 +425,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(floatButtonWhileBottom).toBeTruthy();
 
     await act(async () => {
-      floatButtonWhileBottom!.click();
+      requireValue(
+        floatButtonWhileBottom,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).click();
       await Promise.resolve();
     });
     await flushEffects();
@@ -461,23 +468,27 @@ describe('DockablePanel behaviour (real hook)', () => {
     const panelElement = document.querySelector('.dockable-panel') as HTMLDivElement | null;
     expect(panelElement).toBeTruthy();
 
-    Object.defineProperty(panelElement!, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({
-        left: 300,
-        top: 180,
-        width: 500,
-        height: 320,
-        right: 800,
-        bottom: 500,
-      }),
-    });
+    Object.defineProperty(
+      requireValue(panelElement, 'expected test value in DockablePanel.behavior.test.tsx'),
+      'getBoundingClientRect',
+      {
+        configurable: true,
+        value: () => ({
+          left: 300,
+          top: 180,
+          width: 500,
+          height: 320,
+          right: 800,
+          bottom: 500,
+        }),
+      }
+    );
 
     const header = document.querySelector('.dockable-panel__header') as HTMLDivElement | null;
     expect(header).toBeTruthy();
 
     await act(async () => {
-      header!.dispatchEvent(
+      requireValue(header, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 220 })
       );
     });
@@ -532,9 +543,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(resizeZone).toBeTruthy();
 
     await act(async () => {
-      resizeZone!.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 320 })
-      );
+      requireValue(
+        resizeZone,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 320 }));
     });
     await act(async () => {
       document.dispatchEvent(
@@ -579,7 +591,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(closeButton).toBeTruthy();
 
     await act(async () => {
-      closeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        closeButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -601,13 +616,17 @@ describe('DockablePanel behaviour (real hook)', () => {
     const portal = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
     expect(portal).toBeTruthy();
 
-    const dockBottomButton = portal!.querySelector(
-      "[aria-label='Dock panel to bottom']"
-    ) as HTMLButtonElement | null;
+    const dockBottomButton = requireValue(
+      portal,
+      'expected test value in DockablePanel.behavior.test.tsx'
+    ).querySelector("[aria-label='Dock panel to bottom']") as HTMLButtonElement | null;
     expect(dockBottomButton).toBeTruthy();
 
     await act(async () => {
-      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        dockBottomButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -642,16 +661,20 @@ describe('DockablePanel behaviour (real hook)', () => {
     const panelElement = document.querySelector('.dockable-panel') as HTMLDivElement | null;
     expect(panelElement).toBeTruthy();
 
-    Object.defineProperty(panelElement!, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ left: 200, top: 160, width: 400, height: 280, right: 600, bottom: 440 }),
-    });
+    Object.defineProperty(
+      requireValue(panelElement, 'expected test value in DockablePanel.behavior.test.tsx'),
+      'getBoundingClientRect',
+      {
+        configurable: true,
+        value: () => ({ left: 200, top: 160, width: 400, height: 280, right: 600, bottom: 440 }),
+      }
+    );
 
     const header = document.querySelector('.dockable-panel__header') as HTMLDivElement | null;
     expect(header).toBeTruthy();
 
     await act(async () => {
-      header!.dispatchEvent(
+      requireValue(header, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true, clientX: 240, clientY: 180 })
       );
     });
@@ -706,9 +729,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(resizeHandle).toBeTruthy();
 
     await act(async () => {
-      resizeHandle!.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 400, clientY: 400 })
-      );
+      requireValue(
+        resizeHandle,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 400, clientY: 400 }));
     });
     await act(async () => {
       document.dispatchEvent(
@@ -749,15 +773,17 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     const initialSize = getPanelState('panel-floating-corner').floatingSize;
 
-    const cornerZone = portal!.querySelector(
-      '.dockable-panel__resize-zone--bottom-right'
-    ) as HTMLDivElement | null;
+    const cornerZone = requireValue(
+      portal,
+      'expected test value in DockablePanel.behavior.test.tsx'
+    ).querySelector('.dockable-panel__resize-zone--bottom-right') as HTMLDivElement | null;
     expect(cornerZone).toBeTruthy();
 
     await act(async () => {
-      cornerZone!.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 500 })
-      );
+      requireValue(
+        cornerZone,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 800, clientY: 500 }));
     });
     await act(async () => {
       document.dispatchEvent(
@@ -816,7 +842,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(dockRightButton).toBeTruthy();
 
     await act(async () => {
-      dockRightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        dockRightButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await flushEffects();
@@ -852,7 +881,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(dockBottomButton).toBeTruthy();
 
     await act(async () => {
-      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        dockBottomButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await flushEffects();
@@ -897,7 +929,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(dockBottomButton).toBeTruthy();
 
     await act(async () => {
-      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        dockBottomButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await flushEffects();
@@ -933,7 +968,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(closeButton).toBeTruthy();
 
     await act(async () => {
-      closeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        closeButton,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await flushEffects();
@@ -1044,13 +1082,14 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     const initialSize = getPanelState('panel-floating-top').floatingSize;
 
-    const topZone = portal!.querySelector(
-      '.dockable-panel__resize-zone--top'
-    ) as HTMLDivElement | null;
+    const topZone = requireValue(
+      portal,
+      'expected test value in DockablePanel.behavior.test.tsx'
+    ).querySelector('.dockable-panel__resize-zone--top') as HTMLDivElement | null;
     expect(topZone).toBeTruthy();
 
     await act(async () => {
-      topZone!.dispatchEvent(
+      requireValue(topZone, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 200 })
       );
     });
@@ -1094,15 +1133,17 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     const initialSize = getPanelState('panel-floating-left').floatingSize;
 
-    const leftZone = portal!.querySelector(
-      '.dockable-panel__resize-zone--left'
-    ) as HTMLDivElement | null;
+    const leftZone = requireValue(
+      portal,
+      'expected test value in DockablePanel.behavior.test.tsx'
+    ).querySelector('.dockable-panel__resize-zone--left') as HTMLDivElement | null;
     expect(leftZone).toBeTruthy();
 
     await act(async () => {
-      leftZone!.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 300 })
-      );
+      requireValue(
+        leftZone,
+        'expected test value in DockablePanel.behavior.test.tsx'
+      ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 300 }));
     });
     await act(async () => {
       document.dispatchEvent(

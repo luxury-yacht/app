@@ -8,29 +8,29 @@
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
-import type {
-  PermissionEntry,
-  PermissionKey,
-  PermissionMap,
-  PermissionSpec,
-  PermissionStatus,
-  PermissionQueryDiagnostics,
-} from './permissionTypes';
 import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
+import {
+  type QueryPayloadItem,
+  type QueryResponseResult,
+  queryPermissions,
+} from './permissionRead';
 import {
   ALL_NAMESPACE_PERMISSIONS,
   CLUSTER_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
+import type {
+  PermissionEntry,
+  PermissionKey,
+  PermissionMap,
+  PermissionQueryDiagnostics,
+  PermissionSpec,
+  PermissionStatus,
+} from './permissionTypes';
 import {
   getPermissionResultErrorMessage,
   isTransientPermissionResultError,
 } from './transientPermissionErrors';
-import {
-  queryPermissions,
-  type QueryPayloadItem,
-  type QueryResponseResult,
-} from './permissionRead';
 
 /**
  * Resolve GVK for a permission lookup. When the caller supplied explicit
@@ -116,7 +116,6 @@ export interface NamespacePermissionTarget {
 }
 
 let currentClusterId = '';
-let version = 0;
 
 const permissionResults = new Map<string, PermissionEntry>();
 let permissionMap: PermissionMap = new Map();
@@ -256,7 +255,7 @@ const rebuildPermissionMap = (): void => {
 };
 
 /**
- * Increments the store version, rebuilds the permission map, and fires listeners.
+ * Rebuilds the permission map and fires listeners.
  */
 const flushPermissionListeners = (): void => {
   permissionNotifyScheduled = false;
@@ -280,7 +279,6 @@ const schedulePermissionNotify = (): void => {
 };
 
 const notify = (): void => {
-  version++;
   rebuildPermissionMap();
   schedulePermissionNotify();
 };
@@ -1224,7 +1222,6 @@ export const resetPermissionStore = (): void => {
 export const __resetForTests = (): void => {
   resetPermissionStore();
   currentClusterId = '';
-  version = 0;
   permissionListeners.clear();
   diagnosticsListeners.clear();
   if (unsubChanging) {

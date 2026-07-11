@@ -6,9 +6,10 @@
  * and a value outside the union must throw instead of silently rendering as
  * success (the pre-typed helpers fell through to the green 'success' class).
  */
-import ReactDOM from 'react-dom/client';
+
 import { act } from 'react';
-import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import { DrainProgressCard } from './DrainProgressCard';
@@ -33,10 +34,6 @@ describe('DrainProgressCard status pill', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -55,8 +52,10 @@ describe('DrainProgressCard status pill', () => {
       root.render(<DrainProgressCard job={buildJob(status)} isActive={false} />);
     });
     const pill = container.querySelector('[data-test="drain-job-status"]');
-    expect(pill).not.toBeNull();
-    return pill as HTMLElement;
+    if (!(pill instanceof HTMLElement)) {
+      throw new Error('Expected drain job status pill');
+    }
+    return pill;
   };
 
   it.each([

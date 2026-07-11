@@ -5,35 +5,35 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useShortNames } from '@/hooks/useShortNames';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useCallback } from 'react';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import CatalogPaginationFooter, {
   catalogPaginationPageKeyProps,
 } from '@modules/browse/components/CatalogPaginationFooter';
-import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
-import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import {
+  type CatalogBackedCustomResourceRow,
   customCatalogCRDReference,
   customCatalogObjectReference,
   customCatalogRowKey,
-  type CatalogBackedCustomResourceRow,
 } from '@modules/browse/hooks/customCatalogRowAdapter';
+import { useCatalogBackedCustomResourceRows } from '@modules/browse/hooks/useCatalogBackedCustomResourceRows';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import React, { useCallback, useMemo } from 'react';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Data interface for custom resources
 export type CustomResourceData = CatalogBackedCustomResourceRow;

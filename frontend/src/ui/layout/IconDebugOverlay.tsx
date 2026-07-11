@@ -1,7 +1,6 @@
-import React from 'react';
-
-import { iconDebugEntries, type IconDebugEntry } from '@shared/components/icons/iconDebugDiscovery';
+import { type IconDebugEntry, iconDebugEntries } from '@shared/components/icons/iconDebugDiscovery';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
+import React from 'react';
 
 interface IconDebugOverlayProps {
   onClose: () => void;

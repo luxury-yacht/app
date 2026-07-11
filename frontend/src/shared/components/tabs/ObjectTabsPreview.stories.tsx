@@ -34,12 +34,11 @@
  * could theoretically end up in one strip after drags).
  */
 
-import { useCallback, useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-
-import { Tabs, type TabDescriptor } from './';
-import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
+import { useCallback, useRef, useState } from 'react';
 import { AppearanceModeProviderDecorator } from '../../../../.storybook/decorators/AppearanceModeProviderDecorator';
+import { type TabDescriptor, Tabs } from './';
+import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
 // Import the real dockable panel CSS so the preview renders each tab's
 // kind indicator via the production `.dockable-tab__kind-indicator.kind-badge`
 // rules AND the custom drag image via the real `.dockable-tab-drag-preview`
@@ -393,7 +392,7 @@ function ObjectTabsPreviewHarness() {
     <div className="tabs-story-drag-harness">
       {rows.map((row, rowIndex) => (
         <div
-          key={rowIndex}
+          key={row.map((group) => group.id).join(':')}
           className={`tabs-story-drag-row${rowIndex > 0 ? ' tabs-story-drag-row--below' : ''}`}
         >
           {row.map((group) => (

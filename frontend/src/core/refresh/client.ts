@@ -5,13 +5,13 @@
  * Handles API calls and response shaping for the core layer.
  */
 
+import type { backend } from '@wailsjs/go/models';
 import {
   GetKubernetesAPIClientDiagnostics,
   GetRefreshBaseURL,
   GetSelectionDiagnostics,
-} from '@wailsjs/go/backend/App';
-import type { backend } from '@wailsjs/go/models';
-
+} from '@/core/backend-api';
+import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
 import {
   assertRefreshSnapshotEnvelope,
   assertTelemetrySummary,
@@ -20,7 +20,6 @@ import {
   type SnapshotStats,
   type TelemetrySummary,
 } from './types';
-import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
 
 export type Snapshot<TPayload> = RefreshSnapshot<TPayload>;
 export type { SnapshotStats };

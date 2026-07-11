@@ -7,29 +7,28 @@
  */
 
 import React, {
+  type HTMLAttributes,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type HTMLAttributes,
 } from 'react';
 import './DiagnosticsPanel.css';
+import {
+  resetGridTablePerformanceDiagnostics,
+  useGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { DockablePanel } from '@ui/dockable';
-import { useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
-import type {
-  RefreshDomain,
-  NodeMetricsInfo,
-  PodSnapshotPayload,
-  ContainerLogsSnapshotPayload,
-  TelemetryStreamStatus,
-} from '../types';
-import { refreshManager } from '../RefreshManager';
-import { resourceStreamManager } from '../streaming/resourceStreamManager';
-import { refreshOrchestrator } from '../orchestrator';
-import { resolveModeDetails } from './diagnostics/modeDetails';
-import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
+import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
+import { useViewState } from '@/core/contexts/ViewStateContext';
+import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
+import { parseClusterScopeList, stripClusterScope } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import {
   fetchKubernetesAPIClientDiagnostics,
   fetchSelectionDiagnostics,
@@ -38,18 +37,20 @@ import {
   type NormalizedTelemetrySummary,
   type SelectionDiagnostics,
 } from '../client';
-import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
-import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
-import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
-import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
-import { useViewState } from '@/core/contexts/ViewStateContext';
-import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
+import { refreshOrchestrator } from '../orchestrator';
+import { refreshManager } from '../RefreshManager';
+import { type DomainSnapshotState, useRefreshScopedDomainEntries, useRefreshState } from '../store';
+import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import type {
+  ContainerLogsSnapshotPayload,
+  NodeMetricsInfo,
+  PodSnapshotPayload,
+  RefreshDomain,
+  TelemetryStreamStatus,
+} from '../types';
 
 // Import from extracted modules
 import {
-  type DiagnosticsRow,
-  type DiagnosticsPanelProps,
   buildBrokerReadRows,
   buildBrokerReadsSummary,
   buildCapabilityBatchRows,
@@ -63,31 +64,30 @@ import {
   buildMetricsSummary,
   buildOrchestratorSummary,
   buildPermissionRows,
+  CLUSTER_SCOPE,
+  type DiagnosticsPanelProps,
+  type DiagnosticsRow,
+  DOMAIN_REFRESHER_MAP,
+  DOMAIN_STREAM_MAP,
   dedupeDiagnosticsRows,
   formatInterval,
   formatLastUpdated,
-  STALE_THRESHOLD_MS,
-  CLUSTER_SCOPE,
-  DOMAIN_REFRESHER_MAP,
-  DOMAIN_STREAM_MAP,
+  getScopedFeaturesForView,
   PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
   PRIORITY_DOMAINS,
+  resolveDomainNamespace,
+  STALE_THRESHOLD_MS,
   STREAM_MODE_BY_NAME,
   STREAM_ONLY_DOMAINS,
-  getScopedFeaturesForView,
-  resolveDomainNamespace,
 } from './diagnostics';
-import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
-import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
-import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
+import { GridTablePerformance } from './diagnostics/GridTablePerformance';
+import { resolveModeDetails } from './diagnostics/modeDetails';
 import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
-import { GridTablePerformance } from './diagnostics/GridTablePerformance';
-import {
-  resetGridTablePerformanceDiagnostics,
-  useGridTablePerformanceDiagnostics,
-} from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
+import { DiagnosticsSummaryCards, DiagnosticsTable } from './diagnostics/TableRefreshDomains';
+import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -103,6 +103,9 @@ type StreamHealthSummary = {
 };
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 
 type DiagnosticsTabId =
   | 'refresh-domains'
@@ -437,9 +440,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   // active cluster before falling back to generic "first populated" selection.
   const pickPreferredScopeState = useCallback(
     (
-      entries: Array<[string, DomainSnapshotState<any>]>,
+      entries: Array<[string, DomainSnapshotState<unknown>]>,
       preferredClusterId: string | undefined
-    ): DomainSnapshotState<any> => {
+    ): DomainSnapshotState<unknown> => {
       if (entries.length === 0) {
         return { status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0 };
       }
@@ -479,7 +482,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         candidates[0];
 
       const [scopeKey, scopedState] = selected;
-      if (scopedState.scope && scopedState.scope.trim()) {
+      if (scopedState.scope?.trim()) {
         return scopedState;
       }
       return { ...scopedState, scope: scopeKey };
@@ -887,7 +890,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           if (!hasMetricsFlag) {
             return undefined;
           }
-          return (state.data as any)?.metrics;
+          const metrics = asRecord(state.data)?.metrics;
+          return asRecord(metrics) ? (metrics as NodeMetricsInfo) : undefined;
         })();
         const telemetryLastUpdatedInfo = (() => {
           if (streamLastEvent && streamLastEvent > 0) {
@@ -1010,7 +1014,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             : hasMetricsFlag
               ? 'No metrics available'
               : 'Not applicable';
-        const data = state.data as any;
+        const data = asRecord(state.data);
         let count = (() => {
           if (!data) {
             return 0;
@@ -1021,8 +1025,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
                 return 0;
               }
               return data.namespaces.length;
-            case 'cluster-overview':
-              return data.overview?.totalNodes ?? 0;
+            case 'cluster-overview': {
+              const totalNodes = asRecord(data.overview)?.totalNodes;
+              return typeof totalNodes === 'number' ? totalNodes : 0;
+            }
             case 'nodes':
               return Array.isArray(data.rows) ? data.rows.length : 0;
             case 'object-maintenance':
@@ -1074,9 +1080,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const stats = state.stats;
         let truncated = Boolean(stats?.truncated);
         let totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-        let warnings = (stats?.warnings ?? []).filter(
-          (warning) => warning && warning.trim().length
-        );
+        let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
         if (domain === 'catalog') {
           const catalogTotal =
             stats?.totalItems ??
@@ -1190,7 +1194,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning && warning.trim().length);
+      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
       if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
         warnings = [`Showing most recent ${count} of ${totalItems} pods`];
       }
@@ -1346,7 +1350,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const stats = state.stats;
       const truncated = Boolean(stats?.truncated);
       const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning && warning.trim().length);
+      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
       if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
         warnings = [`Showing most recent ${count} of ${totalItems} entries`];
       }
@@ -1414,7 +1418,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const buildObjectPanelRows = (
       domain: RefreshDomain,
       tabName: string,
-      entries: Array<[string, DomainSnapshotState<any>]>
+      entries: Array<[string, DomainSnapshotState<unknown>]>
     ): DiagnosticsRow[] => {
       return entries.map(([scope, state]) => {
         const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -1799,7 +1803,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
       const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
-      if (target && target.closest('.diagnostics-content')) {
+      if (target?.closest('.diagnostics-content')) {
         return false;
       }
 

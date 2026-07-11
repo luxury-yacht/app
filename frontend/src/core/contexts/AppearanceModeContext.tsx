@@ -5,9 +5,10 @@
  * Applies the resolved light/dark mode to the document and listens for system changes.
  * Also listens for mode change events from the application menu.
  */
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import type React from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { eventBus } from '@/core/events';
-import { getAppearanceModePreference, type AppearanceMode } from '@/core/settings/appPreferences';
+import { type AppearanceMode, getAppearanceModePreference } from '@/core/settings/appPreferences';
 
 type ResolvedAppearanceMode = 'light' | 'dark';
 
@@ -17,6 +18,19 @@ interface AppearanceModeContextType {
 }
 
 const AppearanceModeContext = createContext<AppearanceModeContextType | undefined>(undefined);
+
+const detectSystemAppearanceMode = (): ResolvedAppearanceMode => {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return isDark ? 'dark' : 'light';
+  }
+  return 'light';
+};
+
+const getInitialResolvedMode = (): ResolvedAppearanceMode => {
+  const attr = document.documentElement.getAttribute('data-appearance-mode');
+  return attr === 'dark' ? 'dark' : 'light';
+};
 
 export const useAppearanceMode = () => {
   const context = useContext(AppearanceModeContext);
@@ -33,23 +47,9 @@ interface AppearanceModeProviderProps {
 export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ children }) => {
   const [mode, setMode] = useState<AppearanceMode>(() => getAppearanceModePreference());
 
-  const detectSystemAppearanceMode = (): ResolvedAppearanceMode => {
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      return isDark ? 'dark' : 'light';
-    }
-    return 'light';
-  };
-
-  // Resolve the current effective mode from the document attribute set by the FOUC script.
-  const getInitialResolvedMode = (): ResolvedAppearanceMode => {
-    const attr = document.documentElement.getAttribute('data-appearance-mode');
-    return attr === 'dark' ? 'dark' : 'light';
-  };
-
   const [resolvedMode, setResolvedMode] = useState<ResolvedAppearanceMode>(getInitialResolvedMode);
 
-  const applyResolvedMode = (next: ResolvedAppearanceMode) => {
+  const applyResolvedMode = useCallback((next: ResolvedAppearanceMode) => {
     document.documentElement.setAttribute('data-appearance-mode', next);
     document.documentElement.className = next;
     setResolvedMode((prev) => {
@@ -61,7 +61,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
       }
       return next;
     });
-  };
+  }, []);
 
   useEffect(() => {
     const preference = getAppearanceModePreference();
@@ -103,7 +103,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
 
       runtime?.EventsOff?.('appearance-mode-changed');
     };
-  }, []);
+  }, [applyResolvedMode]);
 
   return (
     <AppearanceModeContext.Provider value={{ mode, resolvedMode }}>

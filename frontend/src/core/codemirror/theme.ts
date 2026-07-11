@@ -5,9 +5,9 @@
  * Implements theme logic for the core layer.
  */
 
-import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import '@styles/overrides/codemirror.css';
 

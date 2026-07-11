@@ -1,8 +1,10 @@
-import React from 'react';
+import type React from 'react';
 import type { IconProps } from './SharedIcons';
 
 export const ObjectMapIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -22,6 +24,8 @@ export const ObjectMapIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) 
 
 export const ZoomInIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -41,6 +45,8 @@ export const ZoomInIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => 
 
 export const ZoomOutIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -59,6 +65,8 @@ export const ZoomOutIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =>
 
 export const ResetZoomIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 20 20"
     fill="currentColor"
@@ -71,6 +79,8 @@ export const ResetZoomIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) 
 
 export const FitToViewIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -90,6 +100,8 @@ export const FitToViewIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) 
 
 export const AutoFitIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -110,6 +122,8 @@ export const AutoFitIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) =>
 
 export const FocusModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="3 3 26 26"
     fill="currentColor"
@@ -122,6 +136,8 @@ export const FocusModeIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) 
 
 export const LegendIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -147,7 +163,7 @@ export const ObjectMapLegendSwatchIcon: React.FC<IconProps & { edgeClassName: st
   className = 'object-map__legend-swatch',
   edgeClassName,
 }) => (
-  <svg className={className} width={width} height={height} aria-hidden="true">
+  <svg className={className} width={width} height={height} aria-hidden="true" focusable="false">
     <line x1={0} y1={3} x2={26} y2={3} className={edgeClassName} />
   </svg>
 );

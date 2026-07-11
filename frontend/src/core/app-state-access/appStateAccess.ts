@@ -1,5 +1,5 @@
-import type { AppStateRequest } from './types';
 import { beginBrokerRead, completeBrokerRead } from '@/core/read-diagnostics';
+import type { AppStateRequest } from './types';
 
 export const requestAppState = async <T>({
   resource,

@@ -10,7 +10,8 @@
  * get a minimum visible width so a one-second job is still findable.
  */
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './JobTimeline.css';
 
 interface JobLike {
@@ -101,7 +102,7 @@ const DEFAULT_WINDOW = WINDOWS[1]; // 3h
 const parseStart = (raw: unknown): number | null => {
   if (typeof raw !== 'string' || !raw) return null;
   const t = new Date(raw).getTime();
-  return isNaN(t) ? null : t;
+  return Number.isNaN(t) ? null : t;
 };
 
 const variantClass = (status?: string): string => {
@@ -268,9 +269,9 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
         {/* Grid lines — one vertical mark per axis tick, behind the
             bars, so users can read where each labeled time falls
             relative to a bar without dropping eyes to the axis. */}
-        {ticks.map((t, i) => (
+        {ticks.map((t) => (
           <div
-            key={`grid-${i}`}
+            key={`grid:${t.leftPct}:${t.label}`}
             className="job-timeline-gridline"
             style={{ left: `${t.leftPct}%` }}
           />
@@ -278,7 +279,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
         {runs.length === 0 && (
           <div className="job-timeline-empty">No runs in last {windowOpt.label}</div>
         )}
-        {runs.map((r, i) => {
+        {runs.map((r) => {
           const startMs = parseStart(r.job.startTime) ?? now;
           const startStr = new Date(startMs).toLocaleString();
           const tooltip = [
@@ -298,7 +299,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
             top: r.row * (ROW_HEIGHT + ROW_GAP),
             height: ROW_HEIGHT,
           };
-          const key = `${r.job.name ?? 'job'}-${i}`;
+          const key = `${r.job.name ?? 'job'}:${r.job.startTime ?? ''}`;
 
           if (onJobClick && r.job.name) {
             const jobName = r.job.name;
@@ -319,8 +320,12 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
       </div>
 
       <div className="job-timeline-axis">
-        {ticks.map((t, i) => (
-          <div key={i} className="job-timeline-tick" style={{ left: `${t.leftPct}%` }}>
+        {ticks.map((t) => (
+          <div
+            key={`tick:${t.leftPct}:${t.label}`}
+            className="job-timeline-tick"
+            style={{ left: `${t.leftPct}%` }}
+          >
             <span className="job-timeline-tick-label">{t.label}</span>
           </div>
         ))}

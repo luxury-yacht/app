@@ -5,11 +5,13 @@
  * Covers: outline/filled heart states, popover choices for add/update/remove.
  */
 
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import React from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
+import { requireValue } from '@/test-utils/requireValue';
+import type { FavSaveModalProps } from './FavSaveModal';
 
 // ---------------------------------------------------------------------------
 // Mocks — declared before importing the hook under test.
@@ -102,11 +104,12 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 }));
 
 vi.mock('./FavSaveModal', () => ({
-  default: ({ isOpen, onClose, onSave, onDelete, existingFavorite }: any) => {
+  default: ({ isOpen, onClose, onSave, onDelete, existingFavorite }: FavSaveModalProps) => {
     if (!isOpen) return null;
     return (
       <div data-testid="fav-save-modal">
         <button
+          type="button"
           data-testid="modal-save"
           onClick={() => {
             onSave({
@@ -125,11 +128,12 @@ vi.mock('./FavSaveModal', () => ({
         >
           Save
         </button>
-        <button data-testid="modal-cancel" onClick={onClose}>
+        <button type="button" data-testid="modal-cancel" onClick={onClose}>
           Cancel
         </button>
-        {existingFavorite && (
+        {!!existingFavorite && (
           <button
+            type="button"
             data-testid="modal-delete"
             onClick={() => {
               onDelete(existingFavorite.id);
@@ -219,16 +223,11 @@ describe('useFavToggle', () => {
 
   const clickToggle = async () => {
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    expect(btn).toBeTruthy();
     await act(async () => {
-      btn!.click();
+      requireValue(btn, 'expected test value in FavToggle.test.tsx').click();
       await Promise.resolve();
     });
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     mockFavorites = [];
@@ -259,8 +258,12 @@ describe('useFavToggle', () => {
 
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
     expect(btn).toBeTruthy();
-    expect(btn!.getAttribute('data-active')).toBe('false');
-    expect(btn!.title).toBe('Save as favorite');
+    expect(
+      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
+    ).toBe('false');
+    expect(requireValue(btn, 'expected test value in FavToggle.test.tsx').title).toBe(
+      'Save as favorite'
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -274,8 +277,12 @@ describe('useFavToggle', () => {
 
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
     expect(btn).toBeTruthy();
-    expect(btn!.getAttribute('data-active')).toBe('true');
-    expect(btn!.title).toBe('Edit favorite');
+    expect(
+      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
+    ).toBe('true');
+    expect(requireValue(btn, 'expected test value in FavToggle.test.tsx').title).toBe(
+      'Edit favorite'
+    );
   });
 
   it('matches cluster-specific favorites by clusterId when present', async () => {
@@ -290,7 +297,9 @@ describe('useFavToggle', () => {
 
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
     expect(btn).toBeTruthy();
-    expect(btn!.getAttribute('data-active')).toBe('true');
+    expect(
+      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
+    ).toBe('true');
   });
 
   // -------------------------------------------------------------------------
@@ -336,7 +345,7 @@ describe('useFavToggle', () => {
 
     const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
     await act(async () => {
-      saveBtn!.click();
+      requireValue(saveBtn, 'expected test value in FavToggle.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -355,7 +364,7 @@ describe('useFavToggle', () => {
 
     const deleteBtn = document.querySelector<HTMLElement>('[data-testid="modal-delete"]');
     await act(async () => {
-      deleteBtn!.click();
+      requireValue(deleteBtn, 'expected test value in FavToggle.test.tsx').click();
       await Promise.resolve();
     });
 
@@ -376,7 +385,7 @@ describe('useFavToggle', () => {
 
     const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
     await act(async () => {
-      saveBtn!.click();
+      requireValue(saveBtn, 'expected test value in FavToggle.test.tsx').click();
       await new Promise((r) => setTimeout(r, 0));
     });
 
@@ -395,7 +404,7 @@ describe('useFavToggle', () => {
 
     const cancelBtn = document.querySelector<HTMLElement>('[data-testid="modal-cancel"]');
     await act(async () => {
-      cancelBtn!.click();
+      requireValue(cancelBtn, 'expected test value in FavToggle.test.tsx').click();
       await new Promise((r) => setTimeout(r, 0));
     });
 

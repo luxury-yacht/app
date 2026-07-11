@@ -2,16 +2,17 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
-import * as YAML from 'yaml';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { YamlEditor } from '@shared/components/yaml';
+import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import * as YAML from 'yaml';
 import { useRefreshDomainHandle } from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import { errorHandler } from '@utils/errorHandler';
 import './ValuesTab.css';
 import '../Yaml/YamlTab.css';
 
@@ -202,7 +203,6 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       case 'overrides':
         content = getActualOverrides(userValues, allValues);
         break;
-      case 'merged':
       default:
         content = markOverriddenValues(allValues, userValues);
         break;

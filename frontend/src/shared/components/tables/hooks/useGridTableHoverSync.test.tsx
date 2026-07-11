@@ -5,12 +5,12 @@
  * Covers key behaviors and edge cases for useGridTableHoverSync.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };
@@ -84,24 +84,51 @@ describe('useGridTableHoverSync', () => {
     row.focus();
 
     act(() => {
-      result.current!.handleRowMouseEnter(row);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).handleRowMouseEnter(row);
     });
-    expect(result.current!.hoverState.visible).toBe(true);
-    expect(result.current!.hoverState.top).toBe(10);
-    expect(result.current!.hoverState.height).toBe(25);
-    expect(result.current!.hoverState.selected).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.top
+    ).toBe(10);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.height
+    ).toBe(25);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.selected
+    ).toBe(true);
 
     document.body.classList.add('gridtable-disable-hover');
     act(() => {
-      result.current!.handleRowMouseLeave();
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).handleRowMouseLeave();
     });
-    expect(result.current!.hoverState.visible).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
     document.body.classList.remove('gridtable-disable-hover');
 
     act(() => {
-      result.current!.handleRowMouseLeave();
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).handleRowMouseLeave();
     });
-    expect(result.current!.hoverState.visible).toBe(false);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(false);
 
     unmount();
     document.body.removeChild(wrapper);
@@ -128,20 +155,35 @@ describe('useGridTableHoverSync', () => {
     row.focus();
 
     act(() => {
-      result.current!.updateHoverForElement(row);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).updateHoverForElement(row);
     });
     act(() => {
-      result.current!.handleRowMouseLeave(row);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).handleRowMouseLeave(row);
     });
 
-    expect(result.current!.hoverState.visible).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
 
     row.dataset.rowSelected = undefined;
     row.dataset.rowFocused = 'true';
     act(() => {
-      result.current!.handleRowMouseLeave(row);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).handleRowMouseLeave(row);
     });
-    expect(result.current!.hoverState.visible).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
 
     unmount();
     document.body.removeChild(wrapper);
@@ -161,7 +203,10 @@ describe('useGridTableHoverSync', () => {
     const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
 
     act(() => {
-      result.current!.scheduleHeaderSync();
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).scheduleHeaderSync();
     });
     expect(headerInner.style.transform).toBe('translateX(-20px)');
 
@@ -191,27 +236,54 @@ describe('useGridTableHoverSync', () => {
 
     // Establish hover on the row.
     act(() => {
-      result.current!.updateHoverForElement(row);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).updateHoverForElement(row);
     });
-    expect(result.current!.hoverState.visible).toBe(true);
-    expect(result.current!.hoverRowRef.current).toBe(row);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverRowRef.current
+    ).toBe(row);
 
     // Activate hover suppression (e.g. during keyboard shortcut).
     document.body.classList.add('gridtable-disable-hover');
 
     // Without force, updateHoverForElement(null) is a no-op during suppression.
     act(() => {
-      result.current!.updateHoverForElement(null);
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).updateHoverForElement(null);
     });
-    expect(result.current!.hoverState.visible).toBe(true);
-    expect(result.current!.hoverRowRef.current).toBe(row);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(true);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverRowRef.current
+    ).toBe(row);
 
     // With force: true, the detached node is cleared even during suppression.
     act(() => {
-      result.current!.updateHoverForElement(null, { force: true });
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).updateHoverForElement(null, { force: true });
     });
-    expect(result.current!.hoverState.visible).toBe(false);
-    expect(result.current!.hoverRowRef.current).toBeNull();
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverState.visible
+    ).toBe(false);
+    expect(
+      requireValue(result.current, 'expected test value in useGridTableHoverSync.test.tsx')
+        .hoverRowRef.current
+    ).toBeNull();
 
     unmount();
     document.body.removeChild(wrapper);
@@ -223,7 +295,10 @@ describe('useGridTableHoverSync', () => {
       useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: true })
     );
     act(() => {
-      firstHook.result.current!.scheduleHeaderSync();
+      requireValue(
+        firstHook.result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).scheduleHeaderSync();
     });
     expect(headerInner.style.transform).toBe('');
     firstHook.unmount();
@@ -235,7 +310,10 @@ describe('useGridTableHoverSync', () => {
       useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
     );
     act(() => {
-      result.current!.scheduleHeaderSync();
+      requireValue(
+        result.current,
+        'expected test value in useGridTableHoverSync.test.tsx'
+      ).scheduleHeaderSync();
     });
     expect(headerInner.style.transform).toBe('translateX(0px)');
     window.requestAnimationFrame = originalRAF;

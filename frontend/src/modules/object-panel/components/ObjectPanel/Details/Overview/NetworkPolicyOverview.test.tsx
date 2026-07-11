@@ -2,14 +2,14 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { networkPolicyDescriptor } from './descriptors/networkpolicy';
+import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -91,7 +91,7 @@ describe('NetworkPolicyOverview', () => {
         ],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Pod Selector')?.textContent).toContain('app=web');
@@ -114,7 +114,7 @@ describe('NetworkPolicyOverview', () => {
         policyTypes: [],
         labels: {},
         annotations: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Pod Selector')?.textContent).toBe('All pods in namespace');

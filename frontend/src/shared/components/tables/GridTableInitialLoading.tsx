@@ -5,8 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import type React from 'react';
 
 interface GridTableInitialLoadingProps {
   embedded: boolean;

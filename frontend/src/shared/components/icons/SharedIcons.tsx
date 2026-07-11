@@ -4,14 +4,13 @@
  * Shared SVG icon components used across multiple UI areas.
  */
 
-import React from 'react';
+import type React from 'react';
 
 export interface IconProps {
   width?: number | string;
   height?: number | string;
   fill?: string;
   className?: string;
-  ariaHidden?: boolean;
 }
 
 export const CordonIcon: React.FC<IconProps> = ({
@@ -20,6 +19,8 @@ export const CordonIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -36,6 +37,8 @@ export const DrainIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -52,6 +55,8 @@ export const DeleteIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -68,6 +73,8 @@ export const ScaleIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -87,6 +94,8 @@ export const ForceDeleteIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -103,6 +112,8 @@ export const ExpandIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -119,6 +130,8 @@ export const CollapseIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -135,6 +148,8 @@ export const ExpandAllIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -151,6 +166,8 @@ export const CollapseAllIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -167,6 +184,8 @@ export const SortAscIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -183,6 +202,8 @@ export const SortDescIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -199,6 +220,8 @@ export const OpenIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -215,6 +238,8 @@ export const RestartIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -231,6 +256,8 @@ export const RollbackIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -247,6 +274,8 @@ export const NamespaceIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -263,6 +292,8 @@ export const NamespaceOpenIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -279,6 +310,8 @@ export const SettingsIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -295,6 +328,8 @@ export const CollapseSidebarIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -311,6 +346,8 @@ export const ExpandSidebarIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -327,6 +364,8 @@ export const ClusterOverviewIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -343,6 +382,8 @@ export const ClusterResourcesIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -359,6 +400,8 @@ export const CategoryIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -370,7 +413,14 @@ export const CategoryIcon: React.FC<IconProps> = ({
 );
 
 export const CloseIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg width={width} height={height} viewBox="0 0 16 16" fill="none">
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width={width}
+    height={height}
+    viewBox="0 0 16 16"
+    fill="none"
+  >
     <path d="M2 2L14 14M2 14L14 2" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
@@ -382,6 +432,8 @@ export const CaseSensitiveIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="1 3 18 18"
     fill={fill}
@@ -400,6 +452,8 @@ export const MetadataIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -416,6 +470,8 @@ export const PortForwardIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -435,6 +491,8 @@ export const ResetFiltersIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -452,6 +510,8 @@ export const CheckIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -469,6 +529,8 @@ export const EditIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -485,6 +547,8 @@ export const InfoIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 20 20"
     fill={fill}
@@ -501,6 +565,8 @@ export const DiagnosticsIcon: React.FC<IconProps> = ({
   fill = 'currentColor',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill={fill}
@@ -518,6 +584,8 @@ export const DiagnosticsIcon: React.FC<IconProps> = ({
 
 export const DiffIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     fill="none"
@@ -534,6 +602,8 @@ export const DiffIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
 
 export const LogsIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -550,6 +620,8 @@ export const LogsIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
 
 export const RefreshIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
@@ -570,6 +642,8 @@ export const IconBarSeparatorIcon: React.FC<IconProps> = ({
   className = 'icon-bar-separator',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 2 16"
     width={width}
@@ -585,7 +659,6 @@ export const WarningTriangleIcon: React.FC<IconProps> = ({
   height = 24,
   fill = 'currentColor',
   className,
-  ariaHidden,
 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -594,7 +667,8 @@ export const WarningTriangleIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
     className={className}
-    aria-hidden={ariaHidden}
+    aria-hidden="true"
+    focusable="false"
   >
     <path d="M12 2L1 21H23L12 2ZM13 18H11V16H13V18ZM13 14H11V9H13V14Z" />
   </svg>
@@ -605,7 +679,6 @@ export const WarningIcon: React.FC<IconProps> = ({
   height = 24,
   fill = 'currentColor',
   className,
-  ariaHidden,
 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -614,7 +687,8 @@ export const WarningIcon: React.FC<IconProps> = ({
     viewBox="0 0 24 24"
     fill={fill}
     className={className}
-    aria-hidden={ariaHidden}
+    aria-hidden="true"
+    focusable="false"
   >
     <path d="M9.138 3.707c1.228-2.276 4.494-2.276 5.721 0l6.743 12.502c1.168 2.165-.4 4.792-2.86 4.793H5.255c-2.46 0-4.028-2.628-2.86-4.793zm4.4.712c-.66-1.225-2.419-1.225-3.08 0L3.715 16.921a1.75 1.75 0 0 0 1.54 2.581h13.487a1.75 1.75 0 0 0 1.54-2.581zM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2m0-7.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 12 7.5" />
   </svg>
@@ -631,7 +705,14 @@ export const ShortcutArrowIcon: React.FC<
   }[direction];
 
   return (
-    <svg width={width} height={height} viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 14 14"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
       <path
         d={path}
         stroke="currentColor"
@@ -648,7 +729,7 @@ export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right'
   direction,
   className = 'tab-strip__overflow-icon',
 }) => (
-  <svg className={className} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+  <svg className={className} viewBox="0 0 12 12" fill="none" aria-hidden="true" focusable="false">
     <path
       d={direction === 'left' ? 'M7.5 2.5L4.5 6L7.5 9.5' : 'M4.5 2.5L7.5 6L4.5 9.5'}
       stroke="currentColor"
@@ -663,6 +744,8 @@ export const TooltipInfoIcon: React.FC<IconProps> = ({
   className = 'tooltip-info-icon',
 }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     className={className}
     xmlns="http://www.w3.org/2000/svg"
     width={width}
@@ -681,7 +764,14 @@ export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
   height = 12,
   outlined = false,
 }) => (
-  <svg viewBox="0 0 12 12" fill={outlined ? 'none' : 'currentColor'} width={width} height={height}>
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 12 12"
+    fill={outlined ? 'none' : 'currentColor'}
+    width={width}
+    height={height}
+  >
     <circle
       cx="6"
       cy="6"
@@ -693,46 +783,45 @@ export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
 );
 
 export const StopSquareIcon: React.FC<IconProps> = ({ width = 24, height = 24 }) => (
-  <svg viewBox="0 0 16 16" fill="currentColor" width={width} height={height} aria-hidden="true">
+  <svg
+    viewBox="0 0 16 16"
+    fill="currentColor"
+    width={width}
+    height={height}
+    aria-hidden="true"
+    focusable="false"
+  >
     <rect x="4" y="4" width="8" height="8" rx="1.2" />
   </svg>
 );
 
-export const PlusIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  className,
-  ariaHidden,
-}) => (
+export const PlusIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     viewBox="0 0 16 16"
     width={width}
     height={height}
     className={className}
-    aria-hidden={ariaHidden}
+    aria-hidden="true"
+    focusable="false"
   >
     <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
 
 /** Plain magnifying glass (search). Same geometry as ZoomInIcon minus the plus. */
-export const SearchIcon: React.FC<IconProps> = ({
-  width = 24,
-  height = 24,
-  className,
-  ariaHidden,
-}) => (
+export const SearchIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     viewBox="0 0 24 24"
     width={width}
     height={height}
     className={className}
-    aria-hidden={ariaHidden}
+    aria-hidden="true"
     fill="none"
     stroke="currentColor"
     strokeWidth={2}
     strokeLinecap="round"
     strokeLinejoin="round"
+    focusable="false"
   >
     <circle cx="10.1" cy="10.1" r="8" />
     <line x1="21.9" y1="21.9" x2="16.3" y2="16.3" />

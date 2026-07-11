@@ -5,18 +5,37 @@
  * Implements orchestrator logic for the core layer.
  */
 
+import { type AppEvents, eventBus } from '@/core/events';
+import {
+  APP_LOG_SOURCES,
+  type AppLogsClusterMeta,
+  logAppLogsInfo,
+  logAppLogsWarn,
+} from '@/core/logging/appLogsClient';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
-  isSnapshotPermissionDenied,
   invalidateRefreshBaseURL,
-  setMetricsActive,
+  isSnapshotPermissionDenied,
   type Snapshot,
+  setMetricsActive,
 } from './client';
-import { eventBus, type AppEvents } from '@/core/events';
-import { refreshManager, type RefreshContext } from './RefreshManager';
+import { clusterReadiness } from './clusterReadiness';
+import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
+import { registerDefaultRefreshDomains } from './domainRegistrations';
+import { type RefreshContext, refreshManager } from './RefreshManager';
+import { RefreshErrorNotifier } from './refreshErrorNotifier';
+import { type RefresherTiming, refresherConfig } from './refresherConfig';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
-import { refresherConfig, type RefresherTiming } from './refresherConfig';
+import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
+import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
+import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
+import {
+  normalizeNamespaceScope as normalizeNamespaceScopeValue,
+  normalizeRefreshDomainScope,
+} from './scopeNormalization';
+import { mergePollingListPayload } from './snapshotMerge';
 import {
   getRefreshState,
   getScopedDomainState,
@@ -26,31 +45,12 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
 } from './store';
-import type { DomainPayloadMap, RefreshDomain } from './types';
-import { resourceStreamManager } from './streaming/resourceStreamManager';
 import {
   doorbellPollingContinues,
   isSupportedDomain as isDoorbellStreamDomain,
 } from './streaming/resourceStreamDomains';
-import {
-  APP_LOG_SOURCES,
-  logAppLogsInfo,
-  logAppLogsWarn,
-  type AppLogsClusterMeta,
-} from '@/core/logging/appLogsClient';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
-import { buildClusterScope, parseClusterScope, parseClusterScopeList } from './clusterScope';
-import { clusterReadiness } from './clusterReadiness';
-import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
-import { mergePollingListPayload } from './snapshotMerge';
-import { registerDefaultRefreshDomains } from './domainRegistrations';
-import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
-import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
-import {
-  normalizeNamespaceScope as normalizeNamespaceScopeValue,
-  normalizeRefreshDomainScope,
-} from './scopeNormalization';
-import { RefreshErrorNotifier } from './refreshErrorNotifier';
+import { resourceStreamManager } from './streaming/resourceStreamManager';
+import type { DomainPayloadMap, RefreshDomain } from './types';
 
 type DomainFetchOptions = {
   isManual: boolean;
@@ -239,7 +239,7 @@ class RefreshOrchestrator {
     this.context = { ...this.context, ...context };
     refreshManager.updateContext(context);
 
-    if (Object.prototype.hasOwnProperty.call(context, 'allConnectedClusterIds')) {
+    if (Object.getOwnPropertyDescriptor(context, 'allConnectedClusterIds') !== undefined) {
       this.pruneRemovedClusterRuntimes(context.allConnectedClusterIds ?? []);
     }
 
@@ -346,7 +346,9 @@ class RefreshOrchestrator {
   private getKnownScopes(domain: RefreshDomain): string[] {
     const scopes = new Set<string>();
     this.getAllRuntimes().forEach((runtime) => {
-      runtime.getKnownScopes(domain).forEach((scope) => scopes.add(scope));
+      runtime.getKnownScopes(domain).forEach((scope) => {
+        scopes.add(scope);
+      });
     });
     return Array.from(scopes);
   }
@@ -1576,7 +1578,8 @@ class RefreshOrchestrator {
   // Re-evaluate streaming for all scoped domains when the orchestrator context changes.
   private handleStreamingScopeChanges(): void {
     this.configs.forEach((config, domain) => {
-      if (!config.streaming) {
+      const streaming = config.streaming;
+      if (!streaming) {
         return;
       }
 
@@ -1588,11 +1591,11 @@ class RefreshOrchestrator {
 
           if (shouldStream && !alreadyStreaming) {
             // Context now allows streaming for this scope — start it.
-            this.scheduleStreamingStart(domain, scope, config.streaming!);
+            this.scheduleStreamingStart(domain, scope, streaming);
           } else if (!shouldStream && alreadyStreaming) {
             // Context no longer allows streaming — stop it.
             scopeRuntime.clearStreamingReady(domain, scope);
-            this.stopStreamingScope(domain, scope, config.streaming!, false);
+            this.stopStreamingScope(domain, scope, streaming, false);
           }
         });
       });

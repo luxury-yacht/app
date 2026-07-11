@@ -5,7 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
+import { CLUSTER_CAPABILITIES as RawClusterCapabilities } from './catalog';
+import {
+  useCapabilities as rawUseCapabilities,
+  useCapabilityDiagnostics as rawUseCapabilityDiagnostics,
+  useUserPermission as rawUseUserPermission,
+  useUserPermissions as rawUseUserPermissions,
+} from './hooks';
 import {
   CLUSTER_CAPABILITIES,
   getPermissionKey,
@@ -19,7 +25,6 @@ import {
   useUserPermission,
   useUserPermissions,
 } from './index';
-import { CLUSTER_CAPABILITIES as RawClusterCapabilities } from './catalog';
 import {
   getPermissionKey as rawGetPermissionKey,
   queryClusterPermissions as rawQueryClusterPermissions,
@@ -28,12 +33,6 @@ import {
   queryNamespacesPermissions as rawQueryNamespacesPermissions,
   setActivePermissionCluster as rawSetActivePermissionCluster,
 } from './permissionStore';
-import {
-  useCapabilities as rawUseCapabilities,
-  useCapabilityDiagnostics as rawUseCapabilityDiagnostics,
-  useUserPermission as rawUseUserPermission,
-  useUserPermissions as rawUseUserPermissions,
-} from './hooks';
 
 describe('core/capabilities index exports', () => {
   it('re-exports catalog and hook utilities', () => {

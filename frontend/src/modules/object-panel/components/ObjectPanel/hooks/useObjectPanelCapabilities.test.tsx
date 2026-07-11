@@ -2,10 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.test.tsx
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import type { FeatureSupport, PanelObjectData } from '../types';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
@@ -45,7 +46,10 @@ describe('useObjectPanelCapabilities', () => {
       await Promise.resolve();
     });
 
-    return resultRef.current!;
+    return requireValue(
+      resultRef.current,
+      'expected test value in useObjectPanelCapabilities.test.tsx'
+    );
   };
 
   const baseFeatureSupport: FeatureSupport = {
@@ -62,10 +66,6 @@ describe('useObjectPanelCapabilities', () => {
     trigger: false,
     suspend: false,
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

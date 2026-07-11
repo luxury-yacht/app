@@ -4,12 +4,13 @@
  * HelmRelease Overview descriptor (X1). Presentation ported verbatim from HelmOverview.tsx.
  */
 
-import React from 'react';
-import { helm } from '@wailsjs/go/models';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { helm } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '../shared/LabelsAndAnnotations.css';
 import '../HelmOverview.css';
@@ -46,55 +47,55 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
         <div className="metadata-section">
           <div className="metadata-label">Managed Resources</div>
           <div className="metadata-pairs">
-            {data.resources
-              .sort((a: helm.HelmResource, b: helm.HelmResource) => a.kind.localeCompare(b.kind))
-              .map((resource: helm.HelmResource, idx: number) => {
-                const resourceRef = (() => {
-                  const scope = (resource.scope ?? '').trim().toLowerCase();
-                  if (scope !== 'cluster' && scope !== 'namespaced') {
-                    return null;
-                  }
-                  try {
-                    return buildRequiredRelatedObjectReference({
-                      kind: resource.kind,
-                      // Prefer the manifest apiVersion so CRD-backed
-                      // managed resources keep their real GVK.
-                      apiVersion: resource.apiVersion,
-                      name: resource.name,
-                      namespace: scope === 'namespaced' ? resource.namespace : undefined,
-                      ...clusterMeta,
-                    });
-                  } catch {
-                    return null;
-                  }
-                })();
+            {withStableListKeys(
+              [...data.resources].sort((a: helm.HelmResource, b: helm.HelmResource) =>
+                a.kind.localeCompare(b.kind)
+              ),
+              (resource) => JSON.stringify(resource)
+            ).map(({ key, value: resource }) => {
+              const resourceRef = (() => {
+                const scope = (resource.scope ?? '').trim().toLowerCase();
+                if (scope !== 'cluster' && scope !== 'namespaced') {
+                  return null;
+                }
+                try {
+                  return buildRequiredRelatedObjectReference({
+                    kind: resource.kind,
+                    // Prefer the manifest apiVersion so CRD-backed
+                    // managed resources keep their real GVK.
+                    apiVersion: resource.apiVersion,
+                    name: resource.name,
+                    namespace: scope === 'namespaced' ? resource.namespace : undefined,
+                    ...clusterMeta,
+                  });
+                } catch {
+                  return null;
+                }
+              })();
 
-                return (
-                  <div
-                    key={`${resource.kind}-${resource.namespace ?? ''}-${resource.name}-${idx}`}
-                    className="metadata-pair"
-                  >
-                    <span className="metadata-key">{resource.kind}:</span>
-                    {resourceRef ? (
-                      <ObjectPanelLink
-                        className="metadata-value"
-                        objectRef={resourceRef}
-                        title={`Click to view ${resource.kind}: ${resource.name}`}
-                      >
-                        {resource.namespace
-                          ? `${resource.namespace}/${resource.name}`
-                          : resource.name}
-                      </ObjectPanelLink>
-                    ) : (
-                      <span className="metadata-value">
-                        {resource.namespace
-                          ? `${resource.namespace}/${resource.name}`
-                          : resource.name}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              return (
+                <div key={key} className="metadata-pair">
+                  <span className="metadata-key">{resource.kind}:</span>
+                  {resourceRef ? (
+                    <ObjectPanelLink
+                      className="metadata-value"
+                      objectRef={resourceRef}
+                      title={`Click to view ${resource.kind}: ${resource.name}`}
+                    >
+                      {resource.namespace
+                        ? `${resource.namespace}/${resource.name}`
+                        : resource.name}
+                    </ObjectPanelLink>
+                  ) : (
+                    <span className="metadata-value">
+                      {resource.namespace
+                        ? `${resource.namespace}/${resource.name}`
+                        : resource.name}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -117,7 +118,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
                     </span>
                   </span>
                 </div>
-                {h.description && (
+                {!!h.description && (
                   <div className="metadata-value helm-history-description">{h.description}</div>
                 )}
               </div>
@@ -134,7 +135,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
       )}
 
       {/* Release Notes */}
-      {data.notes && (
+      {!!data.notes && (
         <div className="metadata-section">
           <div className="metadata-label">Release Notes</div>
           <div className="metadata-pairs">

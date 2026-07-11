@@ -5,12 +5,13 @@
  * Covers the "Copy error" button wiring on error notifications.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ErrorNotification } from '@contexts/ErrorContext';
+import { ErrorCategory, ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const errorsRef: { current: ErrorNotification[] } = { current: [] };
 
@@ -27,6 +28,11 @@ vi.mock('@contexts/ErrorContext', () => ({
 
 import { ErrorNotificationSystem } from './ErrorNotificationSystem';
 import { formatErrorForClipboard } from './formatErrorForClipboard';
+
+const notificationStyles = readFileSync(
+  resolve(process.cwd(), 'src/shared/components/errors/ErrorNotificationSystem.css'),
+  'utf8'
+);
 
 const makeError = (overrides: Partial<ErrorNotification> = {}): ErrorNotification => ({
   id: 'error-1',
@@ -48,16 +54,15 @@ describe('ErrorNotificationSystem copy button', () => {
   let root: ReactDOM.Root;
   let writeText: ReturnType<typeof vi.fn>;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     writeText = vi.fn().mockResolvedValue(undefined);
-    (navigator as any).clipboard = { writeText };
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
   });
 
   afterEach(() => {
@@ -93,7 +98,17 @@ describe('ErrorNotificationSystem copy button', () => {
   it('routes clipboard failures through the global error handler', async () => {
     const clipboardError = new Error('clipboard blocked');
     writeText.mockRejectedValueOnce(clipboardError);
-    const handleSpy = vi.spyOn(errorHandler, 'handle').mockReturnValue({} as any);
+    const handleSpy = vi.spyOn(errorHandler, 'handle').mockReturnValue({
+      message: 'clipboard blocked',
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      timestamp: new Date(),
+      retryable: false,
+      userMessage: 'clipboard blocked',
+      technicalMessage: 'clipboard blocked',
+      suggestions: [],
+      context: {},
+    });
     errorsRef.current = [makeError()];
 
     await act(async () => {
@@ -119,18 +134,19 @@ describe('ErrorNotificationSystem copy button', () => {
 describe('ErrorNotificationSystem header label', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
+  let style: HTMLStyleElement;
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
+    style = document.createElement('style');
+    style.textContent = notificationStyles;
+    document.head.appendChild(style);
     root = ReactDOM.createRoot(container);
   });
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    style.remove();
     errorsRef.current = [];
   });
 
@@ -147,5 +163,17 @@ describe('ErrorNotificationSystem header label', () => {
     errorsRef.current = [makeError({ category: ErrorCategory.UNKNOWN, title: 'Export' })];
     act(() => root.render(<ErrorNotificationSystem />));
     expect(headerLabel()).toBe('Export');
+  });
+
+  it('shows the stack count on the active notification', () => {
+    expect(notificationStyles).toContain('.error-notification-count');
+    errorsRef.current = [makeError({ id: 'error-1' }), makeError({ id: 'error-2' })];
+    act(() => root.render(<ErrorNotificationSystem />));
+
+    const count = container.querySelector<HTMLElement>(
+      '.error-notification--active .error-notification-count'
+    );
+    expect(count).toBeTruthy();
+    expect(window.getComputedStyle(count as HTMLElement).display).toBe('inline-flex');
   });
 });

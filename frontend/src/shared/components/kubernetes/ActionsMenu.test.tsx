@@ -7,15 +7,15 @@
  * the panel lifecycle callbacks (onAfterDelete / onAfterAction).
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ActionsMenu } from './ActionsMenu';
-import { eventBus } from '@/core/events';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
+import { requireValue } from '@/test-utils/requireValue';
+import { ActionsMenu } from './ActionsMenu';
 
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 
@@ -102,31 +102,34 @@ vi.mock('@ui/shortcuts', () => ({
 
 const openMenu = (container: HTMLElement) => {
   const trigger = container.querySelector<HTMLButtonElement>('.actions-menu-button');
-  expect(trigger).toBeTruthy();
   act(() => {
-    trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(trigger, 'expected actions menu trigger').dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
 };
 
 const clickMenuItem = (container: HTMLElement, text: string) => {
   const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
   const item = items.find((entry) => entry.textContent?.includes(text));
-  expect(item, `menu item "${text}"`).toBeTruthy();
   act(() => {
-    item?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(item, `expected menu item "${text}"`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
 };
 
 // Confirm a portaled ConfirmationModal by its exact button text.
 const confirmModal = async (buttonText: string) => {
   const modal = document.querySelector<HTMLElement>('.confirmation-modal');
-  expect(modal, `confirmation modal for "${buttonText}"`).toBeTruthy();
-  const button = Array.from(modal?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+  const confirmationModal = requireValue(modal, `expected confirmation modal for "${buttonText}"`);
+  const button = Array.from(confirmationModal.querySelectorAll<HTMLButtonElement>('button')).find(
     (entry) => entry.textContent === buttonText
   );
-  expect(button, `confirm button "${buttonText}"`).toBeTruthy();
   await act(async () => {
-    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(button, `expected confirm button "${buttonText}"`).dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
     await Promise.resolve();
   });
 };
@@ -169,6 +172,18 @@ describe('ActionsMenu', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('renders available actions as native menu buttons', async () => {
+    await renderMenu({ object: makeObject('Deployment', { group: 'apps', version: 'v1' }) });
+
+    openMenu(container);
+
+    const menu = container.querySelector('[role="menu"]');
+    const items = container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
+    expect(menu).toBeTruthy();
+    expect(items.length).toBeGreaterThan(0);
+    expect(Array.from(items).every((item) => item.type === 'button')).toBe(true);
   });
 
   it('does not render when object is null', async () => {
@@ -269,12 +284,16 @@ describe('ActionsMenu', () => {
         return undefined;
       }
       const fiberKey = Object.keys(input).find((key) => key.startsWith('__reactFiber$'));
-      return fiberKey ? (input as any)[fiberKey]?.memoizedProps?.onChange : undefined;
+      const fiber = fiberKey
+        ? (input as HTMLInputElement & Record<string, unknown>)[fiberKey]
+        : undefined;
+      return (fiber as { memoizedProps?: { onChange?: (event: unknown) => void } } | undefined)
+        ?.memoizedProps?.onChange;
     })();
     expect(typeof onChange).toBe('function');
 
     await act(async () => {
-      input!.value = '7';
+      requireValue(input, 'expected test value in ActionsMenu.test.tsx').value = '7';
       onChange?.({ target: { value: '7' } });
       await Promise.resolve();
     });

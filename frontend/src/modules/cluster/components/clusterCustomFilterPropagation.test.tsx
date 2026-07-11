@@ -6,12 +6,17 @@
  * capture the `filters` it is called with. Driving the filter bar's onChange must
  * propagate the new kind into the catalog query.
  */
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 
-const gridTablePropsRef: { current: any } = { current: null };
+import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CustomRow = Record<string, unknown>;
+
+const gridTablePropsRef: { current: GridTableProps<CustomRow> | null } = { current: null };
 const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -35,7 +40,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: GridTableProps<CustomRow>) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -97,10 +102,6 @@ describe('ClusterViewCustom kind filter propagation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -136,10 +137,20 @@ describe('ClusterViewCustom kind filter propagation', () => {
     expect(lastQueryKinds()).toEqual([]);
 
     // Simulate the user picking a Kind in the filter bar dropdown.
-    const onChange = gridTablePropsRef.current?.filters?.onChange;
+    const onChange = requireValue(gridTablePropsRef.current, 'expected GridTable props').filters
+      ?.onChange;
     expect(typeof onChange).toBe('function');
     await act(async () => {
-      onChange({ search: '', kinds: ['Widget'], namespaces: [], caseSensitive: false });
+      requireValue(
+        onChange,
+        'expected filter change handler'
+      )({
+        search: '',
+        kinds: ['Widget'],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      });
       await Promise.resolve();
     });
     await act(async () => {

@@ -5,11 +5,11 @@
  * Covers key behaviors and edge cases for gridTablePersistence.
  */
 
-import { describe, expect, it } from 'vitest';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
+import { describe, expect, it } from 'vitest';
 import {
   buildGridTableStorageKey,
   buildPersistedStateForSave,

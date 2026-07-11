@@ -8,16 +8,16 @@
  * the row.
  */
 
-import { useCallback } from 'react';
-import { useViewState } from '@/core/contexts/ViewStateContext';
-import { useSidebarState } from '@/core/contexts/SidebarStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { eventBus } from '@/core/events';
-import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { buildGridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
-import { getViewForKind, isNamespaceScopedKind } from '@/utils/kindViewMap';
+import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import { useCallback } from 'react';
+import { useSidebarState } from '@/core/contexts/SidebarStateContext';
+import { useViewState } from '@/core/contexts/ViewStateContext';
+import { eventBus } from '@/core/events';
+import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import { getViewForKind, isNamespaceScopedKind } from '@/utils/kindViewMap';
 
 export interface NavigateToViewResult {
   navigateToView: (objectRef: KubernetesObjectReference) => void;
@@ -43,7 +43,8 @@ export function useNavigateToView(): NavigateToViewResult {
       // named ''" and break cluster-scoped navigation.
       const clusterId = objectRef.clusterId ?? undefined;
       const namespace = (objectRef.namespace ?? objectRef.metadata?.namespace ?? undefined) as
-        string | undefined;
+        | string
+        | undefined;
 
       // 1. Navigate to the target view type
       setViewType(destination.viewType);

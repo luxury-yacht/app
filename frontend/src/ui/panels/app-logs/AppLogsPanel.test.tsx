@@ -5,10 +5,26 @@
  * Covers key behaviors and edge cases for AppLogsPanel.
  */
 
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { act, type ReactNode, type Ref } from 'react';
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { act } from 'react';
-import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
+import { installWindowProperty } from '@/test-utils/windowProperty';
+
+interface CapturedDropdownProps {
+  options: DropdownOption[];
+  onChange: (value: string | string[]) => void;
+  renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;
+  renderValue: () => string;
+  showBulkActions?: boolean;
+}
+
+interface DockablePanelMockProps {
+  children: ReactNode;
+  panelRef?: Ref<HTMLDivElement>;
+}
 
 const getAppLogsMock = vi.hoisted(() => vi.fn());
 const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
@@ -17,9 +33,10 @@ const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(un
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
-const dropdownInstances = vi.hoisted(() => [] as Array<any>);
-const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: any[]) => void>());
+const dropdownInstances = vi.hoisted(() => [] as CapturedDropdownProps[]);
+const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
 const runtimeDisposerMock = vi.hoisted(() => vi.fn());
+const clipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // AppLogsPanel no longer calls useDockablePanelState — its open/close
 // state is now driven by props from AppLayout (which reads from
@@ -27,7 +44,7 @@ const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 // transparent container so the tests can inspect the rendered children
 // directly without exercising the dockable layout system.
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, panelRef }: any) => (
+  DockablePanel: ({ children, panelRef }: DockablePanelMockProps) => (
     <div data-testid="dockable-panel" ref={panelRef}>
       <div data-testid="body">{children}</div>
     </div>
@@ -35,7 +52,7 @@ vi.mock('@ui/dockable', () => ({
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: (props: any) => {
+  Dropdown: (props: CapturedDropdownProps) => {
     dropdownInstances.push(props);
     return <div data-testid={`dropdown-${props.renderValue()}`}></div>;
   },
@@ -109,6 +126,9 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
 const latestDropdown = (renderValue: string) =>
   [...dropdownInstances].reverse().find((instance) => instance.renderValue() === renderValue);
 
+let restoreRuntime: (() => void) | undefined;
+let restoreClipboard: (() => void) | undefined;
+
 beforeEach(() => {
   useShortcutMock.mockClear();
   useKeyboardSurfaceMock.mockClear();
@@ -121,24 +141,40 @@ beforeEach(() => {
   dropdownInstances.length = 0;
   runtimeEventHandlers.clear();
   runtimeDisposerMock.mockReset();
-  (window as any).runtime = {
-    EventsOn: vi.fn((eventName: string, handler: (...args: any[]) => void) => {
+  clipboardWriteTextMock.mockReset();
+  clipboardWriteTextMock.mockResolvedValue(undefined);
+  restoreRuntime = installWindowProperty('runtime', {
+    EventsOn: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
       runtimeEventHandlers.set(eventName, handler);
       return runtimeDisposerMock;
     }),
     EventsOff: vi.fn(),
+  });
+  const previousClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteTextMock },
+  });
+  restoreClipboard = () => {
+    if (previousClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', previousClipboardDescriptor);
+      return;
+    }
+    Reflect.deleteProperty(navigator, 'clipboard');
   };
-  if (!navigator.clipboard) {
-    (navigator as any).clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
-  }
 });
 
 afterEach(() => {
+  restoreRuntime?.();
+  restoreRuntime = undefined;
+  restoreClipboard?.();
+  restoreClipboard = undefined;
   vi.useRealTimers();
 });
 
 afterAll(() => {
-  delete (window as any).runtime;
+  restoreRuntime?.();
+  restoreClipboard?.();
 });
 
 describe('AppLogsPanel', () => {
@@ -204,7 +240,11 @@ describe('AppLogsPanel', () => {
     const header = container.querySelector('.app-logs-header');
     expect(header).not.toBeNull();
     expect(
-      Array.from(header!.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)
+      Array.from(
+        requireValue(header, 'expected test value in AppLogsPanel.test.tsx').querySelectorAll(
+          '[role="columnheader"]'
+        )
+      ).map((cell) => cell.textContent)
     ).toEqual(['Time', 'Level', 'Source', 'Cluster', 'Message']);
 
     cleanup();
@@ -234,7 +274,7 @@ describe('AppLogsPanel', () => {
     expect(clusterResizer).not.toBeNull();
 
     await act(async () => {
-      clusterResizer!.dispatchEvent(
+      requireValue(clusterResizer, 'expected test value in AppLogsPanel.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
       );
       await Promise.resolve();
@@ -432,13 +472,22 @@ describe('AppLogsPanel', () => {
 
     const clustersDropdown = latestDropdown('Clusters');
     expect(clustersDropdown).toBeTruthy();
-    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+    expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
       'kube-alpha:alpha',
       'kube-bravo:bravo',
     ]);
 
     const renderedClusterOption = renderToStaticMarkup(
-      <>{clustersDropdown?.renderOption(clustersDropdown.options[0], true)}</>
+      requireValue(
+        clustersDropdown?.renderOption,
+        'expected cluster option renderer in AppLogsPanel.test.tsx'
+      )(
+        requireValue(
+          clustersDropdown?.options[0],
+          'expected first cluster option in AppLogsPanel.test.tsx'
+        ),
+        true
+      )
     );
     expect(renderedClusterOption).toContain('app-logs-cluster-file');
     expect(renderedClusterOption).toContain('kube-alpha');
@@ -487,7 +536,7 @@ describe('AppLogsPanel', () => {
     expect(clusters).toEqual(['[Global]', '[alpha]']);
 
     const clustersDropdown = latestDropdown('Clusters');
-    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+    expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
       'Global',
       'kube-alpha:alpha',
     ]);
@@ -538,17 +587,14 @@ describe('AppLogsPanel', () => {
     expect(componentsDropdown?.showBulkActions).toBe(true);
     expect(clustersDropdown?.showBulkActions).toBe(true);
 
-    expect(logLevelsDropdown?.options.map((option: any) => option.value)).toEqual([
+    expect(logLevelsDropdown?.options.map((option) => option.value)).toEqual([
       'info',
       'warn',
       'error',
       'debug',
     ]);
-    expect(componentsDropdown?.options.map((option: any) => option.value)).toEqual([
-      'Auth',
-      'Refresh',
-    ]);
-    expect(clustersDropdown?.options.map((option: any) => option.value)).toEqual([
+    expect(componentsDropdown?.options.map((option) => option.value)).toEqual(['Auth', 'Refresh']);
+    expect(clustersDropdown?.options.map((option) => option.value)).toEqual([
       'kube-alpha:alpha',
       'kube-bravo:bravo',
     ]);
@@ -646,7 +692,7 @@ describe('AppLogsPanel', () => {
     const surfaceConfig = surfaceCall?.[0] as {
       captureWhenActive?: boolean;
       active?: boolean;
-      onKeyDown?: (event: KeyboardEvent) => boolean | void;
+      onKeyDown?: (event: KeyboardEvent) => boolean | undefined;
     };
 
     expect(surfaceConfig.active).toBe(true);
@@ -658,7 +704,7 @@ describe('AppLogsPanel', () => {
     expect(textFilterInput).not.toBeNull();
 
     act(() => {
-      logsContainer!.focus();
+      requireValue(logsContainer, 'expected test value in AppLogsPanel.test.tsx').focus();
     });
     expect(document.activeElement).toBe(logsContainer);
 
@@ -702,7 +748,7 @@ describe('AppLogsPanel', () => {
   it('reports clipboard failures when copying logs', async () => {
     vi.useFakeTimers();
     const clipboardError = new Error('clipboard blocked');
-    (navigator as any).clipboard.writeText.mockRejectedValueOnce(clipboardError);
+    clipboardWriteTextMock.mockRejectedValueOnce(clipboardError);
     getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);

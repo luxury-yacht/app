@@ -1,8 +1,8 @@
-import { useCallback, type MouseEvent } from 'react';
 import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { type MouseEvent, useCallback } from 'react';
 import type { ParsedLogEntry } from './logViewerReducer';
 import { getParsedLogRowKey } from './parsedLogUtils';
 
@@ -39,6 +39,7 @@ const ParsedLogTable = ({ rows, columns, expandedRows, onToggleRow }: ParsedLogT
   );
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: click delegation preserves GridTable row behavior and GridTable owns keyboard activation.
     <div onClick={handleTableClick} style={{ height: '100%' }}>
       <GridTable
         data={rows}

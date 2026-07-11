@@ -5,11 +5,11 @@
  * Creates/manages the refresher instance and updates it when clusters or settings change.
  */
 
-import { useEffect, useRef } from 'react';
-import { useBackgroundRefresh } from './useBackgroundRefresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { BackgroundClusterRefresher } from '../backgroundClusterRefresher';
+import { useEffect, useRef } from 'react';
 import type { NavigationTabState } from '@/core/contexts/ViewStateContext';
+import { BackgroundClusterRefresher } from '../backgroundClusterRefresher';
+import { useBackgroundRefresh } from './useBackgroundRefresh';
 
 interface BackgroundClusterRefreshDeps {
   // Lookup a cluster's last-viewed navigation state.

@@ -1,9 +1,8 @@
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useMemo } from 'react';
-
 import { useSidebarState } from '@/core/contexts/SidebarStateContext';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { NamespaceViewType } from '@/types/navigation/views';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 interface NamespaceColumnRow {
   namespace?: string | null;

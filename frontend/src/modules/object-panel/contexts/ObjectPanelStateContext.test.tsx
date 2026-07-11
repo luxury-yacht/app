@@ -4,16 +4,16 @@
  * Test suite for ObjectPanelStateContext.
  * Ensures object panel state is scoped per cluster tab.
  */
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ObjectPanelStateProvider,
-  useObjectPanelState,
   useObjectPanelActiveTab,
+  useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const clearPanelStateMock = vi.fn();
 const handoffLayoutBeforeCloseMock = vi.fn();
@@ -61,10 +61,6 @@ const TabProbe: React.FC<{ panelId: string }> = ({ panelId }) => {
 describe('ObjectPanelStateContext', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

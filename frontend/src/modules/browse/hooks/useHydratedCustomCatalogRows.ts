@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-
 import { readHydratedCustomCatalogRows, requestData } from '@core/data-access';
+import { useEffect, useMemo, useState } from 'react';
 import type { CatalogItem } from '@/core/refresh/types';
 import {
+  type CatalogBackedCustomResourceRow,
   catalogItemToFallbackCustomRow,
   normalizeHydratedCustomRow,
-  type CatalogBackedCustomResourceRow,
 } from './customCatalogRowAdapter';
 
 type HydrationQueryRow = {

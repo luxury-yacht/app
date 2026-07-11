@@ -10,13 +10,13 @@
  *   - non-sortable + hideable
  */
 
-import { act } from 'react';
-import ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 // ---------------------------------------------------------------------------
 // Mocks required by ContextMenu / GridTable internals
@@ -223,10 +223,6 @@ const cleanBody = () => {
 // ---------------------------------------------------------------------------
 
 describe('header context menu integration', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     vi.useRealTimers();
   });
@@ -334,15 +330,30 @@ describe('header context menu integration', () => {
 
     // Sort Ascending should be disabled since we are already sorted asc
     expect(sortAsc).toBeDefined();
-    expect(sortAsc!.classList.contains('disabled')).toBe(true);
+    expect(
+      requireValue(
+        sortAsc,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).classList.contains('disabled')
+    ).toBe(true);
 
     // Sort Descending should be enabled
     expect(sortDesc).toBeDefined();
-    expect(sortDesc!.classList.contains('disabled')).toBe(false);
+    expect(
+      requireValue(
+        sortDesc,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).classList.contains('disabled')
+    ).toBe(false);
 
     // Clear Sort should be enabled since column IS sorted
     expect(clearSort).toBeDefined();
-    expect(clearSort!.classList.contains('disabled')).toBe(false);
+    expect(
+      requireValue(
+        clearSort,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).classList.contains('disabled')
+    ).toBe(false);
 
     await closeMenu();
 
@@ -354,7 +365,12 @@ describe('header context menu integration', () => {
 
     // Clear Sort should be disabled since name is not the sorted column
     expect(nameClearSort).toBeDefined();
-    expect(nameClearSort!.classList.contains('disabled')).toBe(true);
+    expect(
+      requireValue(
+        nameClearSort,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).classList.contains('disabled')
+    ).toBe(true);
 
     await closeMenu();
     cleanup();
@@ -373,7 +389,10 @@ describe('header context menu integration', () => {
     expect(sortAsc).toBeDefined();
 
     await act(async () => {
-      sortAsc!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        sortAsc,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -395,7 +414,10 @@ describe('header context menu integration', () => {
     expect(hideColumn).toBeDefined();
 
     await act(async () => {
-      hideColumn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      requireValue(
+        hideColumn,
+        'expected test value in useGridTableHeaderContextMenu.test.tsx'
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
     await flushAsync();

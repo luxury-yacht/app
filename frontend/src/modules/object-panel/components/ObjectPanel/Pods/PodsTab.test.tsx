@@ -6,12 +6,14 @@
  * using the panel-scoped clusterId — never the global sidebar selection.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PodSnapshotEntry } from '@/core/refresh/types';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 const {
   gridTablePropsRef,
@@ -25,14 +27,14 @@ const {
   queryNamespacesPermissionsMock,
   POD_PERMISSIONS_SENTINEL,
 } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
+  gridTablePropsRef: { current: null as GridTableProps<PodSnapshotEntry> | null },
   mockOpenWithObject: vi.fn(),
-  objectPanelRef: { current: null as any },
+  objectPanelRef: { current: null as unknown },
   navigateToViewMock: vi.fn(),
   useTableSortMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
   useGridTablePersistenceMock: vi.fn(),
-  clusterMetricsRef: { current: null as any },
+  clusterMetricsRef: { current: null as unknown },
   queryNamespacesPermissionsMock: vi.fn(),
   POD_PERMISSIONS_SENTINEL: { feature: 'namespace-pods', specs: [] },
 }));
@@ -101,12 +103,12 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: (props: any) => {
+  default: (props: GridTableProps<PodSnapshotEntry>) => {
     gridTablePropsRef.current = props;
     return (
       <table data-testid="grid-table">
         <tbody>
-          {props.data.map((row: any) => (
+          {props.data.map((row) => (
             <tr key={row.name}>
               <td>{row.name}</td>
             </tr>
@@ -123,11 +125,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => useTableSortMock(...args),
+  useTableSort: (...args: unknown[]) => useTableSortMock(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (...args: any[]) => useGridTablePersistenceMock(...args),
+  useGridTablePersistence: (...args: unknown[]) => useGridTablePersistenceMock(...args),
 }));
 
 vi.mock('@/core/data-access', async (importOriginal) => {
@@ -183,6 +185,21 @@ vi.mock('../shared.css', () => ({}));
 
 import { PodsTab } from './PodsTab';
 
+const getGridTableProps = () =>
+  requireValue(gridTablePropsRef.current, 'expected captured GridTable props in PodsTab.test.tsx');
+
+const getGridColumn = (key: string) =>
+  requireValue(
+    getGridTableProps().columns.find((column) => column.key === key),
+    `expected ${key} column in PodsTab.test.tsx`
+  );
+
+const getContextMenuItems = (row: PodSnapshotEntry) =>
+  requireValue(
+    getGridTableProps().getCustomContextMenuItems,
+    'expected context-menu factory in PodsTab.test.tsx'
+  )(row, 'name');
+
 const DEPLOYMENT_OBJECT_DATA = {
   clusterId: PANEL_CLUSTER_ID,
   clusterName: 'Panel Cluster A',
@@ -237,10 +254,6 @@ const mockQueryRows = (rows: PodSnapshotEntry[]) => {
 describe('PodsTab (query-backed)', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -307,7 +320,7 @@ describe('PodsTab (query-backed)', () => {
         scope: expect.stringContaining('workload:default:apps:v1:Deployment:my-deploy'),
       })
     );
-    expect(gridTablePropsRef.current.data.map((pod: PodSnapshotEntry) => pod.name)).toEqual([
+    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.name)).toEqual([
       'query-pod',
     ]);
   });
@@ -324,9 +337,7 @@ describe('PodsTab (query-backed)', () => {
         scope: expect.stringContaining('node:worker-a'),
       })
     );
-    expect(gridTablePropsRef.current.data.map((pod: PodSnapshotEntry) => pod.name)).toEqual([
-      'node-pod',
-    ]);
+    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.name)).toEqual(['node-pod']);
   });
 
   it('does not issue a pods query when the tab is inactive', async () => {
@@ -366,7 +377,7 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
+    expect(getGridTableProps().keyExtractor(pod, 0)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 
   it('uses backend statusPresentation for the pod status class', async () => {
@@ -375,8 +386,11 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
-    const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
+    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
+    const cell = requireReactElement<{ className?: string }>(
+      getGridColumn('status').render(podRow),
+      'expected status cell element in PodsTab.test.tsx'
+    );
     expect(cell.props.className).toBe('status-text warning');
   });
 
@@ -386,9 +400,10 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    const objectMapItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
+    const objectMapItem = getContextMenuItems(podRow).find(
+      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    );
     expect(objectMapItem).toBeTruthy();
 
     act(() => {
@@ -414,13 +429,13 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    const items = gridTablePropsRef.current.getCustomContextMenuItems(
-      gridTablePropsRef.current.data[0]
+    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
+    const items = getContextMenuItems(podRow);
+    const portForwardItem = requireValue(
+      items.find((item) => item.actionId === OBJECT_ACTION_IDS.portForward),
+      'expected port-forward item in PodsTab.test.tsx'
     );
-    const portForwardItem = items.find(
-      (item: any) => item.actionId === OBJECT_ACTION_IDS.portForward
-    );
-    const deleteItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.delete);
+    const deleteItem = items.find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
 
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem.disabled).toBeFalsy();
@@ -433,9 +448,11 @@ describe('PodsTab (query-backed)', () => {
 
     await renderPods();
 
-    const portForwardItem = gridTablePropsRef.current
-      .getCustomContextMenuItems(gridTablePropsRef.current.data[0])
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.portForward);
+    const podRow = requireValue(getGridTableProps().data[0], 'expected pod row');
+    const portForwardItem = requireValue(
+      getContextMenuItems(podRow).find((item) => item.actionId === OBJECT_ACTION_IDS.portForward),
+      'expected port-forward item in PodsTab.test.tsx'
+    );
 
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem.disabled).toBe(true);

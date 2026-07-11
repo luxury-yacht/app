@@ -5,8 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
-import { ErrorFallbackProps } from './types';
+import type React from 'react';
+import type { ErrorFallbackProps } from './types';
 import './ErrorFallback.css';
 
 export const ErrorFallback: React.FC<ErrorFallbackProps> = ({
@@ -28,12 +28,12 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({
           {scope ? `Error in ${scope}` : 'An unexpected error occurred'}
         </p>
 
-        {isDev && (
+        {!!isDev && (
           <details className="error-details">
             <summary>Error Details (Development Only)</summary>
             <pre className="error-stack">
               <code>{error.toString()}</code>
-              {errorInfo && (
+              {!!errorInfo && (
                 <>
                   <br />
                   <br />
@@ -46,10 +46,10 @@ export const ErrorFallback: React.FC<ErrorFallbackProps> = ({
         )}
 
         <div className="error-actions">
-          <button onClick={resetError} className="btn-reset">
+          <button type="button" onClick={resetError} className="btn-reset">
             Try Again
           </button>
-          <button onClick={() => window.location.reload()} className="btn-reload">
+          <button type="button" onClick={() => window.location.reload()} className="btn-reload">
             Reload Page
           </button>
         </div>

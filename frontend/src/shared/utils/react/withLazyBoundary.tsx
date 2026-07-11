@@ -5,9 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { Component, ComponentType, ComponentProps, lazy, Suspense, ReactNode } from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { Component, type ComponentType, lazy, type ReactNode, Suspense } from 'react';
 
 // Simple inline ErrorBoundary
 class ErrorBoundary extends Component<
@@ -32,9 +33,7 @@ class ErrorBoundary extends Component<
       return (
         <div className="error-boundary" data-testid="error-boundary">
           <h2>Something went wrong</h2>
-          <details style={{ whiteSpace: 'pre-wrap' }}>
-            {this.state.error && this.state.error.toString()}
-          </details>
+          <details style={{ whiteSpace: 'pre-wrap' }}>{this.state.error?.toString()}</details>
         </div>
       );
     }
@@ -67,13 +66,13 @@ class ErrorBoundary extends Component<
  * // In render:
  * <Settings {...props} />
  */
-export function withLazyBoundary<T extends ComponentType<any>>(
-  importFn: () => Promise<{ default: T }>,
+export function withLazyBoundary<P extends object>(
+  importFn: () => Promise<{ default: ComponentType<P> }>,
   loadingMessage?: string
 ) {
   const LazyComponent = lazy(importFn);
 
-  const WrappedComponent = (props: ComponentProps<T>) => (
+  const WrappedComponent = (props: P) => (
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner message={loadingMessage} />}>
         <LazyComponent {...props} />
@@ -82,7 +81,7 @@ export function withLazyBoundary<T extends ComponentType<any>>(
   );
 
   // Set display name for debugging
-  WrappedComponent.displayName = `withLazyBoundary(${(LazyComponent as any).displayName || 'Component'})`;
+  WrappedComponent.displayName = 'withLazyBoundary(LazyComponent)';
 
   return WrappedComponent;
 }

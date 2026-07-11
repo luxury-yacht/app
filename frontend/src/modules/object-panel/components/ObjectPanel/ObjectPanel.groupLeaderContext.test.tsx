@@ -11,11 +11,10 @@
  * permission keys → gated actions vanish from the pod's actions menu).
  */
 
-import ReactDOM from 'react-dom/client';
-import { createContext, useContext, useSyncExternalStore } from 'react';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import { act, createContext, useContext, useSyncExternalStore } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { capturedChildrenRef, probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } =
   vi.hoisted(() => ({
@@ -53,11 +52,15 @@ const tabStore = vi.hoisted(() => {
       const next = new Map(tabs);
       next.set(panelId, tab);
       tabs = next;
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
     reset: () => {
       tabs = new Map();
-      listeners.forEach((listener) => listener());
+      listeners.forEach((listener) => {
+        listener();
+      });
     },
   };
 });
@@ -202,10 +205,6 @@ const LeaderHost = () => <>{capturedChildrenRef.current}</>;
 describe('ObjectPanel content under a tab-group leader', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     capturedChildrenRef.current = null;

@@ -6,9 +6,10 @@
  * elements and provides the correct items based on editability.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 import TextContextMenu from './TextContextMenu';
 
 // --- Mocks ---
@@ -20,7 +21,7 @@ let capturedMenuProps: {
 } | null = null;
 
 vi.mock('@shared/components/ContextMenu', () => ({
-  default: (props: any) => {
+  default: (props: NonNullable<typeof capturedMenuProps>) => {
     capturedMenuProps = props;
     return null;
   },
@@ -96,7 +97,9 @@ function clearSelection(): void {
 }
 
 function itemLabels(): string[] {
-  return capturedMenuProps!.items.filter((i) => !i.divider).map((i) => i.label!);
+  return requireValue(capturedMenuProps, 'expected test value in TextContextMenu.test.tsx')
+    .items.filter((i) => !i.divider)
+    .map((i) => requireValue(i.label, 'expected test value in TextContextMenu.test.tsx'));
 }
 
 // --- Tests ---
@@ -247,8 +250,16 @@ describe('TextContextMenu', () => {
     stubSelection('copied');
     act(() => fireContextMenu(span));
 
-    const copyItem = capturedMenuProps!.items.find((i) => i.label === 'Copy');
-    act(() => copyItem!.onClick!());
+    const copyItem = requireValue(
+      capturedMenuProps,
+      'expected test value in TextContextMenu.test.tsx'
+    ).items.find((i) => i.label === 'Copy');
+    act(() =>
+      requireValue(
+        requireValue(copyItem, 'expected test value in TextContextMenu.test.tsx').onClick,
+        'expected test value in TextContextMenu.test.tsx'
+      )()
+    );
     expect(writeTextSpy).toHaveBeenCalledWith('copied');
     span.remove();
   });
@@ -263,8 +274,16 @@ describe('TextContextMenu', () => {
     stubSelection('hello');
     act(() => fireContextMenu(input));
 
-    const selectAllItem = capturedMenuProps!.items.find((i) => i.label === 'Select All');
-    act(() => selectAllItem!.onClick!());
+    const selectAllItem = requireValue(
+      capturedMenuProps,
+      'expected test value in TextContextMenu.test.tsx'
+    ).items.find((i) => i.label === 'Select All');
+    act(() =>
+      requireValue(
+        requireValue(selectAllItem, 'expected test value in TextContextMenu.test.tsx').onClick,
+        'expected test value in TextContextMenu.test.tsx'
+      )()
+    );
     expect(selectSpy).toHaveBeenCalled();
     input.remove();
   });
@@ -296,8 +315,16 @@ describe('TextContextMenu', () => {
 
     act(() => fireContextMenu(line));
 
-    const selectAllItem = capturedMenuProps!.items.find((item) => item.label === 'Select All');
-    act(() => selectAllItem!.onClick!());
+    const selectAllItem = requireValue(
+      capturedMenuProps,
+      'expected test value in TextContextMenu.test.tsx'
+    ).items.find((item) => item.label === 'Select All');
+    act(() =>
+      requireValue(
+        requireValue(selectAllItem, 'expected test value in TextContextMenu.test.tsx').onClick,
+        'expected test value in TextContextMenu.test.tsx'
+      )()
+    );
 
     expect(focusSpy).toHaveBeenCalled();
     expect(removeAllRanges).toHaveBeenCalled();

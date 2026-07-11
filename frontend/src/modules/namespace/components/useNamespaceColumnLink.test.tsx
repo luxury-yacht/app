@@ -1,9 +1,8 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const viewStateMock = vi.hoisted(() => ({
   setViewType: vi.fn(),
@@ -63,10 +62,6 @@ const renderHook = <T,>(hook: () => T) => {
 };
 
 describe('useNamespaceColumnLink', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     viewStateMock.setViewType.mockReset();
     viewStateMock.setActiveNamespaceTab.mockReset();

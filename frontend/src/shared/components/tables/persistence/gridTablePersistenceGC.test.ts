@@ -5,17 +5,17 @@
  * Covers key behaviors and edge cases for gridTablePersistenceGC.
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
 import {
   computeClusterHash,
   resetGridTablePersistenceCacheForTesting,
   setGridTablePersistenceCacheForTesting,
 } from '@shared/components/tables/persistence/gridTablePersistence';
 import {
-  runGridTableGC,
   computeClusterHashes,
+  runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { resetGridTableViewRegistryForTests } from '@shared/components/tables/persistence/gridTableViewRegistry';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('gridTablePersistenceGC', () => {
   beforeEach(() => {

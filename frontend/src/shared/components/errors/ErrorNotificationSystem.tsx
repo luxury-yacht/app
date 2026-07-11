@@ -5,10 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useErrorContext, ErrorNotification } from '@contexts/ErrorContext';
-import { ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import { type ErrorNotification, useErrorContext } from '@contexts/ErrorContext';
 import { CopyIcon } from '@shared/components/icons/LogIcons';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { type ErrorSeverity, errorHandler } from '@utils/errorHandler';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatErrorForClipboard } from './formatErrorForClipboard';
 import './ErrorNotificationSystem.css';
 
@@ -83,12 +85,13 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
       <div className="error-notification-header">
         {isTop && stackSize > 1 && <span className="error-notification-count">{stackSize}</span>}
         <span className="error-notification-category">{error.title ?? error.category}</span>
-        {error.autoDismiss && (
+        {!!error.autoDismiss && (
           <span className="error-notification-auto-dismiss" title="Will auto-dismiss">
             ⏱️
           </span>
         )}
         <button
+          type="button"
           className={`error-notification-copy${
             copyFeedback === 'copied' ? ' error-notification-copy--copied' : ''
           }${copyFeedback === 'error' ? ' error-notification-copy--error' : ''}`}
@@ -105,6 +108,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           <CopyIcon width={16} height={16} />
         </button>
         <button
+          type="button"
           className="error-notification-dismiss"
           onClick={() => onDismiss(error.id)}
           title="Dismiss"
@@ -120,9 +124,11 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           <div className="error-notification-suggestions">
             <p className="suggestions-label">Suggestions:</p>
             <ul>
-              {error.suggestions.map((suggestion, index) => (
-                <li key={index}>{suggestion}</li>
-              ))}
+              {withStableListKeys(error.suggestions, (suggestion) => suggestion).map(
+                ({ key, value: suggestion }) => (
+                  <li key={key}>{suggestion}</li>
+                )
+              )}
             </ul>
           </div>
         )}
@@ -138,9 +144,10 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
         )}
       </div>
 
-      {error.retryable && (
+      {!!error.retryable && (
         <div className="error-notification-actions">
           <button
+            type="button"
             className="error-notification-retry"
             onClick={() => {
               if (onRetry && error.context?.retryFn) {
@@ -152,7 +159,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           </button>
         </div>
       )}
-      {error.autoDismiss && (
+      {!!error.autoDismiss && (
         <div className="error-notification-progress" aria-hidden="true">
           <span className="error-notification-progress-bar" />
         </div>
@@ -184,7 +191,7 @@ export const ErrorNotificationSystem: React.FC = () => {
       </div>
 
       <div className="error-notification-header-actions">
-        <button className="dismiss-all-btn" onClick={dismissAllErrors}>
+        <button type="button" className="dismiss-all-btn" onClick={dismissAllErrors}>
           {errors.length > 1 ? `Dismiss All (${errors.length})` : 'Dismiss'}
         </button>
       </div>

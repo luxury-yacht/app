@@ -36,7 +36,9 @@ class ClusterReadinessTracker {
       const wasServiceable = this.isServiceable(clusterId);
       this.states.set(clusterId, state);
       if (!wasServiceable && this.isServiceable(clusterId)) {
-        this.listeners.forEach((listener) => listener(clusterId));
+        this.listeners.forEach((listener) => {
+          listener(clusterId);
+        });
       }
     });
   }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-
-import { CLUSTER_CAPABILITIES } from './catalog';
-import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
-import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
 import { getScopedFeaturesForView } from '@/core/refresh/components/diagnostics';
+import { requireValue } from '@/test-utils/requireValue';
+import { CLUSTER_CAPABILITIES } from './catalog';
+import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
+import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
 
 describe('permission feature contract', () => {
   it('uses stable feature keys with labels for every static permission spec', () => {
@@ -17,7 +17,11 @@ describe('permission feature contract', () => {
   it('keeps cluster capability features in the same keyed catalog', () => {
     for (const capability of CLUSTER_CAPABILITIES) {
       expect(capability.feature).toBeTruthy();
-      expect(PERMISSION_FEATURE_LABELS[capability.feature!]).toBeTruthy();
+      expect(
+        PERMISSION_FEATURE_LABELS[
+          requireValue(capability.feature, 'expected test value in permissionFeatures.test.ts')
+        ]
+      ).toBeTruthy();
     }
   });
 

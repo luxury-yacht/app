@@ -1,9 +1,9 @@
-import type { CatalogItem } from '@/core/refresh/types';
 import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
+import type { CatalogItem } from '@/core/refresh/types';
 
 export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
   kind: string;
@@ -36,6 +36,28 @@ export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
 
 const canonicalGroup = (row: CatalogBackedCustomResourceRow): string => row.group || '';
 const canonicalVersion = (row: CatalogBackedCustomResourceRow): string => row.version || '';
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+const optionalString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+const requiredString = (record: Record<string, unknown>, field: string): string => {
+  const value = optionalString(record[field]);
+  if (value === undefined) {
+    throw new Error(`Hydrated catalog row is missing string field "${field}".`);
+  }
+  return value;
+};
+const optionalNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' ? value : undefined;
+const optionalBoolean = (value: unknown): boolean | undefined =>
+  typeof value === 'boolean' ? value : undefined;
+const optionalStringRecord = (value: unknown): Record<string, string> | undefined => {
+  const record = asRecord(value);
+  return Object.values(record).every((entry) => typeof entry === 'string')
+    ? (record as Record<string, string>)
+    : undefined;
+};
 
 export const customCatalogRowKey = (
   row: CatalogBackedCustomResourceRow,
@@ -133,30 +155,34 @@ export const catalogItemToFallbackCustomRow = (
   };
 };
 
-export const normalizeHydratedCustomRow = (row: any): CatalogBackedCustomResourceRow => {
-  const group = row.group ?? '';
-  const version = row.version ?? '';
+export const normalizeHydratedCustomRow = (row: unknown): CatalogBackedCustomResourceRow => {
+  const record = asRecord(row);
+  const kind = requiredString(record, 'kind');
+  const group = requiredString(record, 'group');
+  const version = requiredString(record, 'version');
   return {
-    kind: row.kind,
-    kindAlias: row.kindAlias ?? row.kind,
-    name: row.name,
-    namespace: row.namespace ?? '',
-    clusterId: row.clusterId,
-    clusterName: row.clusterName,
+    kind,
+    kindAlias: optionalString(record.kindAlias) ?? kind,
+    name: requiredString(record, 'name'),
+    namespace: optionalString(record.namespace) ?? '',
+    clusterId: requiredString(record, 'clusterId'),
+    clusterName: optionalString(record.clusterName),
     group,
     version,
-    resource: row.resource ?? '',
-    crdName: row.crdName,
-    status: row.status,
-    statusState: row.statusState,
-    statusPresentation: row.statusPresentation,
-    ready: row.ready,
-    observedGeneration: row.observedGeneration,
-    conditions: row.conditions,
-    age: row.age,
-    ageTimestamp: row.ageTimestamp,
-    creationTimestamp: row.creationTimestamp,
-    labels: row.labels,
-    annotations: row.annotations,
+    resource: optionalString(record.resource) ?? '',
+    crdName: optionalString(record.crdName),
+    status: optionalString(record.status),
+    statusState: optionalString(record.statusState),
+    statusPresentation: optionalString(record.statusPresentation),
+    ready: optionalBoolean(record.ready),
+    observedGeneration: optionalNumber(record.observedGeneration),
+    conditions: Array.isArray(record.conditions)
+      ? (record.conditions as CatalogBackedCustomResourceRow['conditions'])
+      : undefined,
+    age: optionalString(record.age),
+    ageTimestamp: optionalNumber(record.ageTimestamp),
+    creationTimestamp: optionalString(record.creationTimestamp),
+    labels: optionalStringRecord(record.labels),
+    annotations: optionalStringRecord(record.annotations),
   };
 };

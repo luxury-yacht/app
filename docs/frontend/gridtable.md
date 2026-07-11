@@ -50,6 +50,11 @@ of interpolating keys into selectors.
 DOM ids must use stable helper functions that cannot collapse distinct
 cluster-scoped row keys.
 
+Auto-width dirty checking hashes the currently rendered cells before running column measurement.
+When row virtualization changes `virtualRange.start/end`, the controller must enqueue visible
+auto-width columns after the new row window commits; the range bounds are intentional effect
+invalidators even though the callback does not read them.
+
 ## Filtering And Search
 
 - Use local search only when the table owns the complete searchable row set.

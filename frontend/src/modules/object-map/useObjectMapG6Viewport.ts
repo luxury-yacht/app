@@ -6,8 +6,9 @@
  */
 
 import type { Graph, GraphData } from '@antv/g6';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import type { MutableRefObject, RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { fitObjectMapG6GraphToView, resetObjectMapG6GraphZoom } from './objectMapG6Viewport';
 import type {
@@ -251,8 +252,12 @@ export const useObjectMapG6Viewport = ({
     updateTooltipPosition,
   ]);
 
-  useEffect(() => {
-    if (!autoFit || !graphReady) return;
-    scheduleFitGraphToView();
-  }, [autoFit, data, graphReady, palette, scheduleFitGraphToView]);
+  useEffectWithInvalidation(
+    () => {
+      if (!autoFit || !graphReady) return;
+      scheduleFitGraphToView();
+    },
+    [autoFit, graphReady, scheduleFitGraphToView],
+    [data, palette]
+  );
 };

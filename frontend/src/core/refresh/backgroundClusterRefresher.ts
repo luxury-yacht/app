@@ -6,15 +6,15 @@
  */
 
 import type { NavigationTabState } from '@/core/contexts/ViewStateContext';
-import type { RefreshDomain } from './types';
-import {
-  clusterViewToRefresher,
-  namespaceViewToRefresher,
-  type ClusterRefresherName,
-  type NamespaceRefresherName,
-} from './refresherTypes';
-import { refreshOrchestrator } from './orchestrator';
 import { APP_LOG_SOURCES, logAppLogsInfo } from '@/core/logging/appLogsClient';
+import { refreshOrchestrator } from './orchestrator';
+import {
+  type ClusterRefresherName,
+  clusterViewToRefresher,
+  type NamespaceRefresherName,
+  namespaceViewToRefresher,
+} from './refresherTypes';
+import type { RefreshDomain } from './types';
 
 // Default interval between background refresh ticks (15 seconds).
 const BACKGROUND_REFRESH_INTERVAL_MS = 15_000;

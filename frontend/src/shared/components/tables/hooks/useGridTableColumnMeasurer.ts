@@ -5,15 +5,13 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
-import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-
 import type {
   ColumnWidthInput,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // Provides DOM-based column width measurement helpers for GridTable:
 // - measures arbitrary column content

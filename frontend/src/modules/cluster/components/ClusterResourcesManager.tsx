@@ -5,15 +5,15 @@
  * Handles permission checks and manual loading of resources.
  */
 
-import { useEffect } from 'react';
 import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesViews';
-import { ClusterViewType } from '@ui/navigation/types';
-import { useUserPermission } from '@/core/capabilities';
-import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type { ClusterViewType } from '@ui/navigation/types';
+import { useEffect } from 'react';
+import type { PermissionStatus } from '@/core/capabilities';
+import { useUserPermission } from '@/core/capabilities';
+import { eventBus } from '@/core/events';
 import { refreshOrchestrator } from '@/core/refresh';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { eventBus } from '@/core/events';
 
 // The managed cluster domains, reset together on kubeconfig switches so no
 // stale per-cluster rows survive into the next selection. (Catalog is

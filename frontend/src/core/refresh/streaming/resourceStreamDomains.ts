@@ -5,7 +5,7 @@
  */
 
 import type { AppEvents } from '@/core/events';
-import { refreshDomainContract, type RefreshSourceClock } from '../domainRegistry';
+import { type RefreshSourceClock, refreshDomainContract } from '../domainRegistry';
 
 export type ResourceDomain = AppEvents['refresh:resource-stream-drift']['domain'];
 export type DoorbellDomain = AppEvents['refresh:resource-stream-health']['domain'];
@@ -269,7 +269,13 @@ export const domainSupportsSourceClock = (
 
 const getResourceStreamDomainDescriptor = (
   domain: DoorbellDomain
-): ResourceStreamDomainDescriptor => doorbellDescriptorByDomain.get(domain)!;
+): ResourceStreamDomainDescriptor => {
+  const descriptor = doorbellDescriptorByDomain.get(domain);
+  if (!descriptor) {
+    throw new Error(`Missing resource stream descriptor for domain "${domain}".`);
+  }
+  return descriptor;
+};
 
 export const isClusterScopedDomain = (domain: DoorbellDomain): boolean =>
   getResourceStreamDomainDescriptor(domain).isClusterScoped;

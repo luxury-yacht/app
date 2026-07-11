@@ -4,9 +4,9 @@
  * Test suite for ExternalHostLinks.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The global setup mock omits BrowserOpenURL; supply it locally so clicks work.
 const browserOpenURL = vi.fn();
@@ -19,10 +19,6 @@ import { ExternalHostLinks } from './ExternalHostLinks';
 describe('ExternalHostLinks', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

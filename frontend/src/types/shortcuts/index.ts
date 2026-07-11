@@ -18,7 +18,7 @@ export interface ShortcutDefinition {
   key: string; // The key to press (e.g., 's', 'Enter', 'Delete')
   modifiers?: ShortcutModifiers;
   priority?: number; // Higher priority wins in conflicts (default: 0)
-  handler: (event?: KeyboardEvent) => void | boolean; // Return false to prevent default
+  handler: (event?: KeyboardEvent) => undefined | boolean; // Return false to prevent default
   description: string;
   category?: string; // For grouping in help menu
   enabled?: boolean; // Can be dynamically disabled

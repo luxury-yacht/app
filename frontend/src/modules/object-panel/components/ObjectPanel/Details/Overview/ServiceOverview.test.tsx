@@ -2,14 +2,14 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ServiceOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serviceDescriptor } from './descriptors/service';
+import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -79,7 +79,7 @@ describe('ServiceOverview', () => {
         labels: {},
         annotations: {},
         selector: { app: 'web' },
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'Type')?.textContent).toBe('LoadBalancer');
@@ -119,7 +119,7 @@ describe('ServiceOverview', () => {
         labels: {},
         annotations: {},
         selector: {},
-      } as any,
+      } as unknown,
     });
 
     expect(getValueForLabel(container, 'External Name')?.textContent).toBe('api.example.com');

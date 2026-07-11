@@ -60,10 +60,6 @@
   text-transform: uppercase;
 }
 
-.sidebar h3 svg {
-  flex-shrink: 0;
-}
-
 /* Right-aligned action button in a section header (namespace search). */
 .sidebar h3 .sidebar-header-action {
   display: inline-flex;
@@ -93,39 +89,6 @@
 
 .cluster-items {
   margin-top: 0.5rem;
-}
-
-/* Staggered animation for sidebar items on load */
-.cluster-items.animate-items > .sidebar-item {
-  animation: staggerFadeInLeft 0.25s var(--ease-out, ease-out) backwards;
-}
-
-.cluster-items.animate-items > .sidebar-item:nth-child(1) {
-  animation-delay: 0ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(2) {
-  animation-delay: 25ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(3) {
-  animation-delay: 50ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(4) {
-  animation-delay: 75ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(5) {
-  animation-delay: 100ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(6) {
-  animation-delay: 125ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(7) {
-  animation-delay: 150ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(8) {
-  animation-delay: 175ms;
-}
-.cluster-items.animate-items > .sidebar-item:nth-child(n + 9) {
-  animation-delay: 200ms;
 }
 
 .namespace-items {
@@ -173,6 +136,43 @@
 
 .sidebar-item svg {
   flex-shrink: 0;
+}
+
+.sidebar h3 svg {
+  flex-shrink: 0;
+}
+
+/* Staggered animation for sidebar items on load */
+.cluster-items.animate-items > .sidebar-item {
+  animation: staggerFadeInLeft 0.25s var(--ease-out, ease-out) backwards;
+}
+
+.cluster-items.animate-items > .sidebar-item:nth-child(1) {
+  animation-delay: 0ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(2) {
+  animation-delay: 25ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(3) {
+  animation-delay: 50ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(4) {
+  animation-delay: 75ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(5) {
+  animation-delay: 100ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(6) {
+  animation-delay: 125ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(7) {
+  animation-delay: 150ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(8) {
+  animation-delay: 175ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(n + 9) {
+  animation-delay: 200ms;
 }
 
 .sidebar-item:not(.active):hover {
@@ -311,7 +311,9 @@ body.sidebar-resizing,
 body.sidebar-resizing * {
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
+    /* biome-ignore lint/complexity/noImportantStyles: Document-level sidebar resize state must override descendant cursor and text-selection declarations for the duration of the global interaction. */
     col-resize !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Document-level sidebar resize state must override descendant cursor and text-selection declarations for the duration of the global interaction. */
   user-select: none !important;
 }
 
@@ -339,6 +341,9 @@ body.sidebar-resizing * {
 
 .namespace-scope-add {
   color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
 }
 
 .namespace-scope-add:hover {

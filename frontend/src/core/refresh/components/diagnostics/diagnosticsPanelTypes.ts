@@ -5,9 +5,9 @@
  * Defines shared interfaces and payload shapes for the shared components.
  */
 
-import type { RefreshDomain } from '../../types';
-import type { DomainStatus } from '../../store';
 import type { PermissionFeatureKey } from '@/core/capabilities/permissionFeatures';
+import type { DomainStatus } from '../../store';
+import type { RefreshDomain } from '../../types';
 
 export interface DiagnosticsPanelProps {
   onClose: () => void;
@@ -68,7 +68,9 @@ export interface DiagnosticsRow {
 // connect/socket-backlog drops, since one multiplexed socket spans all clusters)
 // → a cluster group row → per-domain rows (per-domain delivery/recovery).
 export type DiagnosticsStreamRow =
-  DiagnosticsStreamHeaderRow | DiagnosticsStreamClusterRow | DiagnosticsStreamDomainRow;
+  | DiagnosticsStreamHeaderRow
+  | DiagnosticsStreamClusterRow
+  | DiagnosticsStreamDomainRow;
 
 // Stream header: socket-level metrics for one stream (Sessions/Last Connect are
 // a property of the single socket, not any cluster/domain).

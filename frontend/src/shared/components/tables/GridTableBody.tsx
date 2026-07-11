@@ -5,10 +5,11 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
-import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
+import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import type React from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface HoverState {
   visible: boolean;
@@ -118,12 +119,12 @@ function GridTableBody<T>({
     if (tableData.length === 0) {
       return (
         <div className="gridtable-empty">
-          {hasActiveFilters ? 'No matching items' : emptyMessage}
-          {hasActiveFilters && (
+          {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
+          {!!hasActiveFilters && (
             <div className="gridtable-empty-filter-hint">
               Filters are enabled that may be hiding objects.{' '}
-              <a
-                href="#"
+              <button
+                type="button"
                 className="gridtable-empty-filter-hint__link"
                 onClick={(e) => {
                   e.preventDefault();
@@ -131,7 +132,7 @@ function GridTableBody<T>({
                 }}
               >
                 Clear filters
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -188,6 +189,7 @@ function GridTableBody<T>({
   };
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks.
     <div
       ref={wrapperRef}
       className="gridtable-wrapper"
@@ -214,6 +216,7 @@ function GridTableBody<T>({
         }}
       />
 
+      {/** biome-ignore lint/a11y/useSemanticElements: The div-based virtualized ARIA grid preserves column sizing and delegates focus, keyboard activation, and sorting to the shared GridTable hooks. */}
       <div
         ref={tableRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}

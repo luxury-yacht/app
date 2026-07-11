@@ -5,15 +5,15 @@
  * Each view handles its own data, loading state, and error handling.
  */
 
-import React from 'react';
-import { ClusterViewType } from '@ui/navigation/types';
-import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
-import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
-import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
+import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
+import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
+import type { ClusterViewType } from '@ui/navigation/types';
+import React from 'react';
 
 interface ClusterResourcesViewsProps {
   // Each resource view is query-backed (sourced from its own typed query + replay

@@ -7,10 +7,10 @@
  * `useResourceInventoryTable.cache.test.tsx` ("keeps the last rows through a
  * transient refetch error").
  */
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { requestRefreshDomainStateMock, gridRenders } = vi.hoisted(() => ({
   requestRefreshDomainStateMock: vi.fn(),
@@ -86,7 +86,12 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[], defaultKey?: string, defaultDir?: string, opts?: any) => ({
+  useTableSort: (
+    data: unknown[],
+    defaultKey?: string,
+    defaultDir?: string,
+    opts?: { controlledSort?: { key: string; direction: string | null } | null }
+  ) => ({
     sortedData: data,
     sortConfig: opts?.controlledSort ?? {
       key: defaultKey ?? 'name',
@@ -168,10 +173,6 @@ const flush = async () => {
 describe('Nodes view revisit', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);

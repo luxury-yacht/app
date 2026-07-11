@@ -19,10 +19,10 @@
  * component; no custom DOM measurement or scroll math lives in this file.
  */
 
-import React, { type HTMLAttributes } from 'react';
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
-import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
+import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import React, { type HTMLAttributes } from 'react';
 import { useDockablePanelContext } from './DockablePanelProvider';
 
 /** Describes a single tab in the bar. */
@@ -148,6 +148,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   }, []);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: The shared dockable shell owns panel drag, tab drag, and pointer resize boundaries; native controls and the panel keyboard surface remain the keyboard interaction owners.
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
       className="dockable-tab-bar-shell"

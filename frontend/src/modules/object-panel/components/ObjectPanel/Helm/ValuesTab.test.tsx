@@ -7,8 +7,14 @@
 
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import * as YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as YAML from 'yaml';
+import { requireValue } from '@/test-utils/requireValue';
+
+interface CapturedCodeMirrorProps {
+  value: string;
+  onCreateEditor?: (view: unknown) => void;
+}
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -38,7 +44,7 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
 }));
 
 const codeMirrorState = {
-  latestProps: { current: null as any },
+  latestProps: { current: { value: '' } as CapturedCodeMirrorProps },
   editorView: {
     state: {
       selection: { main: { from: 0, to: 0 } },
@@ -50,18 +56,17 @@ const codeMirrorState = {
   value: '',
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
-  const props = _props;
+const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView,
     };
   }
   React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView as any);
+    onCreateEditor?.(codeMirrorState.editorView);
   }, [onCreateEditor]);
   return (
     <div data-testid="code-mirror" data-value={props.value}>
@@ -140,6 +145,7 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
+  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
   EditorView: class {
     static contentAttributes = {
       of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
@@ -264,9 +270,10 @@ const clickSegmentedOption = async (container: HTMLElement, label: string) => {
   const btn = Array.from(container.querySelectorAll('.segmented-button__option')).find(
     (el) => el.textContent === label
   );
-  expect(btn).toBeTruthy();
   await act(async () => {
-    btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    requireValue(btn, 'expected test value in ValuesTab.test.tsx').dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
   });
   await waitForUpdates();
 };
@@ -283,7 +290,7 @@ describe('ValuesTab', () => {
       error: null,
     };
     codeMirrorState.value = '';
-    codeMirrorState.latestProps.current = null;
+    codeMirrorState.latestProps.current = { value: '' };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     refreshMocks.setScopedDomainEnabled.mockClear();

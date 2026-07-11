@@ -5,15 +5,15 @@
  * get consistent diagnostics, loading accounting, and orchestrator access.
  */
 
-import { refreshOrchestrator } from '@/core/refresh';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
-import { getScopedDomainState } from '@/core/refresh/store';
 import {
   beginBrokerRead,
   completeBrokerRead,
   recordBlockedBrokerRead,
 } from '@/core/read-diagnostics';
-
+import { refreshOrchestrator } from '@/core/refresh';
+import { getScopedDomainState } from '@/core/refresh/store';
+import type { RefreshDomain } from '@/core/refresh/types';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import type {
   ContextRefreshRequest,
   DataReadRequest,
@@ -24,7 +24,6 @@ import type {
   RefreshDomainStateRequest,
   RefreshDomainStateResult,
 } from './types';
-import type { RefreshDomain } from '@/core/refresh/types';
 
 const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
   return reason === 'user';

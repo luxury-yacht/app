@@ -9,10 +9,10 @@
  * persists across cluster switches and is captured in favorites.
  */
 
-import { useCallback, useMemo } from 'react';
-import { MetadataIcon } from '@shared/components/icons/SharedIcons';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import { MetadataIcon } from '@shared/components/icons/SharedIcons';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import { useCallback, useMemo } from 'react';
 
 export interface UseMetadataSearchOptions<T> {
   /** Whether to create the metadata toggle item. */

@@ -5,17 +5,26 @@
  * LimitRange) rendered through the generic OverviewRenderer.
  */
 
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hpaDescriptor,
   limitRangeDescriptor,
   pdbDescriptor,
   resourceQuotaDescriptor,
 } from './descriptors/policy';
+import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
+
+type DeepPartial<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? DeepPartial<Item>[]
+    : T extends object
+      ? { [Key in keyof T]?: DeepPartial<T[Key]> }
+      : T;
 
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
@@ -23,11 +32,11 @@ const context: OverviewContext = { clusterId: defaultClusterId, clusterName: 'al
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -56,9 +65,13 @@ describe('Policy Overview descriptors', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
+  const renderDescriptor = async <T,>(
+    descriptor: OverviewDescriptor<T>,
+    fixture: DeepPartial<T>
+  ) => {
+    const data = fixture as T;
     await act(async () => {
-      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
+      root.render(<OverviewRenderer<T> descriptor={descriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
@@ -115,7 +128,7 @@ describe('Policy Overview descriptors', () => {
           stabilizationWindowSeconds: 60,
         },
       },
-    } as any);
+    });
 
     const targetLink = getValueForLabel(container, 'Target')?.querySelector('.object-panel-link');
     expect(targetLink).toBeTruthy();
@@ -152,7 +165,7 @@ describe('Policy Overview descriptors', () => {
       desiredHealthy: 5,
       disruptionsAllowed: 2,
       selector: { app: 'web' },
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Min Available')?.textContent).toBe('50%');
     expect(getValueForLabel(container, 'Disruptions Allowed')?.textContent).toBe('2');
@@ -165,7 +178,7 @@ describe('Policy Overview descriptors', () => {
       kind: 'ResourceQuota',
       hard: { cpu: '4', memory: '8Gi' },
       used: { cpu: '2', memory: '4Gi' },
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('cpu: 4');
     expect(getValueForLabel(container, 'Used')?.textContent).toContain('memory: 4Gi');
@@ -175,7 +188,7 @@ describe('Policy Overview descriptors', () => {
     await renderDescriptor(limitRangeDescriptor, {
       kind: 'LimitRange',
       limits: [{}, {}, {}],
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Limits')?.textContent).toBe('3 limit(s)');
   });
@@ -209,7 +222,7 @@ describe('Policy Overview descriptors', () => {
           policies: ['invalid-policy-entry'],
         },
       },
-    } as any);
+    });
 
     expect(container.querySelector('.object-panel-link')).toBeNull();
     const metricsContent = getValueForLabel(container, 'Metrics');
@@ -229,7 +242,7 @@ describe('Policy Overview descriptors', () => {
     await renderDescriptor(resourceQuotaDescriptor, {
       kind: 'ResourceQuota',
       hard: { pods: '10' },
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Hard Limits')?.textContent).toContain('pods: 10');
     expect(getValueForLabel(container, 'Used')).toBeNull();

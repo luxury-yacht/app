@@ -6,9 +6,10 @@
  * so alt-click reveals the HOST object instead of the Namespace kind.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const openWithObject = vi.fn();
 const navigateToView = vi.fn();
@@ -28,10 +29,6 @@ const hostRef = { kind: 'Pod', name: 'web-5', namespace: 'shop', clusterId: 'c1'
 describe('ObjectPanelLink', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -52,7 +49,10 @@ describe('ObjectPanelLink', () => {
         </ObjectPanelLink>
       );
     });
-    return container.querySelector<HTMLElement>('.object-panel-link')!;
+    return requireValue(
+      container.querySelector<HTMLElement>('.object-panel-link'),
+      'expected test value in ObjectPanelLink.test.tsx'
+    );
   };
   const click = (el: HTMLElement, altKey: boolean) =>
     act(() => {

@@ -5,10 +5,12 @@
  * Covers key behaviors and edge cases for search.
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import type { KeyBinding } from '@codemirror/view';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const viewMocks = vi.hoisted(() => ({
-  keymapOf: vi.fn((bindings: unknown) => bindings),
+  keymapOf: vi.fn((bindings: readonly KeyBinding[]) => bindings),
 }));
 
 type SearchQueryOptions = {
@@ -21,14 +23,16 @@ type SearchQueryOptions = {
 };
 
 const searchMocks = vi.hoisted(() => {
-  const getSearchQuery = vi.fn((): SearchQueryOptions => ({
-    search: 'term',
-    caseSensitive: false,
-    literal: false,
-    regexp: false,
-    wholeWord: false,
-    replace: 'replace-term',
-  }));
+  const getSearchQuery = vi.fn(
+    (): SearchQueryOptions => ({
+      search: 'term',
+      caseSensitive: false,
+      literal: false,
+      regexp: false,
+      wholeWord: false,
+      replace: 'replace-term',
+    })
+  );
 
   class SearchQuery {
     search: string;
@@ -68,19 +72,18 @@ const searchMocks = vi.hoisted(() => {
 
 vi.mock('@codemirror/view', () => ({
   keymap: {
-    of: (...args: any[]) => (viewMocks.keymapOf as any)(...args),
+    of: viewMocks.keymapOf,
   },
   EditorView: class {},
 }));
 
 vi.mock('@codemirror/search', () => ({
-  search: (...args: any[]) => (searchMocks.search as any)(...args),
-  highlightSelectionMatches: (...args: any[]) =>
-    (searchMocks.highlightSelectionMatches as any)(...args),
+  search: searchMocks.search,
+  highlightSelectionMatches: searchMocks.highlightSelectionMatches,
   searchKeymap: searchMocks.searchKeymap,
-  openSearchPanel: (...args: any[]) => (searchMocks.openSearchPanel as any)(...args),
-  closeSearchPanel: (...args: any[]) => (searchMocks.closeSearchPanel as any)(...args),
-  getSearchQuery: (...args: any[]) => (searchMocks.getSearchQuery as any)(...args),
+  openSearchPanel: searchMocks.openSearchPanel,
+  closeSearchPanel: searchMocks.closeSearchPanel,
+  getSearchQuery: searchMocks.getSearchQuery,
   setSearchQuery: searchMocks.setSearchQuery,
   SearchQuery: searchMocks.SearchQuery,
 }));
@@ -146,7 +149,7 @@ const createView = (options: { readOnly?: boolean } = {}) => {
     dispatch: vi.fn(),
     focus: vi.fn(),
     hasFocus: false,
-  };
+  } as unknown as import('@codemirror/view').EditorView;
 
   return { view, panel };
 };
@@ -165,7 +168,10 @@ describe('core/codemirror/search helpers', () => {
     expect(searchMocks.search).toHaveBeenCalledWith({ top: true });
     expect(searchMocks.highlightSelectionMatches).toHaveBeenCalled();
     expect(Array.isArray(extensions)).toBe(true);
-    const bindings = viewMocks.keymapOf.mock.calls[0][0] as any[];
+    const bindings = requireValue(
+      viewMocks.keymapOf.mock.calls[0]?.[0],
+      'expected the search keymap bindings'
+    );
     expect(bindings.some((binding) => binding.key === 'Mod-f')).toBe(true);
     expect(bindings.some((binding) => binding.key === 'Escape')).toBe(false);
   });
@@ -186,7 +192,7 @@ describe('core/codemirror/search helpers', () => {
 
   it('opens the search panel and enhances layout', () => {
     const { view, panel } = createView();
-    const opened = openSearchPanel(view as any);
+    const opened = openSearchPanel(view);
     expect(opened).toBe(true);
     expect(searchMocks.openSearchPanel).toHaveBeenCalledWith(view);
     expect(panel.dataset.mode).toBe('find');
@@ -196,7 +202,10 @@ describe('core/codemirror/search helpers', () => {
 
   it('opens the replace panel, updates query, and focuses replace input', () => {
     const { view, panel } = createView();
-    const replaceInput = panel.querySelector<HTMLInputElement>('input[name="replace"]')!;
+    const replaceInput = requireValue(
+      panel.querySelector<HTMLInputElement>('input[name="replace"]'),
+      'expected the replace input in the search panel fixture'
+    );
     const raf = vi
       .spyOn(window, 'requestAnimationFrame')
       .mockImplementation((cb: FrameRequestCallback) => {
@@ -204,7 +213,7 @@ describe('core/codemirror/search helpers', () => {
         return 0;
       });
 
-    const opened = openReplacePanel(view as any);
+    const opened = openReplacePanel(view);
     expect(opened).toBe(true);
     expect(searchMocks.openSearchPanel).toHaveBeenCalledWith(view);
     expect(searchMocks.setSearchQuery.of).toHaveBeenCalled();
@@ -218,13 +227,13 @@ describe('core/codemirror/search helpers', () => {
 
   it('respects read-only views when opening replace panel', () => {
     const { view } = createView({ readOnly: true });
-    openReplacePanel(view as any);
+    openReplacePanel(view);
     expect(view.dispatch).not.toHaveBeenCalled();
   });
 
   it('closes the search panel', () => {
     const { view } = createView();
-    const closed = closeSearchPanel(view as any);
+    const closed = closeSearchPanel(view);
     expect(closed).toBe(true);
     expect(searchMocks.closeSearchPanel).toHaveBeenCalledWith(view);
   });
@@ -237,7 +246,7 @@ describe('core/codemirror/search helpers', () => {
         cb(0);
         return 0;
       });
-    const opened = ensureSearchPanelVisible(view as any, 'replace', { preserveFocus: true });
+    const opened = ensureSearchPanelVisible(view, 'replace', { preserveFocus: true });
     expect(opened).toBe(true);
     expect(searchMocks.openSearchPanel).toHaveBeenCalled();
     expect(view.focus).toHaveBeenCalled();

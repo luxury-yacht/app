@@ -6,7 +6,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
+import { installWindowProperty } from '@/test-utils/windowProperty';
 import {
+  type AppPreferenceKey,
   commitIntegerPreferenceInput,
   createPaletteTintPreferenceWorkflow,
   getAccentColor,
@@ -14,16 +16,15 @@ import {
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getDefaultObjectPanelPosition,
+  getDefaultTablePageSize,
   getDimInactiveNamespaces,
   getExclusiveNamespaces,
-  getDefaultTablePageSize,
   getGridTablePersistenceMode,
+  getIntegerPreferenceMetadata,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
-  getIntegerPreferenceMetadata,
-  getPreferenceMetadata,
-  getObjectPanelLayoutDefaults,
   getLinkColor,
+  getObjectPanelLayoutDefaults,
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
   getObjPanelLogsBufferMaxSize,
@@ -31,6 +32,7 @@ import {
   getObjPanelLogsTargetPerScopeLimit,
   getPaletteTint,
   getPermissionSSRRFetchConcurrency,
+  getPreferenceMetadata,
   getUseShortResourceNames,
   hydrateAppPreferences,
   KUBERNETES_CLIENT_BURST_DEFAULT,
@@ -39,6 +41,7 @@ import {
   KUBERNETES_CLIENT_QPS_DEFAULT,
   KUBERNETES_CLIENT_QPS_MAX,
   KUBERNETES_CLIENT_QPS_MIN,
+  normalizeIntegerPreferenceValue,
   OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
   OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
@@ -50,29 +53,27 @@ import {
   PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
   PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
   resetAppPreferencesCacheForTesting,
-  normalizeIntegerPreferenceValue,
   setAccentColor,
   setAppearanceModePreference,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
+  setDefaultTablePageSize,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
-  setDefaultTablePageSize,
   setGridTablePersistenceMode,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
+  setLinkColor,
+  setObjectPanelLayoutDefaults,
   setObjPanelLogsApiTimestampFormat,
   setObjPanelLogsApiTimestampUseLocalTimeZone,
   setObjPanelLogsBufferMaxSize,
-  setObjectPanelLayoutDefaults,
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
   setPermissionSSRRFetchConcurrency,
-  setLinkColor,
   setUseShortResourceNames,
   validateThemeClusterPattern,
-  type AppPreferenceKey,
 } from './appPreferences';
 
 const appMocks = vi.hoisted(() => ({
@@ -391,6 +392,8 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 describe('appPreferences', () => {
+  let restoreGo: () => void;
+
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockReset();
@@ -399,13 +402,13 @@ describe('appPreferences', () => {
     appMocks.ValidateThemeClusterPattern.mockReset();
     appMocks.GetAppSettingsSchema.mockResolvedValue(null);
     appMocks.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
-    (window as any).go = {
+    restoreGo = installWindowProperty('go', {
       backend: {
         App: {
           UpdateAppPreferences: vi.fn().mockResolvedValue({ settings: {}, changedKeys: [] }),
         },
       },
-    };
+    });
   });
 
   it('validates theme cluster patterns through the backend', async () => {
@@ -423,7 +426,7 @@ describe('appPreferences', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    delete (window as any).go;
+    restoreGo();
   });
 
   it('hydrates preferences from backend settings', async () => {

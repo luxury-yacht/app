@@ -7,23 +7,17 @@
  */
 
 import './NsViewEvents.css';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useShortNames } from '@/hooks/useShortNames';
+import type { NamespaceEventsSnapshotPayload, ResourceLink } from '@core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useCallback } from 'react';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
+import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import * as cf from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   eventGridActionReference,
   eventGridCanOpenRelatedObject,
@@ -33,7 +27,13 @@ import {
   namespaceEventRowIdentity,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
-import type { NamespaceEventsSnapshotPayload, ResourceLink } from '@core/refresh/types';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
+import React, { useCallback, useMemo } from 'react';
+import { useShortNames } from '@/hooks/useShortNames';
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 
 export interface EventData {
   kind: string;

@@ -145,14 +145,6 @@
   margin-bottom: 0;
 }
 
-.error-notification--active .error-notification-count {
-  display: inline-flex;
-}
-
-.error-notification .error-notification-count {
-  display: none;
-}
-
 /* ==========================================================================
    Notification Header
    ========================================================================== */
@@ -188,6 +180,14 @@
   height: 24px;
   align-items: center;
   justify-content: center;
+  display: inline-flex;
+}
+
+.error-notification .error-notification-count {
+  display: none;
+}
+
+.error-notification--active .error-notification-count {
   display: inline-flex;
 }
 

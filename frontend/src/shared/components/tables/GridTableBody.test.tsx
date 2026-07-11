@@ -5,15 +5,12 @@
  * Covers key behaviors and edge cases for GridTableBody.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import GridTableBody from '@shared/components/tables/GridTableBody';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -22,7 +19,7 @@ afterEach(() => {
 
 describe('GridTableBody', () => {
   type TestRow = { id: string };
-  type BodyProps = React.ComponentProps<typeof GridTableBody<any>>;
+  type BodyProps = React.ComponentProps<typeof GridTableBody<TestRow>>;
 
   const renderTableBody = async (props: Partial<BodyProps> = {}) => {
     const container = document.createElement('div');
@@ -49,15 +46,15 @@ describe('GridTableBody', () => {
       useShortNames: false,
       hoverState: { visible: false, selected: false, focused: false, top: 0, height: 0 },
       onWrapperContextMenu: vi.fn(),
-      tableData: [{ id: '1' }, { id: '2' }] as unknown as TestRow[],
-      keyExtractor: ((item: TestRow) => item.id) as any,
+      tableData: [{ id: '1' }, { id: '2' }],
+      keyExtractor: (item) => item.id,
       emptyMessage: 'No rows',
       shouldVirtualize: false,
       virtualRows: [],
       virtualRangeStart: 0,
       totalVirtualHeight: 0,
       virtualOffset: 0,
-      renderRowContent: defaultRenderRowContent as RenderRowContentFn<any>,
+      renderRowContent: defaultRenderRowContent,
       onWrapperFocus: vi.fn(),
       onWrapperBlur: vi.fn(),
       contentWidth: 0,
@@ -101,12 +98,14 @@ describe('GridTableBody', () => {
     const { container } = await renderTableBody({
       shouldVirtualize: true,
       virtualRows: [{ id: 'A' }, { id: 'B' }] as unknown as TestRow[],
-      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+      renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
     });
 
     const virtualInner = container.querySelector('.gridtable-virtual-inner');
     expect(virtualInner).not.toBeNull();
-    expect(virtualInner!.textContent).toContain('Virtual A');
+    expect(
+      requireValue(virtualInner, 'expected test value in GridTableBody.test.tsx').textContent
+    ).toContain('Virtual A');
   });
 
   it('remounts virtualized rows when the data window changes to prevent state leaks', async () => {
@@ -129,7 +128,7 @@ describe('GridTableBody', () => {
       shouldVirtualize: true,
       virtualRows: initialRows,
       tableData: initialRows,
-      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+      renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
     });
 
     const firstCell = container.querySelector('.stateful-cell');
@@ -200,7 +199,7 @@ describe('GridTableBody', () => {
     );
 
     const { container } = await renderTableBody({
-      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+      renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
     });
 
     const cell = container.querySelector('.grid-cell') as HTMLDivElement | null;
@@ -235,7 +234,7 @@ describe('GridTableBody', () => {
     );
 
     const { container } = await renderTableBody({
-      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+      renderRowContent: renderRowContent as RenderRowContentFn<unknown>,
       onWrapperContextMenu,
     });
 

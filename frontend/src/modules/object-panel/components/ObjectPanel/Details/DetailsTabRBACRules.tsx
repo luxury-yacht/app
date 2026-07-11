@@ -10,8 +10,9 @@
  * own top-level section.
  */
 
-import React from 'react';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import React from 'react';
 import '../shared.css';
 import './DetailsTabRBACRules.css';
 
@@ -56,8 +57,8 @@ const joinRuleValues = (
   values: string[],
   mapValue: (v: string) => React.ReactNode = (v) => v
 ): React.ReactNode =>
-  values.map((v, i) => (
-    <React.Fragment key={`${v}-${i}`}>
+  withStableListKeys(values, (value) => value).map(({ key, value: v }, i) => (
+    <React.Fragment key={key}>
       {i > 0 && ', '}
       {v === '*' ? <span className="rule-wildcard">*</span> : mapValue(v)}
     </React.Fragment>
@@ -77,50 +78,57 @@ const Rules: React.FC<RBACRulesProps> = ({ policyRules }) => {
     <div className="object-panel-section">
       <div className="object-panel-section-title">Rules</div>
       <div className="rules-card-list">
-        {policyRules.map((rule, index) => {
-          const hasResources = !!rule.resources && rule.resources.length > 0;
-          const hasNonResourceURLs = !!rule.nonResourceURLs && rule.nonResourceURLs.length > 0;
-          const hasResourceNames = !!rule.resourceNames && rule.resourceNames.length > 0;
+        {withStableListKeys(policyRules, (rule) => JSON.stringify(rule)).map(
+          ({ key, value: rule }) => {
+            const resources = rule.resources ?? [];
+            const nonResourceURLs = rule.nonResourceURLs ?? [];
+            const resourceNames = rule.resourceNames ?? [];
+            const hasResources = resources.length > 0;
+            const hasNonResourceURLs = nonResourceURLs.length > 0;
+            const hasResourceNames = resourceNames.length > 0;
 
-          return (
-            <div key={index} className="rules-card">
-              <div className="rules-card-header">
-                <span className="rules-card-title">
-                  {hasResources
-                    ? joinRuleValues(rule.resources!)
-                    : hasNonResourceURLs
-                      ? joinRuleValues(rule.nonResourceURLs!)
-                      : '(no resources)'}
-                </span>
-                {hasResources && (
-                  <span className="rules-card-meta">
-                    in{' '}
-                    {rule.apiGroups && rule.apiGroups.length > 0
-                      ? joinRuleValues(rule.apiGroups, renderApiGroup)
-                      : 'core'}
+            return (
+              <div key={key} className="rules-card">
+                <div className="rules-card-header">
+                  <span className="rules-card-title">
+                    {hasResources
+                      ? joinRuleValues(resources)
+                      : hasNonResourceURLs
+                        ? joinRuleValues(nonResourceURLs)
+                        : '(no resources)'}
                   </span>
-                )}
-                {hasResourceNames && (
-                  <span className="rules-card-meta">named {rule.resourceNames!.join(', ')}</span>
-                )}
-                {hasResources && hasNonResourceURLs && (
-                  <span className="rules-card-meta">
-                    and URLs: {joinRuleValues(rule.nonResourceURLs!)}
-                  </span>
+                  {hasResources && (
+                    <span className="rules-card-meta">
+                      in{' '}
+                      {rule.apiGroups && rule.apiGroups.length > 0
+                        ? joinRuleValues(rule.apiGroups, renderApiGroup)
+                        : 'core'}
+                    </span>
+                  )}
+                  {hasResourceNames && (
+                    <span className="rules-card-meta">named {rule.resourceNames?.join(', ')}</span>
+                  )}
+                  {!!(hasResources && hasNonResourceURLs) && (
+                    <span className="rules-card-meta">
+                      and URLs: {joinRuleValues(nonResourceURLs)}
+                    </span>
+                  )}
+                </div>
+                {rule.verbs && rule.verbs.length > 0 && (
+                  <div className="rule-verbs">
+                    {withStableListKeys(rule.verbs, (verb) => verb).map(
+                      ({ key: verbKey, value: v }) => (
+                        <StatusChip key={verbKey} variant={verbVariant(v)}>
+                          {v === '*' ? '* (all)' : (v ?? '')}
+                        </StatusChip>
+                      )
+                    )}
+                  </div>
                 )}
               </div>
-              {rule.verbs && rule.verbs.length > 0 && (
-                <div className="rule-verbs">
-                  {rule.verbs.map((v, i) => (
-                    <StatusChip key={`${v}-${i}`} variant={verbVariant(v)}>
-                      {v === '*' ? '* (all)' : v}
-                    </StatusChip>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          }
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
-import type { ReactNode } from 'react';
 import type { StatusIndicatorAction } from '@shared/components/status/StatusIndicator';
+import type { ReactNode } from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
 
 let mockLifecycleState = 'ready';
 let mockNamespaceReady = true;
@@ -41,6 +41,7 @@ vi.mock('@shared/components/status/StatusIndicator', () => ({
   }) => (
     <div
       data-testid="indicator"
+      role="status"
       data-status={status}
       data-action-label={actionLabel ?? ''}
       data-actions={(actions ?? []).map((action) => action.label).join('|')}
@@ -105,10 +106,6 @@ import ConnectivityStatus from './ConnectivityStatus';
 describe('ConnectivityStatus', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

@@ -6,9 +6,9 @@
  * descriptorRegistry (covered by driftCheck.test.ts and the per-kind descriptor tests).
  */
 
-import { describe, it, expect } from 'vitest';
-import { overviewRegistry, getResourceCapabilities } from './registry';
+import { describe, expect, it } from 'vitest';
 import { GenericOverview } from './GenericOverview';
+import { getResourceCapabilities, overviewRegistry } from './registry';
 
 describe('overviewRegistry fallback', () => {
   it('renders the generic overview for any kind (unregistered / custom resources)', () => {

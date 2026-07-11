@@ -5,11 +5,10 @@
  * Covers key behaviors and edge cases for useGridTableProfiler.
  */
 
-import React, { Profiler, act, useImperativeHandle } from 'react';
+import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
+import React, { act, Profiler, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 
 const startMock = vi.fn();
 const stopMock = vi.fn();
@@ -17,8 +16,6 @@ const stopMock = vi.fn();
 vi.mock('./useFrameSampler', () => ({
   useFrameSampler: () => ({ start: startMock, stop: stopMock }),
 }));
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 type HarnessHandle = {
   start: () => void;
@@ -97,7 +94,12 @@ describe('useGridTableProfiler', () => {
       value: 'chrome',
       configurable: true,
     });
-    (import.meta as any).env.VITE_GRIDTABLE_PROFILE_LOGS = 'true';
+    Object.defineProperty(import.meta.env, 'VITE_GRIDTABLE_PROFILE_LOGS', {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: 'true',
+    });
     const harness = await createHarness();
     const wrapped = harness.handle().wrap(<div data-testid="content" />);
     expect(wrapped.type).toBe(Profiler);

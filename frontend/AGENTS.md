@@ -27,7 +27,7 @@ Applies to React/TypeScript code under `frontend/`.
 - Add backend-owned domain payload DTOs to
   `backend/internal/genrefreshcontracts/registry.go`, then run
   `go generate ./backend`. Never hand-edit
-	`frontend/src/core/refresh/types.generated.ts` or format it with Prettier; the
+	`frontend/src/core/refresh/types.generated.ts` or format it with Biome; the
 	Go generator is its only writer. Set domain payload mappings through
 	`refreshPayloadType` in `backend/refresh/domain/refresh-domain-contract.json`.
 	Keep only frontend-owned reducer state in `frontend/src/core/refresh/types.ts`.
@@ -35,7 +35,8 @@ Applies to React/TypeScript code under `frontend/`.
 - Register domains in `frontend/src/core/refresh/orchestrator.ts` and diagnostics config in `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
 - Manual refresh targets are mapped in `frontend/src/core/refresh/refresherTypes.ts` and selected in `frontend/src/core/refresh/RefreshManager.ts`.
 - Wire any SSE managers under `frontend/src/core/refresh/streaming`.
-- Do not call `fetch` directly; use the refresh orchestrator/client (lint allows direct fetch only in `frontend/src/core/refresh/client.ts`, see `frontend/eslint.config.js`).
+- Do not call `fetch` directly; use the refresh orchestrator/client (Biome plugins allow direct fetch only in the refresh and data-access infrastructure; see `frontend/biome.json` and `frontend/biome-plugins/`).
+- Import generated Wails App bindings only through `frontend/src/core/backend-api`; its explicit export list is the frontend backend-call allowlist. Application reads still belong in `appStateAccess` or `dataAccess`, and object mutations belong in their owning action/workflow client.
 - Validate domain state in the Diagnostics panel.
 - Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid SSE-driven renders for Browse.
 - Frontend reads must go through `dataAccess` or `appStateAccess` as documented
@@ -97,7 +98,7 @@ Applies to React/TypeScript code under `frontend/`.
 
 ## Coding Style & Naming Conventions
 
-- The React/TypeScript side relies on Prettier (2-space indentation) and ESLint.
+- The React/TypeScript side relies on Biome for formatting and linting (2-space indentation).
 - React Components are PascalCase.
 - React hooks begin with `use`, and cross-cutting helpers live in `frontend/src/shared`.
 - Prefer the path aliases documented in `tsconfig.json` (`@core/refresh`, `@shared/utils`, etc.) instead of deep relative imports.

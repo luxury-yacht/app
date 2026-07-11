@@ -5,8 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React from 'react';
 import { LabelsAndAnnotations } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations';
+import React from 'react';
 
 interface ResourceMetadataProps {
   labels?: Record<string, string>;
@@ -31,11 +31,11 @@ export const ResourceMetadata = React.memo<ResourceMetadataProps>(
         });
         combinedLabels = derived;
       } else {
-        Object.entries(selectorEntries).forEach(([key, value]) => {
-          if (!(key in combinedLabels!)) {
-            combinedLabels![key] = value;
+        for (const [key, value] of Object.entries(selectorEntries)) {
+          if (!(key in combinedLabels)) {
+            combinedLabels[key] = value;
           }
-        });
+        }
       }
     }
 

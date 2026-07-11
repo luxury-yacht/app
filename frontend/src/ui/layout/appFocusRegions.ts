@@ -1,7 +1,7 @@
-import { type RefObject, useEffect } from 'react';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
+import { type RefObject, useEffect } from 'react';
 
 export type TopLevelAppRegion = 'header' | 'sidebar' | 'content';
 
@@ -79,7 +79,7 @@ const getRegionFromElement = (element: Element | null): TopLevelAppRegion | null
 const focusSavedRegionElement = (region: TopLevelAppRegion) => {
   const root = document.querySelector<HTMLElement>(TOP_LEVEL_REGION_SELECTOR[region]);
   const element = lastFocusedElementByRegion.get(region);
-  if (!root || !element || !element.isConnected || !root.contains(element)) {
+  if (!root || !element?.isConnected || !root.contains(element)) {
     return false;
   }
 

@@ -6,8 +6,8 @@
  * capabilities used throughout the application.
  */
 
-import type { CapabilityDescriptor } from './types';
 import { PERMISSION_FEATURES, type PermissionFeatureKey } from './permissionFeatures';
+import type { CapabilityDescriptor } from './types';
 
 export type CapabilityScope = 'cluster' | 'namespace' | 'object';
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 import {
   __resetScrollbarActivityTrackingForTest,
@@ -143,7 +144,7 @@ describe('scrollbar activity tracking', () => {
     expect(thumb).toBeTruthy();
 
     expect(element.scrollTop).toBe(0);
-    dispatchWheel(thumb!);
+    dispatchWheel(requireValue(thumb, 'expected test value in scrollbarActivity.test.ts'));
 
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeTruthy();
     expect(element.scrollTop).toBe(24);
@@ -186,7 +187,11 @@ describe('scrollbar activity tracking', () => {
     const gutter = document.body.querySelector('.scrollbar-overlay-gutter--vertical');
     expect(gutter).toBeTruthy();
 
-    dispatchPointerDown(gutter!, 99, 95);
+    dispatchPointerDown(
+      requireValue(gutter, 'expected test value in scrollbarActivity.test.ts'),
+      99,
+      95
+    );
 
     expect(element.scrollTop).toBe(100);
   });

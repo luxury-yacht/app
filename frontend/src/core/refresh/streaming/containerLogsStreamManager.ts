@@ -5,20 +5,20 @@
  * Implements containerLogsStreamManager logic for the core layer.
  */
 
+import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import { eventBus } from '@/core/events';
+import {
+  getObjPanelLogsBufferMaxSize,
+  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+} from '@/core/settings/appPreferences';
 import type { SnapshotStats } from '../client';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type {
   ContainerLogsEntry,
   ContainerLogsSnapshotPayload,
   ContainerLogsStreamEventPayload,
 } from '../types';
-import { resolvePermissionDeniedMessage } from '../permissionErrors';
-import { eventBus } from '@/core/events';
-import {
-  getObjPanelLogsBufferMaxSize,
-  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
-} from '@/core/settings/appPreferences';
-import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 import { closeRefreshEventSource, openRefreshEventSource } from './sseStreamTransport';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { streamReconnectDelay } from './streamTiming';
@@ -401,7 +401,9 @@ export class ContainerLogsStreamManager {
 
   stopAll(reset = false): void {
     const scopes = Array.from(this.connections.keys());
-    scopes.forEach((scope) => this.stop(scope, reset));
+    scopes.forEach((scope) => {
+      this.stop(scope, reset);
+    });
     if (reset) {
       this.buffers.clear();
       this.bufferMeta.clear();

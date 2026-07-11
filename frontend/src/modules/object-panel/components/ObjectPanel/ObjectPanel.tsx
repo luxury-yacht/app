@@ -6,39 +6,39 @@
  * from the canonical object reference.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
-import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
+import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import {
-  useObjectPanelState,
   useObjectPanelActiveTab,
+  useObjectPanelState,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import { queryNamespacePermissions } from '@/core/capabilities';
+import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import {
   clearRequestedObjectPanelTab,
   getRequestedObjectPanelTab,
   subscribeObjectPanelTabRequests,
 } from '@modules/object-panel/objectPanelTabRequests';
+import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { queryNamespacePermissions } from '@/core/capabilities';
 import './ObjectPanel.css';
-import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
-import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
-import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
-import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
-import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
-import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
-import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
-import { getKindColorClass } from '@shared/utils/kindBadgeColors';
-import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import {
   CLUSTER_SCOPE,
   RESOURCE_CAPABILITIES,
 } from '@modules/object-panel/components/ObjectPanel/constants';
+import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
+import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
+import { useObjectPanelRefresh } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh';
+import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs';
+import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
+import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
+import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
-import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
+import { getObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import type { DockPosition } from '@ui/dockable';
+import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import { buildObjectDetailModel } from './Details/objectDetailModel';
 import { resetObjectPanelScopedDomain } from './hooks/useObjectPanelScopedDomainLifecycle';
 
@@ -327,6 +327,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
             silently disappear from grouped panels). */}
         <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
           {/* Kind badge + name toolbar */}
+          {/** biome-ignore lint/a11y/noStaticElementInteractions: This toolbar boundary only stops panel-drag pointer propagation; its descendant controls retain native keyboard behavior. */}
           <div onMouseDown={(e) => e.stopPropagation()}>
             <ObjectPanelHeader
               kind={objectData?.kind ?? null}

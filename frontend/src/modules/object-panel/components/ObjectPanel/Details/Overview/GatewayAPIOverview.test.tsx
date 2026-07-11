@@ -6,19 +6,28 @@
  * the cluster identity threaded via `context`.
  */
 
-import ReactDOM from 'react-dom/client';
+import type React from 'react';
 import { act } from 'react';
+import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OverviewRenderer } from './OverviewRenderer';
-import type { OverviewContext, OverviewDescriptor } from './schema';
 import {
   gatewayDescriptor,
   httpRouteDescriptor,
   referenceGrantDescriptor,
 } from './descriptors/gateway';
+import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewContext, OverviewDescriptor } from './schema';
+
+type DeepPartial<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? DeepPartial<Item>[]
+    : T extends object
+      ? { [Key in keyof T]?: DeepPartial<T[Key]> }
+      : T;
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -30,7 +39,10 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: (props: any) => (
+  ObjectPanelLink: (props: {
+    objectRef: { kind: string; name: string };
+    children: React.ReactNode;
+  }) => (
     <span
       data-testid="object-panel-link"
       data-kind={props.objectRef.kind}
@@ -43,7 +55,7 @@ vi.mock('@shared/components/ObjectPanelLink', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const context: OverviewContext = {
@@ -62,9 +74,13 @@ describe('GatewayAPIOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
+  const renderDescriptor = async <T,>(
+    descriptor: OverviewDescriptor<T>,
+    fixture: DeepPartial<T>
+  ) => {
+    const data = fixture as T;
     await act(async () => {
-      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
+      root.render(<OverviewRenderer<T> descriptor={descriptor} data={data} context={context} />);
       await Promise.resolve();
     });
   };
@@ -108,7 +124,7 @@ describe('GatewayAPIOverview', () => {
       conditions: [{ type: 'Accepted', status: 'True', reason: 'Accepted' }],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Gateway Class')?.textContent).toContain(
       'GatewayClass shared'
@@ -157,7 +173,7 @@ describe('GatewayAPIOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     const listenersValue = getValueForLabel(container, 'Listeners');
     const linkTitles = Array.from(
@@ -227,7 +243,7 @@ describe('GatewayAPIOverview', () => {
       conditions: [{ type: 'ResolvedRefs', status: 'True', reason: 'ResolvedRefs' }],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     expect(getValueForLabel(container, 'Hostnames')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Parent Refs')?.textContent).toContain('Gateway prod/edge');
@@ -257,7 +273,7 @@ describe('GatewayAPIOverview', () => {
       ],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     // Grant renders the from→to diagram; query it directly.
     const diagram = container.querySelector('.reference-grant-diagram');

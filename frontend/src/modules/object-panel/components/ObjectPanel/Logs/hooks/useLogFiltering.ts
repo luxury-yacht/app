@@ -6,10 +6,10 @@
  */
 import { useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
-import type { ParsedLogEntry } from '../logViewerReducer';
 import { stripAnsi } from '../ansi';
-import { tryParseJSONObject } from '../parsedLogUtils';
 import { buildLogSearchRegex } from '../logSearch';
+import type { ParsedLogEntry } from '../logViewerReducer';
+import { tryParseJSONObject } from '../parsedLogUtils';
 
 interface UseLogFilteringParams {
   logEntries: ContainerLogsEntry[];

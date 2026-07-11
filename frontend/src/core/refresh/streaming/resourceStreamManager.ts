@@ -7,6 +7,15 @@
  * rather than delivering rows over the bridge.
  */
 
+import { eventBus } from '@/core/events';
+import {
+  APP_LOG_SOURCES,
+  type AppLogsClusterMeta,
+  logAppLogsDebug,
+  logAppLogsInfo,
+} from '@/core/logging/appLogsClient';
+import { stripClusterScope } from '../clusterScope';
+import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { setScopedDomainState } from '../store';
 import {
   RESOURCE_STREAM_MESSAGE_TYPES,
@@ -15,25 +24,23 @@ import {
   type ResourceStreamServerMessage,
   type ResourceStreamSignal,
 } from '../types';
-import { stripClusterScope } from '../clusterScope';
-import { eventBus } from '@/core/events';
+import { ResourceStreamConnection } from './resourceStreamConnection';
 import {
-  APP_LOG_SOURCES,
-  logAppLogsDebug,
-  logAppLogsInfo,
-  type AppLogsClusterMeta,
-} from '@/core/logging/appLogsClient';
-import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
-import {
-  domainSupportsSourceClock,
-  isResourceStreamSourceClock,
-  isCompleteResyncStreamDomain,
-  isClusterScopedDomain,
-  isSupportedDomain,
   type DoorbellDomain,
+  domainSupportsSourceClock,
+  isClusterScopedDomain,
+  isCompleteResyncStreamDomain,
+  isResourceStreamSourceClock,
+  isSupportedDomain,
   type ResourceStreamSourceClock,
 } from './resourceStreamDomains';
-import { ResourceStreamConnection } from './resourceStreamConnection';
+import {
+  type ResourceStreamConnectionStatus,
+  type ResourceStreamHealthPayload,
+  type ResourceStreamHealthStatus,
+  ResourceStreamHealthStore,
+  STREAM_HEALTH_STATUS_ORDER,
+} from './resourceStreamHealth';
 import {
   ResourceStreamSubscriptionStore,
   resourceStreamSubscriptionKey,
@@ -41,13 +48,6 @@ import {
 } from './resourceStreamSubscriptions';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { StreamVisibilityController } from './streamVisibilityController';
-import {
-  ResourceStreamHealthStore,
-  STREAM_HEALTH_STATUS_ORDER,
-  type ResourceStreamConnectionStatus,
-  type ResourceStreamHealthPayload,
-  type ResourceStreamHealthStatus,
-} from './resourceStreamHealth';
 
 export { normalizeResourceScope } from './resourceStreamDomains';
 
@@ -253,7 +253,9 @@ export class ResourceStreamManager {
       resyncCount: 0,
       fallbackCount: 0,
     };
-    this.streamTelemetry.forEach((stats) => accumulateStreamTelemetry(summary, stats));
+    this.streamTelemetry.forEach((stats) => {
+      accumulateStreamTelemetry(summary, stats);
+    });
     return summary;
   }
 
@@ -263,7 +265,8 @@ export class ResourceStreamManager {
     const byClusterDomain: Record<string, ResourceStreamTelemetrySummary> = {};
     this.streamTelemetry.forEach((stats) => {
       const key = `${stats.clusterId}::${stats.domain}`;
-      const summary = (byClusterDomain[key] ??= { resyncCount: 0, fallbackCount: 0 });
+      byClusterDomain[key] ??= { resyncCount: 0, fallbackCount: 0 };
+      const summary = byClusterDomain[key];
       accumulateStreamTelemetry(summary, stats);
     });
     return byClusterDomain;
@@ -297,7 +300,9 @@ export class ResourceStreamManager {
     if (subscriptions.length === 0) {
       return;
     }
-    subscriptions.forEach((subscription) => this.scheduleUnsubscribe(subscription, reset));
+    subscriptions.forEach((subscription) => {
+      this.scheduleUnsubscribe(subscription, reset);
+    });
   }
 
   async refreshOnce(domain: DoorbellDomain, scope: string): Promise<void> {
@@ -522,7 +527,9 @@ export class ResourceStreamManager {
 
   private ensureSubscriptions(domain: DoorbellDomain, scope: string): StreamSubscription[] {
     const subscriptions = this.subscriptions.ensure(domain, scope);
-    subscriptions.forEach((subscription) => this.updateHealthForSubscription(subscription));
+    subscriptions.forEach((subscription) => {
+      this.updateHealthForSubscription(subscription);
+    });
     return subscriptions;
   }
 
@@ -713,7 +720,9 @@ export class ResourceStreamManager {
         }
       });
     });
-    targets.forEach(({ domain, scope }) => this.updateHealthForScope(domain, scope));
+    targets.forEach(({ domain, scope }) => {
+      this.updateHealthForScope(domain, scope);
+    });
   }
 
   private markConnectionOpen(): void {
@@ -1003,7 +1012,9 @@ export class ResourceStreamManager {
 
   private stopAll(reset: boolean): void {
     const subscriptions = Array.from(this.subscriptions.values());
-    subscriptions.forEach((subscription) => this.unsubscribe(subscription, reset));
+    subscriptions.forEach((subscription) => {
+      this.unsubscribe(subscription, reset);
+    });
     this.subscriptions.clear();
     this.connection?.close();
     this.connection = null;

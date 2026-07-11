@@ -8,6 +8,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
 
+interface MockSelectionRange {
+  from: number;
+  to: number;
+}
+
+interface MockSelection {
+  main: MockSelectionRange;
+  ranges?: MockSelectionRange[];
+}
+
+interface CapturedCodeMirrorProps {
+  value: string;
+  extensions: unknown[];
+  onChange: (value: string) => void;
+  onCreateEditor?: (view: unknown) => void;
+}
+
+interface MockEditorView {
+  state: {
+    selection: MockSelection;
+    sliceDoc: ReturnType<typeof vi.fn<() => string>>;
+    changeByRange: (updater: (range: MockSelectionRange) => unknown) => unknown;
+  };
+  dispatch: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
+}
+
+interface CodeMirrorHarness {
+  latestProps: { current: CapturedCodeMirrorProps };
+  editorView: MockEditorView;
+  value: string;
+  selectionText: string;
+}
+
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
   useKeyboardSurface: vi.fn(),
@@ -26,11 +60,20 @@ const refreshStoreMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
 }));
 
-const codeMirrorState = {
-  latestProps: { current: null as any },
+const codeMirrorState: CodeMirrorHarness = {
+  latestProps: {
+    current: {
+      value: '',
+      extensions: [],
+      onChange: () => undefined,
+    },
+  },
   editorView: {
     state: {
-      selection: { main: { from: 0, to: 0 } },
+      selection: {
+        main: { from: 0, to: 0 },
+        ranges: [],
+      },
       sliceDoc: vi.fn(() => codeMirrorState.selectionText),
       changeByRange: (updater: (range: { from: number; to: number }) => unknown) =>
         updater({ from: 0, to: 0 }),
@@ -42,18 +85,17 @@ const codeMirrorState = {
   selectionText: '',
 };
 
-const CodeMirrorMock = React.forwardRef((_props: any, ref) => {
-  const props = _props;
+const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView as any,
+      view: codeMirrorState.editorView,
     };
   }
   React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView as any);
+    onCreateEditor?.(codeMirrorState.editorView);
   }, [onCreateEditor]);
   return (
     <div data-testid="code-mirror" data-value={props.value}>
@@ -157,6 +199,7 @@ vi.mock('@codemirror/view', () => ({
     }),
     set: (ranges: unknown[]) => ranges,
   },
+  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
   EditorView: class {
     static decorations = {
       of: (decorations: unknown) => decorations,
@@ -457,8 +500,15 @@ describe('YamlTab', () => {
     snapshotState.current = { status: 'ready', data: { yaml: YAML }, error: null };
     codeMirrorState.selectionText = '';
     codeMirrorState.value = '';
-    codeMirrorState.latestProps.current = null;
-    codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] } as any;
+    codeMirrorState.latestProps.current = {
+      value: '',
+      extensions: [],
+      onChange: () => undefined,
+    };
+    codeMirrorState.editorView.state.selection = {
+      main: { from: 0, to: 0 },
+      ranges: [],
+    };
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
     (navigator.clipboard.writeText as unknown as ReturnType<typeof vi.fn>).mockClear();
@@ -577,11 +627,11 @@ describe('YamlTab', () => {
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 10 },
       ranges: [{ from: 0, to: 10 }],
-    } as any;
+    };
     codeMirrorState.selectionText = 'apiVersion';
 
     const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
       .filter((config) => typeof config.onNativeAction === 'function')
       .pop();
 
@@ -608,7 +658,7 @@ describe('YamlTab', () => {
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 10 },
       ranges: [{ from: 0, to: 10 }],
-    } as any;
+    };
     codeMirrorState.selectionText = 'apiVersion';
 
     const contextMenuExtension = (codeMirrorState.latestProps.current.extensions as unknown[]).find(
@@ -626,7 +676,7 @@ describe('YamlTab', () => {
           bubbles: true,
           cancelable: true,
         }),
-        codeMirrorState.editorView as any
+        codeMirrorState.editorView
       );
       await Promise.resolve();
     });
@@ -670,10 +720,10 @@ describe('YamlTab', () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 } as any;
+    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 };
 
     const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
-      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .map(([config]) => config as { onNativeAction?: (context: unknown) => boolean })
       .filter((config) => typeof config.onNativeAction === 'function')
       .pop();
 
@@ -1459,7 +1509,7 @@ describe('YamlTab', () => {
     codeMirrorState.selectionText = 'demo';
     codeMirrorState.editorView.state.selection = {
       main: { from: 0, to: 4 },
-    } as any;
+    };
     const searchRegistration = searchShortcutMocks.useSearchShortcutTarget.mock.calls[
       searchShortcutMocks.useSearchShortcutTarget.mock.calls.length - 1
     ]?.[0] as { focus: () => void; isActive: boolean } | undefined;
@@ -1639,7 +1689,7 @@ describe('YamlTab', () => {
     expect(blurSpy).toHaveBeenCalled();
 
     const selectSpy = vi.fn();
-    input.select = selectSpy as any;
+    input.select = () => selectSpy();
     const selectEvent = new KeyboardEvent('keydown', {
       key: 'a',
       metaKey: false,
@@ -1902,7 +1952,7 @@ describe('YamlTab', () => {
     expect(render.container.textContent).toContain('No YAML content available');
     await render.unmount();
 
-    const largeYaml = 'kind: Pod\nmetadata:\n  name: demo\n' + 'a'.repeat(160000);
+    const largeYaml = `kind: Pod\nmetadata:\n  name: demo\n${'a'.repeat(160000)}`;
     snapshotState.current = { status: 'ready', data: { yaml: largeYaml }, error: null };
     render = await renderYamlTab();
     expect(render.container.textContent).toContain('Large manifest detected');

@@ -5,12 +5,11 @@
  * Covers loading, error, empty, auto-select, and title rendering behaviors.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import RollbackModal from './RollbackModal';
 import { KeyboardProvider } from '@ui/shortcuts/context';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import RollbackModal from './RollbackModal';
 
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({
@@ -53,10 +52,6 @@ describe('RollbackModal', () => {
     name: 'my-deploy',
     kind: 'Deployment',
   };
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -102,7 +97,7 @@ describe('RollbackModal', () => {
 
   it('renders loading state then revision list', async () => {
     // Create a deferred promise so we can assert the loading state.
-    let resolveRevisions!: (value: any) => void;
+    let resolveRevisions!: (value: unknown) => void;
     const pending = new Promise((resolve) => {
       resolveRevisions = resolve;
     });

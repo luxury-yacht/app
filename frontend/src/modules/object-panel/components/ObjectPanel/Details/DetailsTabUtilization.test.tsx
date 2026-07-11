@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
 import Utilization from './DetailsTabUtilization';
 
 vi.mock('@shared/components/ResourceBar', () => ({
@@ -14,7 +14,7 @@ vi.mock('@shared/components/ResourceBar', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 describe('DetailsTabUtilization', () => {

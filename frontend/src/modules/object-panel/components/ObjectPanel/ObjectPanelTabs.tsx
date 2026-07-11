@@ -7,10 +7,11 @@
  * the panel's custom focus walker stays in control, and attaches the
  * `data-object-panel-focusable="true"` marker the walker needs.
  */
-import { useMemo, type HTMLAttributes } from 'react';
 
-import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
+
+import { type TabDescriptor, Tabs } from '@shared/components/tabs';
+import { type HTMLAttributes, useMemo } from 'react';
 
 type ObjectPanelTabDefinition = {
   id: string;

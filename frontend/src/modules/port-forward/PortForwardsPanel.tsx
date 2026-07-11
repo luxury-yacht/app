@@ -6,18 +6,18 @@
  * to stop/remove them.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { StopPortForward } from '@wailsjs/go/backend/App';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { assertNever } from '@shared/utils/assertNever';
 import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { errorHandler } from '@utils/errorHandler';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { StopPortForward } from '@/core/backend-api';
 import {
-  useRuntimeOperationStatus,
   type PortForwardSession,
   type PortForwardStatus,
+  useRuntimeOperationStatus,
 } from '@/ui/status/runtimeOperationStatus';
-import { assertNever } from '@shared/utils/assertNever';
 import './PortForwardsPanel.css';
 
 /**
@@ -126,6 +126,7 @@ function PortForwardsPanel() {
 
     return (
       <button
+        type="button"
         className={`button ${isError ? 'danger' : 'warning'} pf-action-button`}
         onClick={() => handleStop(session.id)}
         disabled={isStopping}
@@ -168,6 +169,7 @@ function PortForwardsPanel() {
               <div className="pf-session-local">
                 <span className="pf-port-arrow">→</span>
                 <button
+                  type="button"
                   className="pf-local-port pf-local-port-link"
                   onClick={() => BrowserOpenURL(`http://localhost:${session.localPort}`)}
                   title="Open in browser"
@@ -188,7 +190,7 @@ function PortForwardsPanel() {
               </div>
 
               {/* Show status reason for errors and reconnecting states */}
-              {session.statusReason && (
+              {!!session.statusReason && (
                 <div className="pf-session-reason" title={session.statusReason}>
                   {session.statusReason}
                 </div>

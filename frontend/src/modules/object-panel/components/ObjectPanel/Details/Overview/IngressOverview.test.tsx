@@ -2,15 +2,16 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
-import ReactDOM from 'react-dom/client';
+import { ingress } from '@wailsjs/go/models';
+import type React from 'react';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { ingress } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ingressDescriptor } from './descriptors/ingress';
+import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -28,12 +29,12 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/components/ObjectPanelLink', () => ({
-  ObjectPanelLink: ({ children }: any) => <a href="#">{children}</a>,
+  ObjectPanelLink: ({ children }: React.PropsWithChildren) => <a href="/object">{children}</a>,
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -47,7 +48,8 @@ describe('IngressOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  const renderComponent = async (dto: ingress.IngressDetails) => {
+  const renderComponent = async (fixture: Record<string, unknown>) => {
+    const dto = ingress.IngressDetails.createFrom(fixture);
     await act(async () => {
       root.render(
         <OverviewRenderer
@@ -108,7 +110,7 @@ describe('IngressOverview', () => {
       },
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     // Ingress Class is now rendered as a link to the IngressClass panel.
     const ingressClass = getValueForLabel(container, 'Ingress Class');
@@ -122,7 +124,7 @@ describe('IngressOverview', () => {
     // Service-backed rule paths are linkable.
     const rulesValue = getValueForLabel(container, 'Rules');
     const rulesLinks = rulesValue?.querySelectorAll('a');
-    expect(rulesLinks && rulesLinks.length).toBeGreaterThan(0);
+    expect(rulesLinks?.length).toBeGreaterThan(0);
     // TLS secret is now linkable.
     const tlsValue = getValueForLabel(container, 'TLS');
     expect(tlsValue?.textContent).toContain('tls-secret');
@@ -145,7 +147,7 @@ describe('IngressOverview', () => {
       tls: [{ hosts: ['secure.example.com'], secretName: 'tls-secret' }],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     const rulesValue = getValueForLabel(container, 'Rules');
     const linkTitles = Array.from(
@@ -176,7 +178,7 @@ describe('IngressOverview', () => {
       tls: [],
       labels: {},
       annotations: {},
-    } as any);
+    });
 
     const address = getValueForLabel(container, 'Address');
     expect(address?.textContent).toBe('no address');

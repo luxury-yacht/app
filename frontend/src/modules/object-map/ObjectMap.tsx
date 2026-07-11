@@ -9,32 +9,9 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import Tooltip from '@shared/components/Tooltip';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
-import type { EdgeKindMeta } from './objectMapEdgeStyle';
-import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
-import type { ObjectMapViewportControls } from './objectMapRendererTypes';
-import { useObjectMapModel } from './useObjectMapModel';
-import {
-  createObjectMapDebugId,
-  publishObjectMapDebugSnapshot,
-  removeObjectMapDebugSnapshot,
-  useObjectMapDebugOverlayVisible,
-} from './objectMapDebugStore';
-import {
-  deriveObjectMapVisibleState,
-  pruneObjectMapEnabledEdgeTypes,
-  pruneObjectMapSelectedKinds,
-} from './objectMapVisibleState';
-import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
-import { normalizeObjectMapPayload } from './objectMapPayload';
-import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
   AutoFitIcon,
   FitToViewIcon,
@@ -45,6 +22,33 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '@shared/components/icons/ObjectMapIcons';
+import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import Tooltip from '@shared/components/Tooltip';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { useShortNames } from '@/hooks/useShortNames';
+import {
+  createObjectMapDebugId,
+  publishObjectMapDebugSnapshot,
+  removeObjectMapDebugSnapshot,
+  useObjectMapDebugOverlayVisible,
+} from './objectMapDebugStore';
+import type { EdgeKindMeta } from './objectMapEdgeStyle';
+import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
+import { normalizeObjectMapPayload } from './objectMapPayload';
+import type {
+  ObjectMapContextMenuRequest,
+  ObjectMapViewportControls,
+} from './objectMapRendererTypes';
+import {
+  deriveObjectMapVisibleState,
+  pruneObjectMapEnabledEdgeTypes,
+  pruneObjectMapSelectedKinds,
+} from './objectMapVisibleState';
+import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
+import { useObjectMapModel } from './useObjectMapModel';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 
@@ -198,9 +202,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     return Array.from(groups.values());
   }, [visibleState.legendEntries]);
 
-  useEffect(() => {
-    setSearchIndex(0);
-  }, [visibleState.normalizedSearchQuery]);
+  useEffectWithInvalidation(
+    () => {
+      setSearchIndex(0);
+    },
+    [],
+    [visibleState.normalizedSearchQuery]
+  );
 
   const focusSearchMatch = useCallback(() => {
     if (visibleState.searchMatches.length === 0) return;
@@ -443,6 +451,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, []);
 
   const toolbar = (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
     <div
       className="object-map__toolbar"
       role="toolbar"
@@ -451,6 +460,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
+      {/** biome-ignore lint/a11y/useSemanticElements: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper. */}
       <form
         className="object-map__search"
         role="search"
@@ -486,7 +496,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
-        {visibleState.normalizedSearchQuery && (
+        {!!visibleState.normalizedSearchQuery && (
           <span className="object-map__search-count">
             {visibleState.searchMatches.length === 0
               ? '0/0'
@@ -577,7 +587,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         <ResetFiltersIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      {onRefresh && (
+      {!!onRefresh && (
         <button
           type="button"
           className={`object-map__toolbar-button ${
@@ -647,10 +657,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onViewportControlsChange={setG6ViewportControls}
           />
         </Suspense>
-        {showLegend && (
-          <div
+        {!!showLegend && (
+          // biome-ignore lint/a11y/useKeyWithClickEvents: Toolbar and legend pointer handlers only stop canvas gesture propagation, while the controls remain native keyboard targets; the form role supplies the search landmark without adding a wrapper.
+          <section
             className="object-map__legend"
-            role="region"
             aria-label="Object map legend"
             style={
               legendPosition
@@ -719,7 +729,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               </div>
             )}
             <div className="object-map__legend-separator" aria-hidden="true" />
-            <div className="object-map__legend-counts" aria-label="Visible map totals">
+            <div
+              className="object-map__legend-counts"
+              role="status"
+              aria-label="Visible map totals"
+            >
               <span className="object-map__legend-count">
                 <span className="object-map__legend-count-value">
                   {visibleState.visibleLayout.nodes.length}
@@ -733,7 +747,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                 <span className="object-map__legend-count-label">Links</span>
               </span>
             </div>
-          </div>
+          </section>
         )}
       </div>
       {contextMenu && contextMenuPosition && contextMenuItems.length > 0 && (
@@ -744,7 +758,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         />
       )}
       {objectActions.modals}
-      {payload.truncated && (
+      {!!payload.truncated && (
         <div className="object-map__banner object-map__banner--truncated">
           Showing {model.layout.nodes.length} of many. Increase the depth/node limits to see more.
         </div>
@@ -755,9 +769,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             {payload.warnings.length} warning{payload.warnings.length === 1 ? '' : 's'}
           </summary>
           <ul>
-            {payload.warnings.map((warning, index) => (
-              <li key={index}>{warning}</li>
-            ))}
+            {withStableListKeys(payload.warnings, (warning) => warning).map(
+              ({ key, value: warning }) => (
+                <li key={key}>{warning}</li>
+              )
+            )}
           </ul>
         </details>
       )}

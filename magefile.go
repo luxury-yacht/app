@@ -250,7 +250,7 @@ func (QC) Lint() error {
 		return err
 	}
 	fmt.Println("\n🔎 Running npm linter...")
-	return sh.RunV("npm", "run", "lint", "--prefix", cfg.FrontendDir)
+	return sh.RunV("npm", "run", "check", "--prefix", cfg.FrontendDir)
 }
 
 // Runs the npm linter with fix
@@ -262,7 +262,7 @@ func (QC) LintFix() error {
 		return err
 	}
 	fmt.Println("\n🔧 Running npm linter with fix...")
-	return sh.RunV("npm", "run", "lint:fix", "--prefix", cfg.FrontendDir)
+	return sh.RunV("npm", "run", "check:fix", "--prefix", cfg.FrontendDir)
 }
 
 // Runs the npm typechecker

@@ -5,12 +5,6 @@
  * Covers key behaviors and edge cases for useGridTableColumnWidths.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type {
   ColumnWidthInput,
   ColumnWidthState,
@@ -20,6 +14,12 @@ import {
   DEFAULT_COLUMN_MIN_WIDTH,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import type React from 'react';
+import { act, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 type Row = { id: string; name: string };
 
@@ -34,10 +34,6 @@ describe('useGridTableColumnWidths', () => {
   let originalRaf: typeof globalThis.requestAnimationFrame | undefined;
   let originalCancelRaf: typeof globalThis.cancelAnimationFrame | undefined;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     vi.useFakeTimers();
     container = document.createElement('div');
@@ -50,14 +46,14 @@ describe('useGridTableColumnWidths', () => {
       cb(0);
       return 0;
     };
-    (globalThis as any).requestAnimationFrame = immediateRaf;
+    globalThis.requestAnimationFrame = immediateRaf;
     if (typeof window !== 'undefined') {
-      (window as any).requestAnimationFrame = immediateRaf;
+      window.requestAnimationFrame = immediateRaf;
     }
     const noop = () => {};
-    (globalThis as any).cancelAnimationFrame = noop;
+    globalThis.cancelAnimationFrame = noop;
     if (typeof window !== 'undefined') {
-      (window as any).cancelAnimationFrame = noop;
+      window.cancelAnimationFrame = noop;
     }
   });
 
@@ -75,9 +71,9 @@ describe('useGridTableColumnWidths', () => {
         window.requestAnimationFrame = originalRaf;
       }
     } else {
-      delete (globalThis as any).requestAnimationFrame;
+      Reflect.deleteProperty(globalThis, 'requestAnimationFrame');
       if (typeof window !== 'undefined') {
-        delete (window as any).requestAnimationFrame;
+        Reflect.deleteProperty(window, 'requestAnimationFrame');
       }
     }
     if (originalCancelRaf) {
@@ -86,9 +82,9 @@ describe('useGridTableColumnWidths', () => {
         window.cancelAnimationFrame = originalCancelRaf;
       }
     } else {
-      delete (globalThis as any).cancelAnimationFrame;
+      Reflect.deleteProperty(globalThis, 'cancelAnimationFrame');
       if (typeof window !== 'undefined') {
-        delete (window as any).cancelAnimationFrame;
+        Reflect.deleteProperty(window, 'cancelAnimationFrame');
       }
     }
   });
@@ -216,15 +212,36 @@ describe('useGridTableColumnWidths', () => {
     expect(result?.manuallyResizedColumnsRef.current.has('name')).toBe(true);
     expect(measureColumnWidth).toHaveBeenCalled();
 
-    const nameState = result!.buildColumnWidthState('name', result!.columnWidths.name);
+    const nameState = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).buildColumnWidthState(
+      'name',
+      requireValue(result, 'expected test value in useGridTableColumnWidths.test.tsx').columnWidths
+        .name
+    );
     expect(nameState.source).toBe('user');
     expect(nameState.autoWidth).toBe(false);
 
-    const kindState = result!.buildColumnWidthState('kind', result!.columnWidths.kind);
+    const kindState = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).buildColumnWidthState(
+      'kind',
+      requireValue(result, 'expected test value in useGridTableColumnWidths.test.tsx').columnWidths
+        .kind
+    );
     expect(kindState.source).toBe('table');
     expect(kindState.unit).toBe('px');
 
-    const miscState = result!.buildColumnWidthState('misc', result!.columnWidths.misc);
+    const miscState = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).buildColumnWidthState(
+      'misc',
+      requireValue(result, 'expected test value in useGridTableColumnWidths.test.tsx').columnWidths
+        .misc
+    );
     expect(miscState.source).toBe('column');
     expect(miscState.raw).toBe('120px' as ColumnWidthInput);
 
@@ -314,13 +331,22 @@ describe('useGridTableColumnWidths', () => {
     const result = getResult();
     expect(result).not.toBeNull();
     const base = { kind: 120 } as Record<string, number>;
-    const reconciled = result!.reconcileWidthsToContainer(base, 520);
+    const reconciled = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).reconcileWidthsToContainer(base, 520);
     expect(reconciled.kind).toBe(120);
     expect(reconciled.name).toBe(200);
     expect(reconciled.misc).toBe(200);
 
-    result!.manuallyResizedColumnsRef.current.add('name');
-    const state = result!.buildColumnWidthState('name', 210);
+    requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).manuallyResizedColumnsRef.current.add('name');
+    const state = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).buildColumnWidthState('name', 210);
     expect(state.source).toBe('user');
     expect(state.autoWidth).toBe(false);
 
@@ -358,7 +384,10 @@ describe('useGridTableColumnWidths', () => {
     expect(result).not.toBeNull();
 
     const base = { kind: 90, name: 260, misc: 140 };
-    const reconciled = result!.reconcileWidthsToContainer(base, 320);
+    const reconciled = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).reconcileWidthsToContainer(base, 320);
     expect(reconciled).toEqual(base);
 
     wrapper.remove();
@@ -393,10 +422,16 @@ describe('useGridTableColumnWidths', () => {
     expect(result).not.toBeNull();
 
     const base = { kind: 80, name: 120 };
-    const natural = result!.reconcileWidthsToContainer(base, 480);
+    const natural = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).reconcileWidthsToContainer(base, 480);
     expect(natural).toEqual(base);
 
-    const forceFit = result!.reconcileWidthsToContainer(base, 480, { forceFit: true });
+    const forceFit = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).reconcileWidthsToContainer(base, 480, { forceFit: true });
     expect(forceFit.name).toBeGreaterThan(120);
     expect(forceFit.kind).toBe(80);
     expect(forceFit.kind + forceFit.name).toBeGreaterThanOrEqual(480 - 1);
@@ -435,7 +470,10 @@ describe('useGridTableColumnWidths', () => {
     expect(result).not.toBeNull();
 
     const base = { kind: 90, name: 180, age: 100 };
-    const reconciled = result!.reconcileWidthsToContainer(base, 600);
+    const reconciled = requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).reconcileWidthsToContainer(base, 600);
     expect(reconciled).toEqual(base);
 
     wrapper.remove();
@@ -444,7 +482,10 @@ describe('useGridTableColumnWidths', () => {
   it('marks columns dirty and measures after debounce', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);
-    const table = tableRef.current!;
+    const table = requireValue(
+      tableRef.current,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    );
 
     const columns = [
       createColumn('name', { autoWidth: true }),
@@ -488,7 +529,10 @@ describe('useGridTableColumnWidths', () => {
 
     const result = getResult();
     expect(result).not.toBeNull();
-    result!.markColumnsDirty(columns.map((col) => col.key));
+    requireValue(
+      result,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    ).markColumnsDirty(columns.map((col) => col.key));
 
     await act(async () => {
       vi.advanceTimersByTime(300);
@@ -502,7 +546,10 @@ describe('useGridTableColumnWidths', () => {
   it('does not measure manually resized columns until they are reset', async () => {
     const tableRef = { current: null as HTMLElement | null };
     const wrapper = createWrapper(tableRef);
-    const table = tableRef.current!;
+    const table = requireValue(
+      tableRef.current,
+      'expected test value in useGridTableColumnWidths.test.tsx'
+    );
 
     const columns = [
       createColumn('name', { autoWidth: true }),
@@ -544,14 +591,29 @@ describe('useGridTableColumnWidths', () => {
     expect(result).not.toBeNull();
 
     act(() => {
-      result!.manuallyResizedColumnsRef.current.add('name');
-      result!.handleManualResizeEvent({ type: 'dragStart', columns: ['name'] });
-      result!.handleManualResizeEvent({ type: 'drag', columns: ['name'] });
-      result!.handleManualResizeEvent({ type: 'dragEnd', columns: ['name'] });
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).manuallyResizedColumnsRef.current.add('name');
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).handleManualResizeEvent({ type: 'dragStart', columns: ['name'] });
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).handleManualResizeEvent({ type: 'drag', columns: ['name'] });
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).handleManualResizeEvent({ type: 'dragEnd', columns: ['name'] });
     });
     measureColumnWidth.mockClear();
     act(() => {
-      result!.markColumnsDirty(['name']);
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).markColumnsDirty(['name']);
     });
 
     await act(async () => {
@@ -570,9 +632,18 @@ describe('useGridTableColumnWidths', () => {
     }
 
     act(() => {
-      result!.manuallyResizedColumnsRef.current.clear();
-      result!.handleManualResizeEvent({ type: 'reset', columns: ['name'] });
-      result!.markColumnsDirty(['name']);
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).manuallyResizedColumnsRef.current.clear();
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).handleManualResizeEvent({ type: 'reset', columns: ['name'] });
+      requireValue(
+        result,
+        'expected test value in useGridTableColumnWidths.test.tsx'
+      ).markColumnsDirty(['name']);
     });
 
     await act(async () => {

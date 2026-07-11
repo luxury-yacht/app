@@ -10,8 +10,9 @@
  * boundary spinner, a refresh with rows shows the `updatingMessage` overlay, and
  * a settled-empty result shows the empty state.
  */
-import ResourceInventoryTable from './ResourceInventoryTable';
+
 import { boundedRowsSource } from './boundedRowsSource';
+import ResourceInventoryTable from './ResourceInventoryTable';
 import type {
   ObjectPanelResourceGridTableSurfaceProps,
   ResourceGridTableRow,

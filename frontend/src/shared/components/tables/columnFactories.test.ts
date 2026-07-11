@@ -5,22 +5,20 @@
  * Covers key behaviors and edge cases for columnFactories.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
+  type ColumnSizingMap,
   createAgeColumn,
   createKindColumn,
   createResourceBarColumn,
   createTextColumn,
   upsertNamespaceColumn,
-  type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
@@ -35,10 +33,6 @@ interface RowSample {
 }
 
 describe('columnFactories', () => {
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     localStorage.clear();
@@ -126,8 +120,8 @@ describe('columnFactories', () => {
         title?: string;
         onClick?: (event: unknown) => void;
         onKeyDown?: (event: unknown) => void;
-        ['data-gridtable-shortcut-optout']?: string;
-        ['data-gridtable-rowclick']?: string;
+        'data-gridtable-shortcut-optout'?: string;
+        'data-gridtable-rowclick'?: string;
       }>;
 
       expect(span.props.className.includes('gridtable-link')).toBe(true);
@@ -136,12 +130,12 @@ describe('columnFactories', () => {
       expect(span.props['data-gridtable-shortcut-optout']).toBe('true');
       expect(span.props['data-gridtable-rowclick']).toBe('allow');
 
-      span.props.onClick?.({ stopPropagation() {} } as any);
+      span.props.onClick?.({ stopPropagation() {} } as unknown);
       span.props.onKeyDown?.({
         key: 'Enter',
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      } as any);
+      } as unknown);
 
       expect(onClick).toHaveBeenCalledTimes(2);
     });
@@ -188,24 +182,24 @@ describe('columnFactories', () => {
       const element = column.render({ id: 'pod', kind: 'Pod', alias: 'P' });
       expect(React.isValidElement(element)).toBe(true);
       const badge = element as React.ReactElement<{
-        ['data-kind-value']: string;
+        'data-kind-value': string;
         children: React.ReactNode;
         onClick?: (event: unknown) => void;
         onKeyDown?: (event: unknown) => void;
-        ['data-gridtable-shortcut-optout']?: string;
-        ['data-gridtable-rowclick']?: string;
+        'data-gridtable-shortcut-optout'?: string;
+        'data-gridtable-rowclick'?: string;
       }>;
       expect(badge.props['data-kind-value']).toBe('Pod');
       expect(badge.props.children).toBe('P');
       expect(badge.props['data-gridtable-shortcut-optout']).toBe('true');
       expect(badge.props['data-gridtable-rowclick']).toBe('allow');
 
-      badge.props.onClick?.({ stopPropagation() {} } as any);
+      badge.props.onClick?.({ stopPropagation() {} } as unknown);
       badge.props.onKeyDown?.({
         key: ' ',
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      } as any);
+      } as unknown);
       expect(onKindClick).toHaveBeenCalledTimes(2);
     });
   });

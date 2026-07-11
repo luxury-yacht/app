@@ -5,10 +5,11 @@
  * Handles mouse events, updates panel size/position, and manages cursor styles.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getContentBounds, LAYOUT } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getContentBounds } from './dockablePanelLayout';
+
 // Note: clientX/clientY and getBoundingClientRect() are already in CSS coordinates,
 // so no zoom conversion is needed for drag/resize (see ZoomContext docs).
 
@@ -155,7 +156,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     }
     pendingDragPositionRef.current = null;
     panelStateRef.current.setFloatingPosition(pending);
-  }, [panelStateRef]);
+  }, []);
 
   const scheduleFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
@@ -184,7 +185,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     if (currentPanelState.position === 'floating' && pending.position) {
       currentPanelState.setFloatingPosition(pending.position);
     }
-  }, [panelStateRef]);
+  }, []);
 
   const scheduleSizeUpdate = useCallback(
     (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
@@ -220,7 +221,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       }
       sizeFrameRef.current = window.requestAnimationFrame(flushSizeUpdate);
     },
-    [flushSizeUpdate, panelStateRef]
+    [flushSizeUpdate]
   );
 
   useEffect(() => {

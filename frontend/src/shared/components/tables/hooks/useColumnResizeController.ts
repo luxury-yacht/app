@@ -5,11 +5,10 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type React from 'react';
-
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Manages drag-to-resize and double-click autosize for GridTable headers. Keeps
 // track of the active resize gesture, applies width changes within min/max

@@ -5,8 +5,8 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useMemo } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { useCallback, useMemo } from 'react';
 
 const COLUMN_ACTION_SHOW_ALL = '__grid_columns_show_all__';
 const COLUMN_ACTION_HIDE_ALL = '__grid_columns_hide_all__';

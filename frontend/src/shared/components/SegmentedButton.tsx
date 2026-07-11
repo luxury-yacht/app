@@ -31,14 +31,13 @@ function SegmentedButton<T = string>({
   size = 'medium',
 }: SegmentedButtonProps<T>) {
   return (
-    <div
+    <fieldset
       className={`segmented-button segmented-button--${size} ${className}`}
-      role="group"
       aria-label={ariaLabel}
     >
-      {options.map((option, index) => (
+      {options.map((option) => (
         <button
-          key={index}
+          key={String(option.value)}
           className={`segmented-button__option ${value === option.value ? 'segmented-button__option--active' : ''}`}
           onClick={() => onChange(option.value)}
           title={option.title}
@@ -47,7 +46,7 @@ function SegmentedButton<T = string>({
           {option.label}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 }
 

@@ -6,8 +6,8 @@
  * resync, and row delivery implementation.
  */
 
-import { eventBus, type AppEvents } from '@/core/events';
-import { isSupportedDomain, type DoorbellDomain } from './resourceStreamDomains';
+import { type AppEvents, eventBus } from '@/core/events';
+import { type DoorbellDomain, isSupportedDomain } from './resourceStreamDomains';
 
 export type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
 export type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];

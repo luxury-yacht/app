@@ -5,12 +5,11 @@
  * Covers key behaviors and edge cases for useDropdownState.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { useDropdownState } from '@shared/components/dropdowns/Dropdown/hooks/useDropdownState';
+import type React from 'react';
+import { act, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type HookProps = Parameters<typeof useDropdownState>;
 type HookResult = ReturnType<typeof useDropdownState>;
@@ -20,10 +19,6 @@ const createDefaultProps = (): HookProps => ['', vi.fn(), false, false];
 describe('useDropdownState', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

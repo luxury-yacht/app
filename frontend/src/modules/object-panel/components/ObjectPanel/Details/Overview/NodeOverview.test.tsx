@@ -7,16 +7,17 @@
  * NodeDetails-shaped DTO and a context object.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { nodes } from '@wailsjs/go/models';
-import { OverviewRenderer } from './OverviewRenderer';
+import type React from 'react';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nodeDescriptor } from './descriptors/node';
+import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext } from './schema';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
-  ResourceHeader: (props: any) => (
+  ResourceHeader: (props: { kind: string; name: string }) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
@@ -24,7 +25,11 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: any) => (
+  ResourceStatus: (props: {
+    statusState?: string;
+    statusPresentation?: string;
+    status?: string;
+  }) => (
     <div
       data-testid="resource-status"
       data-state={props.statusState}
@@ -41,7 +46,7 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
-  default: ({ children }: any) => <>{children}</>,
+  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -110,7 +115,9 @@ describe('NodeOverview', () => {
     expect(rolesValue?.textContent).toContain('master');
     const roleChips = rolesValue?.querySelectorAll('.status-chip');
     expect(roleChips?.length).toBe(2);
-    roleChips?.forEach((chip) => expect(chip.className).toContain('status-chip--info'));
+    roleChips?.forEach((chip) => {
+      expect(chip.className).toContain('status-chip--info');
+    });
     expect(getValueForLabel(container, 'Internal IP')?.textContent).toBe('10.0.0.10');
     expect(getValueForLabel(container, 'Pods')?.textContent).toContain('80/100');
     expect(getValueForLabel(container, 'OS')?.textContent).toContain('linux/amd64');

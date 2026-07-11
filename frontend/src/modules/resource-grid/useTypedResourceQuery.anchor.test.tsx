@@ -9,15 +9,13 @@
  * manual pagination or a missing anchor.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import type { SortConfig } from '@hooks/useTableSort';
-import { useTypedResourceQuery, type UseTypedResourceQueryResult } from './useTypedResourceQuery';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
+import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
 
 const { requestRefreshDomainStateMock } = vi.hoisted(() => ({
   requestRefreshDomainStateMock: vi.fn(),
@@ -53,7 +51,11 @@ const anchorRef = {
 
 const scopeOfCallFromEnd = (offset: number): string => {
   const calls = requestRefreshDomainStateMock.mock.calls;
-  return (calls[calls.length - offset]?.[0] as { scope: string }).scope;
+  const call = calls[calls.length - offset]?.[0] as { scope: string } | undefined;
+  if (!call) {
+    throw new Error(`Expected refresh-domain call at offset ${offset}`);
+  }
+  return call.scope;
 };
 const lastScope = (): string => scopeOfCallFromEnd(1);
 

@@ -1,7 +1,7 @@
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SessionsStatus from './SessionsStatus';
 
 const listShellSessionsMock = vi.hoisted(() => vi.fn());
@@ -110,10 +110,6 @@ describe('SessionsStatus shell session jump action', () => {
     startedAt: '2026-02-20T00:00:00Z',
   };
 
-  beforeAll(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -174,7 +170,8 @@ describe('SessionsStatus shell session jump action', () => {
 
   const latestCloseSignal = () =>
     statusIndicatorMock.mock.calls[statusIndicatorMock.mock.calls.length - 1]?.[0]?.closeSignal as
-      number | undefined;
+      | number
+      | undefined;
 
   it('opens and focuses the shell tab immediately for sessions on the active cluster', async () => {
     await renderStatus();

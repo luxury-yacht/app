@@ -7,7 +7,7 @@
  * clusterId guard, and null-safety (an unset scope arrives as null).
  */
 
-import { GetClusterAllowedNamespaces, SetClusterAllowedNamespaces } from '@wailsjs/go/backend/App';
+import { GetClusterAllowedNamespaces, SetClusterAllowedNamespaces } from '@/core/backend-api';
 
 export async function getClusterAllowedNamespaces(clusterId: string): Promise<string[]> {
   if (!clusterId) {

@@ -6,5 +6,5 @@
 
 // Specialized app-shell boundaries
 export { AppErrorBoundary } from './AppErrorBoundary';
-export { RouteErrorBoundary } from './RouteErrorBoundary';
 export { PanelErrorBoundary } from './PanelErrorBoundary';
+export { RouteErrorBoundary } from './RouteErrorBoundary';

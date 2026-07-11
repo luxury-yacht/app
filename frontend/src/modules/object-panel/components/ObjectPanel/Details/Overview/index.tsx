@@ -5,16 +5,17 @@
  * Kubernetes resource, including workload-specific HPA management detection.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { overviewRegistry } from './registry';
+import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
+import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { normalizeKind, SCALABLE_KINDS } from '@shared/hooks/useObjectActions';
+import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
 import { getOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
-import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
-import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
+import { overviewRegistry } from './registry';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -29,7 +30,7 @@ interface GenericOverviewProps {
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction?: () => void;
   portForwardAvailable?: boolean;
-  [key: string]: any; // Allow any additional fields for generic resources
+  [key: string]: unknown; // Allow any additional fields for generic resources
 }
 
 // Union type using generic props for all resources
@@ -66,11 +67,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const [hpaManaged, setHpaManaged] = useState<boolean | null>(null);
   const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
   useEffect(() => {
+    const namespace = props.namespace;
     if (!isScalable) {
       setHpaManaged(false);
       return;
     }
-    if (!clusterId || !props.namespace || !props.name || !objectVersion) {
+    if (!clusterId || !namespace || !props.name || !objectVersion) {
       setHpaManaged(null);
       return;
     }
@@ -81,7 +83,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
       read: () =>
         readWorkloadHPAManagedForRef({
           clusterId,
-          namespace: props.namespace!,
+          namespace,
           group: objectGroup,
           version: objectVersion,
           kind: props.kind,
@@ -129,9 +131,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
     const descriptor = getOverviewDescriptor(props.kind);
     if (descriptor) {
       return (
-        <OverviewRenderer
+        <OverviewRenderer<never>
           descriptor={descriptor}
-          data={props.activeDetail}
+          data={props.activeDetail as never}
           context={{
             hpaManaged: hpaManaged === true,
             drainInProgress: Boolean(activeDrainJob),
@@ -187,11 +189,16 @@ const Overview: React.FC<OverviewProps> = (props) => {
       clusterName,
       group: objectGroup || undefined,
       version: objectVersion || undefined,
-      status: props.suspend ? 'Suspended' : props.status,
+      status:
+        props.suspend === true
+          ? 'Suspended'
+          : typeof props.status === 'string'
+            ? props.status
+            : undefined,
       ready: props.ready !== undefined && props.ready !== null ? String(props.ready) : undefined,
       desiredReplicas: currentScaleReplicas,
       hpaManaged,
-      unschedulable: props.unschedulable,
+      unschedulable: typeof props.unschedulable === 'boolean' ? props.unschedulable : undefined,
       portForwardAvailable: props.portForwardAvailable,
     }),
     [

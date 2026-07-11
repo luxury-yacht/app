@@ -5,8 +5,8 @@
  * Handles catalog scope building, normalization, and item management.
  */
 
-import type { CatalogItem } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { CatalogItem } from '@/core/refresh/types';
 
 /**
  * Parses a continue token from an unknown value.
@@ -190,7 +190,9 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
     .map((kind) => kind.trim())
     .filter(Boolean)
     .sort()
-    .forEach((kind) => query.append('kind', kind));
+    .forEach((kind) => {
+      query.append('kind', kind);
+    });
 
   params.namespaces
     .map((namespace) => namespace.trim())

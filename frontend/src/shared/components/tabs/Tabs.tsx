@@ -8,17 +8,18 @@
  *
  * See docs/frontend/tabs.md for the shared tab contract.
  */
+
+import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
   type CSSProperties,
+  Fragment,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  useEffect,
+  useRef,
+  useState,
 } from 'react';
-import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
 
 export interface TabDescriptor {
   id: string;
@@ -47,7 +48,9 @@ export interface TabDescriptor {
    * attribute. Used primarily by drag sources (draggable, onDragStart,
    * onDragEnd).
    */
-  extraProps?: HTMLAttributes<HTMLElement>;
+  extraProps?:
+    | HTMLAttributes<HTMLElement>
+    | (HTMLAttributes<HTMLElement> & Partial<Record<`data-${string}`, string | number | boolean>>);
 }
 
 // Keys owned by the base Tabs component. Wrappers must not override these via
@@ -236,7 +239,7 @@ export function Tabs({
     const step = (now: number) => {
       const progress = Math.min(1, (now - startTime) / DURATION_MS);
       // easeOutCubic
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = 1 - (1 - progress) ** 3;
       bar.scrollLeft = startScroll + delta * eased;
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(step);
@@ -340,7 +343,7 @@ export function Tabs({
     measure();
     // ResizeObserver is a global in browsers; in environments without it
     // (e.g. jsdom without a mock) fall back to a one-shot measurement.
-    const RO: typeof ResizeObserver | undefined = (globalThis as any).ResizeObserver;
+    const RO: typeof ResizeObserver | undefined = globalThis.ResizeObserver;
     const observer = RO ? new RO(measure) : null;
     observer?.observe(el);
     el.addEventListener('scroll', measure);
@@ -359,6 +362,7 @@ export function Tabs({
   // dep array even though that identity flips on every parent render.
   // React bails out of no-op state updates (e.g. setHasOverflow(true) when
   // already true), so repeat invocations are free.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Tab descriptors change scrollWidth without changing the observed container size, so the list identity intentionally triggers a state-only remeasurement.
   useEffect(() => {
     if (overflow !== 'scroll') return;
     const el = scrollRef.current;
@@ -367,7 +371,7 @@ export function Tabs({
     setHasOverflow(max > 1);
     setAtStart(el.scrollLeft <= 0);
     setAtEnd(el.scrollLeft >= max - 1);
-  }, [tabs, overflow]);
+  }, [overflow, tabs]);
 
   // Cancel any in-flight rAF scroll animation on unmount. Kept as a
   // separate unmount-only effect so it doesn't run on every overflow or
@@ -425,7 +429,7 @@ export function Tabs({
       style={style}
       id={id}
     >
-      {showIndicators && (
+      {!!showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--left"
@@ -475,7 +479,7 @@ export function Tabs({
             >
               {tab.leading}
               <span className="tab-item__label">{tab.label}</span>
-              {tab.onClose && (
+              {!!tab.onClose && (
                 <button
                   type="button"
                   className="tab-item__close"
@@ -496,7 +500,7 @@ export function Tabs({
       {dropInsertIndex === tabs.length && (
         <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
       )}
-      {showIndicators && (
+      {!!showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--right"

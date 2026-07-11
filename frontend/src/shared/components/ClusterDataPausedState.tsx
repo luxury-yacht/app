@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE } from '@/core/refresh/loadingPolicy';
 
 interface ClusterDataPausedStateProps {

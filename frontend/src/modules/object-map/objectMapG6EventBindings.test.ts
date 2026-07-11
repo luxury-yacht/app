@@ -4,14 +4,14 @@
  * Tests G6 event binding behavior for object-map canvas and edge events.
  */
 
-import { CanvasEvent, EdgeEvent } from '@antv/g6';
 import type { Graph } from '@antv/g6';
+import { CanvasEvent, EdgeEvent } from '@antv/g6';
 import type { MutableRefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
-import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { bindObjectMapG6Events, type ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
+import type { ObjectMapLayout } from './objectMapLayout';
+import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const ref = <T>(current: T): MutableRefObject<T> => ({ current });
@@ -29,7 +29,9 @@ class FakeGraph {
   }
 
   emit(eventName: string, event: unknown) {
-    this.listeners.get(eventName)?.forEach((handler) => handler(event));
+    this.listeners.get(eventName)?.forEach((handler) => {
+      handler(event);
+    });
   }
 }
 

@@ -6,17 +6,17 @@
  * information is available.
  */
 
-import {
-  readCatalogObjectByUID,
-  readCatalogObjectMatchForRef,
-  requestData,
-} from '@/core/data-access';
 import type { DisplayRef, ResourceLink, ResourceRef } from '@core/refresh/types';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildRequiredObjectReference,
   type ResolvedObjectReference,
 } from '@shared/utils/objectIdentity';
+import {
+  readCatalogObjectByUID,
+  readCatalogObjectMatchForRef,
+  requestData,
+} from '@/core/data-access';
 
 const normalizeOptional = (value: string | null | undefined): string | undefined => {
   const trimmed = value?.trim() ?? '';
@@ -57,8 +57,8 @@ const validateResourceRefReason = (ref?: ResourceRef | null): string | undefined
 const validateDisplayRef = (ref?: DisplayRef | null): boolean =>
   Boolean(
     normalizeOptional(ref?.clusterId) &&
-    normalizeOptional(ref?.kind) &&
-    normalizeOptional(ref?.name)
+      normalizeOptional(ref?.kind) &&
+      normalizeOptional(ref?.name)
   );
 
 export const validateResourceLink = (link?: ResourceLink | null): boolean => {

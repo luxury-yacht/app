@@ -6,36 +6,36 @@
  * backoff recovery, and initial log priming.
  */
 
-import ReactDOM from 'react-dom/client';
 import React, { act, useRef } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogViewerAction } from '../logViewerReducer';
 
 // --- Mocks ---
 
 const mockStopStreamingDomain = vi.fn();
 const mockSetScopedDomainEnabled = vi.fn();
-const mockRestartStreamingDomain = vi.fn((..._args: any[]) => Promise.resolve());
+const mockRestartStreamingDomain = vi.fn((..._args: unknown[]) => Promise.resolve());
 
 vi.mock('@/core/refresh/orchestrator', () => ({
   refreshOrchestrator: {
-    stopStreamingDomain: (...args: any[]) => mockStopStreamingDomain(...args),
-    setScopedDomainEnabled: (...args: any[]) => mockSetScopedDomainEnabled(...args),
-    restartStreamingDomain: (...args: any[]) => mockRestartStreamingDomain(...args),
+    stopStreamingDomain: (...args: unknown[]) => mockStopStreamingDomain(...args),
+    setScopedDomainEnabled: (...args: unknown[]) => mockSetScopedDomainEnabled(...args),
+    restartStreamingDomain: (...args: unknown[]) => mockRestartStreamingDomain(...args),
   },
 }));
 
 const mockRegister = vi.fn();
 const mockUnregister = vi.fn();
-const mockRefreshNow = vi.fn((..._args: any[]) => Promise.resolve());
+const mockRefreshNow = vi.fn((..._args: unknown[]) => Promise.resolve());
 const mockUpdate = vi.fn();
 
 vi.mock('@/core/refresh/fallbacks/containerLogsFallbackManager', () => ({
   containerLogsFallbackManager: {
-    register: (...args: any[]) => mockRegister(...args),
-    unregister: (...args: any[]) => mockUnregister(...args),
-    refreshNow: (...args: any[]) => mockRefreshNow(...args),
-    update: (...args: any[]) => mockUpdate(...args),
+    register: (...args: unknown[]) => mockRegister(...args),
+    unregister: (...args: unknown[]) => mockUnregister(...args),
+    refreshNow: (...args: unknown[]) => mockRefreshNow(...args),
+    update: (...args: unknown[]) => mockUpdate(...args),
   },
 }));
 
@@ -47,9 +47,9 @@ vi.mock('@/core/refresh/store', () => ({
 
 // Import after mocks
 import {
-  useContainerLogsStreamFallback,
-  isLogDataUnavailable,
   getLogDataUnavailableMessage,
+  isLogDataUnavailable,
+  useContainerLogsStreamFallback,
 } from './useContainerLogsStreamFallback';
 
 // --- Test infrastructure ---
@@ -110,12 +110,6 @@ function defaultProps(overrides: Partial<HarnessProps> = {}): HarnessProps {
     ...overrides,
   };
 }
-
-// --- Tests ---
-
-beforeAll(() => {
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
 describe('isLogDataUnavailable', () => {
   it('returns false for null/empty messages', () => {
@@ -183,7 +177,7 @@ describe('useContainerLogsStreamFallback', () => {
 
   it('stops streaming and disables domain when inactive', () => {
     const { Harness } = createHarness();
-    const dispatch = vi.fn();
+    const dispatch = vi.fn<(action: { type: string; payload?: unknown }) => void>();
     const props = defaultProps({ isActive: false, dispatch });
 
     act(() => {
@@ -250,7 +244,7 @@ describe('useContainerLogsStreamFallback', () => {
     });
 
     const fallbackCalls = dispatch.mock.calls.filter(
-      (c: any[]) => c[0]?.type === 'SET_FALLBACK_ACTIVE' && c[0]?.payload === true
+      (call) => call[0]?.type === 'SET_FALLBACK_ACTIVE' && call[0]?.payload === true
     );
     expect(fallbackCalls.length).toBe(0);
   });
@@ -384,7 +378,18 @@ describe('useContainerLogsStreamFallback', () => {
     const latestCall =
       mockSetScopedDomainState.mock.calls[mockSetScopedDomainState.mock.calls.length - 1];
     const updater = latestCall?.[2] as
-      ((previous: Record<string, any>) => Record<string, any>) | undefined;
+      | ((previous: {
+          status: string;
+          error: string | null;
+          stats?: { warnings?: string[] };
+          scope: string;
+        }) => {
+          status: string;
+          error: string | null;
+          stats?: { warnings?: string[] };
+          scope: string;
+        })
+      | undefined;
     expect(typeof updater).toBe('function');
 
     const next = updater?.({

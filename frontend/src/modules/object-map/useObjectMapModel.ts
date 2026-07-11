@@ -5,29 +5,30 @@
  * manual positioning, and auto-fit.
  */
 
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { NormalizedObjectMapPayload } from './objectMapPayload';
 import {
   computeCollapseInfo,
-  filterByCollapseInfo,
   type DeploymentGroup,
+  filterByCollapseInfo,
 } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import {
   computeObjectMapBounds,
   computeObjectMapLayout,
-  routeObjectMapEdges,
   type ObjectMapLayout,
   type PositionedNode,
+  routeObjectMapEdges,
 } from './objectMapLayout';
-import { computeObjectMapSelectionState } from './objectMapSelection';
+import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
+import type { NormalizedObjectMapPayload } from './objectMapPayload';
 import type {
   ObjectMapHoverEdge,
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
-import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
+import { computeObjectMapSelectionState } from './objectMapSelection';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -126,10 +127,14 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
 
-  useEffect(() => {
-    setNodePositionOverrides(new Map());
-    nodeDragRef.current = null;
-  }, [filtered.nodes, filtered.edges]);
+  useEffectWithInvalidation(
+    () => {
+      setNodePositionOverrides(new Map());
+      nodeDragRef.current = null;
+    },
+    [],
+    [filtered.nodes, filtered.edges]
+  );
 
   const layout: ObjectMapLayout = useMemo(() => {
     if (nodePositionOverrides.size === 0) {
@@ -214,13 +219,12 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
       setAutoFit(false);
     }
     if (!drag.didDrag) return;
-    const hasLayoutCoordinates =
-      drag.originLayoutX !== undefined &&
-      drag.originLayoutY !== undefined &&
-      pointer.layoutX !== undefined &&
-      pointer.layoutY !== undefined;
-    const dxLayout = hasLayoutCoordinates ? pointer.layoutX! - drag.originLayoutX! : dxScreen;
-    const dyLayout = hasLayoutCoordinates ? pointer.layoutY! - drag.originLayoutY! : dyScreen;
+    const { originLayoutX, originLayoutY } = drag;
+    const { layoutX, layoutY } = pointer;
+    const dxLayout =
+      originLayoutX !== undefined && layoutX !== undefined ? layoutX - originLayoutX : dxScreen;
+    const dyLayout =
+      originLayoutY !== undefined && layoutY !== undefined ? layoutY - originLayoutY : dyScreen;
     const nextX = drag.startX + dxLayout;
     const nextY = drag.startY + dyLayout;
     setNodePositionOverrides((prev) => {

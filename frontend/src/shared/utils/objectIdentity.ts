@@ -1,10 +1,10 @@
+import type { ResourceRef } from '@core/refresh/types';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   parseApiVersion,
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import type { ResourceRef } from '@core/refresh/types';
 
 // NOTE: `ResourceRef` (the backend wire contract) requires clusterId + GVK; the
 // reference types below re-establish those guarantees on the frontend side,
@@ -77,7 +77,7 @@ const normalizeOptional = (value: string | null | undefined): string | undefined
   return trimmed || undefined;
 };
 
-export const buildObjectReference = <TExtras extends object = {}>(
+export const buildObjectReference = <TExtras extends object = Record<never, never>>(
   input: ObjectIdentityInput,
   extras?: TExtras
 ): ResolvedObjectReference & TExtras => {
@@ -118,7 +118,7 @@ export const buildObjectReference = <TExtras extends object = {}>(
   } as ResolvedObjectReference & TExtras;
 };
 
-export const buildRequiredObjectReference = <TExtras extends object = {}>(
+export const buildRequiredObjectReference = <TExtras extends object = Record<never, never>>(
   input: ObjectIdentityInput,
   options?: RequiredObjectIdentityOptions,
   extras?: TExtras
@@ -145,13 +145,12 @@ export const buildRequiredObjectReference = <TExtras extends object = {}>(
   ) as ClusterObjectReference & TExtras;
 };
 
-export const buildRelatedObjectReference = <TExtras extends object = {}>(
+export const buildRelatedObjectReference = <TExtras extends object = Record<never, never>>(
   input: RelatedObjectReferenceInput,
   extras?: TExtras
 ): ResolvedObjectReference & TExtras => {
-  const parsedApiVersion = normalizeOptional(input.apiVersion)
-    ? parseApiVersion(input.apiVersion!)
-    : undefined;
+  const apiVersion = normalizeOptional(input.apiVersion);
+  const parsedApiVersion = apiVersion ? parseApiVersion(apiVersion) : undefined;
 
   return buildObjectReference(
     {
@@ -163,14 +162,13 @@ export const buildRelatedObjectReference = <TExtras extends object = {}>(
   );
 };
 
-export const buildRequiredRelatedObjectReference = <TExtras extends object = {}>(
+export const buildRequiredRelatedObjectReference = <TExtras extends object = Record<never, never>>(
   input: RelatedObjectReferenceInput,
   options?: RequiredObjectIdentityOptions,
   extras?: TExtras
 ): ClusterObjectReference & TExtras => {
-  const parsedApiVersion = normalizeOptional(input.apiVersion)
-    ? parseApiVersion(input.apiVersion!)
-    : undefined;
+  const apiVersion = normalizeOptional(input.apiVersion);
+  const parsedApiVersion = apiVersion ? parseApiVersion(apiVersion) : undefined;
 
   return buildRequiredObjectReference(
     {
@@ -183,7 +181,7 @@ export const buildRequiredRelatedObjectReference = <TExtras extends object = {}>
   );
 };
 
-export const buildSyntheticObjectReference = <TExtras extends object = {}>(
+export const buildSyntheticObjectReference = <TExtras extends object = Record<never, never>>(
   input: ObjectIdentityInput,
   extras?: TExtras
 ): ResolvedSyntheticObjectReference & TExtras => {

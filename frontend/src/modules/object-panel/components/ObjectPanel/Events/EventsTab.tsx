@@ -5,46 +5,47 @@
  * shared events refresh scope computed by ObjectPanel.
  */
 
-import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTableSort } from '@hooks/useTableSort';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
+import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
+import { useResourceInventoryTable } from '@modules/resource-grid/useResourceInventoryTable';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import {
   applyColumnSizing,
   type ColumnSizingMap,
   createTextColumn,
 } from '@shared/components/tables/columnFactories';
-import { useTableSort } from '@hooks/useTableSort';
-import { formatAge } from '@utils/ageFormatter';
-import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
-import { errorHandler } from '@/utils/errorHandler';
-import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
-import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
-import { useResourceInventoryTable } from '@modules/resource-grid/useResourceInventoryTable';
-import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
-import type { ObjectEventSummary } from '@/core/refresh/types';
-import { refreshManager } from '@/core/refresh';
-import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
-import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
-import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import {
-  buildEventObjectReference,
-  splitEventObjectTarget,
-} from '@shared/utils/eventObjectIdentity';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   eventGridCanOpenRelatedObject,
   eventGridRelatedObjectInput,
   objectPanelEventGridRow,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import {
+  buildEventObjectReference,
+  splitEventObjectTarget,
+} from '@shared/utils/eventObjectIdentity';
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
-import type { PanelObjectData } from '../types';
-import { CLUSTER_SCOPE, INACTIVE_SCOPE, getObjectEventsRefresherName } from '../constants';
+import { formatAge } from '@utils/ageFormatter';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { type DataRequestReason, requestRefreshDomain } from '@/core/data-access';
+import { refreshManager } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { useRefreshScopedDomain } from '@/core/refresh/store';
+import type { ObjectEventSummary } from '@/core/refresh/types';
+import { errorHandler } from '@/utils/errorHandler';
+import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../constants';
 import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
+import type { PanelObjectData } from '../types';
 import './EventsTab.css';
 
 interface EventsTabProps {

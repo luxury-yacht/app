@@ -5,13 +5,12 @@
  * Covers modal rendering, port selection, form validation, and submission.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import PortForwardModal from './PortForwardModal';
-import type { PortForwardTarget } from './PortForwardModal';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PortForwardTarget } from './PortForwardModal';
+import PortForwardModal from './PortForwardModal';
 
 // Mock the Wails backend
 const runObjectActionMock = vi.hoisted(() => vi.fn());
@@ -42,10 +41,6 @@ describe('PortForwardModal', () => {
 
   const mockOnClose = vi.fn();
   const mockOnStarted = vi.fn();
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

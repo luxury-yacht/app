@@ -6,28 +6,30 @@
  * favorite is activated, this context waits for the cluster to be ready
  * then applies the view/namespace/sidebar state.
  */
-import React, {
+
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
+import { useViewState } from '@core/contexts/ViewStateContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type React from 'react';
+import {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
   hydrateFavorites,
   addFavorite as persistAddFavorite,
-  updateFavorite as persistUpdateFavorite,
   deleteFavorite as persistDeleteFavorite,
+  updateFavorite as persistUpdateFavorite,
   setFavoriteOrder,
   subscribeFavorites,
 } from '@/core/persistence/favorites';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { useViewState } from '@core/contexts/ViewStateContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { parseClusterViewType, parseNamespaceViewType } from '@/types/navigation/views';
 
 // ---------- Types ----------

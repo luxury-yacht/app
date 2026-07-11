@@ -4,31 +4,31 @@
  * Advanced tab content: refresh, persistence, Kubernetes API, and reset actions.
  */
 
-import { useState, useEffect } from 'react';
-import { errorHandler } from '@utils/errorHandler';
-import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ToggleSwitch from '@shared/components/ToggleSwitch';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
+import {
+  type GridTablePersistenceMode,
+  getGridTablePersistenceMode,
+  setGridTablePersistenceMode,
+} from '@shared/components/tables/persistence/gridTablePersistenceSettings';
+import { clearAccentColor } from '@utils/accentColor';
+import { errorHandler } from '@utils/errorHandler';
+import { clearLinkColor } from '@utils/linkColor';
+import { clearTintedPalette } from '@utils/paletteTint';
+import { useEffect, useState } from 'react';
+import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
   commitIntegerPreferenceInput,
   getIntegerPreferenceMetadata,
-  hydrateAppPreferences,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getPermissionSSRRFetchConcurrency,
+  hydrateAppPreferences,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
-import { clearTintedPalette } from '@utils/paletteTint';
-import { clearAccentColor } from '@utils/accentColor';
-import { clearLinkColor } from '@utils/linkColor';
-import {
-  getGridTablePersistenceMode,
-  setGridTablePersistenceMode,
-  type GridTablePersistenceMode,
-} from '@shared/components/tables/persistence/gridTablePersistenceSettings';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import ToggleSwitch from '@shared/components/ToggleSwitch';
 
 function AdvancedSection() {
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
@@ -129,7 +129,7 @@ function AdvancedSection() {
       clearAccentColor();
       clearLinkColor();
 
-      const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
+      const clearAppState = window.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
         throw new Error('ClearAppState is not available');
       }

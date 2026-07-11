@@ -6,13 +6,14 @@
  * container/local port mapping.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
 import { buildObjectActionTarget, runStartPortForward } from '@shared/actions/objectActionClient';
-import { readTargetPortsForRef, requestData } from '@/core/data-access';
-import ModalSurface from '@shared/components/modals/ModalSurface';
-import ModalHeader from '@shared/components/modals/ModalHeader';
-import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
+import ModalHeader from '@shared/components/modals/ModalHeader';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { readTargetPortsForRef, requestData } from '@/core/data-access';
 import './PortForwardModal.css';
 
 /**
@@ -108,79 +109,83 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     : '';
 
   // Reset form state when target changes, fetch ports if not provided
-  useEffect(() => {
-    const currentTarget = targetRef.current;
-    if (!currentTarget) {
-      return;
-    }
+  useEffectWithInvalidation(
+    () => {
+      const currentTarget = targetRef.current;
+      if (!currentTarget) {
+        return;
+      }
 
-    setError(null);
-    setFetchedPorts([]);
-    let cancelled = false;
+      setError(null);
+      setFetchedPorts([]);
+      let cancelled = false;
 
-    // If ports provided in target, use them directly
-    if (currentTarget.ports.length > 0) {
-      const initialContainerPort = currentTarget.ports[0].port;
-      setContainerPort(initialContainerPort);
-      setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
-      return;
-    }
+      // If ports provided in target, use them directly
+      if (currentTarget.ports.length > 0) {
+        const initialContainerPort = currentTarget.ports[0].port;
+        setContainerPort(initialContainerPort);
+        setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
+        return;
+      }
 
-    // Otherwise fetch from backend (if we have a cluster ID)
-    if (!currentTarget.clusterId) {
-      // No cluster ID - allow manual entry without fetching
-      setContainerPort(0);
-      setLocalPort(0);
-      return;
-    }
-
-    setIsLoadingPorts(true);
-    requestData({
-      resource: 'target-ports',
-      reason: 'user',
-      read: () => readTargetPortsForRef(currentTarget),
-    })
-      .then((ports) => {
-        if (cancelled) {
-          return;
-        }
-        const resolvedPorts = ports.status === 'executed' ? (ports.data ?? []) : [];
-        if (resolvedPorts.length > 0) {
-          // Store fetched ports in local state
-          const mappedPorts = resolvedPorts.map((p) => ({
-            port: p.port,
-            name: p.name,
-            protocol: p.protocol,
-          }));
-          setFetchedPorts(mappedPorts);
-          const firstPort = resolvedPorts[0].port;
-          setContainerPort(firstPort);
-          setLocalPort(getDefaultLocalPort(firstPort));
-        } else {
-          // No ports found - allow manual entry
-          setContainerPort(0);
-          setLocalPort(0);
-        }
-      })
-      .catch((err) => {
-        if (cancelled) {
-          return;
-        }
-        console.warn('Failed to fetch target ports:', err);
-        // Allow manual entry if fetch fails
+      // Otherwise fetch from backend (if we have a cluster ID)
+      if (!currentTarget.clusterId) {
+        // No cluster ID - allow manual entry without fetching
         setContainerPort(0);
         setLocalPort(0);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingPorts(false);
-        }
-      });
+        return;
+      }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [targetKey]);
+      setIsLoadingPorts(true);
+      requestData({
+        resource: 'target-ports',
+        reason: 'user',
+        read: () => readTargetPortsForRef(currentTarget),
+      })
+        .then((ports) => {
+          if (cancelled) {
+            return;
+          }
+          const resolvedPorts = ports.status === 'executed' ? (ports.data ?? []) : [];
+          if (resolvedPorts.length > 0) {
+            // Store fetched ports in local state
+            const mappedPorts = resolvedPorts.map((p) => ({
+              port: p.port,
+              name: p.name,
+              protocol: p.protocol,
+            }));
+            setFetchedPorts(mappedPorts);
+            const firstPort = resolvedPorts[0].port;
+            setContainerPort(firstPort);
+            setLocalPort(getDefaultLocalPort(firstPort));
+          } else {
+            // No ports found - allow manual entry
+            setContainerPort(0);
+            setLocalPort(0);
+          }
+        })
+        .catch((err) => {
+          if (cancelled) {
+            return;
+          }
+          console.warn('Failed to fetch target ports:', err);
+          // Allow manual entry if fetch fails
+          setContainerPort(0);
+          setLocalPort(0);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsLoadingPorts(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    },
+    [],
+    [targetKey]
+  );
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {
@@ -296,7 +301,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
         {/* Container Port Selection */}
         <div className="port-forward-field">
-          <label>Container Port</label>
+          <span className="port-forward-field-label">Container Port</span>
           {isLoadingPorts ? (
             // Loading indicator while fetching ports
             <div className="port-forward-loading">Loading available ports...</div>
@@ -320,10 +325,10 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
                   />
                   <span className="port-forward-port-option-label">
                     <span className="port-forward-port-number">{portInfo.port}</span>
-                    {portInfo.name && (
+                    {!!portInfo.name && (
                       <span className="port-forward-port-name">({portInfo.name})</span>
                     )}
-                    {portInfo.protocol && (
+                    {!!portInfo.protocol && (
                       <span className="port-forward-port-protocol">{portInfo.protocol}</span>
                     )}
                   </span>
@@ -334,6 +339,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
             // Manual input for container port
             <div className="port-forward-input-group">
               <input
+                aria-label="Container port"
                 type="number"
                 className="port-forward-input"
                 min={1}
@@ -342,7 +348,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
                 onChange={handleContainerPortInput}
                 placeholder="Enter port (1-65535)"
                 disabled={isLoading}
-                autoFocus
+                data-modal-initial-focus
               />
             </div>
           )}
@@ -372,14 +378,15 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       </div>
 
       {/* Error Message */}
-      {error && <div className="port-forward-error">{error}</div>}
+      {!!error && <div className="port-forward-error">{error}</div>}
 
       {/* Footer */}
       <div className="port-forward-footer">
-        <button className="button cancel" onClick={onClose} disabled={isLoading}>
+        <button type="button" className="button cancel" onClick={onClose} disabled={isLoading}>
           Cancel
         </button>
         <button
+          type="button"
           className="button save"
           onClick={handleSubmit}
           disabled={

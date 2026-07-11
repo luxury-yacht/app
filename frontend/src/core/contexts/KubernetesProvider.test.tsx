@@ -5,9 +5,9 @@
  * Guards provider ordering for KubeconfigContext usage.
  */
 
-import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, it, vi } from 'vitest';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 import { KubernetesProvider } from './KubernetesProvider';
 
 const wailsMocks = vi.hoisted(() => ({
@@ -48,10 +48,6 @@ describe('KubernetesProvider', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
 
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {

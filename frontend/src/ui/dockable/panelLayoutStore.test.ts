@@ -5,7 +5,7 @@
  * holds dock-group memberships per store instance (which becomes per
  * cluster once the provider wires up cluster-keyed stores).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createPanelLayoutStore } from './panelLayoutStore';
 import { addPanelToGroup, createInitialTabGroupState } from './tabGroupState';
 

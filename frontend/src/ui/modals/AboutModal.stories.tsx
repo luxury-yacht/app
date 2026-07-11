@@ -5,10 +5,10 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import AboutModal from './AboutModal';
+import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { setMockAppInfo } from '../../../.storybook/mocks/wailsBackendApp';
 import { backend } from '../../../.storybook/mocks/wailsModels';
-import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
+import AboutModal from './AboutModal';
 
 const meta: Meta<typeof AboutModal> = {
   title: 'Modals/AboutModal',

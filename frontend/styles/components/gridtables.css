@@ -40,7 +40,7 @@
 
 /* Visibility */
 .hidden {
-  display: none !important;
+  display: none;
 }
 
 /* ============================================
@@ -140,26 +140,19 @@
   margin-bottom: 0;
 }
 
-.content-body .gridtable-header-container,
-.content-body .gridtable-pagination {
+.content-body .gridtable-header-container {
   margin-right: var(--dock-right-offset, 0px);
-}
-
-.content-body .gridtable-pagination {
-  margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
 /* Smooth transition only while a docked panel is open.
    When the panel closes the class is removed first so the margin snaps
    back instantly instead of leaving a visible gap. */
 body.dock-right-open .content-body .gridtable-wrapper,
-body.dock-right-open .content-body .gridtable-header-container,
-body.dock-right-open .content-body .gridtable-pagination {
+body.dock-right-open .content-body .gridtable-header-container {
   transition: margin-right 0.3s ease-out;
 }
 
-body.dock-bottom-open .content-body .gridtable-wrapper,
-body.dock-bottom-open .content-body .gridtable-pagination {
+body.dock-bottom-open .content-body .gridtable-wrapper {
   transition: margin-bottom 0.3s ease-out;
 }
 
@@ -170,15 +163,8 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
     margin-bottom 0.3s ease-out;
 }
 
-body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
-  transition:
-    margin-right 0.3s ease-out,
-    margin-bottom 0.3s ease-out;
-}
-
 body.dockable-panel-resizing .content-body .gridtable-wrapper,
-body.dockable-panel-resizing .content-body .gridtable-header-container,
-body.dockable-panel-resizing .content-body .gridtable-pagination {
+body.dockable-panel-resizing .content-body .gridtable-header-container {
   transition: none;
 }
 
@@ -415,7 +401,7 @@ body.dockable-panel-resizing .content-body .gridtable-pagination {
 /* .gridtable-hover-overlay.is-focused inherits border-left from base styles */
 
 body.gridtable-disable-hover .gridtable-hover-overlay {
-  opacity: 0 !important;
+  opacity: 0;
 }
 
 .gridtable-row:last-child {
@@ -496,6 +482,10 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 .gridtable-empty-filter-hint__link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
   color: var(--color-accent);
   text-decoration: none;
   cursor: pointer;
@@ -511,16 +501,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   position: relative;
 }
 
-/* Position the LoadingSpinner exactly 200px from top for initial load */
-.gridtable-container.gridtable-initial-loading .loading-spinner-container {
-  position: absolute;
-  top: 100px; /* Fixed distance from top */
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0;
-  min-height: auto;
-}
-
 /* Loading overlay for refreshing with existing data */
 .gridtable-loading-overlay {
   position: absolute;
@@ -533,6 +513,16 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 
 /* Ensure LoadingSpinner in overlay doesn't have extra padding */
 .gridtable-loading-overlay .loading-spinner-container {
+  padding: 0;
+  min-height: auto;
+}
+
+/* Position the LoadingSpinner exactly 200px from top for initial load */
+.gridtable-container.gridtable-initial-loading .loading-spinner-container {
+  position: absolute;
+  top: 100px; /* Fixed distance from top */
+  left: 50%;
+  transform: translateX(-50%);
   padding: 0;
   min-height: auto;
 }
@@ -569,6 +559,29 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   background-color: var(--color-bg-secondary);
   overflow: visible;
   box-sizing: border-box;
+}
+
+.content-body .gridtable-pagination {
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
+}
+
+body.dock-right-open .content-body .gridtable-pagination {
+  transition: margin-right 0.3s ease-out;
+}
+
+body.dock-bottom-open .content-body .gridtable-pagination {
+  transition: margin-bottom 0.3s ease-out;
+}
+
+body.dock-right-open.dock-bottom-open .content-body .gridtable-pagination {
+  transition:
+    margin-right 0.3s ease-out,
+    margin-bottom 0.3s ease-out;
+}
+
+body.dockable-panel-resizing .content-body .gridtable-pagination {
+  transition: none;
 }
 
 .gridtable-pagination:empty {

@@ -5,7 +5,7 @@
  * Contains types and functions for merging and comparing diff lines.
  */
 
-import { type DiffLine, type DiffLineType } from '@shared/components/diff/lineDiff';
+import type { DiffLine, DiffLineType } from '@shared/components/diff/lineDiff';
 
 // Re-export DiffLineType for consumers of this module.
 export type { DiffLineType };

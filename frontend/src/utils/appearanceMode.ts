@@ -5,7 +5,7 @@
  * Provides shared helper functions for the frontend.
  */
 
-import { setAppearanceModePreference, type AppearanceMode } from '@/core/settings/appPreferences';
+import { type AppearanceMode, setAppearanceModePreference } from '@/core/settings/appPreferences';
 
 /**
  * Changes the application appearance mode.

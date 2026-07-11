@@ -5,35 +5,35 @@
  * Implements Sidebar logic for the UI layer.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
-import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import {
-  ExpandSidebarIcon,
-  CollapseSidebarIcon,
-  ClusterOverviewIcon,
-  ClusterResourcesIcon,
   CategoryIcon,
   CloseIcon,
-  SearchIcon,
-  WarningIcon,
+  ClusterOverviewIcon,
+  ClusterResourcesIcon,
+  CollapseSidebarIcon,
+  ExpandSidebarIcon,
   NamespaceIcon,
   NamespaceOpenIcon,
+  SearchIcon,
+  WarningIcon,
 } from '@shared/components/icons/SharedIcons';
-import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
-import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
-import { isMacPlatform } from '@/utils/platform';
+import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { eventBus } from '@/core/events';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
-import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
+import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
+import { isMacPlatform } from '@/utils/platform';
+import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
+import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
 const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
@@ -323,18 +323,18 @@ function Sidebar() {
     !namespacesPermissionDenied;
 
   return (
-    <div
+    <nav
       className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${
         isKeyboardNavActive ? 'keyboard-mode' : ''
       }`}
       style={{ width: `${width}px` }}
       ref={sidebarRef}
-      role="navigation"
       tabIndex={isCollapsed ? -1 : 0}
       data-app-region="sidebar"
     >
       <div className="sidebar-content">
         <button
+          type="button"
           className="sidebar-toggle"
           onClick={viewState.toggleSidebar}
           title={
@@ -355,6 +355,8 @@ function Sidebar() {
             <div className="sidebar-section">
               <h3>Cluster</h3>
               <div className="cluster-items">
+                {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
+                {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
                 <div
                   className={buildSidebarItemClassName(['sidebar-item'], { kind: 'overview' })}
                   onClick={() => {
@@ -372,6 +374,8 @@ function Sidebar() {
                   <ClusterOverviewIcon width={14} height={14} />
                   <span>Overview</span>
                 </div>
+                {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
+                {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
                 <div
                   className={buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {
                     kind: 'cluster-toggle',
@@ -386,10 +390,12 @@ function Sidebar() {
                   <ClusterResourcesIcon width={14} height={14} />
                   <span>Resources</span>
                 </div>
-                {clusterResourcesExpanded && (
+                {!!clusterResourcesExpanded && (
                   <div className="sidebar-views">
                     {/* Animate Resources the same way as namespace views. */}
                     {resourceViews.map((view) => (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
+                      // biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
                       <div
                         key={view.id}
                         className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
@@ -463,6 +469,8 @@ function Sidebar() {
 
                     return (
                       <div key={namespaceKey}>
+                        {/** biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
+                        {/** biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner. */}
                         <div
                           ref={selectedNamespaceKey === namespaceKey ? selectedNamespaceRef : null}
                           className={buildSidebarItemClassName(
@@ -536,11 +544,13 @@ function Sidebar() {
                             </button>
                           ) : null}
                         </div>
-                        {isExpanded && (
+                        {!!isExpanded && (
                           <div className="sidebar-views">
                             {namespaceViews.map((view) => {
                               const label = view.label;
                               return (
+                                // biome-ignore lint/a11y/noStaticElementInteractions: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
+                                // biome-ignore lint/a11y/useKeyWithClickEvents: The navigation root owns roving keyboard selection and activation, so its programmatically focusable rows intentionally delegate keyboard events to that shared owner.
                                 <div
                                   key={view.id}
                                   className={buildSidebarItemClassName(
@@ -589,7 +599,7 @@ function Sidebar() {
           </>
         )}
       </div>
-    </div>
+    </nav>
   );
 }
 

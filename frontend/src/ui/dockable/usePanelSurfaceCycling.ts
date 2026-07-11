@@ -1,11 +1,11 @@
-import { useCallback, useMemo } from 'react';
-import type { GroupKey, TabGroupState } from './tabGroupTypes';
-import { useShortcut } from '@ui/shortcuts';
-import { KeyCodes } from '@ui/shortcuts/constants';
 import {
   focusElementWithProgrammaticIndicator,
   focusLastFocusedTopLevelAppRegion,
 } from '@ui/layout/appFocusRegions';
+import { useShortcut } from '@ui/shortcuts';
+import { KeyCodes } from '@ui/shortcuts/constants';
+import { useCallback, useMemo } from 'react';
+import type { GroupKey, TabGroupState } from './tabGroupTypes';
 
 interface UsePanelSurfaceCyclingOptions {
   tabGroups: TabGroupState;

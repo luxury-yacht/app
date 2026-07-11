@@ -4,13 +4,14 @@
  * Kubeconfigs tab content: directories scanned for kubeconfig files.
  */
 
-import { useState, useEffect } from 'react';
-import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { KubeconfigFolderIcon } from '@shared/components/icons/SettingsIcons';
+import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
+import { useMountEffect } from '@shared/hooks/useHookLifetimes';
+import { errorHandler } from '@utils/errorHandler';
+import { useState } from 'react';
+import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
+import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@/core/backend-api';
 
 function KubeconfigsSection() {
   const { loadKubeconfigs } = useKubeconfig();
@@ -19,9 +20,9 @@ function KubeconfigsSection() {
   const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
 
-  useEffect(() => {
+  useMountEffect(() => {
     loadKubeconfigPaths();
-  }, []);
+  });
 
   const loadKubeconfigPaths = async () => {
     setKubeconfigPathsLoading(true);
@@ -103,7 +104,7 @@ function KubeconfigsSection() {
                   return (
                     <div
                       className="setting-item setting-item-surface kubeconfig-path-row"
-                      key={`kubeconfig-path-${index}`}
+                      key={path}
                     >
                       <span className="kubeconfig-path-icon" aria-hidden="true">
                         <KubeconfigFolderIcon width={16} height={16} />
@@ -132,7 +133,7 @@ function KubeconfigsSection() {
               onClick={handleAddKubeconfigPath}
               disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
-              <PlusIcon width={12} height={12} ariaHidden />
+              <PlusIcon width={12} height={12} />
               Add path
             </button>
           </div>

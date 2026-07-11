@@ -1,45 +1,45 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RefreshDomain } from '@/core/refresh/types';
-import { errorHandler } from '@utils/errorHandler';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
 import {
-  matchesGridTableFocusRequest,
   type GridTableFocusRequest,
+  matchesGridTableFocusRequest,
 } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
-import { useRefreshScopedDomain } from '@/core/refresh';
+import {
+  isTablePageSize,
+  TABLE_PAGE_SIZE_OPTIONS,
+  type TablePageSize,
+} from '@shared/components/tables/pageSizeOptions';
+import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
+import { errorHandler } from '@utils/errorHandler';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { doorbellSourceClocks } from '@/core/refresh/streaming/resourceStreamDomains';
-import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
-import type { SortConfig } from '@/hooks/useTableSort';
+import type { RefreshDomain } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
-import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
+import type { SortConfig } from '@/hooks/useTableSort';
+import { backendQuerySource } from './backendQuerySource';
+import QueryPaginationControls from './QueryPaginationControls';
+import type { QueryBackedTableState } from './queryBackedTableState';
+import { mergeQueryBackedFilterOptions, useQueryBackedTableState } from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
   NamespaceResourceGridTableParams,
-  ResourceGridTableResult,
   ResourceGridTableMode,
+  ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
-import QueryPaginationControls from './QueryPaginationControls';
-import { backendQuerySource } from './backendQuerySource';
+import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
-  useTypedResourceQuery,
   type TypedQueryPayload,
   type UseTypedResourceQueryResult,
+  useTypedResourceQuery,
 } from './useTypedResourceQuery';
-import {
-  TABLE_PAGE_SIZE_OPTIONS,
-  isTablePageSize,
-  type TablePageSize,
-} from '@shared/components/tables/pageSizeOptions';
-import { mergeQueryBackedFilterOptions, useQueryBackedTableState } from './queryBackedTableState';
-import type { QueryBackedTableState } from './queryBackedTableState';
 
 // The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
 // all-namespaces; the backend scope key is always `namespace:<value>` (see pods.go collectPods,
@@ -80,7 +80,7 @@ export const liveDomainVersion = (
   if (clocks.length === 0) {
     return state.sourceVersion ?? state.etag ?? '';
   }
-  return clocks.map((clock) => clock + ':' + (state.signalVersions?.[clock] ?? '')).join(' ');
+  return clocks.map((clock) => `${clock}:${state.signalVersions?.[clock] ?? ''}`).join(' ');
 };
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
@@ -133,10 +133,8 @@ export const isLiveDomainInitialLoadPending = (state: {
   !state.permissionDenied &&
   (state.status === 'loading' || state.status === 'initialising');
 
-export interface QueryBackedNamespaceGridResult<
-  T extends ResourceGridTableRow,
-  TPayload = unknown,
-> extends ResourceGridTableResult<T> {
+export interface QueryBackedNamespaceGridResult<T extends ResourceGridTableRow, TPayload = unknown>
+  extends ResourceGridTableResult<T> {
   /**
    * The typed query's last applied page payload. Rows come through `source`;
    * payload-level metadata (e.g. the pods metrics meta, scoped to the queried
@@ -508,9 +506,7 @@ const useResolvedQueryKeyExtractor = <TRow extends ResourceGridTableRow>(
 export interface QueryBackedNamespaceGridParams<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
->
-  extends
-    Omit<
+> extends Omit<
       NamespaceResourceGridTableParams<TRow>,
       | 'data'
       | 'tableMode'
@@ -614,9 +610,7 @@ export function useQueryBackedNamespaceResourceGridTable<
 export interface QueryBackedClusterGridParams<
   TPayload extends TypedQueryPayload,
   TRow extends ResourceGridTableRow,
->
-  extends
-    Omit<
+> extends Omit<
       ClusterResourceGridTableParams<TRow>,
       | 'data'
       | 'tableMode'

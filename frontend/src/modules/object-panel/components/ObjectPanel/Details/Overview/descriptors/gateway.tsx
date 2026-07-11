@@ -14,22 +14,23 @@
  * `{kind:'status'}` item — conditions render as a field and `summary` is not surfaced.
  */
 
-import React from 'react';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
   backendtlspolicy,
   gateway,
   gatewayclass,
   listenerset,
   referencegrant,
-  resourcemodel,
+  type resourcemodel,
   types,
 } from '@wailsjs/go/models';
+import type React from 'react';
+import type { OverviewDescriptor } from '../schema';
 import { ExternalHostLinks } from '../shared/ExternalHostLinks';
 import { listenerScheme } from '../shared/hostLink';
-import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import type { OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 
 type GatewayDetails = gateway.GatewayDetails;
@@ -129,15 +130,17 @@ const ConditionList: React.FC<{ conditions?: types.ConditionState[] | null }> = 
   }
   return (
     <div className="overview-condition-list">
-      {conditions.map((condition) => (
-        <StatusChip
-          key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
-          variant={conditionVariant(condition.status)}
-          tooltip={condition.message || condition.reason || undefined}
-        >
-          {condition.type || 'Condition'}
-        </StatusChip>
-      ))}
+      {withStableListKeys(conditions, (condition) => JSON.stringify(condition)).map(
+        ({ key, value: condition }) => (
+          <StatusChip
+            key={key}
+            variant={conditionVariant(condition.status)}
+            tooltip={condition.message || condition.reason || undefined}
+          >
+            {condition.type || 'Condition'}
+          </StatusChip>
+        )
+      )}
     </div>
   );
 };
@@ -150,44 +153,43 @@ const ListenerList: React.FC<{ listeners?: types.GatewayListenerDetails[] | null
   }
   return (
     <div className="overview-card-list">
-      {listeners.map((listener) => {
-        const hasRows = Boolean(listener.hostname);
-        // Only HTTP/HTTPS listeners get a browsable link; other protocols
-        // (TLS/TCP/UDP) keep the hostname as plain text.
-        const hostScheme = listenerScheme(listener.protocol);
-        return (
-          <div
-            key={`${listener.name}-${listener.port}-${listener.protocol}`}
-            className="overview-card"
-          >
-            <div className="overview-card-header">
-              <span className="overview-card-title">{listener.name}</span>
-              <span className="overview-card-meta">
-                {listener.protocol}/{listener.port}
-              </span>
-              <span className="overview-card-tag">
-                {formatAttachedRoutes(listener.attachedRoutes)}
-              </span>
-            </div>
-            {hasRows && (
-              <div className="overview-card-rows">
-                {listener.hostname && (
-                  <div className="overview-row">
-                    <span className="overview-row-label">Hostname</span>
-                    <span className="overview-row-value">
-                      <ExternalHostLinks
-                        host={listener.hostname}
-                        schemes={hostScheme ? [{ scheme: hostScheme, port: listener.port }] : []}
-                      />
-                    </span>
-                  </div>
-                )}
+      {withStableListKeys(listeners, (listener) => JSON.stringify(listener)).map(
+        ({ key, value: listener }) => {
+          const hasRows = Boolean(listener.hostname);
+          // Only HTTP/HTTPS listeners get a browsable link; other protocols
+          // (TLS/TCP/UDP) keep the hostname as plain text.
+          const hostScheme = listenerScheme(listener.protocol);
+          return (
+            <div key={key} className="overview-card">
+              <div className="overview-card-header">
+                <span className="overview-card-title">{listener.name}</span>
+                <span className="overview-card-meta">
+                  {listener.protocol}/{listener.port}
+                </span>
+                <span className="overview-card-tag">
+                  {formatAttachedRoutes(listener.attachedRoutes)}
+                </span>
               </div>
-            )}
-            <ConditionList conditions={listener.conditions} />
-          </div>
-        );
-      })}
+              {hasRows && (
+                <div className="overview-card-rows">
+                  {!!listener.hostname && (
+                    <div className="overview-row">
+                      <span className="overview-row-label">Hostname</span>
+                      <span className="overview-row-value">
+                        <ExternalHostLinks
+                          host={listener.hostname}
+                          schemes={hostScheme ? [{ scheme: hostScheme, port: listener.port }] : []}
+                        />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <ConditionList conditions={listener.conditions} />
+            </div>
+          );
+        }
+      )}
     </div>
   );
 };
@@ -201,8 +203,8 @@ const RefList: React.FC<{
   }
   return (
     <div className="overview-ref-list">
-      {refs.map((ref, index) => (
-        <div key={`ref-${index}`} className="overview-ref-item">
+      {withStableListKeys(refs, (ref) => JSON.stringify(ref)).map(({ key, value: ref }) => (
+        <div key={key} className="overview-ref-item">
           <RefLink value={ref} clusterName={clusterName} />
         </div>
       ))}
@@ -219,35 +221,37 @@ const RouteRulesList: React.FC<{
   }
   return (
     <div className="overview-card-list">
-      {rules.map((rule, index) => {
-        const hasMatches = Boolean(rule.matches?.length);
-        const hasBackends = Boolean(rule.backendRefs?.length);
-        return (
-          <div key={`rule-${index}`} className="overview-card">
-            <div className="overview-card-header">
-              <span className="overview-card-title">Rule {index + 1}</span>
-            </div>
-            {(hasMatches || hasBackends) && (
-              <div className="overview-card-rows">
-                {hasMatches && (
-                  <div className="overview-row">
-                    <span className="overview-row-label">Matches</span>
-                    <span className="overview-row-value">{rule.matches?.join(', ')}</span>
-                  </div>
-                )}
-                {hasBackends && (
-                  <div className="overview-row">
-                    <span className="overview-row-label">Backends</span>
-                    <span className="overview-row-value plain">
-                      <RefList refs={rule.backendRefs} clusterName={clusterName} />
-                    </span>
-                  </div>
-                )}
+      {withStableListKeys(rules, (rule) => JSON.stringify(rule)).map(
+        ({ key, value: rule }, index) => {
+          const hasMatches = Boolean(rule.matches?.length);
+          const hasBackends = Boolean(rule.backendRefs?.length);
+          return (
+            <div key={key} className="overview-card">
+              <div className="overview-card-header">
+                <span className="overview-card-title">Rule {index + 1}</span>
               </div>
-            )}
-          </div>
-        );
-      })}
+              {!!(hasMatches || hasBackends) && (
+                <div className="overview-card-rows">
+                  {hasMatches && (
+                    <div className="overview-row">
+                      <span className="overview-row-label">Matches</span>
+                      <span className="overview-row-value">{rule.matches?.join(', ')}</span>
+                    </div>
+                  )}
+                  {hasBackends && (
+                    <div className="overview-row">
+                      <span className="overview-row-label">Backends</span>
+                      <span className="overview-row-value plain">
+                        <RefList refs={rule.backendRefs} clusterName={clusterName} />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        }
+      )}
     </div>
   );
 };
@@ -266,9 +270,9 @@ const groupFromByNamespace = (
       order.push(ns);
       map.set(ns, []);
     }
-    map.get(ns)!.push(entry);
+    map.get(ns)?.push(entry);
   }
-  return order.map((namespace) => ({ namespace, entries: map.get(namespace)! }));
+  return order.map((namespace) => ({ namespace, entries: map.get(namespace) ?? [] }));
 };
 
 const groupRefsByNamespace = (
@@ -286,9 +290,9 @@ const groupRefsByNamespace = (
       order.push(ns);
       map.set(ns, []);
     }
-    map.get(ns)!.push(ref);
+    map.get(ns)?.push(ref);
   }
-  return order.map((namespace) => ({ namespace, refs: map.get(namespace)! }));
+  return order.map((namespace) => ({ namespace, refs: map.get(namespace) ?? [] }));
 };
 
 const ReferenceGrantDiagram: React.FC<{
@@ -304,17 +308,16 @@ const ReferenceGrantDiagram: React.FC<{
   return (
     <div className="reference-grant-diagram">
       <div className="reference-grant-side-stack">
-        {fromGroups.map((group) => (
-          <div className="reference-grant-side" key={`from-ns-${group.namespace}`}>
+        {withStableListKeys(fromGroups, (group) => group.namespace).map(({ key, value: group }) => (
+          <div className="reference-grant-side" key={key}>
             <div className="reference-grant-namespace">{group.namespace}</div>
-            {group.entries.map((entry) => (
-              <div
-                key={`from-${group.namespace}-${entry.group}-${entry.kind}`}
-                className="reference-grant-item"
-              >
-                {entry.group}/{entry.kind}
-              </div>
-            ))}
+            {withStableListKeys(group.entries, (entry) => JSON.stringify(entry)).map(
+              ({ key: entryKey, value: entry }) => (
+                <div key={entryKey} className="reference-grant-item">
+                  {entry.group}/{entry.kind}
+                </div>
+              )
+            )}
           </div>
         ))}
       </div>
@@ -322,14 +325,18 @@ const ReferenceGrantDiagram: React.FC<{
         →
       </div>
       <div className="reference-grant-side-stack">
-        {toGroups.map((group, groupIndex) => (
-          <div className="reference-grant-side" key={`to-ns-${group.namespace || groupIndex}`}>
-            {group.namespace && <div className="reference-grant-namespace">{group.namespace}</div>}
-            {group.refs.map((ref, refIndex) => (
-              <div key={`to-${group.namespace}-${refIndex}`} className="reference-grant-item">
-                <RefLink value={ref} clusterName={clusterName} omitNamespace />
-              </div>
-            ))}
+        {withStableListKeys(toGroups, (group) => group.namespace).map(({ key, value: group }) => (
+          <div className="reference-grant-side" key={key}>
+            {!!group.namespace && (
+              <div className="reference-grant-namespace">{group.namespace}</div>
+            )}
+            {withStableListKeys(group.refs, (ref) => JSON.stringify(ref)).map(
+              ({ key: refKey, value: ref }) => (
+                <div key={refKey} className="reference-grant-item">
+                  <RefLink value={ref} clusterName={clusterName} omitNamespace />
+                </div>
+              )
+            )}
           </div>
         ))}
       </div>

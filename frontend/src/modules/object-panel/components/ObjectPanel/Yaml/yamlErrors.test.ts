@@ -2,11 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlErrors.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   OBJECT_YAML_ERROR_PREFIX,
-  parseObjectYamlError,
   type ObjectYamlErrorPayload,
+  parseObjectYamlError,
 } from './yamlErrors';
 
 describe('parseObjectYamlError', () => {

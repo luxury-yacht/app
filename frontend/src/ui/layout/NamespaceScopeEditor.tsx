@@ -8,12 +8,12 @@
  * affordances are also the only "scope active" signal the design needs.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   addNamespaceToScope,
   loadNamespaceScope,
+  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
   removeNamespaceFromScope,
   saveNamespaceScope,
 } from './namespaceScope';
@@ -180,15 +180,15 @@ export function NamespaceScopeAddRow({ state }: NamespaceScopeAddRowProps) {
           }}
         />
       ) : (
-        <div
+        <button
+          type="button"
           className="sidebar-item namespace-scope-add"
-          role="button"
           tabIndex={-1}
           onClick={() => setEditing(true)}
         >
           <PlusIcon width={14} height={14} />
           <span>Add namespace</span>
-        </div>
+        </button>
       )}
       {state.error ? <div className="namespace-scope-error">{state.error}</div> : null}
       {state.scope.length > NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD ? (

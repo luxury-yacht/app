@@ -4,9 +4,10 @@
  * Service Overview descriptor (X1 P2). Presentation ported verbatim from ServiceOverview.tsx.
  */
 
-import React from 'react';
-import { service } from '@wailsjs/go/models';
 import { StatusChip } from '@shared/components/StatusChip';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
+import { service } from '@wailsjs/go/models';
+import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';
 
@@ -29,8 +30,8 @@ const renderEndpoints = (d: ServiceDetails): React.ReactNode => {
   if (endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT) {
     return (
       <div className="overview-ref-list">
-        {endpoints.map((ep, index) => (
-          <div key={`${ep}-${index}`} className="overview-ref-item">
+        {withStableListKeys(endpoints, (endpoint) => endpoint).map(({ key, value: ep }) => (
+          <div key={key} className="overview-ref-item">
             {ep}
           </div>
         ))}
@@ -90,19 +91,18 @@ export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
         hidden: (d) => (d.ports ?? []).length === 0,
         render: (d) => (
           <div className="overview-row-list">
-            {(d.ports ?? []).map((port, index) => (
-              <div
-                key={`${port.port}-${port.targetPort ?? 'target'}-${index}`}
-                className="overview-row"
-              >
-                <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
-                <span className="overview-row-value">
-                  {port.port}/{port.protocol}
-                  {port.targetPort && ` → ${port.targetPort}`}
-                  {port.nodePort && port.nodePort > 0 && ` (NodePort: ${port.nodePort})`}
-                </span>
-              </div>
-            ))}
+            {withStableListKeys(d.ports ?? [], (port) => JSON.stringify(port)).map(
+              ({ key, value: port }) => (
+                <div key={key} className="overview-row">
+                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
+                  <span className="overview-row-value">
+                    {port.port}/{port.protocol}
+                    {!!port.targetPort && ` → ${port.targetPort}`}
+                    {port.nodePort && port.nodePort > 0 && ` (NodePort: ${port.nodePort})`}
+                  </span>
+                </div>
+              )
+            )}
           </div>
         ),
       },

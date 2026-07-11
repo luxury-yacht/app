@@ -5,15 +5,15 @@
  * Implements SidebarKeys logic for the UI layer.
  */
 
-import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { hasNativeTabHandling, isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
+import { type RefObject, useCallback, useEffect, useState } from 'react';
 import {
-  parseClusterViewType,
-  parseNamespaceViewType,
   type ClusterViewType,
   type NamespaceViewType,
+  parseClusterViewType,
+  parseNamespaceViewType,
 } from '@/types/navigation/views';
 import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
@@ -267,7 +267,7 @@ export const useSidebarKeyboardControls = ({
       }
 
       const container = sidebarRef.current;
-      if (!container || !container.contains(document.activeElement)) {
+      if (!container?.contains(document.activeElement)) {
         return false;
       }
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {

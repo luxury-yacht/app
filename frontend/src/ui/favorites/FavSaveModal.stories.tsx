@@ -7,9 +7,9 @@
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
-import FavSaveModal from './FavSaveModal';
-import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
+import FavSaveModal from './FavSaveModal';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -49,8 +49,8 @@ const mockExistingFavorite: Favorite = {
 
 // Populate the Storybook Go backend mock with realistic kubeconfigs.
 const installMockKubeconfigs = () => {
-  const overrides = (window as any).__storybookGoOverrides || {};
-  overrides['GetKubeconfigs'] = () =>
+  const overrides = window.__storybookGoOverrides || {};
+  overrides.GetKubeconfigs = () =>
     Promise.resolve([
       {
         name: 'config',
@@ -74,9 +74,9 @@ const installMockKubeconfigs = () => {
         isCurrentContext: false,
       },
     ]);
-  overrides['GetSelectedKubeconfigs'] = () =>
+  overrides.GetSelectedKubeconfigs = () =>
     Promise.resolve(['/Users/john/.kube/config:prod-cluster']);
-  (window as any).__storybookGoOverrides = overrides;
+  window.__storybookGoOverrides = overrides;
 };
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ export const EditExisting: Story = {
   args: {
     existingFavorite: mockExistingFavorite,
     defaultName: mockExistingFavorite.name,
-    filters: mockExistingFavorite.filters!,
+    filters: mockExistingFavorite.filters ?? undefined,
   },
   decorators: [
     (Story) => {

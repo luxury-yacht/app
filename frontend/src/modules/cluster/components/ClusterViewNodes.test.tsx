@@ -5,11 +5,24 @@
  * Covers key behaviors and edge cases for ClusterViewNodes.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClusterNodeRow } from '@/core/refresh/types';
+import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
+import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
+
+type CapturedGridTableProps = GridTableProps<ClusterNodeRow> & {
+  getCustomContextMenuItems: NonNullable<
+    GridTableProps<ClusterNodeRow>['getCustomContextMenuItems']
+  >;
+};
+type LoadingBoundaryProps = React.ComponentProps<typeof ResourceLoadingBoundary>;
 
 const {
   latestTableRowsRef,
@@ -18,8 +31,8 @@ const {
   requestRefreshDomainStateMock,
   useTableSortMock,
 } = vi.hoisted(() => {
-  const latestRows: { current: unknown[] } = { current: [] };
-  const typedQueryRows: { current: unknown[] } = { current: [] };
+  const latestRows: { current: ClusterNodeRow[] } = { current: [] };
+  const typedQueryRows: { current: ClusterNodeRow[] } = { current: [] };
   const scopedDomainState: { current: Record<string, unknown> } = {
     current: {
       data: { metrics: null, rows: [] },
@@ -48,7 +61,12 @@ const {
       })
     ),
     useTableSortMock: vi.fn(
-      (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => {
+      (
+        data: ClusterNodeRow[],
+        _defaultKey?: string,
+        _defaultDir?: SortConfig['direction'],
+        opts?: UseTableSortOptions<ClusterNodeRow>
+      ) => {
         latestRows.current = data;
         return {
           sortedData: data,
@@ -87,8 +105,12 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-const gridTablePropsRef: { current: any } = { current: null };
-const loadingBoundaryPropsRef: { current: any } = { current: null };
+const gridTablePropsRef: { current: CapturedGridTableProps } = {
+  current: null as unknown as CapturedGridTableProps,
+};
+const loadingBoundaryPropsRef: { current: LoadingBoundaryProps } = {
+  current: null as unknown as LoadingBoundaryProps,
+};
 const openWithObjectMock = vi.fn();
 const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
 
@@ -98,7 +120,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
   );
   return {
     ...actual,
-    default: (props: any) => {
+    default: (props: CapturedGridTableProps) => {
       gridTablePropsRef.current = props;
       return <div data-testid="grid-table" />;
     },
@@ -123,14 +145,19 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   __esModule: true,
-  default: (props: { children: React.ReactNode }) => {
+  default: (props: LoadingBoundaryProps) => {
     loadingBoundaryPropsRef.current = props;
     return <>{props.children}</>;
   },
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+  useTableSort: (
+    data: ClusterNodeRow[],
+    defaultKey?: string,
+    defaultDirection?: SortConfig['direction'],
+    options?: UseTableSortOptions<ClusterNodeRow>
+  ) => useTableSortMock(data, defaultKey, defaultDirection, options),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -184,7 +211,7 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
-const baseNode = {
+const baseNode: ClusterNodeRow = {
   name: 'node-1',
   status: 'Ready',
   roles: 'worker',
@@ -193,16 +220,24 @@ const baseNode = {
   externalIP: '',
   cpuCapacity: '4',
   cpuAllocatable: '4',
+  cpuRequests: '1',
+  cpuLimits: '2',
   cpuUsage: '1',
   memoryCapacity: '8Gi',
   memoryAllocatable: '8Gi',
+  memRequests: '1Gi',
+  memLimits: '2Gi',
   memoryUsage: '2Gi',
-  pods: 3,
-  podsAllocatable: 50,
-  podsCapacity: 50,
+  pods: '3',
+  podsAllocatable: '50',
+  podsCapacity: '50',
   taints: [],
   labels: {},
   restarts: 0,
+  kind: 'Node',
+  cpu: '1',
+  memory: '2Gi',
+  unschedulable: false,
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
   age: '2h',
@@ -213,16 +248,12 @@ describe('ClusterViewNodes', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
-  beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    loadingBoundaryPropsRef.current = null;
+    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
+    loadingBoundaryPropsRef.current = null as unknown as LoadingBoundaryProps;
     scopedDomainCallsRef.current = [];
     latestTableRowsRef.current = [];
     typedQueryRowsRef.current = [];
@@ -258,7 +289,7 @@ describe('ClusterViewNodes', () => {
     container.remove();
   });
 
-  const renderNodes = async (nodes: Array<typeof baseNode | Record<string, unknown>>) => {
+  const renderNodes = async (nodes: ClusterNodeRow[]) => {
     typedQueryRowsRef.current = nodes;
     await act(async () => {
       root.render(<ClusterViewNodes />);
@@ -293,7 +324,7 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
 
     const preActions = gridTablePropsRef.current?.filters?.options?.preActions ?? [];
-    expect(preActions.some((item: { id?: string }) => item?.id === 'include-metadata')).toBe(true);
+    expect(preActions.some((item) => 'id' in item && item.id === 'include-metadata')).toBe(true);
   });
 
   it('places the favorite with the filter pre-actions (left), not the export cluster', async () => {
@@ -301,9 +332,9 @@ describe('ClusterViewNodes', () => {
 
     const options = gridTablePropsRef.current?.filters?.options;
     const preActions = options?.preActions ?? [];
-    expect(preActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(true);
+    expect(preActions.some((item) => 'id' in item && item.id === 'favorite')).toBe(true);
     const postActions = options?.postActions ?? [];
-    expect(postActions.some((item: { id?: string }) => item?.id === 'favorite')).toBe(false);
+    expect(postActions.some((item) => 'id' in item && item.id === 'favorite')).toBe(false);
   });
 
   it('threads fetchAllRows so the table can offer the all-matching-rows scope', async () => {
@@ -335,7 +366,10 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
 
     expect(useTableSortMock).toHaveBeenCalled();
-    const options = useTableSortMock.mock.calls[0]?.[3];
+    const options = requireValue(
+      useTableSortMock.mock.calls[0]?.[3],
+      'expected node table sort options'
+    );
     const columns = options.columns as Array<{
       key: string;
       sortValue?: (item: typeof baseNode) => unknown;
@@ -345,7 +379,7 @@ describe('ClusterViewNodes', () => {
     const memoryColumn = columns.find((column) => column.key === 'memory');
     const ageColumn = columns.find((column) => column.key === 'age');
 
-    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3/50' } as any)).toBe(3);
+    expect(podsColumn?.sortValue?.({ ...baseNode, pods: '3', podsAllocatable: '50' })).toBe(3);
     expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
     expect(
@@ -368,9 +402,18 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
-    const statusCell = statusColumn.render(props.data[0]);
-    const badge = statusCell.props.children[0];
+    const statusColumn = requireValue(
+      props.columns.find((column) => column.key === 'status'),
+      'expected the node status column'
+    );
+    const statusCell = requireReactElement<{ children: React.ReactNode[] }>(
+      statusColumn.render(props.data[0]),
+      'expected the node status cell element'
+    );
+    const badge = requireReactElement<{ children?: React.ReactNode; className?: string }>(
+      statusCell.props.children[0],
+      'expected the node status badge element'
+    );
 
     expect(badge.props.children).toBe('Ready');
     expect(badge.props.className).toBe('status-text ready');
@@ -388,9 +431,18 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
-    const statusCell = statusColumn.render(props.data[0]);
-    const badge = statusCell.props.children[0];
+    const statusColumn = requireValue(
+      props.columns.find((column) => column.key === 'status'),
+      'expected the node status column'
+    );
+    const statusCell = requireReactElement<{ children: React.ReactNode[] }>(
+      statusColumn.render(props.data[0]),
+      'expected the node status cell element'
+    );
+    const badge = requireReactElement<{ children?: React.ReactNode; className?: string }>(
+      statusCell.props.children[0],
+      'expected the node status badge element'
+    );
 
     expect(badge.props.children).toBe('Ready (Cordoned)');
     expect(badge.props.className).toBe('status-text cordoned');
@@ -407,9 +459,18 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
-    const statusCell = statusColumn.render(props.data[0]);
-    const badge = statusCell.props.children[0];
+    const statusColumn = requireValue(
+      props.columns.find((column) => column.key === 'status'),
+      'expected the node status column'
+    );
+    const statusCell = requireReactElement<{ children: React.ReactNode[] }>(
+      statusColumn.render(props.data[0]),
+      'expected the node status cell element'
+    );
+    const badge = requireReactElement<{ children?: React.ReactNode; className?: string }>(
+      statusCell.props.children[0],
+      'expected the node status badge element'
+    );
 
     expect(badge.props.children).toBe('Terminating');
     expect(badge.props.className).toBe('status-text terminating');
@@ -426,9 +487,18 @@ describe('ClusterViewNodes', () => {
     await renderNodes([node]);
 
     const props = gridTablePropsRef.current;
-    const statusColumn = props.columns.find((column: any) => column.key === 'status');
-    const statusCell = statusColumn.render(props.data[0]);
-    const badge = statusCell.props.children[0];
+    const statusColumn = requireValue(
+      props.columns.find((column) => column.key === 'status'),
+      'expected the node status column'
+    );
+    const statusCell = requireReactElement<{ children: React.ReactNode[] }>(
+      statusColumn.render(props.data[0]),
+      'expected the node status cell element'
+    );
+    const badge = requireReactElement<{ children?: React.ReactNode; className?: string }>(
+      statusCell.props.children[0],
+      'expected the node status badge element'
+    );
 
     expect(badge.props.children).toBe('Ready');
     expect(badge.props.className).toBe('status-text unknown');
@@ -438,8 +508,13 @@ describe('ClusterViewNodes', () => {
     await renderNodes([baseNode]);
 
     const props = gridTablePropsRef.current;
-    const nameColumn = props.columns.find((column: any) => column.key === 'name');
-    const cell = nameColumn.render(props.data[0]);
+    const nameColumn = requireValue(
+      props.columns.find((column) => column.key === 'name'),
+      'expected the node name column'
+    );
+    const cell = requireReactElement<{
+      onClick?: (event: { stopPropagation: () => void }) => void;
+    }>(nameColumn.render(props.data[0]), 'expected the node name cell element');
 
     // Trigger the column click handler to exercise object navigation.
     act(() => {
@@ -462,7 +537,7 @@ describe('ClusterViewNodes', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(baseNode, 'name')
-      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
+      .find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -5,14 +5,14 @@
  * Runtime storage is delegated to the active panel layout store.
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getContentBounds } from './dockablePanelLayout';
 import {
-  getActivePanelLayoutStore,
   type DockPosition,
+  getActivePanelLayoutStore,
   type PanelCloseReason,
   type PanelLayoutState,
 } from './panelLayoutStore';
-import { getContentBounds } from './dockablePanelLayout';
 import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
 interface InitializeOptions {

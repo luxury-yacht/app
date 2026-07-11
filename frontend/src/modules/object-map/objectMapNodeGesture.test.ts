@@ -6,12 +6,12 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
   beginObjectMapNodeGesture,
   clearObjectMapNodeGesture,
   consumeObjectMapSuppressedClick,
   createObjectMapNodeGestureState,
   endObjectMapNodeGesture,
+  OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
   updateObjectMapNodeGesture,
 } from './objectMapNodeGesture';
 

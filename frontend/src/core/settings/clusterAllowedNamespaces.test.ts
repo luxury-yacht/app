@@ -11,7 +11,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetClusterAllowedNamespaces: vi.fn(),
 }));
 
-import { GetClusterAllowedNamespaces, SetClusterAllowedNamespaces } from '@wailsjs/go/backend/App';
+import { GetClusterAllowedNamespaces, SetClusterAllowedNamespaces } from '@/core/backend-api';
 import {
   getClusterAllowedNamespaces,
   setClusterAllowedNamespaces,

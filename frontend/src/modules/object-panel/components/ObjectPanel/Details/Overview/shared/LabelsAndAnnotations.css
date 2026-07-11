@@ -63,6 +63,10 @@
 }
 
 .metadata-value.clickable {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
   line-height: 1rem;
   cursor: pointer;
   transition: color 0.2s ease;

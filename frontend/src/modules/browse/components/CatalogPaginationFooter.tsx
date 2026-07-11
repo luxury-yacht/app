@@ -1,7 +1,7 @@
-import type React from 'react';
-import type { TablePageSize } from '@shared/components/tables/pageSizeOptions';
 import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 import QueryPaginationControls from '@modules/resource-grid/QueryPaginationControls';
+import type { TablePageSize } from '@shared/components/tables/pageSizeOptions';
+import type React from 'react';
 
 interface CatalogPaginationFooterProps {
   idPrefix: string;

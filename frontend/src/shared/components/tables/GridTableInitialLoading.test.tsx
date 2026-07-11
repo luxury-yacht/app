@@ -5,13 +5,10 @@
  * Covers key behaviors and edge cases for GridTableInitialLoading.
  */
 
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
-
 import GridTableInitialLoading from '@shared/components/tables/GridTableInitialLoading';
-
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+import { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(() => {
   document.body.innerHTML = '';
