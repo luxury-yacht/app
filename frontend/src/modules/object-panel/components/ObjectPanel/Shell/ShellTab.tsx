@@ -2,9 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
-import { ClipboardAddon } from '@xterm/addon-clipboard';
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import * as XtermClipboard from '@xterm/addon-clipboard';
+import * as XtermFit from '@xterm/addon-fit';
+import * as Xterm from '@xterm/xterm';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type WheelEvent } from 'react';
 import {
   readShellSessionBacklog,
@@ -101,8 +101,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const terminalRef = useRef<Xterm.Terminal | null>(null);
+  const fitAddonRef = useRef<XtermFit.FitAddon | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalWrapperRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -184,7 +184,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, []);
 
   const selectAllTerminalText = useCallback(() => {
-    const terminal = terminalRef.current as (Terminal & { selectAll?: () => void }) | null;
+    const terminal = terminalRef.current as (Xterm.Terminal & { selectAll?: () => void }) | null;
     if (!terminal?.selectAll) {
       return false;
     }
@@ -274,7 +274,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const applyTerminalTheme = useCallback(() => {
     const terminal = terminalRef.current as
-      | (Terminal & {
+      | (Xterm.Terminal & {
           options?: {
             theme?: ReturnType<typeof toXtermThemeDefinition>;
             overviewRuler?: { width?: number };
@@ -300,7 +300,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
 
     const theme = resolveThemeColors();
-    const terminal = new Terminal({
+    const terminal = new Xterm.Terminal({
       cursorBlink: true,
       cursorStyle: 'underline',
       scrollback: 5000,
@@ -312,10 +312,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       },
       theme: toXtermThemeDefinition(theme),
     });
-    const fitAddon = new FitAddon();
+    const fitAddon = new XtermFit.FitAddon();
     terminal.loadAddon(fitAddon);
     // Enable OSC 52 clipboard integration for in-terminal apps (tmux/vim/etc).
-    terminal.loadAddon(new ClipboardAddon());
+    terminal.loadAddon(new XtermClipboard.ClipboardAddon());
     terminal.open(terminalContainerRef.current);
     fitAddon.fit();
     terminal.focus();

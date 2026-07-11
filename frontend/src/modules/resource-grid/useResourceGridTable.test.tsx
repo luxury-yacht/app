@@ -12,7 +12,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { ResourceGridTableResult, ResourceGridTableRow } from './resourceGridTableTypes';
 import {

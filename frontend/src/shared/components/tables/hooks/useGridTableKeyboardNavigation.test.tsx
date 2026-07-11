@@ -2,7 +2,7 @@ import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type { FC, RefObject } from 'react';
 import { act, useLayoutEffect, useRef } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface HarnessCapture {

@@ -9,7 +9,7 @@
  */
 
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DetailsTabProps } from './DetailsTab';
 import { buildObjectDetailModel } from './objectDetailModel';

@@ -8,7 +8,7 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
 import React, { act, useImperativeHandle } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type SampleRow = { name: string };

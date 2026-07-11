@@ -6,7 +6,7 @@ import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { act, createContext, useSyncExternalStore } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { requireValue } from '@/test-utils/requireValue';

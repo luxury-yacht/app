@@ -8,7 +8,7 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';

@@ -8,7 +8,7 @@
  * tables own their rows, and the active tab lives in ViewStateContext.
  */
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NamespaceResourcesProvider } from './NsResourcesContext';

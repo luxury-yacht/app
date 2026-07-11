@@ -36,8 +36,8 @@ const lintWithPlugin = (pluginName, source) => {
   );
 };
 
-const lintWithProjectConfig = (source) => {
-  const directory = mkdtempSync(path.join(process.cwd(), 'src', '.biome-boundary-'));
+const lintWithProjectConfig = (source, baseDirectory = path.join(process.cwd(), 'src')) => {
+  const directory = mkdtempSync(path.join(baseDirectory, '.biome-boundary-'));
   temporaryDirectories.push(directory);
   const sourcePath = path.join(directory, 'adversarial.ts');
   writeFileSync(sourcePath, source);
@@ -103,5 +103,25 @@ describe('Biome architectural boundary plugins', () => {
     expect(`${result.stdout}\n${result.stderr}`).toContain(
       'Import generated backend bindings only through @/core/backend-api.'
     );
+  });
+
+  it('rejects aliased imports of the generated backend App binding outside the facade', () => {
+    const result = lintWithProjectConfig(
+      'import { GetAppInfo } from "@wailsjs/go/backend/App"; void GetAppInfo;'
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      'Import generated backend bindings only through @/core/backend-api.'
+    );
+  });
+
+  it('allows the generated backend App binding inside the approved facade', () => {
+    const result = lintWithProjectConfig(
+      'import { GetAppInfo } from "@wailsjs/go/backend/App"; void GetAppInfo;',
+      path.join(process.cwd(), 'src', 'core', 'backend-api')
+    );
+
+    expect(result.status).toBe(0);
   });
 });

@@ -8,7 +8,7 @@ import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
-import ReactDOMClient from 'react-dom/client';
+import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import ObjectMap from './ObjectMap';

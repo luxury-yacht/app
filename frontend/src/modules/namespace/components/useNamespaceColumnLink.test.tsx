@@ -1,7 +1,7 @@
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const viewStateMock = vi.hoisted(() => ({

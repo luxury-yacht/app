@@ -1,5 +1,5 @@
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
 import { requireValue } from '@/test-utils/requireValue';

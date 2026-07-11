@@ -7,7 +7,7 @@
 
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DropdownOption } from '../types';
 import { useKeyboardNavigation } from './useKeyboardNavigation';

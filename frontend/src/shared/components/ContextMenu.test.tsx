@@ -8,7 +8,7 @@
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContextMenu from './ContextMenu';
 

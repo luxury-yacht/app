@@ -7,7 +7,7 @@
 
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
 import { requireValue } from '@/test-utils/requireValue';

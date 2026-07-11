@@ -1,6 +1,6 @@
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocusTrap';
 

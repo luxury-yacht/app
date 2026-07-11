@@ -12,7 +12,7 @@ import {
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import ClusterTabs from '@ui/layout/ClusterTabs';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 

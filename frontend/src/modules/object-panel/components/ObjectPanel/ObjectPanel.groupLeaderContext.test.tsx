@@ -13,7 +13,7 @@
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { act, createContext, useContext, useSyncExternalStore } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { capturedChildrenRef, probedObjectDataRef, mockUseCapabilities, mockRefreshOrchestrator } =

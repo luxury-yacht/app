@@ -8,7 +8,7 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import {

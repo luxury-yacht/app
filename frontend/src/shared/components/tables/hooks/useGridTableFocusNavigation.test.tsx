@@ -7,7 +7,7 @@
 import { AriaGrid } from '@shared/components/tables/AriaGridPrimitives';
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
 import React, { act, useImperativeHandle, useRef } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

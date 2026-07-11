@@ -11,7 +11,7 @@ import type ConfirmationModal from '@shared/components/modals/ConfirmationModal'
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';

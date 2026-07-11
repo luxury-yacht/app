@@ -7,7 +7,7 @@
 
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { act, type ReactNode, type Ref } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';

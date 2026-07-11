@@ -8,7 +8,7 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
 type SampleRow = { id: string; kind?: string };

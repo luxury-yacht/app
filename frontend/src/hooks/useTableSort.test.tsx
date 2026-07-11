@@ -10,7 +10,7 @@ import {
   resetGridTablePerformanceDiagnostics,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTableSort } from './useTableSort';
 

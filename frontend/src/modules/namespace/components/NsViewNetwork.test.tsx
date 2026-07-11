@@ -10,7 +10,7 @@ import type ConfirmationModal from '@shared/components/modals/ConfirmationModal'
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireReactElement } from '@/test-utils/requireReactElement';

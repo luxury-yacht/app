@@ -8,7 +8,7 @@
 import { KeyboardProvider } from '@ui/shortcuts';
 import type React from 'react';
 import { act, useEffect, useRef, useState } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestId } from '@/test-utils/createTestId';
 import { requireValue } from '@/test-utils/requireValue';

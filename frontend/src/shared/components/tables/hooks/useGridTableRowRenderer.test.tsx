@@ -8,7 +8,7 @@
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

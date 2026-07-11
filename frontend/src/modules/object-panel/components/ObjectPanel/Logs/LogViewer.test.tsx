@@ -8,7 +8,7 @@
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FetchContainerLogs, GetContainerLogsScopeContainers } from '@/core/backend-api';
 import { buildClusterScope } from '@/core/refresh/clusterScope';

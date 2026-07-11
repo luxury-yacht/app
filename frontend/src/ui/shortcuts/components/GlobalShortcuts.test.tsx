@@ -7,7 +7,7 @@
 
 import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyCodes } from '../constants';
 import { GlobalShortcuts } from './GlobalShortcuts';

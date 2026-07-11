@@ -1,6 +1,6 @@
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {

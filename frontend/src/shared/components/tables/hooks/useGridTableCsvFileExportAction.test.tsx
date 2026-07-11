@@ -8,7 +8,7 @@
 import type { IconBarAction } from '@shared/components/IconBar/IconBar';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGridTableCsvFileExportAction } from './useGridTableCsvFileExportAction';
 

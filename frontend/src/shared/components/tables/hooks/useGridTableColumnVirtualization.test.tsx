@@ -12,7 +12,7 @@ import type {
 import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 type Row = { id: string };

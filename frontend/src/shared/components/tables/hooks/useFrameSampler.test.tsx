@@ -10,7 +10,7 @@ import {
   useFrameSampler,
 } from '@shared/components/tables/hooks/useFrameSampler';
 import React, { act, useImperativeHandle } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type HarnessHandle = {

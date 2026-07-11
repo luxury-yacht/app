@@ -4,7 +4,7 @@
 
 import { helm } from '@wailsjs/go/models';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { helmReleaseDescriptor } from './descriptors/helm';
 import { OverviewRenderer } from './OverviewRenderer';

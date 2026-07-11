@@ -17,7 +17,7 @@ import {
 import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

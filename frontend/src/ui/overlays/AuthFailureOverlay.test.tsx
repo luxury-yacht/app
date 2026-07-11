@@ -7,7 +7,7 @@
  */
 
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { AuthFailureOverlayContent } from './AuthFailureOverlay';

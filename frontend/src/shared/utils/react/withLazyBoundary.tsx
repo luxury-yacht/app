@@ -7,8 +7,7 @@
 
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { errorHandler } from '@utils/errorHandler';
-import type React from 'react';
-import { Component, type ComponentType, lazy, type ReactNode, Suspense } from 'react';
+import React, { Component, type ComponentType, lazy, type ReactNode } from 'react';
 
 // Simple inline ErrorBoundary
 class ErrorBoundary extends Component<
@@ -74,9 +73,9 @@ export function withLazyBoundary<P extends object>(
 
   const WrappedComponent = (props: P) => (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner message={loadingMessage} />}>
+      <React.Suspense fallback={<LoadingSpinner message={loadingMessage} />}>
         <LazyComponent {...props} />
-      </Suspense>
+      </React.Suspense>
     </ErrorBoundary>
   );
 

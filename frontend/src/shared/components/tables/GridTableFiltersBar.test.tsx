@@ -8,7 +8,7 @@
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

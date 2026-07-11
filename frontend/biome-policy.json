@@ -16,6 +16,7 @@
       "complexity.noImportantStyles",
       "complexity.noStaticOnlyClass",
       "complexity.useMaxParams",
+      "correctness.noUnresolvedImports",
       "correctness.noUnusedInstantiation",
       "correctness.useImageSize",
       "correctness.useUniqueElementIds",

@@ -9,7 +9,7 @@
 
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const peek = vi.fn();

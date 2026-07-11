@@ -9,7 +9,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';

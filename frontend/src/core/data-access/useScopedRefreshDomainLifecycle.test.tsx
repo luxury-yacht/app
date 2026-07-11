@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';

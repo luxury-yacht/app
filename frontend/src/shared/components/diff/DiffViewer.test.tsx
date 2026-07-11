@@ -8,7 +8,7 @@
 
 import type { DisplayDiffLine } from '@shared/components/diff/diffUtils';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import DiffViewer from './DiffViewer';

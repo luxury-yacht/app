@@ -6,7 +6,7 @@
  * G6 renderer so the heavy graph dependency stays out of the initial bundle.
  */
 
-import React, { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
@@ -630,7 +630,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     <div className="object-map" data-testid="object-map">
       <div className="object-map__header">{toolbar}</div>
       <div ref={canvasRef} className="object-map__canvas">
-        <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
+        <React.Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
           <ObjectMapG6Renderer
             layout={visibleState.visibleLayout}
             selectionState={visibleState.visibleSelectionState}
@@ -657,7 +657,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onUserViewportChange={disableAutoFitForManualViewport}
             onViewportControlsChange={setG6ViewportControls}
           />
-        </Suspense>
+        </React.Suspense>
         {!!showLegend && (
           <section
             className="object-map__legend"

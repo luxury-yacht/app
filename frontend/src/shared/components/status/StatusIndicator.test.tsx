@@ -1,6 +1,6 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom';
-import ReactDOMClient from 'react-dom/client';
+import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StatusIndicator from './StatusIndicator';

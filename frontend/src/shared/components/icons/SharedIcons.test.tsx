@@ -5,7 +5,7 @@
  */
 
 import type { ComponentType } from 'react';
-import ReactDOMServer from 'react-dom/server';
+import * as ReactDOMServer from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import * as DockableIcons from './DockableIcons';
 import {

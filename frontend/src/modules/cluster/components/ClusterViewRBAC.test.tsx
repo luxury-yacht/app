@@ -9,7 +9,7 @@ import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

@@ -6,7 +6,7 @@
  */
 
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 import { KubernetesProvider } from './KubernetesProvider';
 

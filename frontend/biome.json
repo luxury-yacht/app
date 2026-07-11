@@ -58,6 +58,7 @@
         }
       },
       "correctness": {
+        "noUnresolvedImports": "error",
         "noUnusedInstantiation": "error",
         "useImageSize": "error",
         "useUniqueElementIds": "error",

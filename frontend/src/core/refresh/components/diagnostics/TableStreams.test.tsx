@@ -1,5 +1,5 @@
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import { DiagnosticsStreamsTable } from './TableStreams';

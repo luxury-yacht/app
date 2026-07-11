@@ -7,7 +7,7 @@
 
 import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import App from './App.tsx';

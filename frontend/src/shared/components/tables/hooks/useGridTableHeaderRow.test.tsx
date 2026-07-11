@@ -8,7 +8,7 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const renderSortIndicator = vi.fn((key: string) => <span data-testid={`sort-${key}`} />);

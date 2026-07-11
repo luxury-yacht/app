@@ -7,7 +7,7 @@
  */
 
 import React, { act, useRef } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogViewerAction } from '../logViewerReducer';
 

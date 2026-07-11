@@ -7,7 +7,7 @@
 import type { Graph, GraphData } from '@antv/g6';
 import type React from 'react';
 import { act, useRef } from 'react';
-import ReactDOMClient from 'react-dom/client';
+import * as ReactDOMClient from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';

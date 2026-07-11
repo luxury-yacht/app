@@ -9,7 +9,7 @@ import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UseTableSortOptions } from '@/hooks/useTableSort';
 import { requireReactElement } from '@/test-utils/requireReactElement';

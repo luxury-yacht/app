@@ -15,7 +15,7 @@ The repository uses Biome's `recommended` preset as its portable baseline and ex
 additional applicable rules to errors. The explicit non-recommended rules include accessibility,
 React correctness, and suspicious-code checks such as `noNoninteractiveElementInteractions`,
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
-`noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
+`noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`, `noUnresolvedImports`,
 `noDelete`, `noEmptyBlockStatements`, `noForIn`, `noReactForwardRef`, `noShadow`, `useGuardForIn`,
 `useMaxParams`, `noConsole`, `noEnum`, `noEqualsToNull`, `noParameterAssign`,
 `noParameterProperties`, `noUnusedExpressions`, `noUnusedInstantiation`, `noUnusedTemplateLiteral`,
@@ -33,10 +33,19 @@ Do not replace this curation with the `all` preset. `all` includes framework and
 do not describe this React application. Audit new Biome releases for newly applicable rules and
 promote them individually with their diagnostics resolved.
 
-`noUnnecessaryConditions` is the remaining high-signal candidate. Biome 2.5.3 currently panics in
-the module resolver while running it across this project (`module_resolver.rs:500`, index out of
-bounds), so it must not enter the required gate until the installed Biome version can run it to
-completion. Re-evaluate it after Biome upgrades with:
+`noUnnecessaryConditions` is the remaining high-signal candidate. Biome 2.5.3, confirmed as the
+latest stable release on 2026-07-11, panics in the module resolver
+(`module_resolver.rs:500`, index out of bounds), so it must not enter the required gate until the
+installed Biome version can run it to completion. The minimized project reproduction is:
+
+```ts
+import { act } from 'react';
+export async function value() {
+  await act(async () => {});
+}
+```
+
+Run that file and the complete frontend after Biome upgrades:
 
 ```sh
 npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
@@ -44,8 +53,28 @@ npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
 
 `useArraySortCompare` has the same analyzer blocker. Its 11 source diagnostics have explicit
 UTF-16 comparators, but enabling the rule globally still activates the crashing module resolver.
-Keep the explicit comparators and re-evaluate the rule with `noUnnecessaryConditions` after a
-Biome upgrade.
+The same five-line reproduction above crashes this rule. Keep the explicit comparators and
+re-evaluate the rule with `noUnnecessaryConditions` after a Biome upgrade.
+
+## Project import-resolution rules
+
+`noUnresolvedImports` is enabled. Package boundaries whose runtime is exposed through CommonJS or
+synthetic defaults use namespace imports so Biome, TypeScript, Vite, Vitest, and Storybook agree on
+the module shape. The isolated rule checks the complete frontend with zero diagnostics.
+
+Two resolution rules are deliberately not enabled:
+
+- `noUndeclaredDependencies` reports 1,688 diagnostics because Biome 2.5.3 treats configured
+  TypeScript/Vite aliases such as `@shared/components`, `@core/contexts`, and `@wailsjs/go` as npm
+  package names. Adding those aliases to `package.json` would create fake dependency declarations.
+- `useImportExtensions` reports 3,699 diagnostics and requests source `.ts`/`.tsx` suffixes for
+  relative and aliased imports. This frontend uses TypeScript `moduleResolution: bundler`; Vite,
+  Vitest, and Storybook resolve extensionless source specifiers and emit bundled JavaScript. Source
+  extensions would couple imports to implementation filenames without improving runtime
+  resolution.
+
+Re-evaluate both rules when Biome can consume the project's TypeScript path and bundler-resolution
+semantics directly.
 
 ## Rules deliberately not adopted
 
@@ -162,6 +191,12 @@ The Grit plugins have executable adversarial fixtures in
 forbidden direct call and accepts a call through the approved facade. Real-project fixtures also
 lint temporary files under `frontend/src` through `frontend/biome.json`; these guard the configured
 plugin globs and backend-binding import patterns, not only the plugin source.
+
+The single disabled-rule scope is `style.noRestrictedImports` under
+`src/core/backend-api/**`. That facade must import the generated Wails App binding it isolates from
+application code. Boundary tests reject both relative and `@wailsjs` imports everywhere outside
+the facade and accept the same import inside the exact approved directory. Remove the override only
+when Biome can express an allowed entry point without disabling the rule for that directory.
 
 ## Reviewing a config override
 

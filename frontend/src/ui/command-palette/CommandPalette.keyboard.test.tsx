@@ -3,7 +3,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { requireValue } from '@/test-utils/requireValue';

@@ -9,7 +9,7 @@ import type { ColumnWidthState } from '@shared/components/tables/GridTable.types
 import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(() => {

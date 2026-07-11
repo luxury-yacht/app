@@ -8,7 +8,7 @@
 import GridTableBody from '@shared/components/tables/GridTableBody';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

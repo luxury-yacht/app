@@ -7,7 +7,7 @@
 
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PortForwardTarget } from './PortForwardModal';
 import PortForwardModal from './PortForwardModal';

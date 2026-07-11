@@ -1,6 +1,6 @@
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import { useKindFilterOptions } from './useKindFilterOptions';
 

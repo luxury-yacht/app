@@ -7,7 +7,7 @@
 
 import { KeyboardProvider } from '@ui/shortcuts';
 import React, { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PERMISSION_FEATURES } from '@/core/capabilities';
 import type {

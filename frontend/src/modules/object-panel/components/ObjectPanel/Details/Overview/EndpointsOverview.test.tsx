@@ -9,7 +9,7 @@
 
 import { endpointslice } from '@wailsjs/go/models';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { endpointSliceDescriptor } from './descriptors/endpointslice';
 import { OverviewRenderer } from './OverviewRenderer';

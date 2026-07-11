@@ -2,7 +2,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
 import type React from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useNamespaceFilterOptions } from './useNamespaceFilterOptions';
 

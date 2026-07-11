@@ -6,7 +6,7 @@ import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPan
 import { buildObjectDetailModel } from '@modules/object-panel/components/ObjectPanel/Details/objectDetailModel';
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 

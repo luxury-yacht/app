@@ -3,7 +3,7 @@
  */
 
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import RBACRules from './DetailsTabRBACRules';
 

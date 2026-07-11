@@ -3,7 +3,7 @@
  */
 
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serviceDescriptor } from './descriptors/service';
 import { OverviewRenderer } from './OverviewRenderer';

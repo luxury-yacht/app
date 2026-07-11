@@ -7,7 +7,7 @@
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { act, type ReactNode } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload, ClusterOverviewSnapshotPayload } from '@/core/refresh/types';

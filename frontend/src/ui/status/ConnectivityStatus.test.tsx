@@ -1,7 +1,7 @@
 import type { StatusIndicatorAction } from '@shared/components/status/StatusIndicator';
 import type { ReactNode } from 'react';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
 

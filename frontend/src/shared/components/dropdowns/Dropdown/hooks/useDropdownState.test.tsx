@@ -8,7 +8,7 @@
 import { useDropdownState } from '@shared/components/dropdowns/Dropdown/hooks/useDropdownState';
 import type React from 'react';
 import { act, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type HookProps = Parameters<typeof useDropdownState>;

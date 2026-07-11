@@ -10,9 +10,8 @@
  */
 
 import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
-import {
+import React, {
   type CSSProperties,
-  Fragment,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -469,7 +468,7 @@ export function Tabs({
         const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
         warnReservedKeys(tab.id, tab.extraProps);
         return (
-          <Fragment key={tab.id}>
+          <React.Fragment key={tab.id}>
             {dropInsertIndex === index && (
               <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
             )}
@@ -516,7 +515,7 @@ export function Tabs({
                 </button>
               )}
             </div>
-          </Fragment>
+          </React.Fragment>
         );
       })}
       {dropInsertIndex === tabs.length && (

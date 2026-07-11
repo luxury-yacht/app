@@ -10,7 +10,7 @@ import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterNodeRow } from '@/core/refresh/types';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
