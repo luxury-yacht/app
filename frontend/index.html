@@ -56,9 +56,8 @@
           if (!variables || typeof variables !== 'object') return;
 
           const root = document.documentElement;
-          for (const token in variables) {
+          for (const token of Object.keys(variables)) {
             if (
-              Object.hasOwn(variables, token) &&
               token.indexOf('--') === 0 &&
               typeof variables[token] === 'string'
             ) {

@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import { requireValue } from '@/test-utils/requireValue';
 import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
@@ -944,7 +945,7 @@ describe('buildCatalogDisplayEntries', () => {
 
   it('returns pods when only a kind is provided', () => {
     const entries = evaluate('pod');
-    expect(entries.map((entry) => entry.displayName).sort()).toEqual([
+    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
       'default/frontend-123',
       'kube-system/aws-node-abc123',
     ]);
@@ -952,7 +953,7 @@ describe('buildCatalogDisplayEntries', () => {
 
   it('returns deployments for partial kind searches', () => {
     const entries = evaluate('depl');
-    expect(entries.map((entry) => entry.displayName).sort()).toEqual([
+    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
       'default/frontend',
       'kube-system/metrics-server',
       'test-namespace/gateway',

@@ -366,6 +366,34 @@ describe('ValuesTab', () => {
     await unmount();
   });
 
+  it('ignores inherited properties when deriving Helm value modes', async () => {
+    const allValues = Object.assign(Object.create({ inheritedDefault: 'not-a-value' }), {
+      ownDefault: 'default',
+      ownOverride: 'base',
+    });
+    const userValues = Object.assign(Object.create({ inheritedOverride: 'not-an-override' }), {
+      ownOverride: 'override',
+    });
+    snapshotState.current = {
+      status: 'ready',
+      data: { values: { allValues, userValues } },
+      error: null,
+    };
+
+    const { container, unmount } = await renderValuesTab();
+    await waitForUpdates();
+
+    expect(parsedValue()).toEqual({ ownDefault: 'default' });
+
+    await clickSegmentedOption(container, 'Overrides');
+    expect(parsedValue()).toEqual({ ownOverride: 'override' });
+
+    await clickSegmentedOption(container, 'Merged');
+    expect(parsedValue()).toEqual({ ownDefault: 'default', ownOverride: 'override' });
+
+    await unmount();
+  });
+
   // -----------------------------------------------------------------------
   // Loading / error / empty states
   // -----------------------------------------------------------------------

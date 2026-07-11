@@ -75,7 +75,7 @@ const CapabilityRow: React.FC<{
         <button
           type="button"
           className={
-            `diagnostics-table-descriptor` +
+            'diagnostics-table-descriptor' +
             (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
           }
           onClick={() => onToggle(row.key)}

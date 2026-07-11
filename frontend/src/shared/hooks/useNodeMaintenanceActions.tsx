@@ -25,6 +25,7 @@ import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-acces
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import { errorHandler } from '@/utils/errorHandler';
 
 export interface NodeActionTarget {
@@ -47,7 +48,7 @@ const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] =>
     seen.add(trimmed);
     result.push(trimmed);
   }
-  return result.sort();
+  return result.sort(compareUtf16Strings);
 };
 
 export const buildNodeMaintenanceAggregateScope = (clusterId: string): string =>

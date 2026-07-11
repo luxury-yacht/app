@@ -96,10 +96,10 @@ export const buildClusterScopedKey = (row: unknown, baseKey: string): string => 
     return `${trimmed}|${baseKey}`;
   }
   throw new Error(
-    `GridTable: buildClusterScopedKey requires clusterId on every row. ` +
+    'GridTable: buildClusterScopedKey requires clusterId on every row. ' +
       `Row with key "${baseKey}" has no clusterId — this will cause key ` +
-      `collisions in multi-cluster views. Ensure the data source populates ` +
-      `clusterId on all rows.`
+      'collisions in multi-cluster views. Ensure the data source populates ' +
+      'clusterId on all rows.'
   );
 };
 

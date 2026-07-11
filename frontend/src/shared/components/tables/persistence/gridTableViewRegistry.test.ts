@@ -6,6 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   isRegisteredGridTableView,
   listRegisteredGridTableViews,
@@ -23,7 +24,9 @@ describe('gridTableViewRegistry', () => {
   it('reports registered view ids and lists them', () => {
     expect(isRegisteredGridTableView('cluster-nodes')).toBe(true);
     expect(isRegisteredGridTableView('missing')).toBe(false);
-    expect(listRegisteredGridTableViews().sort()).toEqual(baseline.sort());
+    expect(listRegisteredGridTableViews().sort(compareUtf16Strings)).toEqual(
+      baseline.sort(compareUtf16Strings)
+    );
   });
 
   it('registers new ids and trims whitespace', () => {
@@ -35,6 +38,8 @@ describe('gridTableViewRegistry', () => {
   it('ignores empty registrations', () => {
     registerGridTableView('   ');
     registerGridTableView('');
-    expect(listRegisteredGridTableViews().sort()).toEqual(baseline.sort());
+    expect(listRegisteredGridTableViews().sort(compareUtf16Strings)).toEqual(
+      baseline.sort(compareUtf16Strings)
+    );
   });
 });

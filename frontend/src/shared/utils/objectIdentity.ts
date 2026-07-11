@@ -90,16 +90,16 @@ export const buildObjectReference = <TExtras extends object = Record<never, neve
   if (!version) {
     throw new Error(
       `Object identity for ${kind}/${name} is missing version. ` +
-        `Built-ins must resolve through resolveBuiltinGroupVersion(); custom resources ` +
-        `must thread group/version from the data source.`
+        'Built-ins must resolve through resolveBuiltinGroupVersion(); custom resources ' +
+        'must thread group/version from the data source.'
     );
   }
 
   if (!group && !builtinGVK.version) {
     throw new Error(
       `Object identity for ${kind}/${name} is missing group. ` +
-        `Custom resources must thread group/version from discovery, catalog, events, ` +
-        `owner refs, HPA targets, or manifests.`
+        'Custom resources must thread group/version from discovery, catalog, events, ' +
+        'owner refs, HPA targets, or manifests.'
     );
   }
 
@@ -249,11 +249,11 @@ export function assertObjectRefHasRequiredIdentity(
   if (!version) {
     throw new Error(
       `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
-        `is missing version. This is the kind-only-objects bug — the ` +
-        `panel and backend resolvers cannot disambiguate two CRDs sharing ` +
-        `a Kind without group+version. Spread ` +
-        `\`...resolveBuiltinGroupVersion(kind)\` for built-ins, or thread ` +
-        `the parsed version from a wire-form apiVersion via \`parseApiVersion(...)\`.`
+        'is missing version. This is the kind-only-objects bug — the ' +
+        'panel and backend resolvers cannot disambiguate two CRDs sharing ' +
+        'a Kind without group+version. Spread ' +
+        '`...resolveBuiltinGroupVersion(kind)` for built-ins, or thread ' +
+        'the parsed version from a wire-form apiVersion via `parseApiVersion(...)`.'
     );
   }
 
@@ -265,8 +265,8 @@ export function assertObjectRefHasRequiredIdentity(
     throw new Error(
       `KubernetesObjectReference for kind=${kind} name=${ref.name ?? '?'} ` +
         `is missing group. Include \`group: ''\` for core/v1 built-ins, ` +
-        `spread \`...resolveBuiltinGroupVersion(kind)\` for other built-ins, ` +
-        `or thread group from the catalog/discovery source for custom resources.`
+        'spread `...resolveBuiltinGroupVersion(kind)` for other built-ins, ' +
+        'or thread group from the catalog/discovery source for custom resources.'
     );
   }
 }

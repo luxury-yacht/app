@@ -6,6 +6,7 @@
 
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
 import { describe, expect, it } from 'vitest';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import { requireValue } from '@/test-utils/requireValue';
 import { computeObjectMapLayout } from './objectMapLayout';
 import {
@@ -107,7 +108,10 @@ describe('deriveObjectMapVisibleState', () => {
       selectedKinds: ['Service', 'Pod'],
     });
 
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort()).toEqual(['pod', 'service']);
+    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
+      'pod',
+      'service',
+    ]);
     expect(result.visibleLayout.edges).toHaveLength(1);
     expect(result.visibleLayout.edges[0]).toMatchObject({
       sourceId: 'service',
@@ -172,13 +176,13 @@ describe('deriveObjectMapVisibleState', () => {
       focusMode: true,
     });
 
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort()).toEqual([
+    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
       'config',
       'deploy',
       'pod-a',
       'secret',
     ]);
-    expect(result.visibleLayout.edges.map((e) => e.id).sort()).toEqual([
+    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
       'config-secret',
       'deploy-pod-a',
       'pod-config',

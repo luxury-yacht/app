@@ -419,7 +419,7 @@ export function useGridTableController<T>({
       warnDevOnce(
         `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
           `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
-          `to prevent key collisions in multi-cluster views.`
+          'to prevent key collisions in multi-cluster views.'
       );
     }
   }

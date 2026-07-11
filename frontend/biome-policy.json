@@ -23,6 +23,7 @@
       "suspicious.noConfusingVoidType",
       "suspicious.noExplicitAny",
       "suspicious.noEvolvingTypes",
+      "suspicious.noForIn",
       "suspicious.noImportCycles",
       "suspicious.noLeakedRender",
       "suspicious.noMisplacedAssertion",
@@ -31,10 +32,13 @@
       "suspicious.noReturnAssign",
       "suspicious.noSkippedTests",
       "suspicious.noUnusedExpressions",
+      "suspicious.useGuardForIn",
       "suspicious.useIterableCallbackReturn",
       "style.noDescendingSpecificity",
       "style.noNonNullAssertion",
-      "style.noRestrictedImports"
+      "style.noParameterAssign",
+      "style.noRestrictedImports",
+      "style.noUnusedTemplateLiteral"
     ],
     "requiredFileExtensions": ["mjs", "cjs"],
     "requiredPlugins": [

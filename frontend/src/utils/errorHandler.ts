@@ -276,6 +276,7 @@ class ErrorHandler {
     context?: Record<string, unknown>,
     customMessage?: string
   ): ErrorDetails {
+    let errorContext = context;
     const errorString = this.getErrorString(error);
     const category = this.categorizeError(error);
     const severity = this.getSeverity(category);
@@ -291,8 +292,8 @@ class ErrorHandler {
       technicalMsg = parts[1]?.trim() || errorString;
 
       // Add the original error to context for debugging
-      context = {
-        ...context,
+      errorContext = {
+        ...errorContext,
         originalError: parts[0].trim(),
         stderr: parts[1]?.trim(),
       };
@@ -303,7 +304,7 @@ class ErrorHandler {
       category,
       severity,
       originalError: error,
-      context,
+      context: errorContext,
       timestamp: new Date(),
       retryable: this.isRetryable(category),
       userMessage: userMsg,

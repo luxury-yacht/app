@@ -67,6 +67,7 @@
         "noConfusingVoidType": "error",
         "noExplicitAny": "error",
         "noEvolvingTypes": "error",
+        "noForIn": "error",
         "noImportCycles": "error",
         "noLeakedRender": "error",
         "noMisplacedAssertion": "error",
@@ -75,6 +76,7 @@
         "noReturnAssign": "error",
         "noSkippedTests": "error",
         "noUnusedExpressions": "error",
+        "useGuardForIn": "error",
         "useIterableCallbackReturn": {
           "level": "error",
           "options": {
@@ -85,6 +87,7 @@
       "style": {
         "noDescendingSpecificity": "error",
         "noNonNullAssertion": "error",
+        "noParameterAssign": "error",
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -98,7 +101,8 @@
               }
             ]
           }
-        }
+        },
+        "noUnusedTemplateLiteral": "error"
       }
     }
   },

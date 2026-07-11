@@ -51,7 +51,7 @@ export const useCatalogDiagnostics = (
     if (countRef.current >= WARN_THRESHOLD && now - lastWarnRef.current > WARN_INTERVAL_MS) {
       logAppLogsWarn(
         `[${viewLabel}] catalog update rate high (${countRef.current}/${UPDATE_WINDOW_MS}ms). ` +
-          `Risk of React update-depth warnings.`,
+          'Risk of React update-depth warnings.',
         APP_LOG_SOURCES.CatalogDiagnostics
       );
       lastWarnRef.current = now;

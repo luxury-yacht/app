@@ -34,6 +34,9 @@ interface ValuesTabProps {
   isActive?: boolean;
 }
 
+const ownsKey = (value: HelmValueObject, key: string): boolean =>
+  Object.getOwnPropertyDescriptor(value, key) !== undefined;
+
 const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [showMode, setShowMode] = useState<'defaults' | 'overrides' | 'merged'>('defaults');
@@ -68,7 +71,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         current === null ||
         typeof current !== 'object' ||
         Array.isArray(current) ||
-        !(key in current)
+        !ownsKey(current, key)
       ) {
         return false;
       }
@@ -85,7 +88,8 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
           current === null ||
           current === undefined ||
           typeof current !== 'object' ||
-          Array.isArray(current)
+          Array.isArray(current) ||
+          !ownsKey(current, key)
         ) {
           return undefined;
         }
@@ -110,7 +114,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         return allVals;
       }
       const result: HelmValueObject = {};
-      for (const key in allVals) {
+      for (const key of Object.keys(allVals)) {
         const newPath = [...path, key];
         const value = allVals[key];
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -148,7 +152,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       }
 
       const result: HelmValueObject = {};
-      for (const key in obj) {
+      for (const key of Object.keys(obj)) {
         const newPath = [...path, key];
         const value = obj[key];
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -179,7 +183,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
           ? _allVals
           : undefined;
       const result: HelmValueObject = {};
-      for (const key in userVals) {
+      for (const key of Object.keys(userVals)) {
         result[key] = getActualOverrides(userVals[key], allObj?.[key], [...path, key]) ?? null;
       }
       return result;

@@ -10,6 +10,7 @@ import {
 } from '@modules/browse/utils/browseUtils';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 
 export interface BrowseFilters {
   search: string;
@@ -126,7 +127,7 @@ export const buildBrowseCatalogPlan = ({
       clusterId: clusterId ?? '',
       clusterScopedOnly,
       customOnly,
-      pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(),
+      pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(compareUtf16Strings),
     }),
   };
 };

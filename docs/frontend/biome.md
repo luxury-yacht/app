@@ -16,8 +16,9 @@ additional applicable rules to errors. The explicit non-recommended rules includ
 React correctness, and suspicious-code checks such as `noNoninteractiveElementInteractions`,
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
 `noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
-`noUnusedExpressions`, and `noUnusedInstantiation`. The policy manifest contains the authoritative
-list, so removing or weakening any required rule fails the policy check.
+`noForIn`, `useGuardForIn`, `noParameterAssign`, `noUnusedExpressions`,
+`noUnusedInstantiation`, and `noUnusedTemplateLiteral`. The policy manifest contains the
+authoritative list, so removing or weakening any required rule fails the policy check.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and
@@ -31,6 +32,11 @@ completion. Re-evaluate it after Biome upgrades with:
 ```sh
 npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
 ```
+
+`useArraySortCompare` has the same analyzer blocker. Its 11 source diagnostics have explicit
+UTF-16 comparators, but enabling the rule globally still activates the crashing module resolver.
+Keep the explicit comparators and re-evaluate the rule with `noUnnecessaryConditions` after a
+Biome upgrade.
 
 ## React hook dependency lifetimes
 
