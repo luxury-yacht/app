@@ -62,6 +62,9 @@
           }
         }
       },
+      "performance": {
+        "noDelete": "error"
+      },
       "suspicious": {
         "noArrayIndexKey": "error",
         "noConfusingVoidType": "error",
@@ -74,6 +77,7 @@
         "noMisplacedAssertion": "error",
         "noNestedPromises": "error",
         "noPrototypeBuiltins": "error",
+        "noReactForwardRef": "error",
         "noReturnAssign": "error",
         "noShadow": "error",
         "noSkippedTests": "error",

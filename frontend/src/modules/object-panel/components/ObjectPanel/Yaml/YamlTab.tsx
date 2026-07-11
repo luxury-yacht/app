@@ -198,7 +198,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       const obj = doc.toJSON();
 
       if (!showManagedFields && obj && obj.metadata && obj.metadata.managedFields) {
-        delete obj.metadata.managedFields;
+        obj.metadata.managedFields = undefined;
       }
 
       return YAML.stringify(obj, YAML_STRINGIFY_OPTIONS);

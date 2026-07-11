@@ -16,10 +16,10 @@ additional applicable rules to errors. The explicit non-recommended rules includ
 React correctness, and suspicious-code checks such as `noNoninteractiveElementInteractions`,
 `useImageSize`, `useUniqueElementIds`, `noEvolvingTypes`, `noImportCycles`, `noLeakedRender`,
 `noMisplacedAssertion`, `noNestedPromises`, `noReturnAssign`, `noSkippedTests`,
-`noEmptyBlockStatements`, `noForIn`, `noShadow`, `useGuardForIn`, `noParameterAssign`,
-`noUnusedExpressions`, `noUnusedInstantiation`, and `noUnusedTemplateLiteral`. The policy manifest
-contains the authoritative list, so removing or weakening any required rule fails the policy
-check.
+`noDelete`, `noEmptyBlockStatements`, `noForIn`, `noReactForwardRef`, `noShadow`, `useGuardForIn`,
+`noParameterAssign`, `noUnusedExpressions`, `noUnusedInstantiation`, and
+`noUnusedTemplateLiteral`. The policy manifest contains the authoritative list, so removing or
+weakening any required rule fails the policy check.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and
@@ -38,6 +38,27 @@ npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
 UTF-16 comparators, but enabling the rule globally still activates the crashing module resolver.
 Keep the explicit comparators and re-evaluate the rule with `noUnnecessaryConditions` after a
 Biome upgrade.
+
+## Rules deliberately not adopted
+
+The following non-recommended rules were evaluated against this frontend and rejected as blanket
+gates. Revisit them when their rule semantics or the application architecture changes:
+
+- `performance.useTopLevelRegex`: the 2026-07-11 isolated audit found 158 diagnostics, including 90
+  in tests or stories and 66 in production. `biome explain useTopLevelRegex` warns that hoisting
+  every expression can increase browser startup work. Keep hot regular expressions top-level when
+  profiling supports it; do not force cold and test-only expressions to module initialization.
+- `performance.noJsxPropsBind`: the isolated audit found 504 diagnostics. An AST classification of
+  the flagged JSX found at least 269 intrinsic DOM handlers and 196 component props. Intrinsic
+  handlers cannot invalidate a memoized child component, so the blanket rule would add callback
+  hooks and dependency arrays without establishing a performance contract. Stabilize individual
+  component callbacks only when profiling or API identity requires it.
+- `style.useComponentExportOnlyModules`: Vite React and HMR are configured in
+  `frontend/vite.config.ts:9-16`, but the isolated audit found 106 diagnostics: 65 production
+  exports across 33 modules and 41 test/story exports. The production set includes 23 context hooks
+  and 18 helper functions that intentionally share their provider or component module. The project
+  accepts a full reload for those edited modules instead of splitting cohesive public APIs solely
+  to preserve development Fast Refresh state.
 
 ## React hook dependency lifetimes
 

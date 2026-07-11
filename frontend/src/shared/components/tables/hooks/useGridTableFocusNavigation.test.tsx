@@ -6,7 +6,7 @@
 
 import { AriaGrid } from '@shared/components/tables/AriaGridPrimitives';
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
-import React, { act, forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { act, useImperativeHandle, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
@@ -30,39 +30,41 @@ interface HarnessProps {
  * real GridTable DOM structure: a single div with both .gridtable-row class and
  * data-row-key attribute on the same element.
  */
-const Harness = forwardRef<HarnessHandle, HarnessProps>(
-  ({ tableData, updateHoverForElement }, ref) => {
-    const wrapperRef = useRef<HTMLTableElement | null>(null);
+const Harness = ({
+  tableData,
+  updateHoverForElement,
+  ref,
+}: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
+  const wrapperRef = useRef<HTMLTableElement | null>(null);
 
-    const result = useGridTableFocusNavigation<Row>({
-      tableData,
-      keyExtractor: (row) => row.id,
-      wrapperRef,
-      updateHoverForElement,
-      isShortcutOptOutTarget: () => false,
-      shouldIgnoreRowClick: () => false,
-    });
+  const result = useGridTableFocusNavigation<Row>({
+    tableData,
+    keyExtractor: (row) => row.id,
+    wrapperRef,
+    updateHoverForElement,
+    isShortcutOptOutTarget: () => false,
+    shouldIgnoreRowClick: () => false,
+  });
 
-    useImperativeHandle(ref, () => ({
-      setFocusedRowKey: result.setFocusedRowKey,
-      focusByIndex: result.focusByIndex,
-      focusedRowIndex: result.focusedRowIndex,
-      focusedRowKey: result.focusedRowKey,
-    }));
+  useImperativeHandle(ref, () => ({
+    setFocusedRowKey: result.setFocusedRowKey,
+    focusByIndex: result.focusByIndex,
+    focusedRowIndex: result.focusedRowIndex,
+    focusedRowKey: result.focusedRowKey,
+  }));
 
-    return (
-      <AriaGrid ref={wrapperRef} tabIndex={0}>
-        <tbody>
-          {tableData.map((row, i) => (
-            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
-              <td>Row {i}</td>
-            </tr>
-          ))}
-        </tbody>
-      </AriaGrid>
-    );
-  }
-);
+  return (
+    <AriaGrid ref={wrapperRef} tabIndex={0}>
+      <tbody>
+        {tableData.map((row, i) => (
+          <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+            <td>Row {i}</td>
+          </tr>
+        ))}
+      </tbody>
+    </AriaGrid>
+  );
+};
 
 describe('useGridTableFocusNavigation', () => {
   let container: HTMLDivElement;
@@ -155,54 +157,56 @@ interface ExtendedProps {
   isShortcutOptOutTarget?: (target: EventTarget | null) => boolean;
 }
 
-const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
-  (
-    { tableData, updateHoverForElement, onRowClick, onRowPointerClick, isShortcutOptOutTarget },
-    ref
-  ) => {
-    const wrapperRef = useRef<HTMLTableElement | null>(null);
+const ExtendedHarness = ({
+  tableData,
+  updateHoverForElement,
+  onRowClick,
+  onRowPointerClick,
+  isShortcutOptOutTarget,
+  ref,
+}: ExtendedProps & { ref?: React.Ref<ExtendedHandle> }) => {
+  const wrapperRef = useRef<HTMLTableElement | null>(null);
 
-    const result = useGridTableFocusNavigation<Row>({
-      tableData,
-      keyExtractor: (row) => row.id,
-      wrapperRef,
-      updateHoverForElement,
-      onRowClick,
-      onRowPointerClick,
-      isShortcutOptOutTarget: isShortcutOptOutTarget ?? (() => false),
-      shouldIgnoreRowClick: () => false,
-    });
+  const result = useGridTableFocusNavigation<Row>({
+    tableData,
+    keyExtractor: (row) => row.id,
+    wrapperRef,
+    updateHoverForElement,
+    onRowClick,
+    onRowPointerClick,
+    isShortcutOptOutTarget: isShortcutOptOutTarget ?? (() => false),
+    shouldIgnoreRowClick: () => false,
+  });
 
-    useImperativeHandle(ref, () => ({
-      setFocusedRowKey: result.setFocusedRowKey,
-      focusByIndex: result.focusByIndex,
-      focusedRowIndex: result.focusedRowIndex,
-      focusedRowKey: result.focusedRowKey,
-      shortcutsActive: result.shortcutsActive,
-      isShortcutsSuppressed: result.isShortcutsSuppressed,
-      isWrapperFocused: result.isWrapperFocused,
-      suppressFocusedRowHighlight: result.suppressFocusedRowHighlight,
-      getRowClassNameWithFocus: result.getRowClassNameWithFocus,
-      handleWrapperFocus: result.handleWrapperFocus,
-      handleWrapperBlur: result.handleWrapperBlur,
-      handleRowActivation: result.handleRowActivation,
-      handleRowClick: result.handleRowClick,
-      lastNavigationMethodRef: result.lastNavigationMethodRef,
-    }));
+  useImperativeHandle(ref, () => ({
+    setFocusedRowKey: result.setFocusedRowKey,
+    focusByIndex: result.focusByIndex,
+    focusedRowIndex: result.focusedRowIndex,
+    focusedRowKey: result.focusedRowKey,
+    shortcutsActive: result.shortcutsActive,
+    isShortcutsSuppressed: result.isShortcutsSuppressed,
+    isWrapperFocused: result.isWrapperFocused,
+    suppressFocusedRowHighlight: result.suppressFocusedRowHighlight,
+    getRowClassNameWithFocus: result.getRowClassNameWithFocus,
+    handleWrapperFocus: result.handleWrapperFocus,
+    handleWrapperBlur: result.handleWrapperBlur,
+    handleRowActivation: result.handleRowActivation,
+    handleRowClick: result.handleRowClick,
+    lastNavigationMethodRef: result.lastNavigationMethodRef,
+  }));
 
-    return (
-      <AriaGrid ref={wrapperRef} tabIndex={0}>
-        <tbody>
-          {tableData.map((row, i) => (
-            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
-              <td>Row {i}</td>
-            </tr>
-          ))}
-        </tbody>
-      </AriaGrid>
-    );
-  }
-);
+  return (
+    <AriaGrid ref={wrapperRef} tabIndex={0}>
+      <tbody>
+        {tableData.map((row, i) => (
+          <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+            <td>Row {i}</td>
+          </tr>
+        ))}
+      </tbody>
+    </AriaGrid>
+  );
+};
 
 describe('useGridTableFocusNavigation – pointer vs keyboard activation', () => {
   let container: HTMLDivElement;

@@ -14,6 +14,7 @@ import { requireValue } from '@/test-utils/requireValue';
 interface CapturedCodeMirrorProps {
   value: string;
   onCreateEditor?: (view: unknown) => void;
+  ref?: React.Ref<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ const codeMirrorState = {
   value: '',
 };
 
-const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
+const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
@@ -73,7 +74,7 @@ const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) =>
       {props.value}
     </div>
   );
-});
+};
 CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const themeMocks = vi.hoisted(() => ({

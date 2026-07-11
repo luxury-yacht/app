@@ -7,7 +7,7 @@
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
-import React, { act, forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { act, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,49 +61,51 @@ const getColumnMinWidth = <T,>(column: GridColumnDefinition<T>) =>
 const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) =>
   typeof column.maxWidth === 'number' ? column.maxWidth : 480;
 
-const Harness = forwardRef<HarnessHandle, HarnessProps>(
-  ({ enable = true, measureWidth = 320 }, ref) => {
-    const [widths, setWidths] = useState<Record<string, number>>({
-      name: 220,
-      kind: 140,
-      status: 110,
-    });
-    const manualRef = useRef(new Set<string>());
+const Harness = ({
+  enable = true,
+  measureWidth = 320,
+  ref,
+}: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
+  const [widths, setWidths] = useState<Record<string, number>>({
+    name: 220,
+    kind: 140,
+    status: 110,
+  });
+  const manualRef = useRef(new Set<string>());
 
-    const columns = useMemo(() => baseColumns, []);
+  const columns = useMemo(() => baseColumns, []);
 
-    const controller = useColumnResizeController<SampleRow>({
-      columns,
-      renderedColumns: columns,
-      columnWidths: widths,
-      setColumnWidths: setWidths,
-      manuallyResizedColumnsRef: manualRef,
-      getColumnMinWidth,
-      getColumnMaxWidth,
-      measureColumnWidth: () => measureWidth,
-      enableColumnResizing: enable,
-      isFixedColumnKey: (key) => key === 'status',
-    });
+  const controller = useColumnResizeController<SampleRow>({
+    columns,
+    renderedColumns: columns,
+    columnWidths: widths,
+    setColumnWidths: setWidths,
+    manuallyResizedColumnsRef: manualRef,
+    getColumnMinWidth,
+    getColumnMaxWidth,
+    measureColumnWidth: () => measureWidth,
+    enableColumnResizing: enable,
+    isFixedColumnKey: (key) => key === 'status',
+  });
 
-    const widthsRef = useRef(widths);
-    widthsRef.current = widths;
+  const widthsRef = useRef(widths);
+  widthsRef.current = widths;
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        beginResize: controller.handleResizeStart,
-        resizeWithKeyboard: controller.handleResizeKeyDown,
-        autoSizeColumn: controller.autoSizeColumn,
-        resetManualResizes: controller.resetManualResizes,
-        getWidths: () => widthsRef.current,
-        getManualKeys: () => Array.from(manualRef.current),
-      }),
-      [controller]
-    );
+  useImperativeHandle(
+    ref,
+    () => ({
+      beginResize: controller.handleResizeStart,
+      resizeWithKeyboard: controller.handleResizeKeyDown,
+      autoSizeColumn: controller.autoSizeColumn,
+      resetManualResizes: controller.resetManualResizes,
+      getWidths: () => widthsRef.current,
+      getManualKeys: () => Array.from(manualRef.current),
+    }),
+    [controller]
+  );
 
-    return null;
-  }
-);
+  return null;
+};
 
 const renderHarness = async (props?: HarnessProps) => {
   const container = document.createElement('div');

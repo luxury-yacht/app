@@ -121,7 +121,7 @@ describe('Sidebar', () => {
       Element.prototype.scrollIntoView = nativeScrollIntoView;
     } else {
       // @ts-expect-error cleanup
-      delete Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = undefined;
     }
   });
   let container: HTMLDivElement | null;
@@ -456,7 +456,7 @@ describe('Sidebar', () => {
       Element.prototype.scrollIntoView = originalScroll;
     } else {
       // @ts-expect-error cleanup
-      delete Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = undefined;
     }
     document.querySelector = originalQuerySelector;
   });

@@ -6,7 +6,8 @@
  */
 
 import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
-import { act, forwardRef } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +27,7 @@ describe('useGridTableHoverFallback', () => {
 
     const wrapperRef = { current: wrapper };
 
-    const Harness = forwardRef<HTMLDivElement, { visible: boolean }>((props, ref) => {
+    const Harness = ({ ref, ...props }: { visible: boolean; ref?: React.Ref<HTMLDivElement> }) => {
       useGridTableHoverFallback({
         hoverStateVisible: props.visible,
         wrapperRef,
@@ -34,7 +35,7 @@ describe('useGridTableHoverFallback', () => {
         tableLength: 2,
       });
       return <div ref={ref} />;
-    });
+    };
 
     const container = document.createElement('div');
     document.body.appendChild(container);

@@ -11,7 +11,7 @@ import {
   type GridTableContextMenuState,
   useGridTableContextMenu,
 } from '@shared/components/tables/hooks/useGridTableContextMenu';
-import React, { act, forwardRef, useImperativeHandle } from 'react';
+import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
@@ -60,63 +60,65 @@ interface HarnessProps {
   wrapperItems?: ContextMenuItem[];
 }
 
-const Harness = forwardRef<HarnessHandle, HarnessProps>(
-  ({ enableContextMenu = true, wrapperItems }, ref) => {
-    const contextMenu = useGridTableContextMenu<SampleRow>({
-      enableContextMenu,
-      columns,
-      getCustomContextMenuItems: (item, columnKey) => [
-        { label: `Inspect ${columnKey}`, onClick: vi.fn() },
-        { label: `Select ${item.name}`, onClick: vi.fn() },
-      ],
-      getContextMenuItems: (columnKey, item, source) => {
-        if (source === 'empty') {
-          return wrapperItems ?? [];
-        }
-        return item
-          ? [{ label: `Sort ${columnKey}`, onClick: vi.fn() }]
-          : [{ label: 'noop', onClick: vi.fn() }];
+const Harness = ({
+  enableContextMenu = true,
+  wrapperItems,
+  ref,
+}: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
+  const contextMenu = useGridTableContextMenu<SampleRow>({
+    enableContextMenu,
+    columns,
+    getCustomContextMenuItems: (item, columnKey) => [
+      { label: `Inspect ${columnKey}`, onClick: vi.fn() },
+      { label: `Select ${item.name}`, onClick: vi.fn() },
+    ],
+    getContextMenuItems: (columnKey, item, source) => {
+      if (source === 'empty') {
+        return wrapperItems ?? [];
+      }
+      return item
+        ? [{ label: `Sort ${columnKey}`, onClick: vi.fn() }]
+        : [{ label: 'noop', onClick: vi.fn() }];
+    },
+    onSort: vi.fn(),
+  });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCellMenu(opts) {
+        const event = buildMouseEvent({ ctrlKey: opts?.enable === false });
+        return contextMenu.openCellContextMenu(event, 'name', { id: '1', name: 'Row 1' });
       },
-      onSort: vi.fn(),
-    });
+      openCellMenuViaKeyboard(element?: HTMLElement) {
+        return contextMenu.openCellContextMenuFromKeyboard(
+          'name',
+          { id: '1', name: 'Row 1' },
+          element
+        );
+      },
+      openWrapperMenu(opts) {
+        const target = document.createElement('div');
+        target.classList.add('gridtable-wrapper');
+        opts?.classList?.forEach((cls) => {
+          target.classList.add(cls);
+        });
+        const event = buildMouseEvent({
+          ctrlKey: opts?.enable === false,
+          clientX: 16,
+          clientY: 18,
+          target,
+        });
+        return contextMenu.openWrapperContextMenu(event);
+      },
+      getContextMenu: () => contextMenu.contextMenu,
+      close: () => contextMenu.closeContextMenu(),
+    }),
+    [contextMenu]
+  );
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        openCellMenu(opts) {
-          const event = buildMouseEvent({ ctrlKey: opts?.enable === false });
-          return contextMenu.openCellContextMenu(event, 'name', { id: '1', name: 'Row 1' });
-        },
-        openCellMenuViaKeyboard(element?: HTMLElement) {
-          return contextMenu.openCellContextMenuFromKeyboard(
-            'name',
-            { id: '1', name: 'Row 1' },
-            element
-          );
-        },
-        openWrapperMenu(opts) {
-          const target = document.createElement('div');
-          target.classList.add('gridtable-wrapper');
-          opts?.classList?.forEach((cls) => {
-            target.classList.add(cls);
-          });
-          const event = buildMouseEvent({
-            ctrlKey: opts?.enable === false,
-            clientX: 16,
-            clientY: 18,
-            target,
-          });
-          return contextMenu.openWrapperContextMenu(event);
-        },
-        getContextMenu: () => contextMenu.contextMenu,
-        close: () => contextMenu.closeContextMenu(),
-      }),
-      [contextMenu]
-    );
-
-    return null;
-  }
-);
+  return null;
+};
 
 const renderHarness = async (props?: HarnessProps) => {
   const container = document.createElement('div');

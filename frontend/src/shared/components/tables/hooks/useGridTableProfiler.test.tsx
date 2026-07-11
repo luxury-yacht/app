@@ -31,10 +31,10 @@ const createHarness = async () => {
   const root = ReactDOM.createRoot(container);
   const ref = React.createRef<HarnessHandle>();
 
-  const Harness = React.forwardRef<HarnessHandle>((_props, forwardRef) => {
+  const Harness = ({ ref: profilerRef }: { ref?: React.Ref<HarnessHandle> }) => {
     const profiler = useGridTableProfiler();
 
-    useImperativeHandle(forwardRef, () => ({
+    useImperativeHandle(profilerRef, () => ({
       start: profiler.startFrameSampler,
       stop: profiler.stopFrameSampler,
       wrap: profiler.wrapWithProfiler,
@@ -43,7 +43,7 @@ const createHarness = async () => {
     }));
 
     return null;
-  });
+  };
 
   await act(async () => {
     root.render(<Harness ref={ref} />);

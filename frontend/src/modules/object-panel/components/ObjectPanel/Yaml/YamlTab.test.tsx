@@ -23,6 +23,7 @@ interface CapturedCodeMirrorProps {
   extensions: unknown[];
   onChange: (value: string) => void;
   onCreateEditor?: (view: unknown) => void;
+  ref?: React.Ref<unknown>;
 }
 
 interface MockEditorView {
@@ -85,7 +86,7 @@ const codeMirrorState: CodeMirrorHarness = {
   selectionText: '',
 };
 
-const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
+const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
   const { onCreateEditor } = props;
   codeMirrorState.value = props.value;
   codeMirrorState.latestProps.current = props;
@@ -102,7 +103,7 @@ const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) =>
       {props.value}
     </div>
   );
-});
+};
 CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const yamlErrorsMocks = vi.hoisted(() => ({

@@ -138,11 +138,11 @@ policy-locked, and no new suppression or disabled override exists. The separatel
 
 | Rule | Diagnostics | Work and decision criteria |
 | --- | ---: | --- |
-| `suspicious.noReactForwardRef` | 19 | The fresh isolated audit after Phase 1 reports 19 production and test-harness uses. The project declares React 19.2.7 (`frontend/package.json:41-42`), and `npx biome explain noReactForwardRef` says React 19 can accept `ref` as a prop. Migrate one component at a time with ref-forwarding tests before enabling it. |
-| `performance.useTopLevelRegex` | 158 | Hoist render/callback-local regular expressions when construction is repeated and semantics do not depend on local flags or state. Keep locally parameterized regex creation explicit. |
-| `performance.noDelete` | 20 | Replace shape-changing deletion where a stable immutable reconstruction is clearer; verify serialization and ownership semantics before changing mutable registries. |
-| `performance.noJsxPropsBind` | 504 | Do not apply mechanically. Profile representative tables, panels, and menus first. Enable only if stable callback identities produce measurable benefit without dependency-array churn or obscuring component logic. |
-| `style.useComponentExportOnlyModules` | 85 | Verify whether the current Vite React Fast Refresh integration needs this restriction. If adopted, separate component exports from helpers while preserving public module boundaries. |
+| `suspicious.noReactForwardRef` | 19 | ✅ Migrated production components and test harnesses to React 19 ref props using the full `React.Ref<T>` contract; 108 focused tests pass and the rule is policy-locked. |
+| `performance.useTopLevelRegex` | 158 | ⛔ Rejected as a blanket gate: 90 findings are tests/stories, 66 are production, and Biome documents the browser-startup cost of hoisting cold expressions. Hot expressions remain a profiling decision. |
+| `performance.noDelete` | 20 | ✅ Replaced shape deletion with stable undefined state, YAML omission, or explicit invalid-test construction; 81 focused tests pass and the rule is policy-locked. |
+| `performance.noJsxPropsBind` | 504 | ⛔ Rejected as a blanket gate: AST classification found at least 269 intrinsic handlers and 196 component props. Intrinsic handlers do not create memoized-child prop churn, and no measured project regression justifies 504 callback wrappers. |
+| `style.useComponentExportOnlyModules` | 106 | ⛔ Rejected after verifying Vite React HMR: the rule would split 65 production exports across 33 modules plus 41 test/story exports. Context hooks and their providers remain cohesive; affected modules may full-reload during development. |
 
 Acceptance: React ref contracts have regression tests; performance rules are enabled only with a
 demonstrated project benefit or a clear invariant, not solely because they are named “performance.”
@@ -275,3 +275,7 @@ For each adopted rule:
   blocked only by the documented Biome resolver panic.
 - 2026-07-11: Began Phase 2 by refreshing the isolated `noReactForwardRef` inventory; it now has 19
   sites across the shared ARIA grid primitives, YAML editor, and test harnesses.
+- 2026-07-11: Completed Phase 2. Policy-locked `noReactForwardRef` and `noDelete`; focused suites
+  pass 108 ref tests and 81 deletion-semantics tests. Rejected `useTopLevelRegex`,
+  `noJsxPropsBind`, and `useComponentExportOnlyModules` as blanket gates with measured repository
+  inventories and durable rule-specific rationale in `docs/frontend/biome.md`.

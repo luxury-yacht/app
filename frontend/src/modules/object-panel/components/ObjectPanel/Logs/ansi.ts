@@ -212,13 +212,13 @@ const applySgrCodes = (
     const code = normalizedCodes[i];
     switch (code) {
       case 0:
-        delete state.color;
-        delete state.backgroundColor;
-        delete state.fontWeight;
-        delete state.fontStyle;
-        delete state.textDecoration;
-        delete state.dim;
-        delete state.inverse;
+        state.color = undefined;
+        state.backgroundColor = undefined;
+        state.fontWeight = undefined;
+        state.fontStyle = undefined;
+        state.textDecoration = undefined;
+        state.dim = undefined;
+        state.inverse = undefined;
         break;
       case 1:
         state.fontWeight = '600';
@@ -236,23 +236,23 @@ const applySgrCodes = (
         state.inverse = true;
         break;
       case 22:
-        delete state.fontWeight;
-        delete state.dim;
+        state.fontWeight = undefined;
+        state.dim = undefined;
         break;
       case 23:
-        delete state.fontStyle;
+        state.fontStyle = undefined;
         break;
       case 24:
-        delete state.textDecoration;
+        state.textDecoration = undefined;
         break;
       case 27:
-        delete state.inverse;
+        state.inverse = undefined;
         break;
       case 39:
-        delete state.color;
+        state.color = undefined;
         break;
       case 49:
-        delete state.backgroundColor;
+        state.backgroundColor = undefined;
         break;
       case 38:
         i = applyExtendedColor(normalizedCodes, i, state, 'fg', terminalTheme);

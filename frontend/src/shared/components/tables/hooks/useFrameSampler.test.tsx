@@ -32,7 +32,10 @@ const createHarness = async (props: HarnessProps) => {
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
 
-  const Harness = React.forwardRef<HarnessHandle, HarnessProps>((incomingProps, samplerRef) => {
+  const Harness = ({
+    ref: samplerRef,
+    ...incomingProps
+  }: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
     const sampler = useFrameSampler({
       enabled: incomingProps.enabled ?? true,
       sampleLabel: 'GridTable scroll',
@@ -51,7 +54,7 @@ const createHarness = async (props: HarnessProps) => {
     }));
 
     return null;
-  });
+  };
 
   const ref = React.createRef<HarnessHandle>();
 

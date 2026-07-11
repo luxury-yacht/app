@@ -45,19 +45,21 @@ const codeMirrorState = {
 interface CapturedCodeMirrorProps {
   value: string;
   onCreateEditor?: (view: unknown) => void;
+  ref?: React.Ref<unknown>;
 }
 
-const CodeMirrorMock = React.forwardRef((props: CapturedCodeMirrorProps, ref) => {
+const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
+  const { onCreateEditor, value } = props;
   if (ref && typeof ref === 'object') {
     (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
       view: codeMirrorState.editorView,
     };
   }
   React.useEffect(() => {
-    props.onCreateEditor?.(codeMirrorState.editorView);
-  }, [props]);
-  return <div data-testid="code-mirror">{props.value}</div>;
-});
+    onCreateEditor?.(codeMirrorState.editorView);
+  }, [onCreateEditor]);
+  return <div data-testid="code-mirror">{value}</div>;
+};
 CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const themeMocks = vi.hoisted(() => ({

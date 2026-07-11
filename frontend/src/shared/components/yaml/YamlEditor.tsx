@@ -25,15 +25,7 @@ import { deriveCopyText } from '@ui/shortcuts/context';
 import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { ClipboardGetText } from '@wailsjs/runtime/runtime';
 import type React from 'react';
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   copyCodeMirrorSelection,
   cutCodeMirrorSelection,
@@ -204,567 +196,560 @@ const insertTextAtSelection = (view: EditorView | null, text: string): boolean =
   return true;
 };
 
-const YamlEditor = forwardRef<YamlEditorHandle, YamlEditorProps>(
-  (
-    {
-      value,
-      onChange,
-      editable = false,
-      disabled = false,
-      ariaLabel,
-      active = true,
-      shortcutLabel = 'YAML editor search',
-      shortcutPriority = 30,
-      height = '100%',
-      className,
-      searchPlaceholder = 'Find...',
-      showSearch = true,
-      showSearchOptions = false,
-      toolbarActions,
-      largeDocumentNotice = null,
-      extraExtensions = [],
-      keyBindings = [],
-      protectedRanges,
-      protectedRangeResolver,
-      protectedTooltip = DEFAULT_PROTECTED_TOOLTIP,
-      protectedBlockedMessage = DEFAULT_PROTECTED_BLOCKED_MESSAGE,
-      onProtectedEditBlocked,
-      onEscape,
-      onCreateEditor,
-    },
-    ref
-  ) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchState, setSearchState] = useState<YamlSearchState>(DEFAULT_SEARCH_STATE);
-    const [contextMenu, setContextMenu] = useState<{
-      position: { x: number; y: number };
-      items: ContextMenuItem[];
-    } | null>(null);
-    const [isDarkMode, setIsDarkMode] = useState(
-      () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
-    );
+const YamlEditor = ({
+  value,
+  onChange,
+  editable = false,
+  disabled = false,
+  ariaLabel,
+  active = true,
+  shortcutLabel = 'YAML editor search',
+  shortcutPriority = 30,
+  height = '100%',
+  className,
+  searchPlaceholder = 'Find...',
+  showSearch = true,
+  showSearchOptions = false,
+  toolbarActions,
+  largeDocumentNotice = null,
+  extraExtensions = [],
+  keyBindings = [],
+  protectedRanges,
+  protectedRangeResolver,
+  protectedTooltip = DEFAULT_PROTECTED_TOOLTIP,
+  protectedBlockedMessage = DEFAULT_PROTECTED_BLOCKED_MESSAGE,
+  onProtectedEditBlocked,
+  onEscape,
+  onCreateEditor,
+  ref,
+}: YamlEditorProps & { ref?: React.Ref<YamlEditorHandle> }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchState, setSearchState] = useState<YamlSearchState>(DEFAULT_SEARCH_STATE);
+  const [contextMenu, setContextMenu] = useState<{
+    position: { x: number; y: number };
+    items: ContextMenuItem[];
+  } | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
+  );
 
-    const editorRef = useRef<ReactCodeMirrorRef>(null);
-    const editorViewRef = useRef<EditorView | null>(null);
-    const editorSurfaceRef = useRef<HTMLDivElement>(null);
-    const searchInputRef = useRef<HTMLInputElement | null>(null);
-    const canEdit = editable && !disabled;
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const editorSurfaceRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const canEdit = editable && !disabled;
 
-    useEffect(() => {
-      const checkAppearanceMode = () => {
-        setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
-      };
+  useEffect(() => {
+    const checkAppearanceMode = () => {
+      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
+    };
 
-      const observer = new MutationObserver(checkAppearanceMode);
-      observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['data-appearance-mode', 'class'],
-      });
+    const observer = new MutationObserver(checkAppearanceMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-appearance-mode', 'class'],
+    });
 
-      return () => observer.disconnect();
-    }, []);
+    return () => observer.disconnect();
+  }, []);
 
-    const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
-      () => buildCodeTheme(isDarkMode),
-      [isDarkMode]
-    );
+  const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
+    () => buildCodeTheme(isDarkMode),
+    [isDarkMode]
+  );
 
-    const searchExtensions = useMemo<Extension[]>(
-      () => createSearchExtensions({ enableKeymap: false }),
-      []
-    );
+  const searchExtensions = useMemo<Extension[]>(
+    () => createSearchExtensions({ enableKeymap: false }),
+    []
+  );
 
-    const applySearchQuery = useCallback(
-      (view: EditorView | null, term: string) => {
-        if (!view) {
-          return;
-        }
-        const current = getSearchQuery(view.state);
-        const query = new SearchQuery({
-          search: term,
-          caseSensitive: searchState.caseSensitiveMatches,
-          literal: !searchState.regexMatches,
-          regexp: searchState.regexMatches,
-          wholeWord: current.wholeWord,
-          replace: current.replace,
-        });
-        view.dispatch({ effects: setSearchQuery.of(query) });
-      },
-      [searchState.caseSensitiveMatches, searchState.regexMatches]
-    );
-
-    const clearSearchQuery = useCallback((view: EditorView | null) => {
+  const applySearchQuery = useCallback(
+    (view: EditorView | null, term: string) => {
       if (!view) {
         return;
       }
       const current = getSearchQuery(view.state);
       const query = new SearchQuery({
-        search: '',
-        caseSensitive: current.caseSensitive,
-        literal: current.literal,
-        regexp: current.regexp,
+        search: term,
+        caseSensitive: searchState.caseSensitiveMatches,
+        literal: !searchState.regexMatches,
+        regexp: searchState.regexMatches,
         wholeWord: current.wholeWord,
         replace: current.replace,
       });
       view.dispatch({ effects: setSearchQuery.of(query) });
-    }, []);
+    },
+    [searchState.caseSensitiveMatches, searchState.regexMatches]
+  );
 
-    const focusSearchInput = useCallback(
-      (useSelection: boolean): boolean => {
-        if (!active) {
-          return false;
-        }
-        const view = editorViewRef.current;
-        if (!view) {
-          return false;
-        }
-        if (useSelection) {
-          const selection = view.state.sliceDoc(
-            view.state.selection.main.from,
-            view.state.selection.main.to
-          );
-          if (selection && !selection.includes('\n')) {
-            setSearchTerm(selection);
-            applySearchQuery(view, selection);
-          }
-        }
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
-        return true;
-      },
-      [active, applySearchQuery]
-    );
+  const clearSearchQuery = useCallback((view: EditorView | null) => {
+    if (!view) {
+      return;
+    }
+    const current = getSearchQuery(view.state);
+    const query = new SearchQuery({
+      search: '',
+      caseSensitive: current.caseSensitive,
+      literal: current.literal,
+      regexp: current.regexp,
+      wholeWord: current.wholeWord,
+      replace: current.replace,
+    });
+    view.dispatch({ effects: setSearchQuery.of(query) });
+  }, []);
 
-    const handleSearchChange = useCallback(
-      (event: React.ChangeEvent<HTMLInputElement>) => {
-        const term = event.target.value;
-        const view = editorViewRef.current;
-        setSearchTerm(term);
-        if (view) {
-          view.dispatch({
-            selection: EditorSelection.cursor(term ? 0 : view.state.selection.main.from),
-          });
-        }
-        applySearchQuery(view, term);
-        if (view && term) {
-          findNext(view);
-        }
-      },
-      [applySearchQuery]
-    );
-
-    const handleFindNext = useCallback(() => {
+  const focusSearchInput = useCallback(
+    (useSelection: boolean): boolean => {
+      if (!active) {
+        return false;
+      }
       const view = editorViewRef.current;
-      if (!view || !searchTerm) {
-        return;
+      if (!view) {
+        return false;
       }
-      findNext(view);
-      view.focus();
-    }, [searchTerm]);
+      if (useSelection) {
+        const selection = view.state.sliceDoc(
+          view.state.selection.main.from,
+          view.state.selection.main.to
+        );
+        if (selection && !selection.includes('\n')) {
+          setSearchTerm(selection);
+          applySearchQuery(view, selection);
+        }
+      }
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+      return true;
+    },
+    [active, applySearchQuery]
+  );
 
-    const handleFindPrevious = useCallback(() => {
+  const handleSearchChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const term = event.target.value;
       const view = editorViewRef.current;
-      if (!view || !searchTerm) {
-        return;
-      }
-      findPrevious(view);
-      view.focus();
-    }, [searchTerm]);
-
-    const handleSearchKeyDown = useCallback(
-      (event: React.KeyboardEvent<HTMLInputElement>) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-          event.preventDefault();
-          event.currentTarget.select();
-          return;
-        }
-
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          if (event.shiftKey) {
-            handleFindPrevious();
-          } else {
-            handleFindNext();
-          }
-        } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-          event.preventDefault();
-          handleFindPrevious();
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-          event.preventDefault();
-          handleFindNext();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          searchInputRef.current?.blur();
-          editorViewRef.current?.focus();
-        }
-      },
-      [handleFindNext, handleFindPrevious]
-    );
-
-    const protectedExtensions = useMemo<Extension[]>(() => {
-      if (!protectedRangeResolver && !protectedRanges?.length) {
-        return [];
-      }
-
-      const protectedDecorationExtension = EditorView.decorations.compute(['doc'], (state) => {
-        const currentText = state.doc.toString();
-        return buildProtectedDecorationSet(
-          currentText,
-          rangesForDocument(currentText, protectedRanges, protectedRangeResolver),
-          protectedTooltip
-        );
-      });
-      const protectedTransactionExtension = EditorState.transactionFilter.of((transaction) => {
-        if (!transaction.docChanged) {
-          return transaction;
-        }
-        if (
-          typeof transaction.annotation === 'function' &&
-          transaction.annotation(ExternalChange)
-        ) {
-          return transaction;
-        }
-        const ranges = rangesForDocument(
-          transaction.startState.doc.toString(),
-          protectedRanges,
-          protectedRangeResolver
-        );
-        let touchedRange: ProtectedYamlRange | null = null;
-        transaction.changes.iterChanges((fromA, toA) => {
-          if (!touchedRange) {
-            touchedRange = changeTouchesRange(fromA, toA, ranges);
-          }
+      setSearchTerm(term);
+      if (view) {
+        view.dispatch({
+          selection: EditorSelection.cursor(term ? 0 : view.state.selection.main.from),
         });
-        const blockedRange = touchedRange as ProtectedYamlRange | null;
-        if (!blockedRange) {
-          return transaction;
+      }
+      applySearchQuery(view, term);
+      if (view && term) {
+        findNext(view);
+      }
+    },
+    [applySearchQuery]
+  );
+
+  const handleFindNext = useCallback(() => {
+    const view = editorViewRef.current;
+    if (!view || !searchTerm) {
+      return;
+    }
+    findNext(view);
+    view.focus();
+  }, [searchTerm]);
+
+  const handleFindPrevious = useCallback(() => {
+    const view = editorViewRef.current;
+    if (!view || !searchTerm) {
+      return;
+    }
+    findPrevious(view);
+    view.focus();
+  }, [searchTerm]);
+
+  const handleSearchKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        event.currentTarget.select();
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleFindPrevious();
+        } else {
+          handleFindNext();
         }
-        const message = blockedRange.blockedMessage ?? protectedBlockedMessage;
-        onProtectedEditBlocked?.(message);
-        return [];
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        handleFindPrevious();
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        handleFindNext();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        searchInputRef.current?.blur();
+        editorViewRef.current?.focus();
+      }
+    },
+    [handleFindNext, handleFindPrevious]
+  );
+
+  const protectedExtensions = useMemo<Extension[]>(() => {
+    if (!protectedRangeResolver && !protectedRanges?.length) {
+      return [];
+    }
+
+    const protectedDecorationExtension = EditorView.decorations.compute(['doc'], (state) => {
+      const currentText = state.doc.toString();
+      return buildProtectedDecorationSet(
+        currentText,
+        rangesForDocument(currentText, protectedRanges, protectedRangeResolver),
+        protectedTooltip
+      );
+    });
+    const protectedTransactionExtension = EditorState.transactionFilter.of((transaction) => {
+      if (!transaction.docChanged) {
+        return transaction;
+      }
+      if (typeof transaction.annotation === 'function' && transaction.annotation(ExternalChange)) {
+        return transaction;
+      }
+      const ranges = rangesForDocument(
+        transaction.startState.doc.toString(),
+        protectedRanges,
+        protectedRangeResolver
+      );
+      let touchedRange: ProtectedYamlRange | null = null;
+      transaction.changes.iterChanges((fromA, toA) => {
+        if (!touchedRange) {
+          touchedRange = changeTouchesRange(fromA, toA, ranges);
+        }
       });
+      const blockedRange = touchedRange as ProtectedYamlRange | null;
+      if (!blockedRange) {
+        return transaction;
+      }
+      const message = blockedRange.blockedMessage ?? protectedBlockedMessage;
+      onProtectedEditBlocked?.(message);
+      return [];
+    });
 
-      return [protectedDecorationExtension, protectedTransactionExtension];
-    }, [
-      onProtectedEditBlocked,
-      protectedBlockedMessage,
-      protectedRangeResolver,
-      protectedRanges,
-      protectedTooltip,
-    ]);
+    return [protectedDecorationExtension, protectedTransactionExtension];
+  }, [
+    onProtectedEditBlocked,
+    protectedBlockedMessage,
+    protectedRangeResolver,
+    protectedRanges,
+    protectedTooltip,
+  ]);
 
-    const editorKeyBindings = useMemo<KeyBinding[]>(
-      () => [
-        {
-          key: 'Mod-f',
-          preventDefault: true,
-          run: () => focusSearchInput(true),
-        },
-        {
-          key: 'Shift-Mod-f',
-          preventDefault: true,
-          run: () => focusSearchInput(true),
-        },
-        ...(!disabled ? keyBindings : []),
-      ],
-      [disabled, focusSearchInput, keyBindings]
-    );
+  const editorKeyBindings = useMemo<KeyBinding[]>(
+    () => [
+      {
+        key: 'Mod-f',
+        preventDefault: true,
+        run: () => focusSearchInput(true),
+      },
+      {
+        key: 'Shift-Mod-f',
+        preventDefault: true,
+        run: () => focusSearchInput(true),
+      },
+      ...(!disabled ? keyBindings : []),
+    ],
+    [disabled, focusSearchInput, keyBindings]
+  );
 
-    const contextMenuExtension = useMemo<Extension>(
-      () =>
-        EditorView.domEventHandlers({
-          contextmenu: (event: MouseEvent, view: EditorView) => {
-            event.preventDefault();
+  const contextMenuExtension = useMemo<Extension>(
+    () =>
+      EditorView.domEventHandlers({
+        contextmenu: (event: MouseEvent, view: EditorView) => {
+          event.preventDefault();
 
-            const selectedText =
-              getCodeMirrorSelectedText(view) || deriveCopyText(window.getSelection()) || '';
-            const hasSelection = Boolean(selectedText);
-            const items: ContextMenuItem[] = [];
+          const selectedText =
+            getCodeMirrorSelectedText(view) || deriveCopyText(window.getSelection()) || '';
+          const hasSelection = Boolean(selectedText);
+          const items: ContextMenuItem[] = [];
 
-            if (canEdit) {
-              items.push({
-                label: 'Cut',
-                disabled: !hasSelection,
-                onClick: () => {
-                  cutCodeMirrorSelection(view);
-                },
-              });
-            }
-
+          if (canEdit) {
             items.push({
-              label: 'Copy',
+              label: 'Cut',
               disabled: !hasSelection,
               onClick: () => {
-                if (selectedText) {
-                  void navigator.clipboard.writeText(selectedText);
-                }
+                cutCodeMirrorSelection(view);
               },
             });
+          }
 
-            if (canEdit) {
-              items.push({
-                label: 'Paste',
-                onClick: () => {
-                  // The browser clipboard-read API is permission-gated inside
-                  // the Wails WebView; read through the Go-side clipboard, the
-                  // same source the Edit menu paste uses.
-                  void ClipboardGetText()
-                    .then((text) => {
-                      if (!text) return;
-                      insertTextAtSelection(view, text);
-                    })
-                    .catch(() => undefined);
-                },
-              });
-            }
+          items.push({
+            label: 'Copy',
+            disabled: !hasSelection,
+            onClick: () => {
+              if (selectedText) {
+                void navigator.clipboard.writeText(selectedText);
+              }
+            },
+          });
 
-            items.push({ divider: true });
+          if (canEdit) {
             items.push({
-              label: 'Select All',
-              onClick: () => selectCodeMirrorContent(view),
+              label: 'Paste',
+              onClick: () => {
+                // The browser clipboard-read API is permission-gated inside
+                // the Wails WebView; read through the Go-side clipboard, the
+                // same source the Edit menu paste uses.
+                void ClipboardGetText()
+                  .then((text) => {
+                    if (!text) return;
+                    insertTextAtSelection(view, text);
+                  })
+                  .catch(() => undefined);
+              },
             });
+          }
 
-            setContextMenu({
-              position: { x: event.clientX, y: event.clientY },
-              items,
-            });
-            return true;
-          },
-        }),
-      [canEdit]
-    );
+          items.push({ divider: true });
+          items.push({
+            label: 'Select All',
+            onClick: () => selectCodeMirrorContent(view),
+          });
 
-    // Read-only content is not editable and would otherwise be unfocusable,
-    // which keeps document.activeElement outside the editor — clipboard and
-    // select-all shortcuts route to the surface that contains the focused
-    // element, so the read-mode editor must be able to take focus.
-    const readModeFocusExtensions = useMemo<Extension[]>(
-      () => (canEdit ? [] : [EditorView.contentAttributes.of({ tabindex: '0' })]),
-      [canEdit]
-    );
-
-    const editorExtensions = useMemo<Extension[]>(
-      () => [
-        yamlLang(),
-        EditorView.lineWrapping,
-        highlightExtension,
-        ...searchExtensions,
-        ...protectedExtensions,
-        ...readModeFocusExtensions,
-        keymap.of(editorKeyBindings),
-        contextMenuExtension,
-        ...extraExtensions,
-      ],
-      [
-        contextMenuExtension,
-        editorKeyBindings,
-        extraExtensions,
-        highlightExtension,
-        protectedExtensions,
-        readModeFocusExtensions,
-        searchExtensions,
-      ]
-    );
-
-    const handleEditorCreated = useCallback(
-      (view: EditorView) => {
-        editorViewRef.current = view;
-        setSearchTerm('');
-        clearSearchQuery(view);
-        closeSearchPanel(view);
-        onCreateEditor?.(view);
-      },
-      [clearSearchQuery, onCreateEditor]
-    );
-
-    useEffect(() => {
-      void value;
-      const view = editorRef.current?.view;
-      if (view) {
-        editorViewRef.current = view;
-        setSearchTerm('');
-        clearSearchQuery(view);
-        closeSearchPanel(view);
-      }
-    }, [clearSearchQuery, value]);
-
-    useEffect(() => {
-      applySearchQuery(editorViewRef.current, searchTerm);
-    }, [applySearchQuery, searchTerm]);
-
-    useSearchShortcutTarget({
-      isActive: active,
-      focus: () => focusSearchInput(true),
-      priority: shortcutPriority,
-      label: shortcutLabel,
-    });
-
-    useKeyboardSurface({
-      kind: 'editor',
-      rootRef: editorSurfaceRef,
-      active,
-      priority: shortcutPriority,
-      onEscape: () => onEscape?.() ?? false,
-      onNativeAction: ({ action, text }) => {
-        if (action === 'copy') {
-          return copyCodeMirrorSelection(editorViewRef.current);
-        }
-        if (action === 'cut') {
-          return canEdit ? cutCodeMirrorSelection(editorViewRef.current) : false;
-        }
-        if (action === 'selectAll') {
-          return selectCodeMirrorContent(editorViewRef.current);
-        }
-        if (action !== 'paste' || !canEdit || typeof text !== 'string') {
-          return false;
-        }
-        return insertTextAtSelection(editorViewRef.current, text);
-      },
-    });
-
-    useImperativeHandle(
-      ref,
-      () => ({
-        focus: () => editorViewRef.current?.focus(),
-        selectAll: () => selectCodeMirrorContent(editorViewRef.current),
-        getSelectedText: () => getCodeMirrorSelectedText(editorViewRef.current),
-        getView: () => editorViewRef.current,
+          setContextMenu({
+            position: { x: event.clientX, y: event.clientY },
+            items,
+          });
+          return true;
+        },
       }),
-      []
-    );
+    [canEdit]
+  );
 
-    const searchIconBarItems = useMemo<IconBarItem[]>(
-      () => [
-        {
-          type: 'action',
-          id: 'search-previous',
-          icon: <YamlPreviousIcon width={16} height={16} />,
-          onClick: handleFindPrevious,
-          title: 'Previous match',
-          ariaLabel: 'Previous match',
-          disabled: !searchTerm,
-        },
-        {
-          type: 'action',
-          id: 'search-next',
-          icon: <YamlNextIcon width={16} height={16} />,
-          onClick: handleFindNext,
-          title: 'Next match',
-          ariaLabel: 'Next match',
-          disabled: !searchTerm,
-        },
-        ...(showSearchOptions
-          ? ([
-              {
-                type: 'toggle' as const,
-                id: 'case-sensitive-search',
-                icon: <CaseSensitiveIcon width={18} height={18} />,
-                active: searchState.caseSensitiveMatches,
-                onClick: () =>
-                  setSearchState((current) =>
-                    current.regexMatches
-                      ? current
-                      : {
-                          ...current,
-                          caseSensitiveMatches: !current.caseSensitiveMatches,
-                        }
-                  ),
-                title: 'Case-sensitive search',
-                ariaLabel: 'Case-sensitive search',
-                disabled: searchState.regexMatches,
-              },
-              {
-                type: 'toggle' as const,
-                id: 'regex-search',
-                icon: <RegexSearchIcon width={16} height={16} />,
-                active: searchState.regexMatches,
-                onClick: () =>
-                  setSearchState((current) => ({
-                    ...current,
-                    regexMatches: !current.regexMatches,
-                    caseSensitiveMatches: !current.regexMatches
-                      ? false
-                      : current.caseSensitiveMatches,
-                  })),
-                title: 'Enable regular expression search',
-                ariaLabel: 'Enable regular expression search',
-              },
-            ] satisfies IconBarItem[])
-          : []),
-      ],
-      [
-        handleFindNext,
-        handleFindPrevious,
-        searchState.caseSensitiveMatches,
-        searchState.regexMatches,
-        searchTerm,
-        showSearchOptions,
-      ]
-    );
+  // Read-only content is not editable and would otherwise be unfocusable,
+  // which keeps document.activeElement outside the editor — clipboard and
+  // select-all shortcuts route to the surface that contains the focused
+  // element, so the read-mode editor must be able to take focus.
+  const readModeFocusExtensions = useMemo<Extension[]>(
+    () => (canEdit ? [] : [EditorView.contentAttributes.of({ tabindex: '0' })]),
+    [canEdit]
+  );
 
-    const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
+  const editorExtensions = useMemo<Extension[]>(
+    () => [
+      yamlLang(),
+      EditorView.lineWrapping,
+      highlightExtension,
+      ...searchExtensions,
+      ...protectedExtensions,
+      ...readModeFocusExtensions,
+      keymap.of(editorKeyBindings),
+      contextMenuExtension,
+      ...extraExtensions,
+    ],
+    [
+      contextMenuExtension,
+      editorKeyBindings,
+      extraExtensions,
+      highlightExtension,
+      protectedExtensions,
+      readModeFocusExtensions,
+      searchExtensions,
+    ]
+  );
 
-    return (
-      <div className={`yaml-editor ${className ?? ''}`}>
-        {!!(showSearch || toolbarActions) && (
-          <div className="yaml-header yaml-editor-header">
-            {!!showSearch && (
-              <div className="yaml-search-controls">
-                <div className="find-controls">
-                  <input
-                    ref={searchInputRef}
-                    className="find-input"
-                    type="text"
-                    placeholder={searchPlaceholder}
-                    value={searchTerm}
-                    onChange={handleSearchChange}
-                    onKeyDown={handleSearchKeyDown}
-                  />
-                </div>
-                <IconBar items={searchIconBarItems} />
+  const handleEditorCreated = useCallback(
+    (view: EditorView) => {
+      editorViewRef.current = view;
+      setSearchTerm('');
+      clearSearchQuery(view);
+      closeSearchPanel(view);
+      onCreateEditor?.(view);
+    },
+    [clearSearchQuery, onCreateEditor]
+  );
+
+  useEffect(() => {
+    void value;
+    const view = editorRef.current?.view;
+    if (view) {
+      editorViewRef.current = view;
+      setSearchTerm('');
+      clearSearchQuery(view);
+      closeSearchPanel(view);
+    }
+  }, [clearSearchQuery, value]);
+
+  useEffect(() => {
+    applySearchQuery(editorViewRef.current, searchTerm);
+  }, [applySearchQuery, searchTerm]);
+
+  useSearchShortcutTarget({
+    isActive: active,
+    focus: () => focusSearchInput(true),
+    priority: shortcutPriority,
+    label: shortcutLabel,
+  });
+
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: editorSurfaceRef,
+    active,
+    priority: shortcutPriority,
+    onEscape: () => onEscape?.() ?? false,
+    onNativeAction: ({ action, text }) => {
+      if (action === 'copy') {
+        return copyCodeMirrorSelection(editorViewRef.current);
+      }
+      if (action === 'cut') {
+        return canEdit ? cutCodeMirrorSelection(editorViewRef.current) : false;
+      }
+      if (action === 'selectAll') {
+        return selectCodeMirrorContent(editorViewRef.current);
+      }
+      if (action !== 'paste' || !canEdit || typeof text !== 'string') {
+        return false;
+      }
+      return insertTextAtSelection(editorViewRef.current, text);
+    },
+  });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => editorViewRef.current?.focus(),
+      selectAll: () => selectCodeMirrorContent(editorViewRef.current),
+      getSelectedText: () => getCodeMirrorSelectedText(editorViewRef.current),
+      getView: () => editorViewRef.current,
+    }),
+    []
+  );
+
+  const searchIconBarItems = useMemo<IconBarItem[]>(
+    () => [
+      {
+        type: 'action',
+        id: 'search-previous',
+        icon: <YamlPreviousIcon width={16} height={16} />,
+        onClick: handleFindPrevious,
+        title: 'Previous match',
+        ariaLabel: 'Previous match',
+        disabled: !searchTerm,
+      },
+      {
+        type: 'action',
+        id: 'search-next',
+        icon: <YamlNextIcon width={16} height={16} />,
+        onClick: handleFindNext,
+        title: 'Next match',
+        ariaLabel: 'Next match',
+        disabled: !searchTerm,
+      },
+      ...(showSearchOptions
+        ? ([
+            {
+              type: 'toggle' as const,
+              id: 'case-sensitive-search',
+              icon: <CaseSensitiveIcon width={18} height={18} />,
+              active: searchState.caseSensitiveMatches,
+              onClick: () =>
+                setSearchState((current) =>
+                  current.regexMatches
+                    ? current
+                    : {
+                        ...current,
+                        caseSensitiveMatches: !current.caseSensitiveMatches,
+                      }
+                ),
+              title: 'Case-sensitive search',
+              ariaLabel: 'Case-sensitive search',
+              disabled: searchState.regexMatches,
+            },
+            {
+              type: 'toggle' as const,
+              id: 'regex-search',
+              icon: <RegexSearchIcon width={16} height={16} />,
+              active: searchState.regexMatches,
+              onClick: () =>
+                setSearchState((current) => ({
+                  ...current,
+                  regexMatches: !current.regexMatches,
+                  caseSensitiveMatches: !current.regexMatches
+                    ? false
+                    : current.caseSensitiveMatches,
+                })),
+              title: 'Enable regular expression search',
+              ariaLabel: 'Enable regular expression search',
+            },
+          ] satisfies IconBarItem[])
+        : []),
+    ],
+    [
+      handleFindNext,
+      handleFindPrevious,
+      searchState.caseSensitiveMatches,
+      searchState.regexMatches,
+      searchTerm,
+      showSearchOptions,
+    ]
+  );
+
+  const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
+
+  return (
+    <div className={`yaml-editor ${className ?? ''}`}>
+      {!!(showSearch || toolbarActions) && (
+        <div className="yaml-header yaml-editor-header">
+          {!!showSearch && (
+            <div className="yaml-search-controls">
+              <div className="find-controls">
+                <input
+                  ref={searchInputRef}
+                  className="find-input"
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  onKeyDown={handleSearchKeyDown}
+                />
               </div>
-            )}
-            {!!toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
-          </div>
-        )}
-        <div className="yaml-editor-content">
-          {!!largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
-          <div ref={editorSurfaceRef} className="codemirror-shell yaml-editor-shell">
-            <CodeMirror
-              ref={editorRef}
-              value={value}
-              height={height}
-              editable={canEdit}
-              basicSetup={{
-                highlightActiveLine: true,
-                highlightActiveLineGutter: true,
-                lineNumbers: true,
-                foldGutter: false,
-                searchKeymap: false,
-              }}
-              theme={codeMirrorTheme}
-              extensions={editorExtensions}
-              onChange={(nextValue) => {
-                if (canEdit) {
-                  onChange?.(nextValue);
-                }
-              }}
-              onCreateEditor={handleEditorCreated}
-              aria-label={ariaLabel}
-            />
-          </div>
-          {!!contextMenu && (
-            <ContextMenu
-              items={contextMenu.items}
-              position={contextMenu.position}
-              onClose={handleContextMenuClose}
-            />
+              <IconBar items={searchIconBarItems} />
+            </div>
           )}
+          {!!toolbarActions && <div className="yaml-editor-toolbar">{toolbarActions}</div>}
         </div>
+      )}
+      <div className="yaml-editor-content">
+        {!!largeDocumentNotice && <div className="yaml-editor-notice">{largeDocumentNotice}</div>}
+        <div ref={editorSurfaceRef} className="codemirror-shell yaml-editor-shell">
+          <CodeMirror
+            ref={editorRef}
+            value={value}
+            height={height}
+            editable={canEdit}
+            basicSetup={{
+              highlightActiveLine: true,
+              highlightActiveLineGutter: true,
+              lineNumbers: true,
+              foldGutter: false,
+              searchKeymap: false,
+            }}
+            theme={codeMirrorTheme}
+            extensions={editorExtensions}
+            onChange={(nextValue) => {
+              if (canEdit) {
+                onChange?.(nextValue);
+              }
+            }}
+            onCreateEditor={handleEditorCreated}
+            aria-label={ariaLabel}
+          />
+        </div>
+        {!!contextMenu && (
+          <ContextMenu
+            items={contextMenu.items}
+            position={contextMenu.position}
+            onClose={handleContextMenuClose}
+          />
+        )}
       </div>
-    );
-  }
-);
+    </div>
+  );
+};
 
 YamlEditor.displayName = 'YamlEditor';
 
