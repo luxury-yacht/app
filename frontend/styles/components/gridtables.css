@@ -500,6 +500,10 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   margin: 1rem;
 }
 
+.gridtable-empty-body {
+  align-items: center;
+}
+
 .gridtable-empty-filter-hint {
   margin-top: 0.5rem;
   font-size: calc(var(--grid-font-size-data) - 1px);

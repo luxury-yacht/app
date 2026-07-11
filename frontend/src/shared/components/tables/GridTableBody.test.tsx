@@ -7,12 +7,17 @@
 
 import GridTableBody from '@shared/components/tables/GridTableBody';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 
 afterEach(() => {
+  document.head.querySelectorAll('style[data-gridtable-body-contract]').forEach((style) => {
+    style.remove();
+  });
   document.body.innerHTML = '';
   vi.restoreAllMocks();
 });
@@ -160,6 +165,31 @@ describe('GridTableBody', () => {
 
     const empty = container.querySelector('.gridtable-empty');
     expect(empty?.textContent).toBe('No rows');
+  });
+
+  it('centers the semantic empty row horizontally without changing its vertical position', async () => {
+    const style = document.createElement('style');
+    style.dataset.gridtableBodyContract = 'empty-centering';
+    style.textContent = readFileSync(
+      resolve(process.cwd(), 'styles/components/gridtables.css'),
+      'utf8'
+    );
+    document.head.appendChild(style);
+
+    const { container } = await renderTableBody({
+      tableData: [],
+      virtualRows: [],
+      shouldVirtualize: false,
+    });
+
+    const body = container.querySelector<HTMLTableSectionElement>('tbody');
+    const row = container.querySelector<HTMLTableRowElement>('tr');
+    const cell = container.querySelector<HTMLTableCellElement>('td');
+    expect(window.getComputedStyle(body as HTMLTableSectionElement).flexGrow).toBe('0');
+    expect(window.getComputedStyle(body as HTMLTableSectionElement).alignItems).toBe('center');
+    expect(window.getComputedStyle(body as HTMLTableSectionElement).justifyContent).toBe('normal');
+    expect(window.getComputedStyle(row as HTMLTableRowElement).display).toBe('table-row');
+    expect(window.getComputedStyle(cell as HTMLTableCellElement).display).toBe('table-cell');
   });
 
   it('shows a filtered-empty message and clear-filters affordance when filters are active', async () => {

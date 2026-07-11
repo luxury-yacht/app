@@ -209,7 +209,12 @@ function GridTableBody<T>({
 
       <AriaGridRowGroup
         ref={tableRef}
-        className={shouldVirtualize ? 'gridtable-virtual-body' : undefined}
+        className={[
+          shouldVirtualize ? 'gridtable-virtual-body' : '',
+          tableData.length === 0 ? 'gridtable-empty-body' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         style={
           shouldVirtualize ? { height: `${totalVirtualHeight}px`, width: virtualWidth } : undefined
         }
