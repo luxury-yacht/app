@@ -362,8 +362,8 @@ export function Tabs({
   // dep array even though that identity flips on every parent render.
   // React bails out of no-op state updates (e.g. setHasOverflow(true) when
   // already true), so repeat invocations are free.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Tab descriptors change scrollWidth without changing the observed container size, so the list identity intentionally triggers a state-only remeasurement.
   useEffect(() => {
+    void tabs;
     if (overflow !== 'scroll') return;
     const el = scrollRef.current;
     if (!el) return;

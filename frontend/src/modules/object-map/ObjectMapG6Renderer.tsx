@@ -10,7 +10,7 @@ import type { Graph, GraphData } from '@antv/g6';
 import { GraphEvent } from '@antv/g6';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -630,15 +630,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     };
   }, [graphReady, showDebugGrid, updateDebugGrid]);
 
-  useEffectWithInvalidation(
-    () => {
-      if (!showDebugGrid) return;
-      const frame = requestAnimationFrame(updateDebugGrid);
-      return () => cancelAnimationFrame(frame);
-    },
-    [showDebugGrid, updateDebugGrid],
-    [data]
-  );
+  useEffect(() => {
+    void data;
+    if (!showDebugGrid) return;
+    const frame = requestAnimationFrame(updateDebugGrid);
+    return () => cancelAnimationFrame(frame);
+  }, [showDebugGrid, updateDebugGrid, data]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -660,13 +657,10 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     updateTooltipPosition,
   });
 
-  useEffectWithInvalidation(
-    () => {
-      updateTooltipPosition();
-    },
-    [updateTooltipPosition],
-    [hoverEdge]
-  );
+  useEffect(() => {
+    void hoverEdge;
+    updateTooltipPosition();
+  }, [updateTooltipPosition, hoverEdge]);
 
   const tooltipText = useMemo(() => {
     if (!palette || !hoverEdge) return null;

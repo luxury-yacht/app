@@ -5,13 +5,6 @@ import { fileURLToPath } from 'node:url';
 const overrideKey = ({ includes, rules }) =>
   `${[...includes].sort().join(',')}::${[...rules].sort().join(',')}`;
 const suppressionKey = ({ file, rule, count }) => `${file}::${rule}::${count}`;
-const lifetimeHookNames = [
-  'useEffectWithInvalidation',
-  'useLayoutEffectWithInvalidation',
-  'useMemoWithInvalidation',
-  'useMountEffect',
-];
-
 export const collectSuppressions = (sources) => {
   const errors = [];
   const counts = new Map();
@@ -165,47 +158,6 @@ export const collectConfigPolicyErrors = (config, policy) => {
   return errors;
 };
 
-export const collectLifetimeHookCallsites = (sources) =>
-  sources
-    .map(({ file, content }) => {
-      const hooks = Object.fromEntries(
-        lifetimeHookNames.flatMap((hook) => {
-          const count = [...content.matchAll(new RegExp(`\\b${hook}\\s*\\(`, 'g'))].length;
-          return count > 0 ? [[hook, count]] : [];
-        })
-      );
-      return { file, hooks };
-    })
-    .filter(({ hooks }) => Object.keys(hooks).length > 0)
-    .sort((left, right) => left.file.localeCompare(right.file));
-
-export const validateLifetimeHookSnapshot = (actual, approved) => {
-  const actualByFile = new Map(actual.map((entry) => [entry.file, entry.hooks]));
-  const approvedByFile = new Map(approved.map((entry) => [entry.file, entry.hooks]));
-  const errors = actual
-    .filter(({ file }) => !approvedByFile.has(file))
-    .map(
-      ({ file, hooks }) => `Unapproved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
-    );
-  for (const { file, hooks } of actual) {
-    const expected = approvedByFile.get(file);
-    if (expected && JSON.stringify(expected) !== JSON.stringify(hooks)) {
-      errors.push(
-        `Changed hook lifetime callsite: ${file} expected ${JSON.stringify(expected)}, found ${JSON.stringify(hooks)}`
-      );
-    }
-  }
-  errors.push(
-    ...approved
-      .filter(({ file }) => !actualByFile.has(file))
-      .map(
-        ({ file, hooks }) =>
-          `Stale approved hook lifetime callsite: ${file} ${JSON.stringify(hooks)}`
-      )
-  );
-  return errors;
-};
-
 export const validateExceptionSnapshot = ({
   actualOverrides,
   approvedOverrides,
@@ -313,10 +265,6 @@ export const validateProjectExceptions = (projectRoot) => {
       actualSuppressions: collected.suppressions,
       approvedSuppressions: manifest.suppressions,
     }),
-    ...validateLifetimeHookSnapshot(
-      collectLifetimeHookCallsites(sources),
-      manifest.hookLifetimes ?? []
-    ),
   ];
 };
 

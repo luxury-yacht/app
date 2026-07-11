@@ -32,45 +32,22 @@ npx biome lint . --only=lint/suspicious/noUnnecessaryConditions
 
 ## React hook dependency lifetimes
 
-`reportUnnecessaryDependencies` is enabled. Ordinary React dependency arrays contain only values
-read by the callback. Reducer dispatchers, state setters, ref objects, and module constants do not
-belong in an array merely because the callback uses them.
+`reportUnnecessaryDependencies` is enabled. React dependency arrays contain only values read by
+the callback. Reducer dispatchers, state setters, ref objects, and module constants do not belong
+in an array merely because the callback uses them.
 
-Use the helpers in `src/shared/hooks/useHookLifetimes.ts` when the callback has a lifecycle contract
-that React and Biome cannot infer:
+Use standard React hooks for every lifecycle. When a revision, identity, cache, collection, or DOM
+measurement token intentionally invalidates a callback without otherwise contributing to its
+result, make that contract explicit with `void token;` inside the callback and include `token` in
+the dependency array. This keeps Biome's missing- and unnecessary-dependency analysis active at
+the real callsite.
 
-- `useEffectWithInvalidation` and `useLayoutEffectWithInvalidation` separate values read by the
-  effect from revision, identity, cache, or collection tokens that intentionally restart it.
-- `useMemoWithInvalidation` recomputes ref-backed data when an explicit revision token changes.
-- `useMountEffect` makes a mount-only capture and its unmount cleanup explicit.
+For mount-only work that needs current callback logic without restarting the effect, define the
+callback with `useEffectEvent` and invoke it from a standard `useEffect` with an empty dependency
+array. Caller-level tests must prove rerun, cleanup, and stable-lifetime behavior when a lifecycle
+contract is non-obvious.
 
-Biome registers the three invalidation helpers as exhaustive-dependency hooks, so their ordinary
-dependency lists still receive missing- and unnecessary-dependency analysis.
-
-Put values read by a callback in the normal dependency list and invalidation-only values in the
-separate invalidation list. Do not use these helpers to hide a missing dependency or to retain a
-redundant one. New lifecycle helpers require regression tests that prove rerun, cleanup, and stable
-lifetime behavior.
-
-`biome-exceptions.json` also snapshots every file and count that calls an invalidation or mount
-lifetime helper. Adding, removing, or changing a callsite fails the policy check. Treat that
-failure as a required lifecycle review: prove the separate invalidator or mount-only capture with
-a caller-level regression test before updating the inventory.
-
-The approved hook-rule suppression surface is intentionally narrow:
-
-- four suppressions inside `useHookLifetimes.ts`, where the helper APIs implement the explicit
-  lifetime contract;
-- one controlled-field persistence effect in `LogViewer.tsx`;
-- one stable ref callback in `useTabDropTarget.ts` whose identity must not churn;
-- one state-only overflow remeasurement in `Tabs.tsx`, where tab identity changes scroll width
-  without changing the observed container size;
-- two tab-count remeasurements in `ClusterTabs.tsx`, where tab content changes can require height
-  and label-fit checks without changing either observed box;
-- one GridTable visible-auto-column invalidation, where virtual row-range changes alter the
-  rendered-cell signature without changing the dirty-marking callback identity.
-
-All other hook dependency arrays must pass missing- and unnecessary-dependency reporting directly.
+Hook dependency suppressions and custom lifetime-hook allowlists are not approved.
 
 ## Exception manifest
 
@@ -78,8 +55,7 @@ All other hook dependency arrays must pass missing- and unnecessary-dependency r
 
 - every config override that disables a rule;
 - every inline `biome-ignore`, aggregated by file and exact rule.
-- every required explicit error rule, exhaustive-dependency hook, and Grit boundary plugin;
-- every approved invalidation or mount lifetime-helper callsite.
+- every required explicit error rule and Grit boundary plugin.
 
 `npm run check:biome-exceptions --prefix frontend` compares the code and config with that
 manifest. It fails for both new exceptions and stale entries, so removing an exception also

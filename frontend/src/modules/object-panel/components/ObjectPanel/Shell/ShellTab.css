@@ -192,18 +192,15 @@
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar {
-  /* biome-ignore lint/complexity/noImportantStyles: The xterm and Monaco-owned scrollbar elements use library styles outside this component boundary, so the terminal integration must override their display state. */
-  display: none !important;
+  display: none;
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .shadow {
-  /* biome-ignore lint/complexity/noImportantStyles: The xterm and Monaco-owned scrollbar elements use library styles outside this component boundary, so the terminal integration must override their display state. */
-  display: none !important;
+  display: none;
 }
 
 .shell-tab__terminal .xterm .xterm-decoration-overview-ruler {
-  /* biome-ignore lint/complexity/noImportantStyles: The xterm and Monaco-owned scrollbar elements use library styles outside this component boundary, so the terminal integration must override their display state. */
-  display: none !important;
+  display: none;
 }
 
 @media (max-width: 640px) {

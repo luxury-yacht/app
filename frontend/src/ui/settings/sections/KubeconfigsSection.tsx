@@ -7,9 +7,8 @@
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { KubeconfigFolderIcon } from '@shared/components/icons/SettingsIcons';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
-import { useMountEffect } from '@shared/hooks/useHookLifetimes';
 import { errorHandler } from '@utils/errorHandler';
-import { useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { readKubeconfigSearchPaths, requestAppState } from '@/core/app-state-access';
 import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@/core/backend-api';
 
@@ -20,9 +19,10 @@ function KubeconfigsSection() {
   const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
 
-  useMountEffect(() => {
+  const loadInitialKubeconfigPaths = useEffectEvent(() => {
     loadKubeconfigPaths();
   });
+  useEffect(() => loadInitialKubeconfigPaths(), []);
 
   const loadKubeconfigPaths = async () => {
     setKubeconfigPathsLoading(true);

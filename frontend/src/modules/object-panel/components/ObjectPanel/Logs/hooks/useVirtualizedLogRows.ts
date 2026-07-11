@@ -1,4 +1,3 @@
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface VirtualizedLogRowsOptions<T> {
@@ -111,58 +110,55 @@ export function useVirtualizedLogRows<T>({
     }
   }, [disconnectRowObserver, keyExtractor, rows]);
 
-  useEffectWithInvalidation(
-    () => {
-      if (!shouldVirtualize) {
-        setViewportHeight(0);
-        setScrollTop(0);
+  useEffect(() => {
+    void rows.length;
+    if (!shouldVirtualize) {
+      setViewportHeight(0);
+      setScrollTop(0);
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    let scrollRaf: number | null = null;
+
+    const handleScroll = () => {
+      if (scrollRaf !== null) {
         return;
       }
-
-      const container = scrollContainerRef.current;
-      if (!container) {
-        return;
-      }
-
-      let scrollRaf: number | null = null;
-
-      const handleScroll = () => {
-        if (scrollRaf !== null) {
-          return;
-        }
-        scrollRaf = requestAnimationFrame(() => {
-          scrollRaf = null;
-          setScrollTop(container.scrollTop);
-        });
-      };
-
-      const updateViewport = () => {
-        setViewportHeight(container.clientHeight);
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
         setScrollTop(container.scrollTop);
-      };
+      });
+    };
 
-      updateViewport();
-      container.addEventListener('scroll', handleScroll, { passive: true });
+    const updateViewport = () => {
+      setViewportHeight(container.clientHeight);
+      setScrollTop(container.scrollTop);
+    };
 
-      let observer: ResizeObserver | null = null;
-      if (typeof ResizeObserver !== 'undefined') {
-        observer = new ResizeObserver(() => {
-          updateViewport();
-        });
-        observer.observe(container);
+    updateViewport();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        updateViewport();
+      });
+      observer.observe(container);
+    }
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (scrollRaf !== null) {
+        cancelAnimationFrame(scrollRaf);
       }
-
-      return () => {
-        container.removeEventListener('scroll', handleScroll);
-        if (scrollRaf !== null) {
-          cancelAnimationFrame(scrollRaf);
-        }
-        observer?.disconnect();
-      };
-    },
-    [scrollContainerRef, shouldVirtualize],
-    [rows.length]
-  );
+      observer?.disconnect();
+    };
+  }, [scrollContainerRef, shouldVirtualize, rows.length]);
 
   useEffect(() => {
     const observers = rowObserversRef.current;

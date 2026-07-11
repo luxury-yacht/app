@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   collectConfigPolicyErrors,
   collectDisabledOverrides,
-  collectLifetimeHookCallsites,
   collectSuppressions,
   readSourceFiles,
   validateExceptionSnapshot,
-  validateLifetimeHookSnapshot,
 } from './check-biome-exceptions.mjs';
 
 describe('Biome exception snapshot', () => {
@@ -328,46 +326,5 @@ describe('Biome source inventory', () => {
     expect(files).not.toContain('package-lock.json');
     expect(files).not.toContain('src/core/refresh/types.generated.ts');
     expect(files.some((file) => file.startsWith('node_modules/'))).toBe(false);
-  });
-});
-
-describe('hook lifetime inventory', () => {
-  it('collects invalidation and mount hook calls by file', () => {
-    expect(
-      collectLifetimeHookCallsites([
-        {
-          file: 'src/widget.tsx',
-          content: `
-            useEffectWithInvalidation(() => {}, [], [revision]);
-            useEffectWithInvalidation(() => {}, [], [otherRevision]);
-            useMountEffect(() => {});
-          `,
-        },
-      ])
-    ).toEqual([
-      {
-        file: 'src/widget.tsx',
-        hooks: { useEffectWithInvalidation: 2, useMountEffect: 1 },
-      },
-    ]);
-  });
-
-  it('reports added, removed, and changed hook callsites', () => {
-    expect(
-      validateLifetimeHookSnapshot(
-        [
-          { file: 'src/added.ts', hooks: { useMountEffect: 1 } },
-          { file: 'src/changed.ts', hooks: { useEffectWithInvalidation: 2 } },
-        ],
-        [
-          { file: 'src/changed.ts', hooks: { useEffectWithInvalidation: 1 } },
-          { file: 'src/removed.ts', hooks: { useMemoWithInvalidation: 1 } },
-        ]
-      )
-    ).toEqual([
-      'Unapproved hook lifetime callsite: src/added.ts {"useMountEffect":1}',
-      'Changed hook lifetime callsite: src/changed.ts expected {"useEffectWithInvalidation":1}, found {"useEffectWithInvalidation":2}',
-      'Stale approved hook lifetime callsite: src/removed.ts {"useMemoWithInvalidation":1}',
-    ]);
   });
 });

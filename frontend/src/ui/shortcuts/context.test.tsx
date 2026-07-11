@@ -5,8 +5,7 @@
  * Covers key behaviors and edge cases for context.
  */
 
-import { useMountEffect } from '@shared/hooks/useHookLifetimes';
-import { act, useEffect } from 'react';
+import { act, useEffect, useEffectEvent } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -55,7 +54,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      useMountEffect(() => {
+      const registerListShortcut = useEffectEvent(() => {
         const listId = ctx.registerShortcut({
           key: 'l',
           priority: 1,
@@ -66,6 +65,7 @@ describe('KeyboardProvider', () => {
           ctx.unregisterShortcut(listId);
         };
       });
+      useEffect(() => registerListShortcut(), []);
 
       return null;
     };
@@ -95,7 +95,7 @@ describe('KeyboardProvider', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      useMountEffect(() => {
+      const registerPriorityShortcuts = useEffectEvent(() => {
         const lowId = ctx.registerShortcut({
           key: 'k',
           priority: 1,
@@ -113,6 +113,7 @@ describe('KeyboardProvider', () => {
           ctx.unregisterShortcut(highId);
         };
       });
+      useEffect(() => registerPriorityShortcuts(), []);
 
       return null;
     };
@@ -215,7 +216,7 @@ describe('keyboard handling edge cases', () => {
         apiRef.current = ctx;
       }, [ctx]);
 
-      useMountEffect(() => {
+      const registerCopyShortcuts = useEffectEvent(() => {
         const plainId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true },
@@ -233,6 +234,7 @@ describe('keyboard handling edge cases', () => {
           ctx.unregisterShortcut(extendedId);
         };
       });
+      useEffect(() => registerCopyShortcuts(), []);
 
       return null;
     };
@@ -317,10 +319,11 @@ describe('keyboard handling edge cases', () => {
 
     const Harness = () => {
       const ctx = useKeyboardContext();
-      useMountEffect(() => {
+      const registerEditorSurface = useEffectEvent(() => {
         const id = ctx.registerSurface({ kind: 'editor', rootRef, onNativeAction });
         return () => ctx.unregisterSurface(id);
       });
+      useEffect(() => registerEditorSurface(), []);
       return null;
     };
 

@@ -35,7 +35,7 @@ import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import {
   readCatalogObjectMatchForRef,
   requestData,
@@ -773,25 +773,19 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     rightYaml.state.status === 'loading' || rightYaml.state.status === 'initialising';
 
   // Reset change tracking when the user swaps objects.
-  useEffectWithInvalidation(
-    () => {
-      leftChecksumRef.current = null;
-      setLeftChangedAt(null);
-      setLeftYamlStable('');
-    },
-    [],
-    [leftObjectUid]
-  );
+  useEffect(() => {
+    void leftObjectUid;
+    leftChecksumRef.current = null;
+    setLeftChangedAt(null);
+    setLeftYamlStable('');
+  }, [leftObjectUid]);
 
-  useEffectWithInvalidation(
-    () => {
-      rightChecksumRef.current = null;
-      setRightChangedAt(null);
-      setRightYamlStable('');
-    },
-    [],
-    [rightObjectUid]
-  );
+  useEffect(() => {
+    void rightObjectUid;
+    rightChecksumRef.current = null;
+    setRightChangedAt(null);
+    setRightYamlStable('');
+  }, [rightObjectUid]);
 
   useEffect(() => {
     if (!leftObjectUid) {

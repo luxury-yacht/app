@@ -323,15 +323,20 @@
   background-color: var(--color-resize-handle);
 }
 
-/* Body cursor override during sidebar resize */
-body.sidebar-resizing,
-body.sidebar-resizing * {
+/* The resize shield prevents descendant controls from replacing the resize
+   cursor or starting a text selection while the global interaction is active. */
+body.sidebar-resizing {
+  user-select: none;
+}
+
+body.sidebar-resizing::after {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0;
+  content: "";
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
-    /* biome-ignore lint/complexity/noImportantStyles: Document-level sidebar resize state must override descendant cursor and text-selection declarations for the duration of the global interaction. */
-    col-resize !important;
-  /* biome-ignore lint/complexity/noImportantStyles: Document-level sidebar resize state must override descendant cursor and text-selection declarations for the duration of the global interaction. */
-  user-select: none !important;
+    col-resize;
 }
 
 /* Inline "accessible namespaces" scope editor (docs/plans/namespace-scope.md).

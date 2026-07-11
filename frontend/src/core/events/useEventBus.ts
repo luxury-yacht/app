@@ -5,8 +5,7 @@
  * Simplifies event subscription in functional components.
  */
 
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { type AppEvents, eventBus } from './eventBus';
 
 type EventCallback<T> = (payload: T) => void;
@@ -22,12 +21,8 @@ export function useEventBus<K extends keyof AppEvents>(
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
-  useEffectWithInvalidation(
-    () => {
-      const unsubscribe = eventBus.on(event, (payload) => callbackRef.current(payload));
-      return unsubscribe;
-    },
-    [event],
-    deps
-  );
+  useEffect(() => {
+    const unsubscribe = eventBus.on(event, (payload) => callbackRef.current(payload));
+    return unsubscribe;
+  }, [event, ...deps]);
 }

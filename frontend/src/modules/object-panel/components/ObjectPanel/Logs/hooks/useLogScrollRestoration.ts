@@ -1,4 +1,3 @@
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { type RefObject, useCallback, useEffect, useRef } from 'react';
 
 interface LogScrollRestorationOptions {
@@ -96,53 +95,50 @@ export const useLogScrollRestoration = ({
     forceTailRestoreRef.current = false;
   }, [cacheKey, getScrollContainer, getScrollTop, rowCount]);
 
-  useEffectWithInvalidation(
-    () => {
-      void tailFollowSignal;
-      if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
+  useEffect(() => {
+    void rowCount;
+    void tailFollowSignal;
+    if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
+      return;
+    }
+
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) {
+      return;
+    }
+
+    let rafId: number | undefined;
+    const scrollToBottom = () => {
+      const element = getScrollContainer();
+      if (!element) {
         return;
       }
+      element.scrollTop = element.scrollHeight;
+    };
 
-      const scrollEl = getScrollContainer();
-      if (!scrollEl) {
-        return;
-      }
-
-      let rafId: number | undefined;
-      const scrollToBottom = () => {
+    if (isParsedView) {
+      let attempts = 0;
+      const maxAttempts = 20;
+      const checkAndScroll = () => {
         const element = getScrollContainer();
-        if (!element) {
-          return;
+        if (element && element.scrollHeight > element.clientHeight) {
+          rafId = requestAnimationFrame(scrollToBottom);
+        } else if (attempts < maxAttempts) {
+          attempts += 1;
+          rafId = requestAnimationFrame(checkAndScroll);
         }
-        element.scrollTop = element.scrollHeight;
       };
+      rafId = requestAnimationFrame(checkAndScroll);
+    } else {
+      rafId = requestAnimationFrame(scrollToBottom);
+    }
 
-      if (isParsedView) {
-        let attempts = 0;
-        const maxAttempts = 20;
-        const checkAndScroll = () => {
-          const element = getScrollContainer();
-          if (element && element.scrollHeight > element.clientHeight) {
-            rafId = requestAnimationFrame(scrollToBottom);
-          } else if (attempts < maxAttempts) {
-            attempts += 1;
-            rafId = requestAnimationFrame(checkAndScroll);
-          }
-        };
-        rafId = requestAnimationFrame(checkAndScroll);
-      } else {
-        rafId = requestAnimationFrame(scrollToBottom);
+    return () => {
+      if (rafId !== undefined) {
+        cancelAnimationFrame(rafId);
       }
-
-      return () => {
-        if (rafId !== undefined) {
-          cancelAnimationFrame(rafId);
-        }
-      };
-    },
-    [getScrollContainer, isParsedView, tailFollowSignal],
-    [rowCount]
-  );
+    };
+  }, [getScrollContainer, isParsedView, tailFollowSignal, rowCount]);
 
   return { getScrollContainer, resetScrollRestoration };
 };

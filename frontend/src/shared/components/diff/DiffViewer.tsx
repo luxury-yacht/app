@@ -7,13 +7,9 @@
 
 import type { DisplayDiffLine, TruncationMap } from '@shared/components/diff/diffUtils';
 import { areTruncationMapsEqual } from '@shared/components/diff/diffUtils';
-import {
-  useEffectWithInvalidation,
-  useLayoutEffectWithInvalidation,
-  useMemoWithInvalidation,
-} from '@shared/hooks/useHookLifetimes';
+
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import './DiffViewer.css';
 
@@ -97,20 +93,17 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const virtualizationCandidate = visibleLines.length >= DIFF_VIRTUALIZATION_THRESHOLD;
   const shouldVirtualize = virtualizationCandidate && !forceFullRender;
 
-  const rowPositions = useMemoWithInvalidation(
-    () => {
-      const positions = new Float64Array(visibleLines.length + 1);
-      const cache = rowHeightCacheRef.current;
-      for (let index = 0; index < visibleLines.length; index += 1) {
-        positions[index + 1] = positions[index] + (cache.get(index) ?? DIFF_ESTIMATED_ROW_HEIGHT);
-      }
-      return positions;
-      // rowHeightCacheVersion is load-bearing here: it forces recomputation when
-      // measured row heights change even though the cache itself lives in a ref.
-    },
-    [visibleLines.length],
-    [rowHeightCacheVersion]
-  );
+  const rowPositions = useMemo(() => {
+    void rowHeightCacheVersion;
+    const positions = new Float64Array(visibleLines.length + 1);
+    const cache = rowHeightCacheRef.current;
+    for (let index = 0; index < visibleLines.length; index += 1) {
+      positions[index + 1] = positions[index] + (cache.get(index) ?? DIFF_ESTIMATED_ROW_HEIGHT);
+    }
+    return positions;
+    // rowHeightCacheVersion is load-bearing here: it forces recomputation when
+    // measured row heights change even though the cache itself lives in a ref.
+  }, [visibleLines.length, rowHeightCacheVersion]);
 
   const totalVirtualHeight = useMemo(
     () => (shouldVirtualize ? rowPositions[visibleLines.length] : 0),
@@ -167,17 +160,14 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     truncatedRowsRef.current = truncatedRows;
   }, [truncatedRows]);
 
-  useEffectWithInvalidation(
-    () => {
-      setExpandedRows(new Set());
-      setTruncatedRows({});
-      setForceFullRender(false);
-      rowHeightCacheRef.current.clear();
-      setRowHeightCacheVersion((current) => current + 1);
-    },
-    [],
-    [visibleLines]
-  );
+  useEffect(() => {
+    void visibleLines;
+    setExpandedRows(new Set());
+    setTruncatedRows({});
+    setForceFullRender(false);
+    rowHeightCacheRef.current.clear();
+    setRowHeightCacheVersion((current) => current + 1);
+  }, [visibleLines]);
 
   useEffect(
     () => () => {
@@ -344,37 +334,32 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     });
   };
 
-  useLayoutEffectWithInvalidation(
-    () => {
-      const table = diffTableRef.current;
-      if (!shouldVirtualize || !table) {
-        setVirtualViewportHeight(DIFF_DEFAULT_VIEWPORT_HEIGHT);
-        return;
-      }
+  useLayoutEffect(() => {
+    void renderedLineEntries.length;
+    const table = diffTableRef.current;
+    if (!shouldVirtualize || !table) {
+      setVirtualViewportHeight(DIFF_DEFAULT_VIEWPORT_HEIGHT);
+      return;
+    }
 
-      const updateViewport = () => {
-        const nextHeight =
-          table.clientHeight ||
-          table.getBoundingClientRect().height ||
-          DIFF_DEFAULT_VIEWPORT_HEIGHT;
-        setVirtualViewportHeight((current) =>
-          Math.abs(current - nextHeight) < 0.5 ? current : nextHeight
-        );
-      };
+    const updateViewport = () => {
+      const nextHeight =
+        table.clientHeight || table.getBoundingClientRect().height || DIFF_DEFAULT_VIEWPORT_HEIGHT;
+      setVirtualViewportHeight((current) =>
+        Math.abs(current - nextHeight) < 0.5 ? current : nextHeight
+      );
+    };
 
-      updateViewport();
+    updateViewport();
 
-      if (typeof ResizeObserver !== 'undefined') {
-        const observer = new ResizeObserver(() => updateViewport());
-        observer.observe(table);
-        return () => observer.disconnect();
-      }
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => updateViewport());
+      observer.observe(table);
+      return () => observer.disconnect();
+    }
 
-      return undefined;
-    },
-    [shouldVirtualize],
-    [renderedLineEntries.length]
-  );
+    return undefined;
+  }, [shouldVirtualize, renderedLineEntries.length]);
 
   useEffect(() => {
     const table = diffTableRef.current;
@@ -479,17 +464,15 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
     setTruncatedRows((current) => (areTruncationMapsEqual(current, next) ? current : next));
   }, [expandedRows]);
 
-  useEffectWithInvalidation(
-    () => {
-      if (!diffTableRef.current) {
-        return;
-      }
-      const frame = requestAnimationFrame(() => computeTruncation());
-      return () => cancelAnimationFrame(frame);
-    },
-    [computeTruncation],
-    [renderedLineEntries, visibleLines]
-  );
+  useEffect(() => {
+    void renderedLineEntries;
+    void visibleLines;
+    if (!diffTableRef.current) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => computeTruncation());
+    return () => cancelAnimationFrame(frame);
+  }, [computeTruncation, renderedLineEntries, visibleLines]);
 
   useEffect(() => {
     const table = diffTableRef.current;

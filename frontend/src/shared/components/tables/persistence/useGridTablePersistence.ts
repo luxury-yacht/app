@@ -30,7 +30,7 @@ import {
   getGridTablePersistenceMode,
   subscribeGridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface UseGridTablePersistenceParams<T> {
@@ -129,20 +129,17 @@ export function useGridTablePersistence<T>({
     setStorageKey(key);
   }, [clusterHash, viewId, namespace, isNamespaceScoped, enabled, persistenceMode]);
 
-  useEffectWithInvalidation(
-    () => {
-      // Force re-hydration when the storage key changes (e.g., namespace switch).
-      setHydrated(false);
-      lastSavePayloadRef.current = '';
-      setSortConfig(null);
-      setColumnVisibility(null);
-      setColumnWidths(null);
-      setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
-      setPageSize(null);
-    },
-    [],
-    [storageKey]
-  );
+  useEffect(() => {
+    void storageKey;
+    // Force re-hydration when the storage key changes (e.g., namespace switch).
+    setHydrated(false);
+    lastSavePayloadRef.current = '';
+    setSortConfig(null);
+    setColumnVisibility(null);
+    setColumnWidths(null);
+    setFilters(DEFAULT_GRID_TABLE_FILTER_STATE);
+    setPageSize(null);
+  }, [storageKey]);
 
   useEffect(() => {
     let active = true;

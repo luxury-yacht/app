@@ -17,11 +17,11 @@
       // immediately to prevent FOUC. Color math lives in TypeScript utilities;
       // this startup path only applies the cached result.
       (() => {
-        var preference = localStorage.getItem('app-appearance-mode-preference');
+        let preference = localStorage.getItem('app-appearance-mode-preference');
         // Migration from localStorage written before the appearance-mode rename.
         // The old key stored the light/dark/system mode preference.
         // TODO: Remove after the old app-theme-preference localStorage key is no longer supported.
-        var oldPreference = localStorage.getItem('app-theme-preference');
+        const oldPreference = localStorage.getItem('app-theme-preference');
         if (!preference && oldPreference) {
           preference = oldPreference;
           localStorage.setItem('app-appearance-mode-preference', oldPreference);
@@ -34,7 +34,7 @@
           localStorage.setItem('app-appearance-mode-preference', 'system');
         }
 
-        var mode = preference;
+        let mode = preference;
 
         // If system mode is selected, detect the actual mode to use.
         if (preference === 'system') {
@@ -48,15 +48,15 @@
         document.documentElement.className = mode;
 
         try {
-          var rawBootstrap = localStorage.getItem('app-appearance-bootstrap-v1');
+          const rawBootstrap = localStorage.getItem('app-appearance-bootstrap-v1');
           if (!rawBootstrap) return;
 
-          var bootstrap = JSON.parse(rawBootstrap);
-          var variables = bootstrap && bootstrap.version === 1 ? bootstrap[mode] : null;
+          const bootstrap = JSON.parse(rawBootstrap);
+          const variables = bootstrap && bootstrap.version === 1 ? bootstrap[mode] : null;
           if (!variables || typeof variables !== 'object') return;
 
-          var root = document.documentElement;
-          for (var token in variables) {
+          const root = document.documentElement;
+          for (const token in variables) {
             if (
               Object.hasOwn(variables, token) &&
               token.indexOf('--') === 0 &&

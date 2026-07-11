@@ -11,7 +11,7 @@ import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readTargetPortsForRef, requestData } from '@/core/data-access';
 import './PortForwardModal.css';
@@ -109,83 +109,80 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     : '';
 
   // Reset form state when target changes, fetch ports if not provided
-  useEffectWithInvalidation(
-    () => {
-      const currentTarget = targetRef.current;
-      if (!currentTarget) {
-        return;
-      }
+  useEffect(() => {
+    void targetKey;
+    const currentTarget = targetRef.current;
+    if (!currentTarget) {
+      return;
+    }
 
-      setError(null);
-      setFetchedPorts([]);
-      let cancelled = false;
+    setError(null);
+    setFetchedPorts([]);
+    let cancelled = false;
 
-      // If ports provided in target, use them directly
-      if (currentTarget.ports.length > 0) {
-        const initialContainerPort = currentTarget.ports[0].port;
-        setContainerPort(initialContainerPort);
-        setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
-        return;
-      }
+    // If ports provided in target, use them directly
+    if (currentTarget.ports.length > 0) {
+      const initialContainerPort = currentTarget.ports[0].port;
+      setContainerPort(initialContainerPort);
+      setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
+      return;
+    }
 
-      // Otherwise fetch from backend (if we have a cluster ID)
-      if (!currentTarget.clusterId) {
-        // No cluster ID - allow manual entry without fetching
-        setContainerPort(0);
-        setLocalPort(0);
-        return;
-      }
+    // Otherwise fetch from backend (if we have a cluster ID)
+    if (!currentTarget.clusterId) {
+      // No cluster ID - allow manual entry without fetching
+      setContainerPort(0);
+      setLocalPort(0);
+      return;
+    }
 
-      setIsLoadingPorts(true);
-      requestData({
-        resource: 'target-ports',
-        reason: 'user',
-        read: () => readTargetPortsForRef(currentTarget),
-      })
-        .then((ports) => {
-          if (cancelled) {
-            return;
-          }
-          const resolvedPorts = ports.status === 'executed' ? (ports.data ?? []) : [];
-          if (resolvedPorts.length > 0) {
-            // Store fetched ports in local state
-            const mappedPorts = resolvedPorts.map((p) => ({
-              port: p.port,
-              name: p.name,
-              protocol: p.protocol,
-            }));
-            setFetchedPorts(mappedPorts);
-            const firstPort = resolvedPorts[0].port;
-            setContainerPort(firstPort);
-            setLocalPort(getDefaultLocalPort(firstPort));
-          } else {
-            // No ports found - allow manual entry
-            setContainerPort(0);
-            setLocalPort(0);
-          }
-        })
-        .catch((err) => {
-          if (cancelled) {
-            return;
-          }
-          console.warn('Failed to fetch target ports:', err);
-          // Allow manual entry if fetch fails
+    setIsLoadingPorts(true);
+    requestData({
+      resource: 'target-ports',
+      reason: 'user',
+      read: () => readTargetPortsForRef(currentTarget),
+    })
+      .then((ports) => {
+        if (cancelled) {
+          return;
+        }
+        const resolvedPorts = ports.status === 'executed' ? (ports.data ?? []) : [];
+        if (resolvedPorts.length > 0) {
+          // Store fetched ports in local state
+          const mappedPorts = resolvedPorts.map((p) => ({
+            port: p.port,
+            name: p.name,
+            protocol: p.protocol,
+          }));
+          setFetchedPorts(mappedPorts);
+          const firstPort = resolvedPorts[0].port;
+          setContainerPort(firstPort);
+          setLocalPort(getDefaultLocalPort(firstPort));
+        } else {
+          // No ports found - allow manual entry
           setContainerPort(0);
           setLocalPort(0);
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setIsLoadingPorts(false);
-          }
-        });
+        }
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        console.warn('Failed to fetch target ports:', err);
+        // Allow manual entry if fetch fails
+        setContainerPort(0);
+        setLocalPort(0);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingPorts(false);
+        }
+      });
 
-      return () => {
-        cancelled = true;
-      };
-    },
-    [],
-    [targetKey]
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [targetKey]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {

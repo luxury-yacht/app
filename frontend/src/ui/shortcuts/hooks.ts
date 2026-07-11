@@ -5,7 +5,6 @@
  * Implements hooks logic for the UI layer.
  */
 
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from './context';
@@ -164,40 +163,38 @@ export function useShortcuts(
 
   const commonSignature = useMemo(() => JSON.stringify(commonOptions ?? {}), [commonOptions]);
 
-  useEffectWithInvalidation(
-    () => {
-      const currentShortcuts = latestShortcutsRef.current;
-      const registeredIds = currentShortcuts.map((shortcut, index) => {
-        const merged = {
-          description: '',
-          enabled: true,
-          ...latestCommonOptionsRef.current,
-          ...shortcut,
-        } as UseShortcutOptions;
+  useEffect(() => {
+    void structuralSignature;
+    void commonSignature;
+    const currentShortcuts = latestShortcutsRef.current;
+    const registeredIds = currentShortcuts.map((shortcut, index) => {
+      const merged = {
+        description: '',
+        enabled: true,
+        ...latestCommonOptionsRef.current,
+        ...shortcut,
+      } as UseShortcutOptions;
 
-        const normalizedModifiers = normalizeModifiers(merged.modifiers);
+      const normalizedModifiers = normalizeModifiers(merged.modifiers);
 
-        return registerShortcut({
-          key: merged.key,
-          modifiers: normalizedModifiers,
-          priority: merged.priority,
-          handler: (event) => handlerRefs.current[index]?.(event),
-          description: merged.description || '',
-          category: merged.category,
-          enabled: merged.enabled ?? true,
-        });
+      return registerShortcut({
+        key: merged.key,
+        modifiers: normalizedModifiers,
+        priority: merged.priority,
+        handler: (event) => handlerRefs.current[index]?.(event),
+        description: merged.description || '',
+        category: merged.category,
+        enabled: merged.enabled ?? true,
       });
+    });
 
-      shortcutIdsRef.current = registeredIds;
+    shortcutIdsRef.current = registeredIds;
 
-      return () => {
-        registeredIds.forEach((id) => {
-          unregisterShortcut(id);
-        });
-        shortcutIdsRef.current = [];
-      };
-    },
-    [registerShortcut, unregisterShortcut],
-    [structuralSignature, commonSignature]
-  );
+    return () => {
+      registeredIds.forEach((id) => {
+        unregisterShortcut(id);
+      });
+      shortcutIdsRef.current = [];
+    };
+  }, [registerShortcut, unregisterShortcut, structuralSignature, commonSignature]);
 }

@@ -24,7 +24,7 @@ import {
 } from '@shared/components/icons/ObjectMapIcons';
 import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import Tooltip from '@shared/components/Tooltip';
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -202,13 +202,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     return Array.from(groups.values());
   }, [visibleState.legendEntries]);
 
-  useEffectWithInvalidation(
-    () => {
-      setSearchIndex(0);
-    },
-    [],
-    [visibleState.normalizedSearchQuery]
-  );
+  useEffect(() => {
+    void visibleState.normalizedSearchQuery;
+    setSearchIndex(0);
+  }, [visibleState.normalizedSearchQuery]);
 
   const focusSearchMatch = useCallback(() => {
     if (visibleState.searchMatches.length === 0) return;

@@ -367,61 +367,49 @@
   pointer-events: none;
 }
 
-/* Body overrides during drag/resize - disable text selection */
+/* A document-level interaction shield owns the pointer during drag/resize.
+   Because underlying controls are no longer pointer targets, their local
+   cursor and selection declarations do not need cascade overrides. */
 body.dockable-panel-dragging,
-body.dockable-panel-dragging *,
-body.dockable-panel-resizing,
-body.dockable-panel-resizing * {
-  /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-  user-select: none !important;
+body.dockable-panel-resizing {
+  user-select: none;
 }
 
-/* Prevent hover events on underlying elements during drag/resize.
-   This stops tooltips/popups from triggering when moving panel edges. */
-body.dockable-panel-dragging .app,
-body.dockable-panel-resizing .app {
-  /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-  pointer-events: none !important;
+body.dockable-panel-dragging::after,
+body.dockable-panel-resizing::after {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0;
+  content: "";
+  cursor: move;
 }
 
-body.dockable-panel-resizing-n,
-body.dockable-panel-resizing-n *,
-body.dockable-panel-resizing-s,
-body.dockable-panel-resizing-s * {
+body.dockable-panel-resizing-n::after,
+body.dockable-panel-resizing-s::after {
   cursor:
     url("../../shared/components/icons/cursors/ns-resize.svg") 12 12,
-    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-    row-resize !important;
+    row-resize;
 }
 
-body.dockable-panel-resizing-e,
-body.dockable-panel-resizing-e *,
-body.dockable-panel-resizing-w,
-body.dockable-panel-resizing-w * {
+body.dockable-panel-resizing-e::after,
+body.dockable-panel-resizing-w::after {
   cursor:
     url("../../shared/components/icons/cursors/ew-resize.svg") 12 12,
-    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-    col-resize !important;
+    col-resize;
 }
 
-body.dockable-panel-resizing-nw,
-body.dockable-panel-resizing-nw *,
-body.dockable-panel-resizing-se,
-body.dockable-panel-resizing-se * {
+body.dockable-panel-resizing-nw::after,
+body.dockable-panel-resizing-se::after {
   cursor:
     url("../../shared/components/icons/cursors/nwse-resize.svg") 12 12,
-    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-    nwse-resize !important;
+    nwse-resize;
 }
 
-body.dockable-panel-resizing-ne,
-body.dockable-panel-resizing-ne *,
-body.dockable-panel-resizing-sw,
-body.dockable-panel-resizing-sw * {
+body.dockable-panel-resizing-ne::after,
+body.dockable-panel-resizing-sw::after {
   cursor:
     url("../../shared/components/icons/cursors/nesw-resize.svg") 12 12,
-    /* biome-ignore lint/complexity/noImportantStyles: Document-level drag and resize state must override descendant cursor, selection, and pointer declarations for the duration of the global interaction. */
-    nesw-resize !important;
+    nesw-resize;
 }
 
 /* Dark mode adjustments */

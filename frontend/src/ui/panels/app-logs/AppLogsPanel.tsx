@@ -11,7 +11,7 @@ import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { AriaGridColumnHeader, AriaGridRow } from '@shared/components/tables/AriaGridPrimitives';
-import { useLayoutEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
+
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { DockablePanel } from '@ui/dockable';
 import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
@@ -23,6 +23,7 @@ import {
   type PointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -312,35 +313,35 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   }, []);
 
   // Auto-scroll when logs change
-  useLayoutEffectWithInvalidation(
-    () => {
-      const container = logsContainerRef.current;
-      if (!container) {
-        return;
-      }
+  useLayoutEffect(() => {
+    void logLevelFilter;
+    void componentFilter;
+    void clusterFilter;
+    void textFilter;
+    const container = logsContainerRef.current;
+    if (!container) {
+      return;
+    }
 
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
 
-      if (isAutoScroll && isPinnedToBottomRef.current && logs.length > 0) {
-        container.scrollTop = maxScrollTop;
-        prevScrollTopRef.current = container.scrollTop;
-        prevScrollHeightRef.current = container.scrollHeight;
-        offsetFromBottomRef.current = 0;
-      } else {
-        const previousTop = prevScrollTopRef.current;
-        const clampedTop = Math.max(0, Math.min(previousTop, maxScrollTop));
-        container.scrollTop = clampedTop;
-        prevScrollTopRef.current = container.scrollTop;
-        prevScrollHeightRef.current = container.scrollHeight;
-        offsetFromBottomRef.current = Math.max(
-          container.scrollHeight - container.scrollTop - container.clientHeight,
-          0
-        );
-      }
-    },
-    [logs, isAutoScroll],
-    [logLevelFilter, componentFilter, clusterFilter, textFilter]
-  );
+    if (isAutoScroll && isPinnedToBottomRef.current && logs.length > 0) {
+      container.scrollTop = maxScrollTop;
+      prevScrollTopRef.current = container.scrollTop;
+      prevScrollHeightRef.current = container.scrollHeight;
+      offsetFromBottomRef.current = 0;
+    } else {
+      const previousTop = prevScrollTopRef.current;
+      const clampedTop = Math.max(0, Math.min(previousTop, maxScrollTop));
+      container.scrollTop = clampedTop;
+      prevScrollTopRef.current = container.scrollTop;
+      prevScrollHeightRef.current = container.scrollHeight;
+      offsetFromBottomRef.current = Math.max(
+        container.scrollHeight - container.scrollTop - container.clientHeight,
+        0
+      );
+    }
+  }, [logs, isAutoScroll, logLevelFilter, componentFilter, clusterFilter, textFilter]);
 
   useEffect(() => {
     if (!isAutoScroll) {

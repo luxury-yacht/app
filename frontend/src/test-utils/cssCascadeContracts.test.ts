@@ -101,11 +101,11 @@ describe('strict CSS cascade contracts', () => {
     expect(computed.borderLeftWidth).toBe('3px');
   });
 
-  it('limits important declarations to documented external and global-state boundaries', () => {
+  it('limits important declarations to the reduced-motion cascade boundary', () => {
     const classifiedBoundaries = [
-      ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 3],
-      ['src/ui/dockable/DockablePanel.css', 6],
-      ['src/ui/layout/Sidebar.css', 2],
+      ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 0],
+      ['src/ui/dockable/DockablePanel.css', 0],
+      ['src/ui/layout/Sidebar.css', 0],
       ['styles/utilities/motion.css', 3],
     ] as const;
 

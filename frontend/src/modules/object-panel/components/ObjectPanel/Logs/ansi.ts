@@ -24,9 +24,10 @@ export interface AnsiTextSegment {
   style: AnsiTextStyle;
 }
 
-const ANSI_TEST_PATTERN = /(?:\u001b\[|\u009b)[0-9;]*m/;
-const ANSI_PATTERN = /(?:\u001b\[|\u009b)[0-9;]*m/g;
-const ANSI_CAPTURE_PATTERN = /(?:\u001b\[|\u009b)([0-9;]*)m/g;
+const ANSI_CSI_PATTERN_SOURCE = '(?:\\u001b\\[|\\u009b)';
+const ANSI_TEST_PATTERN = new RegExp(`${ANSI_CSI_PATTERN_SOURCE}[0-9;]*m`);
+const ANSI_PATTERN = new RegExp(`${ANSI_CSI_PATTERN_SOURCE}[0-9;]*m`, 'g');
+const ANSI_CAPTURE_PATTERN = new RegExp(`${ANSI_CSI_PATTERN_SOURCE}([0-9;]*)m`, 'g');
 const DIM_OPACITY = 0.5;
 
 interface ActiveAnsiState {

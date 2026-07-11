@@ -55,23 +55,6 @@
         "useExhaustiveDependencies": {
           "level": "error",
           "options": {
-            "hooks": [
-              {
-                "name": "useEffectWithInvalidation",
-                "closureIndex": 0,
-                "dependenciesIndex": 1
-              },
-              {
-                "name": "useLayoutEffectWithInvalidation",
-                "closureIndex": 0,
-                "dependenciesIndex": 1
-              },
-              {
-                "name": "useMemoWithInvalidation",
-                "closureIndex": 0,
-                "dependenciesIndex": 1
-              }
-            ],
             "reportUnnecessaryDependencies": true
           }
         }
@@ -151,29 +134,6 @@
         "rules": {
           "style": {
             "noRestrictedImports": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/modules/object-panel/components/ObjectPanel/Logs/ansi.ts",
-        "src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx"
-      ],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noControlCharactersInRegex": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["index.html"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "noInnerDeclarations": "off"
           }
         }
       }

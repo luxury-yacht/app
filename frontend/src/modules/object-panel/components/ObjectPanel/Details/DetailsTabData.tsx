@@ -2,10 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx
  */
 
-import { useEffectWithInvalidation } from '@shared/hooks/useHookLifetimes';
 import { useShortcut } from '@ui/shortcuts';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 import '../shared.css';
 import './DetailsTabData.css';
@@ -21,13 +20,10 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Reset showDecoded when data changes (switching to a different secret)
-  useEffectWithInvalidation(
-    () => {
-      setShowDecoded(false);
-    },
-    [],
-    [data]
-  );
+  useEffect(() => {
+    void data;
+    setShowDecoded(false);
+  }, [data]);
 
   // Handle copying value to clipboard
   const handleCopyValue = (key: string, value: string) => {

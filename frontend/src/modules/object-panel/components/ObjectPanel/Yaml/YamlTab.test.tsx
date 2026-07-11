@@ -199,26 +199,22 @@ vi.mock('@codemirror/view', () => ({
     }),
     set: (ranges: unknown[]) => ranges,
   },
-  // biome-ignore lint/complexity/noStaticOnlyClass: CodeMirror exposes EditorView as a constructable class with static extension facets.
-  EditorView: class {
-    static decorations = {
+  EditorView: Object.assign(class EditorViewMock {}, {
+    decorations: {
       of: (decorations: unknown) => decorations,
       compute: (_dependencies: unknown, compute: unknown) => ({
         type: 'computedDecorations',
         compute,
       }),
-    };
-
-    static contentAttributes = {
+    },
+    contentAttributes: {
       of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
-    };
-
-    static domEventHandlers(handlers: unknown) {
+    },
+    domEventHandlers(handlers: unknown) {
       return handlers;
-    }
-
-    static lineWrapping = 'lineWrapping';
-  },
+    },
+    lineWrapping: 'lineWrapping',
+  }),
   keymap: {
     of: (bindings: unknown) => bindings,
   },

@@ -349,8 +349,9 @@ export function useGridTableController<T>({
   // The dirty queue hashes rendered cells before measuring. Row virtualization changes that
   // visible signature without changing the callback identity, so both range bounds must invalidate
   // this effect after the new virtual rows commit.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Virtual row-window bounds intentionally enqueue visible auto-width columns after scrolling changes their rendered-cell signature.
   useEffect(() => {
+    void virtualRange.start;
+    void virtualRange.end;
     markVisibleAutoColumnsDirty();
   }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 

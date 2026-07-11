@@ -406,30 +406,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // (e.g. after a cluster-switch round trip) the lazy reducer
   // initializer above pulls these values back out.
   //
-  // Deps list every persistent field individually so changes to derived
-  // state (containers, availablePods, parsedContainerLogs, view mode, etc.)
-  // don't trigger an unnecessary writeback. The previous-logs view is the only
-  // mode that persists, so depend on that boolean (not the loading sub-state).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: individual persistent fields intentionally control preference writeback
+  // The reducer state is the source snapshot. Projecting it on every state
+  // transition keeps the cache synchronized without maintaining a second,
+  // manually duplicated dependency contract for its persistent fields.
   useEffect(() => {
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
-  }, [
-    panelId,
-    state.selectedContainer,
-    state.selectedFilters,
-    state.autoRefresh,
-    state.timestampMode,
-    state.wrapText,
-    state.showAnsiColors,
-    state.textFilter,
-    state.highlightMatches,
-    state.inverseMatches,
-    state.caseSensitiveMatches,
-    state.regexMatches,
-    state.displayMode,
-    state.expandedRows,
-    showPreviousContainerLogs,
-  ]);
+  }, [panelId, state]);
 
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);

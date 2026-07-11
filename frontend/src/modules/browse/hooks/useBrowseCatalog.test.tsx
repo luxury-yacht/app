@@ -15,7 +15,7 @@ import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalo
 
 const mocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
-  useRefreshScopedDomain: vi.fn(),
+  readRefreshScopedDomain: vi.fn(),
   requestRefreshDomain: vi.fn(),
   requestRefreshDomainState: vi.fn(),
   getScopedDomainState: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     setScopedDomainEnabled: (...args: unknown[]) => mocks.setScopedDomainEnabled(...args),
   },
-  useRefreshScopedDomain: (...args: unknown[]) => mocks.useRefreshScopedDomain(...args),
+  useRefreshScopedDomain: (...args: unknown[]) => mocks.readRefreshScopedDomain(...args),
 }));
 
 vi.mock('@/core/data-access', () => ({
@@ -47,8 +47,7 @@ vi.mock('@/core/data-access', () => ({
       mocks.refreshFns.set(key, refresh);
     }
     return {
-      // biome-ignore lint/correctness/useHookAtTopLevel: this is a stable mock function, not a React component or custom hook
-      state: domain && scope ? mocks.useRefreshScopedDomain(domain, scope) : { status: 'idle' },
+      state: domain && scope ? mocks.readRefreshScopedDomain(domain, scope) : { status: 'idle' },
       refresh,
     };
   },
@@ -195,7 +194,7 @@ describe('useBrowseCatalog', () => {
       return null;
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => ({
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => ({
       status: 'idle',
       data: null,
       scope,
@@ -218,7 +217,7 @@ describe('useBrowseCatalog', () => {
       scope: baseScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) =>
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) =>
       scope === baseScope ? baseState : { status: 'idle', data: null, scope }
     );
 
@@ -254,7 +253,7 @@ describe('useBrowseCatalog', () => {
     };
     let scopeState = readyState;
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return scopeState;
       }
@@ -305,7 +304,7 @@ describe('useBrowseCatalog', () => {
       sourceVersion: 'catalog:1',
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -360,7 +359,7 @@ describe('useBrowseCatalog', () => {
       scope: metadataScope,
       sourceVersion: 'validator-1',
     };
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -410,7 +409,7 @@ describe('useBrowseCatalog', () => {
       scope: metadataScope,
       sourceVersion: 'validator-1',
     };
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -469,7 +468,7 @@ describe('useBrowseCatalog', () => {
       scope: pageScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -515,7 +514,7 @@ describe('useBrowseCatalog', () => {
 
   it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {
     const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    mocks.useRefreshScopedDomain.mockReturnValue({
+    mocks.readRefreshScopedDomain.mockReturnValue({
       status: 'ready',
       data: makePayload({ items: [first], total: 2, batchSize: 1 }),
       scope: 'cluster-1|limit=2&namespace=default',
@@ -543,7 +542,7 @@ describe('useBrowseCatalog', () => {
 
   it('fetchAllRows pages at the backend max page size', async () => {
     const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    mocks.useRefreshScopedDomain.mockReturnValue({
+    mocks.readRefreshScopedDomain.mockReturnValue({
       status: 'ready',
       data: makePayload({ items: [first], total: 1, batchSize: 1 }),
       scope: 'cluster-1|limit=2&namespace=default',
@@ -649,7 +648,7 @@ describe('useBrowseCatalog', () => {
       scope: pageScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -742,7 +741,7 @@ describe('useBrowseCatalog', () => {
     const onPageLimitChange = vi.fn();
     const baseScope = 'cluster-1|limit=250&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope || scope === metadataScope) {
         return {
           status: 'ready',
@@ -773,7 +772,7 @@ describe('useBrowseCatalog', () => {
     const persistedScope = 'cluster-1|limit=250&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === persistedScope || scope === metadataScope) {
         return {
           status: 'ready',
@@ -815,7 +814,7 @@ describe('useBrowseCatalog', () => {
   it('keeps Cluster Browse loading for empty non-final catalog snapshots', async () => {
     const clusterScope = 'cluster-1|limit=2&namespace=cluster';
     const metadataScope = 'cluster-1|limit=1&namespace=cluster';
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === clusterScope) {
         return {
           status: 'updating',
@@ -864,7 +863,7 @@ describe('useBrowseCatalog', () => {
     });
     let clusterReady = false;
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === namespaceScope) {
         return {
           status: 'ready',
@@ -960,7 +959,7 @@ describe('useBrowseCatalog', () => {
       scope: pageScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -1020,7 +1019,7 @@ describe('useBrowseCatalog', () => {
       scope: pageScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -1061,7 +1060,7 @@ describe('useBrowseCatalog', () => {
     const searchScope = 'cluster-1|limit=2&search=api&namespace=default';
     const metadataScope = 'cluster-1|limit=1&namespace=default';
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope || scope === searchScope || scope === metadataScope) {
         return {
           status: 'ready',
@@ -1106,7 +1105,7 @@ describe('useBrowseCatalog', () => {
     const customScope = 'cluster-1|limit=2&customOnly=true&namespace=default';
     const metadataScope = 'cluster-1|limit=1&customOnly=true&namespace=default';
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === customScope || scope === metadataScope) {
         return {
           status: 'ready',
@@ -1139,7 +1138,7 @@ describe('useBrowseCatalog', () => {
     const metadataScope = 'cluster-1|limit=1&customOnly=true&namespace=cluster';
     const filteredScope = 'cluster-1|limit=2&customOnly=true&kind=Widget&namespace=cluster';
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope || scope === metadataScope || scope === filteredScope) {
         return { status: 'ready', data: makePayload({ items: [], total: 0, batchSize: 0 }), scope };
       }
@@ -1183,7 +1182,7 @@ describe('useBrowseCatalog', () => {
       scope: metadataScope,
     };
 
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) {
         return baseState;
       }
@@ -1292,7 +1291,7 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       scope: metadataScope,
       sourceVersion: 'catalog:1',
     };
-    mocks.useRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
       if (scope === baseScope) return baseState;
       if (scope === metadataScope) return metadataState;
       return { status: 'idle', data: null, scope };
