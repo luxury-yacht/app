@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export const policyFileName = 'biome-policy.json';
+
 const overrideKey = ({ includes, rules }) =>
   `${[...includes].sort().join(',')}::${[...rules].sort().join(',')}`;
 const suppressionKey = ({ file, rule, count }) => `${file}::${rule}::${count}`;
@@ -223,8 +225,8 @@ const excludedDirectories = new Set(['node_modules', 'dist', 'wailsjs', 'coverag
 const excludedFiles = new Set([
   'package-lock.json',
   'src/core/refresh/types.generated.ts',
-  'scripts/check-biome-exceptions.mjs',
-  'scripts/check-biome-exceptions.test.mjs',
+  'scripts/check-biome-policy.mjs',
+  'scripts/check-biome-policy.test.mjs',
 ]);
 
 export const readSourceFiles = (projectRoot) => {
@@ -249,11 +251,9 @@ export const readSourceFiles = (projectRoot) => {
   return sources;
 };
 
-export const validateProjectExceptions = (projectRoot) => {
+export const validateProjectPolicy = (projectRoot) => {
   const config = JSON.parse(fs.readFileSync(path.join(projectRoot, 'biome.json'), 'utf8'));
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(projectRoot, 'biome-exceptions.json'), 'utf8')
-  );
+  const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, policyFileName), 'utf8'));
   const sources = readSourceFiles(projectRoot);
   const collected = collectSuppressions(sources);
   return [
@@ -271,13 +271,13 @@ export const validateProjectExceptions = (projectRoot) => {
 const modulePath = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === modulePath) {
   const projectRoot = path.resolve(path.dirname(modulePath), '..');
-  const errors = validateProjectExceptions(projectRoot);
+  const errors = validateProjectPolicy(projectRoot);
   if (errors.length > 0) {
     errors.forEach((error) => {
       console.error(error);
     });
     process.exitCode = 1;
   } else {
-    console.log('Biome exception snapshot matches the approved manifest.');
+    console.log('Biome configuration and exceptions match the approved policy.');
   }
 }

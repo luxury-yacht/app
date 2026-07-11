@@ -15,7 +15,7 @@ The repository uses Biome's `recommended` preset as its portable baseline and ex
 additional applicable rules to errors. The explicit non-recommended rules currently include
 `noImportCycles`, `noLeakedRender`, `noMisplacedAssertion`, `noSkippedTests`,
 `noUnusedExpressions`, and `noUnusedInstantiation`. Explicit rules are also recorded in the
-exception manifest so removing or weakening one fails the policy check.
+policy manifest so removing or weakening one fails the policy check.
 
 Do not replace this curation with the `all` preset. `all` includes framework and domain rules that
 do not describe this React application. Audit new Biome releases for newly applicable rules and
@@ -49,17 +49,17 @@ contract is non-obvious.
 
 Hook dependency suppressions and custom lifetime-hook allowlists are not approved.
 
-## Exception manifest
+## Policy manifest
 
-`frontend/biome-exceptions.json` is the approved snapshot of:
+`frontend/biome-policy.json` is the approved policy for:
 
 - every config override that disables a rule;
 - every inline `biome-ignore`, aggregated by file and exact rule.
 - every required explicit error rule and Grit boundary plugin.
 
-`npm run check:biome-exceptions --prefix frontend` compares the code and config with that
-manifest. It fails for both new exceptions and stale entries, so removing an exception also
-requires shrinking the manifest.
+`npm run check:biome-policy --prefix frontend` compares the code and config with that policy. It
+fails for both new exceptions and stale entries, so removing an exception also requires shrinking
+the policy.
 
 The manifest is not permission to add an exception. It makes exceptional scope explicit and
 reviewable.
@@ -88,7 +88,7 @@ Before adding or expanding an override:
 1. Run the rule without the proposed override and record the exact diagnostics.
 2. Confirm that native elements, typed helpers, or a local refactor cannot satisfy the contract.
 3. Scope the override to exact files and exact rules; never disable a whole rule category.
-4. Add a concrete rationale to `biome-exceptions.json` describing the behavioral, generated-code,
+4. Add a concrete rationale to `biome-policy.json` describing the behavioral, generated-code,
    third-party, or protocol constraint.
 5. Update this policy or the relevant durable frontend contract when the exception establishes a
    reusable boundary.
@@ -101,7 +101,7 @@ Inline suppressions must:
 - name every exact rule, such as `lint/a11y/noStaticElementInteractions`;
 - include a rationale after `:` that describes the real contract;
 - sit directly on the exceptional statement or JSX node;
-- be added to the exception manifest with its file, rule, and occurrence count.
+- be added to the policy manifest with its file, rule, and occurrence count.
 
 Do not use category suppressions such as `lint/a11y`. If one node needs multiple exceptions, list
 each exact rule in the same directive.

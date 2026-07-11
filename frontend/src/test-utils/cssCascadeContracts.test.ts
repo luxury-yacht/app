@@ -101,17 +101,25 @@ describe('strict CSS cascade contracts', () => {
     expect(computed.borderLeftWidth).toBe('3px');
   });
 
-  it('limits important declarations to the reduced-motion cascade boundary', () => {
+  it('keeps motion and interaction CSS free of important declarations', () => {
     const classifiedBoundaries = [
       ['src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.css', 0],
       ['src/ui/dockable/DockablePanel.css', 0],
       ['src/ui/layout/Sidebar.css', 0],
-      ['styles/utilities/motion.css', 3],
+      ['styles/utilities/motion.css', 0],
     ] as const;
 
     for (const [path, expectedCount] of classifiedBoundaries) {
       const declarations = readProjectFile(path).match(/!important\b/g) ?? [];
       expect(declarations, path).toHaveLength(expectedCount);
     }
+  });
+
+  it('gives the reduced-motion rule app-root specificity', () => {
+    const motion = readProjectFile('styles/utilities/motion.css');
+
+    expect(motion).toContain('#app *');
+    expect(motion).toContain('#app *::before');
+    expect(motion).toContain('#app *::after');
   });
 });

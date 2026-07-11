@@ -19,19 +19,6 @@
   --duration-slow: 300ms;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion accessibility must override component animation declarations regardless of component specificity or stylesheet order. */
-    animation-duration: 0.01ms !important;
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion accessibility must override component animation declarations regardless of component specificity or stylesheet order. */
-    animation-iteration-count: 1 !important;
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion accessibility must override component animation declarations regardless of component specificity or stylesheet order. */
-    transition-duration: 0.01ms !important;
-  }
-}
-
 /* ==========================================================================
    Basic Fade Animations
    ========================================================================== */
@@ -401,6 +388,17 @@
    Motion Preference: Reduced Motion
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
+  #app,
+  #app::before,
+  #app::after,
+  #app *,
+  #app *::before,
+  #app *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+
   .skeleton {
     animation: none;
     background: var(--color-bg-tertiary);

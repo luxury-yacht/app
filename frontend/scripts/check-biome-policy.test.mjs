@@ -3,9 +3,14 @@ import {
   collectConfigPolicyErrors,
   collectDisabledOverrides,
   collectSuppressions,
+  policyFileName,
   readSourceFiles,
   validateExceptionSnapshot,
-} from './check-biome-exceptions.mjs';
+} from './check-biome-policy.mjs';
+
+it('loads the Biome policy from its policy-named manifest', () => {
+  expect(policyFileName).toBe('biome-policy.json');
+});
 
 describe('Biome exception snapshot', () => {
   it('rejects an override that is not in the approved manifest', () => {
