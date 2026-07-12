@@ -772,7 +772,7 @@ describe('BrowseView', () => {
           hasMore: true,
         },
       });
-      // ArrowLeft/ArrowRight page navigation mirrors the footer's gating.
+      // Modified-arrow page navigation mirrors the footer's gating.
       expect(typeof gridTablePropsRef.current.onPagePrevious).toBe('function');
       expect(typeof gridTablePropsRef.current.onPageNext).toBe('function');
       expect(gridTablePropsRef.current.canPagePrevious).toBe(false);

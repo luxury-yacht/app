@@ -9,6 +9,8 @@ import { useMemo } from 'react';
 import './QueryPaginationControls.css';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { formatShortcut } from '@ui/shortcuts/utils';
+import { isMacPlatform } from '@/utils/platform';
 
 interface QueryPaginationControlsProps {
   idPrefix: string;
@@ -93,6 +95,9 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   // Numbered jumps need an exact page count; approximate totals keep
   // first/prev/next only (large-data.md contract).
   const showPageJump = Boolean(onPageJump) && totalIsExact && totalPages > 1;
+  const pageNavigationModifiers = isMacPlatform() ? { meta: true } : { ctrl: true };
+  const previousPageTitle = `Previous page (${formatShortcut('ArrowLeft', pageNavigationModifiers)})`;
+  const nextPageTitle = `Next page (${formatShortcut('ArrowRight', pageNavigationModifiers)})`;
 
   // Commit the page-jump field: parse, clamp to [1, totalPages], and jump only
   // when the target differs from the current page. Both Enter and blur (tab-out)
@@ -155,7 +160,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           onClick={onPrevious}
           disabled={!hasPrevious || loading}
           aria-label="Previous page"
-          title="Previous page"
+          title={previousPageTitle}
         >
           <PaginationArrowIcon direction="previous" />
         </button>
@@ -187,7 +192,7 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           onClick={onNext}
           disabled={!hasNext || loading}
           aria-label="Next page"
-          title="Next page"
+          title={nextPageTitle}
         >
           <PaginationArrowIcon direction="next" />
         </button>

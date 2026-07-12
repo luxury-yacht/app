@@ -441,8 +441,8 @@ function useQueryBackedGridResult<
   const gridTableProps = useMemo(() => {
     const base = {
       ...table.gridTableProps,
-      // Mirrors the footer buttons' disabled logic so ArrowLeft/ArrowRight
-      // page exactly when the buttons are clickable.
+      // Mirrors the footer buttons' disabled logic so the modified-arrow
+      // shortcuts page exactly when the buttons are clickable.
       onPagePrevious: query.loadPrevious,
       onPageNext: query.loadMore,
       canPagePrevious: query.hasPrevious && !query.isRequestingMore,

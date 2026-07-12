@@ -7,6 +7,7 @@
 
 import { useShortcuts } from '@ui/shortcuts';
 import { useEffect, useRef } from 'react';
+import { isMacPlatform } from '@/utils/platform';
 
 // Coordinates all keyboard shortcuts for GridTable, disables hover when
 // shortcuts/context menu are active, and registers the navigation/open/
@@ -49,9 +50,9 @@ type UseGridTableShortcutsOptions = {
   getPageSizeRef: React.RefObject<number>;
   tableDataLength: number;
   isContextMenuVisible: boolean;
-  // Page navigation for paginated tables. Absent handlers leave the arrow
-  // keys unclaimed; false can-flags leave the key unhandled (native behavior
-  // such as horizontal scrolling survives at page boundaries).
+  // Page navigation for paginated tables. Ctrl+Arrow is used off macOS and
+  // Command+Arrow on macOS, leaving plain arrows to horizontal scrolling.
+  // False can-flags leave even the modified shortcut unhandled.
   onPagePrevious?: () => void;
   onPageNext?: () => void;
   canPagePrevious?: boolean;
@@ -81,6 +82,7 @@ export function useGridTableShortcuts({
     suppressionIdRef.current = Symbol('grid-hover-suppressor');
   }
   const suppressionId = suppressionIdRef.current;
+  const pageNavigationModifiers = isMacPlatform() ? { meta: true } : { ctrl: true };
 
   useEffect(() => {
     const shouldDisableHover = shortcutsActive || isContextMenuVisible;
@@ -151,6 +153,7 @@ export function useGridTableShortcuts({
       },
       {
         key: 'ArrowLeft',
+        modifiers: pageNavigationModifiers,
         handler: () => {
           if (!onPagePrevious || !canPagePrevious) {
             return false;
@@ -163,6 +166,7 @@ export function useGridTableShortcuts({
       },
       {
         key: 'ArrowRight',
+        modifiers: pageNavigationModifiers,
         handler: () => {
           if (!onPageNext || !canPageNext) {
             return false;

@@ -2,6 +2,7 @@
 
 ### Changed
 
+- Previous/next pagination is now `ctrl+←/→` (`cmd+←/→` on macOS) to prevent conflicts when the arrow keys are used for horizontal scroll in wide tables.
 - Confirmation dialogs initially focus the non-destructive Cancel action.
 - Refresh API TypeScript contracts are now generated from backend Go DTOs, with stale-output and domain-parity checks to prevent cross-layer drift.
 

@@ -11,7 +11,7 @@ interface CatalogPaginationFooterProps {
 }
 
 /**
- * GridTable props that map ArrowLeft/ArrowRight to catalog page navigation,
+ * GridTable props that map the modified-arrow shortcuts to catalog page navigation,
  * mirroring the footer buttons' disabled logic. Kept beside the footer for
  * the same reason the footer exists: so the three catalog views cannot drift.
  */

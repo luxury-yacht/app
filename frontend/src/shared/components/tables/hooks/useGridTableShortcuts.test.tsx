@@ -25,6 +25,8 @@ const capturedShortcuts: {
   options: undefined,
 };
 
+const isMacPlatformMock = vi.hoisted(() => vi.fn(() => false));
+
 vi.mock('@ui/shortcuts', () => ({
   useShortcuts: (shortcuts: CapturedShortcut[], options: CapturedShortcutOptions) => {
     capturedShortcuts.shortcuts = shortcuts;
@@ -32,11 +34,16 @@ vi.mock('@ui/shortcuts', () => ({
   },
 }));
 
+vi.mock('@/utils/platform', () => ({
+  isMacPlatform: () => isMacPlatformMock(),
+}));
+
 describe('useGridTableShortcuts', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeEach(() => {
+    isMacPlatformMock.mockReturnValue(false);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -220,7 +227,7 @@ describe('useGridTableShortcuts', () => {
     };
   };
 
-  it('pages with ArrowLeft/ArrowRight when pagination is wired and possible', async () => {
+  it('pages with Ctrl+ArrowLeft/ArrowRight on non-macOS when pagination is possible', async () => {
     const onPagePrevious = vi.fn();
     const onPageNext = vi.fn();
     const { findShortcut } = await renderWithPagination({
@@ -236,6 +243,7 @@ describe('useGridTableShortcuts', () => {
         'expected test value in useGridTableShortcuts.test.tsx'
       ).handler()
     ).toBe(true);
+    expect(findShortcut('ArrowLeft')?.modifiers).toEqual({ ctrl: true });
     expect(onPagePrevious).toHaveBeenCalledTimes(1);
 
     expect(
@@ -244,10 +252,24 @@ describe('useGridTableShortcuts', () => {
         'expected test value in useGridTableShortcuts.test.tsx'
       ).handler()
     ).toBe(true);
+    expect(findShortcut('ArrowRight')?.modifiers).toEqual({ ctrl: true });
     expect(onPageNext).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves ArrowLeft/ArrowRight unhandled at page boundaries so native behavior survives', async () => {
+  it('pages with Command+ArrowLeft/ArrowRight on macOS when pagination is possible', async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    const { findShortcut } = await renderWithPagination({
+      onPagePrevious: vi.fn(),
+      onPageNext: vi.fn(),
+      canPagePrevious: true,
+      canPageNext: true,
+    });
+
+    expect(findShortcut('ArrowLeft')?.modifiers).toEqual({ meta: true });
+    expect(findShortcut('ArrowRight')?.modifiers).toEqual({ meta: true });
+  });
+
+  it('leaves modified ArrowLeft/ArrowRight unhandled at page boundaries', async () => {
     const onPagePrevious = vi.fn();
     const onPageNext = vi.fn();
     const { findShortcut } = await renderWithPagination({
@@ -273,7 +295,7 @@ describe('useGridTableShortcuts', () => {
     expect(onPageNext).not.toHaveBeenCalled();
   });
 
-  it('does not claim ArrowLeft/ArrowRight for tables without pagination', async () => {
+  it('does not claim modified ArrowLeft/ArrowRight for tables without pagination', async () => {
     const { findShortcut } = await renderWithPagination({});
 
     expect(

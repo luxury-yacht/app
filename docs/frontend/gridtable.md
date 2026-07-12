@@ -65,6 +65,10 @@ bound to the wrapper while focus remains on the native table. Collapsing those
 elements into one prevents the scroll viewport from constraining content wider
 than itself and removes horizontal scrolling.
 
+Plain Left/Right arrows retain native horizontal scrolling. Paginated tables use
+Ctrl+Left/Right off macOS and Command+Left/Right on macOS for previous/next page;
+the modified shortcut remains unhandled when its page direction is unavailable.
+
 Sortable column labels are native buttons. Column and docked-layout resize
 separators are keyboard focusable and support arrow keys plus Home and End. Keep
 the native elements centralized in `AriaGridPrimitives.tsx`. Production grids,
