@@ -78,6 +78,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
@@ -85,6 +89,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 // Mock keyboard shortcuts for ConfirmationModal
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
+  useKeyboardSurface: vi.fn(),
   useKeyboardContext: () => ({
     registerShortcut: vi.fn(),
     unregisterShortcut: vi.fn(),
@@ -109,8 +114,8 @@ const openMenu = (container: HTMLElement) => {
   });
 };
 
-const clickMenuItem = (container: HTMLElement, text: string) => {
-  const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+const clickMenuItem = (_container: HTMLElement, text: string) => {
+  const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
   const item = items.find((entry) => entry.textContent?.includes(text));
   act(() => {
     requireValue(item, `expected menu item "${text}"`).dispatchEvent(
@@ -179,11 +184,21 @@ describe('ActionsMenu', () => {
 
     openMenu(container);
 
-    const menu = container.querySelector('[role="menu"]');
-    const items = container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
+    const menu = document.body.querySelector('[role="menu"]');
+    const items = document.body.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
     expect(menu).toBeTruthy();
     expect(items.length).toBeGreaterThan(0);
     expect(Array.from(items).every((item) => item.type === 'button')).toBe(true);
+  });
+
+  it('renders the open menu outside the panel scroll container', async () => {
+    await renderMenu({ object: makeObject('Node') });
+
+    openMenu(container);
+
+    const menu = document.body.querySelector<HTMLElement>('.context-menu');
+    expect(menu).toBeTruthy();
+    expect(container.contains(menu)).toBe(false);
   });
 
   it('does not render when object is null', async () => {
@@ -249,7 +264,7 @@ describe('ActionsMenu', () => {
     await renderMenu({ object: makeObject('Deployment'), onAfterDelete });
 
     openMenu(container);
-    const deleteItem = container.querySelector<HTMLElement>('.context-menu-item.danger');
+    const deleteItem = document.body.querySelector<HTMLElement>('.context-menu-item.danger');
     expect(deleteItem).toBeTruthy();
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -329,7 +344,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const scaleToZeroItem = items.find((item) => item.textContent?.includes('Scale to 0'));
     expect(scaleToZeroItem).toBeTruthy();
     expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
@@ -357,7 +372,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
     expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
@@ -397,7 +412,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const resumeItem = items.find((item) => item.textContent?.includes('Resume from 0'));
     expect(resumeItem).toBeTruthy();
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
@@ -420,7 +435,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
     expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
@@ -433,7 +448,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
     expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(true);
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
@@ -445,13 +460,13 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    expect(container.querySelector('.actions-menu-dropdown')).toBeTruthy();
+    expect(document.body.querySelector('.context-menu')).toBeTruthy();
 
     act(() => {
       document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
 
-    expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
+    expect(document.body.querySelector('.context-menu')).toBeNull();
   });
 
   it('does not show Scale while HPA ownership is unknown', async () => {
@@ -460,7 +475,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
     expect(items.some((item) => item.textContent === 'Scale')).toBe(false);
     expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
@@ -473,7 +488,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
     expect(portForwardItem).toBeTruthy();
   });
@@ -486,7 +501,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem?.className).toContain('disabled');
@@ -501,7 +516,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
     expect(portForwardItem).toBeTruthy();
     expect(portForwardItem?.className).toContain('disabled');
@@ -522,7 +537,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
     const diffItem = items.find((item) => item.textContent?.includes('Diff'));
     expect(diffItem).toBeTruthy();
 
@@ -552,7 +567,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const objectMapItem = container.querySelector<HTMLElement>(
+    const objectMapItem = document.body.querySelector<HTMLElement>(
       `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
     );
     expect(objectMapItem).toBeTruthy();
@@ -572,7 +587,7 @@ describe('ActionsMenu', () => {
       }),
       { initialTab: 'map' }
     );
-    expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
+    expect(document.body.querySelector('.context-menu')).toBeNull();
   });
 
   describe('CronJob actions', () => {
@@ -582,7 +597,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -597,7 +612,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
 
       const resumeItem = items.find((item) => item.textContent?.includes('Resume'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -612,7 +627,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
       expect(triggerItem?.classList.contains('disabled')).toBe(true);
     });

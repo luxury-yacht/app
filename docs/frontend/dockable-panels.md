@@ -28,6 +28,9 @@ cluster/object scoped.
   `ObjectPanel.groupLeaderContext.test.tsx`).
 - Layout CSS and measured group geometry are part of behavior; do not remove
   geometry transfer without replacing it.
+- Menus and other transient surfaces opened from docked content must render
+  through their shared body-level portal. Do not weaken the panel's scrolling
+  or overflow boundaries to make an inline surface visible.
 
 ## Ownership
 
