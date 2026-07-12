@@ -570,8 +570,8 @@ describe('Dropdown', () => {
 
     const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
     expect(bulkButtons).toHaveLength(2);
-    expect(bulkButtons[0]?.textContent).toContain('Select All');
-    expect(bulkButtons[1]?.textContent).toContain('Select None');
+    expect(bulkButtons[0]?.textContent).toContain('All');
+    expect(bulkButtons[1]?.textContent).toContain('None');
     expect(container.querySelector('.search-input')).toBeNull();
   });
 
