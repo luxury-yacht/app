@@ -20,6 +20,7 @@ type FocusNavigationOptions<T> = {
   onRowPointerClick?: (item: T) => void;
   isShortcutOptOutTarget: (target: EventTarget | null) => boolean;
   wrapperRef: RefObject<HTMLDivElement | null>;
+  focusRef: RefObject<HTMLTableElement | null>;
   updateHoverForElement: (element: HTMLDivElement | null) => void;
   getRowClassName?: (item: T, index: number) => string | null | undefined;
   shouldIgnoreRowClick: (event: React.MouseEvent) => boolean;
@@ -53,6 +54,7 @@ export function useGridTableFocusNavigation<T>({
   onRowPointerClick,
   isShortcutOptOutTarget,
   wrapperRef,
+  focusRef,
   updateHoverForElement,
   getRowClassName,
   shouldIgnoreRowClick,
@@ -127,7 +129,7 @@ export function useGridTableFocusNavigation<T>({
 
   const handleRowActivation = useCallback(
     (item: T, index: number, source: 'pointer' | 'keyboard') => {
-      wrapperRef.current?.focus();
+      focusRef.current?.focus();
       lastNavigationMethodRef.current = source;
       setIsFocusedRowHighlightSuppressed(false);
       const key = keyExtractor(item, index);
@@ -139,7 +141,7 @@ export function useGridTableFocusNavigation<T>({
         onRowPointerClick?.(item);
       }
     },
-    [keyExtractor, onRowClick, onRowPointerClick, wrapperRef]
+    [focusRef, keyExtractor, onRowClick, onRowPointerClick]
   );
 
   const suppressFocusedRowHighlight = useCallback(() => {

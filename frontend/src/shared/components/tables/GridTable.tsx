@@ -52,6 +52,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
 
   const {
     wrapperRef,
+    gridRef,
     tableRef,
     headerInnerRef,
     tableData,
@@ -102,6 +103,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
   const bodyNode = (
     <GridTableBody
       wrapperRef={wrapperRef}
+      gridRef={gridRef}
       tableRef={tableRef}
       tableClassName={tableClassName}
       useShortNames={useShortNames}

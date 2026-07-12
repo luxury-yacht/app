@@ -52,7 +52,8 @@ const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
 
 export interface GridTableControllerResult<T> {
   // Refs needed by sub-components
-  wrapperRef: RefObject<HTMLTableElement | null>;
+  wrapperRef: RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLTableElement | null>;
   tableRef: RefObject<HTMLTableSectionElement | null>;
   headerInnerRef: RefObject<HTMLTableElement | null>;
 
@@ -147,7 +148,8 @@ export function useGridTableController<T>({
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
     [inputData]
   );
-  const wrapperRef = useRef<HTMLTableElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLTableElement>(null);
   const tableRef = useRef<HTMLTableSectionElement>(null);
   const headerInnerRef = useRef<HTMLTableElement | null>(null);
   const previousInputDataRef = useRef(inputData);
@@ -275,6 +277,7 @@ export function useGridTableController<T>({
     sortConfig,
     onSort,
     wrapperRef,
+    gridRef,
     headerInnerRef,
     hideHeader,
     contextMenuActiveRef,
@@ -376,6 +379,7 @@ export function useGridTableController<T>({
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,
+    focusRef: gridRef,
     tableDataLength: tableData.length,
     focusedRowKey,
     suppressFocusedRowHighlight,
@@ -467,6 +471,7 @@ export function useGridTableController<T>({
 
   return {
     wrapperRef,
+    gridRef,
     tableRef,
     headerInnerRef,
     tableData,

@@ -511,6 +511,39 @@ describe('GridTable virtualization', () => {
     );
   });
 
+  it('keeps a horizontal scroll viewport outside the wide native table', () => {
+    const wideColumns: GridColumnDefinition<SimpleRow>[] = [
+      {
+        key: 'label',
+        header: 'Label',
+        width: 320,
+        render: (row) => row.label,
+      },
+      {
+        key: 'name',
+        header: 'Name',
+        width: 480,
+        render: (row) => row.name ?? row.label,
+      },
+    ];
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(150).map((row, index) => ({ ...row, name: `Name ${index}` })),
+      columns: wideColumns,
+      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+      allowHorizontalOverflow: true,
+    });
+    cleanupRoot = cleanup;
+
+    const viewport = container.querySelector<HTMLElement>('.gridtable-wrapper');
+    const grid = viewport?.querySelector<HTMLTableElement>('table.gridtable--body');
+
+    expect(viewport?.tagName).toBe('DIV');
+    expect(grid).not.toBeNull();
+    expect(grid?.tabIndex).toBe(0);
+    expect(grid?.querySelector<HTMLElement>('.gridtable-virtual-body')?.style.width).toBe('800px');
+  });
+
   it('wires visual viewport listeners to keep the header synced', async () => {
     const addListener = vi.fn();
     const removeListener = vi.fn();
@@ -764,10 +797,12 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
     expect(wrapper).not.toBeNull();
+    expect(grid).not.toBeNull();
 
     act(() => {
-      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
+      requireValue(grid, 'expected test value in GridTable.test.tsx').focus();
     });
 
     await flushAsync();
@@ -793,7 +828,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     act(() => {
-      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
+      requireValue(grid, 'expected test value in GridTable.test.tsx').focus();
     });
 
     await flushAsync();
@@ -961,8 +996,10 @@ describe('GridTable interactions (non-virtualized)', () => {
       '[data-gridtable-filter-role="columns"] .dropdown-trigger'
     );
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
     expect(columnsTrigger).not.toBeNull();
     expect(wrapper).not.toBeNull();
+    expect(grid).not.toBeNull();
 
     act(() => {
       requireValue(columnsTrigger, 'expected test value in GridTable.test.tsx').focus();
@@ -979,7 +1016,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       );
     });
 
-    expect(document.activeElement).toBe(wrapper);
+    expect(document.activeElement).toBe(grid);
   });
 
   it('shift-tabs from the table body back to the last filter control', async () => {
@@ -1012,19 +1049,21 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
     const columnsTrigger = container.querySelector<HTMLElement>(
       '[data-gridtable-filter-role="columns"] .dropdown-trigger'
     );
     expect(wrapper).not.toBeNull();
+    expect(grid).not.toBeNull();
     expect(columnsTrigger).not.toBeNull();
 
     act(() => {
-      requireValue(wrapper, 'expected test value in GridTable.test.tsx').focus();
+      requireValue(grid, 'expected test value in GridTable.test.tsx').focus();
     });
-    expect(document.activeElement).toBe(wrapper);
+    expect(document.activeElement).toBe(grid);
 
     act(() => {
-      requireValue(wrapper, 'expected test value in GridTable.test.tsx').dispatchEvent(
+      requireValue(grid, 'expected test value in GridTable.test.tsx').dispatchEvent(
         new KeyboardEvent('keydown', {
           key: 'Tab',
           shiftKey: true,
@@ -1037,7 +1076,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(document.activeElement).toBe(columnsTrigger);
   });
 
-  it('removes row-internal controls from the tab order so the wrapper stays the only body tab stop', async () => {
+  it('removes row-internal controls from the tab order so the grid stays the only body tab stop', async () => {
     const interactiveColumns: GridColumnDefinition<SimpleRow>[] = [
       {
         key: 'label',
@@ -1056,11 +1095,11 @@ describe('GridTable interactions (non-virtualized)', () => {
     await flushAsync();
 
     const rowButton = container.querySelector<HTMLButtonElement>('.gridtable-row button');
-    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
     expect(rowButton).not.toBeNull();
-    expect(wrapper).not.toBeNull();
+    expect(grid).not.toBeNull();
     expect(requireValue(rowButton, 'expected test value in GridTable.test.tsx').tabIndex).toBe(-1);
-    expect(requireValue(wrapper, 'expected test value in GridTable.test.tsx').tabIndex).toBe(0);
+    expect(requireValue(grid, 'expected test value in GridTable.test.tsx').tabIndex).toBe(0);
   });
 
   it('shows selection counts in kind and namespace dropdown labels', async () => {
@@ -1283,9 +1322,10 @@ it('focuses the first row when the wrapper receives focus and moves with Arrow k
   });
   cleanupRoot = cleanup;
 
-  const wrapper = scrollWrapper();
+  scrollWrapper();
+  const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
   await act(async () => {
-    wrapper.focus();
+    requireValue(grid, 'expected test value in GridTable.test.tsx').focus();
   });
 
   const rows = Array.from(container.querySelectorAll('.gridtable-row'));
@@ -1305,9 +1345,10 @@ it('activates hover overlay on focused row when wrapper receives keyboard focus'
   });
   cleanupRoot = cleanup;
 
-  const wrapper = scrollWrapper();
+  scrollWrapper();
+  const grid = container.querySelector<HTMLTableElement>('table.gridtable--body');
   await act(async () => {
-    wrapper.focus();
+    requireValue(grid, 'expected test value in GridTable.test.tsx').focus();
   });
 
   // The focused row should have the focused class.
@@ -1326,15 +1367,19 @@ it('activates hover overlay on focused row when wrapper receives keyboard focus'
 });
 
 it('toggles hover suppression on the body only while focused', async () => {
-  const { cleanup, scrollWrapper } = renderGridTable({
+  const { container, cleanup, scrollWrapper } = renderGridTable({
     data: createRows(2),
     virtualization: { enabled: false },
   });
   cleanupRoot = cleanup;
 
   const wrapper = scrollWrapper();
+  const grid = requireValue(
+    container.querySelector<HTMLTableElement>('table.gridtable--body'),
+    'expected test value in GridTable.test.tsx'
+  );
   await act(async () => {
-    wrapper.focus();
+    grid.focus();
   });
 
   // Note: With mocked useKeyboardContext, hover suppression via useGridTableShortcuts
@@ -1342,7 +1387,7 @@ it('toggles hover suppression on the body only while focused', async () => {
   // The actual hover suppression is tested implicitly by the app working correctly.
 
   await act(async () => {
-    wrapper.blur();
+    grid.blur();
   });
 
   // Focus/blur cycle completed without hanging
@@ -1981,7 +2026,7 @@ it('renders native table, row, header, and cell semantics', () => {
   });
   cleanupRoot = cleanup;
 
-  const grid = container.querySelector('table.gridtable-wrapper');
+  const grid = container.querySelector('table.gridtable--body');
   expect(grid?.getAttribute('role')).toBeNull();
 
   const headerRow = container.querySelector('thead > .gridtable-header');
@@ -2005,7 +2050,7 @@ it('renders native table, row, header, and cell semantics', () => {
   const gridcells = container.querySelectorAll('td.grid-cell');
   expect(gridcells.length).toBe(3); // 1 column × 3 rows
 
-  const rowgroup = container.querySelector('table.gridtable-wrapper > tbody');
+  const rowgroup = container.querySelector('table.gridtable--body > tbody');
   expect(rowgroup).not.toBeNull();
 });
 
@@ -2057,7 +2102,7 @@ it('sets aria-busy on grid container when loading overlay is shown', () => {
   });
   cleanupRoot = cleanup;
 
-  const grid = container.querySelector('table.gridtable-wrapper');
+  const grid = container.querySelector('table.gridtable--body');
   expect(
     requireValue(grid, 'expected test value in GridTable.test.tsx').getAttribute('aria-busy')
   ).toBe('true');

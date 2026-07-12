@@ -31,6 +31,7 @@ type ContextMenuWiringOptions<T> = {
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
   wrapperRef: RefObject<HTMLDivElement | null>;
+  focusRef: RefObject<HTMLTableElement | null>;
   contextMenuActiveRef?: RefObject<boolean>;
 };
 
@@ -47,6 +48,7 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     focusedRowIndex,
     focusedRowKey,
     wrapperRef,
+    focusRef,
     contextMenuActiveRef: externalContextMenuActiveRef,
   } = options;
 
@@ -85,19 +87,19 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
         (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null);
-      contextMenuRestoreTargetRef.current = activeEl ?? wrapperRef.current;
+      contextMenuRestoreTargetRef.current = activeEl ?? focusRef.current;
     },
-    [wrapperRef, contextMenuActiveRef]
+    [contextMenuActiveRef, focusRef]
   );
 
   const handleCloseContextMenu = useCallback(() => {
     closeContextMenu();
     contextMenuActiveRef.current = false;
     setIsContextMenuVisible(false);
-    const target = contextMenuRestoreTargetRef.current ?? wrapperRef.current;
+    const target = contextMenuRestoreTargetRef.current ?? focusRef.current;
     contextMenuRestoreTargetRef.current = null;
     target?.focus();
-  }, [closeContextMenu, wrapperRef, contextMenuActiveRef]);
+  }, [closeContextMenu, contextMenuActiveRef, focusRef]);
 
   const handleCellContextMenu = useCallback(
     (event: MouseEvent, columnKey: string, item: T | null, _rowIndex: number) => {
@@ -106,10 +108,10 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
       }
       const opened = openCellContextMenu(event, columnKey, item);
       if (opened) {
-        beginContextMenuInteraction(wrapperRef.current);
+        beginContextMenuInteraction(focusRef.current);
       }
     },
-    [beginContextMenuInteraction, enableContextMenu, openCellContextMenu, wrapperRef]
+    [beginContextMenuInteraction, enableContextMenu, focusRef, openCellContextMenu]
   );
 
   const handleWrapperContextMenu = useCallback(
@@ -119,10 +121,10 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
       }
       const opened = openWrapperContextMenu(event);
       if (opened) {
-        beginContextMenuInteraction(wrapperRef.current);
+        beginContextMenuInteraction(focusRef.current);
       }
     },
-    [beginContextMenuInteraction, enableContextMenu, openWrapperContextMenu, wrapperRef]
+    [beginContextMenuInteraction, enableContextMenu, focusRef, openWrapperContextMenu]
   );
 
   const openFocusedRowContextMenu = useCallback(() => {
@@ -161,7 +163,7 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
       anchorCell ?? rowElement
     );
     if (opened) {
-      beginContextMenuInteraction(wrapperRef.current);
+      beginContextMenuInteraction(focusRef.current);
     }
     return opened;
   }, [
@@ -170,6 +172,7 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     enableContextMenu,
     focusedRowIndex,
     focusedRowKey,
+    focusRef,
     openCellContextMenuFromKeyboard,
     tableData,
     wrapperRef,

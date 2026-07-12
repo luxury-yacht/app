@@ -5,10 +5,10 @@
  * Covers key behaviors and edge cases for GridTableBody.
  */
 
-import GridTableBody from '@shared/components/tables/GridTableBody';
-import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import GridTableBody from '@shared/components/tables/GridTableBody';
+import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -29,13 +29,16 @@ describe('GridTableBody', () => {
   const renderTableBody = async (props: Partial<BodyProps> = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const wrapper = document.createElement('table');
+    const wrapper = document.createElement('div');
     wrapper.className = 'gridtable-wrapper';
+    const grid = document.createElement('table');
     const table = document.createElement('tbody');
-    wrapper.appendChild(table);
+    grid.appendChild(table);
+    wrapper.appendChild(grid);
     container.appendChild(wrapper);
 
     const wrapperRef = { current: wrapper };
+    const gridRef = { current: grid };
     const tableRef = { current: table };
 
     const defaultRenderRowContent: RenderRowContentFn<TestRow> = (item, index) => (
@@ -46,6 +49,7 @@ describe('GridTableBody', () => {
 
     const defaultProps: BodyProps = {
       wrapperRef,
+      gridRef,
       tableRef,
       tableClassName: '',
       useShortNames: false,

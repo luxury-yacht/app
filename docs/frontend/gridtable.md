@@ -59,6 +59,12 @@ table, so recycling a virtual row never moves focus to an element that can
 unmount. Virtual rows remain direct `tbody` children and are positioned from the
 virtualizer's per-row top offsets.
 
+The body table lives inside a distinct `.gridtable-wrapper` scroll viewport.
+Keep scrolling, viewport measurement, virtualization, and header synchronization
+bound to the wrapper while focus remains on the native table. Collapsing those
+elements into one prevents the scroll viewport from constraining content wider
+than itself and removes horizontal scrolling.
+
 Sortable column labels are native buttons. Column and docked-layout resize
 separators are keyboard focusable and support arrow keys plus Home and End. Keep
 the native elements centralized in `AriaGridPrimitives.tsx`. Production grids,

@@ -25,7 +25,8 @@ interface HoverState {
 }
 
 interface GridTableBodyProps<T> {
-  wrapperRef: RefObject<HTMLTableElement | null>;
+  wrapperRef: RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLTableElement | null>;
   tableRef: RefObject<HTMLTableSectionElement | null>;
   tableClassName: string;
   useShortNames: boolean;
@@ -55,6 +56,7 @@ interface GridTableBodyProps<T> {
 
 function GridTableBody<T>({
   wrapperRef,
+  gridRef,
   tableRef,
   tableClassName,
   useShortNames,
@@ -182,46 +184,50 @@ function GridTableBody<T>({
   };
 
   return (
-    <AriaGrid
-      ref={wrapperRef}
-      className={`gridtable-wrapper gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
-      onContextMenu={onWrapperContextMenu}
-      onFocus={onWrapperFocus}
-      onBlur={onWrapperBlur}
-      tabIndex={0}
-      aria-busy={loading || undefined}
-      aria-label="Data table"
-    >
-      <caption
-        className={[
-          'gridtable-hover-overlay',
-          hoverState.visible ? 'is-visible' : '',
-          hoverState.selected ? 'is-selected' : '',
-          hoverState.focused ? 'is-focused' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        style={{
-          transform: `translateY(${hoverState.top}px)`,
-          height: `${hoverState.height}px`,
-        }}
-      />
-
-      <AriaGridRowGroup
-        ref={tableRef}
-        className={[
-          shouldVirtualize ? 'gridtable-virtual-body' : '',
-          tableData.length === 0 ? 'gridtable-empty-body' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        style={
-          shouldVirtualize ? { height: `${totalVirtualHeight}px`, width: virtualWidth } : undefined
-        }
+    <div ref={wrapperRef} className="gridtable-wrapper">
+      <AriaGrid
+        ref={gridRef}
+        className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
+        onContextMenu={onWrapperContextMenu}
+        onFocus={onWrapperFocus}
+        onBlur={onWrapperBlur}
+        tabIndex={0}
+        aria-busy={loading || undefined}
+        aria-label="Data table"
       >
-        {renderRows()}
-      </AriaGridRowGroup>
-    </AriaGrid>
+        <caption
+          className={[
+            'gridtable-hover-overlay',
+            hoverState.visible ? 'is-visible' : '',
+            hoverState.selected ? 'is-selected' : '',
+            hoverState.focused ? 'is-focused' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          style={{
+            transform: `translateY(${hoverState.top}px)`,
+            height: `${hoverState.height}px`,
+          }}
+        />
+
+        <AriaGridRowGroup
+          ref={tableRef}
+          className={[
+            shouldVirtualize ? 'gridtable-virtual-body' : '',
+            tableData.length === 0 ? 'gridtable-empty-body' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          style={
+            shouldVirtualize
+              ? { height: `${totalVirtualHeight}px`, width: virtualWidth }
+              : undefined
+          }
+        >
+          {renderRows()}
+        </AriaGridRowGroup>
+      </AriaGrid>
+    </div>
   );
 }
 

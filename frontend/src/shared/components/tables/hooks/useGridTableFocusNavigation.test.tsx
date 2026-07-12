@@ -35,12 +35,14 @@ const Harness = ({
   updateHoverForElement,
   ref,
 }: HarnessProps & { ref?: React.Ref<HarnessHandle> }) => {
-  const wrapperRef = useRef<HTMLTableElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const focusRef = useRef<HTMLTableElement | null>(null);
 
   const result = useGridTableFocusNavigation<Row>({
     tableData,
     keyExtractor: (row) => row.id,
     wrapperRef,
+    focusRef,
     updateHoverForElement,
     isShortcutOptOutTarget: () => false,
     shouldIgnoreRowClick: () => false,
@@ -54,15 +56,17 @@ const Harness = ({
   }));
 
   return (
-    <AriaGrid ref={wrapperRef} tabIndex={0}>
-      <tbody>
-        {tableData.map((row, i) => (
-          <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
-            <td>Row {i}</td>
-          </tr>
-        ))}
-      </tbody>
-    </AriaGrid>
+    <div ref={wrapperRef}>
+      <AriaGrid ref={focusRef} tabIndex={0}>
+        <tbody>
+          {tableData.map((row, i) => (
+            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+              <td>Row {i}</td>
+            </tr>
+          ))}
+        </tbody>
+      </AriaGrid>
+    </div>
   );
 };
 
@@ -165,12 +169,14 @@ const ExtendedHarness = ({
   isShortcutOptOutTarget,
   ref,
 }: ExtendedProps & { ref?: React.Ref<ExtendedHandle> }) => {
-  const wrapperRef = useRef<HTMLTableElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const focusRef = useRef<HTMLTableElement | null>(null);
 
   const result = useGridTableFocusNavigation<Row>({
     tableData,
     keyExtractor: (row) => row.id,
     wrapperRef,
+    focusRef,
     updateHoverForElement,
     onRowClick,
     onRowPointerClick,
@@ -196,15 +202,17 @@ const ExtendedHarness = ({
   }));
 
   return (
-    <AriaGrid ref={wrapperRef} tabIndex={0}>
-      <tbody>
-        {tableData.map((row, i) => (
-          <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
-            <td>Row {i}</td>
-          </tr>
-        ))}
-      </tbody>
-    </AriaGrid>
+    <div ref={wrapperRef}>
+      <AriaGrid ref={focusRef} tabIndex={0}>
+        <tbody>
+          {tableData.map((row, i) => (
+            <tr key={row.id} className="gridtable-row" data-row-key={row.id}>
+              <td>Row {i}</td>
+            </tr>
+          ))}
+        </tbody>
+      </AriaGrid>
+    </div>
   );
 };
 

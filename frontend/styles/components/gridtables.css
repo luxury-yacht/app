@@ -102,15 +102,13 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  border-collapse: collapse;
-  border-spacing: 0;
 }
 
-.gridtable-wrapper > caption {
+.gridtable--body > caption {
   display: block;
 }
 
-.gridtable-wrapper > tbody {
+.gridtable--body > tbody {
   display: flex;
   flex-direction: column;
   position: relative;
@@ -118,7 +116,7 @@
   min-width: 100%;
 }
 
-.gridtable-wrapper:focus {
+.gridtable--body:focus {
   outline: none;
 }
 
@@ -129,6 +127,8 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  border-collapse: collapse;
+  border-spacing: 0;
 }
 
 /* ============================================

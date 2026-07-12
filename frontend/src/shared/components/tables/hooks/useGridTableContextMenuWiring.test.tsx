@@ -101,6 +101,7 @@ describe('useGridTableContextMenuWiring', () => {
     ];
     const renderedColumnKey = opts.renderedColumnKey ?? 'name';
     const wrapperRef = { current: null as HTMLDivElement | null };
+    const focusRef = { current: null as HTMLTableElement | null };
     const handleRowActivation = vi.fn();
     let result: HarnessResult | null = null;
 
@@ -113,6 +114,7 @@ describe('useGridTableContextMenuWiring', () => {
         focusedRowIndex: opts.focusedRowIndex ?? null,
         focusedRowKey: opts.focusedRowKey ?? null,
         wrapperRef,
+        focusRef,
       });
       result = { ...wiring, handleRowActivation };
       return (
@@ -122,6 +124,11 @@ describe('useGridTableContextMenuWiring', () => {
               wrapperRef.current = el;
             }}
           >
+            <table
+              ref={(el) => {
+                focusRef.current = el;
+              }}
+            />
             {tableData.map((row) => (
               <div key={row.id} data-row-key={row.id} className="gridtable-row">
                 <div className="grid-cell" data-column={renderedColumnKey}>

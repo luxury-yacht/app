@@ -34,6 +34,7 @@ interface UseGridTableInteractionWiringOptions<T> {
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
   wrapperRef: RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLTableElement | null>;
   headerInnerRef: RefObject<HTMLDivElement | null>;
   hideHeader: boolean;
   contextMenuActiveRef: RefObject<boolean>;
@@ -81,6 +82,7 @@ export function useGridTableInteractionWiring<T>({
   sortConfig,
   onSort,
   wrapperRef,
+  gridRef,
   headerInnerRef,
   hideHeader,
   contextMenuActiveRef,
@@ -143,6 +145,7 @@ export function useGridTableInteractionWiring<T>({
     onRowPointerClick,
     isShortcutOptOutTarget,
     wrapperRef,
+    focusRef: gridRef,
     updateHoverForElement,
     getRowClassName,
     shouldIgnoreRowClick,
@@ -184,6 +187,7 @@ export function useGridTableInteractionWiring<T>({
     focusedRowIndex,
     focusedRowKey,
     wrapperRef,
+    focusRef: gridRef,
     contextMenuActiveRef,
   });
 
