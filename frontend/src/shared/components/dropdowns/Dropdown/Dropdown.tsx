@@ -494,7 +494,7 @@ const Dropdown = <TMetadata,>({
                     title="Select all"
                     aria-label="Select all"
                   >
-                    <DropdownSelectAllIcon />
+                    <DropdownSelectAllIcon width={20} height={20} />
                     {showBulkActionLabels && (
                       <span className="dropdown-bulk-action-label">All</span>
                     )}
@@ -512,7 +512,7 @@ const Dropdown = <TMetadata,>({
                     title="Select none"
                     aria-label="Select none"
                   >
-                    <DropdownSelectNoneIcon />
+                    <DropdownSelectNoneIcon width={20} height={20} />
                     {showBulkActionLabels && (
                       <span className="dropdown-bulk-action-label">None</span>
                     )}

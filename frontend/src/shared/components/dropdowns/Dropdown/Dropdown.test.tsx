@@ -575,6 +575,19 @@ describe('Dropdown', () => {
     expect(container.querySelector('.search-input')).toBeNull();
   });
 
+  it('renders bulk-action icons at the dropdown-specific size', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const icon = container.querySelector<SVGElement>('.dropdown-bulk-action svg');
+    expect(icon).not.toBeNull();
+    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('width')).toBe('20');
+    expect(requireValue(icon, 'expected bulk-action icon').getAttribute('height')).toBe('20');
+  });
+
   it('preserves menu scroll position across multi-select updates', async () => {
     const manyOptions = Array.from({ length: 40 }, (_, index) => ({
       value: `opt-${index}`,
