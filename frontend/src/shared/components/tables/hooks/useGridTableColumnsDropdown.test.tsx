@@ -2,7 +2,7 @@
  * frontend/src/shared/components/tables/hooks/useGridTableColumnsDropdown.test.ts
  *
  * Test suite for useGridTableColumnsDropdown.
- * Covers column visibility dropdown logic: show/hide all, locked columns, individual toggles.
+ * Covers column visibility dropdown logic: locked columns and visibility changes.
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -18,6 +18,7 @@ type ApplyVisibilityChanges = (
   updater: (next: Record<string, boolean | undefined>) => boolean
 ) => void;
 let latestApplyVisibilityChanges: ReturnType<typeof vi.fn<ApplyVisibilityChanges>>;
+let latestVisibility: Record<string, boolean | undefined>;
 
 const columns: GridColumnDefinition<Row>[] = [
   { key: 'name', header: 'Name', render: (row) => row.id },
@@ -52,10 +53,10 @@ describe('useGridTableColumnsDropdown', () => {
     const lockedColumns = opts.lockedColumns ?? new Set<string>();
     const hiddenColumns = opts.hiddenColumns ?? new Set<string>();
     const enabled = opts.enabled ?? true;
+    latestVisibility = Object.fromEntries(Array.from(hiddenColumns, (key) => [key, false]));
     const applyVisibilityChanges = vi.fn(
       (updater: (next: Record<string, boolean | undefined>) => boolean) => {
-        const obj: Record<string, boolean | undefined> = {};
-        updater(obj);
+        updater(latestVisibility);
       }
     );
     latestApplyVisibilityChanges = applyVisibilityChanges;
@@ -91,7 +92,7 @@ describe('useGridTableColumnsDropdown', () => {
     expect(result).toBeNull();
   });
 
-  it('includes Show All, Hide All, and hideable columns in options', () => {
+  it('includes only hideable columns in options', () => {
     const result = renderHook({});
     expect(result).not.toBeNull();
 
@@ -99,11 +100,7 @@ describe('useGridTableColumnsDropdown', () => {
       result,
       'expected test value in useGridTableColumnsDropdown.test.tsx'
     ).options.map((o) => o.label);
-    expect(labels).toContain('Show All Columns');
-    expect(labels).toContain('Hide All Columns');
-    expect(labels).toContain('Name');
-    expect(labels).toContain('Status');
-    expect(labels).toContain('Age');
+    expect(labels).toEqual(['Name', 'Status', 'Age']);
   });
 
   it('excludes locked columns from options', () => {
@@ -113,9 +110,7 @@ describe('useGridTableColumnsDropdown', () => {
     const columnLabels = requireValue(
       result,
       'expected test value in useGridTableColumnsDropdown.test.tsx'
-    )
-      .options.filter((o) => !o.metadata?.isAction)
-      .map((o) => o.label);
+    ).options.map((o) => o.label);
     expect(columnLabels).toContain('Name');
     expect(columnLabels).toContain('Age');
     expect(columnLabels).not.toContain('Status');
@@ -135,28 +130,30 @@ describe('useGridTableColumnsDropdown', () => {
     ).not.toContain('age');
   });
 
-  it('Show All action calls applyVisibilityChanges to show all hideable columns', () => {
+  it('selecting all options calls applyVisibilityChanges to show all hideable columns', () => {
     const result = renderHook({ hiddenColumns: new Set(['name', 'age']) });
     expect(result).not.toBeNull();
 
-    const showAllValue = '__grid_columns_show_all__';
     requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx').onChange([
-      showAllValue,
+      'name',
+      'status',
+      'age',
     ]);
 
     expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
+    expect(latestVisibility).toEqual({});
   });
 
-  it('Hide All action calls applyVisibilityChanges to hide all hideable columns', () => {
-    const result = renderHook({});
+  it('selecting no options calls applyVisibilityChanges to hide all hideable columns', () => {
+    const result = renderHook({ lockedColumns: new Set(['status']) });
     expect(result).not.toBeNull();
 
-    const hideAllValue = '__grid_columns_hide_all__';
-    requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx').onChange([
-      hideAllValue,
-    ]);
+    requireValue(result, 'expected test value in useGridTableColumnsDropdown.test.tsx').onChange(
+      []
+    );
 
     expect(latestApplyVisibilityChanges).toHaveBeenCalledTimes(1);
+    expect(latestVisibility).toEqual({ name: false, age: false });
   });
 
   it('individual toggle calls applyVisibilityChanges with the correct column set', () => {

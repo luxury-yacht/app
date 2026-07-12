@@ -290,6 +290,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               id={columnsDropdownId ?? `${searchInputId}-columns`}
               name="gridtable-filter-columns"
               multiple
+              showBulkActions
               size="compact"
               placeholder="Columns"
               value={columnValue}

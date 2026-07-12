@@ -231,7 +231,7 @@ describe('useObjectPanelResourceGridTable', () => {
 });
 
 describe('useNamespaceResourceGridTable', () => {
-  it('keeps all namespace options and normalizes selecting all to no namespace query filter', () => {
+  it('keeps all namespace options selected when the namespace dropdown selects all', () => {
     const harness = renderNamespaceGrid();
 
     expect(harness.result.current?.gridTableProps.filters?.options?.namespaces).toEqual([
@@ -246,12 +246,24 @@ describe('useNamespaceResourceGridTable', () => {
       });
     });
 
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([]);
+    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([
+      'team-a',
+      'team-b',
+    ]);
     expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({ namespaces: [] }),
       })
     );
+
+    act(() => {
+      harness.result.current?.gridTableProps.filters?.onChange?.({
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        namespaces: [],
+      });
+    });
+
+    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([]);
 
     harness.cleanup();
   });

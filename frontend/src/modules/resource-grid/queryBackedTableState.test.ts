@@ -1,8 +1,9 @@
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { describe, expect, it } from 'vitest';
 import {
-  normalizeQueryBackedNamespaceFilters,
+  normalizeQueryBackedNamespaceQueryFilters,
   queryBackedFacetFilterOptions,
+  removeQueryBackedNamespaceFilterSentinels,
 } from './queryBackedTableState';
 
 describe('queryBackedTableState', () => {
@@ -27,9 +28,18 @@ describe('queryBackedTableState', () => {
     ]);
   });
 
-  it('treats selecting every namespace as all namespaces for query scope state', () => {
+  it('preserves an explicit selection containing every namespace', () => {
+    const filters = {
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      namespaces: ['team-b', 'team-a'],
+    };
+
+    expect(removeQueryBackedNamespaceFilterSentinels(filters)).toBe(filters);
+  });
+
+  it('omits an explicit all-namespace selection from the backend query', () => {
     expect(
-      normalizeQueryBackedNamespaceFilters(
+      normalizeQueryBackedNamespaceQueryFilters(
         {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
           namespaces: ['team-b', 'team-a'],
@@ -44,29 +54,14 @@ describe('queryBackedTableState', () => {
 
   it('drops persisted all-namespace sentinel values before building query scope state', () => {
     expect(
-      normalizeQueryBackedNamespaceFilters(
-        {
-          ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          namespaces: ['namespace:all'],
-        },
-        []
-      )
+      removeQueryBackedNamespaceFilterSentinels({
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        namespaces: ['namespace:all'],
+      })
     ).toEqual({
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
       namespaces: [],
     });
-  });
-
-  it('preserves persisted namespace filters while no namespace options are loaded', () => {
-    // An empty option list means availability is UNKNOWN (cluster blip, options
-    // still loading) — clearing here would permanently destroy persisted state
-    // because the caller writes normalization results back to persistence.
-    const filters = {
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: ['team-a'],
-    };
-
-    expect(normalizeQueryBackedNamespaceFilters(filters, [])).toBe(filters);
   });
 
   it('preserves real namespace subsets', () => {
@@ -75,6 +70,6 @@ describe('queryBackedTableState', () => {
       namespaces: ['team-a'],
     };
 
-    expect(normalizeQueryBackedNamespaceFilters(filters, ['team-a', 'team-b'])).toBe(filters);
+    expect(removeQueryBackedNamespaceFilterSentinels(filters)).toBe(filters);
   });
 });

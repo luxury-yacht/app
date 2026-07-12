@@ -28,6 +28,12 @@ workflow and that exception is documented.
   rendering details. Changes to them need tests proving controlled search keeps
   focus across updates and rows-per-page menus open and dispatch supported
   values.
+- The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
+  hideable columns only; do not add synthetic show-all or hide-all options.
+- Multi-select filter state preserves an explicit Select All selection so the
+  controlled dropdown remains distinct from Select None. Query adapters may
+  remove a full-dimension selection only when building an equivalent backend
+  query; they must not write that query optimization back into dropdown state.
 
 ## Ownership
 

@@ -19,8 +19,9 @@ import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useCallback, useEffect, useMemo } from 'react';
 import {
-  normalizeQueryBackedNamespaceFilters,
+  normalizeQueryBackedNamespaceQueryFilters,
   queryBackedFacetFilterOptions,
+  removeQueryBackedNamespaceFilterSentinels,
 } from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
@@ -319,7 +320,14 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const normalizeTableFilters = useCallback(
     (next: GridTableFilterState) =>
       isQueryBackedResourceGridTableMode(tableMode) && showNamespaceFilters
-        ? normalizeQueryBackedNamespaceFilters(next, availableFilterNamespaces)
+        ? removeQueryBackedNamespaceFilterSentinels(next)
+        : next,
+    [showNamespaceFilters, tableMode]
+  );
+  const normalizeQueryFilters = useCallback(
+    (next: GridTableFilterState) =>
+      isQueryBackedResourceGridTableMode(tableMode) && showNamespaceFilters
+        ? normalizeQueryBackedNamespaceQueryFilters(next, availableFilterNamespaces)
         : next,
     [availableFilterNamespaces, showNamespaceFilters, tableMode]
   );
@@ -342,7 +350,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       setPersistenceFilters(filters);
     }
     onTableStateChange?.({
-      filters,
+      filters: normalizeQueryFilters(filters),
       sortConfig: sortConfig ?? null,
     });
     // persistenceHydrated is a deliberate dependency: hydration may commit
@@ -351,6 +359,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     // value is safe (consumers dedupe by value).
   }, [
     normalizeTableFilters,
+    normalizeQueryFilters,
     onTableStateChange,
     persistenceFilters,
     setPersistenceFilters,

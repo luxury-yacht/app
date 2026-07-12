@@ -8,12 +8,6 @@
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useCallback, useMemo } from 'react';
 
-const COLUMN_ACTION_SHOW_ALL = '__grid_columns_show_all__';
-const COLUMN_ACTION_HIDE_ALL = '__grid_columns_hide_all__';
-
-// Builds the column visibility dropdown (options + change handler) so GridTable
-// doesn't reimplement show/hide-all logic and locked-column guards inline.
-
 type UseGridTableColumnsDropdownOptions<T> = {
   columns: GridColumnDefinition<T>[];
   lockedColumns: Set<string>;
@@ -23,14 +17,13 @@ type UseGridTableColumnsDropdownOptions<T> = {
 };
 
 type ColumnsDropdownConfig = {
-  options: Array<{ label: string; value: string; metadata?: { isAction?: boolean } }>;
+  options: Array<{ label: string; value: string }>;
   value: string[];
   onChange: (value: string | string[]) => void;
 };
 
-// Builds the column visibility dropdown (options + handlers) so GridTable doesn't
-// have to assemble it inline. It honors locked columns, adds show/hide-all actions,
-// and returns null when the menu should be hidden.
+// Builds the column visibility options and handler so GridTable does not have to
+// assemble them inline. The Dropdown owns shared select-all/select-none controls.
 export function useGridTableColumnsDropdown<T>({
   columns,
   lockedColumns,
@@ -48,39 +41,6 @@ export function useGridTableColumnsDropdown<T>({
   const handleColumnsDropdownChange = useCallback(
     (nextValue: string | string[]) => {
       if (!Array.isArray(nextValue)) {
-        return;
-      }
-
-      const requestedShowAll = nextValue.includes(COLUMN_ACTION_SHOW_ALL);
-      const requestedHideAll = nextValue.includes(COLUMN_ACTION_HIDE_ALL);
-
-      if (requestedShowAll) {
-        applyVisibilityChanges((next) => {
-          let changed = false;
-          hideableColumns.forEach((column) => {
-            if (column.key in next) {
-              delete next[column.key];
-              changed = true;
-            }
-          });
-          return changed;
-        });
-      }
-
-      if (requestedHideAll) {
-        applyVisibilityChanges((next) => {
-          let changed = false;
-          hideableColumns.forEach((column) => {
-            if (next[column.key] !== false) {
-              next[column.key] = false;
-              changed = true;
-            }
-          });
-          return changed;
-        });
-      }
-
-      if (requestedShowAll || requestedHideAll) {
         return;
       }
 
@@ -112,14 +72,10 @@ export function useGridTableColumnsDropdown<T>({
     return null;
   }
 
-  const options: ColumnsDropdownConfig['options'] = [
-    { label: 'Show All Columns', value: COLUMN_ACTION_SHOW_ALL, metadata: { isAction: true } },
-    { label: 'Hide All Columns', value: COLUMN_ACTION_HIDE_ALL, metadata: { isAction: true } },
-    ...hideableColumns.map((column) => ({
-      label: column.header,
-      value: column.key,
-    })),
-  ];
+  const options: ColumnsDropdownConfig['options'] = hideableColumns.map((column) => ({
+    label: column.header,
+    value: column.key,
+  }));
 
   const value = hideableColumns
     .filter((column) => isColumnVisible(column.key))

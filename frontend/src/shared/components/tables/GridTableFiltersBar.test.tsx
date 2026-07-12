@@ -530,6 +530,7 @@ describe('GridTableFiltersBar', () => {
 
     const dropdown = container.querySelector('[data-testid="columns"]') as HTMLSelectElement;
     expect(dropdown).toBeTruthy();
+    expect(dropdown.dataset.bulkActions).toBe('true');
 
     await act(async () => {
       dropdown.value = 'age';
