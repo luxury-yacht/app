@@ -669,6 +669,58 @@ describe('Dropdown', () => {
     });
   });
 
+  it('end-aligns the menu when start alignment would overflow the viewport', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get() {
+        return this.classList.contains('dropdown-menu')
+          ? 300
+          : (offsetWidthDescriptor?.get?.call(this) ?? 0);
+      },
+    });
+
+    await mount(<Dropdown options={OPTIONS} value="" onChange={vi.fn()} />);
+
+    const trigger = container.querySelector('.dropdown-trigger') as HTMLElement;
+    Object.defineProperty(trigger, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        top: 40,
+        bottom: 80,
+        height: 40,
+        width: 150,
+        left: 650,
+        right: 800,
+        x: 650,
+        y: 40,
+        toJSON: () => undefined,
+      }),
+    });
+
+    click(trigger);
+
+    expect(container.querySelector('.dropdown-menu')?.className).toContain(
+      'position-horizontal-end'
+    );
+
+    if (offsetWidthDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidthDescriptor);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
+    }
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: originalInnerWidth,
+    });
+  });
+
   it('respects loading and disabled states', async () => {
     const handleChange = vi.fn();
 

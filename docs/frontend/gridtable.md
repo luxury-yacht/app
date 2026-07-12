@@ -34,6 +34,9 @@ workflow and that exception is documented.
   controlled dropdown remains distinct from Select None. Query adapters may
   remove a full-dimension selection only when building an equivalent backend
   query; they must not write that query optimization back into dropdown state.
+- Shared filter and Columns dropdown menus measure both viewport axes when they
+  open. Right-edge menus end-align when start alignment would overflow, and menu
+  width remains capped to the visible viewport.
 
 ## Ownership
 

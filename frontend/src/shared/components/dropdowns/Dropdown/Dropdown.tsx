@@ -286,20 +286,31 @@ const Dropdown = <TMetadata,>({
 
   // Calculate dropdown position to avoid viewport edges
   const [dropdownPosition, setDropdownPosition] = React.useState<'bottom' | 'top'>('bottom');
+  const [horizontalPosition, setHorizontalPosition] = React.useState<'start' | 'end'>('start');
 
   useEffect(() => {
     if (isOpen && triggerRef.current && menuRef.current) {
       const triggerRect = triggerRef.current.getBoundingClientRect();
       const menuHeight = menuRef.current.offsetHeight;
+      const menuWidth = menuRef.current.offsetWidth;
       const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
 
       const spaceBelow = viewportHeight - triggerRect.bottom;
       const spaceAbove = triggerRect.top;
+      const spaceRight = viewportWidth - triggerRect.left;
+      const spaceLeft = triggerRect.right;
 
       if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
         setDropdownPosition('top');
       } else {
         setDropdownPosition('bottom');
+      }
+
+      if (spaceRight < menuWidth && spaceLeft > spaceRight) {
+        setHorizontalPosition('end');
+      } else {
+        setHorizontalPosition('start');
       }
     }
   }, [isOpen, menuRef, triggerRef]);
@@ -317,7 +328,12 @@ const Dropdown = <TMetadata,>({
     .filter(Boolean)
     .join(' ');
 
-  const menuClasses = ['dropdown-menu', `position-${dropdownPosition}`, dropdownClassName]
+  const menuClasses = [
+    'dropdown-menu',
+    `position-${dropdownPosition}`,
+    `position-horizontal-${horizontalPosition}`,
+    dropdownClassName,
+  ]
     .filter(Boolean)
     .join(' ');
 

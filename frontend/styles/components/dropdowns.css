@@ -133,6 +133,8 @@
   right: auto;
   width: max-content;
   min-width: 100%;
+  max-width: calc(100vw - 1rem);
+  box-sizing: border-box;
   max-height: 400px;
   background-color: var(--dropdown-menu-bg);
   border: 1px solid var(--dropdown-menu-border);
@@ -146,6 +148,16 @@
   animation: dropdownSlide 0.15s ease-out;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+}
+
+.dropdown-menu.position-horizontal-start {
+  left: 0;
+  right: auto;
+}
+
+.dropdown-menu.position-horizontal-end {
+  left: auto;
+  right: 0;
 }
 
 .dropdown-menu::-webkit-scrollbar {
