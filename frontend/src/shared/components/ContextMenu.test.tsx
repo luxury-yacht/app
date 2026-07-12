@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for ContextMenu.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
@@ -89,6 +91,23 @@ describe('ContextMenu', () => {
 
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders separators without a native horizontal-rule border', async () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync(
+      resolve(process.cwd(), 'src/shared/components/ContextMenu.css'),
+      'utf8'
+    );
+    document.head.appendChild(style);
+    const { menu } = await renderMenu({
+      items: [{ label: 'First' }, { divider: true }, { label: 'Second' }],
+    });
+
+    const divider = menu.querySelector<HTMLElement>('.context-menu-divider');
+    expect(divider).toBeTruthy();
+    expect(getComputedStyle(divider as HTMLElement).borderTopWidth).toBe('0px');
+    style.remove();
   });
 
   it('ignores clicks on disabled items', async () => {

@@ -114,6 +114,7 @@ button.context-menu-item {
 }
 
 .context-menu-divider {
+  border: 0;
   height: 1px;
   background-color: var(--color-border);
   margin: 6px 0;
