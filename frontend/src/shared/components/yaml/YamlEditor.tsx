@@ -66,6 +66,7 @@ export interface YamlEditorProps {
   searchPlaceholder?: string;
   showSearch?: boolean;
   showSearchOptions?: boolean;
+  lineWrapping?: boolean;
   toolbarActions?: React.ReactNode;
   largeDocumentNotice?: string | null;
   extraExtensions?: Extension[];
@@ -210,6 +211,7 @@ const YamlEditor = ({
   searchPlaceholder = 'Find...',
   showSearch = true,
   showSearchOptions = false,
+  lineWrapping = true,
   toolbarActions,
   largeDocumentNotice = null,
   extraExtensions = [],
@@ -534,7 +536,7 @@ const YamlEditor = ({
   const editorExtensions = useMemo<Extension[]>(
     () => [
       yamlLang(),
-      EditorView.lineWrapping,
+      ...(lineWrapping ? [EditorView.lineWrapping] : []),
       highlightExtension,
       ...searchExtensions,
       ...protectedExtensions,
@@ -548,6 +550,7 @@ const YamlEditor = ({
       editorKeyBindings,
       extraExtensions,
       highlightExtension,
+      lineWrapping,
       protectedExtensions,
       readModeFocusExtensions,
       searchExtensions,

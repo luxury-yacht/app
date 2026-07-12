@@ -277,6 +277,13 @@ describe('YamlEditor', () => {
     document.body.textContent = '';
   });
 
+  it('allows callers to disable line wrapping', async () => {
+    const { unmount } = await renderYamlEditor({ lineWrapping: false });
+
+    expect(codeMirrorState.props.extensions).not.toContain('lineWrapping');
+    await unmount();
+  });
+
   it('renders view-only YAML and suppresses changes', async () => {
     const onChange = vi.fn();
     const { container, unmount } = await renderYamlEditor({

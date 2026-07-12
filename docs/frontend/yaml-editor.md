@@ -11,6 +11,8 @@ editor.
   infer cluster, GVK, namespace, or name.
 - Protected ranges and read-only modes are caller policy, not Kubernetes
   semantics embedded in the editor.
+- Line wrapping defaults on. Callers may expose the shared editor's
+  `lineWrapping` option when their workflow needs a user-facing toggle.
 - Keyboard behavior should register as an editor surface when it needs ownership.
 - Read-only editors must stay focusable (the content carries a tabindex):
   clipboard and select-all shortcuts route to the surface containing the

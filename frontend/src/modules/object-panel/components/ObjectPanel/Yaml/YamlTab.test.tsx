@@ -550,6 +550,29 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('shows a default-on wrap toggle immediately after managed fields', async () => {
+    const { container, unmount } = await renderYamlTab();
+    const toolbarButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.yaml-editor-toolbar .icon-bar-button')
+    );
+    const managedFieldsIndex = toolbarButtons.findIndex(
+      (button) => button.getAttribute('aria-label') === 'Show managedFields'
+    );
+    const wrapButton = getIconButton(container, 'Wrap YAML lines');
+
+    expect(wrapButton).toBe(toolbarButtons[managedFieldsIndex + 1]);
+    expect(wrapButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(codeMirrorState.latestProps.current.extensions).toContain('lineWrapping');
+
+    await act(async () => {
+      wrapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(wrapButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(codeMirrorState.latestProps.current.extensions).not.toContain('lineWrapping');
+    await unmount();
+  });
+
   it('uses the managedFields visibility setting when entering edit mode', async () => {
     const { container, unmount } = await renderYamlTab();
 
