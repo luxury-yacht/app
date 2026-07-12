@@ -63,7 +63,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   // Handle dragging for floating panels
   const handleMouseDownDrag = useCallback(
-    (e: ReactMouseEvent) => {
+    (e: ReactMouseEvent | MouseEvent) => {
       if (isMaximized) {
         return;
       }
@@ -438,9 +438,9 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     flushSizeUpdate,
   ]);
 
-  // The dedicated native header control owns floating-panel pointer dragging.
+  // The header owns floating-panel pointer dragging after filtering interactive targets.
   const handleHeaderMouseDown = useCallback(
-    (e: ReactMouseEvent) => {
+    (e: MouseEvent) => {
       handleMouseDownDrag(e);
     },
     [handleMouseDownDrag]

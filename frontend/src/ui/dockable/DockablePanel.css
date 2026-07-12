@@ -145,6 +145,7 @@
   align-items: center;
   flex-shrink: 0; /* Never shrink */
   margin-left: auto; /* Push to the right */
+  padding-right: 0.25rem;
   z-index: 1; /* Ensure controls are above other content */
   background: var(--color-bg-secondary); /* Opaque so header-content doesn't show through */
 }
@@ -153,8 +154,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   background: transparent;
   border: none;

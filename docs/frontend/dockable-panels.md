@@ -46,6 +46,9 @@ cluster/object scoped.
 - Dragging to another compatible tab bar moves.
 - Dropping away from a tab bar may create or use a floating group according to
   dockable state rules.
+- A floating group moves from any non-interactive header space, including blank
+  tab-strip space. Tabs, close buttons, and panel controls retain their own
+  pointer behavior and must not start a group move.
 
 ## Change Checklist
 

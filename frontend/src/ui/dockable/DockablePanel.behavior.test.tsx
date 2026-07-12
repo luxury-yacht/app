@@ -496,7 +496,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(mountTracker).toHaveBeenLastCalledWith('unmount');
   });
 
-  it('updates floating position when dragging the panel header', async () => {
+  it('moves from blank tab-bar space without moving from tabs or control buttons', async () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       writable: true,
@@ -539,13 +539,11 @@ describe('DockablePanel behaviour (real hook)', () => {
       }
     );
 
-    const header = document.querySelector(
-      '.dockable-panel__drag-control'
-    ) as HTMLButtonElement | null;
-    expect(header).toBeTruthy();
+    const tabBar = document.querySelector('.dockable-tab-bar') as HTMLDivElement | null;
+    expect(tabBar).toBeTruthy();
 
     await act(async () => {
-      requireValue(header, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
+      requireValue(tabBar, 'expected test value in DockablePanel.behavior.test.tsx').dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 220 })
       );
     });
@@ -562,6 +560,34 @@ describe('DockablePanel behaviour (real hook)', () => {
     const floatingState = getPanelState('panel-drag').floatingPosition;
     expect(floatingState.x).toBeGreaterThan(300);
     expect(floatingState.y).toBeGreaterThan(180);
+
+    const positionAfterBlankSpaceDrag = { ...floatingState };
+    const activeTab = document.querySelector<HTMLElement>('.dockable-tab-bar [role="tab"]');
+    const controlButton = document.querySelector<HTMLButtonElement>(
+      '.dockable-panel__controls .dockable-panel__control-btn'
+    );
+    expect(activeTab).toBeTruthy();
+    expect(controlButton).toBeTruthy();
+
+    for (const interactiveTarget of [activeTab, controlButton]) {
+      await act(async () => {
+        requireValue(
+          interactiveTarget,
+          'expected test value in DockablePanel.behavior.test.tsx'
+        ).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 720, clientY: 520 }));
+      });
+      await act(async () => {
+        document.dispatchEvent(
+          new MouseEvent('mousemove', { bubbles: true, clientX: 820, clientY: 620 })
+        );
+      });
+      await act(async () => {
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      });
+      await flushEffects();
+
+      expect(getPanelState('panel-drag').floatingPosition).toEqual(positionAfterBlankSpaceDrag);
+    }
 
     rafSpy.mockRestore();
     cafSpy.mockRestore();
