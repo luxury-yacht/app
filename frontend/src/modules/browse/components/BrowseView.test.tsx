@@ -345,7 +345,8 @@ describe('BrowseView', () => {
         scope: 'Cluster',
       });
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = catalogPayload([node], {
         kinds: [
           { kind: 'Node', namespaced: false },
@@ -381,12 +382,12 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=50&namespace=cluster',
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
         undefined
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=50&namespace=cluster',
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
     });
@@ -425,7 +426,8 @@ describe('BrowseView', () => {
         creationTimestamp: '2026-01-01T00:00:00Z',
       });
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = catalogPayload([node]);
 
       await act(async () => {
@@ -522,7 +524,8 @@ describe('BrowseView', () => {
   describe('Namespace scope (namespace=specific)', () => {
     it('renders the first namespace page directly from the catalog query payload', async () => {
       refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=team-a';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a';
       refreshMocks.catalogDomain.data = catalogPayload([
         catalogItem({
           namespace: 'team-a',
@@ -582,7 +585,7 @@ describe('BrowseView', () => {
       // The scope should include the pinned namespace
       expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=50&namespace=kube-system',
+        'cluster-1|limit=50&resourceScope=namespace&namespace=kube-system&scopeNamespace=kube-system',
         undefined
       );
     });
@@ -687,16 +690,19 @@ describe('BrowseView', () => {
         namespaces: ['default'],
         caseSensitive: false,
       };
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&search=api&kind=Pod&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [],
-          kinds: [{ kind: 'Pod', namespaced: true }],
-          namespaces: ['default'],
-        },
-        scope: 'cluster-1|limit=50&search=api&kind=Pod&namespace=default',
-      });
-      refreshMocks.scopedDomains.set('cluster-1|limit=1', {
+      refreshMocks.scopedDomains.set(
+        'cluster-1|limit=50&resourceScope=namespace&search=api&kind=Pod&namespace=default',
+        {
+          status: 'ready',
+          data: {
+            items: [],
+            kinds: [{ kind: 'Pod', namespaced: true }],
+            namespaces: ['default'],
+          },
+          scope: 'cluster-1|limit=50&resourceScope=namespace&search=api&kind=Pod&namespace=default',
+        }
+      );
+      refreshMocks.scopedDomains.set('cluster-1|limit=1&resourceScope=namespace', {
         status: 'ready',
         data: {
           items: [],
@@ -706,7 +712,7 @@ describe('BrowseView', () => {
           ],
           namespaces: ['default', 'kube-system'],
         },
-        scope: 'cluster-1|limit=1',
+        scope: 'cluster-1|limit=1&resourceScope=namespace',
       });
 
       await act(async () => {
@@ -724,7 +730,8 @@ describe('BrowseView', () => {
 
   describe('Row cap UI', () => {
     it('renders query pagination in the table footer with the filter-feedback banner enabled', async () => {
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -781,19 +788,20 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         1,
         'catalog',
-        'cluster-1|limit=50&namespace=cluster',
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         2,
         'catalog',
-        'cluster-1|limit=1&namespace=cluster',
+        'cluster-1|limit=1&resourceScope=cluster&namespace=cluster',
         expect.objectContaining({ isManual: false })
       );
     });
 
     it('surfaces catalog degraded reasons in table filter state', async () => {
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50&namespace=cluster';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [],
         batchSize: 0,
@@ -823,47 +831,51 @@ describe('BrowseView', () => {
 
   describe('Action facts', () => {
     it('threads catalog action facts into shared context-menu actions', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [
-            {
-              uid: 'deploy-1',
-              kind: 'Deployment',
-              name: 'web',
-              namespace: 'default',
-              scope: 'Namespace',
-              resource: 'deployments',
-              group: 'apps',
-              version: 'v1',
-              resourceVersion: '1',
-              creationTimestamp: new Date().toISOString(),
-              clusterId: 'cluster-1',
-              actionFacts: { hpaManaged: true, desiredReplicas: 3 },
-            },
-            {
-              uid: 'cron-1',
-              kind: 'CronJob',
-              name: 'nightly',
-              namespace: 'default',
-              scope: 'Namespace',
-              resource: 'cronjobs',
-              group: 'batch',
-              version: 'v1',
-              resourceVersion: '1',
-              creationTimestamp: new Date().toISOString(),
-              clusterId: 'cluster-1',
-              actionFacts: { status: 'Suspended' },
-            },
-          ],
-          kinds: [
-            { kind: 'Deployment', namespaced: true },
-            { kind: 'CronJob', namespaced: true },
-          ],
-          namespaces: ['default'],
-        },
-        scope: 'cluster-1|limit=50&namespace=default',
-      });
+      refreshMocks.scopedDomains.set(
+        'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
+        {
+          status: 'ready',
+          data: {
+            items: [
+              {
+                uid: 'deploy-1',
+                kind: 'Deployment',
+                name: 'web',
+                namespace: 'default',
+                scope: 'Namespace',
+                resource: 'deployments',
+                group: 'apps',
+                version: 'v1',
+                resourceVersion: '1',
+                creationTimestamp: new Date().toISOString(),
+                clusterId: 'cluster-1',
+                actionFacts: { hpaManaged: true, desiredReplicas: 3 },
+              },
+              {
+                uid: 'cron-1',
+                kind: 'CronJob',
+                name: 'nightly',
+                namespace: 'default',
+                scope: 'Namespace',
+                resource: 'cronjobs',
+                group: 'batch',
+                version: 'v1',
+                resourceVersion: '1',
+                creationTimestamp: new Date().toISOString(),
+                clusterId: 'cluster-1',
+                actionFacts: { status: 'Suspended' },
+              },
+            ],
+            kinds: [
+              { kind: 'Deployment', namespaced: true },
+              { kind: 'CronJob', namespaced: true },
+            ],
+            namespaces: ['default'],
+          },
+          scope:
+            'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
+        }
+      );
 
       await act(async () => {
         root.render(<BrowseView namespace="default" />);
@@ -894,16 +906,20 @@ describe('BrowseView', () => {
 
   describe('All-matching export', () => {
     it('threads fetchAllRows so the table offers the all-matching-rows scope', async () => {
-      refreshMocks.scopedDomains.set('cluster-1|limit=50&namespace=default', {
-        status: 'ready',
-        data: {
-          items: [],
-          kinds: [{ kind: 'Pod', namespaced: true }],
-          namespaces: ['default'],
-          total: 1,
-        },
-        scope: 'cluster-1|limit=50&namespace=default',
-      });
+      refreshMocks.scopedDomains.set(
+        'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
+        {
+          status: 'ready',
+          data: {
+            items: [],
+            kinds: [{ kind: 'Pod', namespaced: true }],
+            namespaces: ['default'],
+            total: 1,
+          },
+          scope:
+            'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
+        }
+      );
 
       await act(async () => {
         root.render(<BrowseView namespace="default" />);

@@ -496,7 +496,7 @@ const Dropdown = <TMetadata,>({
                   >
                     <DropdownSelectAllIcon />
                     {showBulkActionLabels && (
-                      <span className="dropdown-bulk-action-label">Select All</span>
+                      <span className="dropdown-bulk-action-label">All</span>
                     )}
                   </button>
                   <button
@@ -514,7 +514,7 @@ const Dropdown = <TMetadata,>({
                   >
                     <DropdownSelectNoneIcon />
                     {showBulkActionLabels && (
-                      <span className="dropdown-bulk-action-label">Select None</span>
+                      <span className="dropdown-bulk-action-label">None</span>
                     )}
                   </button>
                 </div>

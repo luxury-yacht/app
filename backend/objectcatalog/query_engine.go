@@ -33,9 +33,11 @@ const (
 
 // querypage facet names.
 const (
-	catalogEngineFacetKindIdentity = "kindidentity"
-	catalogEngineFacetNamespace    = "namespace"
-	catalogEngineFacetCustom       = "custom"
+	catalogEngineFacetKindIdentity   = "kindidentity"
+	catalogEngineFacetNamespace      = "namespace"
+	catalogEngineFacetScope          = "scope"
+	catalogEngineFacetScopeNamespace = "scopenamespace"
+	catalogEngineFacetCustom         = "custom"
 )
 
 // catalogEngineNoMatchFacetValue is not a valid catalogEngineKindIdentity value:
@@ -88,6 +90,10 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			// "cluster" for cluster-scoped/empty-namespace rows, else the lowercased
 			// namespace — matching catalogQueryNamespaceIndexKey and the filter keys.
 			catalogEngineFacetNamespace: func(s Summary) string { return catalogQueryNamespaceIndexKey(s.Namespace, s.Scope) },
+			catalogEngineFacetScope:     func(s Summary) string { return strings.ToLower(string(s.Scope)) },
+			catalogEngineFacetScopeNamespace: func(s Summary) string {
+				return catalogQueryNamespaceIndexKey(s.Namespace, s.Scope)
+			},
 			// custom = "true" for non-built-in (discovered/CRD) rows, "false" otherwise,
 			// reusing the catalog's builtin check (catalogQueryBuiltinKeys).
 			catalogEngineFacetCustom: func(s Summary) string {
@@ -194,8 +200,10 @@ func catalogEngineSignature(opts QueryOptions, limit int) string {
 	kinds := normalizeQueryValues(opts.Kinds)
 	namespaces := normalizeQueryValues(opts.Namespaces)
 	return fmt.Sprintf(
-		"limit=%d|search=%s|kinds=%s|namespaces=%s|customOnly=%t|sort=%s",
+		"limit=%d|scope=%s|scopeNamespaces=%s|search=%s|kinds=%s|namespaces=%s|customOnly=%t|sort=%s",
 		limit,
+		strings.ToLower(strings.TrimSpace(string(opts.Scope))),
+		strings.Join(normalizeQueryValues(opts.ScopeNamespaces), ","),
 		strings.TrimSpace(opts.Search),
 		strings.Join(kinds, ","),
 		strings.Join(namespaces, ","),
@@ -405,6 +413,12 @@ func findAnchorSummary(rows []Summary, anchor *QueryAnchor) (Summary, bool) {
 // the namespace facet buckets, and CustomOnly to the custom="true" bucket.
 func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[string][]string {
 	filters := make(map[string][]string)
+	if scope := strings.ToLower(strings.TrimSpace(string(opts.Scope))); scope != "" {
+		filters[catalogEngineFacetScope] = []string{scope}
+	}
+	if values := catalogEngineNamespaceFilterValues(opts.ScopeNamespaces); len(values) > 0 {
+		filters[catalogEngineFacetScopeNamespace] = values
+	}
 	if kinds := normalizeQueryValues(opts.Kinds); len(kinds) > 0 {
 		values := catalogEngineKindFilterIdentities(rows, kinds)
 		if len(values) == 0 {
@@ -421,21 +435,30 @@ func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[st
 	return filters
 }
 
-// catalogEngineUnfilteredTotal mirrors unfilteredScopeTotal: the in-scope count
-// before the query's kind/namespace/search filters (custom-only still honored). With
-// no user filter active it equals the already-computed filtered total; otherwise it is
-// a second store query with those filters cleared.
+// catalogEngineUnfilteredTotal is the count inside the query's structural scope before
+// kind/namespace/search filters. Structural resource and pinned-namespace boundaries,
+// plus custom-only, remain active when the user filters are cleared.
 func (s *Service) catalogEngineUnfilteredTotal(store *querypage.Store[Summary], opts QueryOptions, filteredTotal int) (int, bool) {
 	if len(opts.Kinds) == 0 && len(opts.Namespaces) == 0 && opts.Search == "" {
 		return filteredTotal, filteredTotal <= catalogQueryExactMetadataThreshold
 	}
 	filters := make(map[string][]string)
+	if scope := strings.ToLower(strings.TrimSpace(string(opts.Scope))); scope != "" {
+		filters[catalogEngineFacetScope] = []string{scope}
+	}
+	if values := catalogEngineNamespaceFilterValues(opts.ScopeNamespaces); len(values) > 0 {
+		filters[catalogEngineFacetScopeNamespace] = values
+	}
 	if opts.CustomOnly {
 		filters[catalogEngineFacetCustom] = []string{"true"}
 	}
 	page, err := store.Query(querypage.Query{
 		ClusterID: s.clusterID,
-		Signature: catalogEngineSignature(QueryOptions{CustomOnly: opts.CustomOnly}, clampQueryLimit(opts.Limit)),
+		Signature: catalogEngineSignature(QueryOptions{
+			Scope:           opts.Scope,
+			ScopeNamespaces: opts.ScopeNamespaces,
+			CustomOnly:      opts.CustomOnly,
+		}, clampQueryLimit(opts.Limit)),
 		Sort:      catalogEngineSortDefault,
 		Direction: querypage.Ascending,
 		Limit:     1,

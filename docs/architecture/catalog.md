@@ -22,6 +22,9 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
 - Metadata controls that describe the object universe, such as namespace/kind
   filters, should use catalog-derived metadata rather than the current row
   slice.
+- Catalog queries carry a structural resource scope and optional pinned
+  namespaces separately from user filters. `unfilteredTotal` removes search,
+  kind, and user namespace filters while retaining that structural boundary.
 
 ## Layer Model
 

@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -90,16 +91,18 @@ type catalogBuilder struct {
 }
 
 type browseQueryOptions struct {
-	Kinds      []string
-	Namespaces []string
-	Search     string
-	SortField  string
-	SortDir    string
-	Limit      int
-	Continue   string
-	CustomOnly bool
-	Anchor     *ResourceQueryAnchor
-	StartRank  *int
+	Scope           objectcatalog.Scope
+	ScopeNamespaces []string
+	Kinds           []string
+	Namespaces      []string
+	Search          string
+	SortField       string
+	SortDir         string
+	Limit           int
+	Continue        string
+	CustomOnly      bool
+	Anchor          *ResourceQueryAnchor
+	StartRank       *int
 }
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
@@ -373,31 +376,45 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 	if err := request.validate(); err != nil {
 		return browseQueryOptions{}, err
 	}
+	var resourceScope objectcatalog.Scope
+	switch strings.ToLower(strings.TrimSpace(values.Get("resourceScope"))) {
+	case "":
+	case "cluster":
+		resourceScope = objectcatalog.ScopeCluster
+	case "namespace":
+		resourceScope = objectcatalog.ScopeNamespace
+	default:
+		return browseQueryOptions{}, fmt.Errorf("invalid catalog resource scope %q", values.Get("resourceScope"))
+	}
 	opts := browseQueryOptions{
-		Kinds:      request.Kinds,
-		Namespaces: request.Namespaces,
-		Search:     request.Search,
-		SortField:  request.SortField,
-		SortDir:    request.SortDirection,
-		Continue:   request.Continue,
-		Limit:      request.Limit,
-		CustomOnly: values.Get("customOnly") == "true",
-		Anchor:     request.Anchor,
-		StartRank:  request.StartRank,
+		Scope:           resourceScope,
+		ScopeNamespaces: values["scopeNamespace"],
+		Kinds:           request.Kinds,
+		Namespaces:      request.Namespaces,
+		Search:          request.Search,
+		SortField:       request.SortField,
+		SortDir:         request.SortDirection,
+		Continue:        request.Continue,
+		Limit:           request.Limit,
+		CustomOnly:      values.Get("customOnly") == "true",
+		Anchor:          request.Anchor,
+		StartRank:       request.StartRank,
 	}
 	return opts, nil
 }
 
 func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 	opts := objectcatalog.QueryOptions{
-		Kinds:         o.Kinds,
-		Namespaces:    o.Namespaces,
-		Search:        o.Search,
-		SortField:     o.SortField,
-		SortDirection: o.SortDir,
-		Limit:         o.Limit,
-		Continue:      o.Continue,
-		CustomOnly:    o.CustomOnly,
+		Scope:           o.Scope,
+		ScopeNamespaces: o.ScopeNamespaces,
+		Kinds:           o.Kinds,
+		Namespaces:      o.Namespaces,
+		Search:          o.Search,
+		SortField:       o.SortField,
+		SortDirection:   o.SortDir,
+		Limit:           o.Limit,
+		Continue:        o.Continue,
+		CustomOnly:      o.CustomOnly,
 	}
 	if a := o.Anchor; a != nil {
 		// ClusterID stays behind: parseBrowseScope already enforced the

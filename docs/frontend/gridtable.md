@@ -37,6 +37,10 @@ workflow and that exception is documented.
 - Shared filter and Columns dropdown menus measure both viewport axes when they
   open. Right-edge menus end-align when start alignment would overflow, and menu
   width remains capped to the visible viewport.
+- Query-backed filter feedback displays the backend's filtered total against the
+  unfiltered total for the same view scope. Producers must not widen the
+  denominator beyond cluster-scoped, all-namespaces, or pinned-namespace
+  boundaries when clearing user filters.
 
 ## Ownership
 

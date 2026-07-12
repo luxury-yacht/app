@@ -37,6 +37,8 @@ export interface BrowseCatalogPlanInput {
 }
 
 export interface BrowseCatalogPlan {
+  resourceScope: 'cluster' | 'namespace';
+  scopeNamespaces: string[];
   isNamespaceScoped: boolean;
   hasUserNamespaceScope: boolean;
   namespacesToQuery: string[];
@@ -76,6 +78,8 @@ export const buildBrowseCatalogPlan = ({
   pageLimit,
 }: BrowseCatalogPlanInput): BrowseCatalogPlan => {
   const isNamespaceScoped = pinnedNamespaces.length > 0;
+  const resourceScope = clusterScopedOnly ? 'cluster' : 'namespace';
+  const scopeNamespaces = isNamespaceScoped ? pinnedNamespaces : [];
   const sortScope = catalogSortScope(sort);
   const selectedNamespaces = filters.namespaces ?? [];
   const hasUserNamespaceScope = isNamespaceScoped || selectedNamespaces.length > 0;
@@ -89,6 +93,8 @@ export const buildBrowseCatalogPlan = ({
 
   const baseScope = buildCatalogScope({
     limit: pageLimit,
+    resourceScope,
+    scopeNamespaces,
     search: filters.search ?? '',
     kinds: filters.kinds ?? [],
     namespaces: namespacesToQuery,
@@ -107,6 +113,8 @@ export const buildBrowseCatalogPlan = ({
       : [];
   const metadataBaseScope = buildCatalogScope({
     limit: 1,
+    resourceScope,
+    scopeNamespaces,
     search: '',
     kinds: [],
     namespaces: metadataNamespaces,
@@ -117,6 +125,8 @@ export const buildBrowseCatalogPlan = ({
     buildClusterScope(clusterId ?? undefined, metadataBaseScope);
 
   return {
+    resourceScope,
+    scopeNamespaces,
     isNamespaceScoped,
     hasUserNamespaceScope,
     namespacesToQuery,
@@ -143,6 +153,8 @@ export const buildBrowseCatalogPageScope = (
 ): string => {
   const pageScope = buildCatalogScope({
     limit: input.pageLimit,
+    resourceScope: plan.resourceScope,
+    scopeNamespaces: plan.scopeNamespaces,
     search: input.filters.search ?? '',
     kinds: input.filters.kinds ?? [],
     namespaces: plan.namespacesToQuery,

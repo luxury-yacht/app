@@ -34,6 +34,20 @@ func TestParseBrowseScope(t *testing.T) {
 	}
 }
 
+func TestParseBrowseScopePreservesStructuralBoundary(t *testing.T) {
+	opts, err := parseBrowseScope("resourceScope=namespace&scopeNamespace=default&namespace=default&kind=Pod&limit=50")
+	if err != nil {
+		t.Fatalf("parseBrowseScope returned error: %v", err)
+	}
+	query := opts.toQueryOptions()
+	if query.Scope != objectcatalog.ScopeNamespace {
+		t.Fatalf("expected namespace structural scope, got %q", query.Scope)
+	}
+	if !reflect.DeepEqual(query.ScopeNamespaces, []string{"default"}) {
+		t.Fatalf("expected structural namespace boundary [default], got %+v", query.ScopeNamespaces)
+	}
+}
+
 func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	summaries := []objectcatalog.Summary{
 		{

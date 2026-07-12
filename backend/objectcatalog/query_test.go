@@ -368,6 +368,58 @@ func TestQueryReportsUnfilteredScopeTotal(t *testing.T) {
 	}
 }
 
+func TestQueryUnfilteredTotalStaysInsideStructuralScope(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	chunk := &summaryChunk{items: []Summary{
+		{Kind: "APIService", Group: "apiregistration.k8s.io", Version: "v1", Resource: "apiservices", Name: "v1.apps", UID: "uid-1", Scope: ScopeCluster},
+		{Kind: "Node", Version: "v1", Resource: "nodes", Name: "node-a", UID: "uid-2", Scope: ScopeCluster},
+		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-3", Scope: ScopeNamespace},
+		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "kube-system", Name: "pod-b", UID: "uid-4", Scope: ScopeNamespace},
+	}}
+	svc.publishStreamingState(
+		[]*summaryChunk{chunk},
+		map[string]bool{"APIService": true, "Node": true, "Pod": true},
+		map[string]struct{}{"default": {}, "kube-system": {}},
+		nil,
+		false,
+	)
+
+	result := svc.Query(QueryOptions{
+		Scope:      ScopeCluster,
+		Namespaces: []string{"cluster"},
+		Kinds:      []string{"APIService"},
+		Limit:      50,
+	})
+
+	if result.TotalItems != 1 {
+		t.Fatalf("filtered total should be 1, got %d", result.TotalItems)
+	}
+	if result.UnfilteredTotal != 2 {
+		t.Fatalf("unfiltered total should stay inside the two cluster-scoped objects, got %d", result.UnfilteredTotal)
+	}
+
+	namespaceResult := svc.Query(QueryOptions{
+		Scope:           ScopeNamespace,
+		ScopeNamespaces: []string{"default"},
+		Namespaces:      []string{"default"},
+		Kinds:           []string{"Pod"},
+		Limit:           50,
+	})
+	if namespaceResult.TotalItems != 1 || namespaceResult.UnfilteredTotal != 1 {
+		t.Fatalf("pinned namespace totals should stay 1 of 1, got %d of %d", namespaceResult.TotalItems, namespaceResult.UnfilteredTotal)
+	}
+
+	allNamespacesResult := svc.Query(QueryOptions{
+		Scope:      ScopeNamespace,
+		Namespaces: []string{"default", "kube-system"},
+		Search:     "pod-a",
+		Limit:      50,
+	})
+	if allNamespacesResult.TotalItems != 1 || allNamespacesResult.UnfilteredTotal != 2 {
+		t.Fatalf("all-namespaces totals should stay 1 of 2 namespaced objects, got %d of %d", allNamespacesResult.TotalItems, allNamespacesResult.UnfilteredTotal)
+	}
+}
+
 func TestQueryFiltersAndPagination(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 

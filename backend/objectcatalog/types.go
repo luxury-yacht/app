@@ -196,14 +196,16 @@ type Options struct {
 
 // QueryOptions controls catalog queries executed against the in-memory cache.
 type QueryOptions struct {
-	Kinds         []string // resource kinds to filter
-	Namespaces    []string // namespaces to filter
-	Search        string   // search term for filtering
-	SortField     string   // backend-owned sort field; empty uses the catalog default
-	SortDirection string   // backend-owned sort direction; empty uses ascending
-	Limit         int      // maximum number of items to return
-	Continue      string   // token for continuing a paginated query
-	CustomOnly    bool     // restricts results to non-built-in discovered resources
+	Scope           Scope    // structural resource scope for this view; empty includes both scopes
+	ScopeNamespaces []string // structural namespace boundary retained when user filters are cleared
+	Kinds           []string // resource kinds to filter
+	Namespaces      []string // namespaces to filter
+	Search          string   // search term for filtering
+	SortField       string   // backend-owned sort field; empty uses the catalog default
+	SortDirection   string   // backend-owned sort direction; empty uses ascending
+	Limit           int      // maximum number of items to return
+	Continue        string   // token for continuing a paginated query
+	CustomOnly      bool     // restricts results to non-built-in discovered resources
 	// Anchor asks for the page CONTAINING this object instead of a
 	// cursor-addressed page (mutually exclusive with Continue — the snapshot
 	// layer validates before calling). See QueryAnchor.
@@ -243,8 +245,8 @@ type QueryResult struct {
 	SelfToken     string    // token addressing THIS page (counted serves only; page-stable refetch)
 	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
 	TotalItems    int       // total number of items matching the query
-	// UnfilteredTotal is the in-scope item count before the query's filters (the "of M" in
-	// "showing N of M items due to filters"); equals TotalItems when no filter is active.
+	// UnfilteredTotal is the structurally scoped item count before user filters (the "of M"
+	// in "showing N of M items due to filters"); equals TotalItems when no filter is active.
 	UnfilteredTotal int        // in-scope count before the query's filters
 	TotalIsExact    bool       // indicates TotalItems is exact for the query
 	ResourceCount   int        // total number of resources matching the query
