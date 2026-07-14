@@ -85,21 +85,6 @@
   transform-origin: top;
 }
 
-.sidebar-view-group + .sidebar-view-group {
-  margin-top: 0.2rem;
-}
-
-.sidebar-view-group-label {
-  padding: 0.15rem 0.5rem 0 1.8rem;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-display, var(--font-family-base));
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.04em;
-  line-height: 1rem;
-  text-transform: uppercase;
-}
-
 /* Note: expandDown keyframe is defined in motion.css */
 
 .cluster-items {

@@ -29,7 +29,6 @@ import { eventBus } from '@/core/events';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
   GLOBAL_VIEW_DESCRIPTORS,
-  groupViewDescriptors,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -414,38 +413,33 @@ function Sidebar() {
                     id={`${elementIdPrefix}-sidebar-cluster-resource-views`}
                   >
                     {/* Animate Resources the same way as namespace views. */}
-                    {groupViewDescriptors(resourceViews).map((group) => (
-                      <div className="sidebar-view-group" key={group.id}>
-                        <div className="sidebar-view-group-label">{group.label}</div>
-                        {group.views.map((view) => (
-                          <button
-                            type="button"
-                            key={view.id}
-                            className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
-                              kind: 'cluster-view',
-                              view: view.id,
-                            })}
-                            onClick={() => {
-                              if (!keyboardActivationRef.current) {
-                                clearKeyboardPreview();
-                              }
-                              handleClusterViewSelect(view.id);
-                            }}
-                            data-sidebar-focusable="true"
-                            data-sidebar-target-kind="cluster-view"
-                            data-sidebar-target-view={view.id}
-                            tabIndex={-1}
-                            aria-current={
-                              isTargetSelected({ kind: 'cluster-view', view: view.id })
-                                ? 'page'
-                                : undefined
-                            }
-                          >
-                            <CategoryIcon width={14} height={14} />
-                            <span>{view.label}</span>
-                          </button>
-                        ))}
-                      </div>
+                    {resourceViews.map((view) => (
+                      <button
+                        type="button"
+                        key={view.id}
+                        className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
+                          kind: 'cluster-view',
+                          view: view.id,
+                        })}
+                        onClick={() => {
+                          if (!keyboardActivationRef.current) {
+                            clearKeyboardPreview();
+                          }
+                          handleClusterViewSelect(view.id);
+                        }}
+                        data-sidebar-focusable="true"
+                        data-sidebar-target-kind="cluster-view"
+                        data-sidebar-target-view={view.id}
+                        tabIndex={-1}
+                        aria-current={
+                          isTargetSelected({ kind: 'cluster-view', view: view.id })
+                            ? 'page'
+                            : undefined
+                        }
+                      >
+                        <CategoryIcon width={14} height={14} />
+                        <span>{view.label}</span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -583,52 +577,44 @@ function Sidebar() {
                         </div>
                         {!!isExpanded && (
                           <div className="sidebar-views" id={namespaceViewsId}>
-                            {groupViewDescriptors(namespaceViews).map((group) => (
-                              <div className="sidebar-view-group" key={group.id}>
-                                <div className="sidebar-view-group-label">{group.label}</div>
-                                {group.views.map((view) => (
-                                  <button
-                                    type="button"
-                                    key={view.id}
-                                    className={buildSidebarItemClassName(
-                                      ['sidebar-item', 'indented'],
-                                      {
-                                        kind: 'namespace-view',
-                                        namespace: namespaceKey,
-                                        view: view.id,
-                                      }
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!keyboardActivationRef.current) {
-                                        clearKeyboardPreview();
-                                      }
-                                      handleNamespaceViewSelect(
-                                        scope,
-                                        view.id,
-                                        selectedClusterId || undefined
-                                      );
-                                    }}
-                                    data-sidebar-focusable="true"
-                                    data-sidebar-target-kind="namespace-view"
-                                    data-sidebar-target-namespace={namespaceKey}
-                                    data-sidebar-target-view={view.id}
-                                    tabIndex={-1}
-                                    aria-current={
-                                      isTargetSelected({
-                                        kind: 'namespace-view',
-                                        namespace: namespaceKey,
-                                        view: view.id,
-                                      })
-                                        ? 'page'
-                                        : undefined
-                                    }
-                                  >
-                                    <CategoryIcon width={14} height={14} />
-                                    <span>{view.label}</span>
-                                  </button>
-                                ))}
-                              </div>
+                            {namespaceViews.map((view) => (
+                              <button
+                                type="button"
+                                key={view.id}
+                                className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
+                                  kind: 'namespace-view',
+                                  namespace: namespaceKey,
+                                  view: view.id,
+                                })}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!keyboardActivationRef.current) {
+                                    clearKeyboardPreview();
+                                  }
+                                  handleNamespaceViewSelect(
+                                    scope,
+                                    view.id,
+                                    selectedClusterId || undefined
+                                  );
+                                }}
+                                data-sidebar-focusable="true"
+                                data-sidebar-target-kind="namespace-view"
+                                data-sidebar-target-namespace={namespaceKey}
+                                data-sidebar-target-view={view.id}
+                                tabIndex={-1}
+                                aria-current={
+                                  isTargetSelected({
+                                    kind: 'namespace-view',
+                                    namespace: namespaceKey,
+                                    view: view.id,
+                                  })
+                                    ? 'page'
+                                    : undefined
+                                }
+                              >
+                                <CategoryIcon width={14} height={14} />
+                                <span>{view.label}</span>
+                              </button>
                             ))}
                           </div>
                         )}

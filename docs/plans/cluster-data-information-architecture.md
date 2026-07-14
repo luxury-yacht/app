@@ -2,16 +2,15 @@
 
 ## Overview
 
-Move cluster-data navigation from a flat scope-and-kind list toward intent-based
-lenses while preserving the existing catalog, typed-query, shared-resource-model,
-and object-map ownership boundaries.
+Organize cluster-data navigation around explicit scopes and ordered views while
+preserving the existing catalog, typed-query, shared-resource-model, and
+object-map ownership boundaries.
 
 Target navigation order:
 
-1. User intent (Observe, Run, Configure, Govern).
-2. Lens (Inventory, Needs Attention, Applications, Capacity, Change, Clusters).
-3. Explicit cluster and namespace scope.
-4. Concrete Kubernetes objects with full cluster/GVK identity.
+1. Explicit global, cluster, and namespace scope.
+2. View (Browse, Needs Attention, Applications, Nodes, Events, Clusters).
+3. Concrete Kubernetes objects with full cluster/GVK identity.
 
 ## Non-goals
 
@@ -42,15 +41,16 @@ Target navigation order:
 
 ### Phase 1: One shell view registry
 
-- [x] Add a frontend-owned registry containing view id, scope, label, intent
-      group, description, keywords, All Namespaces support, and refresher.
+- [x] Add a frontend-owned registry containing view id, scope, label,
+      description, keywords, All Namespaces support, and refresher.
 - [x] Derive navigation unions/runtime parsers from the registry vocabulary.
 - [x] Migrate Sidebar, command palette, favorite picker, and refresher mapping.
 - [x] Add registry and shell-parity tests that reject vocabulary drift.
 
-### Phase 2: Intent-grouped navigation
+### Phase 2: Scope navigation
 
-- [x] Render cluster and namespace views under intent group headings.
+- [x] Render cluster and namespace views as flat ordered lists without repeated
+      task-category headings.
 - [x] Preserve sidebar keyboard order, selection, expansion, and accessibility.
 - [x] Keep Map hidden for All Namespaces through registry capability metadata.
 - [x] Add focused sidebar and keyboard tests before production changes.
@@ -150,8 +150,8 @@ Target navigation order:
 - **Change** maps to the existing cluster and namespace **Events** surfaces.
   Events remain Kubernetes event views rather than an audit-history promise;
   `change` and `changes` are search aliases for the existing `events` ids.
-- **Needs Attention** remains a separate cluster lens under Observe. It does not
-  replace Overview, which continues to provide the broader cluster summary.
+- **Needs Attention** remains a separate cluster view. It does not replace
+  Overview, which continues to provide the broader cluster summary.
 - Low-confidence application groups remain grouping-only when they do not carry
   a complete root object reference. Confidence does not manufacture identity;
   groups with a complete root may retain object-panel and table-to-map actions.

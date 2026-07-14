@@ -188,19 +188,34 @@ describe('Sidebar', () => {
     expect(resources?.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('categorizes cluster and namespace views by intent', () => {
+  it('renders flat cluster and namespace view lists in canonical order', () => {
     renderSidebar();
 
     const host = requireValue(container, 'expected Sidebar test container');
-    const labelsWithin = (element: Element) =>
-      Array.from(element.querySelectorAll('.sidebar-view-group-label'), (label) =>
-        label.textContent?.trim()
+    const viewIdsWithin = (element: Element) =>
+      Array.from(
+        element.querySelectorAll<HTMLElement>('[data-sidebar-target-view]'),
+        (view) => view.dataset.sidebarTargetView
       );
     const clusterViews = requireValue(
       host.querySelector('[id$="-sidebar-cluster-resource-views"]'),
       'expected cluster resource views'
     );
-    expect(labelsWithin(clusterViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
+    expect(Array.from(clusterViews.children).every((child) => child.matches('.sidebar-item'))).toBe(
+      true
+    );
+    expect(viewIdsWithin(clusterViews)).toEqual([
+      'namespaces',
+      'attention',
+      'browse',
+      'events',
+      'nodes',
+      'config',
+      'storage',
+      'crds',
+      'custom',
+      'rbac',
+    ]);
 
     const namespaceToggle = requireValue(
       host.querySelector<HTMLElement>(
@@ -220,7 +235,25 @@ describe('Sidebar', () => {
       document.getElementById(namespaceViewsId),
       'expected namespace resource views'
     );
-    expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
+    expect(
+      Array.from(namespaceViews.children).every((child) => child.matches('.sidebar-item'))
+    ).toBe(true);
+    expect(viewIdsWithin(namespaceViews)).toEqual([
+      'browse',
+      'map',
+      'events',
+      'applications',
+      'workloads',
+      'pods',
+      'autoscaling',
+      'helm',
+      'config',
+      'network',
+      'storage',
+      'custom',
+      'quotas',
+      'rbac',
+    ]);
   });
 
   it('presents cross-cluster views under the Global scope instead of Cluster resources', () => {
