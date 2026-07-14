@@ -328,9 +328,29 @@ describe('NsViewWorkloads', () => {
           totalIsExact: true,
           namespaces: ['team-a'],
           kinds: ['Deployment'],
-          statuses: ['Degraded', 'Running'],
+          facetValues: [
+            {
+              key: 'statuses',
+              options: [
+                { value: 'Degraded', label: 'Degraded' },
+                { value: 'Running', label: 'Running' },
+              ],
+              exact: true,
+            },
+          ],
           facetsExact: true,
-          capabilities: { filterableFields: ['kinds', 'namespaces', 'statuses'] },
+          capabilities: {
+            filterableFields: ['kinds', 'namespaces'],
+            queryFacets: [
+              {
+                key: 'statuses',
+                label: 'Status',
+                placeholder: 'All statuses',
+                searchable: false,
+                bulkActions: true,
+              },
+            ],
+          },
         },
       },
     });

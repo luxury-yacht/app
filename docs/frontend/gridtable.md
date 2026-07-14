@@ -105,10 +105,15 @@ invalidators even though the callback does not read them.
   Each facet uses a stable provider-owned key, persists through GridTable state
   and favorites, and only shapes backend queries; GridTable must not locally
   apply those selections to the current page.
-- A provider may publish a filter capability only after the frontend serializes
-  that selection and the backend applies it to the full matching dataset. Do not
-  advertise status, owner, node, application, or other row-field filters from
-  response facets alone.
+- Provider-specific facets are declared by backend capability descriptors and
+  paired by key with envelope `facetValues`. The shared resource-query adapter
+  maps descriptor labels/placeholders/searchability/bulk actions and option
+  value/labels into GridTable controls, and serializes selections as
+  `facet.<key>`. Views must not add key-specific projection or serializer branches.
+- A provider may publish a facet only after request serialization, backend
+  extraction/filtering, full-structural-scope options, UI projection, and shared
+  persistence exist. Do not advertise status, owner, node, application, or other
+  row-field filters from response facets alone.
 - Pods, Workloads, and Nodes are the reference typed-query facet implementations:
   their provider-owned options describe the full structural scope, remain stable
   when a selection narrows the result set, and feed backend query parameters

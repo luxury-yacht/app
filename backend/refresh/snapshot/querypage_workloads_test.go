@@ -105,7 +105,7 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Namespaces: f.ns, Kinds: f.kinds, Statuses: f.statuses, Search: f.search, Predicates: f.predicates,
+						Namespaces: f.ns, Kinds: f.kinds, Facets: map[string][]string{"statuses": f.statuses}, Search: f.search, Predicates: f.predicates,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[WorkloadSummary] {
@@ -142,7 +142,7 @@ func TestWorkloadQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
 		Enabled: true,
 		Request: ResourceQueryRequest{
 			ClusterID: "c",
-			Statuses:  []string{"Pending"},
+			Facets:    map[string][]string{"statuses": {"Pending"}},
 			Limit:     50,
 		},
 	}
@@ -157,8 +157,8 @@ func TestWorkloadQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
 			t.Fatalf("status-filtered page contains %q row", row.Status)
 		}
 	}
-	if !slices.Equal(page.Statuses, []string{"Degraded", "Pending", "Running"}) {
-		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
+	if got := testFacetOptionValues(page.FacetValues, "statuses"); !slices.Equal(got, []string{"Degraded", "Pending", "Running"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", got)
 	}
 }
 
@@ -173,7 +173,7 @@ func TestWorkloadStatusFacetsStayStableAcrossHealthPredicate(t *testing.T) {
 		Enabled: true,
 		Request: ResourceQueryRequest{
 			ClusterID:  "c",
-			Statuses:   []string{"Pending"},
+			Facets:     map[string][]string{"statuses": {"Pending"}},
 			Predicates: []ResourceQueryPredicate{{Field: "health", Value: "unhealthy"}},
 			Limit:      50,
 		},
@@ -184,8 +184,8 @@ func TestWorkloadStatusFacetsStayStableAcrossHealthPredicate(t *testing.T) {
 	if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].Name != "pending" {
 		t.Fatalf("status + health query rows = %#v total=%d, want pending only", page.Rows, page.Total)
 	}
-	if !slices.Equal(page.Statuses, []string{"Degraded", "Pending", "Running"}) {
-		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
+	if got := testFacetOptionValues(page.FacetValues, "statuses"); !slices.Equal(got, []string{"Degraded", "Pending", "Running"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", got)
 	}
 }
 
@@ -245,8 +245,8 @@ func TestWorkloadMetricSortQueryViaStoreEquivalent(t *testing.T) {
 			if liveFirst.Total != engineFirst.Total {
 				t.Fatalf("%s: total live=%d engine=%d", label, liveFirst.Total, engineFirst.Total)
 			}
-			if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
-				t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
+			if !slices.Equal(testFacetOptionValues(liveFirst.FacetValues, "statuses"), testFacetOptionValues(engineFirst.FacetValues, "statuses")) {
+				t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.FacetValues, engineFirst.FacetValues)
 			}
 		}
 	}

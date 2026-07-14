@@ -56,6 +56,20 @@ func makePodRows(n int) []PodSummary {
 	return rows
 }
 
+func testFacetOptionValues(values []ResourceQueryFacetValues, key string) []string {
+	for _, facet := range values {
+		if facet.Key != key {
+			continue
+		}
+		result := make([]string, 0, len(facet.Options))
+		for _, option := range facet.Options {
+			result = append(result, option.Value)
+		}
+		return result
+	}
+	return nil
+}
+
 // TestPodsQueryViaStoreEquivalent is the pods cutover gate: the engine-backed serve
 // path must produce the SAME page as the live applyTypedTableQuery — identical rows
 // across full pagination, totals, and facet value lists — across a matrix of sorts
@@ -122,7 +136,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Namespaces: f.ns, Kinds: f.kinds, Statuses: f.statuses, Nodes: f.nodes, Search: f.search, Predicates: f.predicates,
+						Namespaces: f.ns, Kinds: f.kinds, Facets: map[string][]string{"statuses": f.statuses, "nodes": f.nodes}, Search: f.search, Predicates: f.predicates,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[PodSummary] {
@@ -148,11 +162,11 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
-				if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
-					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
+				if !slices.Equal(testFacetOptionValues(liveFirst.FacetValues, "statuses"), testFacetOptionValues(engineFirst.FacetValues, "statuses")) {
+					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.FacetValues, engineFirst.FacetValues)
 				}
-				if !slices.Equal(liveFirst.Nodes, engineFirst.Nodes) {
-					t.Fatalf("%s: node facets live=%v engine=%v", label, liveFirst.Nodes, engineFirst.Nodes)
+				if !slices.Equal(testFacetOptionValues(liveFirst.FacetValues, "nodes"), testFacetOptionValues(engineFirst.FacetValues, "nodes")) {
+					t.Fatalf("%s: node facets live=%v engine=%v", label, liveFirst.FacetValues, engineFirst.FacetValues)
 				}
 			}
 		}
@@ -166,8 +180,7 @@ func TestPodsQueryViaStoreFiltersStatusesAndNodes(t *testing.T) {
 		Request: ResourceQueryRequest{
 			ClusterID: "c",
 			Table:     "pods",
-			Statuses:  []string{"Pending"},
-			Nodes:     []string{"node-2"},
+			Facets:    map[string][]string{"statuses": {"Pending"}, "nodes": {"node-2"}},
 			SortField: "name",
 			Limit:     250,
 		},
@@ -183,8 +196,8 @@ func TestPodsQueryViaStoreFiltersStatusesAndNodes(t *testing.T) {
 
 	require.Equal(t, want, page.Total)
 	require.Len(t, page.Rows, want)
-	require.Equal(t, []string{"Completed", "CrashLoopBackOff", "Pending", "Running"}, page.Statuses)
-	require.Equal(t, []string{"node-1", "node-2", "node-3"}, page.Nodes)
+	require.Equal(t, []string{"Completed", "CrashLoopBackOff", "Pending", "Running"}, testFacetOptionValues(page.FacetValues, "statuses"))
+	require.Equal(t, []string{"node-1", "node-2", "node-3"}, testFacetOptionValues(page.FacetValues, "nodes"))
 	for _, row := range page.Rows {
 		require.Equal(t, "Pending", row.Status)
 		require.Equal(t, "node-2", row.Node)

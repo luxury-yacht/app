@@ -175,8 +175,7 @@ export interface ClusterCRDSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -213,8 +212,7 @@ export interface ClusterConfigSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -287,8 +285,7 @@ export interface ClusterEventsSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -352,8 +349,7 @@ export interface ClusterNodeSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -453,8 +449,7 @@ export interface ClusterRBACSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -497,8 +492,7 @@ export interface ClusterStorageSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -595,8 +589,7 @@ export interface NamespaceApplicationsSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -623,8 +616,7 @@ export interface NamespaceAutoscalingSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -665,8 +657,7 @@ export interface NamespaceConfigSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -752,8 +743,7 @@ export interface NamespaceEventsSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -779,8 +769,7 @@ export interface NamespaceHelmSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -824,8 +813,7 @@ export interface NamespaceNetworkSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -876,8 +864,7 @@ export interface NamespaceQuotasSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -903,8 +890,7 @@ export interface NamespaceRBACSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -949,8 +935,7 @@ export interface NamespaceStorageSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -1018,8 +1003,7 @@ export interface NamespaceWorkloadSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -1278,8 +1262,7 @@ export interface PodSnapshotPayload {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
@@ -1374,6 +1357,7 @@ export interface ResourceQueryCapabilities {
   filterableFields?: Array<string>;
   searchableFields?: Array<string>;
   kindVocabulary?: Array<string>;
+  queryFacets?: Array<ResourceQueryFacetDescriptor>;
 }
 
 export interface ResourceQueryDynamicRef {
@@ -1397,13 +1381,31 @@ export interface ResourceQueryEnvelopeFields {
   totalIsExact: boolean;
   kinds?: Array<string>;
   namespaces?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
   facetsExact: boolean;
   completeness?: ResourceQueryCompleteness;
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
+}
+
+export interface ResourceQueryFacetDescriptor {
+  key: string;
+  label: string;
+  placeholder: string;
+  searchable: boolean;
+  bulkActions: boolean;
+}
+
+export interface ResourceQueryFacetOption {
+  value: string;
+  label: string;
+}
+
+export interface ResourceQueryFacetValues {
+  key: string;
+  options: Array<ResourceQueryFacetOption> | null;
+  exact: boolean;
 }
 
 export interface ResourceQueryIssue {
@@ -1424,8 +1426,7 @@ export interface ResourceQueryRequest {
   scope?: ResourceQueryScope;
   namespaces?: Array<string>;
   kinds?: Array<string>;
-  statuses?: Array<string>;
-  nodes?: Array<string>;
+  facets?: Record<string, Array<string> | null>;
   search?: string;
   includeMetadata?: boolean;
   predicates?: Array<ResourceQueryPredicate>;

@@ -9,6 +9,7 @@ import type {
   ResourceQueryAnchorResult,
   ResourceQueryCapabilities,
   ResourceQueryDynamicRef,
+  ResourceQueryFacetValues,
   ResourceQueryIssue,
 } from '@/core/refresh/types';
 
@@ -29,8 +30,7 @@ export interface TypedQueryPayload {
   totalIsExact?: boolean;
   namespaces?: string[];
   kinds?: string[];
-  statuses?: string[];
-  nodes?: string[];
+  facetValues?: ResourceQueryFacetValues[];
   facetsExact?: boolean;
   issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
@@ -143,13 +143,10 @@ export function buildTypedResourceQueryScope(
   if (kinds.length > 0) {
     params.set('kinds', kinds.join(','));
   }
-  const statuses = stableTypedQueryList(descriptor.filters.queryFacets?.statuses ?? []);
-  if (statuses.length > 0) {
-    params.set('statuses', statuses.join(','));
-  }
-  const nodes = stableTypedQueryList(descriptor.filters.queryFacets?.nodes ?? []);
-  if (nodes.length > 0) {
-    params.set('nodes', nodes.join(','));
+  for (const [key, values] of Object.entries(
+    stableTypedQueryFacets(descriptor.filters.queryFacets)
+  )) {
+    params.set(`facet.${key}`, values.join(','));
   }
   if (descriptor.sortConfig?.key && descriptor.sortConfig.direction) {
     params.set('sort', descriptor.sortConfig.key);
@@ -201,31 +198,20 @@ export function filterOptionsFromTypedPayload(
     ? payload.issues.map((issue) => `${issue.kind}: ${issue.message}`).join('\n')
     : undefined;
   const facetsLabel =
-    payload.facetsExact === false
+    payload.facetsExact === false || payload.facetValues?.some((facet) => !facet.exact)
       ? 'Facet options are approximate because one or more backend data sources were unavailable.'
       : undefined;
-  const filterableFields = new Set(payload.capabilities?.filterableFields ?? []);
-  const queryFacets: NonNullable<GridTableFilterOptions['queryFacets']> = [];
-  if (filterableFields.has('statuses')) {
-    queryFacets.push({
-      key: 'statuses',
-      label: 'Status',
-      placeholder: 'All statuses',
-      options: (payload.statuses ?? []).map((status) => ({ value: status, label: status })),
-      searchable: false,
-      bulkActions: true,
-    });
-  }
-  if (filterableFields.has('nodes')) {
-    queryFacets.push({
-      key: 'nodes',
-      label: 'Node',
-      placeholder: 'All nodes',
-      options: (payload.nodes ?? []).map((node) => ({ value: node, label: node })),
-      searchable: true,
-      bulkActions: true,
-    });
-  }
+  const valuesByKey = new Map((payload.facetValues ?? []).map((facet) => [facet.key, facet]));
+  const queryFacets: NonNullable<GridTableFilterOptions['queryFacets']> = (
+    payload.capabilities?.queryFacets ?? []
+  ).map((descriptor) => ({
+    key: descriptor.key,
+    label: descriptor.label,
+    placeholder: descriptor.placeholder,
+    options: valuesByKey.get(descriptor.key)?.options ?? [],
+    searchable: descriptor.searchable,
+    bulkActions: descriptor.bulkActions,
+  }));
   return {
     kinds: payload.kinds,
     namespaces: payload.namespaces,

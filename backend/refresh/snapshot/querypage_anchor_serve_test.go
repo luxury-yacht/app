@@ -3,6 +3,8 @@ package snapshot
 import (
 	"fmt"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
 
 // anchorFor builds a valid same-cluster anchor ref for typed serve tests.
@@ -193,6 +195,32 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 	if resolved.Envelope.Anchor == nil || resolved.Envelope.Anchor.Found ||
 		resolved.Envelope.Anchor.Reason != "filtered" {
 		t.Fatalf("maintained filtered anchor = %+v", resolved.Envelope.Anchor)
+	}
+}
+
+func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *testing.T) {
+	store := querypage.NewStore(nodesQuerypageSchema())
+	store.Upsert(NodeSummary{Name: "ready", Status: "Ready"})
+	store.Upsert(NodeSummary{Name: "not-ready", Status: "NotReady"})
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c", Table: "nodes", SortField: "name", SortDirection: "asc", Limit: 50,
+			Facets: map[string][]string{"statuses": {"NotReady"}},
+		},
+	}
+	resolved := resolveMaintainedDirect(
+		store, query, map[string]bool{"Node": true}, "", nodeTableQueryAdapter(),
+		nodesQuerypageSchema(), nodeQueryCapabilities(), 100, "nodes",
+		func(NodeSummary) string { return "Node" }, func() []NodeSummary { return nil }, nil,
+	)
+
+	if len(resolved.Rows) != 1 || resolved.Rows[0].Status != "NotReady" {
+		t.Fatalf("maintained facet rows = %#v, want NotReady only", resolved.Rows)
+	}
+	wantOptions := []string{"NotReady", "Ready"}
+	if got := testFacetOptionValues(resolved.Envelope.FacetValues, "statuses"); !equalStringSlices(got, wantOptions) {
+		t.Fatalf("maintained status options = %v, want %v", got, wantOptions)
 	}
 }
 

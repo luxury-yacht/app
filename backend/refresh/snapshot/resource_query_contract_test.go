@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"encoding/json"
+	"net/url"
 	"testing"
 )
 
@@ -91,8 +92,6 @@ func TestTypedResourceProvidersPublishOnlyQueryBackedFilterCapabilities(t *testi
 	queryBackedFields := map[string]bool{
 		"kinds":      true,
 		"namespaces": true,
-		"statuses":   true,
-		"nodes":      true,
 	}
 
 	for domain, caps := range typedCapabilityConformance {
@@ -100,23 +99,92 @@ func TestTypedResourceProvidersPublishOnlyQueryBackedFilterCapabilities(t *testi
 			if !queryBackedFields[field] {
 				t.Errorf("%s: filter capability %q has no shared typed-query request and engine projection", domain, field)
 			}
-			if field == "statuses" && domain != "pods" && domain != "nodes" && domain != "namespace-workloads" {
-				t.Errorf("%s: filter capability %q has no domain adapter projection", domain, field)
-			}
-			if field == "nodes" && domain != "pods" {
-				t.Errorf("%s: filter capability %q has no domain adapter projection", domain, field)
-			}
 		}
 	}
 
-	if got := typedCapabilityConformance["pods"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces", "statuses", "nodes"}) {
-		t.Errorf("pods: filter capabilities = %v, want query-backed kind, namespace, status, and node filters", got)
+	if got := typedCapabilityConformance["pods"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces"}) {
+		t.Errorf("pods: structural filter capabilities = %v, want kind and namespace filters", got)
 	}
-	if got := typedCapabilityConformance["nodes"].FilterableFields; !equalStringSlices(got, []string{"statuses"}) {
-		t.Errorf("nodes: filter capabilities = %v, want query-backed status filters", got)
+	if got := typedCapabilityConformance["nodes"].FilterableFields; len(got) != 0 {
+		t.Errorf("nodes: structural filter capabilities = %v, want none", got)
 	}
-	if got := typedCapabilityConformance["namespace-workloads"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces", "statuses"}) {
-		t.Errorf("namespace-workloads: filter capabilities = %v, want query-backed kind, namespace, and status filters", got)
+	if got := typedCapabilityConformance["namespace-workloads"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces"}) {
+		t.Errorf("namespace-workloads: structural filter capabilities = %v, want kind and namespace filters", got)
+	}
+}
+
+func TestPublishedQueryFacetsHaveBackendExecutionAndOptionProjections(t *testing.T) {
+	type providerFacetContract struct {
+		capabilities ResourceQueryCapabilities
+		keys         []string
+	}
+	providers := map[string]providerFacetContract{
+		"pods":                {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
+		"nodes":               {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
+		"namespace-workloads": {namespaceWorkloadsQueryCapabilities(), typedTableFacetKeys(workloadQueryFacets())},
+	}
+
+	for domain, provider := range providers {
+		published := map[string]bool{}
+		for _, descriptor := range provider.capabilities.QueryFacets {
+			if descriptor.Key == "" || descriptor.Label == "" || descriptor.Placeholder == "" {
+				t.Errorf("%s: facet descriptor must publish key, label, and placeholder: %+v", domain, descriptor)
+			}
+			if published[descriptor.Key] {
+				t.Errorf("%s: duplicate facet key %q", domain, descriptor.Key)
+			}
+			published[descriptor.Key] = true
+		}
+		if len(published) != len(provider.keys) {
+			t.Errorf("%s: published %d facets but adapter executes %d", domain, len(published), len(provider.keys))
+		}
+		for _, key := range provider.keys {
+			if !published[key] {
+				t.Errorf("%s: adapter facet %q lacks published display metadata", domain, key)
+			}
+		}
+	}
+}
+
+func typedTableFacetKeys[T any](facets []typedTableQueryFacet[T]) []string {
+	keys := make([]string, 0, len(facets))
+	for _, facet := range facets {
+		if facet.Value == nil {
+			continue
+		}
+		keys = append(keys, facet.Descriptor.Key)
+	}
+	return keys
+}
+
+func TestTypedResourceProviderFacetContractIsPublishedAndSerializable(t *testing.T) {
+	capsRaw, err := json.Marshal(nodeQueryCapabilities())
+	if err != nil {
+		t.Fatalf("marshal node capabilities: %v", err)
+	}
+	var caps map[string]json.RawMessage
+	if err := json.Unmarshal(capsRaw, &caps); err != nil {
+		t.Fatalf("unmarshal node capabilities: %v", err)
+	}
+	wantDescriptors := `[{"key":"statuses","label":"Status","placeholder":"All statuses","searchable":false,"bulkActions":true}]`
+	if got := string(caps["queryFacets"]); got != wantDescriptors {
+		t.Fatalf("node query facet descriptors = %s, want %s", got, wantDescriptors)
+	}
+
+	values := url.Values{}
+	values.Set("facet.statuses", "NotReady,Ready")
+	request := resourceQueryRequestFromValues("cluster-a", "nodes", values, ResourceQueryRequest{})
+	requestRaw, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var requestJSON map[string]json.RawMessage
+	if err := json.Unmarshal(requestRaw, &requestJSON); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	wantFacets := `{"statuses":["NotReady","Ready"]}`
+	if got := string(requestJSON["facets"]); got != wantFacets {
+		t.Fatalf("serialized provider facet selection = %s, want %s", got, wantFacets)
 	}
 }
 

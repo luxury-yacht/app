@@ -162,20 +162,20 @@ Target navigation order:
 
 ### Phase 10: Extensible provider-owned query facets
 
-- [ ] Define the cross-layer facet descriptor contract before implementation,
+- [x] Define the cross-layer facet descriptor contract before implementation,
       including stable keys, selection values, option values, exactness,
       high-cardinality/searchable behavior, and ownership of display metadata.
-- [ ] Replace the Status/Node-only typed-query transport and adapter plumbing
+- [x] Replace the Status/Node-only typed-query transport and adapter plumbing
       with provider-declared facet selection and extraction while preserving
       `clusterId`, structural namespace scope, query identity, cursor identity,
       exact totals, and full-scope option stability.
-- [ ] Project provider facets through the existing generic GridTable
+- [x] Project provider facets through the existing generic GridTable
       `queryFacets` state so selections persist in table state and favorites
       without view-local filter implementations.
-- [ ] Migrate Pods, Workloads, and Nodes to the shared facet contract without
+- [x] Migrate Pods, Workloads, and Nodes to the shared facet contract without
       changing their current Status/Node behavior, then remove the superseded
       one-off serializer and projection branches.
-- [ ] Add conformance tests that reject a published facet unless request
+- [x] Add conformance tests that reject a published facet unless request
       serialization, backend execution, stable options, UI projection, and
       persistence all exist.
 

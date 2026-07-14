@@ -564,11 +564,43 @@ describe('NsViewPods', () => {
           totalIsExact: true,
           namespaces: ['team-a'],
           kinds: ['Pod'],
-          statuses: ['Pending', 'Running'],
-          nodes: ['node-a', 'node-b'],
+          facetValues: [
+            {
+              key: 'statuses',
+              options: [
+                { value: 'Pending', label: 'Pending' },
+                { value: 'Running', label: 'Running' },
+              ],
+              exact: true,
+            },
+            {
+              key: 'nodes',
+              options: [
+                { value: 'node-a', label: 'node-a' },
+                { value: 'node-b', label: 'node-b' },
+              ],
+              exact: true,
+            },
+          ],
           facetsExact: true,
           capabilities: {
-            filterableFields: ['kinds', 'namespaces', 'statuses', 'nodes'],
+            filterableFields: ['kinds', 'namespaces'],
+            queryFacets: [
+              {
+                key: 'statuses',
+                label: 'Status',
+                placeholder: 'All statuses',
+                searchable: false,
+                bulkActions: true,
+              },
+              {
+                key: 'nodes',
+                label: 'Node',
+                placeholder: 'All nodes',
+                searchable: true,
+                bulkActions: true,
+              },
+            ],
           },
           metrics: { stale: false, successCount: 1, failureCount: 0 },
         },

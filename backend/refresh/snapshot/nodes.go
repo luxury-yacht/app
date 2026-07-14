@@ -76,10 +76,17 @@ type NodeSnapshot struct {
 func nodeQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
-		[]string{"statuses"},
+		nil,
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
 		nil, // no kind filtering
+		typedTableFacetDescriptors(nodeQueryFacets())...,
 	)
+}
+
+func nodeQueryFacets() []typedTableQueryFacet[NodeSummary] {
+	return []typedTableQueryFacet[NodeSummary]{
+		statusQueryFacet(func(row NodeSummary) string { return row.Status }),
+	}
 }
 
 // nodesQuerypageSchema derives the querypage Schema for the nodes table from its

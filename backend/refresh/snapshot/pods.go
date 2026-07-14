@@ -192,10 +192,18 @@ func podSummaryUnhealthy(pod PodSummary) bool {
 func podQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"name", "namespace", "status", "ready", "restarts", "owner", "node", "cpu", "memory", "age"},
-		[]string{"kinds", "namespaces", "statuses", "nodes"},
+		[]string{"kinds", "namespaces"},
 		[]string{"name", "namespace", "status", "ready", "owner", "node"},
 		[]string{podres.Identity.Kind},
+		typedTableFacetDescriptors(podQueryFacets())...,
 	)
+}
+
+func podQueryFacets() []typedTableQueryFacet[PodSummary] {
+	return []typedTableQueryFacet[PodSummary]{
+		statusQueryFacet(func(pod PodSummary) string { return pod.Status }),
+		nodeQueryFacet(func(pod PodSummary) string { return pod.Node }),
+	}
 }
 
 // podQuerypageSchema derives the querypage Schema for the pods table from its
@@ -566,8 +574,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		Namespace: func(pod PodSummary) string { return pod.Namespace },
 		Kind:      func(PodSummary) string { return podres.Identity.Kind },
-		Status:    func(pod PodSummary) string { return pod.Status },
-		Node:      func(pod PodSummary) string { return pod.Node },
+		Facets:    podQueryFacets(),
 		SearchText: func(pod PodSummary) []string {
 			return []string{
 				pod.Name,

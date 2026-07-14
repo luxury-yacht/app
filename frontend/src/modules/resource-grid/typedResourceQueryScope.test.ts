@@ -27,7 +27,7 @@ describe('typedResourceQueryScope', () => {
     });
 
     expect(scope).toBe(
-      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&statuses=Pending%2CRunning&nodes=node-a%2Cnode-b&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
+      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&facet.nodes=node-a%2Cnode-b&facet.statuses=Pending%2CRunning&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
     );
   });
 
@@ -136,9 +136,42 @@ describe('typedResourceQueryScope', () => {
   it('projects advertised status and node facets into query controls', () => {
     expect(
       filterOptionsFromTypedPayload({
-        statuses: ['Pending', 'Running'],
-        nodes: ['node-a', 'node-b'],
-        capabilities: { filterableFields: ['kinds', 'namespaces', 'statuses', 'nodes'] },
+        facetValues: [
+          {
+            key: 'statuses',
+            options: [
+              { value: 'Pending', label: 'Pending' },
+              { value: 'Running', label: 'Running' },
+            ],
+            exact: true,
+          },
+          {
+            key: 'nodes',
+            options: [
+              { value: 'node-a', label: 'node-a' },
+              { value: 'node-b', label: 'node-b' },
+            ],
+            exact: true,
+          },
+        ],
+        capabilities: {
+          queryFacets: [
+            {
+              key: 'statuses',
+              label: 'Status',
+              placeholder: 'All statuses',
+              searchable: false,
+              bulkActions: true,
+            },
+            {
+              key: 'nodes',
+              label: 'Node',
+              placeholder: 'All nodes',
+              searchable: true,
+              bulkActions: true,
+            },
+          ],
+        },
       }).queryFacets
     ).toEqual([
       {
@@ -164,5 +197,42 @@ describe('typedResourceQueryScope', () => {
         bulkActions: true,
       },
     ]);
+  });
+
+  it('projects a new provider facet without shared key-specific metadata', () => {
+    expect(
+      filterOptionsFromTypedPayload({
+        facetValues: [
+          {
+            key: 'zones',
+            options: [{ value: 'us-west-2a', label: 'US West 2A' }],
+            exact: false,
+          },
+        ],
+        capabilities: {
+          queryFacets: [
+            {
+              key: 'zones',
+              label: 'Zone',
+              placeholder: 'All zones',
+              searchable: true,
+              bulkActions: false,
+            },
+          ],
+        },
+      })
+    ).toMatchObject({
+      queryFacets: [
+        {
+          key: 'zones',
+          label: 'Zone',
+          placeholder: 'All zones',
+          options: [{ value: 'us-west-2a', label: 'US West 2A' }],
+          searchable: true,
+          bulkActions: false,
+        },
+      ],
+      partialDataLabel: expect.stringContaining('approximate'),
+    });
   });
 });

@@ -337,9 +337,28 @@ describe('ClusterViewNodes', () => {
           total: 1,
           totalIsExact: true,
           kinds: ['Node'],
-          statuses: ['NotReady', 'Ready'],
+          facetValues: [
+            {
+              key: 'statuses',
+              options: [
+                { value: 'NotReady', label: 'NotReady' },
+                { value: 'Ready', label: 'Ready' },
+              ],
+              exact: true,
+            },
+          ],
           facetsExact: true,
-          capabilities: { filterableFields: ['statuses'] },
+          capabilities: {
+            queryFacets: [
+              {
+                key: 'statuses',
+                label: 'Status',
+                placeholder: 'All statuses',
+                searchable: false,
+                bulkActions: true,
+              },
+            ],
+          },
         },
       },
     };

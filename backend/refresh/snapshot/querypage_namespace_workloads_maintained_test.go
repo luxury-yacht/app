@@ -125,6 +125,34 @@ func TestNamespaceWorkloadsBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 }
 
+func TestNamespaceWorkloadsMaintainedAppliesProviderFacetAndKeepsOptionsStable(t *testing.T) {
+	meta := ClusterMeta{}
+	ready := wlDeployment("ready", "default", "100", 2, 2)
+	progressing := wlDeployment("progressing", "default", "101", 0, 2)
+	src := newFakeWorkloadIngestSource(meta, ready, progressing)
+	builder := &NamespaceWorkloadsBuilder{
+		workloadIngest:     src,
+		includeDeployments: true,
+	}
+	seedWorkloadsMaintained(builder, meta, src)
+
+	base, err := builder.Build(context.Background(), "namespace:all?limit=50")
+	require.NoError(t, err)
+	basePayload := base.Payload.(NamespaceWorkloadsSnapshot)
+	options := testFacetOptionValues(basePayload.FacetValues, "statuses")
+	require.Len(t, options, 2)
+
+	selected := options[0]
+	filtered, err := builder.Build(context.Background(), "namespace:all?limit=50&facet.statuses="+selected)
+	require.NoError(t, err)
+	filteredPayload := filtered.Payload.(NamespaceWorkloadsSnapshot)
+	require.NotEmpty(t, filteredPayload.Rows)
+	for _, row := range filteredPayload.Rows {
+		require.Equal(t, selected, row.Status)
+	}
+	require.Equal(t, options, testFacetOptionValues(filteredPayload.FacetValues, "statuses"))
+}
+
 // TestNamespaceWorkloadsMaintainedOwnedPodNeverStandalone pins the workloads-view rule: the view
 // shows workload OWN-rows plus pods that have NO controller owner. A pod with a controller owner
 // must never appear as its own row — not even when its owning workload is absent from the emitted

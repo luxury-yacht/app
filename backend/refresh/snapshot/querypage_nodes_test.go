@@ -85,7 +85,7 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Search: f.search, Statuses: f.statuses,
+						Search: f.search, Facets: map[string][]string{"statuses": f.statuses},
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeSummary] {
@@ -111,8 +111,8 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
-				if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
-					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
+				if !slices.Equal(testFacetOptionValues(liveFirst.FacetValues, "statuses"), testFacetOptionValues(engineFirst.FacetValues, "statuses")) {
+					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.FacetValues, engineFirst.FacetValues)
 				}
 			}
 		}
@@ -125,7 +125,7 @@ func TestNodeQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
 		Enabled: true,
 		Request: ResourceQueryRequest{
 			ClusterID: "c",
-			Statuses:  []string{"NotReady"},
+			Facets:    map[string][]string{"statuses": {"NotReady"}},
 			Limit:     50,
 		},
 	}
@@ -140,8 +140,8 @@ func TestNodeQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
 			t.Fatalf("status-filtered page contains %q row", row.Status)
 		}
 	}
-	if !slices.Equal(page.Statuses, []string{"NotReady", "Ready", "Unknown"}) {
-		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
+	if got := testFacetOptionValues(page.FacetValues, "statuses"); !slices.Equal(got, []string{"NotReady", "Ready", "Unknown"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", got)
 	}
 }
 

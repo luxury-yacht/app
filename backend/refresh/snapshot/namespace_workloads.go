@@ -123,10 +123,17 @@ type NamespaceWorkloadsSnapshot struct {
 func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
-		[]string{"kinds", "namespaces", "statuses"},
+		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
 		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
+		typedTableFacetDescriptors(workloadQueryFacets())...,
 	)
+}
+
+func workloadQueryFacets() []typedTableQueryFacet[WorkloadSummary] {
+	return []typedTableQueryFacet[WorkloadSummary]{
+		statusQueryFacet(func(row WorkloadSummary) string { return row.Status }),
+	}
 }
 
 // WorkloadSummary lives in the streamrows leaf so every streaming row type has
@@ -537,7 +544,7 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		AnchorKey: namespacedTableKey,
 		Namespace: func(row WorkloadSummary) string { return row.Namespace },
 		Kind:      func(row WorkloadSummary) string { return row.Kind },
-		Status:    func(row WorkloadSummary) string { return row.Status },
+		Facets:    workloadQueryFacets(),
 		SearchText: func(row WorkloadSummary) []string {
 			return []string{
 				row.Kind,

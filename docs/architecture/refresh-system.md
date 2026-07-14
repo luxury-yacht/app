@@ -196,14 +196,20 @@ shape so the frontend consumes them uniformly (see
 
 - Typed-resource domains embed `ResourceQueryEnvelope`
   (`backend/refresh/snapshot/resource_query_contract.go`) in their payload — flat
-  facets (kinds/namespaces/statuses/nodes), `completeness`, `capabilities`, and
-  exactness flags — alongside a typed `Rows` slice. Go embedding flattens the
-  envelope to top-level JSON keys, so every typed payload presents the same shape.
+  structural facets (kinds/namespaces), provider-owned `facetValues`,
+  `completeness`, `capabilities`, and exactness flags — alongside a typed `Rows`
+  slice. Go embedding flattens the envelope to top-level JSON keys, so every
+  typed payload presents the same shape.
 - The catalog provider (`catalog.go`) does not embed the envelope (its kinds facet
   is the richer `[]KindInfo` and it owns keyset pagination) but surfaces the same
   provider/completeness/capabilities contract fields directly.
 - Capabilities describe the query surface (sortable/filterable/searchable
-  fields). Export and copy are client-driven: the current page by default, or a
+  fields) and publish provider facet descriptors. A descriptor owns its stable
+  key, label, placeholder, searchable behavior, and bulk-action behavior;
+  envelope `facetValues` own selection values, display labels, and per-facet
+  exactness. Requests serialize selections as `facet.<key>`, and the backend
+  includes every facet selection in matcher/cache/cursor identity. Export and
+  copy are client-driven: the current page by default, or a
   cursor walk over the same query path for the "all matching rows" scope.
 - Pagination is keyset (`continue`/`previous`). Any batch-streaming fields are
   diagnostics only, never page metadata.

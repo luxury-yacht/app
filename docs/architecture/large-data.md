@@ -321,6 +321,13 @@ metric sorts are backend-owned for the current resource and metric projection
 state. Node Status options cover the full cluster scope rather than the current
 page or active Status selection.
 
+Status and Node are provider-owned query facets, not fixed typed-query fields.
+Pods, Workloads, and Nodes publish generic facet descriptors in capabilities;
+their responses pair those descriptors with full-structural-scope option values
+and exactness. The shared request path serializes every selection as
+`facet.<key>`, so adding another provider facet does not require a new GridTable
+state field or view-local filter implementation.
+
 Config, RBAC, storage, network, quotas, autoscaling, and Helm: these snapshot
 producers expose typed backend query pages for cluster, all-namespaces, and
 single-namespace surfaces alike. Single-namespace tables run a namespace-scoped

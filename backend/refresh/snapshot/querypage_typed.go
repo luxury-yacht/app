@@ -33,13 +33,18 @@ func querypageSchemaFromAdapter[T any](adapter typedTableQueryAdapter[T], sortFi
 			return typedTableComparableSortValue(row, field, adapter)
 		}
 	}
+	facets := map[string]func(T) string{
+		"kind":      func(r T) string { return strings.ToLower(strings.TrimSpace(adapter.Kind(r))) },
+		"namespace": func(r T) string { return strings.ToLower(strings.TrimSpace(adapter.Namespace(r))) },
+	}
+	for _, queryFacet := range adapter.Facets {
+		facet := queryFacet
+		facets[facet.Descriptor.Key] = func(r T) string { return strings.TrimSpace(facet.Value(r)) }
+	}
 	return querypage.Schema[T]{
 		UID:      adapter.Key,
 		SortKeys: sortKeys,
-		Facets: map[string]func(T) string{
-			"kind":      func(r T) string { return strings.ToLower(strings.TrimSpace(adapter.Kind(r))) },
-			"namespace": func(r T) string { return strings.ToLower(strings.TrimSpace(adapter.Namespace(r))) },
-		},
+		Facets:   facets,
 		// Join with NUL: the live search is "any SearchText element contains the
 		// needle"; a NUL separator makes a single Contains equivalent because no real
 		// needle contains NUL, so a match can never span the boundary.
@@ -56,6 +61,17 @@ func lowerTrimAll(in []string) []string {
 			out = append(out, v)
 		}
 	}
+	return out
+}
+
+func stableFacetSelection(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, value := range in {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -85,17 +101,19 @@ func typedQuerySignature(sortField string, dir querypage.Direction, limit int, b
 		b.WriteString(strings.Join(v, ","))
 		b.WriteByte(';')
 	}
-	if v := lowerTrimAll(request.Statuses); len(v) > 0 {
-		sort.Strings(v)
-		b.WriteString("status=")
-		b.WriteString(strings.Join(v, ","))
-		b.WriteByte(';')
+	facetKeys := make([]string, 0, len(request.Facets))
+	for key := range request.Facets {
+		facetKeys = append(facetKeys, key)
 	}
-	if v := lowerTrimAll(request.Nodes); len(v) > 0 {
-		sort.Strings(v)
-		b.WriteString("node=")
-		b.WriteString(strings.Join(v, ","))
-		b.WriteByte(';')
+	sort.Strings(facetKeys)
+	for _, key := range facetKeys {
+		if values := stableFacetSelection(request.Facets[key]); len(values) > 0 {
+			b.WriteString("facet.")
+			b.WriteString(key)
+			b.WriteByte('=')
+			b.WriteString(strings.Join(values, ","))
+			b.WriteByte(';')
+		}
 	}
 	if preds := typedQueryPredicateSignatureParts(request.Predicates); len(preds) > 0 {
 		b.WriteString("predicates=")
@@ -151,20 +169,19 @@ type perBuildStoreCache[T any] struct {
 	matchedTotal int
 	namespaces   []string
 	kinds        []string
-	statuses     []string
-	nodes        []string
+	facetValues  []ResourceQueryFacetValues
 }
 
-func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, []string, []string, bool) {
+func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, []ResourceQueryFacetValues, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.store == nil || c.key != key {
-		return nil, 0, nil, nil, nil, nil, false
+		return nil, 0, nil, nil, nil, false
 	}
-	return c.store, c.matchedTotal, c.namespaces, c.kinds, c.statuses, c.nodes, true
+	return c.store, c.matchedTotal, c.namespaces, c.kinds, c.facetValues, true
 }
 
-func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds, statuses, nodes []string) {
+func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds []string, facetValues []ResourceQueryFacetValues) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.key = key
@@ -172,8 +189,7 @@ func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], match
 	c.matchedTotal = matchedTotal
 	c.namespaces = namespaces
 	c.kinds = kinds
-	c.statuses = statuses
-	c.nodes = nodes
+	c.facetValues = facetValues
 }
 
 // perBuildCacheKey identifies the matched set a per-Build store was built
@@ -206,13 +222,17 @@ func perBuildCacheKey(query typedTableQuery, versionToken string) string {
 	sort.Strings(namespaces)
 	b.WriteString(strings.Join(namespaces, ","))
 	b.WriteByte('\n')
-	statuses := lowerTrimAll(query.Request.Statuses)
-	sort.Strings(statuses)
-	b.WriteString(strings.Join(statuses, ","))
-	b.WriteByte('\n')
-	nodes := lowerTrimAll(query.Request.Nodes)
-	sort.Strings(nodes)
-	b.WriteString(strings.Join(nodes, ","))
+	facetKeys := make([]string, 0, len(query.Request.Facets))
+	for key := range query.Request.Facets {
+		facetKeys = append(facetKeys, key)
+	}
+	sort.Strings(facetKeys)
+	for _, key := range facetKeys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(strings.Join(stableFacetSelection(query.Request.Facets[key]), ","))
+		b.WriteByte(';')
+	}
 	b.WriteByte('\n')
 	b.WriteString(strings.Join(typedQueryPredicateSignatureParts(query.Request.Predicates), ","))
 	return b.String()
@@ -251,7 +271,7 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		opt(&cfg)
 	}
 
-	// Apply the FULL live matcher first — namespace + kind + status + node + search + predicates —
+	// Apply the FULL live matcher first — namespace + kind + provider facets + search + predicates —
 	// so the engine sees only the matched set. Building the store from `matched`
 	// (rather than all items and re-filtering inside Query) is what makes the engine
 	// honor predicates: the engine's Filters/Search cover only its facet dimensions,
@@ -261,12 +281,13 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	// (page turns, sort flips).
 	var store *querypage.Store[T]
 	var matchedTotal int
-	var matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes []string
+	var matchedNamespaces, matchedKinds []string
+	var scopeFacetValues []ResourceQueryFacetValues
 	cacheKey := ""
 	cached := false
 	if cfg.cache != nil {
 		cacheKey = perBuildCacheKey(query, cfg.versionToken)
-		store, matchedTotal, matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes, cached = cfg.cache.get(cacheKey)
+		store, matchedTotal, matchedNamespaces, matchedKinds, scopeFacetValues, cached = cfg.cache.get(cacheKey)
 	}
 	if !cached {
 		matcher := newTypedTableQueryMatcher(query, adapter)
@@ -283,10 +304,9 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		matchedTotal = len(matched)
 		matchedNamespaces = collectTypedTableFacet(matched, adapter.Namespace)
 		matchedKinds = collectTypedTableFacet(matched, adapter.Kind)
-		scopeStatuses = collectOptionalTypedTableFacet(items, adapter.Status)
-		scopeNodes = collectOptionalTypedTableFacet(items, adapter.Node)
+		scopeFacetValues = collectTypedTableFacetValues(items, adapter.Facets, true)
 		if cfg.cache != nil {
-			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes)
+			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds, scopeFacetValues)
 		}
 	}
 
@@ -355,8 +375,7 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		FacetsExact:     true,
 		Namespaces:      matchedNamespaces,
 		Kinds:           matchedKinds,
-		Statuses:        scopeStatuses,
-		Nodes:           scopeNodes,
+		FacetValues:     scopeFacetValues,
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,
 	}
@@ -477,6 +496,23 @@ func maintainedFacetValues(counts map[string]int, casing map[string]string) []st
 	return out
 }
 
+func maintainedQueryFacetValues[T any](counts map[string]map[string]int, facets []typedTableQueryFacet[T], exact bool) []ResourceQueryFacetValues {
+	result := make([]ResourceQueryFacetValues, 0, len(facets))
+	for _, facet := range facets {
+		values := maintainedFacetValues(counts[facet.Descriptor.Key], nil)
+		options := make([]ResourceQueryFacetOption, 0, len(values))
+		for _, value := range values {
+			label := value
+			if facet.Label != nil {
+				label = facet.Label(value)
+			}
+			options = append(options, ResourceQueryFacetOption{Value: value, Label: label})
+		}
+		result = append(result, ResourceQueryFacetValues{Key: facet.Descriptor.Key, Options: options, Exact: exact})
+	}
+	return result
+}
+
 // resolveMaintainedDirect serves a typed-table query (or window) straight from the
 // persistent maintained store, querying it in place (O(log N + page)) instead of
 // snapshotting every row and rebuilding a fresh per-Build store. Its output is
@@ -531,6 +567,9 @@ func resolveMaintainedDirect[T any](
 	// matched-only store queried with no filters. Cursor decode/validate is owned by
 	// the engine: an invalid token restarts at page 1 on page.CursorInvalid.
 	pageBase := maintainedScopeBase(availableKinds, namespace, query.Request.Kinds, query.Request.Namespaces, true)
+	for key, selected := range query.Request.Facets {
+		pageBase[key] = stableFacetSelection(selected)
+	}
 	engineQuery := querypage.Query{
 		ClusterID: query.Request.ClusterID,
 		Signature: sig,
@@ -563,7 +602,7 @@ func resolveMaintainedDirect[T any](
 	// the count of in-scope rows the list path passed in as `items`.
 	matchedFacets, matchedTotal := store.Scope(pageBase, searchLower)
 	scopeOnlyBase := maintainedScopeBase(availableKinds, namespace, nil, nil, false)
-	_, unfilteredTotal := store.Scope(scopeOnlyBase, "")
+	scopeOnlyFacets, unfilteredTotal := store.Scope(scopeOnlyBase, "")
 
 	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
 	// identity), so lowered facet value -> original casing for the kind facet list.
@@ -586,6 +625,7 @@ func resolveMaintainedDirect[T any](
 		FacetsExact:     true,
 		Namespaces:      maintainedFacetValues(matchedFacets["namespace"], nil),
 		Kinds:           maintainedFacetValues(matchedFacets["kind"], kindCasing),
+		FacetValues:     maintainedQueryFacetValues(scopeOnlyFacets, adapter.Facets, true),
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,
 	}
@@ -624,7 +664,7 @@ func resolveTypedSnapshotPageViaStore[T any](
 	window, totalItems := truncateSnapshotWindow(rows, windowLimit)
 	exact := totalItems == len(window) && len(issues) == 0
 	return typedSnapshotPage[T]{
-		Envelope: typedWindowEnvelope(domain, totalItems, exact, snapshotSortedKinds(window, kindOf), capabilities).withIssues(issues),
+		Envelope: typedWindowEnvelope(domain, totalItems, exact, snapshotSortedKinds(window, kindOf), collectTypedTableFacetValues(rows, adapter.Facets, len(issues) == 0), capabilities).withIssues(issues),
 		Rows:     window,
 		Stats:    snapshotWindowStats(len(window), totalItems, windowNoun),
 	}
