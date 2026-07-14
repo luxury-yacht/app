@@ -12,6 +12,7 @@ import {
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 
 const NAMESPACE_REFRESHERS = {
+  applications: 'applications',
   workloads: 'workloads',
   config: 'config',
   network: 'network',

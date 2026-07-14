@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	appsv1 "k8s.io/api/apps/v1"
@@ -199,6 +200,7 @@ func TestProjectPodAggregateWorkloadKindMatchesOverviewResolution(t *testing.T) 
 // oraclePodAggregate recomputes the aggregate using the exact inline math the
 // production domains use today, so the test fails if the projector diverges.
 func oraclePodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) streamrows.PodAggregate {
+	application, _ := resourcemodel.ApplicationCandidateForObject("", pod)
 	agg := streamrows.PodAggregate{
 		Namespace:          pod.Namespace,
 		Name:               pod.Name,
@@ -209,6 +211,7 @@ func oraclePodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) 
 		OwnerKey:           ownerKeyForPod(pod),
 		WorkloadKind:       oracleWorkloadKind(pod, rsLister),
 		StatusPresentation: podres.BuildResourceModel("", pod).Status.Presentation,
+		Application:        application,
 	}
 
 	// Regular-container resource sums (cluster_overview.go / nodes.go / workloads).

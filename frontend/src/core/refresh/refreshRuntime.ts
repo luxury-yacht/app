@@ -71,6 +71,7 @@ const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
   'namespace-rbac',
   'namespace-storage',
   'namespace-workloads',
+  'namespace-applications',
   'nodes',
   'object-details',
   'object-events',

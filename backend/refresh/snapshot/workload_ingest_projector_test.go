@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -34,7 +35,7 @@ func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 	replicas := int32(3)
 
 	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web", UID: "d-1", CreationTimestamp: metav1.Now()},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web", UID: "d-1", CreationTimestamp: metav1.Now(), Labels: map[string]string{"app.kubernetes.io/part-of": "storefront"}},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}}}},
@@ -103,6 +104,22 @@ func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		// pointer fields would differ by allocation, not content.
 		if !reflect.DeepEqual(gotTable, want) {
 			t.Fatalf("Table half mismatch for %s/%s:\n got=%#v\nwant=%#v", tc.obj.GetNamespace(), tc.obj.GetName(), gotTable, want)
+		}
+
+		gotAggregate, ok := bundle.Aggregate.(applicationMemberAggregate)
+		if !ok {
+			t.Fatalf("Aggregate half is %T, want applicationMemberAggregate", bundle.Aggregate)
+		}
+		if gotAggregate.Ref.ClusterID != meta.ClusterID || gotAggregate.Ref.Group != tc.collector.Identity.Group || gotAggregate.Ref.Version != tc.collector.Identity.Version || gotAggregate.Ref.Kind != tc.collector.Identity.Kind || gotAggregate.Ref.Namespace != tc.obj.GetNamespace() || gotAggregate.Ref.Name != tc.obj.GetName() {
+			t.Fatalf("Aggregate member ref for %s/%s is incomplete: %#v", tc.obj.GetNamespace(), tc.obj.GetName(), gotAggregate.Ref)
+		}
+		if gotAggregate.Presentation != gotTable.StatusPresentation {
+			t.Fatalf("Aggregate presentation = %q, want table presentation %q", gotAggregate.Presentation, gotTable.StatusPresentation)
+		}
+		if tc.obj == deploy {
+			if gotAggregate.Candidate.Name != "storefront" || gotAggregate.Candidate.Evidence != resourcemodel.ApplicationEvidenceLabel {
+				t.Fatalf("Deployment application candidate = %#v, want storefront label", gotAggregate.Candidate)
+			}
 		}
 
 		// Catalog half.

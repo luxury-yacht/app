@@ -70,6 +70,11 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatur
   map: [PERMISSION_FEATURES.objectMapResources],
   pods: [PERMISSION_FEATURES.namespacePods],
   workloads: [PERMISSION_FEATURES.namespaceWorkloads],
+  applications: [
+    PERMISSION_FEATURES.namespaceWorkloads,
+    PERMISSION_FEATURES.namespacePods,
+    PERMISSION_FEATURES.namespaceConfig,
+  ],
   config: [PERMISSION_FEATURES.namespaceConfig],
   network: [PERMISSION_FEATURES.namespaceNetwork],
   rbac: [PERMISSION_FEATURES.namespaceRBAC],

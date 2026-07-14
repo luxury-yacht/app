@@ -61,16 +61,17 @@ import (
 )
 
 const (
-	domainPods                 = "pods"
-	domainWorkloads            = "namespace-workloads"
-	domainNamespaceConfig      = "namespace-config"
-	domainNamespaceNetwork     = "namespace-network"
-	domainNamespaceRBAC        = "namespace-rbac"
-	domainNamespaceCustom      = "namespace-custom"
-	domainNamespaceHelm        = "namespace-helm"
-	domainNamespaceAutoscaling = "namespace-autoscaling"
-	domainNamespaceQuotas      = "namespace-quotas"
-	domainNamespaceStorage     = "namespace-storage"
+	domainPods                  = "pods"
+	domainWorkloads             = "namespace-workloads"
+	domainNamespaceApplications = "namespace-applications"
+	domainNamespaceConfig       = "namespace-config"
+	domainNamespaceNetwork      = "namespace-network"
+	domainNamespaceRBAC         = "namespace-rbac"
+	domainNamespaceCustom       = "namespace-custom"
+	domainNamespaceHelm         = "namespace-helm"
+	domainNamespaceAutoscaling  = "namespace-autoscaling"
+	domainNamespaceQuotas       = "namespace-quotas"
+	domainNamespaceStorage      = "namespace-storage"
 	// Cluster-scoped domains stream resources without namespace scopes.
 	domainClusterRBAC     = "cluster-rbac"
 	domainClusterStorage  = "cluster-storage"
@@ -785,6 +786,8 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 		Error:           reason,
 	}
 	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
+	update.Domain = domainNamespaceApplications
+	m.broadcast(domainNamespaceApplications, scopesForNamespace(namespace), update)
 }
 
 // Cluster RBAC updates target the cluster scope only.

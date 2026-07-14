@@ -262,6 +262,8 @@ func (m *Manager) broadcastWorkloadNotification(obj metav1.Object, ref resourcem
 		update.ResourceVersion = resourceVersion
 	}
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	update.Domain = domainNamespaceApplications
+	m.broadcast(domainNamespaceApplications, scopesForNamespace(namespace), update)
 }
 
 // broadcastWorkloadNotificationRef is the ref-only form of broadcastWorkloadNotification
@@ -282,6 +284,8 @@ func (m *Manager) broadcastWorkloadNotificationRef(ref resourcemodel.ResourceRef
 		Ref:             &ref,
 	}
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
+	update.Domain = domainNamespaceApplications
+	m.broadcast(domainNamespaceApplications, scopesForNamespace(namespace), update)
 }
 
 // broadcastWorkloadFromPodSummary re-derives the owner-workload change signal from a

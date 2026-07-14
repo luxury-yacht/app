@@ -1,0 +1,53 @@
+.applications-view {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.applications-view .gridtable-container {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.application-evidence-warning {
+  margin: 0 0 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-warning-border, #d59a32);
+  border-radius: 0.375rem;
+  background: var(--color-warning-bg, rgb(213 154 50 / 12%));
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+}
+
+.application-confidence {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.application-confidence--high {
+  color: var(--color-success, #2e9d64);
+}
+
+.application-confidence--medium {
+  color: var(--color-warning, #c7861d);
+}
+
+.application-confidence--low {
+  color: var(--text-secondary);
+}
+
+.application-group-name {
+  color: var(--text-primary);
+}

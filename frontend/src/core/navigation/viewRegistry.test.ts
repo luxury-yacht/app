@@ -29,6 +29,7 @@ describe('view registry', () => {
     ).toEqual([
       { id: 'browse', label: 'Browse', intent: 'inventory' },
       { id: 'map', label: 'Map', intent: 'topology' },
+      { id: 'applications', label: 'Applications', intent: 'applications' },
       { id: 'workloads', label: 'Workloads', intent: 'compute' },
       { id: 'pods', label: 'Pods', intent: 'compute' },
       { id: 'autoscaling', label: 'Autoscaling', intent: 'compute' },
@@ -88,7 +89,7 @@ describe('view registry', () => {
       }))
     ).toEqual([
       { id: 'observe', views: ['browse', 'map', 'events'] },
-      { id: 'run', views: ['workloads', 'pods', 'autoscaling', 'helm'] },
+      { id: 'run', views: ['applications', 'workloads', 'pods', 'autoscaling', 'helm'] },
       { id: 'configure', views: ['config', 'network', 'storage'] },
       { id: 'govern', views: ['custom', 'quotas', 'rbac'] },
     ]);

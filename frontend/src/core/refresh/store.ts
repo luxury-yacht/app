@@ -114,6 +114,7 @@ const state: RefreshStoreState = {
     catalog: createInitialDomainState(),
     'catalog-diff': createInitialDomainState(),
     'namespace-workloads': createInitialDomainState(),
+    'namespace-applications': createInitialDomainState(),
     'namespace-config': createInitialDomainState(),
     'namespace-network': createInitialDomainState(),
     'namespace-rbac': createInitialDomainState(),

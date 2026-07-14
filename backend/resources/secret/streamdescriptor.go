@@ -14,6 +14,7 @@ package secret
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	informers "k8s.io/client-go/informers"
@@ -30,6 +31,14 @@ var StreamDescriptor = streamspec.Descriptor{
 	ClusterScoped: !Identity.Namespaced,
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.Secret))
+	},
+	AggregateRow: func(obj metav1.Object) any {
+		secret := obj.(*corev1.Secret)
+		candidate, ok := resourcemodel.HelmReleaseStorageCandidateForObject(secret, string(secret.Type))
+		if !ok {
+			return nil
+		}
+		return candidate
 	},
 	Informer: func(factory informers.SharedInformerFactory) cache.SharedIndexInformer {
 		return factory.Core().V1().Secrets().Informer()

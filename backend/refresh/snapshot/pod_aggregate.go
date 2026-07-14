@@ -13,6 +13,7 @@ package snapshot
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
@@ -53,6 +54,7 @@ func projectPodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister)
 		// exactly this string via BuildResourceModel(...).Status.Presentation).
 		StatusPresentation: podres.BuildResourceModel("", pod).Status.Presentation,
 	}
+	agg.Application, _ = resourcemodel.ApplicationCandidateForObject("", pod)
 
 	// Regular-container resource sums (overview/nodes/workloads).
 	for _, container := range pod.Spec.Containers {

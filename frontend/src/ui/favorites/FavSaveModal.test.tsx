@@ -483,6 +483,7 @@ describe('FavSaveModal', () => {
       'cluster:storage',
       'namespace:browse',
       'namespace:map',
+      'namespace:applications',
       'namespace:workloads',
       'namespace:pods',
       'namespace:autoscaling',

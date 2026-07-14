@@ -86,7 +86,7 @@ Target navigation order:
         and categorized sidebar badges.
   - [x] Add utilization and quota-pressure signals with explicit loading,
         available, unavailable, and stale-source presentation.
-- [ ] Add confidence-bearing application grouping from owner links, Helm links,
+- [x] Add confidence-bearing application grouping from owner links, Helm links,
       and explicit application labels.
 - [ ] Add table-to-map and map-to-table navigation with complete object refs.
 - [ ] Keep graph limits and partial/truncated presentation visible.

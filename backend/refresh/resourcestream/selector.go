@@ -127,6 +127,7 @@ func ParseStreamSelector(clusterID, domain, scope string) (StreamSelector, error
 		return selector, nil
 
 	case domainWorkloads,
+		domainNamespaceApplications,
 		domainNamespaceConfig,
 		domainNamespaceNetwork,
 		domainNamespaceRBAC,

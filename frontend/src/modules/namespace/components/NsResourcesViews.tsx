@@ -10,6 +10,7 @@
  */
 
 import BrowseView from '@modules/browse/components/BrowseView';
+import NsViewApplications from '@modules/namespace/components/NsViewApplications';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
@@ -93,6 +94,16 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             fallback={(_, reset) => <ViewErrorFallback viewName="Workloads" reset={reset} />}
           >
             <NsViewWorkloads namespace={namespace} />
+          </ErrorBoundary>
+        );
+      case 'applications':
+        return (
+          <ErrorBoundary
+            scope="namespace-applications"
+            resetKeys={[namespace]}
+            fallback={(_, reset) => <ViewErrorFallback viewName="Applications" reset={reset} />}
+          >
+            <NsViewApplications namespace={namespace} />
           </ErrorBoundary>
         );
       case 'config':

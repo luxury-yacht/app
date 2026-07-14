@@ -2,6 +2,9 @@
 
 **User-facing changes**
 
+- Added an Applications view that groups namespace workloads using Helm metadata,
+  recommended application labels, and owner references, with visible confidence,
+  health, workload counts, and ungrouped-workload disclosure.
 - The filtered data message now properly calculates "[count] of [total] items visible"
 - Previous/next pagination is now `ctrl+←/→` (`cmd+←/→` on macOS) to prevent conflicts when the arrow keys are used for horizontal scroll in wide tables.
 - YAML editor now has line wrap, enabled by default, can be toggled from the toolbar.

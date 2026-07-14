@@ -9,6 +9,7 @@
  */
 
 import BrowseView from '@modules/browse/components/BrowseView';
+import NsViewApplications from '@modules/namespace/components/NsViewApplications';
 import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
 import NsViewConfig from '@modules/namespace/components/NsViewConfig';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
@@ -31,6 +32,8 @@ interface AllNamespacesViewProps {
 const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
   const renderContent = () => {
     switch (activeTab) {
+      case 'applications':
+        return <NsViewApplications namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'pods':
         return <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'workloads':

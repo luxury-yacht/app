@@ -80,9 +80,11 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		}
 		summary := builder.buildDeploymentSummary(meta.ClusterID, deploy, nil, nil)
 		summary.ClusterMeta = meta
+		aggregate := newApplicationMemberAggregate(meta.ClusterID, deployment.Identity, deploy, summary.StatusPresentation)
 		var metaObj metav1.Object = deploy
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
@@ -101,9 +103,11 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		}
 		summary := builder.buildStatefulSetSummary(meta.ClusterID, sts, nil, nil)
 		summary.ClusterMeta = meta
+		aggregate := newApplicationMemberAggregate(meta.ClusterID, statefulset.Identity, sts, summary.StatusPresentation)
 		var metaObj metav1.Object = sts
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
@@ -122,9 +126,11 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		}
 		summary := builder.buildDaemonSetSummary(meta.ClusterID, ds, nil, nil)
 		summary.ClusterMeta = meta
+		aggregate := newApplicationMemberAggregate(meta.ClusterID, daemonset.Identity, ds, summary.StatusPresentation)
 		var metaObj metav1.Object = ds
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
@@ -143,9 +149,11 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		}
 		summary := builder.buildJobSummary(meta.ClusterID, job, nil, nil)
 		summary.ClusterMeta = meta
+		aggregate := newApplicationMemberAggregate(meta.ClusterID, jobres.Identity, job, summary.StatusPresentation)
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
@@ -164,9 +172,11 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		}
 		summary := builder.buildCronJobSummary(meta.ClusterID, cron, nil, nil)
 		summary.ClusterMeta = meta
+		aggregate := newApplicationMemberAggregate(meta.ClusterID, cronjob.Identity, cron, summary.StatusPresentation)
 		var metaObj metav1.Object = cron
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil
