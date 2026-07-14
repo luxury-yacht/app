@@ -50,14 +50,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
-    id: 'attention',
-    label: 'Needs Attention',
-    description: 'Show unhealthy workloads across all namespaces',
-    keywords: ['attention', 'cluster', 'unhealthy', 'warning', 'errors', 'workloads'],
-    refresher: null,
-  },
-  {
-    scope: 'cluster',
     id: 'browse',
     label: 'Browse',
     description: 'Inspect the inventory of all catalogued Kubernetes objects',

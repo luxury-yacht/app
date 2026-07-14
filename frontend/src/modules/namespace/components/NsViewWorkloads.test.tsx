@@ -437,31 +437,6 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it('queries only unhealthy rows for the cluster needs-attention lens', async () => {
-    await act(async () => {
-      root.render(
-        <NsViewWorkloads
-          namespace={ALL_NAMESPACES_SCOPE}
-          showNamespaceColumn
-          attentionOnly
-          metrics={null}
-        />
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'namespace-workloads',
-        label: 'Cluster Needs Attention',
-        scope:
-          'path:context|namespace:all?limit=50&sort=name&sortDirection=asc&predicate.health=unhealthy',
-      })
-    );
-    expect(gridTablePropsRef.current.emptyMessage).toBe('No workloads need attention');
-  });
-
   it('renders all-namespaces workload rows with usage joined at serve by the single base query', async () => {
     const queryWorkload = {
       kind: 'Deployment',

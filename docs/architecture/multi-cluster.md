@@ -63,8 +63,8 @@ lifecycle cannot activate that domain.
 
 Navigation from a Clusters row prepares the destination cluster's navigation and
 sidebar state before activating its kubeconfig selection. Row activation opens
-that cluster's Overview; the Needs Attention cell opens its all-namespaces
-unhealthy-workload lens.
+that cluster's Overview. The Needs Attention cell is a non-interactive summary
+of not-ready nodes and failing pods.
 
 The user-facing scope and label are **Global → Clusters**. The internal `fleet`
 route and `cluster-fleet` table-persistence id remain compatibility identities

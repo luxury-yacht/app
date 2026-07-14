@@ -12,17 +12,3 @@
   flex: 1;
   min-height: 0;
 }
-
-.global-clusters-attention-link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-primary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.global-clusters-attention-link:hover,
-.global-clusters-attention-link:focus-visible {
-  text-decoration: underline;
-}

@@ -24,7 +24,6 @@ describe('view registry', () => {
   it('defines the canonical ordered cluster navigation vocabulary', () => {
     expect(CLUSTER_VIEW_DESCRIPTORS.map(({ id, label }) => ({ id, label }))).toEqual([
       { id: 'namespaces', label: 'Namespaces' },
-      { id: 'attention', label: 'Needs Attention' },
       { id: 'browse', label: 'Browse' },
       { id: 'events', label: 'Events' },
       { id: 'nodes', label: 'Nodes' },
@@ -90,6 +89,7 @@ describe('view registry', () => {
     expect(getViewDescriptor('global', 'fleet')?.label).toBe('Clusters');
     expect(getViewDescriptor('global', 'global-namespaces')?.label).toBe('Namespaces');
     expect(getViewDescriptor('cluster', 'browse')?.label).toBe('Browse');
+    expect(getViewDescriptor('cluster', 'attention')).toBeUndefined();
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
     expect(getViewDescriptor('cluster', 'map')).toBeUndefined();
   });

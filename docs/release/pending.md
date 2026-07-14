@@ -1,8 +1,8 @@
 ### Added
 
 - Added a Global Clusters view that compares health, capacity, metrics, and
-  access across open clusters and links each row to that cluster's Overview or
-  Needs Attention lens.
+  access across open clusters and links each cluster name to that cluster's
+  Overview.
 - Added backend-query Status and Node filters to namespace and All Namespaces
   Pods tables, with options covering the full selected scope.
 - Added backend-query Status filters to Workloads and Cluster Nodes, with stable

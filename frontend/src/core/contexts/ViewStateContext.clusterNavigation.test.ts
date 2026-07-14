@@ -20,7 +20,7 @@ describe('applyClusterNavigationTarget', () => {
           },
         },
         'cluster-b',
-        { viewType: 'cluster', activeClusterView: 'attention' }
+        { viewType: 'cluster', activeClusterView: 'storage' }
       )
     ).toEqual({
       'cluster-a': {
@@ -33,7 +33,7 @@ describe('applyClusterNavigationTarget', () => {
         viewType: 'cluster',
         previousView: 'namespace',
         activeNamespaceView: 'network',
-        activeClusterView: 'attention',
+        activeClusterView: 'storage',
       },
     });
   });

@@ -15,8 +15,6 @@ import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import GlobalViewClusters from '@modules/cluster/components/GlobalViewClusters';
 import GlobalViewNamespaces from '@modules/cluster/components/GlobalViewNamespaces';
-import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { ClusterViewType } from '@ui/navigation/types';
 import React from 'react';
 
@@ -76,10 +74,6 @@ function ClusterResourcesViews({
         return <GlobalViewNamespaces />;
       case 'namespaces':
         return <ClusterViewNamespaces />;
-      case 'attention':
-        return (
-          <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn attentionOnly />
-        );
       case 'nodes':
         return <ClusterViewNodes error={nodesError} />;
       case 'config':

@@ -220,7 +220,6 @@ describe('CommandPaletteCommands', () => {
       'cluster-fleet',
       'cluster-global-namespaces',
       'cluster-namespaces',
-      'cluster-attention',
       'cluster-browse',
       'cluster-events',
       'cluster-nodes',

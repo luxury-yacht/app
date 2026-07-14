@@ -342,19 +342,11 @@ describe('GlobalViewClusters', () => {
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
 
-    const attention = container.querySelector<HTMLButtonElement>(
+    const attention = container.querySelector<HTMLElement>(
       '[data-testid="global-clusters-cluster-a"] [data-testid="global-clusters-attention"]'
     );
-    await act(async () => attention?.click());
-
-    expect(mocks.setClusterNavigationTarget).toHaveBeenLastCalledWith('cluster-a', {
-      viewType: 'cluster',
-      activeClusterView: 'attention',
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenLastCalledWith('cluster-a', {
-      type: 'cluster',
-      value: 'cluster',
-    });
+    expect(attention?.tagName).toBe('SPAN');
+    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledTimes(1);
 
     await unmount();
   });

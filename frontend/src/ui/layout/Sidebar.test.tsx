@@ -206,7 +206,6 @@ describe('Sidebar', () => {
     );
     expect(viewIdsWithin(clusterViews)).toEqual([
       'namespaces',
-      'attention',
       'browse',
       'events',
       'nodes',

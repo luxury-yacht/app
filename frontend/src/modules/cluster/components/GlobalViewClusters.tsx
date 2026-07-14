@@ -236,19 +236,13 @@ const GlobalViewClusters: React.FC = () => {
     };
   }, [refreshTargets]);
 
-  const navigate = useCallback(
-    (row: GlobalClusterRow, target: 'overview' | 'attention') => {
-      const destination =
-        target === 'attention'
-          ? ({ viewType: 'cluster', activeClusterView: 'attention' } as const)
-          : ({ viewType: 'overview', activeClusterView: null } as const);
-      setClusterNavigationTarget(row.clusterId, destination);
-      setSidebarSelectionForCluster(
-        row.clusterId,
-        target === 'attention'
-          ? { type: 'cluster', value: 'cluster' }
-          : { type: 'overview', value: 'overview' }
-      );
+  const navigateToOverview = useCallback(
+    (row: GlobalClusterRow) => {
+      setClusterNavigationTarget(row.clusterId, {
+        viewType: 'overview',
+        activeClusterView: null,
+      });
+      setSidebarSelectionForCluster(row.clusterId, { type: 'overview', value: 'overview' });
       setActiveKubeconfig(row.selection);
     },
     [setActiveKubeconfig, setClusterNavigationTarget, setSidebarSelectionForCluster]
@@ -257,7 +251,7 @@ const GlobalViewClusters: React.FC = () => {
   const columns = useMemo<GridColumnDefinition<GlobalClusterRow>[]>(() => {
     const result: GridColumnDefinition<GlobalClusterRow>[] = [
       cf.createTextColumn('name', 'Cluster', (row) => row.name, {
-        onClick: (row) => navigate(row, 'overview'),
+        onClick: (row) => navigateToOverview(row),
         getClassName: () => 'object-panel-link',
       }),
       {
@@ -309,15 +303,7 @@ const GlobalViewClusters: React.FC = () => {
           const nodes = row.notReadyNodes ?? 0;
           const pods = row.failingPods ?? 0;
           return (
-            <button
-              type="button"
-              className="global-clusters-attention-link"
-              data-testid="global-clusters-attention"
-              onClick={(event) => {
-                event.stopPropagation();
-                navigate(row, 'attention');
-              }}
-            >
+            <span data-testid="global-clusters-attention">
               <span className={nodes > 0 ? 'status-text warning' : undefined}>
                 {nodes} {nodes === 1 ? 'node' : 'nodes'}
               </span>
@@ -325,7 +311,7 @@ const GlobalViewClusters: React.FC = () => {
               <span className={pods > 0 ? 'status-text warning' : undefined}>
                 {pods} {pods === 1 ? 'pod' : 'pods'}
               </span>
-            </button>
+            </span>
           );
         },
       },
@@ -346,7 +332,7 @@ const GlobalViewClusters: React.FC = () => {
       metrics: { autoWidth: true },
     });
     return result;
-  }, [navigate]);
+  }, [navigateToOverview]);
 
   const keyExtractor = useCallback(
     (row: GlobalClusterRow) => buildClusterScopedKey(row, row.clusterId),

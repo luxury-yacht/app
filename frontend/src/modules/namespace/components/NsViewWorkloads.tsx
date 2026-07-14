@@ -35,18 +35,14 @@ import { buildWorkloadActionReference } from './workloadActionReference';
 interface WorkloadsViewProps {
   namespace: string;
   showNamespaceColumn?: boolean;
-  /** Render the operational lens backed by the workload health predicate. */
-  attentionOnly?: boolean;
   metrics?: PodMetricsInfo | null;
 }
-
-const NEEDS_ATTENTION_PREDICATES = { health: 'unhealthy' } as const;
 
 /**
  * GridTable component for namespace workloads without nested pod expansion
  */
 const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
-  ({ namespace, showNamespaceColumn = false, attentionOnly = false, metrics = null }) => {
+  ({ namespace, showNamespaceColumn = false, metrics = null }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -157,14 +153,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
-    const diagnosticsLabel = attentionOnly
-      ? isAllNamespaces
-        ? 'Cluster Needs Attention'
-        : 'Namespace Needs Attention'
-      : isAllNamespaces
-        ? 'All Namespaces Workloads'
-        : 'Namespace Workloads';
-    const resolvedViewId = attentionOnly ? 'needs-attention' : 'namespace-workloads';
+    const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
 
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
@@ -182,9 +171,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
       label: diagnosticsLabel,
-      predicates: attentionOnly ? NEEDS_ATTENTION_PREDICATES : undefined,
       selectRows: selectPayloadRows,
-      viewId: resolvedViewId,
+      viewId: 'namespace-workloads',
       namespace,
       columns: tableColumns as unknown as GridColumnDefinition<WorkloadData>[],
       keyExtractor,
@@ -216,13 +204,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const emptyMessage = useMemo(
       () =>
-        attentionOnly
-          ? 'No workloads need attention'
-          : resolveEmptyStateMessage(
-              undefined,
-              `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
-            ),
-      [attentionOnly, namespace]
+        resolveEmptyStateMessage(
+          undefined,
+          `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     return (
@@ -236,10 +222,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         <ResourceInventoryTable
           source={source}
           gridTableProps={resolvedGridTableProps}
-          spinnerMessage={
-            attentionOnly ? 'Finding workloads that need attention...' : 'Loading workloads...'
-          }
-          updatingMessage={attentionOnly ? 'Updating attention view…' : 'Updating workloads…'}
+          spinnerMessage="Loading workloads..."
+          updatingMessage="Updating workloads…"
           allowPartial
           favModal={favModal}
           columns={tableColumns}

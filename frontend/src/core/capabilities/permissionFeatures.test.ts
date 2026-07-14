@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getScopedFeaturesForView } from '@/core/refresh/components/diagnostics';
 import { requireValue } from '@/test-utils/requireValue';
 import { CLUSTER_CAPABILITIES } from './catalog';
-import { PERMISSION_FEATURE_LABELS, PERMISSION_FEATURES } from './permissionFeatures';
+import { PERMISSION_FEATURE_LABELS } from './permissionFeatures';
 import { ALL_NAMESPACE_PERMISSIONS, CLUSTER_PERMISSIONS } from './permissionSpecs';
 
 describe('permission feature contract', () => {
@@ -52,11 +52,5 @@ describe('permission feature contract', () => {
     for (const feature of filters) {
       expect(PERMISSION_FEATURE_LABELS[feature]).toBeTruthy();
     }
-  });
-
-  it('uses namespace workload permissions for the cluster attention lens', () => {
-    expect(getScopedFeaturesForView('cluster', 'attention', 'browse')).toEqual([
-      PERMISSION_FEATURES.namespaceWorkloads,
-    ]);
   });
 });
