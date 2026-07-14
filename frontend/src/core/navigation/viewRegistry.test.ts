@@ -16,7 +16,10 @@ describe('view registry', () => {
         intent,
         scope,
       }))
-    ).toEqual([{ id: 'fleet', label: 'Clusters', intent: 'inventory', scope: 'global' }]);
+    ).toEqual([
+      { id: 'fleet', label: 'Clusters', intent: 'inventory', scope: 'global' },
+      { id: 'global-namespaces', label: 'Namespaces', intent: 'inventory', scope: 'global' },
+    ]);
   });
 
   it('defines the canonical ordered cluster navigation vocabulary', () => {
@@ -88,6 +91,7 @@ describe('view registry', () => {
 
   it('looks up views by both scope and id', () => {
     expect(getViewDescriptor('global', 'fleet')?.label).toBe('Clusters');
+    expect(getViewDescriptor('global', 'global-namespaces')?.label).toBe('Namespaces');
     expect(getViewDescriptor('cluster', 'browse')?.label).toBe('Browse');
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
     expect(getViewDescriptor('cluster', 'map')).toBeUndefined();

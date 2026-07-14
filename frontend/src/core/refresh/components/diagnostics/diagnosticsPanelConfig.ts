@@ -55,6 +55,7 @@ const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey[]> = {
   fleet: OVERVIEW_FEATURES,
+  'global-namespaces': [], // Each contributing scope is permission-gated by the namespaces domain.
   namespaces: [], // The view is backed by the permission-gated namespaces domain.
   attention: [PERMISSION_FEATURES.namespaceWorkloads],
   nodes: [PERMISSION_FEATURES.clusterNodes, PERMISSION_FEATURES.nodeActions],

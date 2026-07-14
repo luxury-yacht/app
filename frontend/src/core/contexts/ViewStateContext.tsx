@@ -78,10 +78,15 @@ export interface NavigationTabState {
   activeClusterView: ClusterViewType | null;
 }
 
-export interface ClusterNavigationTarget {
-  viewType: 'overview' | 'cluster';
-  activeClusterView: ClusterViewType | null;
-}
+export type ClusterNavigationTarget =
+  | {
+      viewType: 'overview' | 'cluster';
+      activeClusterView: ClusterViewType | null;
+    }
+  | {
+      viewType: 'namespace';
+      activeNamespaceView: NamespaceViewType;
+    };
 
 const DEFAULT_NAVIGATION_STATE: NavigationTabState = {
   viewType: 'overview',
@@ -100,13 +105,17 @@ export const applyClusterNavigationTarget = (
     return states;
   }
   const current = states[targetClusterId] ?? DEFAULT_NAVIGATION_STATE;
+  const destination =
+    target.viewType === 'namespace'
+      ? { activeNamespaceView: target.activeNamespaceView }
+      : { activeClusterView: target.activeClusterView };
   return {
     ...states,
     [targetClusterId]: {
       ...current,
       previousView: current.viewType,
       viewType: target.viewType,
-      activeClusterView: target.activeClusterView,
+      ...destination,
     },
   };
 };
@@ -210,10 +219,17 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
         applyClusterNavigationTarget(previous, targetClusterId, target)
       );
       if (targetClusterId === selectedClusterId) {
-        refreshOrchestrator.updateContext({
-          currentView: target.viewType,
-          activeClusterView: target.activeClusterView ?? undefined,
-        });
+        refreshOrchestrator.updateContext(
+          target.viewType === 'namespace'
+            ? {
+                currentView: target.viewType,
+                activeNamespaceView: target.activeNamespaceView,
+              }
+            : {
+                currentView: target.viewType,
+                activeClusterView: target.activeClusterView ?? undefined,
+              }
+        );
         void requestContextRefresh({ reason: 'startup' });
       }
     },

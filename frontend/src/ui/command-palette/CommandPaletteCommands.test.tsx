@@ -217,6 +217,7 @@ describe('CommandPaletteCommands', () => {
 
     expect(navigationViewIds).toEqual([
       'cluster-fleet',
+      'cluster-global-namespaces',
       'cluster-namespaces',
       'cluster-attention',
       'cluster-browse',
@@ -245,6 +246,10 @@ describe('CommandPaletteCommands', () => {
 
     const globalClusters = getCommands().find((command) => command.id === 'cluster-fleet');
     expect(globalClusters?.label).toBe('Global - Clusters');
+    const globalNamespaces = getCommands().find(
+      (command) => command.id === 'cluster-global-namespaces'
+    );
+    expect(globalNamespaces?.label).toBe('Global - Namespaces');
 
     unmount();
   });

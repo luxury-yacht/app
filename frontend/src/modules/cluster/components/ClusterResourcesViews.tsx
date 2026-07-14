@@ -14,6 +14,7 @@ import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import GlobalViewClusters from '@modules/cluster/components/GlobalViewClusters';
+import GlobalViewNamespaces from '@modules/cluster/components/GlobalViewNamespaces';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { ClusterViewType } from '@ui/navigation/types';
@@ -71,6 +72,8 @@ function ClusterResourcesViews({
     switch (activeTab) {
       case 'fleet':
         return <GlobalViewClusters />;
+      case 'global-namespaces':
+        return <GlobalViewNamespaces />;
       case 'namespaces':
         return <ClusterViewNamespaces />;
       case 'attention':

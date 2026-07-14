@@ -218,7 +218,7 @@ describe('Sidebar', () => {
     expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
   });
 
-  it('presents Clusters under the Global scope instead of Cluster resources', () => {
+  it('presents cross-cluster views under the Global scope instead of Cluster resources', () => {
     renderSidebar();
 
     const host = requireValue(container, 'expected Sidebar test container');
@@ -235,12 +235,20 @@ describe('Sidebar', () => {
       'expected global Clusters entry'
     );
     expect(globalClusters.textContent?.trim()).toBe('Clusters');
+    const globalNamespaces = requireValue(
+      host.querySelector<HTMLElement>(
+        '[data-sidebar-scope="global"][data-sidebar-target-view="global-namespaces"]'
+      ),
+      'expected global Namespaces entry'
+    );
+    expect(globalNamespaces.textContent?.trim()).toBe('Namespaces');
 
     const clusterViews = requireValue(
       host.querySelector('[id$="-sidebar-cluster-resource-views"]'),
       'expected cluster resource views'
     );
     expect(clusterViews.querySelector('[data-sidebar-target-view="fleet"]')).toBeNull();
+    expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
   });
 
   it('keeps namespace rows free of operational telemetry badges', () => {

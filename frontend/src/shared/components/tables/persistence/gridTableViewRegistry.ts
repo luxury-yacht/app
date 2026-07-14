@@ -10,6 +10,7 @@ const VIEW_IDS = new Set<string>([
   'all-namespaces-browse',
   'cluster-nodes',
   'cluster-fleet',
+  'global-namespaces',
   'cluster-namespaces',
   'cluster-rbac',
   'cluster-storage',

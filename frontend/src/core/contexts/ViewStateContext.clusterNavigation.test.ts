@@ -37,4 +37,34 @@ describe('applyClusterNavigationTarget', () => {
       },
     });
   });
+
+  it('prepares a namespace destination without changing another cluster', () => {
+    expect(
+      applyClusterNavigationTarget(
+        {
+          'cluster-a': {
+            viewType: 'cluster',
+            previousView: 'overview',
+            activeNamespaceView: 'pods',
+            activeClusterView: 'fleet',
+          },
+        },
+        'cluster-b',
+        { viewType: 'namespace', activeNamespaceView: 'browse' }
+      )
+    ).toEqual({
+      'cluster-a': {
+        viewType: 'cluster',
+        previousView: 'overview',
+        activeNamespaceView: 'pods',
+        activeClusterView: 'fleet',
+      },
+      'cluster-b': {
+        viewType: 'namespace',
+        previousView: 'overview',
+        activeNamespaceView: 'browse',
+        activeClusterView: null,
+      },
+    });
+  });
 });

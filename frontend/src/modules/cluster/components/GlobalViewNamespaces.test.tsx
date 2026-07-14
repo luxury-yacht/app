@@ -1,0 +1,294 @@
+import { act, isValidElement, type ReactNode } from 'react';
+import * as ReactDOM from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  setActiveKubeconfig: vi.fn(),
+  setClusterNavigationTarget: vi.fn(),
+  setSidebarSelectionForCluster: vi.fn(),
+  setSelectedNamespace: vi.fn(),
+  tableProps: null as null | Record<string, unknown>,
+}));
+
+const namespace = (clusterId: string, clusterName: string, name: string) => ({
+  clusterId,
+  clusterName,
+  ref: {
+    clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'Namespace',
+    resource: 'namespaces',
+    name,
+  },
+  name,
+  phase: 'Active',
+  status: 'Active',
+  statusState: 'active',
+  statusPresentation: 'success',
+  resourceVersion: '12',
+  creationTimestamp: 1_700_000_000,
+  hasWorkloads: true,
+  unhealthyWorkloads: 0,
+  warningEvents: 0,
+  warningEventsState: 'available',
+  cpuUsageMilli: 100,
+  memoryUsageBytes: 128 * 1024 * 1024,
+  quotaCount: 0,
+  quotaHighestUsedPercentage: 0,
+  quotaPressure: '',
+  quotaPressureState: 'available',
+});
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({
+    selectedKubeconfigs: ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'],
+    selectedClusterIds: ['cluster-a', 'cluster-b', 'cluster-c'],
+    getClusterMeta: (selection: string) => {
+      const parts = selection.split(':');
+      const name = parts[parts.length - 1] ?? '';
+      const suffix = name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c';
+      return { id: `cluster-${suffix}`, name };
+    },
+    setActiveKubeconfig: mocks.setActiveKubeconfig,
+  }),
+}));
+
+vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
+  isNamespaceRefreshAvailable: () => true,
+  useNamespace: () => ({ setSelectedNamespace: mocks.setSelectedNamespace }),
+  useNamespaceStatesByScope: () => ({
+    'cluster-a|': {
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        namespaces: [namespace('cluster-a', 'alpha', 'payments')],
+        metrics: { successCount: 1, failureCount: 0 },
+        metricsState: 'available',
+      },
+      error: null,
+      permissionDenied: false,
+    },
+    'cluster-b|': {
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        namespaces: [namespace('cluster-b', 'beta', 'payments')],
+        metrics: { successCount: 0, failureCount: 1 },
+        metricsState: 'unavailable',
+      },
+      error: null,
+      permissionDenied: false,
+    },
+    'cluster-c|': {
+      status: 'error',
+      data: null,
+      error: 'forbidden',
+      permissionDenied: true,
+    },
+  }),
+}));
+
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({ getClusterState: () => 'ready' }),
+}));
+
+vi.mock('@core/contexts/ViewStateContext', () => ({
+  useViewState: () => ({ setClusterNavigationTarget: mocks.setClusterNavigationTarget }),
+}));
+
+vi.mock('@core/contexts/SidebarStateContext', () => ({
+  useSidebarState: () => ({
+    setSidebarSelectionForCluster: mocks.setSidebarSelectionForCluster,
+  }),
+}));
+
+vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
+  useGridTablePersistence: () => ({
+    sortConfig: { key: 'name', direction: 'asc' },
+    setSortConfig: vi.fn(),
+    columnWidths: null,
+    setColumnWidths: vi.fn(),
+    columnVisibility: null,
+    setColumnVisibility: vi.fn(),
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    setFilters: vi.fn(),
+    pageSize: null,
+    setPageSize: vi.fn(),
+    resetState: vi.fn(),
+    hydrated: true,
+  }),
+}));
+
+vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
+  useClusterResourceGridTable: ({ data, keyExtractor }: Record<string, unknown>) => ({
+    gridTableProps: { data, keyExtractor },
+    favModal: null,
+  }),
+}));
+
+vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
+  default: (props: Record<string, unknown>) => {
+    mocks.tableProps = props;
+    const source = props.source as { rows: Array<Record<string, unknown>> };
+    const onRowPointerClick = props.onRowPointerClick as
+      | ((row: Record<string, unknown>) => void)
+      | undefined;
+    return (
+      <div data-testid="global-namespace-table">
+        {source.rows.map((row) => (
+          <button
+            key={`${String(row.clusterId)}:${String(row.name)}`}
+            type="button"
+            data-testid={`namespace-${String(row.clusterId)}-${String(row.name)}`}
+            onClick={() => onRowPointerClick?.(row)}
+          >
+            {String(row.clusterName)} / {String(row.name)}
+          </button>
+        ))}
+      </div>
+    );
+  },
+}));
+
+const renderView = async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+  await act(async () => {
+    const { default: GlobalViewNamespaces } = await import('./GlobalViewNamespaces');
+    root.render(<GlobalViewNamespaces />);
+    await Promise.resolve();
+  });
+  return {
+    container,
+    unmount: async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    },
+  };
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.tableProps = null;
+});
+
+afterEach(() => {
+  document.body.innerHTML = '';
+});
+
+const renderedText = (node: ReactNode): string => {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node);
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return renderedText(node.props.children);
+  }
+  return '';
+};
+
+describe('GlobalViewNamespaces', () => {
+  it('combines namespace snapshots with complete cluster identity and a Cluster column', async () => {
+    const { unmount } = await renderView();
+    if (!mocks.tableProps) {
+      throw new Error('expected global namespace table props');
+    }
+
+    const columns = mocks.tableProps.columns as Array<{
+      key: string;
+      render?: (row: Record<string, unknown>) => ReactNode;
+    }>;
+    expect(columns.map(({ key }) => key)).toEqual([
+      'name',
+      'cluster',
+      'status',
+      'workloads',
+      'unhealthyWorkloads',
+      'warningEvents',
+      'cpu',
+      'memory',
+      'quotaPressure',
+      'age',
+    ]);
+
+    const source = mocks.tableProps.source as {
+      rows: Array<Record<string, unknown>>;
+      completeness: string;
+      partialLabel: string | null;
+    };
+    expect(source.rows).toHaveLength(2);
+    expect(
+      source.rows.map(({ clusterId, clusterName, name, metricsState }) => ({
+        clusterId,
+        clusterName,
+        name,
+        metricsState,
+      }))
+    ).toEqual([
+      { clusterId: 'cluster-a', clusterName: 'alpha', name: 'payments', metricsState: 'available' },
+      {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        name: 'payments',
+        metricsState: 'unavailable',
+      },
+    ]);
+    const keyExtractor = (
+      mocks.tableProps.gridTableProps as {
+        keyExtractor: (row: Record<string, unknown>) => string;
+      }
+    ).keyExtractor;
+    expect(source.rows.map(keyExtractor)).toEqual([
+      'cluster-a|/v1/Namespace//payments',
+      'cluster-b|/v1/Namespace//payments',
+    ]);
+    expect(
+      renderedText(columns.find(({ key }) => key === 'cluster')?.render?.(source.rows[1]))
+    ).toBe('beta');
+    expect(source.completeness).toBe('partial');
+    expect(source.partialLabel).toBe('Showing namespace data from 2 of 3 clusters');
+
+    await unmount();
+  });
+
+  it('stages the target namespace navigation before activating its cluster', async () => {
+    const { container, unmount } = await renderView();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="namespace-cluster-b-payments"]')
+        ?.click();
+    });
+
+    expect(mocks.setSelectedNamespace).toHaveBeenCalledWith('payments', 'cluster-b');
+    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
+      viewType: 'namespace',
+      activeNamespaceView: 'browse',
+    });
+    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
+      type: 'namespace',
+      value: 'payments',
+    });
+    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+    expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+    expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+    expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+
+    await unmount();
+  });
+});

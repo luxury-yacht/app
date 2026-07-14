@@ -70,6 +70,15 @@ The user-facing scope and label are **Global → Clusters**. The internal `fleet
 route and `cluster-fleet` table-persistence id remain compatibility identities
 so existing favorites and table settings continue to resolve.
 
+**Global → Namespaces** reads the existing per-cluster `namespaces` refresh
+entries for every open cluster; it does not introduce an aggregate refresh
+scope. Its columns match **Cluster → Namespaces** and add the originating
+cluster name. Each row retains the namespace object's full canonical identity,
+including `clusterId`, and navigating a row stages that cluster's namespace,
+namespace Browse view, and sidebar selection before activating the cluster.
+When one or more open clusters have no namespace snapshot (including permission
+denial or an unavailable lifecycle), the table labels the union as partial.
+
 ## Change Checklist
 
 When touching multi-cluster behavior:

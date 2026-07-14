@@ -70,6 +70,16 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
     keywords: ['fleet', 'clusters', 'global', 'compare', 'health', 'capacity', 'access'],
     refresher: null,
   },
+  {
+    scope: 'global',
+    id: 'global-namespaces',
+    label: 'Namespaces',
+    intent: 'inventory',
+    description:
+      'Compare namespace health, workloads, events, utilization, and quotas across open clusters',
+    keywords: ['global-namespaces', 'namespaces', 'global', 'clusters', 'compare', 'health'],
+    refresher: null,
+  },
 ] as const satisfies readonly ViewDescriptor<'global', string>[];
 
 export const CLUSTER_VIEW_DESCRIPTORS = [

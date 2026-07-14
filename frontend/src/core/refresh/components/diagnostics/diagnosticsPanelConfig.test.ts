@@ -56,4 +56,8 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       PERMISSION_FEATURES.clusterOverview,
     ]);
   });
+
+  test('leaves Global Namespaces diagnostics scoped to its permission-gated domain', () => {
+    expect(getScopedFeaturesForView('cluster', 'global-namespaces', 'workloads')).toEqual([]);
+  });
 });

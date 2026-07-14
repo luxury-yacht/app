@@ -36,7 +36,8 @@ import './FavSaveModal.css';
 const ALL_VIEWS = [
   { value: '__global_header__', label: 'Global', group: 'header' as const },
   ...GLOBAL_VIEW_DESCRIPTORS.map(({ id, label }) => ({
-    // Keep the persisted route compatible with existing cluster:fleet favorites.
+    // Global views retain cluster-route persistence because the existing
+    // favorite contract stores overview/cluster destinations in this scope.
     value: `cluster:${id}`,
     label,
   })),

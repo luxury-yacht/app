@@ -26,6 +26,9 @@ vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () =>
 vi.mock('@modules/cluster/components/GlobalViewClusters', () => ({
   default: () => <div data-testid="global-clusters" />,
 }));
+vi.mock('@modules/cluster/components/GlobalViewNamespaces', () => ({
+  default: () => <div data-testid="global-namespaces" />,
+}));
 vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
   default: () => <div data-testid="namespaces" />,
 }));
@@ -67,5 +70,11 @@ describe('ClusterResourcesViews', () => {
     act(() => root.render(<ClusterResourcesViews activeTab="namespaces" />));
 
     expect(container.querySelector('[data-testid="namespaces"]')).not.toBeNull();
+  });
+
+  it('renders the global namespace summary inventory', () => {
+    act(() => root.render(<ClusterResourcesViews activeTab="global-namespaces" />));
+
+    expect(container.querySelector('[data-testid="global-namespaces"]')).not.toBeNull();
   });
 });

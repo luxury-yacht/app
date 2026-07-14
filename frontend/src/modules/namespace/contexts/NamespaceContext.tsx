@@ -37,7 +37,11 @@ import {
 import { queryNamespacePermissions } from '@/core/capabilities';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import {
+  refreshOrchestrator,
+  useRefreshScopedDomain,
+  useRefreshScopedDomainStates,
+} from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -101,11 +105,16 @@ export const useNamespace = () => {
   return context;
 };
 
+// Cross-cluster namespace consumers share NamespaceProvider's scope leases and
+// signal-refetch wiring, then read the same scoped store entries through this
+// module so data access and doorbell freshness stay one contract.
+export const useNamespaceStatesByScope = () => useRefreshScopedDomainStates('namespaces');
+
 interface NamespaceProviderProps {
   children: ReactNode;
 }
 
-const isNamespaceRefreshAvailable = (state: ClusterLifecycleState | undefined): boolean =>
+export const isNamespaceRefreshAvailable = (state: ClusterLifecycleState | undefined): boolean =>
   state === 'loading' || state === 'loading_slow' || state === 'ready';
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {

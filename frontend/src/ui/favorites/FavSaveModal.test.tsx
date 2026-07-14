@@ -498,6 +498,7 @@ describe('FavSaveModal', () => {
 
     expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
       'cluster:fleet',
+      'cluster:global-namespaces',
       'cluster:namespaces',
       'cluster:attention',
       'cluster:browse',
@@ -524,6 +525,7 @@ describe('FavSaveModal', () => {
       'namespace:storage',
     ]);
     expect(viewSelect.options[0]?.textContent).toBe('Clusters');
+    expect(viewSelect.options[1]?.textContent).toBe('Namespaces');
   });
 
   // -----------------------------------------------------------------------
