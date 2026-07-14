@@ -26,7 +26,14 @@ export interface ColumnWidthState {
   updatedAt: number;
 }
 
-export interface GridColumnDefinition<T> {
+export type GridColumnAlignment = 'left' | 'center' | 'right';
+
+export interface GridColumnAlignmentOptions {
+  alignHeader?: GridColumnAlignment;
+  alignData?: GridColumnAlignment;
+}
+
+export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
   render: (item: T) => React.ReactNode;

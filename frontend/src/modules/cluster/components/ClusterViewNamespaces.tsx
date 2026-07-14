@@ -63,7 +63,6 @@ const ClusterViewNamespaces: React.FC = () => {
     namespaceMetricsState,
     namespaceError,
     namespaceLoading,
-    namespaceRefreshing,
     namespacesPermissionDenied,
     setSelectedNamespace,
   } = useNamespace();
@@ -133,7 +132,7 @@ const ClusterViewNamespaces: React.FC = () => {
           );
         },
       },
-      cf.createTextColumn('warningEvents', 'Warnings', warningEventText, {
+      cf.createTextColumn('warningEvents', 'Warn', warningEventText, {
         sortValue: (row) =>
           row.warningEventsState === 'available' ? (row.warningEvents ?? 0) : undefined,
         getClassName: (row) =>
@@ -239,7 +238,7 @@ const ClusterViewNamespaces: React.FC = () => {
   // resident snapshot and GridTable virtualizes the rendered window.
   const source = boundedRowsSource({
     rows,
-    loading: namespaceLoading || namespaceRefreshing,
+    loading: namespaceLoading,
     loaded:
       namespacesPermissionDenied ||
       Boolean(namespaceError) ||
@@ -259,7 +258,6 @@ const ClusterViewNamespaces: React.FC = () => {
         gridTableProps={gridTableProps}
         columns={columns}
         spinnerMessage="Loading namespaces..."
-        updatingMessage="Updating namespaces…"
         emptyMessage="No namespaces found"
         diagnosticsLabel="Namespaces"
         diagnosticsMode="local"

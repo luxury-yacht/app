@@ -70,6 +70,7 @@ export function useGridTableHeaderRow<T>({
             className={`grid-cell grid-cell-header ${column.className || ''}`}
             aria-sort={ariaSortValue}
             data-column={column.key}
+            data-align={column.alignHeader ?? 'left'}
             data-sortable={isSortable}
             onContextMenu={
               handleHeaderContextMenu ? (e) => handleHeaderContextMenu(e, column.key) : undefined

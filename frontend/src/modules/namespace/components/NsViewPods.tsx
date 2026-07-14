@@ -305,10 +305,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
         }),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
-          className: 'text-right',
+          alignData: 'right',
         }),
         cf.createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
-          className: 'text-right',
+          alignData: 'right',
           getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
           getClassName: (pod) => getRestartsClassName(pod),
         }),

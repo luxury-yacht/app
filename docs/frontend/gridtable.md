@@ -11,6 +11,9 @@ workflow and that exception is documented.
   cluster identity.
 - Column keys are durable persistence identifiers. Renaming one is a migration,
   not cosmetic cleanup.
+- Column header and data alignment are independent: use `alignHeader` and
+  `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
+  omitted; use `className` only for styling outside this alignment contract.
 - Prefer shared column factories for common Kubernetes/resource fields.
 - Keep rendering, filtering, sorting, focus, keyboard, context menus,
   persistence, and virtualization in the shared table system.

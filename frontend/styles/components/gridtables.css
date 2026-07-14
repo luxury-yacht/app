@@ -25,15 +25,6 @@
    2. Utility Helpers
    ============================================ */
 
-/* Utility Classes */
-.text-right {
-  text-align: right;
-}
-
-.text-center {
-  text-align: center;
-}
-
 .text-muted {
   color: var(--grid-text-secondary);
 }
@@ -245,9 +236,21 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 .header-content {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   flex: 1;
   line-height: inherit;
   overflow: hidden;
+  text-align: left;
+}
+
+.grid-cell-header[data-align="center"] .header-content {
+  justify-content: center;
+  text-align: center;
+}
+
+.grid-cell-header[data-align="right"] .header-content {
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .header-content > span,
@@ -461,6 +464,14 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   min-width: 0;
   flex: 1;
   display: block;
+}
+
+.grid-cell[data-align="center"] .grid-cell-content {
+  text-align: center;
+}
+
+.grid-cell[data-align="right"] .grid-cell-content {
+  text-align: right;
 }
 
 /* Type column - no ellipsis for badge display */

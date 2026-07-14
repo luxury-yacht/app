@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   onNamespaceSelect: vi.fn(),
   setSelectedNamespace: vi.fn(),
   tableProps: null as null | Record<string, unknown>,
+  namespaceLoading: false,
+  namespaceRefreshing: false,
 }));
 
 const namespacePayload = {
@@ -56,8 +58,8 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
     namespaceSummaries: namespacePayload.namespaces,
     namespaceMetricsState: namespacePayload.metricsState,
     namespaceError: null,
-    namespaceLoading: false,
-    namespaceRefreshing: false,
+    namespaceLoading: mocks.namespaceLoading,
+    namespaceRefreshing: mocks.namespaceRefreshing,
     namespacesPermissionDenied: false,
     setSelectedNamespace: mocks.setSelectedNamespace,
   }),
@@ -142,6 +144,8 @@ const renderView = async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tableProps = null;
+  mocks.namespaceLoading = false;
+  mocks.namespaceRefreshing = false;
 });
 
 afterEach(() => {
@@ -184,7 +188,7 @@ describe('ClusterViewNamespaces', () => {
       'age',
     ]);
     expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Attn');
-    expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warnings');
+    expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warn');
 
     const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
     expect(rows[0]).toMatchObject({
@@ -255,6 +259,30 @@ describe('ClusterViewNamespaces', () => {
     expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.onNamespaceSelect.mock.invocationCallOrder[0]
     );
+
+    await unmount();
+  });
+
+  it('keeps resident namespace rows quiet while their domain refreshes', async () => {
+    mocks.namespaceRefreshing = true;
+    const { unmount } = await renderView();
+
+    if (!mocks.tableProps) {
+      throw new Error('expected namespace table props');
+    }
+    expect((mocks.tableProps.source as { loading: boolean }).loading).toBe(false);
+
+    await unmount();
+  });
+
+  it('keeps the loading state for the initial namespace request', async () => {
+    mocks.namespaceLoading = true;
+    const { unmount } = await renderView();
+
+    if (!mocks.tableProps) {
+      throw new Error('expected namespace table props');
+    }
+    expect((mocks.tableProps.source as { loading: boolean }).loading).toBe(true);
 
     await unmount();
   });

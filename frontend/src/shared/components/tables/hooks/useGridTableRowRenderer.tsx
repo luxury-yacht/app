@@ -152,6 +152,7 @@ export function useGridTableRowRenderer<T>({
                 key={model.key}
                 className={`grid-cell ${model.className}`}
                 data-column={model.key}
+                data-align={model.column.alignData ?? 'left'}
                 data-has-context-menu="true"
                 onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
                 style={model.cellStyle}

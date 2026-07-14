@@ -7,7 +7,11 @@
 
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import ResourceBar from '@shared/components/ResourceBar';
-import type { ColumnWidthInput, GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type {
+  ColumnWidthInput,
+  GridColumnAlignmentOptions,
+  GridColumnDefinition,
+} from '@shared/components/tables/GridTable';
 import type React from 'react';
 import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
@@ -48,7 +52,7 @@ export const createAgeColumn = <T extends AgeColumnRow>(
       : getValue(item),
 });
 
-export interface CreateResourceBarColumnOptions<T> {
+export interface CreateResourceBarColumnOptions<T> extends GridColumnAlignmentOptions {
   key?: string;
   header: string;
   type: 'cpu' | 'memory';
@@ -89,6 +93,8 @@ export function createResourceBarColumn<T>(
     getAnimationKey,
     getShowEmptyState,
     className,
+    alignHeader,
+    alignData,
     sortable,
     sortValue,
   } = options;
@@ -168,6 +174,8 @@ export function createResourceBarColumn<T>(
     key,
     header,
     className,
+    alignHeader,
+    alignData,
     sortable: sortable ?? false,
     sortValue,
     render: (item: T) => {
@@ -242,7 +250,7 @@ export const applyColumnSizing = <T,>(
 /**
  * Creates a simple text column (optionally interactive)
  */
-export interface CreateTextColumnOptions<T> {
+export interface CreateTextColumnOptions<T> extends GridColumnAlignmentOptions {
   className?: string;
   sortable?: boolean;
   sortValue?: (item: T) => string | number | undefined;
@@ -304,6 +312,8 @@ export function createTextColumn<T>(
     key,
     header,
     className: options?.className,
+    alignHeader: options?.alignHeader,
+    alignData: options?.alignData,
     sortable: options?.sortable ?? true,
     sortValue: options?.sortValue ?? accessor,
     disableShortcuts: options?.disableShortcuts,
@@ -393,7 +403,7 @@ export function upsertNamespaceColumn<T>(
  */
 type KindColumnClickHandler<T> = (item: T) => void;
 
-export interface CreateKindColumnOptions<T> {
+export interface CreateKindColumnOptions<T> extends GridColumnAlignmentOptions {
   key?: string;
   header?: string;
   getKind: (item: T) => string;
@@ -423,6 +433,8 @@ export const createKindColumn = <T,>(
     sortable = true,
     sortValue,
     className,
+    alignHeader,
+    alignData,
     disableShortcuts,
   } = options;
   const resolveDisplayText = (item: T) => {
@@ -440,6 +452,8 @@ export const createKindColumn = <T,>(
     header,
     sortable,
     className,
+    alignHeader,
+    alignData,
     disableShortcuts,
     sortValue:
       sortValue ??

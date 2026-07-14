@@ -49,9 +49,10 @@ const HeaderHarness: React.FC<{
   enableResizing: boolean;
   fixedKeys?: string[];
   withContextMenu?: boolean;
-}> = ({ enableResizing, fixedKeys = [], withContextMenu = false }) => {
+  tableColumns?: GridColumnDefinition<Row>[];
+}> = ({ enableResizing, fixedKeys = [], withContextMenu = false, tableColumns = columns }) => {
   const node = useGridTableHeaderRow({
-    renderedColumns: columns,
+    renderedColumns: tableColumns,
     enableColumnResizing: enableResizing,
     isFixedColumnKey: (key) => fixedKeys.includes(key),
     handleHeaderContextMenu: withContextMenu ? handleHeaderContextMenu : undefined,
@@ -136,6 +137,43 @@ describe('useGridTableHeaderRow', () => {
       await Promise.resolve();
     });
     expect(autoSizeColumn).toHaveBeenCalledWith('name');
+  });
+
+  it('aligns headers independently and defaults omitted alignment to left', async () => {
+    const alignedColumns: GridColumnDefinition<Row>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        alignData: 'right',
+        render: (row) => row.name,
+      },
+      {
+        key: 'age',
+        header: 'Age',
+        alignHeader: 'center',
+        render: (row) => row.age,
+      },
+      {
+        key: 'role',
+        header: 'Role',
+        alignHeader: 'right',
+        render: (row) => row.role,
+      },
+    ];
+
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing={false} tableColumns={alignedColumns} />);
+    });
+
+    expect(container.querySelector('[data-column="name"]')?.getAttribute('data-align')).toBe(
+      'left'
+    );
+    expect(container.querySelector('[data-column="age"]')?.getAttribute('data-align')).toBe(
+      'center'
+    );
+    expect(container.querySelector('[data-column="role"]')?.getAttribute('data-align')).toBe(
+      'right'
+    );
   });
 
   it('hides resize handles when columns are fixed or resizing disabled', async () => {

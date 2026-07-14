@@ -179,7 +179,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         getClassName: (job) => backendStatusTextClass(job.statusPresentation),
       }),
       createTextColumn<JobRow>('completions', 'Completions', (job) => job.completions || '\u2014', {
-        className: 'text-right',
+        alignData: 'right',
       }),
       createTextColumn<JobRow>('duration', 'Duration', (job) => job.duration || '\u2014'),
     ];

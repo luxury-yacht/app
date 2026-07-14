@@ -156,10 +156,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
       }),
       createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
-        className: 'text-right',
+        alignData: 'right',
       }),
       createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
-        className: 'text-right',
+        alignData: 'right',
         getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
         getClassName: (pod) => getRestartsClassName(pod),
       }),
