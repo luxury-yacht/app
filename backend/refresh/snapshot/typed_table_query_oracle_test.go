@@ -100,6 +100,8 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 			FacetsExact:     true,
 			Namespaces:      collectTypedTableFacet(items, adapter.Namespace),
 			Kinds:           collectTypedTableFacet(items, adapter.Kind),
+			Statuses:        collectOptionalTypedTableFacet(items, adapter.Status),
+			Nodes:           collectOptionalTypedTableFacet(items, adapter.Node),
 			Dynamic:         query.dynamicRef(),
 		}
 	}
@@ -158,6 +160,8 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		FacetsExact:     true,
 		Namespaces:      typedTableFacetMapValues(namespaceFacets),
 		Kinds:           typedTableFacetMapValues(kindFacets),
+		Statuses:        collectOptionalTypedTableFacet(items, adapter.Status),
+		Nodes:           collectOptionalTypedTableFacet(items, adapter.Node),
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,
 	}

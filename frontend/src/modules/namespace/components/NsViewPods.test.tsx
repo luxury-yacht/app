@@ -553,6 +553,50 @@ describe('NsViewPods', () => {
     );
   });
 
+  it('publishes backend-owned Status and Node query facets', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [createPod()],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Pod'],
+          statuses: ['Pending', 'Running'],
+          nodes: ['node-a', 'node-b'],
+          facetsExact: true,
+          capabilities: {
+            filterableFields: ['kinds', 'namespaces', 'statuses', 'nodes'],
+          },
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
+        },
+      },
+    });
+
+    await renderPods({}, { skipDefaultQueryMock: true });
+
+    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
+      expect.objectContaining({
+        key: 'statuses',
+        label: 'Status',
+        options: [
+          { value: 'Pending', label: 'Pending' },
+          { value: 'Running', label: 'Running' },
+        ],
+      }),
+      expect.objectContaining({
+        key: 'nodes',
+        label: 'Node',
+        options: [
+          { value: 'node-a', label: 'node-a' },
+          { value: 'node-b', label: 'node-b' },
+        ],
+      }),
+    ]);
+  });
+
   it('uses backend statusPresentation for the pod status class', async () => {
     const pods = [
       createPod({

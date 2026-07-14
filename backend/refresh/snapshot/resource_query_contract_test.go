@@ -82,6 +82,35 @@ func TestTypedResourceProvidersPublishQueryCapabilities(t *testing.T) {
 	}
 }
 
+// Filter capability metadata must describe dimensions the shared typed query
+// request can serialize and the query engine can apply to the full result set.
+// Keep provider-specific fields out until their request and engine projections
+// exist end to end; otherwise the frontend could expose a global control that
+// only filters the visible page or has no effect.
+func TestTypedResourceProvidersPublishOnlyQueryBackedFilterCapabilities(t *testing.T) {
+	queryBackedFields := map[string]bool{
+		"kinds":      true,
+		"namespaces": true,
+		"statuses":   true,
+		"nodes":      true,
+	}
+
+	for domain, caps := range typedCapabilityConformance {
+		for _, field := range caps.FilterableFields {
+			if !queryBackedFields[field] {
+				t.Errorf("%s: filter capability %q has no shared typed-query request and engine projection", domain, field)
+			}
+			if (field == "statuses" || field == "nodes") && domain != "pods" {
+				t.Errorf("%s: filter capability %q has no domain adapter projection", domain, field)
+			}
+		}
+	}
+
+	if got := typedCapabilityConformance["pods"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces", "statuses", "nodes"}) {
+		t.Errorf("pods: filter capabilities = %v, want query-backed kind, namespace, status, and node filters", got)
+	}
+}
+
 // The catalog publishes the same query-surface capabilities as the typed
 // providers (exports are client-driven cursor walks for every provider).
 func TestCatalogProviderPublishesQueryCapabilities(t *testing.T) {

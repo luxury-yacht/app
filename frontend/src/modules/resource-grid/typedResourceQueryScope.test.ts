@@ -2,6 +2,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import { describe, expect, it } from 'vitest';
 import {
   buildTypedResourceQueryScope,
+  filterOptionsFromTypedPayload,
   typedResourceQueryIdentity,
   typedResourceQueryLifecycleIdentity,
 } from './typedResourceQueryScope';
@@ -14,6 +15,10 @@ describe('typedResourceQueryScope', () => {
         search: 'api',
         kinds: ['Pod', 'Deployment'],
         namespaces: ['zeta', 'apps'],
+        queryFacets: {
+          statuses: ['Pending', 'Running'],
+          nodes: ['node-b', 'node-a'],
+        },
       },
       sortConfig: { key: 'cpu', direction: 'desc' },
       pageLimit: 250,
@@ -22,7 +27,7 @@ describe('typedResourceQueryScope', () => {
     });
 
     expect(scope).toBe(
-      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
+      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&statuses=Pending%2CRunning&nodes=node-a%2Cnode-b&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
     );
   });
 
@@ -49,12 +54,33 @@ describe('typedResourceQueryScope', () => {
     expect(off).not.toBe(on);
   });
 
+  it('changes the query identity when a provider-owned facet changes', () => {
+    const base = {
+      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+      sortConfig: { key: 'name', direction: 'asc' } as const,
+      predicates: {},
+    };
+
+    expect(
+      typedResourceQueryIdentity({
+        ...base,
+        filters: { ...base.filters, queryFacets: { statuses: ['Running'] } },
+      })
+    ).not.toBe(
+      typedResourceQueryIdentity({
+        ...base,
+        filters: { ...base.filters, queryFacets: { statuses: ['Pending'] } },
+      })
+    );
+  });
+
   it('builds the same query identity for equivalent unordered filters', () => {
     const left = typedResourceQueryIdentity({
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         kinds: ['Pod', 'Deployment'],
         namespaces: ['zeta', 'apps'],
+        queryFacets: { statuses: ['Running', 'Pending'], nodes: ['node-b', 'node-a'] },
       },
       sortConfig: { key: 'name', direction: 'asc' },
       predicates: { health: 'unhealthy', phase: 'pending' },
@@ -64,6 +90,7 @@ describe('typedResourceQueryScope', () => {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         kinds: ['Deployment', 'Pod'],
         namespaces: ['apps', 'zeta'],
+        queryFacets: { nodes: ['node-a', 'node-b'], statuses: ['Pending', 'Running'] },
       },
       sortConfig: { key: 'name', direction: 'asc' },
       predicates: { phase: 'pending', health: 'unhealthy' },
@@ -104,5 +131,38 @@ describe('typedResourceQueryScope', () => {
         pageLimit: 500,
       })
     );
+  });
+
+  it('projects advertised status and node facets into query controls', () => {
+    expect(
+      filterOptionsFromTypedPayload({
+        statuses: ['Pending', 'Running'],
+        nodes: ['node-a', 'node-b'],
+        capabilities: { filterableFields: ['kinds', 'namespaces', 'statuses', 'nodes'] },
+      }).queryFacets
+    ).toEqual([
+      {
+        key: 'statuses',
+        label: 'Status',
+        placeholder: 'All statuses',
+        options: [
+          { value: 'Pending', label: 'Pending' },
+          { value: 'Running', label: 'Running' },
+        ],
+        searchable: false,
+        bulkActions: true,
+      },
+      {
+        key: 'nodes',
+        label: 'Node',
+        placeholder: 'All nodes',
+        options: [
+          { value: 'node-a', label: 'node-a' },
+          { value: 'node-b', label: 'node-b' },
+        ],
+        searchable: true,
+        bulkActions: true,
+      },
+    ]);
   });
 });

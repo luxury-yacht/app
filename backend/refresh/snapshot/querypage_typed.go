@@ -62,7 +62,7 @@ func lowerTrimAll(in []string) []string {
 // typedQuerySignature pins a cursor to its query shape so a cursor issued for one
 // query can never mispage a different one (it is rejected → CursorInvalid). It
 // folds EVERY field that changes the matched set — base scope, namespaces, kinds,
-// search, includeMetadata, and predicates — into a stable string, sorting each
+// statuses, nodes, search, includeMetadata, and predicates — into a stable string, sorting each
 // list so map/slice ordering can never perturb the signature. This is the same
 // matched-set identity perBuildCacheKey uses. The base-scope and metadata
 // segments are last, so a scope/metadata change invalidates in-flight cursors
@@ -82,6 +82,18 @@ func typedQuerySignature(sortField string, dir querypage.Direction, limit int, b
 	if v := lowerTrimAll(request.Namespaces); len(v) > 0 {
 		sort.Strings(v)
 		b.WriteString("namespace=")
+		b.WriteString(strings.Join(v, ","))
+		b.WriteByte(';')
+	}
+	if v := lowerTrimAll(request.Statuses); len(v) > 0 {
+		sort.Strings(v)
+		b.WriteString("status=")
+		b.WriteString(strings.Join(v, ","))
+		b.WriteByte(';')
+	}
+	if v := lowerTrimAll(request.Nodes); len(v) > 0 {
+		sort.Strings(v)
+		b.WriteString("node=")
 		b.WriteString(strings.Join(v, ","))
 		b.WriteByte(';')
 	}
@@ -139,18 +151,20 @@ type perBuildStoreCache[T any] struct {
 	matchedTotal int
 	namespaces   []string
 	kinds        []string
+	statuses     []string
+	nodes        []string
 }
 
-func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, bool) {
+func (c *perBuildStoreCache[T]) get(key string) (*querypage.Store[T], int, []string, []string, []string, []string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.store == nil || c.key != key {
-		return nil, 0, nil, nil, false
+		return nil, 0, nil, nil, nil, nil, false
 	}
-	return c.store, c.matchedTotal, c.namespaces, c.kinds, true
+	return c.store, c.matchedTotal, c.namespaces, c.kinds, c.statuses, c.nodes, true
 }
 
-func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds []string) {
+func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], matchedTotal int, namespaces, kinds, statuses, nodes []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.key = key
@@ -158,11 +172,13 @@ func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], match
 	c.matchedTotal = matchedTotal
 	c.namespaces = namespaces
 	c.kinds = kinds
+	c.statuses = statuses
+	c.nodes = nodes
 }
 
 // perBuildCacheKey identifies the matched set a per-Build store was built
 // from: the base scope + every matcher input (search, includeMetadata, kinds,
-// namespaces, predicates) + the caller's source-version token + the metric
+// namespaces, statuses, nodes, predicates) + the caller's source-version token + the metric
 // revision. DynamicRevision matters because metric-joined domains overlay
 // usage onto the rows BEFORE the store is built — a key without it would
 // freeze metric values AND metric sort order across ticks. Sort, direction,
@@ -189,6 +205,14 @@ func perBuildCacheKey(query typedTableQuery, versionToken string) string {
 	namespaces := lowerTrimAll(query.Request.Namespaces)
 	sort.Strings(namespaces)
 	b.WriteString(strings.Join(namespaces, ","))
+	b.WriteByte('\n')
+	statuses := lowerTrimAll(query.Request.Statuses)
+	sort.Strings(statuses)
+	b.WriteString(strings.Join(statuses, ","))
+	b.WriteByte('\n')
+	nodes := lowerTrimAll(query.Request.Nodes)
+	sort.Strings(nodes)
+	b.WriteString(strings.Join(nodes, ","))
 	b.WriteByte('\n')
 	b.WriteString(strings.Join(typedQueryPredicateSignatureParts(query.Request.Predicates), ","))
 	return b.String()
@@ -227,7 +251,7 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		opt(&cfg)
 	}
 
-	// Apply the FULL live matcher first — namespace + kind + search + predicates —
+	// Apply the FULL live matcher first — namespace + kind + status + node + search + predicates —
 	// so the engine sees only the matched set. Building the store from `matched`
 	// (rather than all items and re-filtering inside Query) is what makes the engine
 	// honor predicates: the engine's Filters/Search cover only its facet dimensions,
@@ -237,12 +261,12 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 	// (page turns, sort flips).
 	var store *querypage.Store[T]
 	var matchedTotal int
-	var matchedNamespaces, matchedKinds []string
+	var matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes []string
 	cacheKey := ""
 	cached := false
 	if cfg.cache != nil {
 		cacheKey = perBuildCacheKey(query, cfg.versionToken)
-		store, matchedTotal, matchedNamespaces, matchedKinds, cached = cfg.cache.get(cacheKey)
+		store, matchedTotal, matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes, cached = cfg.cache.get(cacheKey)
 	}
 	if !cached {
 		matcher := newTypedTableQueryMatcher(query, adapter)
@@ -259,8 +283,10 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		matchedTotal = len(matched)
 		matchedNamespaces = collectTypedTableFacet(matched, adapter.Namespace)
 		matchedKinds = collectTypedTableFacet(matched, adapter.Kind)
+		scopeStatuses = collectOptionalTypedTableFacet(items, adapter.Status)
+		scopeNodes = collectOptionalTypedTableFacet(items, adapter.Node)
 		if cfg.cache != nil {
-			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds)
+			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds, scopeStatuses, scopeNodes)
 		}
 	}
 
@@ -329,6 +355,8 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		FacetsExact:     true,
 		Namespaces:      matchedNamespaces,
 		Kinds:           matchedKinds,
+		Statuses:        scopeStatuses,
+		Nodes:           scopeNodes,
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,
 	}

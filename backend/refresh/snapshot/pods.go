@@ -566,6 +566,8 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		},
 		Namespace: func(pod PodSummary) string { return pod.Namespace },
 		Kind:      func(PodSummary) string { return podres.Identity.Kind },
+		Status:    func(pod PodSummary) string { return pod.Status },
+		Node:      func(pod PodSummary) string { return pod.Node },
 		SearchText: func(pod PodSummary) []string {
 			return []string{
 				pod.Name,

@@ -105,6 +105,14 @@ invalidators even though the callback does not read them.
   Each facet uses a stable provider-owned key, persists through GridTable state
   and favorites, and only shapes backend queries; GridTable must not locally
   apply those selections to the current page.
+- A provider may publish a filter capability only after the frontend serializes
+  that selection and the backend applies it to the full matching dataset. Do not
+  advertise status, owner, node, application, or other row-field filters from
+  response facets alone.
+- Pods are the reference typed-query facet implementation: their Status and Node
+  options describe the full namespace or all-namespaces scope, remain stable when
+  a selection narrows the result set, and feed backend query parameters through
+  the shared typed-resource scope builder.
 
 ## Sorting
 

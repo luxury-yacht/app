@@ -91,6 +91,8 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 	type filt struct {
 		ns         []string
 		kinds      []string
+		statuses   []string
+		nodes      []string
 		search     string
 		predicates []ResourceQueryPredicate
 	}
@@ -102,6 +104,9 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 		{ns: []string{"default", "app"}},
 		{kinds: []string{"Pod"}},
 		{ns: []string{"kube-system"}, kinds: []string{"Pod"}},
+		{statuses: []string{"Pending"}},
+		{statuses: []string{"Pending", "Running"}, nodes: []string{"node-1", "node-2"}},
+		{nodes: []string{"node-3"}},
 		{search: "pod-01"},
 		{search: "running"},
 		{predicates: []ResourceQueryPredicate{{Field: "health", Value: "restarts"}}},
@@ -117,7 +122,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Namespaces: f.ns, Kinds: f.kinds, Search: f.search, Predicates: f.predicates,
+						Namespaces: f.ns, Kinds: f.kinds, Statuses: f.statuses, Nodes: f.nodes, Search: f.search, Predicates: f.predicates,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[PodSummary] {
@@ -127,7 +132,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 					return applyTypedTableQueryViaStore(items, q, adapter, podQuerypageSchema())
 				}, base)
 
-				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v search=%q preds=%v", sf, d, f.ns, f.kinds, f.search, f.predicates)
+				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v statuses=%v nodes=%v search=%q preds=%v", sf, d, f.ns, f.kinds, f.statuses, f.nodes, f.search, f.predicates)
 				if !slices.Equal(liveKeys, engineKeys) {
 					t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
 				}
@@ -143,8 +148,46 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
+				if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
+					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
+				}
+				if !slices.Equal(liveFirst.Nodes, engineFirst.Nodes) {
+					t.Fatalf("%s: node facets live=%v engine=%v", label, liveFirst.Nodes, engineFirst.Nodes)
+				}
 			}
 		}
+	}
+}
+
+func TestPodsQueryViaStoreFiltersStatusesAndNodes(t *testing.T) {
+	items := makePodRows(120)
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c",
+			Table:     "pods",
+			Statuses:  []string{"Pending"},
+			Nodes:     []string{"node-2"},
+			SortField: "name",
+			Limit:     250,
+		},
+	}
+
+	page := applyTypedTableQueryViaStore(items, query, podTableQueryAdapter(), podQuerypageSchema())
+	want := 0
+	for _, item := range items {
+		if item.Status == "Pending" && item.Node == "node-2" {
+			want++
+		}
+	}
+
+	require.Equal(t, want, page.Total)
+	require.Len(t, page.Rows, want)
+	require.Equal(t, []string{"Completed", "CrashLoopBackOff", "Pending", "Running"}, page.Statuses)
+	require.Equal(t, []string{"node-1", "node-2", "node-3"}, page.Nodes)
+	for _, row := range page.Rows {
+		require.Equal(t, "Pending", row.Status)
+		require.Equal(t, "node-2", row.Node)
 	}
 }
 

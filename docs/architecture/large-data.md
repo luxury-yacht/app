@@ -279,11 +279,13 @@ refetching — never from mutating displayed rows in place. The contract:
 Pods: `backend/refresh/snapshot/pods.go` feeds namespace and all-namespaces pod
 tables. It carries pod identity, status, restart, readiness, node, owner, and
 metrics projection state. All-namespaces Pods are `Query Backed Dynamic`:
-search, namespace filters, health predicates, pagination, and CPU/memory sort
-are backend-owned for the current metrics snapshot. Pod rows are served from a
-maintained `querypage` store fed by the owned-reflector ingest path (a keyset
-range scan with exact facet/total counters; metrics are overlaid at serve, never
-stored) — see [data-layer.md](./data-layer.md).
+search, namespace/status/node filters, health predicates, pagination, and
+CPU/memory sort are backend-owned for the current metrics snapshot. Status and
+node dropdown options describe the full structural scope rather than the current
+page or selected subset. Pod rows are served from a maintained `querypage` store
+fed by the owned-reflector ingest path (a keyset range scan with exact
+facet/total counters; metrics are overlaid at serve, never stored) — see
+[data-layer.md](./data-layer.md).
 
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
 workload tables. Both single-namespace and all-namespaces workload tables are

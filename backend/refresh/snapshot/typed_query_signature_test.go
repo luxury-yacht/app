@@ -40,3 +40,30 @@ func TestTypedQuerySignatureIncludesBaseScopeAndIncludeMetadata(t *testing.T) {
 		t.Error("equal query identity must share a signature")
 	}
 }
+
+func TestTypedQuerySignatureIncludesStatusAndNodeFilters(t *testing.T) {
+	base := ResourceQueryRequest{ClusterID: "c1", Table: "pods"}
+	sig := func(req ResourceQueryRequest) string {
+		return typedQuerySignature("name", querypage.Ascending, 50, "namespace:all", req)
+	}
+
+	withStatus := base
+	withStatus.Statuses = []string{"Running"}
+	if sig(base) == sig(withStatus) {
+		t.Error("Statuses must change the signature")
+	}
+
+	withNode := base
+	withNode.Nodes = []string{"node-a"}
+	if sig(base) == sig(withNode) {
+		t.Error("Nodes must change the signature")
+	}
+
+	reordered := base
+	reordered.Statuses = []string{"Running", "Pending"}
+	equivalent := base
+	equivalent.Statuses = []string{"Pending", "Running"}
+	if sig(reordered) != sig(equivalent) {
+		t.Error("equivalent unordered status filters must share a signature")
+	}
+}

@@ -336,7 +336,7 @@ func TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges(t *testing.T) {
 
 func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing.T) {
 	values := mapValues(
-		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy&includeMetadata=true",
+		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&statuses=Running,Pending&status=Completed&nodes=node-b,node-a&node=node-c&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy&includeMetadata=true",
 	)
 
 	request := resourceQueryRequestFromValues("cluster-a", "pods", values, ResourceQueryRequest{
@@ -350,6 +350,8 @@ func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing
 	}
 	assertStringSlicesEqual(t, []string{"Deployment", "Pod", "StatefulSet"}, request.Kinds)
 	assertStringSlicesEqual(t, []string{"apps", "default", "kube-system"}, request.Namespaces)
+	assertStringSlicesEqual(t, []string{"Completed", "Pending", "Running"}, request.Statuses)
+	assertStringSlicesEqual(t, []string{"node-a", "node-b", "node-c"}, request.Nodes)
 	if request.SortField != "cpu" || request.SortDirection != "desc" || request.Limit != 500 {
 		t.Fatalf("unexpected sort/limit: %+v", request)
 	}

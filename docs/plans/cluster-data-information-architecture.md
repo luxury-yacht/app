@@ -75,7 +75,7 @@ Target navigation order:
       materializing unbounded datasets in React.
 - [x] Make the new lens and canonical view labels available to existing favorite
       persistence without a stored-state migration.
-- [ ] Keep global status/owner/application filters disabled until their backend
+- [x] Keep global status/owner/application filters disabled until their backend
       query projections exist.
 
 ### Phase 5: Namespace, application, and topology lenses
@@ -97,6 +97,18 @@ Target navigation order:
 - [x] Present cluster comparison rows with explicit `clusterId` identity.
 - [x] Switch cluster before navigating to a cluster-scoped lens or object.
 - [x] Cover mixed ready/loading/auth-failed cluster states.
+
+### Phase 7: Query-backed Pod facets
+
+- [x] Extend the shared typed-query request, cursor identity, maintained-store-fed
+      production path, and fallback executor with status and node facet filters.
+- [x] Return stable scope-level status and node options instead of options that
+      collapse to the current page or active selection.
+- [x] Render and persist the provider-owned Status and Node controls in the Pods
+      view for both one namespace and All Namespaces.
+- [x] Prove backend executor parity, frontend scope serialization, persistence,
+      focus-safe interaction, and rendered behavior before enabling the
+      capabilities.
 
 ## Validation
 

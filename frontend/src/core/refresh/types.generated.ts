@@ -1424,6 +1424,8 @@ export interface ResourceQueryRequest {
   scope?: ResourceQueryScope;
   namespaces?: Array<string>;
   kinds?: Array<string>;
+  statuses?: Array<string>;
+  nodes?: Array<string>;
   search?: string;
   includeMetadata?: boolean;
   predicates?: Array<ResourceQueryPredicate>;

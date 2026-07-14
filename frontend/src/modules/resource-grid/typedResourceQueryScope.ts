@@ -29,6 +29,8 @@ export interface TypedQueryPayload {
   totalIsExact?: boolean;
   namespaces?: string[];
   kinds?: string[];
+  statuses?: string[];
+  nodes?: string[];
   facetsExact?: boolean;
   issues?: ResourceQueryIssue[];
   dynamic?: ResourceQueryDynamicRef;
@@ -67,6 +69,14 @@ const stableTypedQueryList = (values: string[]) =>
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
+const stableTypedQueryFacets = (facets: Record<string, string[]> | undefined) =>
+  Object.fromEntries(
+    Object.entries(facets ?? {})
+      .map(([key, values]) => [key, stableTypedQueryList(values)] as const)
+      .filter(([, values]) => values.length > 0)
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+
 export const typedResourceQueryIdentity = ({
   filters,
   sortConfig,
@@ -78,6 +88,7 @@ export const typedResourceQueryIdentity = ({
     includeMetadata: filters.includeMetadata,
     kinds: stableTypedQueryList(filters.kinds),
     namespaces: stableTypedQueryList(filters.namespaces),
+    queryFacets: stableTypedQueryFacets(filters.queryFacets),
     sort: sortConfig,
     predicates: Object.fromEntries(
       Object.entries(predicates ?? {})
@@ -132,6 +143,14 @@ export function buildTypedResourceQueryScope(
   if (kinds.length > 0) {
     params.set('kinds', kinds.join(','));
   }
+  const statuses = stableTypedQueryList(descriptor.filters.queryFacets?.statuses ?? []);
+  if (statuses.length > 0) {
+    params.set('statuses', statuses.join(','));
+  }
+  const nodes = stableTypedQueryList(descriptor.filters.queryFacets?.nodes ?? []);
+  if (nodes.length > 0) {
+    params.set('nodes', nodes.join(','));
+  }
   if (descriptor.sortConfig?.key && descriptor.sortConfig.direction) {
     params.set('sort', descriptor.sortConfig.key);
     params.set('sortDirection', descriptor.sortConfig.direction);
@@ -185,12 +204,35 @@ export function filterOptionsFromTypedPayload(
     payload.facetsExact === false
       ? 'Facet options are approximate because one or more backend data sources were unavailable.'
       : undefined;
+  const filterableFields = new Set(payload.capabilities?.filterableFields ?? []);
+  const queryFacets: NonNullable<GridTableFilterOptions['queryFacets']> = [];
+  if (filterableFields.has('statuses')) {
+    queryFacets.push({
+      key: 'statuses',
+      label: 'Status',
+      placeholder: 'All statuses',
+      options: (payload.statuses ?? []).map((status) => ({ value: status, label: status })),
+      searchable: false,
+      bulkActions: true,
+    });
+  }
+  if (filterableFields.has('nodes')) {
+    queryFacets.push({
+      key: 'nodes',
+      label: 'Node',
+      placeholder: 'All nodes',
+      options: (payload.nodes ?? []).map((node) => ({ value: node, label: node })),
+      searchable: true,
+      bulkActions: true,
+    });
+  }
   return {
     kinds: payload.kinds,
     namespaces: payload.namespaces,
     totalCount: payload.total,
     unfilteredTotal: payload.unfilteredTotal,
     totalIsExact: payload.totalIsExact,
+    queryFacets: queryFacets.length > 0 ? queryFacets : undefined,
     partialDataLabel: [issueLabel, facetsLabel].filter(Boolean).join('\n') || undefined,
   };
 }

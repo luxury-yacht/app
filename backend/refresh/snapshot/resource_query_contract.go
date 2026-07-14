@@ -51,6 +51,8 @@ type ResourceQueryRequest struct {
 	Scope      ResourceQueryScope    `json:"scope,omitempty"`
 	Namespaces []string              `json:"namespaces,omitempty"`
 	Kinds      []string              `json:"kinds,omitempty"`
+	Statuses   []string              `json:"statuses,omitempty"`
+	Nodes      []string              `json:"nodes,omitempty"`
 	Search     string                `json:"search,omitempty"`
 	// IncludeMetadata extends Search to also match each row's labels and annotations.
 	IncludeMetadata bool                     `json:"includeMetadata,omitempty"`
@@ -296,6 +298,8 @@ func resourceQueryRequestFromValues(clusterID, table string, values url.Values, 
 	request.IncludeMetadata = strings.TrimSpace(values.Get("includeMetadata")) == "true"
 	request.Namespaces = resourceQueryListValues(values, "namespaces", "namespace")
 	request.Kinds = resourceQueryListValues(values, "kinds", "kind")
+	request.Statuses = resourceQueryListValues(values, "statuses", "status")
+	request.Nodes = resourceQueryListValues(values, "nodes", "node")
 	request.SortField = strings.TrimSpace(values.Get("sort"))
 	if request.SortField == "" {
 		request.SortField = defaults.SortField

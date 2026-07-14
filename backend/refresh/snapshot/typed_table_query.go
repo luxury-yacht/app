@@ -41,12 +41,14 @@ type typedTableQueryPage[T any] struct {
 	PageStartRank *int
 	Total         int
 	// UnfilteredTotal is the count of items in scope before the query's filters
-	// (search/kinds/namespaces/predicates). It is the "of M" in the table's
+	// (search/kinds/namespaces/statuses/nodes/predicates). It is the "of M" in the table's
 	// "showing N of M items due to filters" banner; Total is the "N".
 	UnfilteredTotal int
 	TotalIsExact    bool
 	Namespaces      []string
 	Kinds           []string
+	Statuses        []string
+	Nodes           []string
 	FacetsExact     bool
 	Dynamic         *ResourceQueryDynamicRef
 	// SortField is the field the request asked to sort by; the envelope
@@ -59,6 +61,8 @@ type typedTableQueryAdapter[T any] struct {
 	Key       func(T) string
 	Namespace func(T) string
 	Kind      func(T) string
+	Status    func(T) string
+	Node      func(T) string
 	// AnchorKey builds the SAME row key as Key from an anchor's object identity
 	// (kind, namespace, name) — the anchor→row resolution contract, pinned by
 	// TestAdapterAnchorKeyMatchesKey. nil means the family cannot resolve
@@ -136,6 +140,8 @@ func typedQueryEnvelope[T any](table string, page typedTableQueryPage[T], capabi
 		TotalIsExact:    page.TotalIsExact,
 		Kinds:           page.Kinds,
 		Namespaces:      page.Namespaces,
+		Statuses:        page.Statuses,
+		Nodes:           page.Nodes,
 		FacetsExact:     page.FacetsExact,
 		Completeness:    resourceQueryCompleteness(true),
 		Dynamic:         page.Dynamic,
@@ -213,14 +219,16 @@ type typedSnapshotPage[T any] struct {
 	Stats    refresh.SnapshotStats
 }
 
-// typedTableQueryMatcher prebuilds the per-query filter state (namespace/kind
-// sets, search needle, predicate map) so matching N rows costs N membership
+// typedTableQueryMatcher prebuilds the per-query filter state (namespace/kind/
+// status/node sets, search needle, predicate map) so matching N rows costs N membership
 // checks, not N map constructions.
 type typedTableQueryMatcher[T any] struct {
 	adapter         typedTableQueryAdapter[T]
 	includeMetadata bool
 	namespaceSet    map[string]struct{}
 	kindSet         map[string]struct{}
+	statusSet       map[string]struct{}
+	nodeSet         map[string]struct{}
 	searchNeedle    string
 	predicates      map[string]string
 }
@@ -231,6 +239,8 @@ func newTypedTableQueryMatcher[T any](query typedTableQuery, adapter typedTableQ
 		includeMetadata: query.Request.IncludeMetadata,
 		namespaceSet:    stringSet(query.Request.Namespaces),
 		kindSet:         stringSet(query.Request.Kinds),
+		statusSet:       stringSet(query.Request.Statuses),
+		nodeSet:         stringSet(query.Request.Nodes),
 		searchNeedle:    strings.ToLower(strings.TrimSpace(query.Request.Search)),
 		predicates:      resourceQueryPredicatesToMap(query.Request.Predicates),
 	}
@@ -244,6 +254,22 @@ func (m typedTableQueryMatcher[T]) Matches(item T) bool {
 	}
 	if len(m.kindSet) > 0 {
 		if _, ok := m.kindSet[strings.ToLower(strings.TrimSpace(m.adapter.Kind(item)))]; !ok {
+			return false
+		}
+	}
+	if len(m.statusSet) > 0 {
+		if m.adapter.Status == nil {
+			return false
+		}
+		if _, ok := m.statusSet[strings.ToLower(strings.TrimSpace(m.adapter.Status(item)))]; !ok {
+			return false
+		}
+	}
+	if len(m.nodeSet) > 0 {
+		if m.adapter.Node == nil {
+			return false
+		}
+		if _, ok := m.nodeSet[strings.ToLower(strings.TrimSpace(m.adapter.Node(item)))]; !ok {
 			return false
 		}
 	}
@@ -315,6 +341,13 @@ func collectTypedTableFacet[T any](items []T, accessor func(T) string) []string 
 		addTypedTableFacetValue(seen, accessor(item))
 	}
 	return typedTableFacetMapValues(seen)
+}
+
+func collectOptionalTypedTableFacet[T any](items []T, accessor func(T) string) []string {
+	if accessor == nil {
+		return nil
+	}
+	return collectTypedTableFacet(items, accessor)
 }
 
 func addTypedTableFacetValue(seen map[string]string, raw string) {
