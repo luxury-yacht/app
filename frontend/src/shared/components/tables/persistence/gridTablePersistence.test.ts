@@ -78,6 +78,10 @@ describe('gridTablePersistence', () => {
           search: ' pods ',
           kinds: ['Pod', 'Deployment'],
           namespaces: ['team-a', 'team-b'],
+          queryFacets: {
+            apiGroups: ['apps', 'batch'],
+            resourceScopes: ['Namespace'],
+          },
           caseSensitive: false,
           includeMetadata: false,
         },
@@ -90,6 +94,10 @@ describe('gridTablePersistence', () => {
         filterOptions: {
           kinds: ['Pod'],
           namespaces: ['team-a'],
+          queryFacets: {
+            apiGroups: ['apps'],
+            resourceScopes: ['Namespace'],
+          },
           isNamespaceScoped: true,
         },
         pageSizeOptions: [25, 50, 100, 250],
@@ -103,6 +111,10 @@ describe('gridTablePersistence', () => {
       search: 'pods',
       kinds: ['Pod'],
       namespaces: [],
+      queryFacets: {
+        apiGroups: ['apps'],
+        resourceScopes: ['Namespace'],
+      },
       caseSensitive: false,
       includeMetadata: false,
     });

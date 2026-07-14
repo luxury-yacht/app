@@ -173,6 +173,8 @@ export interface BrowseCatalogQueryDescriptor {
   namespaces: string[];
   hasUserNamespaceScope: boolean;
   kinds: string[];
+  apiGroups: string[];
+  resourceScopes: string[];
   search: string;
   sortField: string;
   sortDirection: string;
@@ -298,6 +300,8 @@ export function useBrowseCatalog({
       namespaces: plan.namespacesToQuery,
       hasUserNamespaceScope: plan.hasUserNamespaceScope,
       kinds: queryFilters.kinds ?? [],
+      apiGroups: queryFilters.apiGroups ?? [],
+      resourceScopes: queryFilters.resourceScopes ?? [],
       search: queryFilters.search ?? '',
       sortField: activeSort.sortField,
       sortDirection: activeSort.sortDirection,
@@ -313,6 +317,8 @@ export function useBrowseCatalog({
       plan.hasUserNamespaceScope,
       plan.namespacesToQuery,
       queryFilters.kinds,
+      queryFilters.apiGroups,
+      queryFilters.resourceScopes,
       queryFilters.search,
     ]
   );

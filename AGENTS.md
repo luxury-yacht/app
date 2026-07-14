@@ -123,6 +123,22 @@ the desktop app's in-app browser. Do not ask the user to repeatedly provide
 screenshots when the local Wails development UI is reachable. Use the
 machine-wide Playwright MCP server instead.
 
+- **FOR RENDERED WAILS UI PASSES, CALL THE STANDALONE PLAYWRIGHT MCP TOOLS
+  DIRECTLY.** Start with `mcp__playwright__browser_navigate`, then use
+  `mcp__playwright__browser_snapshot`, `mcp__playwright__browser_click`,
+  `mcp__playwright__browser_find`, and
+  `mcp__playwright__browser_take_screenshot` as needed. These are the intended
+  Codex CLI browser-control tools for this repository.
+- **DO NOT ROUTE WAILS UI PASSES THROUGH THE BROWSER PLUGIN OR
+  `agent.browsers`.** The Browser plugin's backend discovery is a separate
+  integration and does not discover the registered standalone `playwright` MCP
+  server. An empty `agent.browsers.list()` result says nothing about whether
+  the standalone Playwright tools are available.
+- Before reporting that browser control is unavailable, check the active tool
+  list for `mcp__playwright__browser_navigate` and run `codex mcp list`. If the
+  direct tool is exposed and the `playwright` row is enabled, use it; do not
+  initialize `node_repl`, call `agent.browsers.getForUrl`, or ask the user for
+  screenshots.
 - The one-time installation is under
   `~/.codex/browser-tools/playwright`, and the global MCP server is named
   `playwright`. It is already registered on the primary development machine.

@@ -200,6 +200,8 @@ type QueryOptions struct {
 	ScopeNamespaces []string // structural namespace boundary retained when user filters are cleared
 	Kinds           []string // resource kinds to filter
 	Namespaces      []string // namespaces to filter
+	Groups          []string // API groups to filter; "(core)" represents the core API group
+	ResourceScopes  []Scope  // user-selected resource scopes; separate from the structural Scope boundary
 	Search          string   // search term for filtering
 	SortField       string   // backend-owned sort field; empty uses the catalog default
 	SortDirection   string   // backend-owned sort direction; empty uses ascending
@@ -252,7 +254,9 @@ type QueryResult struct {
 	ResourceCount   int        // total number of resources matching the query
 	Kinds           []KindInfo // resource kinds included in the query
 	Namespaces      []string   // namespaces included in the query
-	FacetsExact     bool       // indicates Kinds and Namespaces describe the matching universe exactly
+	Groups          []string   // API groups included in the structurally scoped query universe
+	ResourceScopes  []Scope    // resource scopes included in the structurally scoped query universe
+	FacetsExact     bool       // indicates the facet lists describe the matching universe exactly
 	// AnchorOutcome reports how an anchored query resolved (nil when the query
 	// carried no anchor); the snapshot layer maps it onto the wire contract's
 	// found/filtered/not-found result.

@@ -274,7 +274,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     columns,
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
-    filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: false },
+    filterOptions: {
+      kinds: [],
+      namespaces: [],
+      queryFacets: { apiGroups: [], resourceScopes: [] },
+      isNamespaceScoped: false,
+    },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: !isNamespaceScoped,
   });
@@ -286,7 +291,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     columns,
     data: [], // We'll populate this after we have catalog data
     keyExtractor,
-    filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: true },
+    filterOptions: {
+      kinds: [],
+      namespaces: [],
+      queryFacets: { apiGroups: [], resourceScopes: [] },
+      isNamespaceScoped: true,
+    },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: isNamespaceScoped,
   });
@@ -316,6 +326,10 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       search: persistence.filters.search ?? '',
       kinds: persistence.filters.kinds ?? [],
       namespaces: persistence.filters.namespaces ?? [],
+      apiGroups: persistence.filters.queryFacets?.apiGroups ?? [],
+      resourceScopes: (persistence.filters.queryFacets?.resourceScopes ?? []).filter(
+        (value): value is 'Cluster' | 'Namespace' => value === 'Cluster' || value === 'Namespace'
+      ),
     },
     sort: persistence.sortConfig,
     pageLimit: persistence.pageSize ?? undefined,
@@ -352,6 +366,24 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       searchBehavior: 'query' as const,
       kinds: filterOptions.kinds,
       namespaces: filterOptions.namespaces,
+      queryFacets: [
+        {
+          key: 'apiGroups',
+          label: 'API groups',
+          placeholder: 'All API groups',
+          options: filterOptions.apiGroups,
+          searchable: true,
+          bulkActions: true,
+        },
+        {
+          key: 'resourceScopes',
+          label: 'Resource scopes',
+          placeholder: 'All resource scopes',
+          options: filterOptions.resourceScopes,
+          searchable: false,
+          bulkActions: false,
+        },
+      ],
       showKindDropdown: true,
       showNamespaceDropdown: showNamespaceColumn,
       kindDropdownSearchable: true,
@@ -368,6 +400,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     [
       filterOptions.kinds,
       filterOptions.namespaces,
+      filterOptions.apiGroups,
+      filterOptions.resourceScopes,
       filterOptions.partialDataLabel,
       showNamespaceColumn,
       totalCount,

@@ -50,6 +50,7 @@ export function buildGridTableFilterOptions<T>({
     kindDropdownBulkActions: options?.kindDropdownBulkActions ?? false,
     namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
     namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
+    queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
     preActions: options?.preActions,
     postActions: options?.postActions,
     customActions: options?.customActions,
@@ -62,6 +63,7 @@ export function buildGridTableFilterOptions<T>({
       ...baseOptions,
       kinds: [],
       namespaces: [],
+      queryFacets: [],
     };
   }
 

@@ -24,8 +24,15 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 		ViewType:         "namespace",
 		View:             "pods",
 		Namespace:        "default",
-		Filters:          &FavoriteFilters{Search: "nginx", Kinds: []string{"Pod"}},
-		TableState:       &FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
+		Filters: &FavoriteFilters{
+			Search: "nginx",
+			Kinds:  []string{"Pod"},
+			QueryFacets: map[string][]string{
+				"apiGroups":      {"apps"},
+				"resourceScopes": {"Namespace"},
+			},
+		},
+		TableState: &FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
 	}
 	added, err := app.AddFavorite(fav)
 	require.NoError(t, err)
@@ -38,6 +45,7 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, favs, 1)
 	require.Equal(t, added.ID, favs[0].ID)
+	require.Equal(t, fav.Filters.QueryFacets, favs[0].Filters.QueryFacets)
 
 	// Update the name.
 	added.Name = "Renamed"

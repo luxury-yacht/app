@@ -15,6 +15,7 @@ import {
   hasNonDefaultGridTableFilters,
   normalizeGridTableFilterArray,
   normalizeGridTableFilterState,
+  normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import { requestAppState } from '@/core/app-state-access';
 
@@ -36,6 +37,7 @@ export interface GridTablePersistenceKeyParts {
 export interface GridTableFilterPersistenceOptions {
   kinds?: string[];
   namespaces?: string[];
+  queryFacets?: Record<string, string[]>;
   isNamespaceScoped?: boolean;
 }
 
@@ -310,6 +312,24 @@ const intersectsAllowed = (values: string[], allowed?: string[]): string[] => {
   return values.filter((value) => allowedSet.has(value.toLowerCase()));
 };
 
+const pruneQueryFacets = (
+  facets: Record<string, string[]>,
+  allowed?: Record<string, string[]>
+): Record<string, string[]> => {
+  const pruned: Record<string, string[]> = {};
+  const allowedKeys = allowed ? new Set(Object.keys(allowed)) : null;
+  for (const [key, values] of Object.entries(facets)) {
+    if (allowedKeys && !allowedKeys.has(key)) {
+      continue;
+    }
+    const selected = intersectsAllowed(values, allowed?.[key]);
+    if (selected.length > 0) {
+      pruned[key] = selected;
+    }
+  }
+  return pruned;
+};
+
 const isAllowedPageSize = (value: number, options?: readonly number[]): boolean => {
   if (!Number.isInteger(value) || value <= 0) {
     return false;
@@ -379,11 +399,16 @@ export const prunePersistedState = <T>(
     const namespaces = isNamespaceScoped
       ? []
       : intersectsAllowed(normalized.namespaces, context.filterOptions?.namespaces);
+    const queryFacets = pruneQueryFacets(
+      normalizeGridTableQueryFacets(normalized.queryFacets),
+      context.filterOptions?.queryFacets
+    );
 
     const filters: GridTableFilterState = {
       search: normalized.search,
       kinds,
       namespaces,
+      ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,
     };
@@ -464,10 +489,15 @@ export const buildPersistedStateForSave = <T>(
   if (context.filters) {
     const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
     const normalized = normalizeGridTableFilterState(context.filters);
+    const queryFacets = pruneQueryFacets(
+      normalizeGridTableQueryFacets(normalized.queryFacets),
+      context.filterOptions?.queryFacets
+    );
     const filters: GridTableFilterState = {
       search: normalized.search,
       kinds: normalizeGridTableFilterArray(normalized.kinds),
       namespaces: isNamespaceScoped ? [] : normalizeGridTableFilterArray(normalized.namespaces),
+      ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,
     };

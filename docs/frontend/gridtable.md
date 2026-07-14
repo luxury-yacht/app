@@ -101,6 +101,10 @@ invalidators even though the callback does not read them.
   includes them.
 - Metadata filters that describe the object universe should come from catalog or
   query metadata, not a capped row slice.
+- Query providers may add `queryFacets` to the shared filter state and options.
+  Each facet uses a stable provider-owned key, persists through GridTable state
+  and favorites, and only shapes backend queries; GridTable must not locally
+  apply those selections to the current page.
 
 ## Sorting
 

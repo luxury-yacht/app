@@ -98,6 +98,7 @@ export function useGridTableFiltersWiring<T>({
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
+    handleFilterQueryFacetChange,
     handleFilterReset,
     toggleCaseSensitive,
   } = useGridTableFilters({
@@ -133,9 +134,17 @@ export function useGridTableFiltersWiring<T>({
     [handleFilterNamespacesChange, normalizeDropdownValue]
   );
 
+  const handleQueryFacetDropdownChange = useCallback(
+    (key: string, value: string | string[]) => {
+      handleFilterQueryFacetChange(key, normalizeDropdownValue(value));
+    },
+    [handleFilterQueryFacetChange, normalizeDropdownValue]
+  );
+
   const searchInputId = useId();
   const kindDropdownId = useId();
   const namespaceDropdownId = useId();
+  const queryFacetDropdownIdPrefix = useId();
   const columnsDropdownId = useId();
 
   const showKindDropdown = filters?.options?.showKindDropdown ?? false;
@@ -276,6 +285,7 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
+      queryFacetDropdownIdPrefix,
       columnsDropdownId,
       resolvedFilterOptions,
       containerRef: filtersContainerRef,
@@ -283,6 +293,7 @@ export function useGridTableFiltersWiring<T>({
       onSearchChange: handleFilterSearchChange,
       onKindsChange: handleKindDropdownChange,
       onNamespacesChange: handleNamespaceDropdownChange,
+      onQueryFacetChange: handleQueryFacetDropdownChange,
       onReset: handleFilterReset,
       onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
@@ -306,12 +317,14 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
+      queryFacetDropdownIdPrefix,
       columnsDropdownId,
       resolvedFilterOptions,
       activeFilters,
       handleFilterSearchChange,
       handleKindDropdownChange,
       handleNamespaceDropdownChange,
+      handleQueryFacetDropdownChange,
       handleFilterReset,
       toggleCaseSensitive,
       showKindDropdown,

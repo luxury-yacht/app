@@ -28,10 +28,12 @@ interface GridTableFiltersBarProps {
   resolvedFilterOptions: InternalFilterOptions;
   kindDropdownId: string;
   namespaceDropdownId: string;
+  queryFacetDropdownIdPrefix?: string;
   columnsDropdownId?: string;
   searchInputId: string;
   onKindsChange: (value: string | string[]) => void;
   onNamespacesChange: (value: string | string[]) => void;
+  onQueryFacetChange?: (key: string, value: string | string[]) => void;
   onSearchChange: (value: string) => void;
   onReset: () => void;
   /** Toggle the case-sensitive search filter. */
@@ -81,10 +83,12 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   resolvedFilterOptions,
   kindDropdownId,
   namespaceDropdownId,
+  queryFacetDropdownIdPrefix,
   columnsDropdownId,
   searchInputId,
   onKindsChange,
   onNamespacesChange,
+  onQueryFacetChange,
   onSearchChange,
   onReset,
   onToggleCaseSensitive,
@@ -110,7 +114,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
   // The result count is filter feedback (how many rows match the active filter), not
   // pagination/total info — that lives in the pagination footer. So it shows only when
-  // a narrowing filter (search/kind/namespace) is active.
+  // a narrowing filter (search/kind/namespace/provider query facet) is active.
   const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
   const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
 
@@ -177,7 +181,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
       <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
-        {!!(showKindDropdown || showNamespaceDropdown) && (
+        {!!(
+          showKindDropdown ||
+          showNamespaceDropdown ||
+          (resolvedFilterOptions.queryFacets?.length ?? 0) > 0
+        ) && (
           <div className="gridtable-filter-subcluster">
             {!!showKindDropdown && (
               <div className="gridtable-filter-group" data-gridtable-filter-role="kind">
@@ -219,6 +227,34 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 />
               </div>
             )}
+            {(resolvedFilterOptions.queryFacets ?? []).map((facet) => {
+              const selected = activeFilters.queryFacets?.[facet.key] ?? [];
+              const count = selected.length;
+              return (
+                <div
+                  key={facet.key}
+                  className="gridtable-filter-group"
+                  data-gridtable-filter-role={`query-facet-${facet.key}`}
+                >
+                  <Dropdown
+                    id={`${queryFacetDropdownIdPrefix ?? 'gridtable-query-facet'}-${facet.key}`}
+                    name={`gridtable-filter-${facet.key}`}
+                    multiple
+                    size="compact"
+                    searchable={facet.searchable}
+                    showBulkActions={facet.bulkActions}
+                    placeholder={facet.placeholder}
+                    value={selected}
+                    options={facet.options}
+                    disabled={!facet.options.length}
+                    onChange={(value) => onQueryFacetChange?.(facet.key, value)}
+                    dropdownClassName="dropdown-filter-menu"
+                    renderOption={renderOption}
+                    renderValue={() => (count > 0 ? `${facet.label} (${count})` : facet.label)}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="gridtable-filter-subcluster">

@@ -71,7 +71,13 @@ const persistenceArgsRef: {
   namespace: null,
 };
 const persistenceFiltersRef: {
-  current: { search: string; kinds: string[]; namespaces: string[]; caseSensitive: boolean };
+  current: {
+    search: string;
+    kinds: string[];
+    namespaces: string[];
+    queryFacets?: Record<string, string[]>;
+    caseSensitive: boolean;
+  };
 } = {
   current: { search: '', kinds: [], namespaces: [], caseSensitive: false },
 };
@@ -715,6 +721,41 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(true);
+    });
+
+    it('publishes backend-owned API-group and resource-scope facets as query controls', async () => {
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.data = catalogPayload([], {
+        groups: ['(core)', 'apps'],
+        resourceScopes: ['Namespace'],
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.filters?.options?.queryFacets).toEqual([
+        {
+          key: 'apiGroups',
+          label: 'API groups',
+          placeholder: 'All API groups',
+          options: [
+            { value: '(core)', label: 'core' },
+            { value: 'apps', label: 'apps' },
+          ],
+          searchable: true,
+          bulkActions: true,
+        },
+        {
+          key: 'resourceScopes',
+          label: 'Resource scopes',
+          placeholder: 'All resource scopes',
+          options: [{ value: 'Namespace', label: 'Namespace-scoped' }],
+          searchable: false,
+          bulkActions: false,
+        },
+      ]);
     });
 
     it('keeps kind and namespace filter options stable while active browse filters change', async () => {

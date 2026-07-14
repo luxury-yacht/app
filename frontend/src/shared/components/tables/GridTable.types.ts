@@ -66,8 +66,19 @@ export interface GridTableFilterState {
   search: string;
   kinds: string[];
   namespaces: string[];
+  /** Backend-owned query facet selections keyed by the provider's facet name. */
+  queryFacets?: Record<string, string[]>;
   caseSensitive: boolean;
   includeMetadata: boolean;
+}
+
+export interface GridTableQueryFacetDefinition {
+  key: string;
+  label: string;
+  placeholder: string;
+  options: DropdownOption[];
+  searchable?: boolean;
+  bulkActions?: boolean;
 }
 
 export interface GridTableFilterAccessors<T> {
@@ -81,6 +92,8 @@ export interface GridTableFilterOptions {
   searchPlaceholder?: string;
   kinds?: string[];
   namespaces?: string[];
+  /** Additional backend-owned facet controls for query-backed tables. */
+  queryFacets?: GridTableQueryFacetDefinition[];
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
   kindDropdownSearchable?: boolean;
@@ -199,6 +212,7 @@ export interface InternalFilterOptions {
   searchBehavior?: 'local' | 'query';
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
+  queryFacets?: GridTableQueryFacetDefinition[];
   searchPlaceholder?: string;
   kindDropdownSearchable?: boolean;
   kindDropdownBulkActions?: boolean;

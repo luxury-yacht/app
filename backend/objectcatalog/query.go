@@ -246,10 +246,18 @@ func newCustomOnlyMatcher(enabled bool) customOnlyMatcher {
 }
 
 func countMatchingDescriptorsWithOptions(descriptors []Descriptor, matcher kindMatcher, opts QueryOptions) int {
-	if matcher == nil && !opts.CustomOnly {
+	if matcher == nil && !opts.CustomOnly && len(opts.Groups) == 0 && len(opts.ResourceScopes) == 0 {
 		return len(descriptors)
 	}
 	count := 0
+	groups := make(map[string]struct{}, len(opts.Groups))
+	for _, group := range normalizeCatalogAPIGroups(opts.Groups) {
+		groups[group] = struct{}{}
+	}
+	resourceScopes := make(map[string]struct{}, len(opts.ResourceScopes))
+	for _, scope := range normalizeCatalogResourceScopes(opts.ResourceScopes) {
+		resourceScopes[scope] = struct{}{}
+	}
 	for _, desc := range descriptors {
 		if opts.CustomOnly {
 			if _, builtin := catalogQueryBuiltinKeys[identityKey(desc.Group, desc.Version, desc.Kind)]; builtin {
@@ -258,6 +266,16 @@ func countMatchingDescriptorsWithOptions(descriptors []Descriptor, matcher kindM
 		}
 		if matcher != nil && !matcher(desc.Kind, desc.Group, desc.Version, desc.Resource) {
 			continue
+		}
+		if len(opts.Groups) > 0 {
+			if _, ok := groups[catalogAPIGroupFacetValue(desc.Group)]; !ok {
+				continue
+			}
+		}
+		if len(opts.ResourceScopes) > 0 {
+			if _, ok := resourceScopes[strings.ToLower(string(desc.Scope))]; !ok {
+				continue
+			}
 		}
 		count++
 	}

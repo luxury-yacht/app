@@ -42,13 +42,19 @@ describe('browseCatalogData', () => {
       clusterId: 'cluster-1',
       clusterScopedOnly: false,
       pinnedNamespaces: ['default'],
-      filters: { search: 'api', kinds: ['Pod'], namespaces: [] },
+      filters: {
+        search: 'api',
+        kinds: ['Pod'],
+        namespaces: [],
+        apiGroups: ['(core)', 'apps'],
+        resourceScopes: ['Namespace'],
+      },
       availableNamespaces: ['default', 'kube-system'],
       pageLimit: 200,
     });
 
     expect(plan.catalogScope).toBe(
-      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&namespace=default&scopeNamespace=default'
+      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&resourceScopeFilter=Namespace&namespace=default&scopeNamespace=default'
     );
     expect(plan.metadataScope).toBe(
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default'
@@ -61,14 +67,20 @@ describe('browseCatalogData', () => {
         plan,
         {
           clusterId: 'cluster-1',
-          filters: { search: 'api', kinds: ['Pod'], namespaces: [] },
+          filters: {
+            search: 'api',
+            kinds: ['Pod'],
+            namespaces: [],
+            apiGroups: ['(core)', 'apps'],
+            resourceScopes: ['Namespace'],
+          },
           pageLimit: 200,
           pinnedNamespaces: ['default'],
         },
         '200'
       )
     ).toBe(
-      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&namespace=default&scopeNamespace=default&continue=200'
+      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&resourceScopeFilter=Namespace&namespace=default&scopeNamespace=default&continue=200'
     );
   });
 
@@ -194,6 +206,8 @@ describe('browseCatalogData', () => {
         { kind: 'Pod', namespaced: true },
       ],
       namespaces: ['kube-system', 'default'],
+      groups: ['apps', '(core)'],
+      resourceScopes: ['Namespace'],
     });
 
     expect(
@@ -205,6 +219,11 @@ describe('browseCatalogData', () => {
     ).toEqual({
       kinds: ['Deployment', 'Pod'],
       namespaces: ['default', 'kube-system'],
+      apiGroups: [
+        { value: '(core)', label: 'core' },
+        { value: 'apps', label: 'apps' },
+      ],
+      resourceScopes: [{ value: 'Namespace', label: 'Namespace-scoped' }],
       isNamespaceScoped: false,
       partialDataLabel: undefined,
     });

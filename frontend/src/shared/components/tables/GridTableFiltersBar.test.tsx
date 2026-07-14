@@ -165,6 +165,52 @@ describe('GridTableFiltersBar', () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
+  it('renders backend query facet dropdowns and propagates keyed changes', async () => {
+    const onQueryFacetChange = vi.fn();
+
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        queryFacets: { apiGroups: ['apps'] },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        queryFacets: [
+          {
+            key: 'apiGroups',
+            label: 'API groups',
+            placeholder: 'All API groups',
+            options: [
+              { label: 'core', value: '(core)' },
+              { label: 'apps', value: 'apps' },
+            ],
+            searchable: true,
+            bulkActions: true,
+          },
+        ],
+      },
+      queryFacetDropdownIdPrefix: 'facet',
+      onQueryFacetChange,
+    });
+
+    const dropdown = container.querySelector(
+      '[data-testid="facet-apiGroups"]'
+    ) as HTMLSelectElement;
+    expect(dropdown).toBeTruthy();
+    expect(dropdown.getAttribute('data-searchable')).toBe('true');
+    expect(dropdown.getAttribute('data-bulk-actions')).toBe('true');
+    await act(async () => {
+      dropdown.value = '(core)';
+      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onQueryFacetChange).toHaveBeenCalledWith('apiGroups', ['(core)']);
+  });
+
   it('passes searchable through to kind and namespace dropdowns when enabled', async () => {
     await renderFilters({
       showKindDropdown: true,

@@ -13,7 +13,7 @@ import (
 )
 
 func TestParseBrowseScope(t *testing.T) {
-	opts, err := parseBrowseScope("kind=Pod&namespace=default&namespace=cluster&search=nginx&limit=50&continue=10")
+	opts, err := parseBrowseScope("kind=Pod&namespace=default&namespace=cluster&apiGroup=%28core%29&apiGroup=apps&resourceScopeFilter=Namespace&search=nginx&limit=50&continue=10")
 	if err != nil {
 		t.Fatalf("parseBrowseScope returned error: %v", err)
 	}
@@ -23,6 +23,12 @@ func TestParseBrowseScope(t *testing.T) {
 	if len(opts.Namespaces) != 2 {
 		t.Fatalf("unexpected namespaces: %+v", opts.Namespaces)
 	}
+	if !reflect.DeepEqual(opts.Groups, []string{"(core)", "apps"}) {
+		t.Fatalf("unexpected API groups: %#v", opts.Groups)
+	}
+	if !reflect.DeepEqual(opts.ResourceScopes, []objectcatalog.Scope{objectcatalog.ScopeNamespace}) {
+		t.Fatalf("unexpected resource scopes: %#v", opts.ResourceScopes)
+	}
 	if opts.Search != "nginx" {
 		t.Fatalf("expected search nginx, got %q", opts.Search)
 	}
@@ -31,6 +37,30 @@ func TestParseBrowseScope(t *testing.T) {
 	}
 	if opts.Continue != "10" {
 		t.Fatalf("expected continue 10, got %q", opts.Continue)
+	}
+}
+
+func TestBuildCatalogSnapshotCarriesInventoryFacets(t *testing.T) {
+	payload, _ := buildCatalogSnapshot(
+		objectcatalog.QueryResult{
+			Groups:         []string{"(core)", "apps"},
+			ResourceScopes: []objectcatalog.Scope{objectcatalog.ScopeCluster, objectcatalog.ScopeNamespace},
+			FacetsExact:    true,
+		},
+		browseQueryOptions{Limit: 50},
+		objectcatalog.HealthStatus{},
+		true,
+		false,
+	)
+
+	if !reflect.DeepEqual(payload.Groups, []string{"(core)", "apps"}) {
+		t.Fatalf("unexpected API-group facets: %#v", payload.Groups)
+	}
+	if !reflect.DeepEqual(payload.ResourceScopes, []objectcatalog.Scope{objectcatalog.ScopeCluster, objectcatalog.ScopeNamespace}) {
+		t.Fatalf("unexpected resource-scope facets: %#v", payload.ResourceScopes)
+	}
+	if !reflect.DeepEqual(payload.Capabilities.FilterableFields, []string{"kinds", "namespaces", "apiGroups", "resourceScopes"}) {
+		t.Fatalf("unexpected catalog filter capabilities: %#v", payload.Capabilities.FilterableFields)
 	}
 }
 

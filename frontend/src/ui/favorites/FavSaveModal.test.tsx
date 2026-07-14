@@ -179,6 +179,10 @@ const defaultFilters: FavoriteFilters = {
   search: '',
   kinds: [],
   namespaces: [],
+  queryFacets: {
+    apiGroups: ['apps'],
+    resourceScopes: ['Namespace'],
+  },
   caseSensitive: false,
   includeMetadata: false,
 };
@@ -335,6 +339,7 @@ describe('FavSaveModal', () => {
     expect(savedFav.clusterSelection).toBe('/home/user/.kube/config:prod-cluster');
     expect(savedFav.clusterId).toBe('config:prod-cluster');
     expect(savedFav.clusterName).toBe('prod-cluster');
+    expect(savedFav.filters?.queryFacets).toEqual(defaultFilters.queryFacets);
     expect(savedFav.id).toBe(''); // New favorite has empty id.
     expect(onClose).toHaveBeenCalledTimes(1);
   });

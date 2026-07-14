@@ -70,7 +70,7 @@ Target navigation order:
 
 ### Phase 4: Inventory and saved lenses
 
-- [ ] Add backend-owned API-group/scope facets to catalog Inventory.
+- [x] Add backend-owned API-group/scope facets to catalog Inventory.
 - [x] Add API identity and available backend status presentation without
       materializing unbounded datasets in React.
 - [x] Make the new lens and canonical view labels available to existing favorite

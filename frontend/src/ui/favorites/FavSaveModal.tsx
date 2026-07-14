@@ -385,6 +385,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         search: filterText,
         kinds: filterKinds,
         namespaces: filterNamespaces,
+        queryFacets: filters.queryFacets ?? existingFavorite?.filters?.queryFacets,
         caseSensitive,
         includeMetadata: includeMetadataState,
       },

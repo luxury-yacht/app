@@ -28,15 +28,39 @@ export const normalizeGridTableFilterArray = (values?: string[]): string[] => {
   return result;
 };
 
+export const normalizeGridTableQueryFacets = (
+  facets?: Record<string, string[]>
+): Record<string, string[]> => {
+  if (!facets || typeof facets !== 'object') {
+    return {};
+  }
+  const normalized: Record<string, string[]> = {};
+  for (const rawKey of Object.keys(facets).sort()) {
+    const key = rawKey.trim();
+    if (!key) {
+      continue;
+    }
+    const values = normalizeGridTableFilterArray(facets[rawKey]);
+    if (values.length > 0) {
+      normalized[key] = values;
+    }
+  }
+  return normalized;
+};
+
 export const normalizeGridTableFilterState = (
   state?: Partial<GridTableFilterState>
-): GridTableFilterState => ({
-  search: state?.search?.trim() ?? '',
-  kinds: normalizeGridTableFilterArray(state?.kinds),
-  namespaces: normalizeGridTableFilterArray(state?.namespaces),
-  caseSensitive: state?.caseSensitive ?? false,
-  includeMetadata: state?.includeMetadata ?? false,
-});
+): GridTableFilterState => {
+  const queryFacets = normalizeGridTableQueryFacets(state?.queryFacets);
+  return {
+    search: state?.search?.trim() ?? '',
+    kinds: normalizeGridTableFilterArray(state?.kinds),
+    namespaces: normalizeGridTableFilterArray(state?.namespaces),
+    ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
+    caseSensitive: state?.caseSensitive ?? false,
+    includeMetadata: state?.includeMetadata ?? false,
+  };
+};
 
 export const areGridTableFilterStatesEqual = (
   a: GridTableFilterState,
@@ -48,10 +72,15 @@ export const areGridTableFilterStatesEqual = (
   a.kinds.length === b.kinds.length &&
   a.namespaces.length === b.namespaces.length &&
   a.kinds.every((value, index) => value === b.kinds[index]) &&
-  a.namespaces.every((value, index) => value === b.namespaces[index]);
+  a.namespaces.every((value, index) => value === b.namespaces[index]) &&
+  JSON.stringify(normalizeGridTableQueryFacets(a.queryFacets)) ===
+    JSON.stringify(normalizeGridTableQueryFacets(b.queryFacets));
 
 export const hasNarrowingGridTableFilters = (state: GridTableFilterState): boolean =>
-  state.search.trim() !== '' || state.kinds.length > 0 || state.namespaces.length > 0;
+  state.search.trim() !== '' ||
+  state.kinds.length > 0 ||
+  state.namespaces.length > 0 ||
+  Object.keys(normalizeGridTableQueryFacets(state.queryFacets)).length > 0;
 
 export const hasNonDefaultGridTableFilters = (state: GridTableFilterState): boolean =>
   hasNarrowingGridTableFilters(state) || state.caseSensitive || state.includeMetadata;

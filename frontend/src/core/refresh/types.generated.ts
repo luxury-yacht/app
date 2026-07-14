@@ -121,6 +121,8 @@ export interface CatalogSnapshotPayload {
   resourceCount: number;
   kinds?: Array<KindInfo>;
   namespaces?: Array<string>;
+  groups?: Array<string>;
+  resourceScopes?: Array<CatalogItemScope>;
   facetsExact: boolean;
   issues?: Array<ResourceQueryIssue>;
   hasNext: boolean;

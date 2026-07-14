@@ -14,6 +14,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import { normalizeGridTableQueryFacets } from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getViewDescriptor } from '@/core/navigation/viewRegistry';
@@ -96,7 +97,7 @@ export function useFavToggle(state: FavToggleState): {
         continue;
       }
 
-      // Compare filters: search text, kinds, namespaces, caseSensitive, includeMetadata.
+      // Compare the full persisted filter state, including provider-owned query facets.
       if (fav.filters) {
         const search = state.filters.search.trim();
         const favSearch = (fav.filters.search ?? '').trim();
@@ -113,6 +114,16 @@ export function useFavToggle(state: FavToggleState): {
         const ns = [...state.filters.namespaces].sort().join(',');
         const favNs = [...(fav.filters.namespaces ?? [])].sort().join(',');
         if (ns !== favNs) {
+          continue;
+        }
+
+        const queryFacets = JSON.stringify(
+          normalizeGridTableQueryFacets(state.filters.queryFacets)
+        );
+        const favoriteQueryFacets = JSON.stringify(
+          normalizeGridTableQueryFacets(fav.filters.queryFacets)
+        );
+        if (queryFacets !== favoriteQueryFacets) {
           continue;
         }
 
@@ -169,6 +180,7 @@ export function useFavToggle(state: FavToggleState): {
         search: pendingFavorite.filters.search ?? '',
         kinds: pendingFavorite.filters.kinds ?? [],
         namespaces: pendingFavorite.filters.namespaces ?? [],
+        queryFacets: pendingFavorite.filters.queryFacets,
         caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
         includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
       });
@@ -218,7 +230,8 @@ export function useFavToggle(state: FavToggleState): {
     const hasActiveFilters =
       state.filters.search.trim().length > 0 ||
       state.filters.kinds.length > 0 ||
-      state.filters.namespaces.length > 0;
+      state.filters.namespaces.length > 0 ||
+      Object.keys(normalizeGridTableQueryFacets(state.filters.queryFacets)).length > 0;
     return hasActiveFilters ? `${base} (filtered)` : base;
   }, [selectedClusterName, viewType, selectedNamespace, viewLabel, state.filters]);
 
@@ -228,6 +241,7 @@ export function useFavToggle(state: FavToggleState): {
       search: state.filters.search,
       kinds: [...state.filters.kinds],
       namespaces: [...state.filters.namespaces],
+      queryFacets: normalizeGridTableQueryFacets(state.filters.queryFacets),
       caseSensitive: state.filters.caseSensitive ?? false,
       includeMetadata: state.includeMetadata ?? false,
     }),

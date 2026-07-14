@@ -54,6 +54,72 @@ func TestServiceQueryUsesCatalogQueryStoreContract(t *testing.T) {
 	}
 }
 
+func TestQueryFiltersAndPublishesAPIGroupAndResourceScopeFacets(t *testing.T) {
+	svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
+	svc.items = map[string]Summary{
+		"pod": {
+			ClusterID: "cluster-a", Kind: "Pod", Group: "", Version: "v1", Resource: "pods",
+			Namespace: "default", Name: "pod-a", UID: "uid-pod", Scope: ScopeNamespace,
+		},
+		"deployment-a": {
+			ClusterID: "cluster-a", Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments",
+			Namespace: "default", Name: "deployment-a", UID: "uid-deployment-a", Scope: ScopeNamespace,
+		},
+		"deployment-b": {
+			ClusterID: "cluster-a", Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments",
+			Namespace: "team-a", Name: "deployment-b", UID: "uid-deployment-b", Scope: ScopeNamespace,
+		},
+		"node": {
+			ClusterID: "cluster-a", Kind: "Node", Group: "", Version: "v1", Resource: "nodes",
+			Name: "node-a", UID: "uid-node", Scope: ScopeCluster,
+		},
+		"crd": {
+			ClusterID: "cluster-a", Kind: "CustomResourceDefinition", Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions",
+			Name: "widgets.example.com", UID: "uid-crd", Scope: ScopeCluster,
+		},
+	}
+
+	result := svc.Query(QueryOptions{
+		Limit:          1,
+		Groups:         []string{"apps"},
+		ResourceScopes: []Scope{ScopeNamespace},
+	})
+
+	if result.TotalItems != 2 || result.UnfilteredTotal != 5 {
+		t.Fatalf("expected API-group/scope filtering to return 2 of 5 rows, got %d of %d", result.TotalItems, result.UnfilteredTotal)
+	}
+	if len(result.Items) != 1 || result.Items[0].Group != "apps" || result.Items[0].Scope != ScopeNamespace {
+		t.Fatalf("unexpected filtered page: %+v", result.Items)
+	}
+	if !reflect.DeepEqual(result.Groups, []string{"(core)", "apiextensions.k8s.io", "apps"}) {
+		t.Fatalf("unexpected API-group facets: %+v", result.Groups)
+	}
+	if !reflect.DeepEqual(result.ResourceScopes, []Scope{ScopeCluster, ScopeNamespace}) {
+		t.Fatalf("unexpected resource-scope facets: %+v", result.ResourceScopes)
+	}
+	if result.ContinueToken == "" {
+		t.Fatal("expected a cursor for the second apps row")
+	}
+
+	reusedAcrossGroup := svc.Query(QueryOptions{
+		Limit:          1,
+		Groups:         []string{"(core)"},
+		ResourceScopes: []Scope{ScopeNamespace},
+		Continue:       result.ContinueToken,
+	})
+	if !reusedAcrossGroup.CursorInvalid {
+		t.Fatal("expected a cursor minted for one API-group filter to be rejected by another")
+	}
+
+	namespaceOnly := svc.Query(QueryOptions{Scope: ScopeNamespace, Limit: 10})
+	if !reflect.DeepEqual(namespaceOnly.Groups, []string{"(core)", "apps"}) {
+		t.Fatalf("expected API-group facets to retain the structural namespace boundary, got %+v", namespaceOnly.Groups)
+	}
+	if !reflect.DeepEqual(namespaceOnly.ResourceScopes, []Scope{ScopeNamespace}) {
+		t.Fatalf("expected resource-scope facets to retain the structural namespace boundary, got %+v", namespaceOnly.ResourceScopes)
+	}
+}
+
 func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 

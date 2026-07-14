@@ -633,6 +633,7 @@ export namespace backend {
 	    search: string;
 	    kinds: string[];
 	    namespaces: string[];
+	    queryFacets?: Record<string, Array<string>>;
 	    caseSensitive: boolean;
 	    includeMetadata: boolean;
 	
@@ -645,6 +646,7 @@ export namespace backend {
 	        this.search = source["search"];
 	        this.kinds = source["kinds"];
 	        this.namespaces = source["namespaces"];
+	        this.queryFacets = source["queryFacets"];
 	        this.caseSensitive = source["caseSensitive"];
 	        this.includeMetadata = source["includeMetadata"];
 	    }
