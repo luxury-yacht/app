@@ -43,7 +43,7 @@ func makeWorkloadRows(n int) []WorkloadSummary {
 // engine-backed serve path must produce the SAME page as the live
 // applyTypedTableQuery — identical rows across full pagination, totals, and facet
 // value lists — across a matrix of sorts × directions × namespace/kind filters ×
-// searches AND health-predicate queries (the engine only honors predicates because
+// status filters × searches AND health-predicate queries (the engine only honors predicates because
 // applyTypedTableQueryViaStore now builds its store from the matched set).
 func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 	adapter := workloadTableQueryAdapter()
@@ -75,6 +75,7 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 	type filt struct {
 		ns         []string
 		kinds      []string
+		statuses   []string
 		search     string
 		predicates []ResourceQueryPredicate
 	}
@@ -86,6 +87,9 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 		{ns: []string{"default", "app"}},
 		{kinds: []string{"Pod"}},
 		{ns: []string{"kube-system"}, kinds: []string{"Deployment"}},
+		{statuses: []string{"Pending"}},
+		{statuses: []string{"Running", "Degraded"}},
+		{ns: []string{"default"}, statuses: []string{"Running"}},
 		{search: "wl-01"},
 		{search: "running"},
 		{predicates: []ResourceQueryPredicate{{Field: "health", Value: "restarts"}}},
@@ -101,7 +105,7 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Namespaces: f.ns, Kinds: f.kinds, Search: f.search, Predicates: f.predicates,
+						Namespaces: f.ns, Kinds: f.kinds, Statuses: f.statuses, Search: f.search, Predicates: f.predicates,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[WorkloadSummary] {
@@ -111,7 +115,7 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 					return applyTypedTableQueryViaStore(items, q, adapter, workloadsQuerypageSchema())
 				}, base)
 
-				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v search=%q preds=%v", sf, d, f.ns, f.kinds, f.search, f.predicates)
+				label := fmt.Sprintf("sort=%q dir=%s ns=%v kinds=%v statuses=%v search=%q preds=%v", sf, d, f.ns, f.kinds, f.statuses, f.search, f.predicates)
 				if !slices.Equal(liveKeys, engineKeys) {
 					t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
 				}
@@ -129,6 +133,59 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestWorkloadQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
+	items := makeWorkloadRows(12)
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c",
+			Statuses:  []string{"Pending"},
+			Limit:     50,
+		},
+	}
+
+	page := applyTypedTableQueryViaStore(items, query, workloadTableQueryAdapter(), workloadsQuerypageSchema())
+
+	if page.Total != 4 {
+		t.Fatalf("filtered total = %d, want 4 Pending workloads", page.Total)
+	}
+	for _, row := range page.Rows {
+		if row.Status != "Pending" {
+			t.Fatalf("status-filtered page contains %q row", row.Status)
+		}
+	}
+	if !slices.Equal(page.Statuses, []string{"Degraded", "Pending", "Running"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
+	}
+}
+
+func TestWorkloadStatusFacetsStayStableAcrossHealthPredicate(t *testing.T) {
+	items := []WorkloadSummary{
+		{Kind: "Deployment", Namespace: "team-a", Name: "healthy", Status: "Running", StatusPresentation: "healthy"},
+		{Kind: "Deployment", Namespace: "team-a", Name: "pending", Status: "Pending", StatusPresentation: "warning"},
+		{Kind: "StatefulSet", Namespace: "team-a", Name: "degraded", Status: "Degraded", StatusPresentation: "error"},
+		{Kind: "Pod", Namespace: "team-a", Name: "failing", Status: "Running", StatusPresentation: "error"},
+	}
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID:  "c",
+			Statuses:   []string{"Pending"},
+			Predicates: []ResourceQueryPredicate{{Field: "health", Value: "unhealthy"}},
+			Limit:      50,
+		},
+	}
+
+	page := applyTypedTableQueryViaStore(items, query, workloadTableQueryAdapter(), workloadsQuerypageSchema())
+
+	if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].Name != "pending" {
+		t.Fatalf("status + health query rows = %#v total=%d, want pending only", page.Rows, page.Total)
+	}
+	if !slices.Equal(page.Statuses, []string{"Degraded", "Pending", "Running"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
 	}
 }
 
@@ -187,6 +244,9 @@ func TestWorkloadMetricSortQueryViaStoreEquivalent(t *testing.T) {
 			}
 			if liveFirst.Total != engineFirst.Total {
 				t.Fatalf("%s: total live=%d engine=%d", label, liveFirst.Total, engineFirst.Total)
+			}
+			if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
+				t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
 			}
 		}
 	}

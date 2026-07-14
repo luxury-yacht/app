@@ -100,7 +100,10 @@ func TestTypedResourceProvidersPublishOnlyQueryBackedFilterCapabilities(t *testi
 			if !queryBackedFields[field] {
 				t.Errorf("%s: filter capability %q has no shared typed-query request and engine projection", domain, field)
 			}
-			if (field == "statuses" || field == "nodes") && domain != "pods" {
+			if field == "statuses" && domain != "pods" && domain != "nodes" && domain != "namespace-workloads" {
+				t.Errorf("%s: filter capability %q has no domain adapter projection", domain, field)
+			}
+			if field == "nodes" && domain != "pods" {
 				t.Errorf("%s: filter capability %q has no domain adapter projection", domain, field)
 			}
 		}
@@ -108,6 +111,12 @@ func TestTypedResourceProvidersPublishOnlyQueryBackedFilterCapabilities(t *testi
 
 	if got := typedCapabilityConformance["pods"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces", "statuses", "nodes"}) {
 		t.Errorf("pods: filter capabilities = %v, want query-backed kind, namespace, status, and node filters", got)
+	}
+	if got := typedCapabilityConformance["nodes"].FilterableFields; !equalStringSlices(got, []string{"statuses"}) {
+		t.Errorf("nodes: filter capabilities = %v, want query-backed status filters", got)
+	}
+	if got := typedCapabilityConformance["namespace-workloads"].FilterableFields; !equalStringSlices(got, []string{"kinds", "namespaces", "statuses"}) {
+		t.Errorf("namespace-workloads: filter capabilities = %v, want query-backed kind, namespace, and status filters", got)
 	}
 }
 

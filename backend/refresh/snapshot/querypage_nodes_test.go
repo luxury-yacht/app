@@ -33,8 +33,9 @@ func makeNodeRows(n int) []NodeSummary {
 // TestNodeQueryViaStoreEquivalent is the nodes cutover gate: the engine-backed serve
 // path must produce the SAME page as the live applyTypedTableQuery — identical rows
 // across full pagination, totals, and facet value lists — across a matrix of sorts ×
-// directions × searches. Nodes are cluster-scoped (no namespace) and unfiltered by
-// kind, so the matrix exercises every sortable metric column plus searches.
+// directions × searches × status filters. Nodes are cluster-scoped (no namespace)
+// and unfiltered by kind, so the matrix exercises every sortable metric column plus
+// both remaining query dimensions.
 func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 	adapter := nodeTableQueryAdapter()
 	items := makeNodeRows(250)
@@ -63,7 +64,8 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 	}
 
 	type filt struct {
-		search string
+		search   string
+		statuses []string
 	}
 	sorts := []string{"", "name", "status", "roles", "version", "pods", "restarts", "age"}
 	dirs := []string{"asc", "desc"}
@@ -72,6 +74,8 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 		{search: "node-01"},
 		{search: "ready"},
 		{search: "v1.30"},
+		{statuses: []string{"NotReady"}},
+		{statuses: []string{"Ready", "Unknown"}},
 	}
 
 	for _, sf := range sorts {
@@ -81,7 +85,7 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Search: f.search,
+						Search: f.search, Statuses: f.statuses,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[NodeSummary] {
@@ -91,7 +95,7 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 					return applyTypedTableQueryViaStore(items, q, adapter, nodesQuerypageSchema())
 				}, base)
 
-				label := fmt.Sprintf("sort=%q dir=%s search=%q", sf, d, f.search)
+				label := fmt.Sprintf("sort=%q dir=%s search=%q statuses=%v", sf, d, f.search, f.statuses)
 				if !slices.Equal(liveKeys, engineKeys) {
 					t.Fatalf("%s: row sequence differs (live=%d engine=%d rows)", label, len(liveKeys), len(engineKeys))
 				}
@@ -107,8 +111,37 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 				if !slices.Equal(liveFirst.Kinds, engineFirst.Kinds) {
 					t.Fatalf("%s: kind facets live=%v engine=%v", label, liveFirst.Kinds, engineFirst.Kinds)
 				}
+				if !slices.Equal(liveFirst.Statuses, engineFirst.Statuses) {
+					t.Fatalf("%s: status facets live=%v engine=%v", label, liveFirst.Statuses, engineFirst.Statuses)
+				}
 			}
 		}
+	}
+}
+
+func TestNodeQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
+	items := makeNodeRows(12)
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "c",
+			Statuses:  []string{"NotReady"},
+			Limit:     50,
+		},
+	}
+
+	page := applyTypedTableQueryViaStore(items, query, nodeTableQueryAdapter(), nodesQuerypageSchema())
+
+	if page.Total != 4 {
+		t.Fatalf("filtered total = %d, want 4 NotReady nodes", page.Total)
+	}
+	for _, row := range page.Rows {
+		if row.Status != "NotReady" {
+			t.Fatalf("status-filtered page contains %q row", row.Status)
+		}
+	}
+	if !slices.Equal(page.Statuses, []string{"NotReady", "Ready", "Unknown"}) {
+		t.Fatalf("status facets = %v, want full structural-scope options", page.Statuses)
 	}
 }
 

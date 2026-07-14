@@ -5,6 +5,8 @@
   lens.
 - Added backend-query Status and Node filters to namespace and All Namespaces
   Pods tables, with options covering the full selected scope.
+- Added backend-query Status filters to Workloads and Cluster Nodes, with stable
+  options covering the full selected namespace or cluster scope.
 
 ### Changed
 

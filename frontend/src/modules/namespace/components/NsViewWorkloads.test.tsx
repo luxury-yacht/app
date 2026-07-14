@@ -317,6 +317,45 @@ describe('NsViewWorkloads', () => {
     );
   });
 
+  it('projects advertised workload Status values into a query facet', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          statuses: ['Degraded', 'Running'],
+          facetsExact: true,
+          capabilities: { filterableFields: ['kinds', 'namespaces', 'statuses'] },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
+      {
+        key: 'statuses',
+        label: 'Status',
+        placeholder: 'All statuses',
+        options: [
+          { value: 'Degraded', label: 'Degraded' },
+          { value: 'Running', label: 'Running' },
+        ],
+        searchable: false,
+        bulkActions: true,
+      },
+    ]);
+  });
+
   it('uses the typed query result for all-namespaces workloads on first render', async () => {
     const localWorkload = {
       kind: 'Deployment',

@@ -440,6 +440,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 		AnchorKey: func(_, _, name string) string { return clusterTableKey(nodespkg.Identity.Kind, name) },
 		Namespace: func(NodeSummary) string { return "" },
 		Kind:      func(NodeSummary) string { return nodespkg.Identity.Kind },
+		Status:    func(row NodeSummary) string { return row.Status },
 		SearchText: func(row NodeSummary) []string {
 			return []string{row.Name, row.Status, row.Roles, row.Version, row.InternalIP, row.ExternalIP}
 		},

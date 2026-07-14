@@ -327,6 +327,45 @@ describe('ClusterViewNodes', () => {
     expect(preActions.some((item) => 'id' in item && item.id === 'include-metadata')).toBe(true);
   });
 
+  it('projects advertised Node Status values into a query facet', async () => {
+    const response = {
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [baseNode],
+          total: 1,
+          totalIsExact: true,
+          kinds: ['Node'],
+          statuses: ['NotReady', 'Ready'],
+          facetsExact: true,
+          capabilities: { filterableFields: ['statuses'] },
+        },
+      },
+    };
+    requestRefreshDomainStateMock.mockResolvedValue(response);
+
+    await act(async () => {
+      root.render(<ClusterViewNodes />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
+      {
+        key: 'statuses',
+        label: 'Status',
+        placeholder: 'All statuses',
+        options: [
+          { value: 'NotReady', label: 'NotReady' },
+          { value: 'Ready', label: 'Ready' },
+        ],
+        searchable: false,
+        bulkActions: true,
+      },
+    ]);
+  });
+
   it('places the favorite with the filter pre-actions (left), not the export cluster', async () => {
     await renderNodes([baseNode]);
 

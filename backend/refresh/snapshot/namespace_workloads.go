@@ -123,7 +123,7 @@ type NamespaceWorkloadsSnapshot struct {
 func namespaceWorkloadsQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"name", "kind", "namespace", "status", "ready", "restarts", "cpu", "memory", "age"},
-		[]string{"kinds", "namespaces"},
+		[]string{"kinds", "namespaces", "statuses"},
 		[]string{"kind", "name", "namespace", "status", "ready"},
 		[]string{podres.Identity.Kind, deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind, jobres.Identity.Kind, cronjob.Identity.Kind},
 	)
@@ -537,6 +537,7 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		AnchorKey: namespacedTableKey,
 		Namespace: func(row WorkloadSummary) string { return row.Namespace },
 		Kind:      func(row WorkloadSummary) string { return row.Kind },
+		Status:    func(row WorkloadSummary) string { return row.Status },
 		SearchText: func(row WorkloadSummary) []string {
 			return []string{
 				row.Kind,

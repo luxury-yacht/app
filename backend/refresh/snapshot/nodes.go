@@ -76,7 +76,7 @@ type NodeSnapshot struct {
 func nodeQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"name", "kind", "status", "roles", "version", "cpu", "memory", "pods", "restarts", "age"},
-		nil,
+		[]string{"statuses"},
 		[]string{"name", "status", "roles", "version", "internalIP", "externalIP"},
 		nil, // no kind filtering
 	)

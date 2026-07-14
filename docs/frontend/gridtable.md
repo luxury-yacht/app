@@ -109,10 +109,11 @@ invalidators even though the callback does not read them.
   that selection and the backend applies it to the full matching dataset. Do not
   advertise status, owner, node, application, or other row-field filters from
   response facets alone.
-- Pods are the reference typed-query facet implementation: their Status and Node
-  options describe the full namespace or all-namespaces scope, remain stable when
-  a selection narrows the result set, and feed backend query parameters through
-  the shared typed-resource scope builder.
+- Pods, Workloads, and Nodes are the reference typed-query facet implementations:
+  their provider-owned options describe the full structural scope, remain stable
+  when a selection narrows the result set, and feed backend query parameters
+  through the shared typed-resource scope builder. Pods add Node; all three expose
+  Status.
 
 ## Sorting
 

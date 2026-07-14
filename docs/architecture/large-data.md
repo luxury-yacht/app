@@ -290,10 +290,12 @@ facet/total counters; metrics are overlaid at serve, never stored) — see
 Workloads: `backend/refresh/snapshot/namespace_workloads.go` feeds namespace
 workload tables. Both single-namespace and all-namespaces workload tables are
 `Query Backed Dynamic` (single-namespace runs a namespace-scoped query page):
-kind and namespace filters, search, pagination, and CPU/memory aggregate sorts
-are backend-owned for the current metrics snapshot. Like Pods, workload rows
-serve from a maintained `querypage` store fed by the workload GVRs' ingest
-reflectors, with the pod-aggregate / HPA / metrics join applied at serve — see
+kind, namespace, and status filters, search, pagination, and CPU/memory aggregate
+sorts are backend-owned for the current metrics snapshot. Status options cover
+the full structural namespace scope and remain available when a Status selection
+or fixed health predicate narrows the result set. Like Pods, workload rows serve
+from a maintained `querypage` store fed by the workload GVRs' ingest reflectors,
+with the pod-aggregate / HPA / metrics join applied at serve — see
 [data-layer.md](./data-layer.md).
 
 Custom resources: cluster and namespace custom table row universes come from
@@ -316,7 +318,8 @@ recent/capped windows and are visibly `Local Partial`.
 Nodes: `backend/refresh/snapshot/nodes.go` feeds a `Query Backed Dynamic`
 cluster table. Search, pagination, status filters, age sort, and CPU/memory
 metric sorts are backend-owned for the current resource and metric projection
-state.
+state. Node Status options cover the full cluster scope rather than the current
+page or active Status selection.
 
 Config, RBAC, storage, network, quotas, autoscaling, and Helm: these snapshot
 producers expose typed backend query pages for cluster, all-namespaces, and

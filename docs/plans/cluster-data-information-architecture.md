@@ -110,6 +110,17 @@ Target navigation order:
       focus-safe interaction, and rendered behavior before enabling the
       capabilities.
 
+### Phase 8: Status facets across operational inventory
+
+- [x] Add backend-query Status filtering to namespace and All Namespaces
+      Workloads using the shared resource-model status projection.
+- [x] Add backend-query Status filtering to Cluster Nodes using the shared
+      resource-model status projection.
+- [x] Keep Status options stable across active selections and fixed health
+      predicates, with exact scope-level values from the typed query payload.
+- [x] Prove executor parity, capability/UI projection, persisted query state,
+      and rendered behavior before enabling both capabilities.
+
 ## Validation
 
 - Red/green/refactor for each behavior change.
