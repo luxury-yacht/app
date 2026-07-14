@@ -32,6 +32,7 @@ const { mocks } = vi.hoisted(() => ({
       loadKubeconfigs: vi.fn(),
     },
     viewState: {
+      sidebarSelection: undefined as { type: 'namespace'; value: string } | undefined,
       setIsAboutOpen: vi.fn(),
       setIsSettingsOpen: vi.fn(),
       setIsObjectDiffOpen: vi.fn(),
@@ -168,6 +169,7 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.openKubeconfig.mockResolvedValue(undefined);
     mocks.kubeconfig.closeKubeconfig.mockReset();
     mocks.kubeconfig.closeKubeconfig.mockResolvedValue(undefined);
+    mocks.viewState.sidebarSelection = undefined;
     mocks.kubeconfig.loadKubeconfigs.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
     mocks.autoRefresh.enabled = true;
@@ -201,6 +203,42 @@ describe('CommandPaletteCommands', () => {
     expect(command).toBeTruthy();
     const isMac = /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
     expect(command?.shortcut).toEqual(isMac ? ['⌘', 'O'] : ['Ctrl', 'O']);
+
+    unmount();
+  });
+
+  it('offers navigation commands for every registered cluster and namespace view', () => {
+    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
+
+    const { getCommands, unmount } = renderHook();
+    const navigationViewIds = getCommands()
+      .filter((command) => command.id.startsWith('cluster-') || command.id.startsWith('namespace-'))
+      .map((command) => command.id);
+
+    expect(navigationViewIds).toEqual([
+      'cluster-attention',
+      'cluster-browse',
+      'cluster-nodes',
+      'cluster-config',
+      'cluster-crds',
+      'cluster-custom',
+      'cluster-events',
+      'cluster-rbac',
+      'cluster-storage',
+      'namespace-browse',
+      'namespace-map',
+      'namespace-workloads',
+      'namespace-pods',
+      'namespace-autoscaling',
+      'namespace-config',
+      'namespace-custom',
+      'namespace-events',
+      'namespace-helm',
+      'namespace-network',
+      'namespace-quotas',
+      'namespace-rbac',
+      'namespace-storage',
+    ]);
 
     unmount();
   });

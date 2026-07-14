@@ -10,15 +10,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 )
 
 // fakeNamespaceIngest is a minimal namespacePodIngestSource whose presence rows
 // and sync state the tests mutate directly.
 type fakeNamespaceIngest struct {
-	mu         sync.Mutex
-	synced     bool
-	workloadNS []string
+	mu           sync.Mutex
+	synced       bool
+	workloadNS   []string
+	presentation string
 }
 
 func (f *fakeNamespaceIngest) Tracks(schema.GroupVersionResource) bool { return true }
@@ -42,11 +45,33 @@ func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []int
 func (f *fakeNamespaceIngest) AggregateRows(schema.GroupVersionResource) []interface{} {
 	return nil
 }
+func (f *fakeNamespaceIngest) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if gvr != DeploymentGVR {
+		return nil
+	}
+	rows := make([]interface{}, 0, len(f.workloadNS))
+	for _, ns := range f.workloadNS {
+		rows = append(rows, objectmapnode.Node{
+			Namespace: ns,
+			Name:      "d",
+			Status:    &objectmap.Status{Presentation: f.presentation},
+		})
+	}
+	return rows
+}
 
 func (f *fakeNamespaceIngest) set(synced bool, workloadNS ...string) {
 	f.mu.Lock()
 	f.synced = synced
 	f.workloadNS = workloadNS
+	f.mu.Unlock()
+}
+
+func (f *fakeNamespaceIngest) setPresentation(presentation string) {
+	f.mu.Lock()
+	f.presentation = presentation
 	f.mu.Unlock()
 }
 
@@ -146,6 +171,23 @@ func TestNamespaceNotifierGatesWorkloadEventsOnPresenceSignature(t *testing.T) {
 	requireNoMoreBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "workload presence changed",
 		"the broadcast reason must say WHAT rang the doorbell")
+}
+
+func TestNamespaceNotifierBroadcastsWhenWorkloadHealthChanges(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true, "team-a")
+	ingest.setPresentation("ready")
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	defer notifier.Stop()
+
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 1)
+
+	ingest.setPresentation("warning")
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "workload health changed")
 }
 
 // A burst of events inside one debounce window coalesces to a single broadcast.

@@ -50,6 +50,7 @@ type NamespaceEntry = {
   hasWorkloads: boolean;
   workloadsUnknown: boolean;
   details: string;
+  unhealthyWorkloads?: number;
 };
 
 type NamespaceState = {
@@ -172,6 +173,79 @@ describe('Sidebar', () => {
 
     act(() => resources?.click());
     expect(resources?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('categorizes cluster and namespace views by intent', () => {
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    const labelsWithin = (element: Element) =>
+      Array.from(element.querySelectorAll('.sidebar-view-group-label'), (label) =>
+        label.textContent?.trim()
+      );
+    const clusterViews = requireValue(
+      host.querySelector('[id$="-sidebar-cluster-resource-views"]'),
+      'expected cluster resource views'
+    );
+    expect(labelsWithin(clusterViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
+
+    const namespaceToggle = requireValue(
+      host.querySelector<HTMLElement>(
+        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+          'default'
+        )}"]`
+      ),
+      'expected namespace toggle'
+    );
+    act(() => namespaceToggle.click());
+
+    const namespaceViewsId = requireValue(
+      namespaceToggle.getAttribute('aria-controls'),
+      'expected namespace view controls id'
+    );
+    const namespaceViews = requireValue(
+      document.getElementById(namespaceViewsId),
+      'expected namespace resource views'
+    );
+    expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
+  });
+
+  it('shows namespace attention counts without adding a badge for healthy namespaces', () => {
+    renderSidebar({
+      namespaces: [
+        {
+          name: 'alpha',
+          scope: 'alpha',
+          resourceVersion: '1',
+          hasWorkloads: true,
+          workloadsUnknown: false,
+          unhealthyWorkloads: 3,
+          details: '',
+        },
+        {
+          name: 'beta',
+          scope: 'beta',
+          resourceVersion: '2',
+          hasWorkloads: true,
+          workloadsUnknown: false,
+          unhealthyWorkloads: 0,
+          details: '',
+        },
+      ],
+    });
+
+    const alpha = document.querySelector(
+      `[data-sidebar-target-namespace="${namespaceKey('alpha')}"]`
+    );
+    const beta = document.querySelector(
+      `[data-sidebar-target-namespace="${namespaceKey('beta')}"]`
+    );
+    expect(alpha?.querySelector('.namespace-attention-badge')?.textContent).toBe('3');
+    expect(alpha?.querySelector('.namespace-attention-badge')?.getAttribute('aria-hidden')).toBe(
+      'true'
+    );
+    expect(alpha?.querySelector('.sr-only')?.textContent).toBe('3 unhealthy workloads');
+    expect(beta?.querySelector('.namespace-attention-badge')).toBeNull();
   });
 
   beforeEach(() => {

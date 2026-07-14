@@ -16,6 +16,7 @@ import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icon
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getViewDescriptor } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import FavSaveModal from './FavSaveModal';
 
@@ -44,37 +45,6 @@ export interface FavToggleState {
   setColumnVisibility?: (visibility: Record<string, boolean>) => void;
   setIncludeMetadata?: (value: boolean) => void;
 }
-
-// ---------------------------------------------------------------------------
-// View-label lookup — maps tab id to display label for auto-generated names.
-// Mirrors the labels used in the Sidebar navigation.
-// ---------------------------------------------------------------------------
-
-const NAMESPACE_VIEW_LABELS: Record<string, string> = {
-  browse: 'Browse',
-  workloads: 'Workloads',
-  pods: 'Pods',
-  config: 'Config',
-  network: 'Network',
-  rbac: 'RBAC',
-  storage: 'Storage',
-  autoscaling: 'Autoscaling',
-  quotas: 'Quotas',
-  custom: 'Custom',
-  helm: 'Helm',
-  events: 'Events',
-};
-
-const CLUSTER_VIEW_LABELS: Record<string, string> = {
-  browse: 'Browse',
-  nodes: 'Nodes',
-  config: 'Config',
-  crds: 'CRDs',
-  custom: 'Custom',
-  events: 'Events',
-  rbac: 'RBAC',
-  storage: 'Storage',
-};
 
 // ---------------------------------------------------------------------------
 // useFavToggle hook
@@ -230,10 +200,8 @@ export function useFavToggle(state: FavToggleState): {
   // Build a human-readable display label for the view tab.
   const viewLabel = useMemo(() => {
     const tab = activeViewTab ?? '';
-    if (viewType === 'namespace') {
-      return NAMESPACE_VIEW_LABELS[tab] ?? tab;
-    }
-    return CLUSTER_VIEW_LABELS[tab] ?? tab;
+    const scope = viewType === 'namespace' ? 'namespace' : 'cluster';
+    return getViewDescriptor(scope, tab)?.label ?? tab;
   }, [viewType, activeViewTab]);
 
   // Auto-generate a default name for new favorites.

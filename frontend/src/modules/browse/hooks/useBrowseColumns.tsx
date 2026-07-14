@@ -28,6 +28,8 @@ export type BrowseTableRow = {
   resource: string;
   group: string;
   version: string;
+  apiDisplay: string;
+  statusDisplay: string;
   age: string;
   ageTimestamp: number;
   item: CatalogItem;
@@ -58,6 +60,8 @@ export const toTableRows = (
       resource: item.resource,
       group: item.group,
       version: item.version,
+      apiDisplay: `${item.group || 'core'}/${item.version}`,
+      statusDisplay: item.actionFacts?.status?.trim() || '—',
       age: '—',
       ageTimestamp: created ? created.getTime() : 0,
       item,
@@ -106,6 +110,12 @@ export function useBrowseColumns({
         onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.item)),
         getClassName: () => 'object-panel-link',
       }),
+      cf.createTextColumn<BrowseTableRow>('api', 'API', (row) => row.apiDisplay, {
+        sortable: false,
+      }),
+      cf.createTextColumn<BrowseTableRow>('status', 'Status', (row) => row.statusDisplay, {
+        sortable: false,
+      }),
     ];
 
     // Add namespace column for cluster-scoped and all-namespaces views
@@ -134,6 +144,8 @@ export function useBrowseColumns({
     const sizing: cf.ColumnSizingMap = {
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
+      api: { width: 180, autoWidth: false },
+      status: { width: 140, autoWidth: false },
       ...(showNamespaceColumn ? { namespace: { width: 220, autoWidth: false } } : {}),
       age: { width: 120, autoWidth: false },
     };

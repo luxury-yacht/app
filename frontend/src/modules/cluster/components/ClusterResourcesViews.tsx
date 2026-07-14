@@ -12,6 +12,8 @@ import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
+import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { ClusterViewType } from '@ui/navigation/types';
 import React from 'react';
 
@@ -65,6 +67,10 @@ function ClusterResourcesViews({
     }
 
     switch (activeTab) {
+      case 'attention':
+        return (
+          <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn attentionOnly />
+        );
       case 'nodes':
         return <ClusterViewNodes error={nodesError} />;
       case 'config':

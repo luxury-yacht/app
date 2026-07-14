@@ -15,6 +15,10 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
+	"github.com/luxury-yacht/app/backend/kind/objectmap"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
@@ -145,6 +149,70 @@ func TestNamespaceBuilderReportsWorkloadsFromSyncedIngestStore(t *testing.T) {
 	if summary.Status != "Active" || summary.StatusState != "Active" || summary.StatusPresentation != "ready" {
 		t.Fatalf("expected shared namespace status projection, got %#v", summary)
 	}
+}
+
+func TestNamespaceBuilderReportsUnhealthyWorkloadsWithoutDoubleCountingOwnedPods(t *testing.T) {
+	tracker := newNamespaceWorkloadTracker()
+	tracker.synced.Store(true)
+
+	source := fakePodAggregateSource{
+		aggregates: []streamrows.PodAggregate{
+			{Namespace: "alpha", Name: "standalone-bad", Phase: string(corev1.PodRunning), StatusPresentation: "warning"},
+			{Namespace: "alpha", Name: "owned-bad", Phase: string(corev1.PodRunning), OwnerKey: "Deployment/alpha/web", StatusPresentation: "error"},
+			{Namespace: "alpha", Name: "terminal-bad", Phase: string(corev1.PodFailed), StatusPresentation: "error"},
+			{Namespace: "beta", Name: "standalone-good", Phase: string(corev1.PodRunning), StatusPresentation: "ready"},
+		},
+		workloadObjects: map[schema.GroupVersionResource][]objectmapnode.Node{
+			DeploymentGVR: {
+				{Namespace: "alpha", Name: "web", Status: &objectmap.Status{Presentation: "warning"}},
+			},
+			StatefulSetGVR: {
+				{Namespace: "alpha", Name: "db", Status: &objectmap.Status{Presentation: "ready"}},
+			},
+			JobGVR: {
+				{Namespace: "beta", Name: "import", Status: &objectmap.Status{Presentation: "error"}},
+			},
+		},
+	}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "beta", ResourceVersion: "2"}},
+		),
+		ingest:  source,
+		tracker: tracker,
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Equal(t, 2, payload.Namespaces[0].UnhealthyWorkloads)
+	require.Equal(t, 1, payload.Namespaces[1].UnhealthyWorkloads)
+}
+
+func TestNamespaceBuilderWorkloadHealthChangesSourceVersion(t *testing.T) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	buildVersion := func(presentation string) string {
+		tracker := newNamespaceWorkloadTracker()
+		tracker.synced.Store(true)
+		builder := &NamespaceBuilder{
+			namespaces: testsupport.NewNamespaceLister(t, ns),
+			ingest: fakePodAggregateSource{
+				workloadCatalog: map[schema.GroupVersionResource][]interface{}{
+					DeploymentGVR: {objectcatalog.Summary{Namespace: "alpha", Name: "web"}},
+				},
+				workloadObjects: map[schema.GroupVersionResource][]objectmapnode.Node{
+					DeploymentGVR: {{Namespace: "alpha", Name: "web", Status: &objectmap.Status{Presentation: presentation}}},
+				},
+			},
+			tracker: tracker,
+		}
+		snap, err := builder.Build(context.Background(), "")
+		require.NoError(t, err)
+		return snap.SourceVersions["workloads"]
+	}
+
+	require.NotEqual(t, buildVersion("ready"), buildVersion("warning"))
 }
 
 func TestNamespaceBuilderDoesNotDimWhenTrackerMissesButIngestHasWorkloads(t *testing.T) {

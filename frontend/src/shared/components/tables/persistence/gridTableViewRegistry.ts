@@ -15,6 +15,7 @@ const VIEW_IDS = new Set<string>([
   'cluster-crds',
   'cluster-events',
   'cluster-custom',
+  'needs-attention',
   'namespace-workloads',
   'namespace-pods',
   'namespace-events',

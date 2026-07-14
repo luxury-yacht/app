@@ -458,6 +458,40 @@ describe('FavSaveModal', () => {
     expect(savedFav.namespace).toBe('');
   });
 
+  it('offers every registered cluster and namespace view', async () => {
+    await renderComponent(makeProps());
+
+    const viewSelect = requireValue(
+      container.querySelector<HTMLSelectElement>('select[data-testid="dropdown-Select view..."]'),
+      'expected view dropdown in FavSaveModal.test.tsx'
+    );
+
+    expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
+      'cluster:attention',
+      'cluster:browse',
+      'cluster:nodes',
+      'cluster:config',
+      'cluster:crds',
+      'cluster:custom',
+      'cluster:events',
+      'cluster:rbac',
+      'cluster:storage',
+      'namespace:browse',
+      'namespace:map',
+      'namespace:workloads',
+      'namespace:pods',
+      'namespace:autoscaling',
+      'namespace:config',
+      'namespace:custom',
+      'namespace:events',
+      'namespace:helm',
+      'namespace:network',
+      'namespace:quotas',
+      'namespace:rbac',
+      'namespace:storage',
+    ]);
+  });
+
   // -----------------------------------------------------------------------
   // 9. Header says "Edit Favorite" when editing
   // -----------------------------------------------------------------------

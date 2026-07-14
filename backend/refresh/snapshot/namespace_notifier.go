@@ -24,9 +24,9 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 //
 //   - a Namespace object add/update/delete broadcasts unconditionally (the rows
 //     come solely from the namespace informer);
-//   - workload/pod ingest events broadcast ONLY when the workload-presence
-//     signature changes (the exact signature the snapshot stamps as its
-//     "workloads" source clock), so steady pod churn stays silent;
+//   - workload/pod ingest events broadcast ONLY when the workload-presence or health-rollup
+//     signature changes (the exact signature the snapshot stamps as its "workloads" source
+//     clock), so steady pod churn stays silent;
 //   - while the workload tracker has not settled, the notifier re-arms itself so
 //     the readiness flip broadcasts even with no further ingest event — the
 //     cluster-Ready lifecycle gate needs a namespaces build AFTER settling. The
@@ -166,7 +166,7 @@ func (n *NamespaceChangeNotifier) flush() {
 		reasons = append(reasons, "namespace object changed")
 	}
 	if needSignature {
-		signature := workloadPresenceSignature(namespacesWithWorkloadsFromIngest(n.ingest), ready)
+		signature := workloadRollupSignature(namespaceWorkloadRollupsFromIngest(n.ingest), ready)
 		n.mu.Lock()
 		if !n.signatureKnown || signature != n.lastSignature {
 			hadSignature := n.signatureKnown
@@ -185,9 +185,9 @@ func (n *NamespaceChangeNotifier) flush() {
 				case !hadSignature:
 					reasons = append(reasons, "workload-presence baseline established")
 				case !ready:
-					reasons = append(reasons, "workload presence changed while stores are still settling")
+					reasons = append(reasons, "workload presence changed or workload health changed while stores are still settling")
 				default:
-					reasons = append(reasons, "workload presence changed (a namespace gained its first or lost its last workload, or the stores finished settling)")
+					reasons = append(reasons, "workload presence changed or workload health changed (a namespace rollup changed, or the stores finished settling)")
 				}
 			}
 		}

@@ -413,6 +413,40 @@ describe('BrowseView', () => {
       expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
     });
 
+    it('shows API identity and available status alongside object identity', async () => {
+      const deployment = catalogItem({
+        kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
+        resource: 'deployments',
+        namespace: undefined,
+        name: 'api',
+        scope: 'Cluster',
+        actionFacts: { status: 'Available' },
+      });
+      refreshMocks.catalogDomain.status = 'ready';
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
+      refreshMocks.catalogDomain.data = catalogPayload([deployment]);
+
+      await act(async () => {
+        root.render(<BrowseView />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current.data[0]).toEqual(
+        expect.objectContaining({ apiDisplay: 'apps/v1', statusDisplay: 'Available' })
+      );
+      expect(gridTablePropsRef.current.columns.map((column) => column.key)).toEqual([
+        'kind',
+        'name',
+        'api',
+        'status',
+        'age',
+      ]);
+      expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+    });
+
     it('renders Age from creationTimestamp and updates without catalog row replacement', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));

@@ -3,6 +3,7 @@ package snapshot
 import (
 	"strconv"
 
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
@@ -23,6 +24,7 @@ type fakePodAggregateSource struct {
 	resourceVersion string
 	podSynced       *bool
 	workloadCatalog map[schema.GroupVersionResource][]interface{}
+	workloadObjects map[schema.GroupVersionResource][]objectmapnode.Node
 	workloadSynced  map[schema.GroupVersionResource]bool
 	// nodeBundles are the cut node kind's projected bundles (Table=NodeSummary own-row,
 	// Aggregate=nodeOverviewFact), returned for NodeGVR via Rows. nodeSynced gates the
@@ -76,6 +78,15 @@ func (s fakePodAggregateSource) Rows(gvr schema.GroupVersionResource) []interfac
 // the cluster-overview / namespaces workload counts), or nil otherwise.
 func (s fakePodAggregateSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
 	return s.workloadCatalog[gvr]
+}
+
+func (s fakePodAggregateSource) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
+	rows := s.workloadObjects[gvr]
+	out := make([]interface{}, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row)
+	}
+	return out
 }
 
 // HasSyncedFor reports the per-GVR synced flag for a cut workload GVR (default false), so a

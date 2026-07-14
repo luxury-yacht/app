@@ -26,6 +26,11 @@ import {
 } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { eventBus } from '@/core/events';
+import {
+  CLUSTER_VIEW_DESCRIPTORS,
+  groupViewDescriptors,
+  NAMESPACE_VIEW_DESCRIPTORS,
+} from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
@@ -34,35 +39,6 @@ import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/view
 import { isMacPlatform } from '@/utils/platform';
 import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
-
-// Static cluster view list to avoid re-creating the array each render.
-const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
-  { id: 'browse', label: 'Browse' },
-  { id: 'nodes', label: 'Nodes' },
-  { id: 'config', label: 'Config' },
-  { id: 'crds', label: 'CRDs' },
-  { id: 'custom', label: 'Custom' },
-  { id: 'events', label: 'Events' },
-  { id: 'rbac', label: 'RBAC' },
-  { id: 'storage', label: 'Storage' },
-];
-
-// Static namespace view list to avoid re-creating the array each render.
-const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
-  { id: 'browse', label: 'Browse' },
-  { id: 'map', label: 'Map' },
-  { id: 'workloads', label: 'Workloads' },
-  { id: 'pods', label: 'Pods' },
-  { id: 'autoscaling', label: 'Autoscaling' },
-  { id: 'config', label: 'Config' },
-  { id: 'custom', label: 'Custom' },
-  { id: 'events', label: 'Events' },
-  { id: 'helm', label: 'Helm' },
-  { id: 'network', label: 'Network' },
-  { id: 'quotas', label: 'Quotas' },
-  { id: 'rbac', label: 'RBAC' },
-  { id: 'storage', label: 'Storage' },
-];
 
 const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
   const scoped = buildClusterScope(clusterId, scope);
@@ -169,7 +145,7 @@ function Sidebar() {
     });
 
   // Cluster view items (always visible)
-  const resourceViews = RESOURCE_VIEWS;
+  const resourceViews = CLUSTER_VIEW_DESCRIPTORS;
 
   // Scroll selected namespace into view when it changes
   useEffect(() => {
@@ -399,33 +375,38 @@ function Sidebar() {
                     id={`${elementIdPrefix}-sidebar-cluster-resource-views`}
                   >
                     {/* Animate Resources the same way as namespace views. */}
-                    {resourceViews.map((view) => (
-                      <button
-                        type="button"
-                        key={view.id}
-                        className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
-                          kind: 'cluster-view',
-                          view: view.id,
-                        })}
-                        onClick={() => {
-                          if (!keyboardActivationRef.current) {
-                            clearKeyboardPreview();
-                          }
-                          handleClusterViewSelect(view.id);
-                        }}
-                        data-sidebar-focusable="true"
-                        data-sidebar-target-kind="cluster-view"
-                        data-sidebar-target-view={view.id}
-                        tabIndex={-1}
-                        aria-current={
-                          isTargetSelected({ kind: 'cluster-view', view: view.id })
-                            ? 'page'
-                            : undefined
-                        }
-                      >
-                        <CategoryIcon width={14} height={14} />
-                        <span>{view.label}</span>
-                      </button>
+                    {groupViewDescriptors(resourceViews).map((group) => (
+                      <div className="sidebar-view-group" key={group.id}>
+                        <div className="sidebar-view-group-label">{group.label}</div>
+                        {group.views.map((view) => (
+                          <button
+                            type="button"
+                            key={view.id}
+                            className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
+                              kind: 'cluster-view',
+                              view: view.id,
+                            })}
+                            onClick={() => {
+                              if (!keyboardActivationRef.current) {
+                                clearKeyboardPreview();
+                              }
+                              handleClusterViewSelect(view.id);
+                            }}
+                            data-sidebar-focusable="true"
+                            data-sidebar-target-kind="cluster-view"
+                            data-sidebar-target-view={view.id}
+                            tabIndex={-1}
+                            aria-current={
+                              isTargetSelected({ kind: 'cluster-view', view: view.id })
+                                ? 'page'
+                                : undefined
+                            }
+                          >
+                            <CategoryIcon width={14} height={14} />
+                            <span>{view.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -475,8 +456,8 @@ function Sidebar() {
                     const namespaceViewsId = `sidebar-namespace-${encodeURIComponent(namespaceKey)}-views`;
                     const namespaceViews =
                       scope === ALL_NAMESPACES_SCOPE
-                        ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
-                        : NAMESPACE_VIEWS;
+                        ? NAMESPACE_VIEW_DESCRIPTORS.filter((view) => view.supportsAllNamespaces)
+                        : NAMESPACE_VIEW_DESCRIPTORS;
 
                     return (
                       <div key={namespaceKey}>
@@ -530,6 +511,17 @@ function Sidebar() {
                               <NamespaceIcon width={14} height={14} />
                             )}
                             <span>{namespace.name}</span>
+                            {namespace.unhealthyWorkloads > 0 ? (
+                              <>
+                                <span className="namespace-attention-badge" aria-hidden="true">
+                                  {namespace.unhealthyWorkloads}
+                                </span>
+                                <span className="sr-only">
+                                  {namespace.unhealthyWorkloads} unhealthy workload
+                                  {namespace.unhealthyWorkloads === 1 ? '' : 's'}
+                                </span>
+                              </>
+                            ) : null}
                             {namespace.scopeStatus ? (
                               <span
                                 className="namespace-scope-flag"
@@ -563,51 +555,53 @@ function Sidebar() {
                         </div>
                         {!!isExpanded && (
                           <div className="sidebar-views" id={namespaceViewsId}>
-                            {namespaceViews.map((view) => {
-                              const label = view.label;
-                              return (
-                                <button
-                                  type="button"
-                                  key={view.id}
-                                  className={buildSidebarItemClassName(
-                                    ['sidebar-item', 'indented'],
-                                    {
-                                      kind: 'namespace-view',
-                                      namespace: namespaceKey,
-                                      view: view.id,
+                            {groupViewDescriptors(namespaceViews).map((group) => (
+                              <div className="sidebar-view-group" key={group.id}>
+                                <div className="sidebar-view-group-label">{group.label}</div>
+                                {group.views.map((view) => (
+                                  <button
+                                    type="button"
+                                    key={view.id}
+                                    className={buildSidebarItemClassName(
+                                      ['sidebar-item', 'indented'],
+                                      {
+                                        kind: 'namespace-view',
+                                        namespace: namespaceKey,
+                                        view: view.id,
+                                      }
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!keyboardActivationRef.current) {
+                                        clearKeyboardPreview();
+                                      }
+                                      handleNamespaceViewSelect(
+                                        scope,
+                                        view.id,
+                                        selectedClusterId || undefined
+                                      );
+                                    }}
+                                    data-sidebar-focusable="true"
+                                    data-sidebar-target-kind="namespace-view"
+                                    data-sidebar-target-namespace={namespaceKey}
+                                    data-sidebar-target-view={view.id}
+                                    tabIndex={-1}
+                                    aria-current={
+                                      isTargetSelected({
+                                        kind: 'namespace-view',
+                                        namespace: namespaceKey,
+                                        view: view.id,
+                                      })
+                                        ? 'page'
+                                        : undefined
                                     }
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!keyboardActivationRef.current) {
-                                      clearKeyboardPreview();
-                                    }
-                                    handleNamespaceViewSelect(
-                                      scope,
-                                      view.id,
-                                      selectedClusterId || undefined
-                                    );
-                                  }}
-                                  data-sidebar-focusable="true"
-                                  data-sidebar-target-kind="namespace-view"
-                                  data-sidebar-target-namespace={namespaceKey}
-                                  data-sidebar-target-view={view.id}
-                                  tabIndex={-1}
-                                  aria-current={
-                                    isTargetSelected({
-                                      kind: 'namespace-view',
-                                      namespace: namespaceKey,
-                                      view: view.id,
-                                    })
-                                      ? 'page'
-                                      : undefined
-                                  }
-                                >
-                                  <CategoryIcon width={14} height={14} />
-                                  <span>{label}</span>
-                                </button>
-                              );
-                            })}
+                                  >
+                                    <CategoryIcon width={14} height={14} />
+                                    <span>{view.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

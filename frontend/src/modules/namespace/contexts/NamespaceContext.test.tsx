@@ -34,6 +34,7 @@ interface TestNamespaceDomain {
       creationTimestamp: number;
       clusterId: string;
       clusterName: string;
+      unhealthyWorkloads?: number;
     }>;
   } | null;
   error: null;
@@ -257,6 +258,36 @@ describe('NamespaceProvider selection behaviour', () => {
     const visibleNames = namespaceRef.current?.namespaces.map((item) => item.name) ?? [];
     expect(visibleNames).toEqual([ALL_NAMESPACES_DISPLAY_NAME, 'alpha']);
     expect(namespaceRef.current?.namespaceReady).toBe(true);
+    cleanup();
+  });
+
+  it('maps backend unhealthy workload rollups into namespace display data', () => {
+    namespaceDomainRef.current = {
+      status: 'ready',
+      data: {
+        namespaces: [
+          {
+            name: 'alpha',
+            phase: 'Active',
+            resourceVersion: '1',
+            creationTimestamp: Math.floor(Date.now() / 1000),
+            clusterId: 'cluster-a',
+            clusterName: 'alpha',
+            unhealthyWorkloads: 3,
+          },
+        ],
+      },
+      error: null,
+    };
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    const alpha = namespaceRef.current?.namespaces.find((item) => item.name === 'alpha');
+    expect(alpha?.unhealthyWorkloads).toBe(3);
+    expect(alpha?.details).toContain('Unhealthy workloads: 3');
     cleanup();
   });
 

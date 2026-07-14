@@ -556,8 +556,7 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 					ready, total, ok := parseReadyPair(row.Ready)
 					return ok && total > 0 && ready < total
 				case "unhealthy":
-					presentation := strings.ToLower(strings.TrimSpace(row.StatusPresentation))
-					return presentation == "warning" || presentation == "error" || presentation == "not-ready"
+					return isUnhealthyStatusPresentation(row.StatusPresentation)
 				default:
 					return true
 				}
@@ -609,6 +608,15 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 				return 0, false
 			}
 		},
+	}
+}
+
+func isUnhealthyStatusPresentation(presentation string) bool {
+	switch strings.ToLower(strings.TrimSpace(presentation)) {
+	case "warning", "error", "not-ready":
+		return true
+	default:
+		return false
 	}
 }
 

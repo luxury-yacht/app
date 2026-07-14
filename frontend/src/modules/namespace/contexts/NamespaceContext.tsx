@@ -48,6 +48,7 @@ export interface NamespaceListItem {
   age: string;
   hasWorkloads: boolean;
   workloadsUnknown: boolean;
+  unhealthyWorkloads: number;
   resourceVersion: string;
   scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
@@ -173,6 +174,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       age: '—',
       hasWorkloads: true,
       workloadsUnknown: false,
+      unhealthyWorkloads: 0,
       resourceVersion: ALL_NAMESPACES_RESOURCE_VERSION,
       isSynthetic: true,
     }),
@@ -216,15 +218,17 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         : ns.hasWorkloads
           ? 'Workloads: Present'
           : 'Workloads: None';
+      const unhealthyWorkloads = ns.unhealthyWorkloads ?? 0;
 
       return {
         name: ns.name,
         scope: ns.name,
         status: ns.status || ns.phase,
-        details: `Status: ${ns.status || ns.phase} • ${workloadSummary}`,
+        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads}`,
         age,
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,
+        unhealthyWorkloads,
         resourceVersion: ns.resourceVersion,
         scopeStatus: ns.scopeStatus,
         clusterId: ns.clusterId,

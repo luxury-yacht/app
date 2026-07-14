@@ -933,6 +933,7 @@ export interface NamespaceSummary {
   creationTimestamp: number;
   hasWorkloads: boolean;
   workloadsUnknown?: boolean;
+  unhealthyWorkloads?: number;
   scopeStatus?: NamespaceScopeStatus;
 }
 

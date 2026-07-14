@@ -1,8 +1,8 @@
 /**
  * frontend/src/types/navigation/views.ts
  *
- * Navigation view vocabularies. The unions are derived from the `as const`
- * arrays so the runtime membership sets and the types cannot drift, and
+ * Navigation view vocabularies. The unions and runtime membership sets are
+ * derived from the canonical registry so they cannot drift, and
  * stringly boundaries (persisted favorites, DOM datasets) can validate via
  * the parse helpers instead of blind-casting.
  */
@@ -10,37 +10,21 @@
 export const VIEW_TYPES = ['namespace', 'cluster', 'overview', 'settings', 'about'] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
 
-export const NAMESPACE_VIEW_TYPES = [
-  'browse',
-  'map',
-  'workloads',
-  'pods',
-  'config',
-  'network',
-  'rbac',
-  'storage',
-  'autoscaling',
-  'quotas',
-  'custom',
-  'helm',
-  'events',
-] as const;
-export type NamespaceViewType = (typeof NAMESPACE_VIEW_TYPES)[number];
+import {
+  CLUSTER_VIEW_DESCRIPTORS,
+  type ClusterViewType,
+  NAMESPACE_VIEW_DESCRIPTORS,
+  type NamespaceViewType,
+} from '@/core/navigation/viewRegistry';
 
-export const CLUSTER_VIEW_TYPES = [
-  'nodes',
-  'rbac',
-  'storage',
-  'config',
-  'crds',
-  'custom',
-  'events',
-  'browse',
-] as const;
-export type ClusterViewType = (typeof CLUSTER_VIEW_TYPES)[number];
+export type { ClusterViewType, NamespaceViewType } from '@/core/navigation/viewRegistry';
 
-const namespaceViewTypeSet: ReadonlySet<string> = new Set(NAMESPACE_VIEW_TYPES);
-const clusterViewTypeSet: ReadonlySet<string> = new Set(CLUSTER_VIEW_TYPES);
+const namespaceViewTypeSet: ReadonlySet<string> = new Set(
+  NAMESPACE_VIEW_DESCRIPTORS.map(({ id }) => id)
+);
+const clusterViewTypeSet: ReadonlySet<string> = new Set(
+  CLUSTER_VIEW_DESCRIPTORS.map(({ id }) => id)
+);
 
 /**
  * Coerce a raw string (persisted favorite, DOM dataset) into the union, or

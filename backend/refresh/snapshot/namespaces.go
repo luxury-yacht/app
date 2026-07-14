@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -155,6 +156,7 @@ type namespacePodIngestSource interface {
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}
+	ObjectMapRows(gvr schema.GroupVersionResource) []interface{}
 }
 
 // NamespaceSnapshot payload returned to clients.
@@ -184,6 +186,7 @@ type NamespaceSummary struct {
 	CreationUnix       int64                     `json:"creationTimestamp"`
 	HasWorkloads       bool                      `json:"hasWorkloads"`
 	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
+	UnhealthyWorkloads int                       `json:"unhealthyWorkloads,omitempty"`
 	// ScopeStatus flags a configured scope entry the identity cannot reach:
 	// "not-found" (definitive) or "no-access" (may not exist). Empty for
 	// reachable namespaces and for every unscoped row.
@@ -348,7 +351,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	if b.tracker != nil {
 		trackerReady = b.tracker.Synced()
 	}
-	workloadNamespaces := b.namespacesWithWorkloads()
+	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
+	workloadNamespaces := workloadRollups.namespaces
 
 	items := make([]NamespaceSummary, 0, len(namespaces))
 	var version uint64
@@ -374,6 +378,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 			CreationUnix:       model.Metadata.CreationTimestamp.Unix(),
 			HasWorkloads:       facts.HasWorkloads,
 			WorkloadsUnknown:   !facts.WorkloadsKnown,
+			UnhealthyWorkloads: workloadRollups.unhealthy[ns.Name],
 			ScopeStatus:        scopeStatuses[ns.Name],
 		})
 		if v := parseResourceVersion(ns); v > version {
@@ -397,7 +402,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		// readiness changes; otherwise an unchanged validator makes the delivery layer return
 		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
 		SourceVersions: map[string]string{
-			"workloads": workloadPresenceSignature(workloadNamespaces, trackerReady),
+			"workloads": workloadRollupSignature(workloadRollups, trackerReady),
 		},
 	}
 	if len(b.scope) > 0 {
@@ -409,13 +414,20 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	return snap, nil
 }
 
-// workloadPresenceSignature is a stable fingerprint of the set of namespaces that have at least
-// one workload and whether empty absence is authoritative yet. It changes when that set or the
-// sync-readiness state changes, so a workload-presence or unknown→known change yields a new
-// snapshot validator and is delivered to the client instead of being 304'd.
-func workloadPresenceSignature(set map[string]struct{}, ready bool) string {
-	names := make([]string, 0, len(set))
-	for ns := range set {
+// workloadRollupSignature is a stable fingerprint of the namespace workload-presence and
+// unhealthy-count rollups plus whether empty absence is authoritative yet. Those values are
+// content namespace resourceVersions cannot capture, so every rollup change needs a new snapshot
+// validator.
+func workloadRollupSignature(rollups namespaceWorkloadRollups, ready bool) string {
+	names := make([]string, 0, len(rollups.namespaces)+len(rollups.unhealthy))
+	seen := make(map[string]struct{}, len(rollups.namespaces)+len(rollups.unhealthy))
+	for ns := range rollups.namespaces {
+		seen[ns] = struct{}{}
+	}
+	for ns := range rollups.unhealthy {
+		seen[ns] = struct{}{}
+	}
+	for ns := range seen {
 		names = append(names, ns)
 	}
 	sort.Strings(names)
@@ -428,6 +440,8 @@ func workloadPresenceSignature(set map[string]struct{}, ready bool) string {
 	_, _ = h.Write([]byte{0})
 	for _, ns := range names {
 		_, _ = h.Write([]byte(ns))
+		_, _ = h.Write([]byte{'='})
+		_, _ = h.Write([]byte(strconv.Itoa(rollups.unhealthy[ns])))
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)
@@ -452,39 +466,51 @@ func (b *NamespaceBuilder) tracksAnyWorkloadKind() bool {
 	return false
 }
 
-// namespacesWithWorkloads returns the set of namespaces that have at least one workload, read
-// directly from the ingest stores in a single pass: the five cut workload kinds' projected
-// Catalog rows (Deployment/StatefulSet/DaemonSet/Job/CronJob) plus the pod aggregate rows. It
-// is the authoritative, drift-free source the per-namespace workload flag is derived from —
-// the same projected rows Browse reads (objectcatalog collectViaIngest), so a namespace whose
-// workloads are ingested is never wrongly reported as empty.
-func (b *NamespaceBuilder) namespacesWithWorkloads() map[string]struct{} {
-	return namespacesWithWorkloadsFromIngest(b.ingest)
+type namespaceWorkloadRollups struct {
+	namespaces map[string]struct{}
+	unhealthy  map[string]int
 }
 
-// namespacesWithWorkloadsFromIngest is the shared presence computation: the
-// builder derives per-namespace flags from it, and the change notifier hashes
-// it to decide whether an ingest event actually flipped presence.
-func namespacesWithWorkloadsFromIngest(ingest namespacePodIngestSource) map[string]struct{} {
-	set := make(map[string]struct{})
+// namespaceWorkloadRollupsFromIngest computes the namespace workload-presence and health
+// summaries from retained ingest projections. Controller health comes from the object-map half,
+// whose status is projected from the same resource model as the workload table. Pod health comes
+// from PodAggregate; only non-terminal ownerless pods count because controller-owned pods are
+// folded into their workload row and terminal standalone pods are not emitted by that table.
+func namespaceWorkloadRollupsFromIngest(ingest namespacePodIngestSource) namespaceWorkloadRollups {
+	rollups := namespaceWorkloadRollups{
+		namespaces: make(map[string]struct{}),
+		unhealthy:  make(map[string]int),
+	}
 	if ingest == nil {
-		return set
+		return rollups
 	}
 	for _, gvr := range []schema.GroupVersionResource{
 		DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR,
 	} {
 		for _, row := range ingest.CatalogRows(gvr) {
 			if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace != "" {
-				set[summary.Namespace] = struct{}{}
+				rollups.namespaces[summary.Namespace] = struct{}{}
+			}
+		}
+		for _, row := range ingest.ObjectMapRows(gvr) {
+			node, ok := row.(objectmapnode.Node)
+			if !ok || node.Namespace == "" || node.Status == nil {
+				continue
+			}
+			if isUnhealthyStatusPresentation(node.Status.Presentation) {
+				rollups.unhealthy[node.Namespace]++
 			}
 		}
 	}
 	for _, row := range ingest.AggregateRows(PodGVR) {
 		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace != "" {
-			set[agg.Namespace] = struct{}{}
+			rollups.namespaces[agg.Namespace] = struct{}{}
+			if agg.OwnerKey == "" && agg.Phase != string(corev1.PodSucceeded) && agg.Phase != string(corev1.PodFailed) && isUnhealthyStatusPresentation(agg.StatusPresentation) {
+				rollups.unhealthy[agg.Namespace]++
+			}
 		}
 	}
-	return set
+	return rollups
 }
 
 func parseResourceVersion(obj *corev1.Namespace) uint64 {

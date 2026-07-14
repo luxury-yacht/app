@@ -54,6 +54,7 @@ export const STREAM_MODE_BY_NAME: Record<StreamTelemetryName, 'streaming' | 'wat
 const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey[]> = {
+  attention: [PERMISSION_FEATURES.namespaceWorkloads],
   nodes: [PERMISSION_FEATURES.clusterNodes, PERMISSION_FEATURES.nodeActions],
   rbac: [PERMISSION_FEATURES.clusterRBAC],
   storage: [PERMISSION_FEATURES.storageView, PERMISSION_FEATURES.storageActions],

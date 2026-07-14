@@ -5,6 +5,10 @@
  * Defines shared interfaces and payload shapes for the core layer.
  */
 
+import {
+  CLUSTER_VIEW_DESCRIPTORS,
+  NAMESPACE_VIEW_DESCRIPTORS,
+} from '@/core/navigation/viewRegistry';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 
 const NAMESPACE_REFRESHERS = {
@@ -75,31 +79,12 @@ export type StaticRefresherName =
 
 export type RefresherName = StaticRefresherName | ObjectRefresherName;
 
-export const namespaceViewToRefresher: Record<NamespaceViewType, NamespaceRefresherName | null> = {
-  browse: null,
-  map: null,
-  pods: null,
-  workloads: NAMESPACE_REFRESHERS.workloads,
-  config: NAMESPACE_REFRESHERS.config,
-  network: NAMESPACE_REFRESHERS.network,
-  rbac: NAMESPACE_REFRESHERS.rbac,
-  storage: NAMESPACE_REFRESHERS.storage,
-  autoscaling: NAMESPACE_REFRESHERS.autoscaling,
-  quotas: NAMESPACE_REFRESHERS.quotas,
-  custom: null,
-  helm: NAMESPACE_REFRESHERS.helm,
-  events: NAMESPACE_REFRESHERS.events,
-};
+export const namespaceViewToRefresher = Object.fromEntries(
+  NAMESPACE_VIEW_DESCRIPTORS.map(({ id, refresher }) => [id, refresher])
+) as Record<NamespaceViewType, NamespaceRefresherName | null>;
 
-export const clusterViewToRefresher: Record<ClusterViewType, ClusterRefresherName | null> = {
-  nodes: CLUSTER_REFRESHERS.nodes,
-  rbac: CLUSTER_REFRESHERS.rbac,
-  storage: CLUSTER_REFRESHERS.storage,
-  config: CLUSTER_REFRESHERS.config,
-  crds: CLUSTER_REFRESHERS.crds,
-  custom: null,
-  events: CLUSTER_REFRESHERS.events,
-  browse: CLUSTER_REFRESHERS.browse,
-};
+export const clusterViewToRefresher = Object.fromEntries(
+  CLUSTER_VIEW_DESCRIPTORS.map(({ id, refresher }) => [id, refresher])
+) as Record<ClusterViewType, ClusterRefresherName | null>;
 
 export { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS };

@@ -18,39 +18,31 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  CLUSTER_VIEW_DESCRIPTORS,
+  NAMESPACE_VIEW_DESCRIPTORS,
+} from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
 
 // ---------------------------------------------------------------------------
-// View lists — mirrors the Sidebar navigation tabs.
+// View list derived from the same registry as shell navigation.
 // ---------------------------------------------------------------------------
 
 // Combined view list with scope prefix to avoid value collisions.
 // The value format is "scope:view" (e.g. "cluster:nodes", "namespace:pods").
 const ALL_VIEWS = [
   { value: '__cluster_header__', label: 'Cluster', group: 'header' as const },
-  { value: 'cluster:browse', label: 'Browse' },
-  { value: 'cluster:nodes', label: 'Nodes' },
-  { value: 'cluster:config', label: 'Config' },
-  { value: 'cluster:crds', label: 'CRDs' },
-  { value: 'cluster:custom', label: 'Custom' },
-  { value: 'cluster:events', label: 'Events' },
-  { value: 'cluster:rbac', label: 'RBAC' },
-  { value: 'cluster:storage', label: 'Storage' },
+  ...CLUSTER_VIEW_DESCRIPTORS.map(({ scope, id, label }) => ({
+    value: `${scope}:${id}`,
+    label,
+  })),
   { value: '__namespace_header__', label: 'Namespaced', group: 'header' as const },
-  { value: 'namespace:browse', label: 'Browse' },
-  { value: 'namespace:workloads', label: 'Workloads' },
-  { value: 'namespace:pods', label: 'Pods' },
-  { value: 'namespace:autoscaling', label: 'Autoscaling' },
-  { value: 'namespace:config', label: 'Config' },
-  { value: 'namespace:custom', label: 'Custom' },
-  { value: 'namespace:events', label: 'Events' },
-  { value: 'namespace:helm', label: 'Helm' },
-  { value: 'namespace:network', label: 'Network' },
-  { value: 'namespace:quotas', label: 'Quotas' },
-  { value: 'namespace:rbac', label: 'RBAC' },
-  { value: 'namespace:storage', label: 'Storage' },
+  ...NAMESPACE_VIEW_DESCRIPTORS.map(({ scope, id, label }) => ({
+    value: `${scope}:${id}`,
+    label,
+  })),
 ];
 
 /** Parse a combined view value into scope and view. */

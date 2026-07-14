@@ -49,7 +49,12 @@ checker, so the SSAR cache resets with it
   from ingest; when NOTHING is tracked (pre-data or fully denied), rows
   report `workloadsUnknown` so the sidebar never dims them as
   authoritatively empty. Browse's namespace groups serve the same list
-  (`catalogNamespaceGroups`).
+  (`catalogNamespaceGroups`). Each row also carries `unhealthyWorkloads`:
+  controller health is counted from the retained object-map status projection,
+  while only non-terminal, ownerless pod aggregates count as standalone
+  workload rows. The namespaces source signature includes these counts so a
+  status-only transition invalidates the snapshot and rings the same debounced
+  doorbell without counting controller-owned pods twice.
 - **Ingest**: one reflector per (kind, namespace) writing ONE shared store
   through partition views; `ReplacePartition` fully defines only its own
   namespace and fans per-row sink events (never the bulk kind-wide Replace,

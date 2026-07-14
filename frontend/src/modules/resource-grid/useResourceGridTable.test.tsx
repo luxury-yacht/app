@@ -157,6 +157,7 @@ const renderNamespaceGrid = (
               age: '',
               hasWorkloads: true,
               workloadsUnknown: false,
+              unhealthyWorkloads: 0,
               resourceVersion: '',
               isSynthetic: true,
             },
@@ -168,6 +169,7 @@ const renderNamespaceGrid = (
               age: '',
               hasWorkloads: true,
               workloadsUnknown: false,
+              unhealthyWorkloads: 0,
               resourceVersion: '',
             },
             {
@@ -178,6 +180,7 @@ const renderNamespaceGrid = (
               age: '',
               hasWorkloads: true,
               workloadsUnknown: false,
+              unhealthyWorkloads: 0,
               resourceVersion: '',
             },
           ],
