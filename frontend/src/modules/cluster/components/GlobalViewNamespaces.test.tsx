@@ -35,7 +35,11 @@ const namespace = (clusterId: string, clusterName: string, name: string) => ({
   warningEvents: 0,
   warningEventsState: 'available',
   cpuUsageMilli: 100,
+  cpuRequestsMilli: 250,
+  cpuLimitsMilli: 500,
   memoryUsageBytes: 128 * 1024 * 1024,
+  memoryRequestsBytes: 256 * 1024 * 1024,
+  memoryLimitsBytes: 512 * 1024 * 1024,
   quotaCount: 0,
   quotaHighestUsedPercentage: 0,
   quotaPressure: '',
@@ -264,6 +268,16 @@ describe('GlobalViewNamespaces', () => {
     expect(
       renderedText(columns.find(({ key }) => key === 'cluster')?.render?.(source.rows[1]))
     ).toBe('beta');
+    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(source.rows[0]);
+    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
+    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
+      throw new Error('expected global namespace CPU ResourceBar');
+    }
+    expect(cpuCell.props).toMatchObject({
+      usage: '100m',
+      request: '250m',
+      limit: '500m',
+    });
     expect(source.completeness).toBe('partial');
     expect(source.partialLabel).toBe('Showing namespace data from 2 of 3 clusters');
 

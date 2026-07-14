@@ -61,6 +61,6 @@
    nonResourceURLs — bare wildcard means cluster-wide scope, worth flagging
    visually without promoting the value to a full chip. */
 .rule-wildcard {
-  color: var(--status-warning-text);
+  color: var(--color-warning);
   font-weight: 700;
 }

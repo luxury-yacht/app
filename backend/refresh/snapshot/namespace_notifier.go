@@ -253,9 +253,9 @@ func (n *NamespaceChangeNotifier) flush() {
 				case !hadSignature:
 					reasons = append(reasons, "workload-presence baseline established")
 				case !ready:
-					reasons = append(reasons, "workload presence changed or workload health changed while stores are still settling")
+					reasons = append(reasons, "workload rollup changed while stores are still settling")
 				default:
-					reasons = append(reasons, "workload presence changed or workload health changed (a namespace rollup changed, or the stores finished settling)")
+					reasons = append(reasons, "workload rollup changed (presence, health, reservations, or store readiness changed)")
 				}
 			}
 		}

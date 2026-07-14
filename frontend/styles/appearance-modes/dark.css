@@ -91,7 +91,6 @@
   --badge-teal-bg: rgba(20, 184, 166, 0.25);
   --badge-teal-text: #5eead4;
   --badge-warning-bg: rgba(245, 158, 11, 0.25);
-  --badge-warning-text: #fde047;
   --badge-green-soft-bg: rgba(34, 197, 94, 0.25);
   --badge-green-soft-text: #86efac;
   --badge-hover-overlay: rgb(255 255 255 / 10%);
@@ -103,10 +102,8 @@
   --status-failed-text: var(--badge-red-text);
   --status-released-bg: rgba(249, 115, 22, 0.25);
   --status-released-text: var(--badge-orange-text);
-  --status-warning-text: var(--badge-warning-text);
   --status-warning-bg: rgba(245, 158, 11, 0.25);
   --status-text-ready: var(--color-text);
-  --status-text-warning: var(--status-warning-text);
   --status-text-error: var(--status-failed-text);
   --status-text-unknown: var(--color-text-secondary);
   --status-text-info: var(--color-accent);

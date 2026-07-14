@@ -41,7 +41,11 @@ const namespacePayload = {
       warningEvents: 5,
       warningEventsState: 'available',
       cpuUsageMilli: 450,
+      cpuRequestsMilli: 300,
+      cpuLimitsMilli: 600,
       memoryUsageBytes: 256 * 1024 * 1024,
+      memoryRequestsBytes: 512 * 1024 * 1024,
+      memoryLimitsBytes: 1024 * 1024 * 1024,
       quotaCount: 2,
       quotaHighestUsedPercentage: 92,
       quotaPressure: 'warning',
@@ -222,6 +226,8 @@ describe('ClusterViewNamespaces', () => {
     }
     expect(cpuCell.props).toMatchObject({
       usage: '450m',
+      request: '300m',
+      limit: '600m',
       type: 'cpu',
       variant: 'compact',
       animationScopeKey: 'cluster-a|/v1/Namespace//payments:cpu',
@@ -233,6 +239,8 @@ describe('ClusterViewNamespaces', () => {
     }
     expect(memoryCell.props).toMatchObject({
       usage: '256Mi',
+      request: '512Mi',
+      limit: '1.0Gi',
       type: 'memory',
       variant: 'compact',
       animationScopeKey: 'cluster-a|/v1/Namespace//payments:memory',
@@ -255,7 +263,11 @@ describe('ClusterViewNamespaces', () => {
       unhealthyWorkloads: 0,
       warningEvents: 0,
       cpuUsageMilli: 0,
+      cpuRequestsMilli: 0,
+      cpuLimitsMilli: 0,
       memoryUsageBytes: 0,
+      memoryRequestsBytes: 0,
+      memoryLimitsBytes: 0,
     };
     expect(
       renderedText(columns.find(({ key }) => key === 'unhealthyWorkloads')?.render?.(zeroSignalRow))
@@ -271,6 +283,18 @@ describe('ClusterViewNamespaces', () => {
     );
     expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(zeroSignalRow)).toBe(0);
     expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(zeroSignalRow)).toBe(0);
+
+    const reservationOnlyRow = {
+      ...rows[0],
+      cpuUsageMilli: 0,
+      memoryUsageBytes: 0,
+    };
+    expect(
+      isValidElement(columns.find(({ key }) => key === 'cpu')?.render?.(reservationOnlyRow))
+    ).toBe(true);
+    expect(
+      isValidElement(columns.find(({ key }) => key === 'memory')?.render?.(reservationOnlyRow))
+    ).toBe(true);
 
     await unmount();
   });

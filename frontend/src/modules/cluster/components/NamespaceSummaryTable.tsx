@@ -91,18 +91,27 @@ const createNamespaceResourceColumn = (
 ): GridColumnDefinition<NamespaceTableRow> => {
   const usageNumber = (row: NamespaceTableRow): number =>
     type === 'cpu' ? (row.cpuUsageMilli ?? 0) : (row.memoryUsageBytes ?? 0);
-  const usageDisplay = (row: NamespaceTableRow): string => {
-    const display = namespaceAggregateUsageDisplay(
-      row.cpuUsageMilli ?? 0,
-      row.memoryUsageBytes ?? 0
-    );
+  const requestNumber = (row: NamespaceTableRow): number =>
+    type === 'cpu' ? (row.cpuRequestsMilli ?? 0) : (row.memoryRequestsBytes ?? 0);
+  const limitNumber = (row: NamespaceTableRow): number =>
+    type === 'cpu' ? (row.cpuLimitsMilli ?? 0) : (row.memoryLimitsBytes ?? 0);
+  const resourceDisplay = (cpuMilli: number, memoryBytes: number): string => {
+    const display = namespaceAggregateUsageDisplay(cpuMilli, memoryBytes);
     return type === 'cpu' ? display.cpu : display.memory;
   };
   const column = cf.createResourceBarColumn<NamespaceTableRow>({
     key: type,
     header: type === 'cpu' ? 'CPU' : 'Memory',
     type,
-    getUsage: usageDisplay,
+    getUsage: (row) => resourceDisplay(row.cpuUsageMilli ?? 0, row.memoryUsageBytes ?? 0),
+    getRequest: (row) =>
+      requestNumber(row) > 0
+        ? resourceDisplay(row.cpuRequestsMilli ?? 0, row.memoryRequestsBytes ?? 0)
+        : undefined,
+    getLimit: (row) =>
+      limitNumber(row) > 0
+        ? resourceDisplay(row.cpuLimitsMilli ?? 0, row.memoryLimitsBytes ?? 0)
+        : undefined,
     getVariant: () => 'compact',
     getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row)}:${type}`,
     sortable: true,
@@ -115,7 +124,9 @@ const createNamespaceResourceColumn = (
       if (row.metricsState !== 'available') {
         return unavailableSignalText(row.metricsState);
       }
-      return usageNumber(row) > 0 ? column.render(row) : '-';
+      return usageNumber(row) > 0 || requestNumber(row) > 0 || limitNumber(row) > 0
+        ? column.render(row)
+        : '-';
     },
   };
 };

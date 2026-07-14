@@ -48,7 +48,7 @@
 
 .event-badge.warning {
   background-color: var(--status-warning-bg);
-  color: var(--status-warning-text);
+  color: var(--color-warning);
   border-color: rgba(249, 115, 22, 0.2);
 }
 
@@ -270,7 +270,7 @@
 .status-text.warning,
 .status-text.canceling,
 .status-text.cancelled {
-  color: var(--status-text-warning);
+  color: var(--color-warning);
 }
 
 .status-text.not-ready,

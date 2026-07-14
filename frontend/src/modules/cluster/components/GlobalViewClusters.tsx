@@ -47,7 +47,6 @@ interface GlobalClusterRow {
   cpu: string;
   memory: string;
   metrics: string;
-  access: string;
   overview?: ClusterOverviewPayload;
   metricsInfo?: ClusterOverviewMetrics;
 }
@@ -182,12 +181,6 @@ const GlobalViewClusters: React.FC = () => {
             cpu: resourceUsage(overview?.cpuUsage, overview?.cpuAllocatable),
             memory: resourceUsage(overview?.memoryUsage, overview?.memoryAllocatable),
             metrics: metricsLabel(metrics),
-            access:
-              overview && (overview.unavailableResources?.length ?? 0) > 0
-                ? `Partial (${overview.unavailableResources?.length})`
-                : overview
-                  ? 'Available'
-                  : '—',
             overview,
             metricsInfo: metrics,
           },
@@ -264,7 +257,10 @@ const GlobalViewClusters: React.FC = () => {
 
   const columns = useMemo<GridColumnDefinition<GlobalClusterRow>[]>(() => {
     const result: GridColumnDefinition<GlobalClusterRow>[] = [
-      cf.createTextColumn('name', 'Cluster', (row) => row.name),
+      cf.createTextColumn('name', 'Cluster', (row) => row.name, {
+        onClick: (row) => navigate(row, 'overview'),
+        getClassName: () => 'object-panel-link',
+      }),
       {
         key: 'connection',
         header: 'Connection',
@@ -280,11 +276,27 @@ const GlobalViewClusters: React.FC = () => {
       },
       cf.createTextColumn('clusterType', 'Type', (row) => row.clusterType),
       cf.createTextColumn('clusterVersion', 'Version', (row) => row.clusterVersion),
-      cf.createTextColumn('nodes', 'Nodes ready', (row) => ratio(row.readyNodes, row.totalNodes)),
-      cf.createTextColumn('pods', 'Pods ready', (row) => ratio(row.readyPods, row.totalPods)),
+      cf.createTextColumn('nodes', 'Nodes ready', (row) => ratio(row.readyNodes, row.totalNodes), {
+        alignHeader: 'center',
+        alignData: 'center',
+        getClassName: (row) =>
+          row.readyNodes !== null && row.totalNodes !== null && row.readyNodes !== row.totalNodes
+            ? 'status-text warning'
+            : undefined,
+      }),
+      cf.createTextColumn('pods', 'Pods ready', (row) => ratio(row.readyPods, row.totalPods), {
+        alignHeader: 'center',
+        alignData: 'center',
+        getClassName: (row) =>
+          row.readyPods !== null && row.totalPods !== null && row.readyPods !== row.totalPods
+            ? 'status-text warning'
+            : undefined,
+      }),
       {
         key: 'attention',
         header: 'Needs attention',
+        alignHeader: 'center',
+        alignData: 'center',
         sortable: true,
         sortValue: (row) => (row.notReadyNodes ?? 0) + (row.failingPods ?? 0),
         render: (row) => {
@@ -303,16 +315,24 @@ const GlobalViewClusters: React.FC = () => {
                 navigate(row, 'attention');
               }}
             >
-              {nodes} {nodes === 1 ? 'node' : 'nodes'} · {pods} {pods === 1 ? 'pod' : 'pods'}
+              <span className={nodes > 0 ? 'status-text warning' : undefined}>
+                {nodes} {nodes === 1 ? 'node' : 'nodes'}
+              </span>
+              {' · '}
+              <span className={pods > 0 ? 'status-text warning' : undefined}>
+                {pods} {pods === 1 ? 'pod' : 'pods'}
+              </span>
             </button>
           );
         },
       },
       createClusterResourceColumn('cpu'),
       createClusterResourceColumn('memory'),
-      cf.createTextColumn('totalNamespaces', 'Namespaces', (row) => row.totalNamespaces ?? '—'),
+      cf.createTextColumn('totalNamespaces', 'Namespaces', (row) => row.totalNamespaces ?? '—', {
+        alignHeader: 'right',
+        alignData: 'right',
+      }),
       cf.createTextColumn('metrics', 'Metrics', (row) => row.metrics),
-      cf.createTextColumn('access', 'Access', (row) => row.access),
     ];
     cf.applyColumnSizing(result, {
       name: { autoWidth: true },
@@ -326,7 +346,6 @@ const GlobalViewClusters: React.FC = () => {
       memory: { width: 200, minWidth: 200 },
       totalNamespaces: { autoWidth: true },
       metrics: { autoWidth: true },
-      access: { autoWidth: true },
     });
     return result;
   }, [navigate]);
@@ -391,8 +410,6 @@ const GlobalViewClusters: React.FC = () => {
         diagnosticsMode="local"
         enableColumnVisibilityMenu
         allowHorizontalOverflow
-        onRowClick={(row) => navigate(row, 'overview')}
-        onRowPointerClick={(row) => navigate(row, 'overview')}
         favModal={favModal}
       />
     </div>

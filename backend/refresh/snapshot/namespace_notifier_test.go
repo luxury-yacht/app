@@ -27,6 +27,7 @@ type fakeNamespaceIngest struct {
 	synced       bool
 	workloadNS   []string
 	presentation string
+	podRows      []streamrows.PodAggregate
 	quotaRows    []streamrows.ResourceQuotaAggregate
 }
 
@@ -57,6 +58,13 @@ func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []int
 func (f *fakeNamespaceIngest) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if gvr == PodGVR {
+		rows := make([]interface{}, 0, len(f.podRows))
+		for _, row := range f.podRows {
+			rows = append(rows, row)
+		}
+		return rows
+	}
 	if gvr != ResourceQuotaGVR {
 		return nil
 	}
@@ -93,6 +101,12 @@ func (f *fakeNamespaceIngest) set(synced bool, workloadNS ...string) {
 func (f *fakeNamespaceIngest) setPresentation(presentation string) {
 	f.mu.Lock()
 	f.presentation = presentation
+	f.mu.Unlock()
+}
+
+func (f *fakeNamespaceIngest) setPodRows(rows ...streamrows.PodAggregate) {
+	f.mu.Lock()
+	f.podRows = append([]streamrows.PodAggregate(nil), rows...)
 	f.mu.Unlock()
 }
 
@@ -225,7 +239,7 @@ func TestNamespaceNotifierGatesWorkloadEventsOnPresenceSignature(t *testing.T) {
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
 	requireNoMoreBroadcasts(t, recorder, 2)
-	require.Contains(t, recorder.lastReason(), "workload presence changed",
+	require.Contains(t, recorder.lastReason(), "workload rollup changed",
 		"the broadcast reason must say WHAT rang the doorbell")
 }
 
@@ -243,7 +257,34 @@ func TestNamespaceNotifierBroadcastsWhenWorkloadHealthChanges(t *testing.T) {
 	ingest.setPresentation("warning")
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
-	require.Contains(t, recorder.lastReason(), "workload health changed")
+	require.Contains(t, recorder.lastReason(), "workload rollup changed")
+}
+
+func TestNamespaceNotifierBroadcastsWhenPodReservationsChange(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	ingest.setPodRows(streamrows.PodAggregate{
+		Namespace:       "team-a",
+		Name:            "api-0",
+		Phase:           string(corev1.PodRunning),
+		CPURequestMilli: 100,
+	})
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	defer notifier.Stop()
+
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 1)
+
+	ingest.setPodRows(streamrows.PodAggregate{
+		Namespace:       "team-a",
+		Name:            "api-0",
+		Phase:           string(corev1.PodRunning),
+		CPURequestMilli: 200,
+	})
+	notifier.WorkloadChanged()
+	waitForBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "workload rollup changed")
 }
 
 func TestNamespaceNotifierGatesMetricCollectionsOnRevision(t *testing.T) {

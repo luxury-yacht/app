@@ -206,7 +206,11 @@ type NamespaceSummary struct {
 	WarningEvents              int                       `json:"warningEvents,omitempty"`
 	WarningEventsState         NamespaceSignalState      `json:"warningEventsState"`
 	CPUUsageMilli              int64                     `json:"cpuUsageMilli,omitempty"`
+	CPURequestsMilli           int64                     `json:"cpuRequestsMilli,omitempty"`
+	CPULimitsMilli             int64                     `json:"cpuLimitsMilli,omitempty"`
 	MemoryUsageBytes           int64                     `json:"memoryUsageBytes,omitempty"`
+	MemoryRequestsBytes        int64                     `json:"memoryRequestsBytes,omitempty"`
+	MemoryLimitsBytes          int64                     `json:"memoryLimitsBytes,omitempty"`
 	QuotaCount                 int                       `json:"quotaCount,omitempty"`
 	QuotaHighestUsedPercentage int                       `json:"quotaHighestUsedPercentage,omitempty"`
 	QuotaPressure              NamespaceQuotaPressure    `json:"quotaPressure,omitempty"`
@@ -434,6 +438,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	for _, ns := range namespaces {
 		_, hasWorkloads := workloadNamespaces[ns.Name]
 		usage := utilization[ns.Name]
+		reservations := workloadRollups.reservations[ns.Name]
 		quota := quotaRollups[ns.Name]
 		// In scoped mode a tracker that latched synced because NOTHING is
 		// tracked (every workload kind permission-skipped) means presence is
@@ -459,7 +464,11 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 			WarningEvents:              warningEvents[ns.Name],
 			WarningEventsState:         warningEventsState,
 			CPUUsageMilli:              usage.cpuMilli,
+			CPURequestsMilli:           reservations.cpuRequestsMilli,
+			CPULimitsMilli:             reservations.cpuLimitsMilli,
 			MemoryUsageBytes:           usage.memoryBytes,
+			MemoryRequestsBytes:        reservations.memoryRequestsBytes,
+			MemoryLimitsBytes:          reservations.memoryLimitsBytes,
 			QuotaCount:                 quota.count,
 			QuotaHighestUsedPercentage: quota.highestUsedPercentage,
 			QuotaPressure:              namespaceQuotaPressure(quota.highestUsedPercentage),
@@ -655,17 +664,20 @@ func namespaceQuotaRollupSignature(rollups map[string]namespaceQuotaRollup, stat
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-// workloadRollupSignature is a stable fingerprint of the namespace workload-presence and
-// unhealthy-count rollups plus whether empty absence is authoritative yet. Those values are
-// content namespace resourceVersions cannot capture, so every rollup change needs a new snapshot
-// validator.
+// workloadRollupSignature is a stable fingerprint of namespace workload
+// presence, health, and active-pod reservations plus whether empty absence is
+// authoritative yet. Namespace resourceVersions do not capture those values,
+// so every rollup change needs a new snapshot validator.
 func workloadRollupSignature(rollups namespaceWorkloadRollups, ready bool) string {
-	names := make([]string, 0, len(rollups.namespaces)+len(rollups.unhealthy))
-	seen := make(map[string]struct{}, len(rollups.namespaces)+len(rollups.unhealthy))
+	names := make([]string, 0, len(rollups.namespaces)+len(rollups.unhealthy)+len(rollups.reservations))
+	seen := make(map[string]struct{}, len(rollups.namespaces)+len(rollups.unhealthy)+len(rollups.reservations))
 	for ns := range rollups.namespaces {
 		seen[ns] = struct{}{}
 	}
 	for ns := range rollups.unhealthy {
+		seen[ns] = struct{}{}
+	}
+	for ns := range rollups.reservations {
 		seen[ns] = struct{}{}
 	}
 	for ns := range seen {
@@ -683,6 +695,16 @@ func workloadRollupSignature(rollups namespaceWorkloadRollups, ready bool) strin
 		_, _ = h.Write([]byte(ns))
 		_, _ = h.Write([]byte{'='})
 		_, _ = h.Write([]byte(strconv.Itoa(rollups.unhealthy[ns])))
+		reservations := rollups.reservations[ns]
+		for _, value := range []int64{
+			reservations.cpuRequestsMilli,
+			reservations.cpuLimitsMilli,
+			reservations.memoryRequestsBytes,
+			reservations.memoryLimitsBytes,
+		} {
+			_, _ = h.Write([]byte{'/'})
+			_, _ = h.Write([]byte(strconv.FormatInt(value, 10)))
+		}
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)
@@ -708,19 +730,29 @@ func (b *NamespaceBuilder) tracksAnyWorkloadKind() bool {
 }
 
 type namespaceWorkloadRollups struct {
-	namespaces map[string]struct{}
-	unhealthy  map[string]int
+	namespaces   map[string]struct{}
+	unhealthy    map[string]int
+	reservations map[string]namespaceResourceReservations
 }
 
-// namespaceWorkloadRollupsFromIngest computes the namespace workload-presence and health
-// summaries from retained ingest projections. Controller health comes from the object-map half,
-// whose status is projected from the same resource model as the workload table. Pod health comes
-// from PodAggregate; only non-terminal ownerless pods count because controller-owned pods are
-// folded into their workload row and terminal standalone pods are not emitted by that table.
+type namespaceResourceReservations struct {
+	cpuRequestsMilli    int64
+	cpuLimitsMilli      int64
+	memoryRequestsBytes int64
+	memoryLimitsBytes   int64
+}
+
+// namespaceWorkloadRollupsFromIngest computes namespace workload presence,
+// health, and active-pod regular-container reservations from retained ingest
+// projections. Controller health comes from the object-map half. Pod health
+// counts only non-terminal ownerless pods because controller-owned pods are
+// folded into their workload row; reservations include every non-terminal pod
+// so they match the namespace's scheduled workload demand.
 func namespaceWorkloadRollupsFromIngest(ingest namespacePodIngestSource) namespaceWorkloadRollups {
 	rollups := namespaceWorkloadRollups{
-		namespaces: make(map[string]struct{}),
-		unhealthy:  make(map[string]int),
+		namespaces:   make(map[string]struct{}),
+		unhealthy:    make(map[string]int),
+		reservations: make(map[string]namespaceResourceReservations),
 	}
 	if ingest == nil {
 		return rollups
@@ -746,7 +778,16 @@ func namespaceWorkloadRollupsFromIngest(ingest namespacePodIngestSource) namespa
 	for _, row := range ingest.AggregateRows(PodGVR) {
 		if agg, ok := row.(streamrows.PodAggregate); ok && agg.Namespace != "" {
 			rollups.namespaces[agg.Namespace] = struct{}{}
-			if agg.OwnerKey == "" && agg.Phase != string(corev1.PodSucceeded) && agg.Phase != string(corev1.PodFailed) && isUnhealthyStatusPresentation(agg.StatusPresentation) {
+			active := agg.Phase != string(corev1.PodSucceeded) && agg.Phase != string(corev1.PodFailed)
+			if active {
+				reservations := rollups.reservations[agg.Namespace]
+				reservations.cpuRequestsMilli += agg.CPURequestMilli
+				reservations.cpuLimitsMilli += agg.CPULimitMilli
+				reservations.memoryRequestsBytes += agg.MemRequestBytes
+				reservations.memoryLimitsBytes += agg.MemLimitBytes
+				rollups.reservations[agg.Namespace] = reservations
+			}
+			if agg.OwnerKey == "" && active && isUnhealthyStatusPresentation(agg.StatusPresentation) {
 				rollups.unhealthy[agg.Namespace]++
 			}
 		}

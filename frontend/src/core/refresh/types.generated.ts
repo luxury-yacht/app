@@ -978,7 +978,11 @@ export interface NamespaceSummary {
   warningEvents?: number;
   warningEventsState: NamespaceSignalState;
   cpuUsageMilli?: number;
+  cpuRequestsMilli?: number;
+  cpuLimitsMilli?: number;
   memoryUsageBytes?: number;
+  memoryRequestsBytes?: number;
+  memoryLimitsBytes?: number;
   quotaCount?: number;
   quotaHighestUsedPercentage?: number;
   quotaPressure?: NamespaceQuotaPressure;

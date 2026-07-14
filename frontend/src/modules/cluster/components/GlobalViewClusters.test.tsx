@@ -156,17 +156,13 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
       key: string;
       render: (row: Record<string, unknown>) => React.ReactNode;
     }>;
+    const name = columns.find((column) => column.key === 'name');
     const attention = columns.find((column) => column.key === 'attention');
-    const onRowPointerClick = props.onRowPointerClick as
-      | ((row: Record<string, unknown>) => void)
-      | undefined;
     return (
       <div data-testid="global-clusters-table">
         {source.rows.map((row) => (
           <div key={String(row.clusterId)} data-testid={`global-clusters-${row.clusterId}`}>
-            <button type="button" onClick={() => onRowPointerClick?.(row)}>
-              {String(row.name)}
-            </button>
+            {name?.render(row)}
             <span>{String(row.connection)}</span>
             {attention?.render(row)}
           </div>
@@ -229,8 +225,30 @@ describe('GlobalViewClusters', () => {
     ]);
     const columns = tableProps.columns as Array<{
       key: string;
+      header?: React.ReactNode;
       render?: (row: Record<string, unknown>) => React.ReactNode;
     }>;
+    expect(columns.map(({ key }) => key)).toEqual([
+      'name',
+      'connection',
+      'clusterType',
+      'clusterVersion',
+      'nodes',
+      'pods',
+      'attention',
+      'cpu',
+      'memory',
+      'totalNamespaces',
+      'metrics',
+    ]);
+    expect(
+      Object.fromEntries(columns.map(({ key, header }) => [key, header]))
+    ).toMatchObject({
+      connection: 'Status',
+      nodes: 'Nodes',
+      pods: 'Pods',
+      totalNamespaces: 'NS',
+    });
     const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
     expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
     if (!isValidElement<Record<string, unknown>>(cpuCell)) {
@@ -294,9 +312,12 @@ describe('GlobalViewClusters', () => {
 
   it('prepares target-cluster navigation before activating the cluster tab', async () => {
     const { container, unmount } = await renderGlobalClusters();
+    expect(mocks.tableProps).not.toHaveProperty('onRowClick');
+    expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');
     const cluster = container.querySelector<HTMLButtonElement>(
-      '[data-testid="global-clusters-cluster-b"] button'
+      '[data-testid="global-clusters-cluster-b"] .object-panel-link'
     );
+    expect(cluster?.className).toContain('gridtable-link');
 
     await act(async () => cluster?.click());
 

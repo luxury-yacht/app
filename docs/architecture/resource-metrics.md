@@ -141,13 +141,17 @@ row-key round-trips.
 | ReplicaSet utilization | object-detail DTO exception |
 | Node utilization | `nodes` scoped payload rows |
 | Cluster aggregate utilization | `cluster-overview` scoped payload; out of scope for table metrics |
-| Namespace aggregate utilization | `namespaces` payload rows, joined from one poller sample at serve |
+| Namespace aggregate utilization | `namespaces` payload rows: usage joined from one poller sample at serve; requests and limits summed from active pod aggregate rows |
 | Pod / workload / node tables | ONE base-domain query per table; CPU/memory sorts run server-side on the joined usage |
 
 Tables read the freshness block from the query payload (`queryPayload.metrics`).
 The object panel's `useResourceMetrics` leases one scoped base domain per kind
 (`pods` namespace scope, `namespace-workloads` namespace scope, `nodes` cluster
 scope) and selects the object's row by full identity.
+
+Namespace request and limit totals sum regular-container values from
+non-terminal pods. Init-container values stay separate in the pod aggregate and
+are not included, matching the pod and namespace-workload table semantics.
 
 ## ReplicaSet Exception
 

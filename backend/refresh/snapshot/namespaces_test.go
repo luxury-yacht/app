@@ -151,6 +151,68 @@ func TestNamespaceBuilderRollsUpUtilizationAndQuotaPressure(t *testing.T) {
 	require.Equal(t, NamespaceQuotaPressureCritical, payload.Namespaces[1].QuotaPressure)
 }
 
+func TestNamespaceBuilderRollsUpActivePodReservationsByNamespace(t *testing.T) {
+	nsAlpha := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	nsBeta := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "beta", ResourceVersion: "2"}}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, nsAlpha, nsBeta),
+		ingest: fakePodAggregateSource{aggregates: []streamrows.PodAggregate{
+			{
+				Namespace:           "alpha",
+				Name:                "api-0",
+				Phase:               string(corev1.PodRunning),
+				CPURequestMilli:     100,
+				CPULimitMilli:       250,
+				MemRequestBytes:     64 * 1024 * 1024,
+				MemLimitBytes:       128 * 1024 * 1024,
+				InitCPURequestMilli: 900,
+				InitCPULimitMilli:   900,
+				InitMemRequestBytes: 900 * 1024 * 1024,
+				InitMemLimitBytes:   900 * 1024 * 1024,
+			},
+			{
+				Namespace:       "alpha",
+				Name:            "api-1",
+				Phase:           string(corev1.PodPending),
+				CPURequestMilli: 200,
+				CPULimitMilli:   400,
+				MemRequestBytes: 96 * 1024 * 1024,
+				MemLimitBytes:   256 * 1024 * 1024,
+			},
+			{
+				Namespace:       "alpha",
+				Name:            "completed",
+				Phase:           string(corev1.PodSucceeded),
+				CPURequestMilli: 10_000,
+				CPULimitMilli:   10_000,
+				MemRequestBytes: 10_000 * 1024 * 1024,
+				MemLimitBytes:   10_000 * 1024 * 1024,
+			},
+			{
+				Namespace:       "beta",
+				Name:            "worker",
+				Phase:           string(corev1.PodRunning),
+				CPURequestMilli: 50,
+				CPULimitMilli:   75,
+				MemRequestBytes: 32 * 1024 * 1024,
+				MemLimitBytes:   48 * 1024 * 1024,
+			},
+		}},
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Equal(t, int64(300), payload.Namespaces[0].CPURequestsMilli)
+	require.Equal(t, int64(650), payload.Namespaces[0].CPULimitsMilli)
+	require.Equal(t, int64(160*1024*1024), payload.Namespaces[0].MemoryRequestsBytes)
+	require.Equal(t, int64(384*1024*1024), payload.Namespaces[0].MemoryLimitsBytes)
+	require.Equal(t, int64(50), payload.Namespaces[1].CPURequestsMilli)
+	require.Equal(t, int64(75), payload.Namespaces[1].CPULimitsMilli)
+	require.Equal(t, int64(32*1024*1024), payload.Namespaces[1].MemoryRequestsBytes)
+	require.Equal(t, int64(48*1024*1024), payload.Namespaces[1].MemoryLimitsBytes)
+}
+
 func TestNamespaceBuilderAggregateStatesDistinguishLoadingAndUnavailable(t *testing.T) {
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
 	quotaSource := fakePodAggregateSource{quotaTracked: true}
@@ -505,6 +567,26 @@ func TestNamespaceBuilderWorkloadPresenceChangesSourceVersion(t *testing.T) {
 	if withWorkloads == withoutWorkloads {
 		t.Fatalf("workload presence change did not change the workloads source version (%q) — the correction would be 304'd", withWorkloads)
 	}
+}
+
+func TestNamespaceBuilderPodReservationChangesSourceVersion(t *testing.T) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	workloadsSourceVersion := func(cpuRequestMilli int64) string {
+		builder := &NamespaceBuilder{
+			namespaces: testsupport.NewNamespaceLister(t, ns),
+			ingest: fakePodAggregateSource{aggregates: []streamrows.PodAggregate{{
+				Namespace:       "alpha",
+				Name:            "api-0",
+				Phase:           string(corev1.PodRunning),
+				CPURequestMilli: cpuRequestMilli,
+			}}},
+		}
+		snap, err := builder.Build(context.Background(), "")
+		require.NoError(t, err)
+		return snap.SourceVersions["workloads"]
+	}
+
+	require.NotEqual(t, workloadsSourceVersion(100), workloadsSourceVersion(200))
 }
 
 func TestNamespaceBuilderWorkloadSyncReadinessChangesSourceVersion(t *testing.T) {
