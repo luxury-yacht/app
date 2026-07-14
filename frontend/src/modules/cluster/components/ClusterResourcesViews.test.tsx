@@ -23,6 +23,9 @@ vi.mock('@modules/cluster/components/ClusterViewConfig', () => ({ default: () =>
 vi.mock('@modules/cluster/components/ClusterViewCRDs', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () => null }));
+vi.mock('@modules/cluster/components/ClusterViewFleet', () => ({
+  default: () => <div data-testid="fleet" />,
+}));
 vi.mock('@modules/cluster/components/ClusterViewNodes', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewRBAC', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewStorage', () => ({ default: () => null }));
@@ -49,5 +52,11 @@ describe('ClusterResourcesViews', () => {
     expect(lens?.dataset.namespace).toBe(ALL_NAMESPACES_SCOPE);
     expect(lens?.dataset.showNamespace).toBe('true');
     expect(lens?.dataset.attentionOnly).toBe('true');
+  });
+
+  it('renders the fleet comparison lens', () => {
+    act(() => root.render(<ClusterResourcesViews activeTab="fleet" />));
+
+    expect(container.querySelector('[data-testid="fleet"]')).not.toBeNull();
   });
 });

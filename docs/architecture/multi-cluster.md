@@ -47,6 +47,24 @@ validation errors. Frontend refresh code should not produce them.
 - Refresh scope helpers: `frontend/src/core/refresh/clusterScope.ts`
 - Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
 
+## Fleet Lens
+
+Fleet compares only open clusters. The frontend fans out the existing
+`cluster-overview` domain over one `clusterId|` scope per eligible cluster; it
+does not introduce a cross-cluster refresh scope or cache entry. Each row keeps
+the originating `clusterId` as its identity and uses overview-owned readiness,
+capacity, workload, metrics, and unavailable-resource projections.
+
+Lifecycle and confirmed authentication failures remain per cluster. Fleet may
+show ready, loading, reconnecting, disconnected, and authentication-required
+rows together, and it does not start overview refresh for a cluster whose
+lifecycle cannot activate that domain.
+
+Navigation from a Fleet row prepares the destination cluster's navigation and
+sidebar state before activating its kubeconfig selection. Row activation opens
+that cluster's Overview; the Needs Attention cell opens its all-namespaces
+unhealthy-workload lens.
+
 ## Change Checklist
 
 When touching multi-cluster behavior:

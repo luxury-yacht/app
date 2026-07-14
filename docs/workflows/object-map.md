@@ -45,6 +45,23 @@ rendering, and interaction state.
   contract. Updating the displayed age must not rewrite backend graph identity,
   relationship data, or layout inputs.
 
+## Table Navigation
+
+- Resource-table **Open Map** actions open an object-scoped map from a validated
+  reference containing `clusterId`, group, version, kind, namespace when
+  namespaced, and name.
+- Map **Go to Table View** actions select the resource's owning namespace and
+  table, then issue a cluster-scoped row-focus request from the same complete
+  reference. Query-backed tables may use that reference for an anchor query
+  when the object is outside the loaded page.
+- In the map canvas, Alt-click is the shortcut for **Go to Table View**. The
+  context-menu action is the discoverable equivalent.
+- Missing or partial graph identity must not be repaired from kind/name guesses;
+  such relationships remain display-only.
+
+Graph truncation and permission warnings remain visible below the canvas. A
+truncated graph must not present its object or link counts as the whole scope.
+
 ## Change Checklist
 
 When changing object-map behavior:

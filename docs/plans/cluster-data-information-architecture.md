@@ -88,15 +88,15 @@ Target navigation order:
         available, unavailable, and stale-source presentation.
 - [x] Add confidence-bearing application grouping from owner links, Helm links,
       and explicit application labels.
-- [ ] Add table-to-map and map-to-table navigation with complete object refs.
-- [ ] Keep graph limits and partial/truncated presentation visible.
+- [x] Add table-to-map and map-to-table navigation with complete object refs.
+- [x] Keep graph limits and partial/truncated presentation visible.
 
 ### Phase 6: Fleet lens
 
-- [ ] Fan out over per-cluster overview/attention state in the frontend.
-- [ ] Present cluster comparison rows with explicit `clusterId` identity.
-- [ ] Switch cluster before navigating to a cluster-scoped lens or object.
-- [ ] Cover mixed ready/loading/auth-failed cluster states.
+- [x] Fan out over per-cluster overview/attention state in the frontend.
+- [x] Present cluster comparison rows with explicit `clusterId` identity.
+- [x] Switch cluster before navigating to a cluster-scoped lens or object.
+- [x] Cover mixed ready/loading/auth-failed cluster states.
 
 ## Validation
 

@@ -82,6 +82,22 @@ describe('SidebarStateContext', () => {
     expect(stateRef.current?.sidebarSelection).toEqual({ type: 'namespace', value: 'default' });
   });
 
+  it('can prepare another cluster selection without mutating the active cluster', async () => {
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setSidebarSelectionForCluster('cluster-b', {
+        type: 'cluster',
+        value: 'cluster',
+      });
+    });
+    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'overview', value: 'overview' });
+
+    mockClusterId = 'cluster-b';
+    await renderProvider();
+    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'cluster', value: 'cluster' });
+  });
+
   it('clears sidebar selection when a tab is closed', async () => {
     mockClusterId = 'cluster-b';
     await renderProvider();

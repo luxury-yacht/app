@@ -61,6 +61,15 @@ interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
 export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
+    id: 'fleet',
+    label: 'Fleet',
+    intent: 'inventory',
+    description: 'Compare health, capacity, and access across open clusters',
+    keywords: ['fleet', 'cluster', 'compare', 'health', 'capacity', 'access'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
     id: 'attention',
     label: 'Needs Attention',
     intent: 'operations',

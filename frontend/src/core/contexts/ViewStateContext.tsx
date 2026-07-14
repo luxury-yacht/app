@@ -57,6 +57,7 @@ interface NavigationStateContextType {
   setPreviousView: (view: ViewType) => void;
   setActiveNamespaceTab: (tab: NamespaceViewType) => void;
   setActiveClusterView: (tab: ClusterViewType | null) => void;
+  setClusterNavigationTarget: (clusterId: string, target: ClusterNavigationTarget) => void;
 
   // Complex navigation actions
   navigateToClusterView: (viewType: ViewType) => void;
@@ -77,11 +78,37 @@ export interface NavigationTabState {
   activeClusterView: ClusterViewType | null;
 }
 
+export interface ClusterNavigationTarget {
+  viewType: 'overview' | 'cluster';
+  activeClusterView: ClusterViewType | null;
+}
+
 const DEFAULT_NAVIGATION_STATE: NavigationTabState = {
   viewType: 'overview',
   previousView: 'overview',
   activeNamespaceView: 'workloads',
   activeClusterView: null,
+};
+
+export const applyClusterNavigationTarget = (
+  states: Record<string, NavigationTabState>,
+  clusterId: string,
+  target: ClusterNavigationTarget
+): Record<string, NavigationTabState> => {
+  const targetClusterId = clusterId.trim();
+  if (!targetClusterId) {
+    return states;
+  }
+  const current = states[targetClusterId] ?? DEFAULT_NAVIGATION_STATE;
+  return {
+    ...states,
+    [targetClusterId]: {
+      ...current,
+      previousView: current.viewType,
+      viewType: target.viewType,
+      activeClusterView: target.activeClusterView,
+    },
+  };
 };
 
 const useNavigationState = () => {
@@ -173,6 +200,26 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
     [updateActiveState]
   );
 
+  const setClusterNavigationTarget = useCallback(
+    (clusterId: string, target: ClusterNavigationTarget) => {
+      const targetClusterId = clusterId.trim();
+      if (!targetClusterId) {
+        return;
+      }
+      setNavigationStateByCluster((previous) =>
+        applyClusterNavigationTarget(previous, targetClusterId, target)
+      );
+      if (targetClusterId === selectedClusterId) {
+        refreshOrchestrator.updateContext({
+          currentView: target.viewType,
+          activeClusterView: target.activeClusterView ?? undefined,
+        });
+        void requestContextRefresh({ reason: 'startup' });
+      }
+    },
+    [selectedClusterId]
+  );
+
   const setPreviousView = useCallback(
     (view: ViewType) => {
       updateActiveState((prev) => ({ ...prev, previousView: view }));
@@ -242,6 +289,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       setPreviousView,
       setActiveNamespaceTab: setActiveNamespaceView,
       setActiveClusterView,
+      setClusterNavigationTarget,
       navigateToClusterView,
       navigateToNamespace,
       onNamespaceSelect,
@@ -257,6 +305,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       setPreviousView,
       setActiveNamespaceView,
       setActiveClusterView,
+      setClusterNavigationTarget,
       navigateToClusterView,
       navigateToNamespace,
       onNamespaceSelect,

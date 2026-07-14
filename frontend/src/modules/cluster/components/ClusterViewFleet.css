@@ -1,0 +1,48 @@
+.cluster-fleet {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cluster-fleet .gridtable-container {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.fleet-connection {
+  font-weight: 600;
+}
+
+.fleet-connection--ready {
+  color: var(--color-success);
+}
+
+.fleet-connection--warning {
+  color: var(--color-warning);
+}
+
+.fleet-connection--error {
+  color: var(--color-error);
+}
+
+.fleet-connection--unknown {
+  color: var(--text-secondary);
+}
+
+.fleet-attention-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fleet-attention-link:hover,
+.fleet-attention-link:focus-visible {
+  text-decoration: underline;
+}

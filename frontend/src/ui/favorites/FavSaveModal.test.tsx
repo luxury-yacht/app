@@ -472,6 +472,7 @@ describe('FavSaveModal', () => {
     );
 
     expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
+      'cluster:fleet',
       'cluster:attention',
       'cluster:browse',
       'cluster:nodes',

@@ -6,7 +6,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
+import { PERMISSION_FEATURES } from '@/core/capabilities/permissionFeatures';
 import {
+  getScopedFeaturesForView,
   PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
   STREAM_ONLY_DOMAINS,
 } from './diagnosticsPanelConfig';
@@ -46,6 +48,12 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'nodes',
       'object-events',
       'pods',
+    ]);
+  });
+
+  test('reports cluster-overview permissions for the Fleet lens', () => {
+    expect(getScopedFeaturesForView('cluster', 'fleet', 'workloads')).toEqual([
+      PERMISSION_FEATURES.clusterOverview,
     ]);
   });
 });

@@ -26,6 +26,7 @@ interface SidebarStateContextType {
   setSidebarWidth: (width: number) => void;
   setIsResizing: (resizing: boolean) => void;
   setSidebarSelection: (selection: SidebarSelectionType) => void;
+  setSidebarSelectionForCluster: (clusterId: string, selection: SidebarSelectionType) => void;
 }
 
 const SidebarStateContext = createContext<SidebarStateContextType | undefined>(undefined);
@@ -98,6 +99,30 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
     });
   }, [selectedClusterIds]);
 
+  const setSidebarSelectionForCluster = useCallback(
+    (clusterId: string, selection: SidebarSelectionType) => {
+      const targetClusterId = clusterId.trim();
+      if (!targetClusterId) {
+        return;
+      }
+      setSidebarSelections((prev) => ({
+        ...prev,
+        [targetClusterId]: selection,
+      }));
+    },
+    []
+  );
+
+  const setSidebarSelection = useCallback(
+    (selection: SidebarSelectionType) => {
+      setSidebarSelections((prev) => ({
+        ...prev,
+        [clusterKey]: selection,
+      }));
+    },
+    [clusterKey]
+  );
+
   const value = useMemo(
     () => ({
       isSidebarVisible,
@@ -107,14 +132,18 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
       toggleSidebar,
       setSidebarWidth,
       setIsResizing,
-      setSidebarSelection: (selection: SidebarSelectionType) => {
-        setSidebarSelections((prev) => ({
-          ...prev,
-          [clusterKey]: selection,
-        }));
-      },
+      setSidebarSelection,
+      setSidebarSelectionForCluster,
     }),
-    [isSidebarVisible, sidebarWidth, isResizing, sidebarSelection, toggleSidebar, clusterKey]
+    [
+      isSidebarVisible,
+      sidebarWidth,
+      isResizing,
+      sidebarSelection,
+      toggleSidebar,
+      setSidebarSelection,
+      setSidebarSelectionForCluster,
+    ]
   );
 
   return <SidebarStateContext.Provider value={value}>{children}</SidebarStateContext.Provider>;
