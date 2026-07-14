@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for NsViewEvents.
  */
 
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -302,6 +303,90 @@ describe('NsViewEvents', () => {
     expect(ageColumn.sortable).not.toBe(false);
     expect(requireValue(ageColumn.sortValue, 'expected the event age sort accessor')(event)).toBe(
       -42
+    );
+  });
+
+  it('projects backend Event triage facets for All Namespaces', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [baseEvent()],
+          total: 1,
+          unfilteredTotal: 2,
+          totalIsExact: true,
+          namespaces: ['team-a', 'team-b'],
+          kinds: ['Pod'],
+          facetValues: [
+            {
+              key: 'types',
+              options: [
+                { value: 'Normal', label: 'Normal' },
+                { value: 'Warning', label: 'Warning' },
+              ],
+              exact: true,
+            },
+            {
+              key: 'reasons',
+              options: [{ value: 'FailedScheduling', label: 'FailedScheduling' }],
+              exact: true,
+            },
+            {
+              key: 'sources',
+              options: [{ value: 'kubelet', label: 'kubelet' }],
+              exact: true,
+            },
+          ],
+          facetsExact: true,
+          capabilities: {
+            queryFacets: [
+              {
+                key: 'types',
+                label: 'Type',
+                placeholder: 'All types',
+                searchable: false,
+                bulkActions: true,
+              },
+              {
+                key: 'reasons',
+                label: 'Reason',
+                placeholder: 'All reasons',
+                searchable: true,
+                bulkActions: true,
+              },
+              {
+                key: 'sources',
+                label: 'Source',
+                placeholder: 'All sources',
+                searchable: true,
+                bulkActions: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const props = await renderEventsView({
+      namespace: ALL_NAMESPACES_SCOPE,
+      showNamespaceColumn: true,
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(props.filters?.options?.queryFacets).toEqual([
+      expect.objectContaining({ key: 'types', searchable: false }),
+      expect.objectContaining({ key: 'reasons', searchable: true }),
+      expect.objectContaining({ key: 'sources', searchable: true }),
+    ]);
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'namespace-events',
+        scope: expect.stringContaining('cluster-a|namespace:all?'),
+      })
     );
   });
 

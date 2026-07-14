@@ -7,6 +7,11 @@
   Pods tables, with options covering the full selected scope.
 - Added backend-query Status filters to Workloads and Cluster Nodes, with stable
   options covering the full selected namespace or cluster scope.
+- Added backend-query Type, Reason, and Source filters to cluster, namespace,
+  and All Namespaces Events, with searchable high-cardinality options.
+- Added backend-query Status, Confidence, and Has Issues filters to namespace
+  and All Namespaces Applications, including partial-data disclosure when
+  contributing resource access is degraded.
 
 ### Changed
 

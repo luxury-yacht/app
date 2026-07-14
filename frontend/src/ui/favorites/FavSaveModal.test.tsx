@@ -344,6 +344,31 @@ describe('FavSaveModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('saves Event and Application provider facet selections in favorites', async () => {
+    const onSave = vi.fn();
+    const filters: FavoriteFilters = {
+      ...defaultFilters,
+      queryFacets: {
+        types: ['Warning'],
+        reasons: ['BackOff'],
+        sources: ['kubelet'],
+        statuses: ['Needs attention'],
+        confidences: ['low'],
+        hasIssues: ['true'],
+      },
+    };
+    await renderComponent(makeProps({ onSave, filters, viewLabel: 'Events' }));
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.filters?.queryFacets).toEqual(filters.queryFacets);
+    expect(saved.clusterId).toBe('config:prod-cluster');
+  });
+
   // -----------------------------------------------------------------------
   // 5. Clicking Cancel calls onClose without calling onSave
   // -----------------------------------------------------------------------

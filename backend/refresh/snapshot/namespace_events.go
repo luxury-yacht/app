@@ -82,6 +82,7 @@ func namespaceEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kinds", "namespaces"},
 		[]string{"kind", "name", "namespace", "type", "source", "reason", "object", "message"},
 		nil, // open kind set (involved-object kinds); no kind dropdown
+		typedTableFacetDescriptors(namespacedEventTableQueryAdapter().Facets)...,
 	)
 }
 

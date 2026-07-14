@@ -24,6 +24,96 @@ func (f fakeApplicationAggregateSource) StoreResourceVersion(gvr schema.GroupVer
 	return "9"
 }
 
+func TestNamespaceApplicationsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.T) {
+	items := []NamespaceApplicationSummary{
+		{Name: "healthy", Namespace: "team-a", Confidence: resourcemodel.ApplicationConfidenceHigh, Status: "Healthy"},
+		{Name: "warning", Namespace: "team-a", Confidence: resourcemodel.ApplicationConfidenceLow, Status: "Needs attention", NeedsAttention: 2},
+		{Name: "unknown", Namespace: "team-a", Confidence: resourcemodel.ApplicationConfidenceMedium, Status: "Unknown"},
+	}
+	page := applyTypedTableQueryViaStore(
+		items,
+		typedTableQuery{
+			Enabled: true,
+			Request: ResourceQueryRequest{
+				ClusterID: "cluster-a",
+				Limit:     50,
+				Facets: map[string][]string{
+					"statuses":    {"Needs attention"},
+					"confidences": {"low"},
+					"hasIssues":   {"true"},
+				},
+			},
+		},
+		namespaceApplicationsTableQueryAdapter(),
+		namespaceApplicationsQuerypageSchema(),
+	)
+
+	require.Len(t, page.Rows, 1)
+	require.Equal(t, "warning", page.Rows[0].Name)
+	require.Equal(t, []string{"Healthy", "Needs attention", "Unknown"}, testFacetOptionValues(page.FacetValues, "statuses"))
+	require.Equal(t, []string{"high", "low", "medium"}, testFacetOptionValues(page.FacetValues, "confidences"))
+	require.Equal(t, []string{"false", "true"}, testFacetOptionValues(page.FacetValues, "hasIssues"))
+	require.True(t, page.FacetsExact)
+	require.Equal(t, []ResourceQueryFacetOption{
+		{Value: "false", Label: "No issues"},
+		{Value: "true", Label: "Has issues"},
+	}, page.FacetValues[2].Options)
+}
+
+func TestNamespaceApplicationsQueryViaStoreEquivalent(t *testing.T) {
+	items := []NamespaceApplicationSummary{
+		{Name: "healthy", Namespace: "team-a", Confidence: resourcemodel.ApplicationConfidenceHigh, Status: "Healthy", WorkloadCount: 4},
+		{Name: "warning", Namespace: "team-a", Confidence: resourcemodel.ApplicationConfidenceLow, Status: "Needs attention", WorkloadCount: 2, NeedsAttention: 2},
+		{Name: "unknown", Namespace: "team-b", Confidence: resourcemodel.ApplicationConfidenceMedium, Status: "Unknown", WorkloadCount: 1},
+	}
+	selections := []map[string][]string{
+		nil,
+		{"statuses": {"Healthy"}},
+		{"confidences": {"medium"}},
+		{"hasIssues": {"true"}},
+		{"statuses": {"Needs attention"}, "confidences": {"low"}, "hasIssues": {"true"}},
+	}
+
+	for _, sortField := range []string{"name", "namespace", "confidence", "status", "workloadCount", "needsAttention"} {
+		for _, direction := range []string{"asc", "desc"} {
+			for _, facets := range selections {
+				query := typedTableQuery{
+					Enabled: true,
+					Request: ResourceQueryRequest{
+						ClusterID:     "cluster-a",
+						Limit:         2,
+						SortField:     sortField,
+						SortDirection: direction,
+						Facets:        facets,
+					},
+				}
+				live := applyTypedTableQuery(items, query, namespaceApplicationsTableQueryAdapter())
+				engine := applyTypedTableQueryViaStore(items, query, namespaceApplicationsTableQueryAdapter(), namespaceApplicationsQuerypageSchema())
+				require.Equal(t, live.Rows, engine.Rows, "sort=%s direction=%s facets=%v", sortField, direction, facets)
+				require.Equal(t, live.Total, engine.Total, "sort=%s direction=%s facets=%v", sortField, direction, facets)
+				require.Equal(t, live.UnfilteredTotal, engine.UnfilteredTotal, "sort=%s direction=%s facets=%v", sortField, direction, facets)
+				require.Equal(t, live.FacetValues, engine.FacetValues, "sort=%s direction=%s facets=%v", sortField, direction, facets)
+			}
+		}
+	}
+}
+
+func TestNamespaceApplicationsQueryFacetsPublishExactEmptyOptionSets(t *testing.T) {
+	page := applyTypedTableQueryViaStore(
+		[]NamespaceApplicationSummary{},
+		typedTableQuery{Enabled: true, Request: ResourceQueryRequest{ClusterID: "cluster-a", Limit: 50}},
+		namespaceApplicationsTableQueryAdapter(),
+		namespaceApplicationsQuerypageSchema(),
+	)
+
+	require.True(t, page.FacetsExact)
+	require.Len(t, page.FacetValues, 3)
+	for _, facet := range page.FacetValues {
+		require.True(t, facet.Exact)
+		require.Empty(t, facet.Options)
+	}
+}
+
 func TestNamespaceApplicationsBuilderGroupsEvidenceAndPreservesNavigationIdentity(t *testing.T) {
 	helmCandidate := resourcemodel.ApplicationCandidate{
 		Name:       "payments",
@@ -156,6 +246,11 @@ func TestNamespaceApplicationsBuilderOmitsDeniedSourcesAndReportsPartial(t *test
 	require.Empty(t, payload.Rows)
 	require.Equal(t, ResourceQueryPartial, payload.Completeness)
 	require.NotEmpty(t, payload.Issues)
+	require.False(t, payload.FacetsExact)
+	require.Len(t, payload.FacetValues, 3)
+	for _, facet := range payload.FacetValues {
+		require.False(t, facet.Exact, "facet %s must disclose permission-degraded options", facet.Key)
+	}
 }
 
 func allNamespaceApplicationsPermissions() NamespaceApplicationsPermissions {

@@ -163,6 +163,56 @@ describe('useGridTablePersistence multi-cluster', () => {
     container.remove();
   });
 
+  it('does not carry provider facet selections across clusters', async () => {
+    stateMap['key:hash-cluster-a:namespace-pods:default'] = {
+      version: 1,
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        queryFacets: { types: ['Warning'], reasons: ['BackOff'] },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+    };
+    stateMap['key:hash-cluster-b:namespace-pods:default'] = {
+      version: 1,
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        queryFacets: { statuses: ['Healthy'], hasIssues: ['false'] },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+    };
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+
+    await renderHarness(root, 'cluster-a');
+    expect(getLatestState().filters.queryFacets).toEqual({
+      types: ['Warning'],
+      reasons: ['BackOff'],
+    });
+
+    await renderHarness(root, 'cluster-b');
+    expect(getLatestState().filters.queryFacets).toEqual({
+      statuses: ['Healthy'],
+      hasIssues: ['false'],
+    });
+
+    await renderHarness(root, 'cluster-a');
+    expect(getLatestState().filters.queryFacets).toEqual({
+      types: ['Warning'],
+      reasons: ['BackOff'],
+    });
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it('resets state to defaults when switching to a cluster with no persisted data', async () => {
     stateMap['key:hash-cluster-a:namespace-pods:default'] = {
       version: 1,

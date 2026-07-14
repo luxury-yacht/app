@@ -194,8 +194,8 @@ func (c *perBuildStoreCache[T]) put(key string, store *querypage.Store[T], match
 
 // perBuildCacheKey identifies the matched set a per-Build store was built
 // from: the base scope + every matcher input (search, includeMetadata, kinds,
-// namespaces, statuses, nodes, predicates) + the caller's source-version token + the metric
-// revision. DynamicRevision matters because metric-joined domains overlay
+// namespaces, provider facets, predicates) + the caller's source-version token
+// + the metric revision. DynamicRevision matters because metric-joined domains overlay
 // usage onto the rows BEFORE the store is built — a key without it would
 // freeze metric values AND metric sort order across ticks. Sort, direction,
 // limit, cursor, and anchor are deliberately excluded: the store carries every

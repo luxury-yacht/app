@@ -119,8 +119,13 @@ func TestPublishedQueryFacetsHaveBackendExecutionAndOptionProjections(t *testing
 		keys         []string
 	}
 	providers := map[string]providerFacetContract{
-		"pods":                {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
-		"nodes":               {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
+		"pods":           {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
+		"nodes":          {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
+		"cluster-events": {clusterEventsQueryCapabilities(), typedTableFacetKeys(clusterEventTableQueryAdapter().Facets)},
+		"namespace-applications": {
+			namespaceApplicationsQueryCapabilities(), typedTableFacetKeys(namespaceApplicationQueryFacets()),
+		},
+		"namespace-events":    {namespaceEventsQueryCapabilities(), typedTableFacetKeys(namespacedEventTableQueryAdapter().Facets)},
 		"namespace-workloads": {namespaceWorkloadsQueryCapabilities(), typedTableFacetKeys(workloadQueryFacets())},
 	}
 

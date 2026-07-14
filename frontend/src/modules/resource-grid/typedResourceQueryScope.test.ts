@@ -31,6 +31,29 @@ describe('typedResourceQueryScope', () => {
     );
   });
 
+  it('serializes Event and Application triage facet selections as provider-owned query keys', () => {
+    const scope = buildTypedResourceQueryScope('cluster-a', {
+      baseScope: 'namespace:team-a',
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        queryFacets: {
+          types: ['Warning'],
+          reasons: ['BackOff'],
+          sources: ['kubelet'],
+          statuses: ['Needs attention'],
+          confidences: ['low'],
+          hasIssues: ['true'],
+        },
+      },
+      sortConfig: { key: 'name', direction: 'asc' },
+      pageLimit: 50,
+    });
+
+    expect(scope).toBe(
+      'cluster-a|namespace:team-a?limit=50&facet.confidences=low&facet.hasIssues=true&facet.reasons=BackOff&facet.sources=kubelet&facet.statuses=Needs+attention&facet.types=Warning&sort=name&sortDirection=asc'
+    );
+  });
+
   it('sends includeMetadata in the scope when metadata search is enabled', () => {
     const scope = buildTypedResourceQueryScope('cluster-a', {
       filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'team', includeMetadata: true },
@@ -234,5 +257,71 @@ describe('typedResourceQueryScope', () => {
       ],
       partialDataLabel: expect.stringContaining('approximate'),
     });
+  });
+
+  it('projects searchable Event triage facets and approximate Application triage facets', () => {
+    const options = filterOptionsFromTypedPayload({
+      facetValues: [
+        {
+          key: 'reasons',
+          options: [{ value: 'BackOff', label: 'BackOff' }],
+          exact: true,
+        },
+        {
+          key: 'sources',
+          options: [{ value: 'kubelet', label: 'kubelet' }],
+          exact: true,
+        },
+        {
+          key: 'hasIssues',
+          options: [
+            { value: 'false', label: 'No issues' },
+            { value: 'true', label: 'Has issues' },
+          ],
+          exact: false,
+        },
+      ],
+      facetsExact: false,
+      issues: [{ kind: 'Deployment', message: 'list permission denied' }],
+      capabilities: {
+        queryFacets: [
+          {
+            key: 'reasons',
+            label: 'Reason',
+            placeholder: 'All reasons',
+            searchable: true,
+            bulkActions: true,
+          },
+          {
+            key: 'sources',
+            label: 'Source',
+            placeholder: 'All sources',
+            searchable: true,
+            bulkActions: true,
+          },
+          {
+            key: 'hasIssues',
+            label: 'Has issues',
+            placeholder: 'All issue states',
+            searchable: false,
+            bulkActions: true,
+          },
+        ],
+      },
+    });
+
+    expect(options.queryFacets).toEqual([
+      expect.objectContaining({ key: 'reasons', searchable: true }),
+      expect.objectContaining({ key: 'sources', searchable: true }),
+      expect.objectContaining({
+        key: 'hasIssues',
+        options: [
+          { value: 'false', label: 'No issues' },
+          { value: 'true', label: 'Has issues' },
+        ],
+      }),
+    ]);
+    expect(options.partialDataLabel).toContain('Deployment: list permission denied');
+    expect(options.partialDataLabel).toContain('approximate');
   });
 });

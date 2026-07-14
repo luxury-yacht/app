@@ -102,6 +102,7 @@ func clusterEventsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kinds"},
 		[]string{"kind", "name", "type", "source", "reason", "object", "message"},
 		nil, // open kind set (involved-object kinds); no kind dropdown
+		typedTableFacetDescriptors(clusterEventTableQueryAdapter().Facets)...,
 	)
 }
 

@@ -181,17 +181,17 @@ Target navigation order:
 
 ### Phase 11: Event and application triage facets
 
-- [ ] Add backend-query Event Type, Reason, and Source facets to cluster,
+- [x] Add backend-query Event Type, Reason, and Source facets to cluster,
       namespace, and All Namespaces Events, with options derived from the full
       structural scope rather than the current page or selection.
-- [ ] Add backend-query Application Status, Confidence, and Has Issues facets to
+- [x] Add backend-query Application Status, Confidence, and Has Issues facets to
       namespace and All Namespaces Applications using the existing backend-owned
       grouping status, evidence confidence, and needs-attention count.
-- [ ] Keep high-cardinality Reason/Source options searchable and truthful when
+- [x] Keep high-cardinality Reason/Source options searchable and truthful when
       facet metadata is approximate or contributing sources are degraded.
-- [ ] Preserve selections through favorites and cluster/namespace-scoped table
+- [x] Preserve selections through favorites and cluster/namespace-scoped table
       persistence, without carrying selections across a different `clusterId`.
-- [ ] Prove executor parity, exact/approximate option behavior, empty and
+- [x] Prove executor parity, exact/approximate option behavior, empty and
       permission-degraded states, focus-safe interaction, and rendered filtering
       before advertising the new capabilities.
 
@@ -208,11 +208,13 @@ Target navigation order:
 - Browser validation for grouped navigation and new visual lenses.
 - `mage qc:prerelease` on the final worktree, followed by `git status --short`.
 
-## Open Questions
+## Resolved Decisions
 
-- Whether query providers or a frontend facet registry own labels,
-  placeholders, searchability, and bulk-action presentation for generic facets.
-- Whether Event Reason and Source facets stay exact at current event volumes or
-  need an explicit metadata budget and approximate-options presentation.
-- Whether Application Has Issues is a boolean facet over `needsAttention > 0`
-  or a status-family selection derived from the backend grouping presentation.
+- Query providers own generic facet labels, placeholders, searchability, and
+  bulk-action presentation through capability descriptors.
+- Event Reason and Source options are exact over the current full structural
+  scope. Any future metadata budget must mark the affected option sets
+  approximate through the existing facet exactness contract.
+- Application Has Issues is the stable boolean selection `needsAttention > 0`;
+  its wire values are `true` and `false`, with user-facing labels supplied by
+  the backend provider.

@@ -123,6 +123,7 @@ func namespaceApplicationsQueryCapabilities() ResourceQueryCapabilities {
 		[]string{"kinds", "namespaces"},
 		[]string{"name", "namespace", "confidence", "status", "workloadKinds"},
 		[]string{"Application"},
+		typedTableFacetDescriptors(namespaceApplicationQueryFacets())...,
 	)
 }
 
@@ -133,6 +134,31 @@ func namespaceApplicationsQuerypageSchema() querypage.Schema[NamespaceApplicatio
 	)
 }
 
+func namespaceApplicationQueryFacets() []typedTableQueryFacet[NamespaceApplicationSummary] {
+	return []typedTableQueryFacet[NamespaceApplicationSummary]{
+		statusQueryFacet(func(row NamespaceApplicationSummary) string { return row.Status }),
+		{
+			Descriptor: ResourceQueryFacetDescriptor{Key: "confidences", Label: "Confidence", Placeholder: "All confidence levels", BulkActions: true},
+			Value:      func(row NamespaceApplicationSummary) string { return string(row.Confidence) },
+		},
+		{
+			Descriptor: ResourceQueryFacetDescriptor{Key: "hasIssues", Label: "Has issues", Placeholder: "All issue states", BulkActions: true},
+			Value: func(row NamespaceApplicationSummary) string {
+				if row.NeedsAttention > 0 {
+					return "true"
+				}
+				return "false"
+			},
+			Label: func(value string) string {
+				if value == "true" {
+					return "Has issues"
+				}
+				return "No issues"
+			},
+		},
+	}
+}
+
 func namespaceApplicationsTableQueryAdapter() typedTableQueryAdapter[NamespaceApplicationSummary] {
 	return typedTableQueryAdapter[NamespaceApplicationSummary]{
 		Key: func(row NamespaceApplicationSummary) string {
@@ -140,6 +166,7 @@ func namespaceApplicationsTableQueryAdapter() typedTableQueryAdapter[NamespaceAp
 		},
 		Namespace: func(row NamespaceApplicationSummary) string { return row.Namespace },
 		Kind:      func(NamespaceApplicationSummary) string { return "Application" },
+		Facets:    namespaceApplicationQueryFacets(),
 		SearchText: func(row NamespaceApplicationSummary) []string {
 			values := []string{row.Name, row.Namespace, string(row.Confidence), row.Status}
 			values = append(values, row.WorkloadKinds...)
