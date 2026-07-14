@@ -70,6 +70,15 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'cluster',
+    id: 'namespaces',
+    label: 'Namespaces',
+    intent: 'inventory',
+    description: 'Compare health, workloads, events, utilization, and quotas across namespaces',
+    keywords: ['namespaces', 'cluster', 'health', 'workloads', 'events', 'utilization', 'quotas'],
+    refresher: null,
+  },
+  {
+    scope: 'cluster',
     id: 'attention',
     label: 'Needs Attention',
     intent: 'operations',

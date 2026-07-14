@@ -217,6 +217,7 @@ describe('CommandPaletteCommands', () => {
 
     expect(navigationViewIds).toEqual([
       'cluster-fleet',
+      'cluster-namespaces',
       'cluster-attention',
       'cluster-browse',
       'cluster-nodes',

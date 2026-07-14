@@ -218,7 +218,7 @@ describe('Sidebar', () => {
     expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
   });
 
-  it('shows categorized namespace attention counts without badges for zero values', () => {
+  it('keeps namespace rows free of operational telemetry badges', () => {
     renderSidebar({
       namespaces: [
         {
@@ -258,24 +258,11 @@ describe('Sidebar', () => {
     const beta = document.querySelector(
       `[data-sidebar-target-namespace="${namespaceKey('beta')}"]`
     );
-    expect(alpha?.querySelector('.namespace-attention-badge')?.textContent).toBe('3');
-    expect(alpha?.querySelector('.namespace-attention-badge')?.getAttribute('aria-hidden')).toBe(
-      'true'
-    );
-    expect(alpha?.querySelector('.sr-only')?.textContent).toBe('3 unhealthy workloads');
-    expect(alpha?.querySelector('.namespace-warning-events-badge')?.textContent).toBe('2');
-    expect(
-      alpha?.querySelector('.namespace-warning-events-badge')?.getAttribute('aria-hidden')
-    ).toBe('true');
-    expect(alpha?.querySelectorAll('.sr-only')[1]?.textContent).toBe('2 warning events');
-    expect(alpha?.querySelector('.namespace-utilization-badge')?.textContent).toBe('200m');
-    expect(alpha?.querySelector('.namespace-quota-pressure-badge')?.textContent).toBe('92%');
-    expect(alpha?.querySelectorAll('.sr-only')[2]?.textContent).toBe(
-      'CPU utilization 200m, memory utilization 96Mi'
-    );
-    expect(alpha?.querySelectorAll('.sr-only')[3]?.textContent).toBe(
-      'Quota pressure warning at 92%'
-    );
+    expect(alpha?.querySelector('.namespace-signal-badges')).toBeNull();
+    expect(alpha?.querySelector('.namespace-attention-badge')).toBeNull();
+    expect(alpha?.querySelector('.namespace-warning-events-badge')).toBeNull();
+    expect(alpha?.querySelector('.namespace-utilization-badge')).toBeNull();
+    expect(alpha?.querySelector('.namespace-quota-pressure-badge')).toBeNull();
     expect(beta?.querySelector('.namespace-attention-badge')).toBeNull();
     expect(beta?.querySelector('.namespace-warning-events-badge')).toBeNull();
   });

@@ -179,6 +179,10 @@ bespoke display path:
   wrapper. It takes a normalized `source` plus `gridTableProps` and owns the
   loading boundary, refresh overlay, settled-empty state, and partial banner. It
   is the only sanctioned direct `GridTable` consumer for resource data.
+  While the controller renders live source rows, the wrapper must pass the
+  binding-owned row order to `GridTable` so local sorting is not discarded. If
+  the controller substitutes cached rows during a transient empty refresh, the
+  replay rows take precedence because the live binding has no rows to order.
 - `useResourceInventoryTable` / `deriveResourceInventoryRenderState`
   (`useResourceInventoryTable.ts`) is the pure controller: it projects a source's
   lifecycle into a display status (`initializing`, `loading`, `refreshing`,

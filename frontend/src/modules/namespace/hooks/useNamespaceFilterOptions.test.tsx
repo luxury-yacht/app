@@ -27,6 +27,9 @@ const renderHook = <T,>(hook: () => T) => {
       <NamespaceContext.Provider
         value={{
           namespaces: namespaceMock.namespaces as never[],
+          namespaceSummaries: [],
+          namespaceMetricsState: 'unavailable',
+          namespaceError: null,
           selectedNamespace: undefined,
           selectedNamespaceClusterId: undefined,
           namespaceLoading: false,

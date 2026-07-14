@@ -8,7 +8,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './Sidebar.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
-import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -459,17 +458,6 @@ function Sidebar() {
                       scope === ALL_NAMESPACES_SCOPE
                         ? NAMESPACE_VIEW_DESCRIPTORS.filter((view) => view.supportsAllNamespaces)
                         : NAMESPACE_VIEW_DESCRIPTORS;
-                    const usageDisplay = namespaceAggregateUsageDisplay(
-                      namespace.cpuUsageMilli ?? 0,
-                      namespace.memoryUsageBytes ?? 0
-                    );
-                    const hasUtilization =
-                      namespace.utilizationState === 'available' &&
-                      ((namespace.cpuUsageMilli ?? 0) > 0 || (namespace.memoryUsageBytes ?? 0) > 0);
-                    const hasQuotaPressure =
-                      namespace.quotaPressureState === 'available' &&
-                      (namespace.quotaPressure === 'warning' ||
-                        namespace.quotaPressure === 'critical');
 
                     return (
                       <div key={namespaceKey}>
@@ -523,76 +511,6 @@ function Sidebar() {
                               <NamespaceIcon width={14} height={14} />
                             )}
                             <span>{namespace.name}</span>
-                            {namespace.unhealthyWorkloads > 0 ||
-                            (namespace.warningEventsState === 'available' &&
-                              namespace.warningEvents > 0) ||
-                            hasUtilization ||
-                            hasQuotaPressure ? (
-                              <span className="namespace-signal-badges">
-                                {namespace.unhealthyWorkloads > 0 ? (
-                                  <>
-                                    <span
-                                      className="namespace-attention-badge"
-                                      aria-hidden="true"
-                                      title="Unhealthy workloads"
-                                    >
-                                      {namespace.unhealthyWorkloads}
-                                    </span>
-                                    <span className="sr-only">
-                                      {namespace.unhealthyWorkloads} unhealthy workload
-                                      {namespace.unhealthyWorkloads === 1 ? '' : 's'}
-                                    </span>
-                                  </>
-                                ) : null}
-                                {namespace.warningEventsState === 'available' &&
-                                namespace.warningEvents > 0 ? (
-                                  <>
-                                    <span
-                                      className="namespace-warning-events-badge"
-                                      aria-hidden="true"
-                                      title="Warning events"
-                                    >
-                                      <WarningIcon width={12} height={12} />
-                                      {namespace.warningEvents}
-                                    </span>
-                                    <span className="sr-only">
-                                      {namespace.warningEvents} warning event
-                                      {namespace.warningEvents === 1 ? '' : 's'}
-                                    </span>
-                                  </>
-                                ) : null}
-                                {hasUtilization ? (
-                                  <>
-                                    <span
-                                      className="namespace-utilization-badge"
-                                      aria-hidden="true"
-                                      title={`${usageDisplay.cpu} CPU, ${usageDisplay.memory} memory`}
-                                    >
-                                      {usageDisplay.cpu}
-                                    </span>
-                                    <span className="sr-only">
-                                      CPU utilization {usageDisplay.cpu}, memory utilization{' '}
-                                      {usageDisplay.memory}
-                                    </span>
-                                  </>
-                                ) : null}
-                                {hasQuotaPressure ? (
-                                  <>
-                                    <span
-                                      className={`namespace-quota-pressure-badge ${namespace.quotaPressure}`}
-                                      aria-hidden="true"
-                                      title={`Quota pressure ${namespace.quotaPressure} at ${namespace.quotaHighestUsedPercentage ?? 0}%`}
-                                    >
-                                      {namespace.quotaHighestUsedPercentage ?? 0}%
-                                    </span>
-                                    <span className="sr-only">
-                                      Quota pressure {namespace.quotaPressure} at{' '}
-                                      {namespace.quotaHighestUsedPercentage ?? 0}%
-                                    </span>
-                                  </>
-                                ) : null}
-                              </span>
-                            ) : null}
                             {namespace.scopeStatus ? (
                               <span
                                 className="namespace-scope-flag"

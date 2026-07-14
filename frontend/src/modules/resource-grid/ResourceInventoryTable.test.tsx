@@ -56,12 +56,15 @@ const src = (o: Partial<ResourceInventorySourceState<Row>>): ResourceInventorySo
   ...o,
 });
 
-const renderTable = (source: ResourceInventorySourceState<Row>) => {
+const renderTable = (source: ResourceInventorySourceState<Row>, boundRows?: Row[]) => {
   act(() => {
     root.render(
       <ResourceInventoryTable<Row>
         source={source}
-        gridTableProps={{ keyExtractor: (row: Row) => row.name }}
+        gridTableProps={{
+          keyExtractor: (row: Row) => row.name,
+          ...(boundRows ? { data: boundRows } : {}),
+        }}
         spinnerMessage="Loading..."
         emptyMessage="No rows found"
         columns={columns}
@@ -119,5 +122,21 @@ describe('ResourceInventoryTable error surface', () => {
     renderTable(src({ rows: [{ name: 'row-1' }], error: 'refresh failed' }));
     expect(container.textContent).toContain('row-1');
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('renders the binding-owned row order while the live source rows are active', () => {
+    const sourceRows = [{ name: 'alpha' }, { name: 'bravo' }];
+    renderTable(src({ rows: sourceRows }), [...sourceRows].reverse());
+
+    expect(gridTablePropsRef.current?.data.map(({ name }) => name)).toEqual(['bravo', 'alpha']);
+  });
+
+  it('keeps controller replay rows when the live binding is transiently empty', () => {
+    renderTable(src({ rows: [{ name: 'cached' }], cacheKey: 'cluster-a|namespaces' }), [
+      { name: 'cached' },
+    ]);
+    renderTable(src({ rows: [], loading: true, cacheKey: 'cluster-a|namespaces' }), []);
+
+    expect(gridTablePropsRef.current?.data.map(({ name }) => name)).toEqual(['cached']);
   });
 });

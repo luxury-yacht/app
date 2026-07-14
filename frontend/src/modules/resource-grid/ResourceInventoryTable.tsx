@@ -59,6 +59,12 @@ export default function ResourceInventoryTable<T>({
   ...tableProps
 }: ResourceInventoryTableProps<T>) {
   const render = useResourceInventoryTable(source);
+  // The binding owns local table ordering. Use its rows while the controller is
+  // rendering the live source; when the controller substitutes cached rows for
+  // a transient empty refresh, keep those replay rows because the binding was
+  // built from the empty live source and has no rows to order.
+  const tableRows =
+    render.rows === source.rows && gridTableProps.data ? gridTableProps.data : render.rows;
 
   // The partial/degraded note rides on the filter options GridTable already
   // reads; only merge it when the source carries filters to merge into.
@@ -98,7 +104,7 @@ export default function ResourceInventoryTable<T>({
         <GridTable<T>
           {...gridTableProps}
           {...tableProps}
-          data={render.rows}
+          data={tableRows}
           filters={filters}
           loading={updatingMessage ? false : render.showRefreshOverlay}
           loadingOverlay={

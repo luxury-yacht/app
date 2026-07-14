@@ -428,45 +428,6 @@ body.sidebar-resizing::after {
   color: var(--color-warning);
 }
 
-.namespace-signal-badges {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: auto;
-}
-
-.namespace-attention-badge,
-.namespace-warning-events-badge,
-.namespace-utilization-badge,
-.namespace-quota-pressure-badge {
-  display: inline-flex;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.35rem;
-  border-radius: var(--border-radius-round);
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
-}
-
-.namespace-warning-events-badge {
-  gap: 0.15rem;
-}
-
-.namespace-utilization-badge {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text-secondary);
-}
-
-.namespace-quota-pressure-badge.critical {
-  background: var(--button-danger-bg);
-  color: var(--button-danger-text);
-}
-
 /* Inaccessible scope entries cannot expand: no pointer affordance, muted
    text; the hover delete (and flag tooltip) remain the row's only actions. */
 .sidebar-item.scope-inaccessible {

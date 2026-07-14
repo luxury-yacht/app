@@ -12,6 +12,7 @@ describe('view registry', () => {
       CLUSTER_VIEW_DESCRIPTORS.map(({ id, label, intent }) => ({ id, label, intent }))
     ).toEqual([
       { id: 'fleet', label: 'Fleet', intent: 'inventory' },
+      { id: 'namespaces', label: 'Namespaces', intent: 'inventory' },
       { id: 'attention', label: 'Needs Attention', intent: 'operations' },
       { id: 'browse', label: 'Browse', intent: 'inventory' },
       { id: 'nodes', label: 'Nodes', intent: 'compute' },
@@ -92,7 +93,11 @@ describe('view registry', () => {
         views: views.map((view) => view.id),
       }))
     ).toEqual([
-      { id: 'observe', label: 'Observe', views: ['fleet', 'attention', 'browse', 'events'] },
+      {
+        id: 'observe',
+        label: 'Observe',
+        views: ['fleet', 'namespaces', 'attention', 'browse', 'events'],
+      },
       { id: 'run', label: 'Run', views: ['nodes'] },
       { id: 'configure', label: 'Configure', views: ['config', 'storage'] },
       { id: 'govern', label: 'Govern', views: ['crds', 'custom', 'rbac'] },

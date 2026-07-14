@@ -41,6 +41,7 @@ import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import type { NamespaceSignalState, NamespaceSummary } from '@/core/refresh/types';
 
 export interface NamespaceListItem {
   name: string;
@@ -70,6 +71,9 @@ export interface NamespaceListItem {
 
 interface NamespaceContextType {
   namespaces: NamespaceListItem[];
+  namespaceSummaries: NamespaceSummary[];
+  namespaceMetricsState: NamespaceSignalState;
+  namespaceError: string | null;
   selectedNamespace?: string;
   selectedNamespaceClusterId?: string;
   namespaceLoading: boolean;
@@ -639,6 +643,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const contextValue = useMemo(
     () => ({
       namespaces,
+      namespaceSummaries: scopedNamespaces,
+      namespaceMetricsState: namespaceDomain.data?.metricsState ?? 'unavailable',
+      namespaceError: namespaceDomain.error ?? null,
       selectedNamespace,
       selectedNamespaceClusterId,
       namespaceLoading,
@@ -652,6 +659,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }),
     [
       namespaces,
+      scopedNamespaces,
+      namespaceDomain.data?.metricsState,
+      namespaceDomain.error,
       selectedNamespace,
       selectedNamespaceClusterId,
       namespaceLoading,

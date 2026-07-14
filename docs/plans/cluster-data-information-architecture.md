@@ -82,10 +82,12 @@ Target navigation order:
 
 - [x] Expand the per-cluster namespace workload rollup into a broader aggregate
       domain for warning events, utilization, quota pressure, and degraded access.
-  - [x] Add permission-honest warning-event counts, event-driven invalidation,
-        and categorized sidebar badges.
+  - [x] Add permission-honest warning-event counts and event-driven invalidation.
   - [x] Add utilization and quota-pressure signals with explicit loading,
         available, unavailable, and stale-source presentation.
+  - [x] Keep the expandable sidebar namespace list navigation-focused and present
+        namespace status, workload health, warning events, utilization, quota
+        pressure, access, and age in a Cluster → Namespaces table.
 - [x] Add confidence-bearing application grouping from owner links, Helm links,
       and explicit application labels.
 - [x] Add table-to-map and map-to-table navigation with complete object refs.

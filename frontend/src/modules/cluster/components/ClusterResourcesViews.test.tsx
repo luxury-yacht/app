@@ -26,6 +26,9 @@ vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () =>
 vi.mock('@modules/cluster/components/ClusterViewFleet', () => ({
   default: () => <div data-testid="fleet" />,
 }));
+vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
+  default: () => <div data-testid="namespaces" />,
+}));
 vi.mock('@modules/cluster/components/ClusterViewNodes', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewRBAC', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewStorage', () => ({ default: () => null }));
@@ -58,5 +61,11 @@ describe('ClusterResourcesViews', () => {
     act(() => root.render(<ClusterResourcesViews activeTab="fleet" />));
 
     expect(container.querySelector('[data-testid="fleet"]')).not.toBeNull();
+  });
+
+  it('renders the namespace summary inventory', () => {
+    act(() => root.render(<ClusterResourcesViews activeTab="namespaces" />));
+
+    expect(container.querySelector('[data-testid="namespaces"]')).not.toBeNull();
   });
 });
