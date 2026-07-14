@@ -5,11 +5,13 @@ import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceG
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceSignalState, NamespaceSummary } from '@/core/refresh/types';
+import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 
 export interface NamespaceTableRow extends NamespaceSummary {
   group: string;
@@ -151,6 +153,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   cacheKey,
   emptyMessage,
 }) => {
+  const defaultPageSize = useDefaultTablePageSize();
   const columns = useMemo<GridColumnDefinition<NamespaceTableRow>[]>(() => {
     const result: GridColumnDefinition<NamespaceTableRow>[] = [
       cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.name, {
@@ -256,6 +259,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     filterOptions: showClusterColumn
       ? { clusters: clusterOptions.map(({ value }) => value) }
       : undefined,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
   });
   const { gridTableProps, favModal } = useClusterResourceGridTable({
     viewId: resolvedViewId,
@@ -309,6 +313,12 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       emptyMessage={emptyMessage}
       diagnosticsLabel="Namespaces"
       diagnosticsMode="local"
+      localPagination={{
+        idPrefix: `${resolvedViewId}-${clusterIdentity}`,
+        pageSize: persistence.pageSize ?? defaultPageSize,
+        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+        onPageSizeChange: persistence.setPageSize,
+      }}
       enableColumnVisibilityMenu
       allowHorizontalOverflow
       {...(enableRowNavigation ? { onRowClick: navigate, onRowPointerClick: navigate } : {})}

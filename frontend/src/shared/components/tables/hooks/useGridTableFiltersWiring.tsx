@@ -62,6 +62,8 @@ type UseGridTableFiltersWiringOptions<T> = {
   fetchAllRows?: () => Promise<T[]>;
   /** Default filename offered by the file Export action. */
   exportFilename?: string;
+  /** The local data contains every filter match before presentation pagination. */
+  hasAllLocalMatches?: boolean;
   /** IconBar items rendered before the built-in Reset action. */
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following Reset. */
@@ -83,6 +85,7 @@ export function useGridTableFiltersWiring<T>({
   getTextContent,
   fetchAllRows,
   exportFilename,
+  hasAllLocalMatches,
   preActions,
   postActions,
 }: UseGridTableFiltersWiringOptions<T>) {
@@ -207,9 +210,9 @@ export function useGridTableFiltersWiring<T>({
   const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
   const resolvedCustomActions = resolvedFilterOptions.customActions;
 
-  // Copy and Export always act on EVERY matching row when the view can fetch all pages
-  // (the active filters are part of the fetch scope). Views without a fetcher keep the
-  // page-only Copy — on those non-paginated tables the visible rows ARE the full set.
+  // Copy and Export act on every matching row when the view can fetch all pages.
+  // Local presentation pagination also supplies every filtered row here because
+  // pagination is applied downstream of this hook.
   const supportsExportAll = Boolean(fetchAllRows);
 
   const fetchAllRowsOrEmpty = useCallback(
@@ -221,8 +224,9 @@ export function useGridTableFiltersWiring<T>({
     data: tableData,
     columns: exportColumns,
     getTextContent,
-    // Pass the real (possibly undefined) fetcher: when absent, Copy takes the visible rows.
+    // Pass the real (possibly undefined) fetcher: when absent, Copy takes this local row set.
     fetchAllRows,
+    hasAllLocalMatches,
   });
 
   const csvExportFileAction = useGridTableCsvFileExportAction({

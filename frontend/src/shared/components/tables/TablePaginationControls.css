@@ -1,4 +1,4 @@
-.query-pagination-controls {
+.table-pagination-controls {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -9,7 +9,7 @@
   overflow: visible;
 }
 
-.query-pagination-page-size {
+.table-pagination-page-size {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2, 0.5rem);
@@ -17,32 +17,32 @@
   min-width: 0;
 }
 
-.query-pagination-page-size-label {
+.table-pagination-page-size-label {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm, 0.875rem);
   line-height: 1.2;
   white-space: nowrap;
 }
 
-.query-pagination-page-size .dropdown {
+.table-pagination-page-size .dropdown {
   width: var(--page-size-dropdown-width);
   min-width: var(--page-size-dropdown-width);
 }
 
-.query-pagination-page-size .dropdown-trigger {
+.table-pagination-page-size .dropdown-trigger {
   width: 100%;
   min-width: 0;
 }
 
-.query-pagination-page-size .dropdown-value {
+.table-pagination-page-size .dropdown-value {
   text-align: right;
 }
 
-.query-pagination-page-size .dropdown-menu {
+.table-pagination-page-size .dropdown-menu {
   min-width: 5rem;
 }
 
-.query-pagination-status {
+.table-pagination-status {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -55,12 +55,12 @@
   white-space: nowrap;
 }
 
-.query-pagination-range {
+.table-pagination-range {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.query-pagination-progress {
+.table-pagination-progress {
   width: 0.875rem;
   height: 0.875rem;
   flex: 0 0 0.875rem;
@@ -70,19 +70,19 @@
   opacity: 0;
 }
 
-.query-pagination-progress[aria-label] {
+.table-pagination-progress[aria-label] {
   opacity: 1;
-  animation: query-pagination-spin 0.8s linear infinite;
+  animation: table-pagination-spin 0.8s linear infinite;
 }
 
-.query-pagination-buttons {
+.table-pagination-buttons {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
   gap: var(--space-1, 0.25rem);
 }
 
-.query-pagination-button {
+.table-pagination-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -95,52 +95,50 @@
   cursor: pointer;
 }
 
-.query-pagination-button-icon {
+.table-pagination-button-icon {
   display: block;
   fill: currentColor;
 }
 
-.query-pagination-button:hover:not(:disabled),
-.query-pagination-button:focus-visible:not(:disabled) {
+.table-pagination-button:hover:not(:disabled),
+.table-pagination-button:focus-visible:not(:disabled) {
   border-color: var(--color-accent);
   background: var(--color-bg-secondary);
 }
 
-.query-pagination-button:focus-visible {
+.table-pagination-button:focus-visible {
   outline: none;
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
-.query-pagination-button:disabled {
+.table-pagination-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-@keyframes query-pagination-spin {
+@keyframes table-pagination-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .query-pagination-progress[aria-label] {
+  .table-pagination-progress[aria-label] {
     animation: none;
   }
 }
 
 @media (max-width: 640px) {
-  .query-pagination-page-size-label {
+  .table-pagination-page-size-label {
     display: none;
   }
 
-  .query-pagination-status {
+  .table-pagination-status {
     min-width: 6.5rem;
   }
 }
 
-/* The editable page number sits BETWEEN the prev/next arrows — one navigation
-   cluster: ◀ [1]/5 ▶ — so the status text carries the single range fact. */
-.query-pagination-page-jump {
+.table-pagination-page-jump {
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-1, 0.25rem);
@@ -149,37 +147,36 @@
   font-size: var(--font-size-sm, 0.875rem);
 }
 
-.query-pagination-page-jump-input {
+.table-pagination-page-jump-input {
   width: 2rem;
   height: 1.5rem;
   padding: 0 0.25rem;
-  border: 1px solid var(--color-border, #444);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: var(--color-bg, transparent);
+  background: var(--color-bg);
   color: var(--color-text);
   font-size: var(--font-size-sm, 0.875rem);
   text-align: center;
-  /* The arrows communicate stepping; the number field is for typing a page. */
   -moz-appearance: textfield;
   appearance: textfield;
 }
 
-.query-pagination-page-jump-input::-webkit-outer-spin-button,
-.query-pagination-page-jump-input::-webkit-inner-spin-button {
+.table-pagination-page-jump-input::-webkit-outer-spin-button,
+.table-pagination-page-jump-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.query-pagination-page-jump-input:focus-visible {
+.table-pagination-page-jump-input:focus-visible {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
-.query-pagination-page-jump-input:disabled {
+.table-pagination-page-jump-input:disabled {
   opacity: 0.55;
 }
 
-.query-pagination-page-jump-total {
+.table-pagination-page-jump-total {
   color: var(--color-text-secondary);
 }

@@ -12,6 +12,7 @@ import {
 } from '@shared/components/tables/pageSizeOptions';
 import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import TablePaginationControls from '@shared/components/tables/TablePaginationControls';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +24,6 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { backendQuerySource } from './backendQuerySource';
-import QueryPaginationControls from './QueryPaginationControls';
 import type { QueryBackedTableState } from './queryBackedTableState';
 import { mergeQueryBackedFilterOptions, useQueryBackedTableState } from './queryBackedTableState';
 import type {
@@ -447,7 +447,7 @@ function useQueryBackedGridResult<
       onPageNext: query.loadMore,
       canPagePrevious: query.hasPrevious && !query.isRequestingMore,
       canPageNext: Boolean(query.continueToken) && !query.isRequestingMore,
-      paginationControls: React.createElement(QueryPaginationControls, {
+      paginationControls: React.createElement(TablePaginationControls, {
         idPrefix: viewId,
         pageIndex: query.pageIndex,
         pageSize: query.pageSize,

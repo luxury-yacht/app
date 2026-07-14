@@ -305,6 +305,12 @@ describe('GlobalViewNamespaces', () => {
     });
     expect(mocks.persistenceParams).toMatchObject({
       filterOptions: { clusters: ['cluster-a', 'cluster-b', 'cluster-c'] },
+      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
+    });
+    expect(mocks.tableProps.localPagination).toMatchObject({
+      idPrefix: 'global-namespaces-global-namespaces:cluster-a|cluster-b|cluster-c',
+      pageSize: 50,
+      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
     });
     expect(mocks.tableProps).not.toHaveProperty('onRowClick');
     expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');

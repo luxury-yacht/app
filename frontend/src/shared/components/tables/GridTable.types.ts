@@ -156,6 +156,13 @@ export interface GridTableFilterConfig<T> {
  */
 export type GridTableDiagnosticsMode = 'local' | 'query' | 'live';
 
+export interface GridTableLocalPaginationConfig {
+  idPrefix: string;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  onPageSizeChange: (value: number) => void;
+}
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
@@ -199,6 +206,8 @@ export interface GridTableProps<T> {
   emptyMessage?: string;
   /** Rendered in the table's pagination footer (e.g. cursor pagination controls). */
   paginationControls?: React.ReactNode;
+  /** Client-side pagination applied after local table filters and sorting. */
+  localPagination?: GridTableLocalPaginationConfig;
   /** Ctrl+ArrowLeft (Command+ArrowLeft on macOS) pages back while the table has focus. */
   onPagePrevious?: () => void;
   /** Ctrl+ArrowRight (Command+ArrowRight on macOS) pages forward while the table has focus. */

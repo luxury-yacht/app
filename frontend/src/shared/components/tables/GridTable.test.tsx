@@ -124,6 +124,12 @@ type RenderOptions = Partial<{
   allowHorizontalOverflow: boolean;
   keyExtractor: (item: SimpleRow, index: number) => string;
   paginationControls: React.ReactNode;
+  localPagination: {
+    idPrefix: string;
+    pageSize: number;
+    pageSizeOptions: readonly number[];
+    onPageSizeChange: (value: number) => void;
+  };
 }>;
 
 let cleanupRoot: (() => void) | null = null;
@@ -1232,6 +1238,7 @@ function renderGridTable(options: RenderOptions = {}) {
     columnWidths: options.columnWidths ?? {},
     allowHorizontalOverflow: options.allowHorizontalOverflow ?? false,
     paginationControls: options.paginationControls,
+    localPagination: options.localPagination,
   };
 
   let currentProps = initialProps;
@@ -1311,6 +1318,122 @@ it('renders paginationControls in the footer without any pagination callbacks', 
 
   expect(container.querySelector('.gridtable-pagination')).not.toBeNull();
   expect(container.querySelector('[data-testid="cursor-pagination-controls"]')).not.toBeNull();
+
+  cleanup();
+});
+
+it('paginates a local row set after the table pipeline and renders exact footer controls', async () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    localPagination: {
+      idPrefix: 'local-table',
+      pageSize: 2,
+      pageSizeOptions: [2, 3],
+      onPageSizeChange: vi.fn(),
+    },
+  });
+  cleanupRoot = cleanup;
+
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 0', 'Row 1']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('1-2 of 5');
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click();
+  });
+
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 2', 'Row 3']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('3-4 of 5');
+
+  cleanup();
+});
+
+it('resets local pagination after filters change and paginates the filtered result', async () => {
+  let filterValue = {
+    search: '',
+    kinds: [] as string[],
+    namespaces: [] as string[],
+    caseSensitive: false,
+    includeMetadata: false,
+  };
+  const filters = (): GridTableFilterConfig<SimpleRow> => ({
+    enabled: true,
+    value: filterValue,
+    onChange: vi.fn(),
+  });
+  const { container, cleanup, rerender } = renderGridTable({
+    data: createRows(6),
+    filters: filters(),
+    virtualization: { enabled: false },
+    localPagination: {
+      idPrefix: 'local-filtered-table',
+      pageSize: 2,
+      pageSizeOptions: [2, 3],
+      onPageSizeChange: vi.fn(),
+    },
+  });
+  cleanupRoot = cleanup;
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click();
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click();
+  });
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('5-6 of 6');
+
+  filterValue = { ...filterValue, search: 'Row 0' };
+  await act(async () => {
+    rerender({ filters: filters() });
+    await Promise.resolve();
+  });
+
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 0']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('1-1 of 1');
+
+  cleanup();
+});
+
+it('copies every filtered local row when only one local page is rendered', async () => {
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  if (!navigator.clipboard) {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+  } else {
+    Object.assign(navigator.clipboard, { writeText: clipboardWriteText });
+  }
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    filters: { enabled: true },
+    localPagination: {
+      idPrefix: 'local-copy-table',
+      pageSize: 2,
+      pageSizeOptions: [2, 3],
+      onPageSizeChange: vi.fn(),
+    },
+  });
+  cleanupRoot = cleanup;
+
+  expect(container.querySelectorAll('.gridtable-row')).toHaveLength(2);
+  const copyButton = container.querySelector<HTMLButtonElement>(
+    '.icon-bar-button[aria-label="Copy all matching rows as CSV"]'
+  );
+  expect(copyButton).not.toBeNull();
+
+  await act(async () => {
+    requireValue(copyButton, 'expected local pagination copy action').click();
+    await Promise.resolve();
+  });
+
+  expect(clipboardWriteText).toHaveBeenCalledWith('Label\nRow 0\nRow 1\nRow 2\nRow 3\nRow 4');
 
   cleanup();
 });

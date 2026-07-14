@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   onNamespaceSelect: vi.fn(),
   setSelectedNamespace: vi.fn(),
+  setPageSize: vi.fn(),
   tableProps: null as null | Record<string, unknown>,
   resourceGridParams: null as null | Record<string, unknown>,
+  persistenceParams: null as null | Record<string, unknown>,
   namespaceLoading: false,
   namespaceRefreshing: false,
 }));
@@ -75,26 +77,29 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: {
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    },
-    setFilters: vi.fn(),
-    pageSize: null,
-    setPageSize: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-  }),
+  useGridTablePersistence: (params: Record<string, unknown>) => {
+    mocks.persistenceParams = params;
+    return {
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: mocks.setPageSize,
+      resetState: vi.fn(),
+      hydrated: true,
+    };
+  },
 }));
 
 vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
@@ -153,6 +158,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.tableProps = null;
   mocks.resourceGridParams = null;
+  mocks.persistenceParams = null;
   mocks.namespaceLoading = false;
   mocks.namespaceRefreshing = false;
 });
@@ -197,6 +203,19 @@ describe('ClusterViewNamespaces', () => {
       'age',
     ]);
     expect(mocks.resourceGridParams).toMatchObject({ filterOptionOverrides: undefined });
+    expect(mocks.persistenceParams).toMatchObject({
+      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
+    });
+    expect(tableProps.localPagination).toMatchObject({
+      idPrefix: 'cluster-namespaces-cluster-a',
+      pageSize: 50,
+      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
+    });
+    const localPagination = tableProps.localPagination as {
+      onPageSizeChange: (value: number) => void;
+    };
+    localPagination.onPageSizeChange(100);
+    expect(mocks.setPageSize).toHaveBeenCalledWith(100);
     expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Attn');
     expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warn');
 

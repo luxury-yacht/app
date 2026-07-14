@@ -1,18 +1,12 @@
-/**
- * frontend/src/modules/resource-grid/QueryPaginationControls.tsx
- *
- * Shared cursor pagination controls for query-backed resource tables.
- */
-
-import type React from 'react';
-import { useMemo } from 'react';
-import './QueryPaginationControls.css';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { formatShortcut } from '@ui/shortcuts/utils';
+import type React from 'react';
+import { useMemo } from 'react';
 import { isMacPlatform } from '@/utils/platform';
+import './TablePaginationControls.css';
 
-interface QueryPaginationControlsProps {
+export interface TablePaginationControlsProps {
   idPrefix: string;
   pageIndex: number;
   pageSize: number;
@@ -26,10 +20,6 @@ interface QueryPaginationControlsProps {
   onPrevious: () => void;
   onNext: () => void;
   onPageSizeChange: (value: number) => void;
-  /**
-   * Numbered page jump (1-based). Rendered only while the total is exact —
-   * approximate totals keep first/prev/next only (large-data.md contract).
-   */
   onPageJump?: (page: number) => void;
 }
 
@@ -37,7 +27,7 @@ const formatCount = (value: number): string => Math.max(0, value).toLocaleString
 
 const PaginationArrowIcon: React.FC<{ direction: 'previous' | 'next' }> = ({ direction }) => (
   <svg
-    className="query-pagination-button-icon"
+    className="table-pagination-button-icon"
     viewBox="0 0 16 16"
     width="16"
     height="16"
@@ -52,7 +42,7 @@ const PaginationArrowIcon: React.FC<{ direction: 'previous' | 'next' }> = ({ dir
   </svg>
 );
 
-const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
+const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
   idPrefix,
   pageIndex,
   pageSize,
@@ -92,17 +82,11 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   const totalLabel = totalIsExact ? formatCount(totalCount) : `${formatCount(totalCount)}+`;
   const totalPages =
     totalIsExact && pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 0;
-  // Numbered jumps need an exact page count; approximate totals keep
-  // first/prev/next only (large-data.md contract).
   const showPageJump = Boolean(onPageJump) && totalIsExact && totalPages > 1;
   const pageNavigationModifiers = isMacPlatform() ? { meta: true } : { ctrl: true };
   const previousPageTitle = `Previous page (${formatShortcut('ArrowLeft', pageNavigationModifiers)})`;
   const nextPageTitle = `Next page (${formatShortcut('ArrowRight', pageNavigationModifiers)})`;
 
-  // Commit the page-jump field: parse, clamp to [1, totalPages], and jump only
-  // when the target differs from the current page. Both Enter and blur (tab-out)
-  // call this, so they can't drift. On an empty/invalid/same-page value it
-  // restores the field to the current page rather than leaving a stale number.
   const commitPageJump = (input: HTMLInputElement) => {
     const value = Number(input.value);
     const target =
@@ -115,9 +99,9 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   };
 
   return (
-    <nav className="query-pagination-controls" aria-label="Table pagination">
-      <div className="query-pagination-page-size">
-        <span className="query-pagination-page-size-label">Rows per page</span>
+    <nav className="table-pagination-controls" aria-label="Table pagination">
+      <div className="table-pagination-page-size">
+        <span className="table-pagination-page-size-label">Rows per page</span>
         <Dropdown
           id={`${idPrefix}-page-size`}
           name={`${idPrefix}-page-size`}
@@ -139,24 +123,21 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           }}
         />
       </div>
-      <div className="query-pagination-status" aria-live="polite">
-        <span className="query-pagination-range">
+      <div className="table-pagination-status" aria-live="polite">
+        <span className="table-pagination-range">
           {rangeLabel} of {totalLabel}
         </span>
         <span
-          className="query-pagination-progress"
+          className="table-pagination-progress"
           role="status"
           aria-label={loading ? 'Page request in progress' : undefined}
           aria-hidden={loading ? undefined : true}
         />
       </div>
-      {/* One navigation cluster: ◀ [page]/total ▶. The editable page number
-          lives between the arrows because it IS navigation — keeping it out of
-          the status text leaves exactly one "X of Y" fact on the footer. */}
-      <div className="query-pagination-buttons">
+      <div className="table-pagination-buttons">
         <button
           type="button"
-          className="query-pagination-button"
+          className="table-pagination-button"
           onClick={onPrevious}
           disabled={!hasPrevious || loading}
           aria-label="Previous page"
@@ -165,11 +146,11 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
           <PaginationArrowIcon direction="previous" />
         </button>
         {showPageJump ? (
-          <span className="query-pagination-page-jump">
+          <span className="table-pagination-page-jump">
             <input
               key={pageIndex}
               type="number"
-              className="query-pagination-page-jump-input"
+              className="table-pagination-page-jump-input"
               defaultValue={pageIndex}
               min={1}
               max={totalPages}
@@ -183,12 +164,12 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
               }}
               onBlur={(event) => commitPageJump(event.currentTarget)}
             />
-            <span className="query-pagination-page-jump-total">/ {formatCount(totalPages)}</span>
+            <span className="table-pagination-page-jump-total">/ {formatCount(totalPages)}</span>
           </span>
         ) : null}
         <button
           type="button"
-          className="query-pagination-button"
+          className="table-pagination-button"
           onClick={onNext}
           disabled={!hasNext || loading}
           aria-label="Next page"
@@ -201,4 +182,4 @@ const QueryPaginationControls: React.FC<QueryPaginationControlsProps> = ({
   );
 };
 
-export default QueryPaginationControls;
+export default TablePaginationControls;

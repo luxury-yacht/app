@@ -24,6 +24,11 @@ workflow and that exception is documented.
 - Do not split pagination controls across unrelated parts of the view. For
   query-backed tables, the control group belongs with the table footer and must
   show page size, visible range, and honest total/page-count state.
+- Complete or explicitly partial local row sets may use `localPagination` for
+  presentation paging. `GridTable` applies it after local filter and sort, shows
+  an exact filtered range and total, and keeps Copy scoped to every locally
+  matching row rather than the displayed page. Do not combine `localPagination`
+  with externally supplied `paginationControls`.
 - Rows-per-page is persisted table state. Store it with the same
   cluster/view/namespace persistence key as sort, filters, widths, and column
   visibility, and validate it against the table's supported page-size options.
@@ -153,6 +158,10 @@ invalidators even though the callback does not read them.
 - `Local Partial` means the loaded rows are only a recent, capped, buffered, or
   degraded window. UI text, counts, filters, export, selection, and object
   actions must be scoped to that window.
+- Local presentation pagination does not change either local table mode. Its
+  page index is transient, resets when filter, sort, scope, or page size changes,
+  and clamps when the filtered result shrinks. Page size uses the table's
+  persisted state and shared supported options.
 - `Query Backed Static` and `Query Backed Dynamic` mean the backend owns global
   search, filters, sort, counts, facets, and pagination. `GridTable` renders the
   current page/window and emits query changes.
@@ -208,9 +217,10 @@ A table's `source` (`ResourceInventorySourceState`) comes from exactly one of tw
 adapters; there is no third shape:
 
 - `boundedRowsSource` — bounded local data (a fully-resident `Local Complete`
-  set, or an explicitly `Local Partial` window). It never paginates, so a bounded
-  table cannot silently fan out to query scale; it carries `completeness` and an
-  optional `partialLabel`.
+  set, or an explicitly `Local Partial` window). The source never fetches pages,
+  so a bounded table cannot silently fan out to query scale; it carries
+  `completeness` and an optional `partialLabel`. `GridTable` may divide those
+  already-loaded rows into local presentation pages.
 - `backendQuerySource` — catalog/explicit backend query results (Browse, Custom).
   The typed-resource query wrappers build their source inline from the same
   `ResourceInventorySourceState` shape.
@@ -269,8 +279,9 @@ When changing table behavior:
 2. Verify virtualization, keyboard focus, hover, context menu, and empty states.
    For accessibility changes, also verify the wrapper's active descendant,
    row/cell roles, native sort buttons, and separator value attributes.
-3. Verify pagination placement, page-size behavior, visible range, and total
-   exactness for query-backed tables.
+3. Verify pagination placement, page-size behavior, visible range, total
+   exactness, and reset/clamp behavior for the table's local or query-backed
+   mode.
 4. Verify partial/degraded copy and action limits for Local Partial tables.
 5. Keep shared behavior in focused table hooks rather than feature components.
 6. Add tests with enough rows and columns to exercise the shared path.

@@ -2,9 +2,9 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
-import QueryPaginationControls from './QueryPaginationControls';
+import TablePaginationControls from './TablePaginationControls';
 
-describe('QueryPaginationControls', () => {
+describe('TablePaginationControls', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -30,7 +30,7 @@ describe('QueryPaginationControls', () => {
 
     act(() => {
       root.render(
-        <QueryPaginationControls
+        <TablePaginationControls
           idPrefix="typed"
           pageIndex={1}
           pageSize={50}
@@ -68,7 +68,7 @@ describe('QueryPaginationControls', () => {
 
     act(() => {
       root.render(
-        <QueryPaginationControls
+        <TablePaginationControls
           idPrefix="typed"
           pageIndex={2}
           pageSize={100}
@@ -103,7 +103,7 @@ describe('QueryPaginationControls', () => {
   const renderWithJump = (onPageJump: (page: number) => void) => {
     act(() => {
       root.render(
-        <QueryPaginationControls
+        <TablePaginationControls
           idPrefix="typed"
           pageIndex={2}
           pageSize={250}
@@ -122,7 +122,7 @@ describe('QueryPaginationControls', () => {
       );
     });
     return requireValue(
-      container.querySelector<HTMLInputElement>('.query-pagination-page-jump-input'),
+      container.querySelector<HTMLInputElement>('.table-pagination-page-jump-input'),
       'Expected the page-jump input after rendering pagination controls'
     );
   };

@@ -30,6 +30,7 @@ import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/u
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import { useGridTableInteractionWiring } from '@shared/components/tables/hooks/useGridTableInteractionWiring';
 import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
+import { useGridTableLocalPagination } from '@shared/components/tables/hooks/useGridTableLocalPagination';
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
@@ -60,6 +61,7 @@ export interface GridTableControllerResult<T> {
   // Filtered data
   tableData: T[];
   filtersNode: ReactNode;
+  paginationControls: ReactNode;
 
   // Focus
   focusedRowKey: string | null;
@@ -129,6 +131,8 @@ export function useGridTableController<T>({
   onColumnVisibilityChange,
   nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
   enableColumnVisibilityMenu = true,
+  paginationControls: externalPaginationControls,
+  localPagination,
   onPagePrevious,
   onPageNext,
   canPagePrevious = false,
@@ -216,9 +220,20 @@ export function useGridTableController<T>({
     getTextContent,
     fetchAllRows,
     exportFilename,
+    hasAllLocalMatches: Boolean(localPagination),
   });
 
-  const tableData = filteredData;
+  const localPage = useGridTableLocalPagination({
+    data: filteredData,
+    config: localPagination,
+    resetIdentity: `${filterSignature}|${sortConfig?.key ?? ''}|${sortConfig?.direction ?? ''}`,
+  });
+  const tableData = localPage.data;
+  const resolvedPagePrevious = localPagination ? localPage.onPrevious : onPagePrevious;
+  const resolvedPageNext = localPagination ? localPage.onNext : onPageNext;
+  const resolvedCanPagePrevious = localPagination ? localPage.canPagePrevious : canPagePrevious;
+  const resolvedCanPageNext = localPagination ? localPage.canPageNext : canPageNext;
+  const paginationControls = localPagination ? localPage.controls : externalPaginationControls;
 
   useEffect(() => {
     if (!diagnosticsLabel) {
@@ -396,10 +411,10 @@ export function useGridTableController<T>({
     moveSelectionByDelta,
     jumpToIndex,
     getPageSizeRef,
-    onPagePrevious,
-    onPageNext,
-    canPagePrevious,
-    canPageNext,
+    onPagePrevious: resolvedPagePrevious,
+    onPageNext: resolvedPageNext,
+    canPagePrevious: resolvedCanPagePrevious,
+    canPageNext: resolvedCanPageNext,
     tableDataLength: tableData.length,
     isContextMenuVisible,
   });
@@ -478,6 +493,7 @@ export function useGridTableController<T>({
     headerInnerRef,
     tableData,
     filtersNode,
+    paginationControls,
     focusedRowKey,
     handleWrapperFocus,
     handleWrapperBlur,

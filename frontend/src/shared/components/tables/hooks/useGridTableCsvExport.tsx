@@ -17,6 +17,8 @@ interface UseGridTableCsvExportOptions<T> {
    * rows — which on non-paginated tables is already everything.
    */
   fetchAllRows?: () => Promise<T[]>;
+  /** The provided local rows are every filtered match, even if the table renders one page. */
+  hasAllLocalMatches?: boolean;
 }
 
 export function useGridTableCsvExport<T>({
@@ -24,6 +26,7 @@ export function useGridTableCsvExport<T>({
   columns,
   getTextContent,
   fetchAllRows,
+  hasAllLocalMatches = false,
 }: UseGridTableCsvExportOptions<T>): IconBarItem {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null);
@@ -59,7 +62,8 @@ export function useGridTableCsvExport<T>({
     }
     setCopying(true);
     try {
-      // With a fetcher, copy every matching row; otherwise copy the rows on screen.
+      // A fetcher supplies every backend match. Otherwise copy the provided local row set,
+      // which can contain all local matches even when presentation pagination is enabled.
       const rows = fetchAllRows ? await fetchAllRows() : data;
       const csvText = buildGridTableCsv(rows, columns, getTextContent);
       if (!csvText) {
@@ -77,7 +81,11 @@ export function useGridTableCsvExport<T>({
     }
   }, [canCopyToClipboard, columns, data, fetchAllRows, getTextContent, scheduleCopyReset]);
 
-  const title = fetchAllRows ? 'Copy all matching rows to clipboard' : 'Copy visible rows as CSV';
+  const title = fetchAllRows
+    ? 'Copy all matching rows to clipboard'
+    : hasAllLocalMatches
+      ? 'Copy all matching rows as CSV'
+      : 'Copy visible rows as CSV';
 
   return useMemo<IconBarItem>(
     () => ({

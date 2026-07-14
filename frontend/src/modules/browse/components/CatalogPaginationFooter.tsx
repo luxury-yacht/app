@@ -1,6 +1,6 @@
 import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
-import QueryPaginationControls from '@modules/resource-grid/QueryPaginationControls';
 import type { TablePageSize } from '@shared/components/tables/pageSizeOptions';
+import TablePaginationControls from '@shared/components/tables/TablePaginationControls';
 import type React from 'react';
 
 interface CatalogPaginationFooterProps {
@@ -26,7 +26,7 @@ export const catalogPaginationPageKeyProps = (pagination: BrowseCatalogPaginatio
 };
 
 /**
- * The one catalog pagination footer. Renders the shared QueryPaginationControls
+ * The one catalog pagination footer. Renders the shared TablePaginationControls
  * straight from useBrowseCatalog's assembled pagination object so Browse and
  * the two Custom views cannot drift on the footer wiring.
  */
@@ -35,7 +35,7 @@ const CatalogPaginationFooter: React.FC<CatalogPaginationFooterProps> = ({
   visibleItemCount,
   pagination,
 }) => (
-  <QueryPaginationControls
+  <TablePaginationControls
     idPrefix={idPrefix}
     pageIndex={pagination.pageIndex}
     pageSize={pagination.pageLimit}

@@ -30,6 +30,7 @@ export type {
   GridTableFilterConfig,
   GridTableFilterOptions,
   GridTableFilterState,
+  GridTableLocalPaginationConfig,
   GridTableProps,
   GridTableVirtualizationOptions,
   InternalFilterOptions,
@@ -46,7 +47,6 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     hideHeader = false,
     useShortNames = false,
     emptyMessage = 'No data available',
-    paginationControls,
     allowHorizontalOverflow = true,
     showTrailingColumnBoundary = true,
     keyExtractor,
@@ -79,6 +79,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     loadingOverlayMessage,
     hasActiveFilters,
     onClearFilters,
+    paginationControls,
     wrapWithProfiler,
   } = useGridTableController<T>(props);
 
