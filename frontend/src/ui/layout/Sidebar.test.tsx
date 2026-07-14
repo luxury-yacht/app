@@ -218,6 +218,31 @@ describe('Sidebar', () => {
     expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
   });
 
+  it('presents Clusters under the Global scope instead of Cluster resources', () => {
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    expect(
+      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual(['Global', 'Cluster', 'Namespaces']);
+
+    const globalClusters = requireValue(
+      host.querySelector<HTMLElement>(
+        '[data-sidebar-scope="global"][data-sidebar-target-view="fleet"]'
+      ),
+      'expected global Clusters entry'
+    );
+    expect(globalClusters.textContent?.trim()).toBe('Clusters');
+
+    const clusterViews = requireValue(
+      host.querySelector('[id$="-sidebar-cluster-resource-views"]'),
+      'expected cluster resource views'
+    );
+    expect(clusterViews.querySelector('[data-sidebar-target-view="fleet"]')).toBeNull();
+  });
+
   it('keeps namespace rows free of operational telemetry badges', () => {
     renderSidebar({
       namespaces: [

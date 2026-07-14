@@ -47,23 +47,28 @@ validation errors. Frontend refresh code should not produce them.
 - Refresh scope helpers: `frontend/src/core/refresh/clusterScope.ts`
 - Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
 
-## Fleet Lens
+## Global Clusters View
 
-Fleet compares only open clusters. The frontend fans out the existing
-`cluster-overview` domain over one `clusterId|` scope per eligible cluster; it
-does not introduce a cross-cluster refresh scope or cache entry. Each row keeps
-the originating `clusterId` as its identity and uses overview-owned readiness,
-capacity, workload, metrics, and unavailable-resource projections.
+Clusters is a Global-scope view that compares only open clusters. The frontend
+fans out the existing `cluster-overview` domain over one `clusterId|` scope per
+eligible cluster; it does not introduce a cross-cluster refresh scope or cache
+entry. Each row keeps the originating `clusterId` as its identity and uses
+overview-owned readiness, capacity, workload, metrics, and
+unavailable-resource projections.
 
-Lifecycle and confirmed authentication failures remain per cluster. Fleet may
+Lifecycle and confirmed authentication failures remain per cluster. Clusters may
 show ready, loading, reconnecting, disconnected, and authentication-required
 rows together, and it does not start overview refresh for a cluster whose
 lifecycle cannot activate that domain.
 
-Navigation from a Fleet row prepares the destination cluster's navigation and
+Navigation from a Clusters row prepares the destination cluster's navigation and
 sidebar state before activating its kubeconfig selection. Row activation opens
 that cluster's Overview; the Needs Attention cell opens its all-namespaces
 unhealthy-workload lens.
+
+The user-facing scope and label are **Global → Clusters**. The internal `fleet`
+route and `cluster-fleet` table-persistence id remain compatibility identities
+so existing favorites and table settings continue to resolve.
 
 ## Change Checklist
 

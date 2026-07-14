@@ -1,11 +1,11 @@
 /**
- * Canonical metadata for the cluster and namespace views exposed by the app shell.
+ * Canonical metadata for the global, cluster, and namespace views exposed by the app shell.
  *
  * Keep this module React-free: refresh infrastructure, persistence boundaries,
  * and UI navigation all consume the same vocabulary.
  */
 
-export type ViewScope = 'cluster' | 'namespace';
+export type ViewScope = 'global' | 'cluster' | 'namespace';
 
 export type ViewIntent =
   | 'applications'
@@ -58,16 +58,21 @@ interface ViewDescriptor<Scope extends ViewScope, Id extends string> {
   readonly supportsAllNamespaces?: boolean;
 }
 
-export const CLUSTER_VIEW_DESCRIPTORS = [
+// Global views compare data across the app's open clusters. Presentation scope
+// is independent from the stable route ids used by dispatch and persistence.
+export const GLOBAL_VIEW_DESCRIPTORS = [
   {
-    scope: 'cluster',
+    scope: 'global',
     id: 'fleet',
-    label: 'Fleet',
+    label: 'Clusters',
     intent: 'inventory',
     description: 'Compare health, capacity, and access across open clusters',
-    keywords: ['fleet', 'cluster', 'compare', 'health', 'capacity', 'access'],
+    keywords: ['fleet', 'clusters', 'global', 'compare', 'health', 'capacity', 'access'],
     refresher: null,
   },
+] as const satisfies readonly ViewDescriptor<'global', string>[];
+
+export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
     id: 'namespaces',
@@ -313,17 +318,33 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
 ] as const satisfies readonly ViewDescriptor<'namespace', string>[];
 
 export type ClusterViewDescriptor = (typeof CLUSTER_VIEW_DESCRIPTORS)[number];
+export type GlobalViewDescriptor = (typeof GLOBAL_VIEW_DESCRIPTORS)[number];
 export type NamespaceViewDescriptor = (typeof NAMESPACE_VIEW_DESCRIPTORS)[number];
-export type ClusterViewType = ClusterViewDescriptor['id'];
+export type GlobalViewType = GlobalViewDescriptor['id'];
+// Global views currently retain their stable cluster-route ids so saved
+// favorites and table state continue to resolve after the presentation move.
+export type ClusterViewType = ClusterViewDescriptor['id'] | GlobalViewType;
 export type NamespaceViewType = NamespaceViewDescriptor['id'];
-export type RegisteredViewDescriptor = ClusterViewDescriptor | NamespaceViewDescriptor;
+export type RegisteredViewDescriptor =
+  | GlobalViewDescriptor
+  | ClusterViewDescriptor
+  | NamespaceViewDescriptor;
+
+export const CLUSTER_ROUTE_VIEW_DESCRIPTORS = [
+  ...GLOBAL_VIEW_DESCRIPTORS,
+  ...CLUSTER_VIEW_DESCRIPTORS,
+] as const;
 
 export const getViewDescriptor = (
   scope: ViewScope,
   id: string
 ): RegisteredViewDescriptor | undefined => {
   const descriptors: readonly RegisteredViewDescriptor[] =
-    scope === 'cluster' ? CLUSTER_VIEW_DESCRIPTORS : NAMESPACE_VIEW_DESCRIPTORS;
+    scope === 'global'
+      ? GLOBAL_VIEW_DESCRIPTORS
+      : scope === 'cluster'
+        ? CLUSTER_VIEW_DESCRIPTORS
+        : NAMESPACE_VIEW_DESCRIPTORS;
   return descriptors.find((descriptor) => descriptor.id === id);
 };
 

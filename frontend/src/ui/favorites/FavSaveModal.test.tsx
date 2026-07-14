@@ -488,7 +488,7 @@ describe('FavSaveModal', () => {
     expect(savedFav.namespace).toBe('');
   });
 
-  it('offers every registered cluster and namespace view', async () => {
+  it('offers every registered global, cluster, and namespace view', async () => {
     await renderComponent(makeProps());
 
     const viewSelect = requireValue(
@@ -523,6 +523,7 @@ describe('FavSaveModal', () => {
       'namespace:rbac',
       'namespace:storage',
     ]);
+    expect(viewSelect.options[0]?.textContent).toBe('Clusters');
   });
 
   // -----------------------------------------------------------------------

@@ -17,7 +17,7 @@ import type { GridTableFilterState } from '@shared/components/tables/GridTable.t
 import { normalizeGridTableQueryFacets } from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getViewDescriptor } from '@/core/navigation/viewRegistry';
+import { GLOBAL_VIEW_DESCRIPTORS, getViewDescriptor } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import FavSaveModal from './FavSaveModal';
 
@@ -212,7 +212,12 @@ export function useFavToggle(state: FavToggleState): {
   // Build a human-readable display label for the view tab.
   const viewLabel = useMemo(() => {
     const tab = activeViewTab ?? '';
-    const scope = viewType === 'namespace' ? 'namespace' : 'cluster';
+    const scope =
+      viewType === 'namespace'
+        ? 'namespace'
+        : GLOBAL_VIEW_DESCRIPTORS.some((view) => view.id === tab)
+          ? 'global'
+          : 'cluster';
     return getViewDescriptor(scope, tab)?.label ?? tab;
   }, [viewType, activeViewTab]);
 

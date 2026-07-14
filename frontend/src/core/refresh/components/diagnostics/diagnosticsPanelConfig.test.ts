@@ -51,7 +51,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
     ]);
   });
 
-  test('reports cluster-overview permissions for the Fleet lens', () => {
+  test('reports cluster-overview permissions for the Global Clusters view', () => {
     expect(getScopedFeaturesForView('cluster', 'fleet', 'workloads')).toEqual([
       PERMISSION_FEATURES.clusterOverview,
     ]);

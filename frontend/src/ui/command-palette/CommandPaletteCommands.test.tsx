@@ -243,6 +243,9 @@ describe('CommandPaletteCommands', () => {
       'namespace-storage',
     ]);
 
+    const globalClusters = getCommands().find((command) => command.id === 'cluster-fleet');
+    expect(globalClusters?.label).toBe('Global - Clusters');
+
     unmount();
   });
 

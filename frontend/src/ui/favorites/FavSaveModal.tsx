@@ -20,6 +20,7 @@ import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
+  GLOBAL_VIEW_DESCRIPTORS,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
@@ -33,6 +34,12 @@ import './FavSaveModal.css';
 // Combined view list with scope prefix to avoid value collisions.
 // The value format is "scope:view" (e.g. "cluster:nodes", "namespace:pods").
 const ALL_VIEWS = [
+  { value: '__global_header__', label: 'Global', group: 'header' as const },
+  ...GLOBAL_VIEW_DESCRIPTORS.map(({ id, label }) => ({
+    // Keep the persisted route compatible with existing cluster:fleet favorites.
+    value: `cluster:${id}`,
+    label,
+  })),
   { value: '__cluster_header__', label: 'Cluster', group: 'header' as const },
   ...CLUSTER_VIEW_DESCRIPTORS.map(({ scope, id, label }) => ({
     value: `${scope}:${id}`,

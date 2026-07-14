@@ -9,7 +9,7 @@ and object-map ownership boundaries.
 Target navigation order:
 
 1. User intent (Observe, Run, Configure, Govern).
-2. Lens (Inventory, Needs Attention, Applications, Capacity, Change, Fleet).
+2. Lens (Inventory, Needs Attention, Applications, Capacity, Change, Clusters).
 3. Explicit cluster and namespace scope.
 4. Concrete Kubernetes objects with full cluster/GVK identity.
 
@@ -93,7 +93,7 @@ Target navigation order:
 - [x] Add table-to-map and map-to-table navigation with complete object refs.
 - [x] Keep graph limits and partial/truncated presentation visible.
 
-### Phase 6: Fleet lens
+### Phase 6: Global Clusters view
 
 - [x] Fan out over per-cluster overview/attention state in the frontend.
 - [x] Present cluster comparison rows with explicit `clusterId` identity.
@@ -129,7 +129,7 @@ Target navigation order:
       existing Browse, Overview/Nodes, and Events surfaces or require distinct
       lenses; do not add routes until those mappings are explicit.
 - [x] Resolve the remaining Needs Attention placement, low-confidence
-      application navigation, and configured-versus-open Fleet scope questions
+      application navigation, and configured-versus-open Clusters scope questions
       with rendered evidence and explicit product decisions.
 - [x] Align the plan, view registry, sidebar, command palette, favorites, and
       dispatch vocabulary with the resulting decisions, preserving stored view
@@ -144,9 +144,9 @@ Target navigation order:
   id; `inventory` is a command-palette search alias, not a new route.
 - **Capacity** is a cross-surface concept: **Overview** provides the cluster
   summary, **Nodes** provides node-level health/scheduling/capacity detail, and
-  **Fleet** compares capacity across open clusters. `overview`, `nodes`, and
-  `fleet` retain their current navigation identities; no `capacity` route is
-  introduced.
+  Global **Clusters** compares capacity across open clusters. `overview`,
+  `nodes`, and the compatibility `fleet` route retain their current navigation
+  identities; no `capacity` route is introduced.
 - **Change** maps to the existing cluster and namespace **Events** surfaces.
   Events remain Kubernetes event views rather than an audit-history promise;
   `change` and `changes` are search aliases for the existing `events` ids.
@@ -155,12 +155,11 @@ Target navigation order:
 - Low-confidence application groups remain grouping-only when they do not carry
   a complete root object reference. Confidence does not manufacture identity;
   groups with a complete root may retain object-panel and table-to-map actions.
-- **Fleet** includes open/selected clusters, whose per-cluster runtimes are
-  already active. Merely configured clusters are not added to Fleet implicitly.
-- Existing ids and labels remain canonical across the registry, sidebar,
-  favorites, refresh mapping, and cluster/namespace dispatch. This preserves
-  stored favorites without a migration while descriptions and search aliases
-  expose the reconciled product language in the command palette.
+- Global **Clusters** includes open/selected clusters, whose per-cluster runtimes are
+  already active. Merely configured clusters are not added implicitly.
+- The user-facing scope and label are **Global → Clusters**. The existing
+  `fleet` route and `cluster-fleet` table key remain compatibility identities,
+  preserving stored favorites and table state without a migration.
 
 ### Phase 10: Extensible provider-owned query facets
 

@@ -23,8 +23,8 @@ vi.mock('@modules/cluster/components/ClusterViewConfig', () => ({ default: () =>
 vi.mock('@modules/cluster/components/ClusterViewCRDs', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () => null }));
-vi.mock('@modules/cluster/components/ClusterViewFleet', () => ({
-  default: () => <div data-testid="fleet" />,
+vi.mock('@modules/cluster/components/GlobalViewClusters', () => ({
+  default: () => <div data-testid="global-clusters" />,
 }));
 vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
   default: () => <div data-testid="namespaces" />,
@@ -57,10 +57,10 @@ describe('ClusterResourcesViews', () => {
     expect(lens?.dataset.attentionOnly).toBe('true');
   });
 
-  it('renders the fleet comparison lens', () => {
+  it('renders the global Clusters comparison view for the compatibility route', () => {
     act(() => root.render(<ClusterResourcesViews activeTab="fleet" />));
 
-    expect(container.querySelector('[data-testid="fleet"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="global-clusters"]')).not.toBeNull();
   });
 
   it('renders the namespace summary inventory', () => {

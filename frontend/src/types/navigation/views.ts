@@ -11,7 +11,7 @@ export const VIEW_TYPES = ['namespace', 'cluster', 'overview', 'settings', 'abou
 export type ViewType = (typeof VIEW_TYPES)[number];
 
 import {
-  CLUSTER_VIEW_DESCRIPTORS,
+  CLUSTER_ROUTE_VIEW_DESCRIPTORS,
   type ClusterViewType,
   NAMESPACE_VIEW_DESCRIPTORS,
   type NamespaceViewType,
@@ -23,7 +23,7 @@ const namespaceViewTypeSet: ReadonlySet<string> = new Set(
   NAMESPACE_VIEW_DESCRIPTORS.map(({ id }) => id)
 );
 const clusterViewTypeSet: ReadonlySet<string> = new Set(
-  CLUSTER_VIEW_DESCRIPTORS.map(({ id }) => id)
+  CLUSTER_ROUTE_VIEW_DESCRIPTORS.map(({ id }) => id)
 );
 
 /**

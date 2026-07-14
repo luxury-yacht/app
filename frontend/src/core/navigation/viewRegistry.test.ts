@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
+  GLOBAL_VIEW_DESCRIPTORS,
   getViewDescriptor,
   groupViewDescriptors,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from './viewRegistry';
 
 describe('view registry', () => {
+  it('defines the canonical ordered global navigation vocabulary', () => {
+    expect(
+      GLOBAL_VIEW_DESCRIPTORS.map(({ id, label, intent, scope }) => ({
+        id,
+        label,
+        intent,
+        scope,
+      }))
+    ).toEqual([{ id: 'fleet', label: 'Clusters', intent: 'inventory', scope: 'global' }]);
+  });
+
   it('defines the canonical ordered cluster navigation vocabulary', () => {
     expect(
       CLUSTER_VIEW_DESCRIPTORS.map(({ id, label, intent }) => ({ id, label, intent }))
     ).toEqual([
-      { id: 'fleet', label: 'Fleet', intent: 'inventory' },
       { id: 'namespaces', label: 'Namespaces', intent: 'inventory' },
       { id: 'attention', label: 'Needs Attention', intent: 'operations' },
       { id: 'browse', label: 'Browse', intent: 'inventory' },
@@ -47,7 +58,11 @@ describe('view registry', () => {
   });
 
   it('carries presentation, search, and refresh metadata for every view', () => {
-    const descriptors = [...CLUSTER_VIEW_DESCRIPTORS, ...NAMESPACE_VIEW_DESCRIPTORS];
+    const descriptors = [
+      ...GLOBAL_VIEW_DESCRIPTORS,
+      ...CLUSTER_VIEW_DESCRIPTORS,
+      ...NAMESPACE_VIEW_DESCRIPTORS,
+    ];
 
     for (const descriptor of descriptors) {
       expect(descriptor.description.length).toBeGreaterThan(0);
@@ -72,6 +87,7 @@ describe('view registry', () => {
   });
 
   it('looks up views by both scope and id', () => {
+    expect(getViewDescriptor('global', 'fleet')?.label).toBe('Clusters');
     expect(getViewDescriptor('cluster', 'browse')?.label).toBe('Browse');
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
     expect(getViewDescriptor('cluster', 'map')).toBeUndefined();
@@ -96,7 +112,7 @@ describe('view registry', () => {
       {
         id: 'observe',
         label: 'Observe',
-        views: ['fleet', 'namespaces', 'attention', 'browse', 'events'],
+        views: ['namespaces', 'attention', 'browse', 'events'],
       },
       { id: 'run', label: 'Run', views: ['nodes'] },
       { id: 'configure', label: 'Configure', views: ['config', 'storage'] },

@@ -23,9 +23,9 @@ import type {
   ClusterOverviewSnapshotPayload,
 } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
-import './ClusterViewFleet.css';
+import './GlobalViewClusters.css';
 
-interface FleetClusterRow {
+interface GlobalClusterRow {
   kind: 'Cluster';
   clusterId: string;
   clusterName: string;
@@ -53,7 +53,7 @@ const connectionFor = (
   lifecycle: ClusterLifecycleState | undefined,
   confirmedAuthFailure: boolean,
   recovering: boolean
-): Pick<FleetClusterRow, 'connection' | 'connectionPresentation'> => {
+): Pick<GlobalClusterRow, 'connection' | 'connectionPresentation'> => {
   if (confirmedAuthFailure) {
     return { connection: 'Authentication required', connectionPresentation: 'error' };
   }
@@ -98,7 +98,7 @@ const ratio = (ready: number | null, total: number | null): string =>
 const resourceUsage = (usage: string | undefined, allocatable: string | undefined): string =>
   usage && allocatable ? `${usage} / ${allocatable}` : '—';
 
-const ClusterViewFleet: React.FC = () => {
+const GlobalViewClusters: React.FC = () => {
   const {
     selectedKubeconfigs,
     selectedClusterIds,
@@ -112,7 +112,7 @@ const ClusterViewFleet: React.FC = () => {
   const { setSidebarSelectionForCluster } = useSidebarState();
   const overviewStates = useRefreshScopedDomainStates('cluster-overview');
 
-  const rows = useMemo<FleetClusterRow[]>(
+  const rows = useMemo<GlobalClusterRow[]>(
     () =>
       selectedKubeconfigs.flatMap((selection) => {
         const meta = getClusterMeta(selection);
@@ -191,10 +191,10 @@ const ClusterViewFleet: React.FC = () => {
         domain: 'cluster-overview',
         scope,
         reason: 'startup',
-        label: `Fleet overview: ${label}`,
+        label: `Clusters overview: ${label}`,
       }).catch((error) => {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-          source: 'cluster-fleet-overview',
+          source: 'global-clusters-overview',
           scope,
         });
       });
@@ -212,7 +212,7 @@ const ClusterViewFleet: React.FC = () => {
   }, [refreshTargets]);
 
   const navigate = useCallback(
-    (row: FleetClusterRow, target: 'overview' | 'attention') => {
+    (row: GlobalClusterRow, target: 'overview' | 'attention') => {
       const destination =
         target === 'attention'
           ? ({ viewType: 'cluster', activeClusterView: 'attention' } as const)
@@ -229,8 +229,8 @@ const ClusterViewFleet: React.FC = () => {
     [setActiveKubeconfig, setClusterNavigationTarget, setSidebarSelectionForCluster]
   );
 
-  const columns = useMemo<GridColumnDefinition<FleetClusterRow>[]>(() => {
-    const result: GridColumnDefinition<FleetClusterRow>[] = [
+  const columns = useMemo<GridColumnDefinition<GlobalClusterRow>[]>(() => {
+    const result: GridColumnDefinition<GlobalClusterRow>[] = [
       cf.createTextColumn('name', 'Cluster', (row) => row.name),
       {
         key: 'connection',
@@ -238,7 +238,9 @@ const ClusterViewFleet: React.FC = () => {
         sortable: true,
         sortValue: (row) => row.connection,
         render: (row) => (
-          <span className={`fleet-connection fleet-connection--${row.connectionPresentation}`}>
+          <span
+            className={`global-clusters-connection global-clusters-connection--${row.connectionPresentation}`}
+          >
             {row.connection}
           </span>
         ),
@@ -261,8 +263,8 @@ const ClusterViewFleet: React.FC = () => {
           return (
             <button
               type="button"
-              className="fleet-attention-link"
-              data-testid="fleet-attention"
+              className="global-clusters-attention-link"
+              data-testid="global-clusters-attention"
               onClick={(event) => {
                 event.stopPropagation();
                 navigate(row, 'attention');
@@ -295,16 +297,17 @@ const ClusterViewFleet: React.FC = () => {
   }, [navigate]);
 
   const keyExtractor = useCallback(
-    (row: FleetClusterRow) => buildClusterScopedKey(row, row.clusterId),
+    (row: GlobalClusterRow) => buildClusterScopedKey(row, row.clusterId),
     []
   );
-  const fleetIdentity = useMemo(
+  const clusterSetIdentity = useMemo(
+    // Retain the prefix because it participates in the persisted table-state key.
     () => `fleet:${[...selectedClusterIds].sort().join('|')}`,
     [selectedClusterIds]
   );
   const persistence = useGridTablePersistence({
     viewId: 'cluster-fleet',
-    clusterIdentity: fleetIdentity,
+    clusterIdentity: clusterSetIdentity,
     isNamespaceScoped: false,
     columns,
     data: rows,
@@ -320,7 +323,7 @@ const ClusterViewFleet: React.FC = () => {
     persistenceOverride: persistence,
     defaultSortKey: 'name',
     defaultSortDirection: 'asc',
-    diagnosticsLabel: 'Fleet',
+    diagnosticsLabel: 'Clusters',
     showKindDropdown: false,
     filterAccessors: {
       getSearchText: (row) => [
@@ -337,19 +340,19 @@ const ClusterViewFleet: React.FC = () => {
     loading: kubeconfigsLoading && rows.length === 0,
     loaded: !kubeconfigsLoading,
     mode: 'Local Complete',
-    cacheKey: fleetIdentity,
+    cacheKey: clusterSetIdentity,
   });
 
   return (
-    <div className="cluster-fleet">
+    <div className="global-clusters">
       <ResourceInventoryTable
         source={source}
         gridTableProps={gridTableProps}
         columns={columns}
-        spinnerMessage="Loading fleet..."
-        updatingMessage="Updating fleet…"
-        emptyMessage="Open at least one cluster to compare fleet state"
-        diagnosticsLabel="Fleet"
+        spinnerMessage="Loading clusters..."
+        updatingMessage="Updating clusters…"
+        emptyMessage="Open at least one cluster to compare cluster state"
+        diagnosticsLabel="Clusters"
         diagnosticsMode="local"
         enableColumnVisibilityMenu
         allowHorizontalOverflow
@@ -361,4 +364,4 @@ const ClusterViewFleet: React.FC = () => {
   );
 };
 
-export default React.memo(ClusterViewFleet);
+export default React.memo(GlobalViewClusters);

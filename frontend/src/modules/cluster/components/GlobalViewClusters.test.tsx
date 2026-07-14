@@ -156,9 +156,9 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
       | ((row: Record<string, unknown>) => void)
       | undefined;
     return (
-      <div data-testid="fleet-table">
+      <div data-testid="global-clusters-table">
         {source.rows.map((row) => (
-          <div key={String(row.clusterId)} data-testid={`fleet-${row.clusterId}`}>
+          <div key={String(row.clusterId)} data-testid={`global-clusters-${row.clusterId}`}>
             <button type="button" onClick={() => onRowPointerClick?.(row)}>
               {String(row.name)}
             </button>
@@ -171,13 +171,13 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
   },
 }));
 
-const renderFleet = async () => {
+const renderGlobalClusters = async () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
   await act(async () => {
-    const { default: ClusterViewFleet } = await import('./ClusterViewFleet');
-    root.render(<ClusterViewFleet />);
+    const { default: GlobalViewClusters } = await import('./GlobalViewClusters');
+    root.render(<GlobalViewClusters />);
     await Promise.resolve();
   });
   return {
@@ -198,23 +198,23 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('ClusterViewFleet', () => {
+describe('GlobalViewClusters', () => {
   it('renders complete cluster identity and mixed ready, loading, and auth-failed states', async () => {
-    const { container, unmount } = await renderFleet();
+    const { container, unmount } = await renderGlobalClusters();
 
-    expect(container.querySelector('[data-testid="fleet-cluster-a"]')?.textContent).toContain(
-      'Ready'
-    );
-    expect(container.querySelector('[data-testid="fleet-cluster-b"]')?.textContent).toContain(
-      'Loading'
-    );
-    expect(container.querySelector('[data-testid="fleet-cluster-c"]')?.textContent).toContain(
-      'Authentication required'
-    );
+    expect(
+      container.querySelector('[data-testid="global-clusters-cluster-a"]')?.textContent
+    ).toContain('Ready');
+    expect(
+      container.querySelector('[data-testid="global-clusters-cluster-b"]')?.textContent
+    ).toContain('Loading');
+    expect(
+      container.querySelector('[data-testid="global-clusters-cluster-c"]')?.textContent
+    ).toContain('Authentication required');
 
     const tableProps = mocks.tableProps;
     if (!tableProps) {
-      throw new Error('expected Fleet table props');
+      throw new Error('expected Clusters table props');
     }
     const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
     expect(rows.map(({ clusterId, name }) => ({ clusterId, name }))).toEqual([
@@ -232,25 +232,29 @@ describe('ClusterViewFleet', () => {
       domain: 'cluster-overview',
       scope: 'cluster-a|',
       reason: 'startup',
-      label: 'Fleet overview: alpha',
+      label: 'Clusters overview: alpha',
     });
     expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
       domain: 'cluster-overview',
       scope: 'cluster-b|',
       reason: 'startup',
-      label: 'Fleet overview: beta',
+      label: 'Clusters overview: beta',
     });
     expect(mocks.requestRefreshDomain).not.toHaveBeenCalledWith(
       expect.objectContaining({ scope: 'cluster-c|' })
     );
+    expect(tableProps.spinnerMessage).toBe('Loading clusters...');
+    expect(tableProps.updatingMessage).toBe('Updating clusters…');
+    expect(tableProps.emptyMessage).toBe('Open at least one cluster to compare cluster state');
+    expect(tableProps.diagnosticsLabel).toBe('Clusters');
 
     await unmount();
   });
 
   it('prepares target-cluster navigation before activating the cluster tab', async () => {
-    const { container, unmount } = await renderFleet();
+    const { container, unmount } = await renderGlobalClusters();
     const cluster = container.querySelector<HTMLButtonElement>(
-      '[data-testid="fleet-cluster-b"] button'
+      '[data-testid="global-clusters-cluster-b"] button'
     );
 
     await act(async () => cluster?.click());
@@ -269,7 +273,7 @@ describe('ClusterViewFleet', () => {
     );
 
     const attention = container.querySelector<HTMLButtonElement>(
-      '[data-testid="fleet-cluster-a"] [data-testid="fleet-attention"]'
+      '[data-testid="global-clusters-cluster-a"] [data-testid="global-clusters-attention"]'
     );
     await act(async () => attention?.click());
 

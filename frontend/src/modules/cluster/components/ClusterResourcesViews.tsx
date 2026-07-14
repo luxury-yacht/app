@@ -9,11 +9,11 @@ import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewFleet from '@modules/cluster/components/ClusterViewFleet';
 import ClusterViewNamespaces from '@modules/cluster/components/ClusterViewNamespaces';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
+import GlobalViewClusters from '@modules/cluster/components/GlobalViewClusters';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { ClusterViewType } from '@ui/navigation/types';
@@ -70,7 +70,7 @@ function ClusterResourcesViews({
 
     switch (activeTab) {
       case 'fleet':
-        return <ClusterViewFleet />;
+        return <GlobalViewClusters />;
       case 'namespaces':
         return <ClusterViewNamespaces />;
       case 'attention':

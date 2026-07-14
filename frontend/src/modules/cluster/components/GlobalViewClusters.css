@@ -1,4 +1,4 @@
-.cluster-fleet {
+.global-clusters {
   position: relative;
   display: flex;
   flex: 1;
@@ -6,34 +6,34 @@
   min-height: 0;
 }
 
-.cluster-fleet .gridtable-container {
+.global-clusters .gridtable-container {
   position: relative;
   inset: auto;
   flex: 1;
   min-height: 0;
 }
 
-.fleet-connection {
+.global-clusters-connection {
   font-weight: 600;
 }
 
-.fleet-connection--ready {
+.global-clusters-connection--ready {
   color: var(--color-success);
 }
 
-.fleet-connection--warning {
+.global-clusters-connection--warning {
   color: var(--color-warning);
 }
 
-.fleet-connection--error {
+.global-clusters-connection--error {
   color: var(--color-error);
 }
 
-.fleet-connection--unknown {
+.global-clusters-connection--unknown {
   color: var(--text-secondary);
 }
 
-.fleet-attention-link {
+.global-clusters-attention-link {
   padding: 0;
   border: 0;
   background: none;
@@ -42,7 +42,7 @@
   cursor: pointer;
 }
 
-.fleet-attention-link:hover,
-.fleet-attention-link:focus-visible {
+.global-clusters-attention-link:hover,
+.global-clusters-attention-link:focus-visible {
   text-decoration: underline;
 }

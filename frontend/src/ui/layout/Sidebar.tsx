@@ -28,6 +28,7 @@ import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { eventBus } from '@/core/events';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
+  GLOBAL_VIEW_DESCRIPTORS,
   groupViewDescriptors,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@/core/navigation/viewRegistry';
@@ -330,6 +331,39 @@ function Sidebar() {
         </button>
         {!isCollapsed && (
           <>
+            <div className="sidebar-section">
+              <h3>Global</h3>
+              <div className="cluster-items">
+                {GLOBAL_VIEW_DESCRIPTORS.map((view) => (
+                  <button
+                    type="button"
+                    key={view.id}
+                    className={buildSidebarItemClassName(['sidebar-item'], {
+                      kind: 'cluster-view',
+                      view: view.id,
+                    })}
+                    onClick={() => {
+                      if (!keyboardActivationRef.current) {
+                        clearKeyboardPreview();
+                      }
+                      handleClusterViewSelect(view.id);
+                    }}
+                    data-sidebar-focusable="true"
+                    data-sidebar-scope="global"
+                    data-sidebar-target-kind="cluster-view"
+                    data-sidebar-target-view={view.id}
+                    tabIndex={-1}
+                    aria-current={
+                      isTargetSelected({ kind: 'cluster-view', view: view.id }) ? 'page' : undefined
+                    }
+                  >
+                    <CategoryIcon width={14} height={14} />
+                    <span>{view.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="sidebar-section">
               <h3>Cluster</h3>
               <div className="cluster-items">
