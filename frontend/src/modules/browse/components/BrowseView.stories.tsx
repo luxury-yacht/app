@@ -9,6 +9,7 @@ import '@styles/components/gridtables.css';
 import './BrowseView.css';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
+import { createAgeColumn } from '@shared/components/tables/columnFactories';
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
@@ -54,7 +55,7 @@ const COLUMNS: GridColumnDefinition<BrowseStoryRow>[] = [
   { key: 'kind', header: 'Kind', render: (row) => row.kind, sortable: true, width: 160 },
   { key: 'name', header: 'Name', render: (row) => row.name, sortable: true, width: 320 },
   { key: 'namespace', header: 'Namespace', render: (row) => row.ns, sortable: true, width: 220 },
-  { key: 'age', header: 'Age', render: (row) => row.age, sortable: true, width: 120 },
+  { ...createAgeColumn<BrowseStoryRow>(), width: 120 },
 ];
 
 function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {

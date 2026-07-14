@@ -248,6 +248,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
             return '-';
           },
           {
+            alignHeader: 'center',
+            alignData: 'center',
             getClassName: (resource) =>
               resource.kind === 'HorizontalPodAutoscaler' ? 'replica-range' : undefined,
           }
@@ -269,6 +271,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
             return '-';
           },
           {
+            alignHeader: 'center',
+            alignData: 'center',
             getClassName: (resource) => {
               if (resource.kind === 'HorizontalPodAutoscaler') {
                 return 'current-replicas';

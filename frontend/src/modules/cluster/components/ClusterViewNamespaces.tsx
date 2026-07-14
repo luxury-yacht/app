@@ -117,10 +117,15 @@ const ClusterViewNamespaces: React.FC = () => {
           </span>
         ),
       },
-      cf.createTextColumn('workloads', 'Workloads', workloadText),
+      cf.createTextColumn('workloads', 'Workloads', workloadText, {
+        alignHeader: 'center',
+        alignData: 'center',
+      }),
       {
         key: 'unhealthyWorkloads',
         header: 'Attn',
+        alignHeader: 'center',
+        alignData: 'center',
         sortable: true,
         sortValue: (row) => row.unhealthyWorkloads ?? 0,
         render: (row) => {
@@ -133,6 +138,8 @@ const ClusterViewNamespaces: React.FC = () => {
         },
       },
       cf.createTextColumn('warningEvents', 'Warn', warningEventText, {
+        alignHeader: 'center',
+        alignData: 'center',
         sortValue: (row) =>
           row.warningEventsState === 'available' ? (row.warningEvents ?? 0) : undefined,
         getClassName: (row) =>

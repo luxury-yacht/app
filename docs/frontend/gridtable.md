@@ -158,6 +158,8 @@ invalidators even though the callback does not read them.
 
 - Age is display-time relative text. Use `createAgeColumn` or `LiveAgeText` with
   an absolute timestamp; do not refetch rows only to advance age text.
+- Age headers and data are right-aligned in every table. Use `createAgeColumn`,
+  which owns that alignment default, when adding an Age column.
 - Resource utilization columns should use the shared value adapters in
   `frontend/src/core/resource-metrics`. Table rows can use adapters directly
   because many table row shapes do not carry full object GVK identity.

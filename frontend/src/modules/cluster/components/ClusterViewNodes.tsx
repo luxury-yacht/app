@@ -230,6 +230,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         },
       },
       cf.createTextColumn<ClusterNodeRow>('pods', 'Pods', (row) => row.pods || '—', {
+        alignHeader: 'center',
+        alignData: 'center',
         sortValue: (row) => parseNodePodsUsed(row.pods),
       }),
       (() => {
@@ -238,6 +240,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
           'Restarts',
           (row) => resolveNodeRestarts(row).text,
           {
+            alignHeader: 'center',
+            alignData: 'center',
             getClassName: (row) => resolveNodeRestarts(row).className,
           }
         );

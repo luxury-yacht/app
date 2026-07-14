@@ -151,6 +151,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           'Capacity',
           (resource) => resource.capacity || '-',
           {
+            alignHeader: 'right',
+            alignData: 'right',
             getClassName: (resource) => (resource.capacity ? 'capacity' : undefined),
           }
         ),

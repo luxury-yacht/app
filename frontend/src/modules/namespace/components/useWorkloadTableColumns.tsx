@@ -125,6 +125,8 @@ const useWorkloadTableColumns = ({
       'Ready',
       (row) => row.ready ?? '—',
       {
+        alignHeader: 'center',
+        alignData: 'center',
         getClassName: (row) => getReadyClassName(row),
       }
     );
@@ -136,6 +138,8 @@ const useWorkloadTableColumns = ({
       'Restarts',
       (row) => String(row.restarts ?? 0),
       {
+        alignHeader: 'center',
+        alignData: 'center',
         getClassName: (row) => getRestartsClassName(row),
       }
     );

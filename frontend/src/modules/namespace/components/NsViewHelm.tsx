@@ -199,6 +199,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return '-';
           },
           {
+            alignHeader: 'right',
+            alignData: 'right',
             getClassName: (resource) =>
               resource.revision || resource.info?.revision ? 'revision-number' : undefined,
           }

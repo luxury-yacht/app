@@ -32,6 +32,8 @@ export const createAgeColumn = <T extends AgeColumnRow>(
 ): GridColumnDefinition<T> => ({
   key,
   header,
+  alignHeader: 'right',
+  alignData: 'right',
   render: (item) => {
     const fallback = getValue(item) || '-';
     if (typeof item.ageTimestamp === 'number' && Number.isFinite(item.ageTimestamp)) {
