@@ -100,6 +100,29 @@ const GlobalViewNamespaces: React.FC = () => {
       targetByClusterId,
     ]
   );
+  const navigateCluster = useCallback(
+    (row: NamespaceTableRow) => {
+      const target = targetByClusterId.get(row.clusterId);
+      if (!target) {
+        return;
+      }
+      setClusterNavigationTarget(row.clusterId, {
+        viewType: 'overview',
+        activeClusterView: null,
+      });
+      setSidebarSelectionForCluster(row.clusterId, {
+        type: 'overview',
+        value: 'overview',
+      });
+      setActiveKubeconfig(target.selection);
+    },
+    [
+      setActiveKubeconfig,
+      setClusterNavigationTarget,
+      setSidebarSelectionForCluster,
+      targetByClusterId,
+    ]
+  );
 
   const pending = targets.some((target) => {
     if (!isNamespaceRefreshAvailable(getClusterState(target.clusterId))) {
@@ -125,6 +148,8 @@ const GlobalViewNamespaces: React.FC = () => {
       <NamespaceSummaryTable
         rows={rows}
         navigate={navigate}
+        navigateCluster={navigateCluster}
+        enableRowNavigation={false}
         showClusterColumn
         clusterOptions={targets.map(({ clusterId, clusterName }) => ({
           value: clusterId,

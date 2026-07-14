@@ -231,24 +231,32 @@ describe('GlobalViewClusters', () => {
     expect(columns.map(({ key }) => key)).toEqual([
       'name',
       'connection',
+      'metrics',
       'clusterType',
       'clusterVersion',
+      'totalNamespaces',
       'nodes',
       'pods',
       'attention',
       'cpu',
       'memory',
-      'totalNamespaces',
-      'metrics',
     ]);
-    expect(
-      Object.fromEntries(columns.map(({ key, header }) => [key, header]))
-    ).toMatchObject({
+    expect(Object.fromEntries(columns.map(({ key, header }) => [key, header]))).toMatchObject({
       connection: 'Status',
       nodes: 'Nodes',
       pods: 'Pods',
       totalNamespaces: 'NS',
     });
+    const statusColumn = columns.find(({ key }) => key === 'connection');
+    expect(statusColumn?.render?.(rows[0])).toBe('Ready');
+    for (const row of rows.slice(1)) {
+      const statusCell = statusColumn?.render?.(row);
+      expect(isValidElement<{ className?: string }>(statusCell)).toBe(true);
+      if (!isValidElement<{ className?: string }>(statusCell)) {
+        throw new Error('expected warning Status cell');
+      }
+      expect(statusCell.props.className).toBe('status-text warning');
+    }
     const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
     expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
     if (!isValidElement<Record<string, unknown>>(cpuCell)) {

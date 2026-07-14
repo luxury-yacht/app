@@ -33,7 +33,6 @@ interface GlobalClusterRow {
   name: string;
   selection: string;
   connection: string;
-  connectionPresentation: 'ready' | 'warning' | 'error' | 'unknown';
   clusterType: string;
   clusterVersion: string;
   readyNodes: number | null;
@@ -55,29 +54,29 @@ const connectionFor = (
   lifecycle: ClusterLifecycleState | undefined,
   confirmedAuthFailure: boolean,
   recovering: boolean
-): Pick<GlobalClusterRow, 'connection' | 'connectionPresentation'> => {
+): string => {
   if (confirmedAuthFailure) {
-    return { connection: 'Authentication required', connectionPresentation: 'error' };
+    return 'Authentication required';
   }
   if (recovering || lifecycle === 'reconnecting') {
-    return { connection: 'Reconnecting', connectionPresentation: 'warning' };
+    return 'Reconnecting';
   }
   switch (lifecycle) {
     case 'ready':
-      return { connection: 'Ready', connectionPresentation: 'ready' };
+      return 'Ready';
     case 'loading':
-      return { connection: 'Loading', connectionPresentation: 'warning' };
+      return 'Loading';
     case 'loading_slow':
-      return { connection: 'Loading slowly', connectionPresentation: 'warning' };
+      return 'Loading slowly';
     case 'connecting':
     case 'connected':
-      return { connection: 'Connecting', connectionPresentation: 'warning' };
+      return 'Connecting';
     case 'auth_failed':
-      return { connection: 'Authentication required', connectionPresentation: 'error' };
+      return 'Authentication required';
     case 'disconnected':
-      return { connection: 'Disconnected', connectionPresentation: 'error' };
+      return 'Disconnected';
     default:
-      return { connection: 'Unknown', connectionPresentation: 'unknown' };
+      return 'Unknown';
   }
 };
 
@@ -167,7 +166,7 @@ const GlobalViewClusters: React.FC = () => {
             clusterName: meta.name || meta.id,
             name: meta.name || meta.id,
             selection,
-            ...connection,
+            connection,
             clusterType: overview?.clusterType || '—',
             clusterVersion: overview?.clusterVersion || '—',
             readyNodes: overview?.readyNodes ?? null,
@@ -263,20 +262,24 @@ const GlobalViewClusters: React.FC = () => {
       }),
       {
         key: 'connection',
-        header: 'Connection',
+        header: 'Status',
         sortable: true,
         sortValue: (row) => row.connection,
-        render: (row) => (
-          <span
-            className={`global-clusters-connection global-clusters-connection--${row.connectionPresentation}`}
-          >
-            {row.connection}
-          </span>
-        ),
+        render: (row) =>
+          row.connection === 'Ready' ? (
+            row.connection
+          ) : (
+            <span className="status-text warning">{row.connection}</span>
+          ),
       },
+      cf.createTextColumn('metrics', 'Metrics', (row) => row.metrics),
       cf.createTextColumn('clusterType', 'Type', (row) => row.clusterType),
       cf.createTextColumn('clusterVersion', 'Version', (row) => row.clusterVersion),
-      cf.createTextColumn('nodes', 'Nodes ready', (row) => ratio(row.readyNodes, row.totalNodes), {
+      cf.createTextColumn('totalNamespaces', 'NS', (row) => row.totalNamespaces ?? '—', {
+        alignHeader: 'right',
+        alignData: 'right',
+      }),
+      cf.createTextColumn('nodes', 'Nodes', (row) => ratio(row.readyNodes, row.totalNodes), {
         alignHeader: 'center',
         alignData: 'center',
         getClassName: (row) =>
@@ -284,7 +287,7 @@ const GlobalViewClusters: React.FC = () => {
             ? 'status-text warning'
             : undefined,
       }),
-      cf.createTextColumn('pods', 'Pods ready', (row) => ratio(row.readyPods, row.totalPods), {
+      cf.createTextColumn('pods', 'Pods', (row) => ratio(row.readyPods, row.totalPods), {
         alignHeader: 'center',
         alignData: 'center',
         getClassName: (row) =>
@@ -328,11 +331,6 @@ const GlobalViewClusters: React.FC = () => {
       },
       createClusterResourceColumn('cpu'),
       createClusterResourceColumn('memory'),
-      cf.createTextColumn('totalNamespaces', 'Namespaces', (row) => row.totalNamespaces ?? '—', {
-        alignHeader: 'right',
-        alignData: 'right',
-      }),
-      cf.createTextColumn('metrics', 'Metrics', (row) => row.metrics),
     ];
     cf.applyColumnSizing(result, {
       name: { autoWidth: true },

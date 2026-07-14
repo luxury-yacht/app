@@ -13,26 +13,6 @@
   min-height: 0;
 }
 
-.global-clusters-connection {
-  font-weight: 600;
-}
-
-.global-clusters-connection--ready {
-  color: var(--color-success);
-}
-
-.global-clusters-connection--warning {
-  color: var(--color-warning);
-}
-
-.global-clusters-connection--error {
-  color: var(--color-error);
-}
-
-.global-clusters-connection--unknown {
-  color: var(--text-secondary);
-}
-
 .global-clusters-attention-link {
   padding: 0;
   border: 0;

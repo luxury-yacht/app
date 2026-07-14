@@ -23,6 +23,8 @@ export interface NamespaceTableRow extends NamespaceSummary {
 interface NamespaceSummaryTableProps {
   rows: NamespaceTableRow[];
   navigate: (row: NamespaceTableRow) => void;
+  navigateCluster?: (row: NamespaceTableRow) => void;
+  enableRowNavigation?: boolean;
   showClusterColumn?: boolean;
   clusterOptions?: DropdownOption[];
   clusterIdentity: string;
@@ -134,6 +136,8 @@ const createNamespaceResourceColumn = (
 const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   rows,
   navigate,
+  navigateCluster,
+  enableRowNavigation = true,
   showClusterColumn = false,
   clusterOptions = [],
   clusterIdentity,
@@ -157,7 +161,10 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     ];
     if (showClusterColumn) {
       result.push(
-        cf.createTextColumn('cluster', 'Cluster', (row) => row.clusterName || row.clusterId)
+        cf.createTextColumn('cluster', 'Cluster', (row) => row.clusterName || row.clusterId, {
+          onClick: navigateCluster,
+          getClassName: () => 'object-panel-link',
+        })
       );
     }
     result.push(
@@ -231,7 +238,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       age: { autoWidth: true },
     });
     return result;
-  }, [navigate, showClusterColumn]);
+  }, [navigate, navigateCluster, showClusterColumn]);
 
   const keyExtractor = useCallback(
     (row: NamespaceTableRow) => buildRequiredCanonicalObjectRowKey(row),
@@ -304,8 +311,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       diagnosticsMode="local"
       enableColumnVisibilityMenu
       allowHorizontalOverflow
-      onRowClick={navigate}
-      onRowPointerClick={navigate}
+      {...(enableRowNavigation ? { onRowClick: navigate, onRowPointerClick: navigate } : {})}
       favModal={favModal}
     />
   );

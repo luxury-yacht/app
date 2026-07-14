@@ -151,20 +151,26 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
   default: (props: Record<string, unknown>) => {
     mocks.tableProps = props;
     const source = props.source as { rows: Array<Record<string, unknown>> };
-    const onRowPointerClick = props.onRowPointerClick as
-      | ((row: Record<string, unknown>) => void)
-      | undefined;
+    const columns = props.columns as Array<{
+      key: string;
+      render: (row: Record<string, unknown>) => ReactNode;
+    }>;
+    const namespaceColumn = columns.find(({ key }) => key === 'name');
+    const clusterColumn = columns.find(({ key }) => key === 'cluster');
     return (
       <div data-testid="global-namespace-table">
         {source.rows.map((row) => (
-          <button
+          <div
             key={`${String(row.clusterId)}:${String(row.name)}`}
-            type="button"
-            data-testid={`namespace-${String(row.clusterId)}-${String(row.name)}`}
-            onClick={() => onRowPointerClick?.(row)}
+            data-testid={`namespace-row-${String(row.clusterId)}-${String(row.name)}`}
           >
-            {String(row.clusterName)} / {String(row.name)}
-          </button>
+            <span data-testid={`namespace-link-${String(row.clusterId)}-${String(row.name)}`}>
+              {namespaceColumn?.render(row)}
+            </span>
+            <span data-testid={`cluster-link-${String(row.clusterId)}-${String(row.name)}`}>
+              {clusterColumn?.render(row)}
+            </span>
+          </div>
         ))}
       </div>
     );
@@ -212,7 +218,7 @@ const renderedText = (node: ReactNode): string => {
 
 describe('GlobalViewNamespaces', () => {
   it('combines namespace snapshots with complete cluster identity and a Cluster column', async () => {
-    const { unmount } = await renderView();
+    const { container, unmount } = await renderView();
     if (!mocks.tableProps) {
       throw new Error('expected global namespace table props');
     }
@@ -300,6 +306,20 @@ describe('GlobalViewNamespaces', () => {
     expect(mocks.persistenceParams).toMatchObject({
       filterOptions: { clusters: ['cluster-a', 'cluster-b', 'cluster-c'] },
     });
+    expect(mocks.tableProps).not.toHaveProperty('onRowClick');
+    expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');
+    const namespaceLink = container.querySelector<HTMLButtonElement>(
+      '[data-testid="namespace-link-cluster-b-payments"] button'
+    );
+    const clusterLink = container.querySelector<HTMLButtonElement>(
+      '[data-testid="cluster-link-cluster-b-payments"] button'
+    );
+    expect(namespaceLink?.className.split(' ')).toEqual(
+      expect.arrayContaining(['gridtable-link', 'object-panel-link'])
+    );
+    expect(clusterLink?.className.split(' ')).toEqual(
+      expect.arrayContaining(['gridtable-link', 'object-panel-link'])
+    );
 
     await unmount();
   });
@@ -309,7 +329,9 @@ describe('GlobalViewNamespaces', () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('[data-testid="namespace-cluster-b-payments"]')
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="namespace-link-cluster-b-payments"] button'
+        )
         ?.click();
     });
 
@@ -326,6 +348,35 @@ describe('GlobalViewNamespaces', () => {
     expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
+    expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+    expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+
+    await unmount();
+  });
+
+  it('opens a cluster from its explicit link without selecting the namespace', async () => {
+    const { container, unmount } = await renderView();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="cluster-link-cluster-b-payments"] button')
+        ?.click();
+    });
+
+    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
+      viewType: 'overview',
+      activeClusterView: null,
+    });
+    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
+      type: 'overview',
+      value: 'overview',
+    });
+    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
     expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
