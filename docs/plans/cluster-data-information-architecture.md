@@ -121,21 +121,98 @@ Target navigation order:
 - [x] Prove executor parity, capability/UI projection, persisted query state,
       and rendered behavior before enabling both capabilities.
 
+### Phase 9: Reconcile target lenses and product decisions
+
+- [x] Decide and document whether Inventory, Capacity, and Change are names for
+      existing Browse, Overview/Nodes, and Events surfaces or require distinct
+      lenses; do not add routes until those mappings are explicit.
+- [x] Resolve the remaining Needs Attention placement, low-confidence
+      application navigation, and configured-versus-open Fleet scope questions
+      with rendered evidence and explicit product decisions.
+- [x] Align the plan, view registry, sidebar, command palette, favorites, and
+      dispatch vocabulary with the resulting decisions, preserving stored view
+      compatibility or defining a migration when an id must change.
+- [x] Prove registry/shell parity, keyboard order, persistence behavior, and the
+      rendered navigation before treating the target taxonomy as settled.
+
+#### Settled taxonomy
+
+- **Inventory** is the user-intent name for the existing cluster and namespace
+  **Browse** surfaces. `browse` remains the canonical stored and dispatched view
+  id; `inventory` is a command-palette search alias, not a new route.
+- **Capacity** is a cross-surface concept: **Overview** provides the cluster
+  summary, **Nodes** provides node-level health/scheduling/capacity detail, and
+  **Fleet** compares capacity across open clusters. `overview`, `nodes`, and
+  `fleet` retain their current navigation identities; no `capacity` route is
+  introduced.
+- **Change** maps to the existing cluster and namespace **Events** surfaces.
+  Events remain Kubernetes event views rather than an audit-history promise;
+  `change` and `changes` are search aliases for the existing `events` ids.
+- **Needs Attention** remains a separate cluster lens under Observe. It does not
+  replace Overview, which continues to provide the broader cluster summary.
+- Low-confidence application groups remain grouping-only when they do not carry
+  a complete root object reference. Confidence does not manufacture identity;
+  groups with a complete root may retain object-panel and table-to-map actions.
+- **Fleet** includes open/selected clusters, whose per-cluster runtimes are
+  already active. Merely configured clusters are not added to Fleet implicitly.
+- Existing ids and labels remain canonical across the registry, sidebar,
+  favorites, refresh mapping, and cluster/namespace dispatch. This preserves
+  stored favorites without a migration while descriptions and search aliases
+  expose the reconciled product language in the command palette.
+
+### Phase 10: Extensible provider-owned query facets
+
+- [ ] Define the cross-layer facet descriptor contract before implementation,
+      including stable keys, selection values, option values, exactness,
+      high-cardinality/searchable behavior, and ownership of display metadata.
+- [ ] Replace the Status/Node-only typed-query transport and adapter plumbing
+      with provider-declared facet selection and extraction while preserving
+      `clusterId`, structural namespace scope, query identity, cursor identity,
+      exact totals, and full-scope option stability.
+- [ ] Project provider facets through the existing generic GridTable
+      `queryFacets` state so selections persist in table state and favorites
+      without view-local filter implementations.
+- [ ] Migrate Pods, Workloads, and Nodes to the shared facet contract without
+      changing their current Status/Node behavior, then remove the superseded
+      one-off serializer and projection branches.
+- [ ] Add conformance tests that reject a published facet unless request
+      serialization, backend execution, stable options, UI projection, and
+      persistence all exist.
+
+### Phase 11: Event and application triage facets
+
+- [ ] Add backend-query Event Type, Reason, and Source facets to cluster,
+      namespace, and All Namespaces Events, with options derived from the full
+      structural scope rather than the current page or selection.
+- [ ] Add backend-query Application Status, Confidence, and Has Issues facets to
+      namespace and All Namespaces Applications using the existing backend-owned
+      grouping status, evidence confidence, and needs-attention count.
+- [ ] Keep high-cardinality Reason/Source options searchable and truthful when
+      facet metadata is approximate or contributing sources are degraded.
+- [ ] Preserve selections through favorites and cluster/namespace-scoped table
+      persistence, without carrying selections across a different `clusterId`.
+- [ ] Prove executor parity, exact/approximate option behavior, empty and
+      permission-degraded states, focus-safe interaction, and rendered filtering
+      before advertising the new capabilities.
+
 ## Validation
 
 - Red/green/refactor for each behavior change.
 - Focused Vitest for shell, favorites, command palette, resource-grid, and map.
 - Focused Go tests for any new snapshot/query/rollup contracts.
 - Frontend typecheck and relevant static contract tests per phase.
+- Typed-query capability/facet conformance tests for every provider-declared
+  facet and backend executor-parity tests across active selections.
+- GridTable persistence, favorites, focus retention, and query-serialization
+  tests for provider-owned facet controls.
 - Browser validation for grouped navigation and new visual lenses.
 - `mage qc:prerelease` on the final worktree, followed by `git status --short`.
 
 ## Open Questions
 
-- Whether the first Needs Attention surface replaces Cluster Overview or appears
-  as a new lens. Start as a new lens to preserve current behavior while evidence
-  is gathered.
-- Whether application labels without owner/Helm evidence are navigable. Start as
-  grouping-only with an explicit lower-confidence marker.
-- Whether Fleet includes every configured cluster or only open clusters. Start
-  with open/selected clusters because their per-cluster runtimes already exist.
+- Whether query providers or a frontend facet registry own labels,
+  placeholders, searchability, and bulk-action presentation for generic facets.
+- Whether Event Reason and Source facets stay exact at current event volumes or
+  need an explicit metadata budget and approximate-options presentation.
+- Whether Application Has Issues is a boolean facet over `needsAttention > 0`
+  or a status-family selection derived from the backend grouping presentation.

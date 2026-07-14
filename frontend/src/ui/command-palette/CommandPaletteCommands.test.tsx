@@ -245,6 +245,21 @@ describe('CommandPaletteCommands', () => {
     unmount();
   });
 
+  it('searches existing navigation commands by the target lens vocabulary', () => {
+    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
+
+    const { getCommands, unmount } = renderHook();
+    const commandsById = new Map(getCommands().map((command) => [command.id, command]));
+
+    expect(commandsById.get('cluster-browse')?.keywords).toContain('inventory');
+    expect(commandsById.get('namespace-browse')?.keywords).toContain('inventory');
+    expect(commandsById.get('cluster-nodes')?.keywords).toContain('capacity');
+    expect(commandsById.get('cluster-events')?.keywords).toContain('change');
+    expect(commandsById.get('namespace-events')?.keywords).toContain('change');
+
+    unmount();
+  });
+
   it('opens a cluster tab when the kubeconfig is inactive', () => {
     mocks.kubeconfig.kubeconfigs = [
       {

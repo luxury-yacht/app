@@ -55,6 +55,21 @@ describe('view registry', () => {
     }
   });
 
+  it('maps target lens language onto the existing stable navigation surfaces', () => {
+    expect(getViewDescriptor('cluster', 'browse')?.keywords).toContain('inventory');
+    expect(getViewDescriptor('namespace', 'browse')?.keywords).toContain('inventory');
+    expect(getViewDescriptor('cluster', 'nodes')?.keywords).toContain('capacity');
+    expect(getViewDescriptor('cluster', 'events')?.keywords).toContain('change');
+    expect(getViewDescriptor('namespace', 'events')?.keywords).toContain('change');
+
+    expect(CLUSTER_VIEW_DESCRIPTORS.map(({ id }) => id)).not.toEqual(
+      expect.arrayContaining(['inventory', 'capacity', 'change'])
+    );
+    expect(NAMESPACE_VIEW_DESCRIPTORS.map(({ id }) => id)).not.toEqual(
+      expect.arrayContaining(['inventory', 'capacity', 'change'])
+    );
+  });
+
   it('looks up views by both scope and id', () => {
     expect(getViewDescriptor('cluster', 'browse')?.label).toBe('Browse');
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
