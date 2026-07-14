@@ -5,6 +5,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 // namespaceNotifierDebounce coalesces event bursts (a rollout creating dozens of
@@ -27,10 +30,14 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 //   - workload/pod ingest events broadcast ONLY when the workload-presence or health-rollup
 //     signature changes (the exact signature the snapshot stamps as its "workloads" source
 //     clock), so steady pod churn stays silent;
+//   - Events informer mutations broadcast ONLY when the per-namespace Warning
+//     count or its availability state changes, so Normal-event churn stays silent;
 //   - while the workload tracker has not settled, the notifier re-arms itself so
 //     the readiness flip broadcasts even with no further ingest event — the
-//     cluster-Ready lifecycle gate needs a namespaces build AFTER settling. The
-//     re-arm stops permanently once ready.
+//     cluster-Ready lifecycle gate needs a namespaces build AFTER settling. It
+//     also re-arms while an expected Events informer is warming, so an empty
+//     synced cache becomes an authoritative zero. The re-arm stops once both
+//     expected sources settle.
 //
 // Inputs may fire from informer/reflector goroutines; the broadcast sink is
 // wired later (the resource-stream manager is built after domain registration),
@@ -39,18 +46,26 @@ type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
 
+	eventLister    corelisters.EventLister
+	eventsExpected bool
+	eventsSynced   cache.InformerSynced
+
 	mu             sync.Mutex
 	broadcast      func(version, reason string)
 	timer          *time.Timer
 	debounce       time.Duration
 	namespaceDirty bool
 	workloadDirty  bool
+	eventDirty     bool
 	signatureKnown bool
 	lastSignature  string
 	// lastSignatureReady records whether lastSignature was computed AFTER the
 	// tracker settled; a not-ready signature must be recomputed on the rearm
 	// tick even with no new events, so the readiness flip itself broadcasts.
-	lastSignatureReady bool
+	lastSignatureReady  bool
+	eventSignatureKnown bool
+	lastEventSignature  string
+	lastEventReady      bool
 	// notReadyMinInterval floors presence-only broadcasts while settling; see
 	// namespaceNotifierNotReadySettleInterval. Overridable in tests.
 	notReadyMinInterval time.Duration
@@ -80,7 +95,7 @@ func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version, reason st
 	}
 	n.mu.Lock()
 	n.broadcast = broadcast
-	pending := n.namespaceDirty || n.workloadDirty
+	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty
 	n.mu.Unlock()
 	if pending {
 		n.arm()
@@ -106,6 +121,19 @@ func (n *NamespaceChangeNotifier) WorkloadChanged() {
 	}
 	n.mu.Lock()
 	n.workloadDirty = true
+	n.mu.Unlock()
+	n.arm()
+}
+
+// EventChanged records an Events informer mutation that might change a
+// namespace's warning-event count. The flush compares the aggregate signature,
+// so Normal-event churn does not refetch the namespace list.
+func (n *NamespaceChangeNotifier) EventChanged() {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.eventDirty = true
 	n.mu.Unlock()
 	n.arm()
 }
@@ -149,8 +177,10 @@ func (n *NamespaceChangeNotifier) flush() {
 	}
 	namespaceDirty := n.namespaceDirty
 	workloadDirty := n.workloadDirty
+	eventDirty := n.eventDirty
 	n.namespaceDirty = false
 	n.workloadDirty = false
+	n.eventDirty = false
 	n.mu.Unlock()
 
 	// Compute outside the lock: the signature reads the ingest stores.
@@ -195,6 +225,28 @@ func (n *NamespaceChangeNotifier) flush() {
 		n.mu.Unlock()
 	}
 
+	eventReady := !n.eventsExpected || (n.eventsSynced != nil && n.eventsSynced())
+	n.mu.Lock()
+	needEventSignature := eventDirty || !n.eventSignatureKnown || (n.eventsExpected && !n.lastEventReady)
+	n.mu.Unlock()
+	if needEventSignature {
+		counts, state := namespaceWarningEventRollups(n.eventLister, n.eventsExpected, n.eventsSynced)
+		signature := warningEventRollupSignature(counts, state)
+		n.mu.Lock()
+		if !n.eventSignatureKnown || signature != n.lastEventSignature {
+			hadSignature := n.eventSignatureKnown
+			n.eventSignatureKnown = true
+			n.lastEventSignature = signature
+			if !hadSignature {
+				reasons = append(reasons, "warning-event baseline established")
+			} else {
+				reasons = append(reasons, "warning event count changed")
+			}
+		}
+		n.lastEventReady = eventReady
+		n.mu.Unlock()
+	}
+
 	if len(reasons) > 0 {
 		n.mu.Lock()
 		n.counter++
@@ -203,9 +255,10 @@ func (n *NamespaceChangeNotifier) flush() {
 		broadcast(version, strings.Join(reasons, "; "))
 	}
 
-	// The cluster-Ready gate needs a build after the tracker settles; keep a
-	// bounded self-rearm alive until then (it stops for good once ready).
-	if !ready {
+	// The cluster-Ready gate needs a build after the tracker settles, and the UI
+	// needs an empty Events cache to transition from loading to an authoritative
+	// zero. Keep a bounded self-rearm alive until both expected sources settle.
+	if !ready || (n.eventsExpected && !eventReady) {
 		n.arm()
 	}
 }

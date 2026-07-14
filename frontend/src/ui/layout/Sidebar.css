@@ -428,13 +428,20 @@ body.sidebar-resizing::after {
   color: var(--color-warning);
 }
 
-.namespace-attention-badge {
+.namespace-signal-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.namespace-attention-badge,
+.namespace-warning-events-badge {
   display: inline-flex;
   min-width: 1.25rem;
   height: 1.25rem;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
   padding: 0 0.35rem;
   border-radius: var(--border-radius-round);
   background: var(--color-warning-bg);
@@ -442,6 +449,10 @@ body.sidebar-resizing::after {
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-bold);
   line-height: 1;
+}
+
+.namespace-warning-events-badge {
+  gap: 0.15rem;
 }
 
 /* Inaccessible scope entries cannot expand: no pointer affordance, muted

@@ -36,6 +36,8 @@ export type ResourceQueryCompleteness = 'complete' | 'partial';
 
 export type NamespaceScopeStatus = 'not-found' | 'no-access';
 
+export type NamespaceSignalState = 'available' | 'loading' | 'unavailable';
+
 export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
@@ -936,6 +938,8 @@ export interface NamespaceSummary {
   hasWorkloads: boolean;
   workloadsUnknown?: boolean;
   unhealthyWorkloads?: number;
+  warningEvents?: number;
+  warningEventsState: NamespaceSignalState;
   scopeStatus?: NamespaceScopeStatus;
 }
 

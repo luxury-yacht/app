@@ -683,12 +683,14 @@ func listChecksFromRegistrationPlan(plan domainpermissions.RegistrationAccessPla
 // the scope exists for. Unscoped clusters keep the fail-fast list+watch gate.
 func namespacesRegistration(deps registrationDeps) domainRegistration {
 	registerScopedOrUnscoped := func() error {
+		eventsExpected := deps.informerFactory != nil && deps.informerFactory.CanListWatch("", "events")
 		notifier, err := snapshot.RegisterNamespaceDomain(
 			deps.registry,
 			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
 			deps.cfg.AllowedNamespaces,
 			deps.cfg.KubernetesClient,
+			eventsExpected,
 		)
 		if err != nil {
 			return err

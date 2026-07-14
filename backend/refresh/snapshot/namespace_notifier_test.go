@@ -8,7 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
@@ -188,6 +191,38 @@ func TestNamespaceNotifierBroadcastsWhenWorkloadHealthChanges(t *testing.T) {
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "workload health changed")
+}
+
+func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	notifier.eventLister = corelisters.NewEventLister(indexer)
+	notifier.eventsExpected = true
+	notifier.eventsSynced = func() bool { return true }
+	defer notifier.Stop()
+
+	notifier.EventChanged()
+	waitForBroadcasts(t, recorder, 1)
+
+	require.NoError(t, indexer.Add(&corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "warning", Namespace: "team-a"},
+		InvolvedObject: corev1.ObjectReference{Namespace: "team-a"},
+		Type:           corev1.EventTypeWarning,
+	}))
+	notifier.EventChanged()
+	waitForBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "warning event count changed")
+
+	require.NoError(t, indexer.Add(&corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "normal", Namespace: "team-a"},
+		InvolvedObject: corev1.ObjectReference{Namespace: "team-a"},
+		Type:           corev1.EventTypeNormal,
+	}))
+	notifier.EventChanged()
+	requireNoMoreBroadcasts(t, recorder, 2)
 }
 
 // A burst of events inside one debounce window coalesces to a single broadcast.

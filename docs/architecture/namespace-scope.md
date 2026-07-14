@@ -54,7 +54,16 @@ checker, so the SSAR cache resets with it
   while only non-terminal, ownerless pod aggregates count as standalone
   workload rows. The namespaces source signature includes these counts so a
   status-only transition invalidates the snapshot and rings the same debounced
-  doorbell without counting controller-owned pods twice.
+  doorbell without counting controller-owned pods twice. The same summary
+  counts current Warning Event objects by involved-object namespace.
+  `warningEventsState` distinguishes an authoritative `available` zero from an
+  allowed informer that is still `loading` and an `unavailable` list/watch
+  source. Event add/update/delete handlers feed the namespace notifier; its
+  warning-count signature suppresses Normal-event churn and changes the
+  snapshot's `warning-events` source clock when a visible count or source state
+  changes. Events remain cluster-wide under a configured namespace scope, so
+  this optional aggregate is enabled only when the identity can list and watch
+  that cluster-wide source.
 - **Ingest**: one reflector per (kind, namespace) writing ONE shared store
   through partition views; `ReplacePartition` fully defines only its own
   namespace and fans per-row sink events (never the bulk kind-wide Replace,

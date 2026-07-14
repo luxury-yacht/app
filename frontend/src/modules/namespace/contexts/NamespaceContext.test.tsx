@@ -35,6 +35,8 @@ interface TestNamespaceDomain {
       clusterId: string;
       clusterName: string;
       unhealthyWorkloads?: number;
+      warningEvents?: number;
+      warningEventsState?: 'available' | 'loading' | 'unavailable';
     }>;
   } | null;
   error: null;
@@ -261,7 +263,7 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
-  it('maps backend unhealthy workload rollups into namespace display data', () => {
+  it('maps backend workload and warning-event rollups into namespace display data', () => {
     namespaceDomainRef.current = {
       status: 'ready',
       data: {
@@ -274,6 +276,8 @@ describe('NamespaceProvider selection behaviour', () => {
             clusterId: 'cluster-a',
             clusterName: 'alpha',
             unhealthyWorkloads: 3,
+            warningEvents: 2,
+            warningEventsState: 'available',
           },
         ],
       },
@@ -287,7 +291,10 @@ describe('NamespaceProvider selection behaviour', () => {
 
     const alpha = namespaceRef.current?.namespaces.find((item) => item.name === 'alpha');
     expect(alpha?.unhealthyWorkloads).toBe(3);
+    expect(alpha?.warningEvents).toBe(2);
+    expect(alpha?.warningEventsState).toBe('available');
     expect(alpha?.details).toContain('Unhealthy workloads: 3');
+    expect(alpha?.details).toContain('Warning events: 2');
     cleanup();
   });
 

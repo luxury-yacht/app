@@ -1100,6 +1100,7 @@ describe('refreshOrchestrator', () => {
       resourceVersion: '1',
       creationTimestamp: 100,
       hasWorkloads: false,
+      warningEventsState: 'available' as const,
     };
     const changedNamespace = {
       clusterId: 'cluster-a',
@@ -1117,6 +1118,7 @@ describe('refreshOrchestrator', () => {
       resourceVersion: '2',
       creationTimestamp: 200,
       hasWorkloads: false,
+      warningEventsState: 'available' as const,
     };
 
     setScopedDomainState('namespaces', scope, (prev) => ({

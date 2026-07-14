@@ -51,6 +51,8 @@ type NamespaceEntry = {
   workloadsUnknown: boolean;
   details: string;
   unhealthyWorkloads?: number;
+  warningEvents?: number;
+  warningEventsState?: 'available' | 'loading' | 'unavailable';
 };
 
 type NamespaceState = {
@@ -210,7 +212,7 @@ describe('Sidebar', () => {
     expect(labelsWithin(namespaceViews)).toEqual(['Observe', 'Run', 'Configure', 'Govern']);
   });
 
-  it('shows namespace attention counts without adding a badge for healthy namespaces', () => {
+  it('shows categorized namespace attention counts without badges for zero values', () => {
     renderSidebar({
       namespaces: [
         {
@@ -220,6 +222,8 @@ describe('Sidebar', () => {
           hasWorkloads: true,
           workloadsUnknown: false,
           unhealthyWorkloads: 3,
+          warningEvents: 2,
+          warningEventsState: 'available',
           details: '',
         },
         {
@@ -229,6 +233,8 @@ describe('Sidebar', () => {
           hasWorkloads: true,
           workloadsUnknown: false,
           unhealthyWorkloads: 0,
+          warningEvents: 0,
+          warningEventsState: 'available',
           details: '',
         },
       ],
@@ -245,7 +251,13 @@ describe('Sidebar', () => {
       'true'
     );
     expect(alpha?.querySelector('.sr-only')?.textContent).toBe('3 unhealthy workloads');
+    expect(alpha?.querySelector('.namespace-warning-events-badge')?.textContent).toBe('2');
+    expect(
+      alpha?.querySelector('.namespace-warning-events-badge')?.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(alpha?.querySelectorAll('.sr-only')[1]?.textContent).toBe('2 warning events');
     expect(beta?.querySelector('.namespace-attention-badge')).toBeNull();
+    expect(beta?.querySelector('.namespace-warning-events-badge')).toBeNull();
   });
 
   beforeEach(() => {

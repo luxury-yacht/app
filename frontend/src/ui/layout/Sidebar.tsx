@@ -511,16 +511,43 @@ function Sidebar() {
                               <NamespaceIcon width={14} height={14} />
                             )}
                             <span>{namespace.name}</span>
-                            {namespace.unhealthyWorkloads > 0 ? (
-                              <>
-                                <span className="namespace-attention-badge" aria-hidden="true">
-                                  {namespace.unhealthyWorkloads}
-                                </span>
-                                <span className="sr-only">
-                                  {namespace.unhealthyWorkloads} unhealthy workload
-                                  {namespace.unhealthyWorkloads === 1 ? '' : 's'}
-                                </span>
-                              </>
+                            {namespace.unhealthyWorkloads > 0 ||
+                            (namespace.warningEventsState === 'available' &&
+                              namespace.warningEvents > 0) ? (
+                              <span className="namespace-signal-badges">
+                                {namespace.unhealthyWorkloads > 0 ? (
+                                  <>
+                                    <span
+                                      className="namespace-attention-badge"
+                                      aria-hidden="true"
+                                      title="Unhealthy workloads"
+                                    >
+                                      {namespace.unhealthyWorkloads}
+                                    </span>
+                                    <span className="sr-only">
+                                      {namespace.unhealthyWorkloads} unhealthy workload
+                                      {namespace.unhealthyWorkloads === 1 ? '' : 's'}
+                                    </span>
+                                  </>
+                                ) : null}
+                                {namespace.warningEventsState === 'available' &&
+                                namespace.warningEvents > 0 ? (
+                                  <>
+                                    <span
+                                      className="namespace-warning-events-badge"
+                                      aria-hidden="true"
+                                      title="Warning events"
+                                    >
+                                      <WarningIcon width={12} height={12} />
+                                      {namespace.warningEvents}
+                                    </span>
+                                    <span className="sr-only">
+                                      {namespace.warningEvents} warning event
+                                      {namespace.warningEvents === 1 ? '' : 's'}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </span>
                             ) : null}
                             {namespace.scopeStatus ? (
                               <span

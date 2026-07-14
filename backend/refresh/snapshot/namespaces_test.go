@@ -58,6 +58,60 @@ func TestNamespaceBuilderSortsByName(t *testing.T) {
 	}
 }
 
+func TestNamespaceBuilderRollsUpWarningEventsByNamespace(t *testing.T) {
+	nsAlpha := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	nsBeta := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "beta", ResourceVersion: "2"}}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, nsAlpha, nsBeta),
+		eventLister: testsupport.NewEventLister(t,
+			&corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "warning-alpha"}, InvolvedObject: corev1.ObjectReference{Namespace: "alpha"}, Type: corev1.EventTypeWarning},
+			&corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "normal-alpha"}, InvolvedObject: corev1.ObjectReference{Namespace: "alpha"}, Type: corev1.EventTypeNormal},
+			&corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "warning-beta"}, InvolvedObject: corev1.ObjectReference{Namespace: "beta"}, Type: corev1.EventTypeWarning},
+			&corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "warning-cluster"}, Type: corev1.EventTypeWarning},
+		),
+		eventsExpected: true,
+		eventsSynced:   func() bool { return true },
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Len(t, payload.Namespaces, 2)
+	require.Equal(t, 1, payload.Namespaces[0].WarningEvents)
+	require.Equal(t, NamespaceSignalAvailable, payload.Namespaces[0].WarningEventsState)
+	require.Equal(t, 1, payload.Namespaces[1].WarningEvents)
+	require.Equal(t, NamespaceSignalAvailable, payload.Namespaces[1].WarningEventsState)
+}
+
+func TestNamespaceBuilderWarningEventStateDistinguishesWarmingAndUnavailable(t *testing.T) {
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	synced := false
+	builder := &NamespaceBuilder{
+		namespaces:     testsupport.NewNamespaceLister(t, namespace),
+		eventLister:    testsupport.NewEventLister(t),
+		eventsExpected: true,
+		eventsSynced:   func() bool { return synced },
+	}
+
+	warming, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	warmingPayload := warming.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalLoading, warmingPayload.Namespaces[0].WarningEventsState)
+
+	synced = true
+	available, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	availablePayload := available.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalAvailable, availablePayload.Namespaces[0].WarningEventsState)
+	require.NotEqual(t, warming.SourceVersions["warning-events"], available.SourceVersions["warning-events"])
+
+	builder.eventsExpected = false
+	unavailable, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	unavailablePayload := unavailable.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalUnavailable, unavailablePayload.Namespaces[0].WarningEventsState)
+}
+
 func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *testing.T) {
 	created := time.Unix(1700000000, 0).UTC()
 	nsAlpha := &corev1.Namespace{
@@ -506,7 +560,7 @@ func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T
 	// the scoped registration must never instantiate the namespaces informer.
 	// Passing a nil factory proves it: any touch would panic.
 	reg := domain.New()
-	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil)
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
 }

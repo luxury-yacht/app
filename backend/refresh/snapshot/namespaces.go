@@ -36,9 +36,15 @@ import (
 // workload kinds are cut to the ingest path, so the legacy per-namespace workload-detection
 // count reads each kind's projected rows from the ingest manager rather than a typed lister.
 type NamespaceBuilder struct {
-	namespaces corelisters.NamespaceLister
-	ingest     namespacePodIngestSource
-	tracker    *NamespaceWorkloadTracker
+	namespaces  corelisters.NamespaceLister
+	eventLister corelisters.EventLister
+	// eventsExpected is true only when the identity may list and watch the
+	// cluster-wide Events informer. A denied source is unavailable, while an
+	// allowed source that has not synced yet is loading.
+	eventsExpected bool
+	eventsSynced   cache.InformerSynced
+	ingest         namespacePodIngestSource
+	tracker        *NamespaceWorkloadTracker
 	// scope is the cluster's configured namespace scope
 	// (docs/plans/namespace-scope.md). Non-empty means the rows are
 	// synthesized from these names instead of read from the (cluster-wide,
@@ -187,11 +193,23 @@ type NamespaceSummary struct {
 	HasWorkloads       bool                      `json:"hasWorkloads"`
 	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
 	UnhealthyWorkloads int                       `json:"unhealthyWorkloads,omitempty"`
+	WarningEvents      int                       `json:"warningEvents,omitempty"`
+	WarningEventsState NamespaceSignalState      `json:"warningEventsState"`
 	// ScopeStatus flags a configured scope entry the identity cannot reach:
 	// "not-found" (definitive) or "no-access" (may not exist). Empty for
 	// reachable namespaces and for every unscoped row.
 	ScopeStatus NamespaceScopeStatus `json:"scopeStatus,omitempty"`
 }
+
+// NamespaceSignalState reports whether an optional namespace aggregate is
+// authoritative, still warming, or unavailable for this cluster identity.
+type NamespaceSignalState string
+
+const (
+	NamespaceSignalAvailable   NamespaceSignalState = "available"
+	NamespaceSignalLoading     NamespaceSignalState = "loading"
+	NamespaceSignalUnavailable NamespaceSignalState = "unavailable"
+)
 
 // RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
 // pod kinds' projected rows come from the ingest manager (read per build for workload presence);
@@ -202,7 +220,7 @@ type NamespaceSummary struct {
 // informer events and workload/pod ingest events feed it (handlers/sinks registered HERE,
 // before the informer factory and ingest manager start), and the subsystem wires its
 // broadcast to the resource-stream doorbell once the stream manager exists.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, allowedNamespaces []string, client kubernetes.Interface) (*NamespaceChangeNotifier, error) {
+func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, allowedNamespaces []string, client kubernetes.Interface, eventsExpected bool) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
 	builder := &NamespaceBuilder{
 		ingest:  ingestManager,
@@ -215,6 +233,22 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 		builder.client = client
 	}
 	notifier := NewNamespaceChangeNotifier(ingestManager, tracker)
+	if eventsExpected && factory != nil {
+		eventInformer := factory.Core().V1().Events()
+		builder.eventLister = eventInformer.Lister()
+		builder.eventsExpected = true
+		builder.eventsSynced = eventInformer.Informer().HasSynced
+		notifier.eventLister = builder.eventLister
+		notifier.eventsExpected = true
+		notifier.eventsSynced = builder.eventsSynced
+		if _, err := eventInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(interface{}) { notifier.EventChanged() },
+			UpdateFunc: func(interface{}, interface{}) { notifier.EventChanged() },
+			DeleteFunc: func(interface{}) { notifier.EventChanged() },
+		}); err != nil {
+			return nil, fmt.Errorf("namespaces: register event aggregate handler: %w", err)
+		}
+	}
 	// Scoped clusters synthesize rows from the configured names: the
 	// (cluster-scoped, typically denied) namespaces informer is never
 	// instantiated, and namespace add/delete events cannot occur — the row
@@ -353,6 +387,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	}
 	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
 	workloadNamespaces := workloadRollups.namespaces
+	warningEvents, warningEventsState := b.warningEventRollups()
 
 	items := make([]NamespaceSummary, 0, len(namespaces))
 	var version uint64
@@ -379,6 +414,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 			HasWorkloads:       facts.HasWorkloads,
 			WorkloadsUnknown:   !facts.WorkloadsKnown,
 			UnhealthyWorkloads: workloadRollups.unhealthy[ns.Name],
+			WarningEvents:      warningEvents[ns.Name],
+			WarningEventsState: warningEventsState,
 			ScopeStatus:        scopeStatuses[ns.Name],
 		})
 		if v := parseResourceVersion(ns); v > version {
@@ -402,7 +439,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		// readiness changes; otherwise an unchanged validator makes the delivery layer return
 		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
 		SourceVersions: map[string]string{
-			"workloads": workloadRollupSignature(workloadRollups, trackerReady),
+			"workloads":      workloadRollupSignature(workloadRollups, trackerReady),
+			"warning-events": warningEventRollupSignature(warningEvents, warningEventsState),
 		},
 	}
 	if len(b.scope) > 0 {
@@ -412,6 +450,53 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		snap.SourceVersions["scope-probe"] = scopeProbeSignature(scopeStatuses)
 	}
 	return snap, nil
+}
+
+func (b *NamespaceBuilder) warningEventRollups() (map[string]int, NamespaceSignalState) {
+	return namespaceWarningEventRollups(b.eventLister, b.eventsExpected, b.eventsSynced)
+}
+
+func namespaceWarningEventRollups(eventLister corelisters.EventLister, eventsExpected bool, eventsSynced cache.InformerSynced) (map[string]int, NamespaceSignalState) {
+	counts := make(map[string]int)
+	if !eventsExpected || eventLister == nil {
+		return counts, NamespaceSignalUnavailable
+	}
+	if eventsSynced == nil || !eventsSynced() {
+		return counts, NamespaceSignalLoading
+	}
+	events, err := eventLister.List(labels.Everything())
+	if err != nil {
+		return counts, NamespaceSignalUnavailable
+	}
+	for _, event := range events {
+		if event == nil || !strings.EqualFold(event.Type, corev1.EventTypeWarning) {
+			continue
+		}
+		namespace := strings.TrimSpace(event.InvolvedObject.Namespace)
+		if namespace == "" {
+			continue
+		}
+		counts[namespace]++
+	}
+	return counts, NamespaceSignalAvailable
+}
+
+func warningEventRollupSignature(counts map[string]int, state NamespaceSignalState) string {
+	names := make([]string, 0, len(counts))
+	for namespace := range counts {
+		names = append(names, namespace)
+	}
+	sort.Strings(names)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(state))
+	_, _ = h.Write([]byte{0})
+	for _, namespace := range names {
+		_, _ = h.Write([]byte(namespace))
+		_, _ = h.Write([]byte{'='})
+		_, _ = h.Write([]byte(strconv.Itoa(counts[namespace])))
+		_, _ = h.Write([]byte{0})
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
 }
 
 // workloadRollupSignature is a stable fingerprint of the namespace workload-presence and

@@ -49,6 +49,8 @@ export interface NamespaceListItem {
   hasWorkloads: boolean;
   workloadsUnknown: boolean;
   unhealthyWorkloads: number;
+  warningEvents: number;
+  warningEventsState: 'available' | 'loading' | 'unavailable';
   resourceVersion: string;
   scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
@@ -175,6 +177,8 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       hasWorkloads: true,
       workloadsUnknown: false,
       unhealthyWorkloads: 0,
+      warningEvents: 0,
+      warningEventsState: 'unavailable',
       resourceVersion: ALL_NAMESPACES_RESOURCE_VERSION,
       isSynthetic: true,
     }),
@@ -219,16 +223,26 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
           ? 'Workloads: Present'
           : 'Workloads: None';
       const unhealthyWorkloads = ns.unhealthyWorkloads ?? 0;
+      const warningEvents = ns.warningEvents ?? 0;
+      const warningEventsState = ns.warningEventsState ?? 'unavailable';
+      const warningEventSummary =
+        warningEventsState === 'available'
+          ? String(warningEvents)
+          : warningEventsState === 'loading'
+            ? 'Loading'
+            : 'Unavailable';
 
       return {
         name: ns.name,
         scope: ns.name,
         status: ns.status || ns.phase,
-        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads}`,
+        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads} • Warning events: ${warningEventSummary}`,
         age,
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,
         unhealthyWorkloads,
+        warningEvents,
+        warningEventsState,
         resourceVersion: ns.resourceVersion,
         scopeStatus: ns.scopeStatus,
         clusterId: ns.clusterId,
