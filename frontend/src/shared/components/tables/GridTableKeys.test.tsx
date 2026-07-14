@@ -79,6 +79,7 @@ describe('GridTableKeys filter target selectors', () => {
     caseSensitive: '.icon-bar-button[title="Match case"]',
     kind: '[data-gridtable-filter-role="kind"] .dropdown-trigger',
     namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
+    cluster: '[data-gridtable-filter-role="cluster"] .dropdown-trigger',
     columns: '[data-gridtable-filter-role="columns"] .dropdown-trigger',
   };
 
@@ -96,18 +97,22 @@ describe('GridTableKeys filter target selectors', () => {
       resolvedFilterOptions: {
         kinds: [{ label: 'Pod', value: 'Pod' }],
         namespaces: [{ label: 'default', value: 'default' }],
+        clusters: [{ label: 'alpha', value: 'cluster-a' }],
       },
       kindDropdownId: 'test-kind',
       namespaceDropdownId: 'test-ns',
+      clusterDropdownId: 'test-cluster',
       searchInputId: 'test-search',
       onKindsChange: vi.fn(),
       onNamespacesChange: vi.fn(),
+      onClustersChange: vi.fn(),
       onSearchChange: vi.fn(),
       onReset: vi.fn(),
       onToggleCaseSensitive: vi.fn(),
       renderOption: (opt) => opt.label,
       renderKindsValue: () => 'Kinds',
       renderNamespacesValue: () => 'Namespaces',
+      renderClustersValue: () => 'Clusters',
       showKindDropdown: true,
       showNamespaceDropdown: true,
       ...overrides,
@@ -158,6 +163,13 @@ describe('GridTableKeys filter target selectors', () => {
     expect(nsTrigger).not.toBeNull();
   });
 
+  it('cluster selector matches the cluster dropdown trigger', async () => {
+    const el = await renderFiltersBar({ showClusterDropdown: true });
+
+    const clusterTrigger = el.querySelector<HTMLElement>(SELECTORS.cluster);
+    expect(clusterTrigger).not.toBeNull();
+  });
+
   it('search input is found when dropdowns are hidden', async () => {
     const el = await renderFiltersBar({
       showKindDropdown: false,
@@ -195,6 +207,7 @@ describe('GridTableKeys filter target selectors', () => {
         filteringEnabled: true,
         showKindDropdown: false,
         showNamespaceDropdown: false,
+        showClusterDropdown: false,
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
@@ -222,16 +235,19 @@ describe('GridTableKeys filter target selectors', () => {
             }}
             kindDropdownId="kind"
             namespaceDropdownId="namespace"
+            clusterDropdownId="cluster"
             columnsDropdownId="columns"
             searchInputId="search"
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
+            onClustersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             renderKindsValue={() => 'Kinds'}
             renderNamespacesValue={() => 'Namespaces'}
+            renderClustersValue={() => 'Clusters'}
             renderColumnsValue={() => 'Columns'}
             showColumnsDropdown
             columnOptions={[{ label: 'Name', value: 'name' }]}
@@ -334,6 +350,7 @@ describe('GridTableKeys filter target selectors', () => {
         filteringEnabled: false,
         showKindDropdown: false,
         showNamespaceDropdown: false,
+        showClusterDropdown: false,
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,
@@ -388,6 +405,7 @@ describe('GridTableKeys filter target selectors', () => {
         filteringEnabled: true,
         showKindDropdown: false,
         showNamespaceDropdown: false,
+        showClusterDropdown: false,
         filtersContainerRef,
         filterFocusIndexRef,
         wrapperRef,

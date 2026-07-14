@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   setSidebarSelectionForCluster: vi.fn(),
   setSelectedNamespace: vi.fn(),
   tableProps: null as null | Record<string, unknown>,
+  resourceGridParams: null as null | Record<string, unknown>,
+  persistenceParams: null as null | Record<string, unknown>,
 }));
 
 const namespace = (clusterId: string, clusterName: string, name: string) => ({
@@ -106,33 +108,39 @@ vi.mock('@core/contexts/SidebarStateContext', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: {
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    },
-    setFilters: vi.fn(),
-    pageSize: null,
-    setPageSize: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-  }),
+  useGridTablePersistence: (params: Record<string, unknown>) => {
+    mocks.persistenceParams = params;
+    return {
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
+    };
+  },
 }));
 
 vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
-  useClusterResourceGridTable: ({ data, keyExtractor }: Record<string, unknown>) => ({
-    gridTableProps: { data, keyExtractor },
-    favModal: null,
-  }),
+  useClusterResourceGridTable: (params: Record<string, unknown>) => {
+    mocks.resourceGridParams = params;
+    return {
+      gridTableProps: { data: params.data, keyExtractor: params.keyExtractor },
+      favModal: null,
+    };
+  },
 }));
 
 vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
@@ -180,6 +188,8 @@ const renderView = async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tableProps = null;
+  mocks.resourceGridParams = null;
+  mocks.persistenceParams = null;
 });
 
 afterEach(() => {
@@ -256,6 +266,26 @@ describe('GlobalViewNamespaces', () => {
     ).toBe('beta');
     expect(source.completeness).toBe('partial');
     expect(source.partialLabel).toBe('Showing namespace data from 2 of 3 clusters');
+
+    const resourceGridParams = mocks.resourceGridParams as {
+      filterAccessors: { getCluster: (row: Record<string, unknown>) => string };
+      filterOptionOverrides: {
+        clusters: Array<{ value: string; label: string }>;
+        showClusterDropdown: boolean;
+      };
+    };
+    expect(resourceGridParams.filterAccessors.getCluster(source.rows[1])).toBe('cluster-b');
+    expect(resourceGridParams.filterOptionOverrides).toMatchObject({
+      clusters: [
+        { value: 'cluster-a', label: 'alpha' },
+        { value: 'cluster-b', label: 'beta' },
+        { value: 'cluster-c', label: 'gamma' },
+      ],
+      showClusterDropdown: true,
+    });
+    expect(mocks.persistenceParams).toMatchObject({
+      filterOptions: { clusters: ['cluster-a', 'cluster-b', 'cluster-c'] },
+    });
 
     await unmount();
   });

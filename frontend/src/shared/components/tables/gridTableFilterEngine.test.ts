@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 
 interface Row {
   id: string;
+  clusterId: string;
+  clusterName: string;
   kind: string;
   namespace: string | null;
   name: string;
@@ -16,11 +18,37 @@ interface Row {
 }
 
 const rows: Row[] = [
-  { id: '1', kind: 'Deployment', namespace: 'default', name: 'frontend', description: 'web app' },
-  { id: '2', kind: 'Pod', namespace: 'default', name: 'frontend-1', description: 'pod instance' },
-  { id: '3', kind: 'Deployment', namespace: 'platform', name: 'gateway', description: 'edge' },
+  {
+    id: '1',
+    clusterId: 'cluster-a',
+    clusterName: 'alpha',
+    kind: 'Deployment',
+    namespace: 'default',
+    name: 'frontend',
+    description: 'web app',
+  },
+  {
+    id: '2',
+    clusterId: 'cluster-a',
+    clusterName: 'alpha',
+    kind: 'Pod',
+    namespace: 'default',
+    name: 'frontend-1',
+    description: 'pod instance',
+  },
+  {
+    id: '3',
+    clusterId: 'cluster-b',
+    clusterName: 'beta',
+    kind: 'Deployment',
+    namespace: 'platform',
+    name: 'gateway',
+    description: 'edge',
+  },
   {
     id: '4',
+    clusterId: 'cluster-b',
+    clusterName: 'beta',
     kind: 'ConfigMap',
     namespace: null,
     name: 'global-config',
@@ -63,6 +91,64 @@ describe('gridTableFilterEngine', () => {
       'default',
       'platform',
     ]);
+  });
+
+  it('builds labeled cluster options and filters locally by cluster ID', () => {
+    const clusterAccessors = resolveGridTableFilterAccessors({
+      accessors: {
+        getCluster: (row) => row.clusterId,
+      },
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+    const options = buildGridTableFilterOptions({
+      filteringEnabled: true,
+      options: {
+        clusters: [
+          { value: 'cluster-a', label: 'alpha' },
+          { value: 'cluster-b', label: 'beta' },
+        ],
+      },
+      data: rows,
+      accessors: clusterAccessors,
+      defaultGetKind,
+      defaultGetNamespace,
+    });
+
+    expect(options.clusters).toEqual([
+      { value: 'cluster-a', label: 'alpha' },
+      { value: 'cluster-b', label: 'beta' },
+    ]);
+
+    const filtered = applyGridTableFilters({
+      filteringEnabled: true,
+      data: rows,
+      activeFilters: {
+        ...defaultState,
+        clusters: ['cluster-b'],
+      },
+      accessors: clusterAccessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+
+    expect(filtered.map((row) => row.id)).toEqual(['3', '4']);
+
+    const caseVariantFiltered = applyGridTableFilters({
+      filteringEnabled: true,
+      data: rows,
+      activeFilters: {
+        ...defaultState,
+        clusters: ['CLUSTER-B'],
+      },
+      accessors: clusterAccessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+    expect(caseVariantFiltered).toEqual([]);
   });
 
   it('returns empty option lists when filtering is disabled', () => {

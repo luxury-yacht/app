@@ -27,6 +27,11 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+const kubeconfigState = vi.hoisted(() => ({
+  selectedClusterId: 'cluster-a',
+  selectedClusterIds: ['cluster-a', 'cluster-b'],
+}));
+
 const testClusterId = 'cluster-a';
 const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 
@@ -36,7 +41,7 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: testClusterId }),
+  useKubeconfig: () => kubeconfigState,
 }));
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
@@ -251,6 +256,19 @@ describe('Sidebar', () => {
     expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
   });
 
+  it('hides the Global section when fewer than two clusters are open', () => {
+    kubeconfigState.selectedClusterIds = ['cluster-a'];
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    expect(
+      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual(['Cluster', 'Namespaces']);
+    expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
+  });
+
   it('keeps namespace rows free of operational telemetry badges', () => {
     renderSidebar({
       namespaces: [
@@ -307,6 +325,7 @@ describe('Sidebar', () => {
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
     autoRefreshLoadingState.suppressPassiveLoading = false;
+    kubeconfigState.selectedClusterIds = ['cluster-a', 'cluster-b'];
     resetAppPreferencesCacheForTesting();
   });
 

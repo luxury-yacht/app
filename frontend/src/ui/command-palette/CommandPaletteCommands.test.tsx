@@ -209,6 +209,7 @@ describe('CommandPaletteCommands', () => {
 
   it('offers navigation commands for every registered cluster and namespace view', () => {
     mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
+    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
 
     const { getCommands, unmount } = renderHook();
     const navigationViewIds = getCommands()
@@ -250,6 +251,19 @@ describe('CommandPaletteCommands', () => {
       (command) => command.id === 'cluster-global-namespaces'
     );
     expect(globalNamespaces?.label).toBe('Global - Namespaces');
+
+    unmount();
+  });
+
+  it('hides Global navigation commands when fewer than two clusters are open', () => {
+    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
+
+    const { getCommands, unmount } = renderHook();
+    const commandIds = getCommands().map((command) => command.id);
+
+    expect(commandIds).not.toContain('cluster-fleet');
+    expect(commandIds).not.toContain('cluster-global-namespaces');
+    expect(commandIds).toContain('cluster-namespaces');
 
     unmount();
   });

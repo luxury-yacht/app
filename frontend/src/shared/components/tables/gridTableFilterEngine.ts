@@ -20,6 +20,7 @@ export function resolveGridTableFilterAccessors<T>({
   defaultGetSearchText,
 }: ResolveGridTableFilterAccessorsOptions<T>): GridTableFilterAccessors<T> {
   return {
+    getCluster: accessors?.getCluster,
     getKind: accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null),
     getNamespace: accessors?.getNamespace ?? ((row: T) => defaultGetNamespace(row) ?? null),
     getSearchText: accessors?.getSearchText ?? ((row: T) => defaultGetSearchText(row)),
@@ -50,6 +51,8 @@ export function buildGridTableFilterOptions<T>({
     kindDropdownBulkActions: options?.kindDropdownBulkActions ?? false,
     namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
     namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
+    clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
+    clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
     queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
     preActions: options?.preActions,
     postActions: options?.postActions,
@@ -63,6 +66,7 @@ export function buildGridTableFilterOptions<T>({
       ...baseOptions,
       kinds: [],
       namespaces: [],
+      clusters: [],
       queryFacets: [],
     };
   }
@@ -119,6 +123,24 @@ export function buildGridTableFilterOptions<T>({
     (row) => accessors.getNamespace?.(row) ?? defaultGetNamespace(row),
     (value) => (value === '—' ? '' : value)
   );
+  const clusterMap = new Map<string, DropdownOption>();
+  if (!queryBacked && options?.clusters?.length) {
+    for (const option of options.clusters) {
+      const value = option.value.trim();
+      if (!value) {
+        continue;
+      }
+      const key = value;
+      if (!clusterMap.has(key)) {
+        clusterMap.set(key, { ...option, value, label: option.label.trim() || value });
+      }
+    }
+  } else if (!queryBacked) {
+    for (const row of data) {
+      addOption(clusterMap, accessors.getCluster?.(row), (value) => value);
+    }
+  }
+  const clusters = Array.from(clusterMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   const namespaceSeparator =
     clusterScopedOption && namespaces.length > 0
       ? ({
@@ -140,6 +162,7 @@ export function buildGridTableFilterOptions<T>({
     ...baseOptions,
     kinds,
     namespaces: namespaceOptions,
+    clusters,
   };
 }
 
@@ -178,10 +201,18 @@ export function applyGridTableFilters<T>({
   const shouldFilterSearch = searchNeedle.length > 0;
   const kindSet = new Set(activeFilters.kinds.map((value) => value.toLowerCase()));
   const namespaceSet = new Set(activeFilters.namespaces.map((value) => value.toLowerCase()));
+  const clusterSet = new Set(activeFilters.clusters ?? []);
   const shouldFilterKinds = kindSet.size > 0;
   const shouldFilterNamespaces = namespaceSet.size > 0;
+  const shouldFilterClusters = clusterSet.size > 0;
 
   return data.filter((row) => {
+    const clusterValueRaw = accessors.getCluster?.(row);
+    const clusterValue = typeof clusterValueRaw === 'string' ? clusterValueRaw.trim() : '';
+    if (shouldFilterClusters && (!clusterValue || !clusterSet.has(clusterValue))) {
+      return false;
+    }
+
     const kindValueRaw = accessors.getKind?.(row) ?? defaultGetKind(row);
     const kindValue = typeof kindValueRaw === 'string' ? kindValueRaw.trim() : '';
     if (shouldFilterKinds && (!kindValue || !kindSet.has(kindValue.toLowerCase()))) {

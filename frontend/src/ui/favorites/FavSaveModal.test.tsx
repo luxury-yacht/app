@@ -369,6 +369,23 @@ describe('FavSaveModal', () => {
     expect(saved.clusterId).toBe('config:prod-cluster');
   });
 
+  it('preserves cluster filter selections in favorites', async () => {
+    const onSave = vi.fn();
+    const filters: FavoriteFilters = {
+      ...defaultFilters,
+      clusters: ['cluster-a', 'cluster-b'],
+    };
+    await renderComponent(makeProps({ onSave, filters, viewLabel: 'Namespaces' }));
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.filters?.clusters).toEqual(['cluster-a', 'cluster-b']);
+  });
+
   // -----------------------------------------------------------------------
   // 5. Clicking Cancel calls onClose without calling onSave
   // -----------------------------------------------------------------------

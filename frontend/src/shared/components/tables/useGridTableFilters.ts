@@ -42,6 +42,7 @@ export interface UseGridTableFiltersResult<T> {
   handleFilterSearchChange: (value: string) => void;
   handleFilterKindsChange: (values: string[]) => void;
   handleFilterNamespacesChange: (values: string[]) => void;
+  handleFilterClustersChange: (values: string[]) => void;
   handleFilterQueryFacetChange: (key: string, values: string[]) => void;
   handleFilterReset: () => void;
   /** Whether the built-in case-sensitive search toggle is active. */
@@ -252,6 +253,13 @@ export function useGridTableFilters<T>({
     [updateFilters]
   );
 
+  const handleFilterClustersChange = useCallback(
+    (next: string[]) => {
+      updateFilters({ clusters: next });
+    },
+    [updateFilters]
+  );
+
   const handleFilterQueryFacetChange = useCallback(
     (key: string, values: string[]) => {
       updateFilters({
@@ -281,6 +289,7 @@ export function useGridTableFilters<T>({
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
+    handleFilterClustersChange,
     handleFilterQueryFacetChange,
     handleFilterReset,
     caseSensitive: activeFilters.caseSensitive,

@@ -393,6 +393,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         search: filterText,
         kinds: filterKinds,
         namespaces: filterNamespaces,
+        clusters: filters.clusters ?? existingFavorite?.filters?.clusters,
         queryFacets: filters.queryFacets ?? existingFavorite?.filters?.queryFacets,
         caseSensitive,
         includeMetadata: includeMetadataState,

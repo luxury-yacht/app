@@ -430,15 +430,17 @@ export function useCommandPaletteCommands() {
         keywords: ['namespace', 'change', 'select'],
         shortcut: selectNamespaceShortcut,
       },
-      ...GLOBAL_VIEW_DESCRIPTORS.map((view) => ({
-        id: `cluster-${view.id}`,
-        label: `Global - ${view.label}`,
-        icon: <CategoryIcon width={16} height={16} />,
-        description: view.description,
-        category: 'Navigation',
-        action: () => openClusterTab(view.id),
-        keywords: [...view.keywords],
-      })),
+      ...(selectedKubeconfigs.length > 1
+        ? GLOBAL_VIEW_DESCRIPTORS.map((view) => ({
+            id: `cluster-${view.id}`,
+            label: `Global - ${view.label}`,
+            icon: <CategoryIcon width={16} height={16} />,
+            description: view.description,
+            category: 'Navigation',
+            action: () => openClusterTab(view.id),
+            keywords: [...view.keywords],
+          }))
+        : []),
       ...CLUSTER_VIEW_DESCRIPTORS.map((view) => ({
         id: `cluster-${view.id}`,
         label: `Cluster - ${view.label}`,
@@ -467,6 +469,7 @@ export function useCommandPaletteCommands() {
       zoomOut,
       resetZoom,
       zoomLevel,
+      selectedKubeconfigs.length,
     ]
   );
 

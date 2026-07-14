@@ -15,6 +15,7 @@ import {
   hasNonDefaultGridTableFilters,
   normalizeGridTableFilterArray,
   normalizeGridTableFilterState,
+  normalizeGridTableIdentityFilterArray,
   normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import { requestAppState } from '@/core/app-state-access';
@@ -37,6 +38,7 @@ export interface GridTablePersistenceKeyParts {
 export interface GridTableFilterPersistenceOptions {
   kinds?: string[];
   namespaces?: string[];
+  clusters?: string[];
   queryFacets?: Record<string, string[]>;
   isNamespaceScoped?: boolean;
 }
@@ -312,6 +314,14 @@ const intersectsAllowed = (values: string[], allowed?: string[]): string[] => {
   return values.filter((value) => allowedSet.has(value.toLowerCase()));
 };
 
+const intersectsAllowedIdentities = (values: string[], allowed?: string[]): string[] => {
+  if (!allowed || allowed.length === 0) {
+    return values;
+  }
+  const allowedSet = new Set(allowed);
+  return values.filter((value) => allowedSet.has(value));
+};
+
 const pruneQueryFacets = (
   facets: Record<string, string[]>,
   allowed?: Record<string, string[]>
@@ -399,6 +409,10 @@ export const prunePersistedState = <T>(
     const namespaces = isNamespaceScoped
       ? []
       : intersectsAllowed(normalized.namespaces, context.filterOptions?.namespaces);
+    const clusters = intersectsAllowedIdentities(
+      normalized.clusters ?? [],
+      context.filterOptions?.clusters
+    );
     const queryFacets = pruneQueryFacets(
       normalizeGridTableQueryFacets(normalized.queryFacets),
       context.filterOptions?.queryFacets
@@ -408,6 +422,7 @@ export const prunePersistedState = <T>(
       search: normalized.search,
       kinds,
       namespaces,
+      ...(clusters.length > 0 ? { clusters } : {}),
       ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,
@@ -493,10 +508,12 @@ export const buildPersistedStateForSave = <T>(
       normalizeGridTableQueryFacets(normalized.queryFacets),
       context.filterOptions?.queryFacets
     );
+    const clusters = normalizeGridTableIdentityFilterArray(normalized.clusters);
     const filters: GridTableFilterState = {
       search: normalized.search,
       kinds: normalizeGridTableFilterArray(normalized.kinds),
       namespaces: isNamespaceScoped ? [] : normalizeGridTableFilterArray(normalized.namespaces),
+      ...(clusters.length > 0 ? { clusters } : {}),
       ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,

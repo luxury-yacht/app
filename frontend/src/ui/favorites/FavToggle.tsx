@@ -117,6 +117,12 @@ export function useFavToggle(state: FavToggleState): {
           continue;
         }
 
+        const clusters = [...(state.filters.clusters ?? [])].sort().join(',');
+        const favClusters = [...(fav.filters.clusters ?? [])].sort().join(',');
+        if (clusters !== favClusters) {
+          continue;
+        }
+
         const queryFacets = JSON.stringify(
           normalizeGridTableQueryFacets(state.filters.queryFacets)
         );
@@ -180,6 +186,7 @@ export function useFavToggle(state: FavToggleState): {
         search: pendingFavorite.filters.search ?? '',
         kinds: pendingFavorite.filters.kinds ?? [],
         namespaces: pendingFavorite.filters.namespaces ?? [],
+        clusters: pendingFavorite.filters.clusters,
         queryFacets: pendingFavorite.filters.queryFacets,
         caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
         includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
@@ -236,6 +243,7 @@ export function useFavToggle(state: FavToggleState): {
       state.filters.search.trim().length > 0 ||
       state.filters.kinds.length > 0 ||
       state.filters.namespaces.length > 0 ||
+      (state.filters.clusters?.length ?? 0) > 0 ||
       Object.keys(normalizeGridTableQueryFacets(state.filters.queryFacets)).length > 0;
     return hasActiveFilters ? `${base} (filtered)` : base;
   }, [selectedClusterName, viewType, selectedNamespace, viewLabel, state.filters]);
@@ -246,6 +254,7 @@ export function useFavToggle(state: FavToggleState): {
       search: state.filters.search,
       kinds: [...state.filters.kinds],
       namespaces: [...state.filters.namespaces],
+      clusters: [...(state.filters.clusters ?? [])],
       queryFacets: normalizeGridTableQueryFacets(state.filters.queryFacets),
       caseSensitive: state.filters.caseSensitive ?? false,
       includeMetadata: state.includeMetadata ?? false,

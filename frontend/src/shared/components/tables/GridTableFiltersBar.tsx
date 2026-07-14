@@ -28,11 +28,13 @@ interface GridTableFiltersBarProps {
   resolvedFilterOptions: InternalFilterOptions;
   kindDropdownId: string;
   namespaceDropdownId: string;
+  clusterDropdownId: string;
   queryFacetDropdownIdPrefix?: string;
   columnsDropdownId?: string;
   searchInputId: string;
   onKindsChange: (value: string | string[]) => void;
   onNamespacesChange: (value: string | string[]) => void;
+  onClustersChange: (value: string | string[]) => void;
   onQueryFacetChange?: (key: string, value: string | string[]) => void;
   onSearchChange: (value: string) => void;
   onReset: () => void;
@@ -41,12 +43,14 @@ interface GridTableFiltersBarProps {
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
   renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   renderNamespacesValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
+  renderClustersValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   renderColumnsValue?: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   columnOptions?: DropdownOption[];
   columnValue?: string[];
   onColumnsChange?: (value: string | string[]) => void;
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
+  showClusterDropdown?: boolean;
   showColumnsDropdown?: boolean;
   searchShortcutActive?: boolean;
   searchShortcutPriority?: number;
@@ -83,11 +87,13 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   resolvedFilterOptions,
   kindDropdownId,
   namespaceDropdownId,
+  clusterDropdownId,
   queryFacetDropdownIdPrefix,
   columnsDropdownId,
   searchInputId,
   onKindsChange,
   onNamespacesChange,
+  onClustersChange,
   onQueryFacetChange,
   onSearchChange,
   onReset,
@@ -95,12 +101,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   renderOption,
   renderKindsValue,
   renderNamespacesValue,
+  renderClustersValue,
   renderColumnsValue = () => 'Columns',
   columnOptions,
   columnValue,
   onColumnsChange,
   showKindDropdown = false,
   showNamespaceDropdown = false,
+  showClusterDropdown = false,
   showColumnsDropdown = false,
   searchShortcutActive = false,
   searchShortcutPriority = 0,
@@ -114,7 +122,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
   // The result count is filter feedback (how many rows match the active filter), not
   // pagination/total info — that lives in the pagination footer. So it shows only when
-  // a narrowing filter (search/kind/namespace/provider query facet) is active.
+  // a narrowing filter (search/kind/namespace/cluster/provider query facet) is active.
   const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
   const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
 
@@ -184,6 +192,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         {!!(
           showKindDropdown ||
           showNamespaceDropdown ||
+          showClusterDropdown ||
           (resolvedFilterOptions.queryFacets?.length ?? 0) > 0
         ) && (
           <div className="gridtable-filter-subcluster">
@@ -224,6 +233,26 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   dropdownClassName="dropdown-filter-menu"
                   renderOption={renderOption}
                   renderValue={renderNamespacesValue}
+                />
+              </div>
+            )}
+            {!!showClusterDropdown && (
+              <div className="gridtable-filter-group" data-gridtable-filter-role="cluster">
+                <Dropdown
+                  id={clusterDropdownId}
+                  name="gridtable-filter-cluster"
+                  multiple
+                  size="compact"
+                  searchable={resolvedFilterOptions.clusterDropdownSearchable}
+                  showBulkActions={resolvedFilterOptions.clusterDropdownBulkActions}
+                  placeholder="All clusters"
+                  value={activeFilters.clusters ?? []}
+                  options={resolvedFilterOptions.clusters ?? []}
+                  disabled={!resolvedFilterOptions.clusters?.length}
+                  onChange={onClustersChange}
+                  dropdownClassName="dropdown-filter-menu"
+                  renderOption={renderOption}
+                  renderValue={renderClustersValue}
                 />
               </div>
             )}

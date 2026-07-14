@@ -98,6 +98,7 @@ export function useGridTableFiltersWiring<T>({
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
+    handleFilterClustersChange,
     handleFilterQueryFacetChange,
     handleFilterReset,
     toggleCaseSensitive,
@@ -134,6 +135,13 @@ export function useGridTableFiltersWiring<T>({
     [handleFilterNamespacesChange, normalizeDropdownValue]
   );
 
+  const handleClusterDropdownChange = useCallback(
+    (value: string | string[]) => {
+      handleFilterClustersChange(normalizeDropdownValue(value));
+    },
+    [handleFilterClustersChange, normalizeDropdownValue]
+  );
+
   const handleQueryFacetDropdownChange = useCallback(
     (key: string, value: string | string[]) => {
       handleFilterQueryFacetChange(key, normalizeDropdownValue(value));
@@ -144,11 +152,13 @@ export function useGridTableFiltersWiring<T>({
   const searchInputId = useId();
   const kindDropdownId = useId();
   const namespaceDropdownId = useId();
+  const clusterDropdownId = useId();
   const queryFacetDropdownIdPrefix = useId();
   const columnsDropdownId = useId();
 
   const showKindDropdown = filters?.options?.showKindDropdown ?? false;
   const showNamespaceDropdown = filters?.options?.showNamespaceDropdown ?? false;
+  const showClusterDropdown = filters?.options?.showClusterDropdown ?? false;
 
   const renderFilterOption = useCallback(
     (option: DropdownOption, isSelected: boolean): ReactNode => (
@@ -176,6 +186,13 @@ export function useGridTableFiltersWiring<T>({
       // Include the selected count so multi-select status is visible at a glance.
       const count = Array.isArray(value) ? value.length : value ? 1 : 0;
       return count > 0 ? `Namespaces (${count})` : 'Namespaces';
+    },
+    []
+  );
+  const renderClustersValue = useCallback(
+    (value: string | string[], _options: DropdownOption[]) => {
+      const count = Array.isArray(value) ? value.length : value ? 1 : 0;
+      return count > 0 ? `Clusters (${count})` : 'Clusters';
     },
     []
   );
@@ -285,6 +302,7 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
+      clusterDropdownId,
       queryFacetDropdownIdPrefix,
       columnsDropdownId,
       resolvedFilterOptions,
@@ -293,14 +311,17 @@ export function useGridTableFiltersWiring<T>({
       onSearchChange: handleFilterSearchChange,
       onKindsChange: handleKindDropdownChange,
       onNamespacesChange: handleNamespaceDropdownChange,
+      onClustersChange: handleClusterDropdownChange,
       onQueryFacetChange: handleQueryFacetDropdownChange,
       onReset: handleFilterReset,
       onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
+      showClusterDropdown,
       renderOption: renderFilterOption,
       renderKindsValue,
       renderNamespacesValue,
+      renderClustersValue,
       renderColumnsValue: columnsDropdown?.renderValue ?? renderColumnsValue,
       columnOptions: columnsDropdown?.options,
       columnValue: columnsDropdown?.value,
@@ -317,6 +338,7 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
+      clusterDropdownId,
       queryFacetDropdownIdPrefix,
       columnsDropdownId,
       resolvedFilterOptions,
@@ -324,14 +346,17 @@ export function useGridTableFiltersWiring<T>({
       handleFilterSearchChange,
       handleKindDropdownChange,
       handleNamespaceDropdownChange,
+      handleClusterDropdownChange,
       handleQueryFacetDropdownChange,
       handleFilterReset,
       toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
+      showClusterDropdown,
       renderFilterOption,
       renderKindsValue,
       renderNamespacesValue,
+      renderClustersValue,
       columnsDropdown,
       renderColumnsValue,
       showColumnsDropdown,
@@ -356,6 +381,7 @@ export function useGridTableFiltersWiring<T>({
     filterFocusIndexRef,
     showKindDropdown,
     showNamespaceDropdown,
+    showClusterDropdown,
     filtersBarProps,
     filtersNode,
     handleFilterReset,

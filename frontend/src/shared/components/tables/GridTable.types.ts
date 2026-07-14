@@ -73,6 +73,8 @@ export interface GridTableFilterState {
   search: string;
   kinds: string[];
   namespaces: string[];
+  /** Selected cluster IDs for multi-cluster local tables. */
+  clusters?: string[];
   /** Backend-owned query facet selections keyed by the provider's facet name. */
   queryFacets?: Record<string, string[]>;
   caseSensitive: boolean;
@@ -92,6 +94,7 @@ export interface GridTableFilterAccessors<T> {
   getSearchText?: (row: T) => string | string[] | null | undefined;
   getKind?: (row: T) => string | null | undefined;
   getNamespace?: (row: T) => string | null | undefined;
+  getCluster?: (row: T) => string | null | undefined;
 }
 
 export interface GridTableFilterOptions {
@@ -99,14 +102,19 @@ export interface GridTableFilterOptions {
   searchPlaceholder?: string;
   kinds?: string[];
   namespaces?: string[];
+  /** Cluster IDs and their user-facing context names. */
+  clusters?: DropdownOption[];
   /** Additional backend-owned facet controls for query-backed tables. */
   queryFacets?: GridTableQueryFacetDefinition[];
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
+  showClusterDropdown?: boolean;
   kindDropdownSearchable?: boolean;
   kindDropdownBulkActions?: boolean;
   namespaceDropdownSearchable?: boolean;
   namespaceDropdownBulkActions?: boolean;
+  clusterDropdownSearchable?: boolean;
+  clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
   preActions?: IconBarItem[];
@@ -219,12 +227,15 @@ export interface InternalFilterOptions {
   searchBehavior?: 'local' | 'query';
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
+  clusters?: DropdownOption[];
   queryFacets?: GridTableQueryFacetDefinition[];
   searchPlaceholder?: string;
   kindDropdownSearchable?: boolean;
   kindDropdownBulkActions?: boolean;
   namespaceDropdownSearchable?: boolean;
   namespaceDropdownBulkActions?: boolean;
+  clusterDropdownSearchable?: boolean;
+  clusterDropdownBulkActions?: boolean;
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
   customActions?: React.ReactNode;

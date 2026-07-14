@@ -102,6 +102,11 @@ invalidators even though the callback does not read them.
 - Use query-backed search when upstream query parameters shape the dataset.
 - Namespace filters must preserve cluster-scoped resources where the table
   includes them.
+- Multi-cluster local tables use the first-class Cluster filter. Dropdown option
+  values and row accessors carry `clusterId`; context names are display labels
+  only. Build the option vocabulary from the table's full open-cluster scope so
+  partial row availability does not rename, collapse, or remove cluster
+  selections. Cluster selections persist with GridTable state and favorites.
 - Metadata filters that describe the object universe should come from catalog or
   query metadata, not a capped row slice.
 - Query providers may add `queryFacets` to the shared filter state and options.

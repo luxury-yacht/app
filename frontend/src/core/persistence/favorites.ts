@@ -15,6 +15,7 @@ export interface FavoriteFilters {
   search: string;
   kinds: string[];
   namespaces: string[];
+  clusters?: string[];
   queryFacets?: Record<string, string[]>;
   caseSensitive: boolean;
   includeMetadata: boolean;

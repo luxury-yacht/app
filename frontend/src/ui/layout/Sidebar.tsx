@@ -60,7 +60,8 @@ function Sidebar() {
     selectedNamespaceClusterId,
   } = useNamespace();
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const showGlobalViews = selectedClusterIds.length > 1;
   // The active cluster's "accessible namespaces" scope
   // (docs/plans/namespace-scope.md): the namespaces section doubles as its
   // inline editor when a scope is set or the cluster-wide list is denied.
@@ -331,38 +332,42 @@ function Sidebar() {
         </button>
         {!isCollapsed && (
           <>
-            <div className="sidebar-section">
-              <h3>Global</h3>
-              <div className="cluster-items">
-                {GLOBAL_VIEW_DESCRIPTORS.map((view) => (
-                  <button
-                    type="button"
-                    key={view.id}
-                    className={buildSidebarItemClassName(['sidebar-item'], {
-                      kind: 'cluster-view',
-                      view: view.id,
-                    })}
-                    onClick={() => {
-                      if (!keyboardActivationRef.current) {
-                        clearKeyboardPreview();
+            {showGlobalViews && (
+              <div className="sidebar-section">
+                <h3>Global</h3>
+                <div className="cluster-items">
+                  {GLOBAL_VIEW_DESCRIPTORS.map((view) => (
+                    <button
+                      type="button"
+                      key={view.id}
+                      className={buildSidebarItemClassName(['sidebar-item'], {
+                        kind: 'cluster-view',
+                        view: view.id,
+                      })}
+                      onClick={() => {
+                        if (!keyboardActivationRef.current) {
+                          clearKeyboardPreview();
+                        }
+                        handleClusterViewSelect(view.id);
+                      }}
+                      data-sidebar-focusable="true"
+                      data-sidebar-scope="global"
+                      data-sidebar-target-kind="cluster-view"
+                      data-sidebar-target-view={view.id}
+                      tabIndex={-1}
+                      aria-current={
+                        isTargetSelected({ kind: 'cluster-view', view: view.id })
+                          ? 'page'
+                          : undefined
                       }
-                      handleClusterViewSelect(view.id);
-                    }}
-                    data-sidebar-focusable="true"
-                    data-sidebar-scope="global"
-                    data-sidebar-target-kind="cluster-view"
-                    data-sidebar-target-view={view.id}
-                    tabIndex={-1}
-                    aria-current={
-                      isTargetSelected({ kind: 'cluster-view', view: view.id }) ? 'page' : undefined
-                    }
-                  >
-                    <CategoryIcon width={14} height={14} />
-                    <span>{view.label}</span>
-                  </button>
-                ))}
+                    >
+                      <CategoryIcon width={14} height={14} />
+                      <span>{view.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="sidebar-section">
               <h3>Cluster</h3>

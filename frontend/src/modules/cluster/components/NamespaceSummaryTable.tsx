@@ -2,6 +2,7 @@ import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
 import { type BoundedRowsMode, boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
@@ -23,6 +24,7 @@ interface NamespaceSummaryTableProps {
   rows: NamespaceTableRow[];
   navigate: (row: NamespaceTableRow) => void;
   showClusterColumn?: boolean;
+  clusterOptions?: DropdownOption[];
   clusterIdentity: string;
   persistenceEnabled: boolean;
   loading: boolean;
@@ -88,6 +90,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   rows,
   navigate,
   showClusterColumn = false,
+  clusterOptions = [],
   clusterIdentity,
   persistenceEnabled,
   loading,
@@ -226,6 +229,9 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     data: rows,
     keyExtractor,
     enabled: persistenceEnabled,
+    filterOptions: showClusterColumn
+      ? { clusters: clusterOptions.map(({ value }) => value) }
+      : undefined,
   });
   const { gridTableProps, favModal } = useClusterResourceGridTable({
     viewId: resolvedViewId,
@@ -238,7 +244,16 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     defaultSortDirection: 'asc',
     diagnosticsLabel: 'Namespaces',
     showKindDropdown: false,
+    filterOptionOverrides: showClusterColumn
+      ? {
+          clusters: clusterOptions,
+          showClusterDropdown: true,
+          clusterDropdownSearchable: true,
+          clusterDropdownBulkActions: true,
+        }
+      : undefined,
     filterAccessors: {
+      getCluster: (row) => row.clusterId,
       getSearchText: (row) => [
         row.name,
         ...(showClusterColumn ? [row.clusterName, row.clusterId] : []),

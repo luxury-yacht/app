@@ -92,6 +92,10 @@ describe('GridTableFiltersBar', () => {
             }}
             resolvedFilterOptions={{
               searchBehavior: 'local',
+              clusters: [
+                { label: 'alpha', value: 'cluster-a' },
+                { label: 'beta', value: 'cluster-b' },
+              ],
               kinds: [
                 { label: 'Pods', value: 'Pod' },
                 { label: 'Deployments', value: 'Deployment' },
@@ -103,15 +107,18 @@ describe('GridTableFiltersBar', () => {
             }}
             kindDropdownId="kinds"
             namespaceDropdownId="namespaces"
+            clusterDropdownId="clusters"
             searchInputId="search"
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
+            onClustersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             renderKindsValue={() => 'Kinds'}
             renderNamespacesValue={() => 'Namespaces'}
+            renderClustersValue={() => 'Clusters'}
             {...props}
           />
         </ZoomProvider>
@@ -163,6 +170,32 @@ describe('GridTableFiltersBar', () => {
       resetButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a cluster dropdown and propagates cluster IDs', async () => {
+    const onClustersChange = vi.fn();
+
+    await renderFilters({
+      showClusterDropdown: true,
+      onClustersChange,
+    });
+
+    const clusterDropdown = container.querySelector(
+      '[data-testid="clusters"]'
+    ) as HTMLSelectElement;
+    expect(clusterDropdown).toBeTruthy();
+    expect(Array.from(clusterDropdown.options).map(({ text, value }) => ({ text, value }))).toEqual(
+      [
+        { text: 'alpha', value: 'cluster-a' },
+        { text: 'beta', value: 'cluster-b' },
+      ]
+    );
+
+    await act(async () => {
+      clusterDropdown.value = 'cluster-b';
+      clusterDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onClustersChange).toHaveBeenCalledWith(['cluster-b']);
   });
 
   it('renders backend query facet dropdowns and propagates keyed changes', async () => {
@@ -316,15 +349,18 @@ describe('GridTableFiltersBar', () => {
             }}
             kindDropdownId="kinds"
             namespaceDropdownId="namespaces"
+            clusterDropdownId="clusters"
             searchInputId="search"
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
+            onClustersChange={vi.fn()}
             onSearchChange={setSearch}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
             renderOption={(option) => option.label}
             renderKindsValue={() => 'Kinds'}
             renderNamespacesValue={() => 'Namespaces'}
+            renderClustersValue={() => 'Clusters'}
           />
         </ZoomProvider>
       );

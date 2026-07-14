@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   onNamespaceSelect: vi.fn(),
   setSelectedNamespace: vi.fn(),
   tableProps: null as null | Record<string, unknown>,
+  resourceGridParams: null as null | Record<string, unknown>,
   namespaceLoading: false,
   namespaceRefreshing: false,
 }));
@@ -93,10 +94,13 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
-  useClusterResourceGridTable: ({ data, keyExtractor }: Record<string, unknown>) => ({
-    gridTableProps: { data, keyExtractor },
-    favModal: null,
-  }),
+  useClusterResourceGridTable: (params: Record<string, unknown>) => {
+    mocks.resourceGridParams = params;
+    return {
+      gridTableProps: { data: params.data, keyExtractor: params.keyExtractor },
+      favModal: null,
+    };
+  },
 }));
 
 vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
@@ -144,6 +148,7 @@ const renderView = async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tableProps = null;
+  mocks.resourceGridParams = null;
   mocks.namespaceLoading = false;
   mocks.namespaceRefreshing = false;
 });
@@ -187,6 +192,7 @@ describe('ClusterViewNamespaces', () => {
       'quotaPressure',
       'age',
     ]);
+    expect(mocks.resourceGridParams).toMatchObject({ filterOptionOverrides: undefined });
     expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Attn');
     expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warn');
 

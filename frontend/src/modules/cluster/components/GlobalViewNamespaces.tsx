@@ -126,6 +126,10 @@ const GlobalViewNamespaces: React.FC = () => {
         rows={rows}
         navigate={navigate}
         showClusterColumn
+        clusterOptions={targets.map(({ clusterId, clusterName }) => ({
+          value: clusterId,
+          label: clusterName,
+        }))}
         clusterIdentity={clusterSetIdentity}
         persistenceEnabled={targets.length > 0}
         loading={targets.length > 0 && resolvedCount === 0 && pending}
