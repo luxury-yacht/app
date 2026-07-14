@@ -25,6 +25,9 @@ var StreamDescriptor = streamspec.Descriptor{
 	StreamRow: func(meta streamrows.ClusterMeta, obj metav1.Object) any {
 		return BuildStreamSummary(meta, obj.(*corev1.ResourceQuota))
 	},
+	AggregateRow: func(obj metav1.Object) any {
+		return BuildAggregate(obj.(*corev1.ResourceQuota))
+	},
 	Informer: func(factory informers.SharedInformerFactory) cache.SharedIndexInformer {
 		return factory.Core().V1().ResourceQuotas().Informer()
 	},

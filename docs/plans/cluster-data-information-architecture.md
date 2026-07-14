@@ -80,12 +80,12 @@ Target navigation order:
 
 ### Phase 5: Namespace, application, and topology lenses
 
-- [ ] Expand the per-cluster namespace workload rollup into a broader aggregate
+- [x] Expand the per-cluster namespace workload rollup into a broader aggregate
       domain for warning events, utilization, quota pressure, and degraded access.
   - [x] Add permission-honest warning-event counts, event-driven invalidation,
         and categorized sidebar badges.
-  - [ ] Add utilization and quota-pressure signals; keep the parent item open
-        until those sources and their degraded states are represented.
+  - [x] Add utilization and quota-pressure signals with explicit loading,
+        available, unavailable, and stale-source presentation.
 - [ ] Add confidence-bearing application grouping from owner links, Helm links,
       and explicit application labels.
 - [ ] Add table-to-map and map-to-table navigation with complete object refs.

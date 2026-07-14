@@ -214,6 +214,13 @@ type QuotaStatus struct {
 	DesiredHealthy     int32 `json:"desiredHealthy"`
 }
 
+// ResourceQuotaAggregate is the compact ingest half used to summarize quota
+// pressure by namespace without retaining typed ResourceQuota objects or table rows.
+type ResourceQuotaAggregate struct {
+	Namespace             string
+	HighestUsedPercentage int
+}
+
 // NewQuotaSummary fills the row skeleton shared by the namespace-quotas kinds.
 func NewQuotaSummary(meta ClusterMeta, obj metav1.Object, kind, details string) QuotaSummary {
 	return QuotaSummary{

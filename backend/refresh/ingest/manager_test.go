@@ -27,7 +27,26 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/stretchr/testify/require"
 )
+
+func TestProjectionForIncludesDescriptorAggregate(t *testing.T) {
+	descriptor := streamspec.Descriptor{
+		StreamRow: func(_ streamrows.ClusterMeta, obj metav1.Object) any {
+			return tableRow{NS: obj.GetNamespace(), Name: obj.GetName()}
+		},
+		AggregateRow: func(obj metav1.Object) any {
+			return aggregateRow{Key: obj.GetNamespace() + "/" + obj.GetName()}
+		},
+	}
+	project := projectionFor(streamrows.ClusterMeta{ClusterID: "cluster-a"}, &entry{desc: descriptor})
+
+	raw, err := project(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "quota", Namespace: "team-a"}})
+	require.NoError(t, err)
+	bundle := raw.(Bundle)
+	require.Equal(t, aggregateRow{Key: "team-a/quota"}, bundle.Aggregate)
+}
 
 // trackerAPIServer is a minimal Kubernetes-shaped API server backed by a
 // client-go ObjectTracker. It serves LIST and WatchList (sendInitialEvents)

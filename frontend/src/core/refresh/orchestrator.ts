@@ -1370,6 +1370,9 @@ class RefreshOrchestrator {
     if (this.hasEnabledScopedSources('cluster-overview')) {
       return true;
     }
+    if (this.hasEnabledScopedSources('namespaces')) {
+      return true;
+    }
     if (this.hasEnabledScopedSources('nodes')) {
       return true;
     }

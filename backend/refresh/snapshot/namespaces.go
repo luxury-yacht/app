@@ -28,9 +28,13 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
+	resourcequotapkg "github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
+
+var ResourceQuotaGVR = schema.GroupVersionResource{Group: resourcequotapkg.Identity.Group, Version: resourcequotapkg.Identity.Version, Resource: resourcequotapkg.Identity.Resource}
 
 // NamespaceBuilder constructs namespace snapshots from informer caches. Pods AND the five
 // workload kinds are cut to the ingest path, so the legacy per-namespace workload-detection
@@ -44,6 +48,7 @@ type NamespaceBuilder struct {
 	eventsExpected bool
 	eventsSynced   cache.InformerSynced
 	ingest         namespacePodIngestSource
+	metrics        metrics.Provider
 	tracker        *NamespaceWorkloadTracker
 	// scope is the cluster's configured namespace scope
 	// (docs/plans/namespace-scope.md). Non-empty means the rows are
@@ -156,7 +161,7 @@ func scopeProbeSignature(statuses map[string]NamespaceScopeStatus) string {
 // namespacePodIngestSource is the ingest surface the namespace domain reads: the per-kind sync
 // gate (Tracks/HasSyncedFor, used by NewNamespaceWorkloadTracker) plus the projected rows the
 // per-build workload-presence set is computed from (the cut workload kinds' Catalog rows and the
-// pod kind's Aggregate rows).
+// pod and ResourceQuota kinds' Aggregate rows).
 type namespacePodIngestSource interface {
 	Tracks(gvr schema.GroupVersionResource) bool
 	HasSyncedFor(gvr schema.GroupVersionResource) bool
@@ -169,6 +174,11 @@ type namespacePodIngestSource interface {
 type NamespaceSnapshot struct {
 	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
+	Metrics    PodMetricsInfo     `json:"metrics"`
+	// MetricsState distinguishes the first-collection window from a terminally
+	// unavailable metrics source; stale successful data remains available and is
+	// described by Metrics.
+	MetricsState NamespaceSignalState `json:"metricsState"`
 	// WorkloadsReady reports whether the pod + workload ingest stores this snapshot's
 	// workload-presence flags derive from have SETTLED (synced/degraded/permission-skipped).
 	// It is a backend-internal readiness signal — the cluster lifecycle gate flips a cluster
@@ -181,20 +191,26 @@ type NamespaceSnapshot struct {
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
 	ClusterMeta
-	Ref                resourcemodel.ResourceRef `json:"ref"`
-	Name               string                    `json:"name"`
-	Phase              string                    `json:"phase"`
-	Status             string                    `json:"status,omitempty"`
-	StatusState        string                    `json:"statusState,omitempty"`
-	StatusPresentation string                    `json:"statusPresentation,omitempty"`
-	StatusReason       string                    `json:"statusReason,omitempty"`
-	ResourceVersion    string                    `json:"resourceVersion"`
-	CreationUnix       int64                     `json:"creationTimestamp"`
-	HasWorkloads       bool                      `json:"hasWorkloads"`
-	WorkloadsUnknown   bool                      `json:"workloadsUnknown,omitempty"`
-	UnhealthyWorkloads int                       `json:"unhealthyWorkloads,omitempty"`
-	WarningEvents      int                       `json:"warningEvents,omitempty"`
-	WarningEventsState NamespaceSignalState      `json:"warningEventsState"`
+	Ref                        resourcemodel.ResourceRef `json:"ref"`
+	Name                       string                    `json:"name"`
+	Phase                      string                    `json:"phase"`
+	Status                     string                    `json:"status,omitempty"`
+	StatusState                string                    `json:"statusState,omitempty"`
+	StatusPresentation         string                    `json:"statusPresentation,omitempty"`
+	StatusReason               string                    `json:"statusReason,omitempty"`
+	ResourceVersion            string                    `json:"resourceVersion"`
+	CreationUnix               int64                     `json:"creationTimestamp"`
+	HasWorkloads               bool                      `json:"hasWorkloads"`
+	WorkloadsUnknown           bool                      `json:"workloadsUnknown,omitempty"`
+	UnhealthyWorkloads         int                       `json:"unhealthyWorkloads,omitempty"`
+	WarningEvents              int                       `json:"warningEvents,omitempty"`
+	WarningEventsState         NamespaceSignalState      `json:"warningEventsState"`
+	CPUUsageMilli              int64                     `json:"cpuUsageMilli,omitempty"`
+	MemoryUsageBytes           int64                     `json:"memoryUsageBytes,omitempty"`
+	QuotaCount                 int                       `json:"quotaCount,omitempty"`
+	QuotaHighestUsedPercentage int                       `json:"quotaHighestUsedPercentage,omitempty"`
+	QuotaPressure              NamespaceQuotaPressure    `json:"quotaPressure,omitempty"`
+	QuotaPressureState         NamespaceSignalState      `json:"quotaPressureState"`
 	// ScopeStatus flags a configured scope entry the identity cannot reach:
 	// "not-found" (definitive) or "no-access" (may not exist). Empty for
 	// reachable namespaces and for every unscoped row.
@@ -211,6 +227,18 @@ const (
 	NamespaceSignalUnavailable NamespaceSignalState = "unavailable"
 )
 
+// NamespaceQuotaPressure is backend-owned presentation semantics for the
+// strongest ResourceQuota utilization observed in a namespace.
+type NamespaceQuotaPressure string
+
+const (
+	NamespaceQuotaPressureNone     NamespaceQuotaPressure = ""
+	NamespaceQuotaPressureWarning  NamespaceQuotaPressure = "warning"
+	NamespaceQuotaPressureCritical NamespaceQuotaPressure = "critical"
+)
+
+const namespaceQuotaWarningPercentage = 80
+
 // RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
 // pod kinds' projected rows come from the ingest manager (read per build for workload presence);
 // the tracker only gates the read on those stores having synced. ingestManager may be nil in a
@@ -220,10 +248,11 @@ const (
 // informer events and workload/pod ingest events feed it (handlers/sinks registered HERE,
 // before the informer factory and ingest manager start), and the subsystem wires its
 // broadcast to the resource-stream doorbell once the stream manager exists.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, allowedNamespaces []string, client kubernetes.Interface, eventsExpected bool) (*NamespaceChangeNotifier, error) {
+func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, metricsProvider metrics.Provider, allowedNamespaces []string, client kubernetes.Interface, eventsExpected bool) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
 	builder := &NamespaceBuilder{
 		ingest:  ingestManager,
+		metrics: metricsProvider,
 		tracker: tracker,
 		scope:   append([]string(nil), allowedNamespaces...),
 	}
@@ -232,7 +261,7 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 		// lister and must not issue per-name GETs.
 		builder.client = client
 	}
-	notifier := NewNamespaceChangeNotifier(ingestManager, tracker)
+	notifier := NewNamespaceChangeNotifier(ingestManager, tracker, metricsProvider)
 	if eventsExpected && factory != nil {
 		eventInformer := factory.Core().V1().Events()
 		builder.eventLister = eventInformer.Lister()
@@ -283,6 +312,7 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 		} {
 			sinks.AddBundleSink(gvr, namespaceNotifierSink{notifier: notifier})
 		}
+		sinks.AddBundleSink(ResourceQuotaGVR, namespaceQuotaNotifierSink{notifier: notifier})
 	}
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          "namespaces",
@@ -318,6 +348,14 @@ type namespaceNotifierSink struct {
 func (s namespaceNotifierSink) UpsertBundle(ingest.Bundle)     { s.notifier.WorkloadChanged() }
 func (s namespaceNotifierSink) DeleteBundle(ingest.Bundle)     { s.notifier.WorkloadChanged() }
 func (s namespaceNotifierSink) ReplaceBundles([]ingest.Bundle) { s.notifier.WorkloadChanged() }
+
+type namespaceQuotaNotifierSink struct {
+	notifier *NamespaceChangeNotifier
+}
+
+func (s namespaceQuotaNotifierSink) UpsertBundle(ingest.Bundle)     { s.notifier.QuotaChanged() }
+func (s namespaceQuotaNotifierSink) DeleteBundle(ingest.Bundle)     { s.notifier.QuotaChanged() }
+func (s namespaceQuotaNotifierSink) ReplaceBundles([]ingest.Bundle) { s.notifier.QuotaChanged() }
 
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -388,11 +426,15 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
 	workloadNamespaces := workloadRollups.namespaces
 	warningEvents, warningEventsState := b.warningEventRollups()
+	utilization, metricsInfo, metricsState, metricsRevision := namespaceUtilizationRollups(b.metrics)
+	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(b.ingest)
 
 	items := make([]NamespaceSummary, 0, len(namespaces))
 	var version uint64
 	for _, ns := range namespaces {
 		_, hasWorkloads := workloadNamespaces[ns.Name]
+		usage := utilization[ns.Name]
+		quota := quotaRollups[ns.Name]
 		// In scoped mode a tracker that latched synced because NOTHING is
 		// tracked (every workload kind permission-skipped) means presence is
 		// genuinely unknown — reporting it as authoritative would dim every
@@ -401,22 +443,28 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		model := namespacepkg.BuildResourceModel(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil)
 		facts := namespacepkg.BuildFacts(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
-			ClusterMeta:        meta,
-			Ref:                model.Ref,
-			Name:               model.Ref.Name,
-			Phase:              model.Status.State,
-			Status:             model.Status.Label,
-			StatusState:        model.Status.State,
-			StatusPresentation: model.Status.Presentation,
-			StatusReason:       model.Status.Reason,
-			ResourceVersion:    model.Metadata.ResourceVersion,
-			CreationUnix:       model.Metadata.CreationTimestamp.Unix(),
-			HasWorkloads:       facts.HasWorkloads,
-			WorkloadsUnknown:   !facts.WorkloadsKnown,
-			UnhealthyWorkloads: workloadRollups.unhealthy[ns.Name],
-			WarningEvents:      warningEvents[ns.Name],
-			WarningEventsState: warningEventsState,
-			ScopeStatus:        scopeStatuses[ns.Name],
+			ClusterMeta:                meta,
+			Ref:                        model.Ref,
+			Name:                       model.Ref.Name,
+			Phase:                      model.Status.State,
+			Status:                     model.Status.Label,
+			StatusState:                model.Status.State,
+			StatusPresentation:         model.Status.Presentation,
+			StatusReason:               model.Status.Reason,
+			ResourceVersion:            model.Metadata.ResourceVersion,
+			CreationUnix:               model.Metadata.CreationTimestamp.Unix(),
+			HasWorkloads:               facts.HasWorkloads,
+			WorkloadsUnknown:           !facts.WorkloadsKnown,
+			UnhealthyWorkloads:         workloadRollups.unhealthy[ns.Name],
+			WarningEvents:              warningEvents[ns.Name],
+			WarningEventsState:         warningEventsState,
+			CPUUsageMilli:              usage.cpuMilli,
+			MemoryUsageBytes:           usage.memoryBytes,
+			QuotaCount:                 quota.count,
+			QuotaHighestUsedPercentage: quota.highestUsedPercentage,
+			QuotaPressure:              namespaceQuotaPressure(quota.highestUsedPercentage),
+			QuotaPressureState:         quotaState,
+			ScopeStatus:                scopeStatuses[ns.Name],
 		})
 		if v := parseResourceVersion(ns); v > version {
 			version = v
@@ -427,7 +475,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		Domain:  "namespaces",
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items, WorkloadsReady: trackerReady},
+		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items, Metrics: metricsInfo, MetricsState: metricsState, WorkloadsReady: trackerReady},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},
@@ -441,6 +489,8 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		SourceVersions: map[string]string{
 			"workloads":      workloadRollupSignature(workloadRollups, trackerReady),
 			"warning-events": warningEventRollupSignature(warningEvents, warningEventsState),
+			"metric":         metricsRevision,
+			"quota-pressure": namespaceQuotaRollupSignature(quotaRollups, quotaState),
 		},
 	}
 	if len(b.scope) > 0 {
@@ -494,6 +544,112 @@ func warningEventRollupSignature(counts map[string]int, state NamespaceSignalSta
 		_, _ = h.Write([]byte(namespace))
 		_, _ = h.Write([]byte{'='})
 		_, _ = h.Write([]byte(strconv.Itoa(counts[namespace])))
+		_, _ = h.Write([]byte{0})
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+type namespaceUtilization struct {
+	cpuMilli    int64
+	memoryBytes int64
+}
+
+func namespaceUtilizationRollups(provider metrics.Provider) (map[string]namespaceUtilization, PodMetricsInfo, NamespaceSignalState, string) {
+	rollups := make(map[string]namespaceUtilization)
+	if provider == nil {
+		return rollups, podMetricsInfoFromMetadata(metrics.Metadata{}), NamespaceSignalUnavailable, ""
+	}
+	sample := provider.Sample()
+	info := podMetricsInfoFromMetadata(sample.Metadata)
+	if sample.Metadata.Disabled {
+		return rollups, info, NamespaceSignalUnavailable, ""
+	}
+	if sample.Metadata.CollectedAt.IsZero() {
+		return rollups, info, NamespaceSignalLoading, ""
+	}
+	for key, usage := range sample.PodUsage {
+		namespace, _, ok := strings.Cut(key, "/")
+		if !ok || namespace == "" {
+			continue
+		}
+		rollup := rollups[namespace]
+		rollup.cpuMilli += usage.CPUUsageMilli
+		rollup.memoryBytes += usage.MemoryUsageBytes
+		rollups[namespace] = rollup
+	}
+	return rollups, info, NamespaceSignalAvailable, metricRevisionFromMetadata(sample.Metadata)
+}
+
+type namespaceQuotaRollup struct {
+	count                 int
+	highestUsedPercentage int
+}
+
+type namespaceQuotaIngestState interface {
+	RawHasSyncedFor(gvr schema.GroupVersionResource) bool
+	PermissionSkippedFor(gvr schema.GroupVersionResource) bool
+}
+
+func namespaceQuotaRollupsFromIngest(source namespacePodIngestSource) (map[string]namespaceQuotaRollup, NamespaceSignalState) {
+	rollups := make(map[string]namespaceQuotaRollup)
+	if source == nil || !source.Tracks(ResourceQuotaGVR) {
+		return rollups, NamespaceSignalUnavailable
+	}
+	if stateSource, ok := source.(namespaceQuotaIngestState); ok {
+		if stateSource.PermissionSkippedFor(ResourceQuotaGVR) {
+			return rollups, NamespaceSignalUnavailable
+		}
+		if !stateSource.RawHasSyncedFor(ResourceQuotaGVR) {
+			if source.HasSyncedFor(ResourceQuotaGVR) {
+				return rollups, NamespaceSignalUnavailable
+			}
+			return rollups, NamespaceSignalLoading
+		}
+	} else if !source.HasSyncedFor(ResourceQuotaGVR) {
+		return rollups, NamespaceSignalLoading
+	}
+	for _, row := range source.AggregateRows(ResourceQuotaGVR) {
+		aggregate, ok := row.(streamrows.ResourceQuotaAggregate)
+		if !ok || aggregate.Namespace == "" {
+			continue
+		}
+		rollup := rollups[aggregate.Namespace]
+		rollup.count++
+		if aggregate.HighestUsedPercentage > rollup.highestUsedPercentage {
+			rollup.highestUsedPercentage = aggregate.HighestUsedPercentage
+		}
+		rollups[aggregate.Namespace] = rollup
+	}
+	return rollups, NamespaceSignalAvailable
+}
+
+func namespaceQuotaPressure(highestUsedPercentage int) NamespaceQuotaPressure {
+	switch {
+	case highestUsedPercentage >= 100:
+		return NamespaceQuotaPressureCritical
+	case highestUsedPercentage >= namespaceQuotaWarningPercentage:
+		return NamespaceQuotaPressureWarning
+	default:
+		return NamespaceQuotaPressureNone
+	}
+}
+
+func namespaceQuotaRollupSignature(rollups map[string]namespaceQuotaRollup, state NamespaceSignalState) string {
+	namespaces := make([]string, 0, len(rollups))
+	for namespace := range rollups {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(state))
+	_, _ = h.Write([]byte{0})
+	for _, namespace := range namespaces {
+		rollup := rollups[namespace]
+		_, _ = h.Write([]byte(namespace))
+		_, _ = h.Write([]byte{'='})
+		_, _ = h.Write([]byte(strconv.Itoa(rollup.count)))
+		_, _ = h.Write([]byte{'/'})
+		_, _ = h.Write([]byte(strconv.Itoa(rollup.highestUsedPercentage)))
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)

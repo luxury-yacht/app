@@ -375,7 +375,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		if observable, ok := metricsPoller.(interface {
 			SetCollectionObserver(func(metrics.Metadata))
 		}); ok {
-			observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
+			observable.SetCollectionObserver(metricsSignalObserver(resourceManager, namespaceNotifier))
 		}
 	}
 	// Namespaces doorbell: namespace object changes and workload-presence flips
@@ -494,11 +494,12 @@ func wireObjectEventsDoorbell(
 	})
 }
 
-func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
+func metricsSignalObserver(resourceManager *resourcestream.Manager, namespaceNotifier *snapshot.NamespaceChangeNotifier) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
 		if resourceManager == nil || metadata.CollectedAt.IsZero() {
 			return
 		}
+		namespaceNotifier.MetricsChanged()
 		resourceManager.BroadcastMetricsRefresh(strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10))
 	}
 }

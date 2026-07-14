@@ -10,6 +10,7 @@
 
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
+import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   ALL_NAMESPACES_DETAILS,
@@ -18,6 +19,7 @@ import {
   ALL_NAMESPACES_SCOPE,
   isAllNamespaces,
 } from '@modules/namespace/constants';
+import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { formatAge } from '@utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
@@ -51,6 +53,13 @@ export interface NamespaceListItem {
   unhealthyWorkloads: number;
   warningEvents: number;
   warningEventsState: 'available' | 'loading' | 'unavailable';
+  cpuUsageMilli: number;
+  memoryUsageBytes: number;
+  utilizationState: 'available' | 'loading' | 'unavailable';
+  quotaCount: number;
+  quotaHighestUsedPercentage: number;
+  quotaPressure: '' | 'warning' | 'critical';
+  quotaPressureState: 'available' | 'loading' | 'unavailable';
   resourceVersion: string;
   scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
@@ -134,6 +143,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   }, [refreshAvailableClusterIds]);
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
+  const namespaceMetricsBanner = useMetricsBannerInfo(namespaceDomain.data?.metrics ?? null);
   // Doorbell refetch: the namespaces stream signal only bumps the scoped
   // sourceVersion — the snapshot itself must be refetched. The shared hook
   // covers every leased cluster scope so background cluster tabs stay fresh.
@@ -179,6 +189,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unhealthyWorkloads: 0,
       warningEvents: 0,
       warningEventsState: 'unavailable',
+      cpuUsageMilli: 0,
+      memoryUsageBytes: 0,
+      utilizationState: 'unavailable',
+      quotaCount: 0,
+      quotaHighestUsedPercentage: 0,
+      quotaPressure: '',
+      quotaPressureState: 'unavailable',
       resourceVersion: ALL_NAMESPACES_RESOURCE_VERSION,
       isSynthetic: true,
     }),
@@ -231,18 +248,47 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
           : warningEventsState === 'loading'
             ? 'Loading'
             : 'Unavailable';
+      const cpuUsageMilli = ns.cpuUsageMilli ?? 0;
+      const memoryUsageBytes = ns.memoryUsageBytes ?? 0;
+      const utilizationState = namespaceDomain.data?.metricsState ?? 'unavailable';
+      const usageDisplay = namespaceAggregateUsageDisplay(cpuUsageMilli, memoryUsageBytes);
+      const utilizationSummary =
+        utilizationState === 'available'
+          ? `${usageDisplay.cpu} CPU, ${usageDisplay.memory} memory${namespaceMetricsBanner ? ` (${namespaceMetricsBanner.message})` : ''}`
+          : utilizationState === 'loading'
+            ? (namespaceMetricsBanner?.message ?? 'Collecting')
+            : (namespaceDomain.data?.metrics?.lastError?.trim() ?? 'Unavailable');
+      const quotaCount = ns.quotaCount ?? 0;
+      const quotaHighestUsedPercentage = ns.quotaHighestUsedPercentage ?? 0;
+      const quotaPressure = ns.quotaPressure ?? '';
+      const quotaPressureState = ns.quotaPressureState ?? 'unavailable';
+      const quotaSummary =
+        quotaPressureState === 'available'
+          ? quotaCount > 0
+            ? `${quotaHighestUsedPercentage}%`
+            : 'No quotas'
+          : quotaPressureState === 'loading'
+            ? 'Loading'
+            : 'Unavailable';
 
       return {
         name: ns.name,
         scope: ns.name,
         status: ns.status || ns.phase,
-        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads} • Warning events: ${warningEventSummary}`,
+        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads} • Warning events: ${warningEventSummary} • Utilization: ${utilizationSummary} • Quota pressure: ${quotaSummary}`,
         age,
         hasWorkloads: ns.hasWorkloads ?? false,
         workloadsUnknown,
         unhealthyWorkloads,
         warningEvents,
         warningEventsState,
+        cpuUsageMilli,
+        memoryUsageBytes,
+        utilizationState,
+        quotaCount,
+        quotaHighestUsedPercentage,
+        quotaPressure,
+        quotaPressureState,
         resourceVersion: ns.resourceVersion,
         scopeStatus: ns.scopeStatus,
         clusterId: ns.clusterId,
@@ -257,6 +303,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     allNamespaceItem,
     namespaceDomain.status,
     namespaceDomain.data,
+    namespaceMetricsBanner,
     scopedNamespaces,
     updateNamespaces,
   ]);

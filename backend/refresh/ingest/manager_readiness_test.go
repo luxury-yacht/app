@@ -167,8 +167,14 @@ func TestIngestManagerHasSyncedForDegradesAfterDeadline(t *testing.T) {
 	if mgr.HasSyncedFor(gvr) {
 		t.Fatalf("HasSyncedFor(%s) must be false before the deadline", gvr)
 	}
+	if mgr.RawHasSyncedFor(gvr) {
+		t.Fatalf("RawHasSyncedFor(%s) must be false before the store syncs", gvr)
+	}
 	current.Store(int64(time.Second))
 	if !mgr.HasSyncedFor(gvr) {
 		t.Fatalf("HasSyncedFor(%s) must report settled after the deadline", gvr)
+	}
+	if mgr.RawHasSyncedFor(gvr) {
+		t.Fatalf("RawHasSyncedFor(%s) must remain false after deadline degradation", gvr)
 	}
 }

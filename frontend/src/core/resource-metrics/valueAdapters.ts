@@ -1,3 +1,4 @@
+import { formatCpuValue, formatMemoryValue } from '@shared/utils/resourceCalculations';
 import type {
   ClusterNodeSnapshotEntry,
   ClusterOverviewPayload,
@@ -13,6 +14,14 @@ import type {
   ResourceMetricValues,
   ResourcePodsMetricValues,
 } from './types';
+
+export const namespaceAggregateUsageDisplay = (
+  cpuUsageMilli: number,
+  memoryUsageBytes: number
+): { cpu: string; memory: string } => ({
+  cpu: formatCpuValue(cpuUsageMilli),
+  memory: formatMemoryValue(memoryUsageBytes / (1024 * 1024)),
+});
 
 export interface WorkloadMetricRow {
   kind?: string | null;

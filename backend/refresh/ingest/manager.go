@@ -460,6 +460,9 @@ func projectionFor(meta streamrows.ClusterMeta, e *entry) ProjectFunc {
 			return nil, err
 		}
 		bundle := Bundle{Table: streamRow(meta, m)}
+		if e.desc.AggregateRow != nil {
+			bundle.Aggregate = e.desc.AggregateRow(m)
+		}
 		if e.catalogProject != nil {
 			bundle.Catalog = e.catalogProject(m)
 		}
@@ -1107,6 +1110,14 @@ func (m *IngestManager) HasSyncedFor(gvr schema.GroupVersionResource) bool {
 		return e.store.HasSynced()
 	}
 	return m.entrySettled(e)
+}
+
+// RawHasSyncedFor reports whether gvr's store has completed an actual initial
+// sync. Unlike HasSyncedFor it does not treat deadline degradation as data
+// availability, so aggregate consumers can distinguish loading from unavailable.
+func (m *IngestManager) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
+	store := m.StoreFor(gvr)
+	return store != nil && store.HasSynced()
 }
 
 // PermissionSkippedFor reports whether gvr's reflector was permission-skipped at Start —

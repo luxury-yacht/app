@@ -53,6 +53,12 @@ type NamespaceEntry = {
   unhealthyWorkloads?: number;
   warningEvents?: number;
   warningEventsState?: 'available' | 'loading' | 'unavailable';
+  cpuUsageMilli?: number;
+  memoryUsageBytes?: number;
+  utilizationState?: 'available' | 'loading' | 'unavailable';
+  quotaHighestUsedPercentage?: number;
+  quotaPressure?: '' | 'warning' | 'critical';
+  quotaPressureState?: 'available' | 'loading' | 'unavailable';
 };
 
 type NamespaceState = {
@@ -224,6 +230,12 @@ describe('Sidebar', () => {
           unhealthyWorkloads: 3,
           warningEvents: 2,
           warningEventsState: 'available',
+          cpuUsageMilli: 200,
+          memoryUsageBytes: 96 * 1024 * 1024,
+          utilizationState: 'available',
+          quotaHighestUsedPercentage: 92,
+          quotaPressure: 'warning',
+          quotaPressureState: 'available',
           details: '',
         },
         {
@@ -256,6 +268,14 @@ describe('Sidebar', () => {
       alpha?.querySelector('.namespace-warning-events-badge')?.getAttribute('aria-hidden')
     ).toBe('true');
     expect(alpha?.querySelectorAll('.sr-only')[1]?.textContent).toBe('2 warning events');
+    expect(alpha?.querySelector('.namespace-utilization-badge')?.textContent).toBe('200m');
+    expect(alpha?.querySelector('.namespace-quota-pressure-badge')?.textContent).toBe('92%');
+    expect(alpha?.querySelectorAll('.sr-only')[2]?.textContent).toBe(
+      'CPU utilization 200m, memory utilization 96Mi'
+    );
+    expect(alpha?.querySelectorAll('.sr-only')[3]?.textContent).toBe(
+      'Quota pressure warning at 92%'
+    );
     expect(beta?.querySelector('.namespace-attention-badge')).toBeNull();
     expect(beta?.querySelector('.namespace-warning-events-badge')).toBeNull();
   });

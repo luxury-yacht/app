@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -45,6 +46,7 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
+	metrics metrics.Provider
 
 	eventLister    corelisters.EventLister
 	eventsExpected bool
@@ -57,15 +59,22 @@ type NamespaceChangeNotifier struct {
 	namespaceDirty bool
 	workloadDirty  bool
 	eventDirty     bool
+	metricDirty    bool
+	quotaDirty     bool
 	signatureKnown bool
 	lastSignature  string
 	// lastSignatureReady records whether lastSignature was computed AFTER the
 	// tracker settled; a not-ready signature must be recomputed on the rearm
 	// tick even with no new events, so the readiness flip itself broadcasts.
-	lastSignatureReady  bool
-	eventSignatureKnown bool
-	lastEventSignature  string
-	lastEventReady      bool
+	lastSignatureReady   bool
+	eventSignatureKnown  bool
+	lastEventSignature   string
+	lastEventReady       bool
+	metricSignatureKnown bool
+	lastMetricSignature  string
+	quotaSignatureKnown  bool
+	lastQuotaSignature   string
+	lastQuotaReady       bool
 	// notReadyMinInterval floors presence-only broadcasts while settling; see
 	// namespaceNotifierNotReadySettleInterval. Overridable in tests.
 	notReadyMinInterval time.Duration
@@ -77,10 +86,11 @@ type NamespaceChangeNotifier struct {
 // NewNamespaceChangeNotifier builds a notifier over the same ingest source and
 // tracker the namespaces builder reads, so the presence signature can never
 // drift from what Build serves.
-func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker) *NamespaceChangeNotifier {
+func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker, metricsProvider metrics.Provider) *NamespaceChangeNotifier {
 	return &NamespaceChangeNotifier{
 		ingest:              ingest,
 		tracker:             tracker,
+		metrics:             metricsProvider,
 		debounce:            namespaceNotifierDebounce,
 		notReadyMinInterval: namespaceNotifierNotReadySettleInterval,
 	}
@@ -95,7 +105,7 @@ func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version, reason st
 	}
 	n.mu.Lock()
 	n.broadcast = broadcast
-	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty
+	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty || n.metricDirty || n.quotaDirty
 	n.mu.Unlock()
 	if pending {
 		n.arm()
@@ -134,6 +144,30 @@ func (n *NamespaceChangeNotifier) EventChanged() {
 	}
 	n.mu.Lock()
 	n.eventDirty = true
+	n.mu.Unlock()
+	n.arm()
+}
+
+// MetricsChanged records a successful metrics collection. The collection
+// revision is compared at flush so duplicate observer deliveries stay silent.
+func (n *NamespaceChangeNotifier) MetricsChanged() {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.metricDirty = true
+	n.mu.Unlock()
+	n.arm()
+}
+
+// QuotaChanged records a ResourceQuota ingest mutation that may change one
+// namespace's strongest pressure signal.
+func (n *NamespaceChangeNotifier) QuotaChanged() {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.quotaDirty = true
 	n.mu.Unlock()
 	n.arm()
 }
@@ -178,9 +212,13 @@ func (n *NamespaceChangeNotifier) flush() {
 	namespaceDirty := n.namespaceDirty
 	workloadDirty := n.workloadDirty
 	eventDirty := n.eventDirty
+	metricDirty := n.metricDirty
+	quotaDirty := n.quotaDirty
 	n.namespaceDirty = false
 	n.workloadDirty = false
 	n.eventDirty = false
+	n.metricDirty = false
+	n.quotaDirty = false
 	n.mu.Unlock()
 
 	// Compute outside the lock: the signature reads the ingest stores.
@@ -247,6 +285,45 @@ func (n *NamespaceChangeNotifier) flush() {
 		n.mu.Unlock()
 	}
 
+	if metricDirty {
+		_, _, state, revision := namespaceUtilizationRollups(n.metrics)
+		signature := string(state) + ":" + revision
+		n.mu.Lock()
+		if !n.metricSignatureKnown || signature != n.lastMetricSignature {
+			hadSignature := n.metricSignatureKnown
+			n.metricSignatureKnown = true
+			n.lastMetricSignature = signature
+			if !hadSignature {
+				reasons = append(reasons, "namespace utilization baseline established")
+			} else {
+				reasons = append(reasons, "namespace utilization changed")
+			}
+		}
+		n.mu.Unlock()
+	}
+
+	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(n.ingest)
+	quotaReady := quotaState != NamespaceSignalLoading
+	n.mu.Lock()
+	needQuotaSignature := quotaDirty || !n.quotaSignatureKnown || !n.lastQuotaReady
+	n.mu.Unlock()
+	if needQuotaSignature {
+		signature := namespaceQuotaRollupSignature(quotaRollups, quotaState)
+		n.mu.Lock()
+		if !n.quotaSignatureKnown || signature != n.lastQuotaSignature {
+			hadSignature := n.quotaSignatureKnown
+			n.quotaSignatureKnown = true
+			n.lastQuotaSignature = signature
+			if !hadSignature {
+				reasons = append(reasons, "quota-pressure baseline established")
+			} else {
+				reasons = append(reasons, "quota pressure changed")
+			}
+		}
+		n.lastQuotaReady = quotaReady
+		n.mu.Unlock()
+	}
+
 	if len(reasons) > 0 {
 		n.mu.Lock()
 		n.counter++
@@ -258,7 +335,7 @@ func (n *NamespaceChangeNotifier) flush() {
 	// The cluster-Ready gate needs a build after the tracker settles, and the UI
 	// needs an empty Events cache to transition from loading to an authoritative
 	// zero. Keep a bounded self-rearm alive until both expected sources settle.
-	if !ready || (n.eventsExpected && !eventReady) {
+	if !ready || (n.eventsExpected && !eventReady) || !quotaReady {
 		n.arm()
 	}
 }

@@ -63,7 +63,18 @@ checker, so the SSAR cache resets with it
   snapshot's `warning-events` source clock when a visible count or source state
   changes. Events remain cluster-wide under a configured namespace scope, so
   this optional aggregate is enabled only when the identity can list and watch
-  that cluster-wide source.
+  that cluster-wide source. Namespace utilization is joined at snapshot serve
+  from one consistent metrics-poller sample and carries the shared freshness
+  block plus an explicit `metricsState` (`loading`, `available`, or
+  `unavailable`); successful metric collections feed the same namespace
+  notifier, which invalidates the snapshot before broadcasting. ResourceQuota
+  ingest retains a compact aggregate half (namespace + highest used percentage)
+  rather than the typed object or table row. Namespace rows expose quota count,
+  the strongest percentage, explicit source state, and backend-owned pressure
+  presentation (`warning` at 80%, `critical` at 100%). The quota signature
+  suppresses object churn that does not change a namespace rollup and re-arms
+  while the ResourceQuota store is warming so an empty synced store becomes an
+  authoritative zero.
 - **Ingest**: one reflector per (kind, namespace) writing ONE shared store
   through partition views; `ReplacePartition` fully defines only its own
   namespace and fans per-row sink events (never the bulk kind-wide Replace,

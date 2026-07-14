@@ -43,6 +43,11 @@ type Descriptor struct {
 	// manager handles only metav1.Object.
 	StreamRow func(meta streamrows.ClusterMeta, obj metav1.Object) any
 
+	// AggregateRow projects one object into the compact, kind-owned facts used by
+	// cross-object snapshot aggregates. It is retained independently of StreamRow,
+	// whose Table half is normally dropped after sink fan-out for ingest-owned kinds.
+	AggregateRow func(obj metav1.Object) any
+
 	// Informer returns the kind's informer from the shared factory. Kinds served by
 	// the shared factory set this; Gateway-API kinds set GatewayInformer instead.
 	Informer func(factory informers.SharedInformerFactory) cache.SharedIndexInformer

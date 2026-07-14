@@ -35,7 +35,7 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	nodesSub, err := manager.SubscribeSelector(nodesSelector)
 	require.NoError(t, err)
 
-	observer := metricsSignalObserver(manager)
+	observer := metricsSignalObserver(manager, nil)
 
 	collectedAt := time.Unix(1700000000, 42)
 	observer(metrics.Metadata{CollectedAt: collectedAt})

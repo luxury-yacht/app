@@ -20,6 +20,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -110,6 +111,68 @@ func TestNamespaceBuilderWarningEventStateDistinguishesWarmingAndUnavailable(t *
 	require.NoError(t, err)
 	unavailablePayload := unavailable.Payload.(NamespaceSnapshot)
 	require.Equal(t, NamespaceSignalUnavailable, unavailablePayload.Namespaces[0].WarningEventsState)
+}
+
+func TestNamespaceBuilderRollsUpUtilizationAndQuotaPressure(t *testing.T) {
+	nsAlpha := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	nsBeta := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "beta", ResourceVersion: "2"}}
+	collectedAt := time.Unix(1700000000, 42)
+	ingestSource := fakePodAggregateSource{}.withQuotaAggregates(
+		streamrows.ResourceQuotaAggregate{Namespace: "alpha", HighestUsedPercentage: 75},
+		streamrows.ResourceQuotaAggregate{Namespace: "alpha", HighestUsedPercentage: 92},
+		streamrows.ResourceQuotaAggregate{Namespace: "beta", HighestUsedPercentage: 110},
+	)
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, nsAlpha, nsBeta),
+		ingest:     ingestSource,
+		metrics: fakeMetricsProvider{
+			podUsage: map[string]metrics.PodUsage{
+				"alpha/api-0": {CPUUsageMilli: 125, MemoryUsageBytes: 64 * 1024 * 1024},
+				"alpha/api-1": {CPUUsageMilli: 75, MemoryUsageBytes: 32 * 1024 * 1024},
+				"beta/job-0":  {CPUUsageMilli: 50, MemoryUsageBytes: 16 * 1024 * 1024},
+			},
+			metadata: metrics.Metadata{CollectedAt: collectedAt, SuccessCount: 1},
+		},
+	}
+
+	snap, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload := snap.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalAvailable, payload.MetricsState)
+	require.Equal(t, collectedAt.Unix(), payload.Metrics.CollectedAt)
+	require.Equal(t, "1700000000000000042", snap.SourceVersions["metric"])
+	require.Equal(t, "alpha", payload.Namespaces[0].Name)
+	require.Equal(t, int64(200), payload.Namespaces[0].CPUUsageMilli)
+	require.Equal(t, int64(96*1024*1024), payload.Namespaces[0].MemoryUsageBytes)
+	require.Equal(t, 2, payload.Namespaces[0].QuotaCount)
+	require.Equal(t, 92, payload.Namespaces[0].QuotaHighestUsedPercentage)
+	require.Equal(t, NamespaceQuotaPressureWarning, payload.Namespaces[0].QuotaPressure)
+	require.Equal(t, NamespaceSignalAvailable, payload.Namespaces[0].QuotaPressureState)
+	require.Equal(t, NamespaceQuotaPressureCritical, payload.Namespaces[1].QuotaPressure)
+}
+
+func TestNamespaceBuilderAggregateStatesDistinguishLoadingAndUnavailable(t *testing.T) {
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "alpha", ResourceVersion: "1"}}
+	quotaSource := fakePodAggregateSource{quotaTracked: true}
+	builder := &NamespaceBuilder{
+		namespaces: testsupport.NewNamespaceLister(t, namespace),
+		ingest:     quotaSource,
+		metrics:    fakeMetricsProvider{},
+	}
+
+	warming, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	warmingPayload := warming.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalLoading, warmingPayload.MetricsState)
+	require.Equal(t, NamespaceSignalLoading, warmingPayload.Namespaces[0].QuotaPressureState)
+
+	builder.metrics = fakeMetricsProvider{metadata: metrics.Metadata{Disabled: true, LastError: "metrics unavailable"}}
+	builder.ingest = quotaSource.withPermissionSkipped(ResourceQuotaGVR)
+	unavailable, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	unavailablePayload := unavailable.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalUnavailable, unavailablePayload.MetricsState)
+	require.Equal(t, NamespaceSignalUnavailable, unavailablePayload.Namespaces[0].QuotaPressureState)
 }
 
 func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *testing.T) {
@@ -560,7 +623,7 @@ func TestRegisterNamespaceDomainScopedDoesNotTouchNamespaceInformer(t *testing.T
 	// the scoped registration must never instantiate the namespaces informer.
 	// Passing a nil factory proves it: any touch would panic.
 	reg := domain.New()
-	notifier, err := RegisterNamespaceDomain(reg, nil, nil, []string{"prod"}, nil, false)
+	notifier, err := RegisterNamespaceDomain(reg, nil, nil, nil, []string{"prod"}, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, notifier)
 }

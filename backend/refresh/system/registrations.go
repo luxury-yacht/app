@@ -688,6 +688,7 @@ func namespacesRegistration(deps registrationDeps) domainRegistration {
 			deps.registry,
 			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
+			deps.metricsProvider,
 			deps.cfg.AllowedNamespaces,
 			deps.cfg.KubernetesClient,
 			eventsExpected,

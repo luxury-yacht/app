@@ -20,3 +20,21 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, quota *corev1.ResourceQuota
 	}
 	return streamrows.NewQuotaSummary(meta, quota, "ResourceQuota", DescribeSummary(BuildFacts(quota)))
 }
+
+// BuildAggregate projects the namespace and strongest quota utilization from
+// one ResourceQuota for namespace-level pressure rollups.
+func BuildAggregate(quota *corev1.ResourceQuota) streamrows.ResourceQuotaAggregate {
+	if quota == nil {
+		return streamrows.ResourceQuotaAggregate{}
+	}
+	highest := 0
+	for _, percentage := range BuildFacts(quota).UsedPercentage {
+		if percentage > highest {
+			highest = percentage
+		}
+	}
+	return streamrows.ResourceQuotaAggregate{
+		Namespace:             quota.Namespace,
+		HighestUsedPercentage: highest,
+	}
+}

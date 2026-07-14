@@ -15,7 +15,9 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
 // fakeNamespaceIngest is a minimal namespacePodIngestSource whose presence rows
@@ -25,6 +27,7 @@ type fakeNamespaceIngest struct {
 	synced       bool
 	workloadNS   []string
 	presentation string
+	quotaRows    []streamrows.ResourceQuotaAggregate
 }
 
 func (f *fakeNamespaceIngest) Tracks(schema.GroupVersionResource) bool { return true }
@@ -32,6 +35,12 @@ func (f *fakeNamespaceIngest) HasSyncedFor(schema.GroupVersionResource) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.synced
+}
+func (f *fakeNamespaceIngest) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
+	return f.HasSyncedFor(gvr)
+}
+func (f *fakeNamespaceIngest) PermissionSkippedFor(schema.GroupVersionResource) bool {
+	return false
 }
 func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
 	f.mu.Lock()
@@ -45,8 +54,17 @@ func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []int
 	}
 	return rows
 }
-func (f *fakeNamespaceIngest) AggregateRows(schema.GroupVersionResource) []interface{} {
-	return nil
+func (f *fakeNamespaceIngest) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if gvr != ResourceQuotaGVR {
+		return nil
+	}
+	rows := make([]interface{}, 0, len(f.quotaRows))
+	for _, row := range f.quotaRows {
+		rows = append(rows, row)
+	}
+	return rows
 }
 func (f *fakeNamespaceIngest) ObjectMapRows(gvr schema.GroupVersionResource) []interface{} {
 	f.mu.Lock()
@@ -77,6 +95,41 @@ func (f *fakeNamespaceIngest) setPresentation(presentation string) {
 	f.presentation = presentation
 	f.mu.Unlock()
 }
+
+func (f *fakeNamespaceIngest) setQuotaRows(rows ...streamrows.ResourceQuotaAggregate) {
+	f.mu.Lock()
+	f.quotaRows = append([]streamrows.ResourceQuotaAggregate(nil), rows...)
+	f.mu.Unlock()
+}
+
+type mutableNamespaceMetrics struct {
+	mu     sync.Mutex
+	sample metrics.Sample
+}
+
+func (m *mutableNamespaceMetrics) set(sample metrics.Sample) {
+	m.mu.Lock()
+	m.sample = sample
+	m.mu.Unlock()
+}
+
+func (m *mutableNamespaceMetrics) Sample() metrics.Sample {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return metrics.Sample{
+		NodeUsage: map[string]metrics.NodeUsage{},
+		PodUsage:  m.sample.PodUsage,
+		Metadata:  m.sample.Metadata,
+	}
+}
+
+func (m *mutableNamespaceMetrics) LatestNodeUsage() map[string]metrics.NodeUsage {
+	return m.Sample().NodeUsage
+}
+func (m *mutableNamespaceMetrics) LatestPodUsage() map[string]metrics.PodUsage {
+	return m.Sample().PodUsage
+}
+func (m *mutableNamespaceMetrics) Metadata() metrics.Metadata { return m.Sample().Metadata }
 
 type broadcastRecorder struct {
 	mu       sync.Mutex
@@ -125,7 +178,7 @@ func requireNoMoreBroadcasts(t *testing.T, r *broadcastRecorder, have int) {
 }
 
 func newNotifierForTest(ingest *fakeNamespaceIngest, recorder *broadcastRecorder) *NamespaceChangeNotifier {
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), nil)
 	notifier.debounce = 20 * time.Millisecond
 	if recorder != nil {
 		notifier.SetBroadcast(recorder.record)
@@ -191,6 +244,53 @@ func TestNamespaceNotifierBroadcastsWhenWorkloadHealthChanges(t *testing.T) {
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "workload health changed")
+}
+
+func TestNamespaceNotifierGatesMetricCollectionsOnRevision(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	provider := &mutableNamespaceMetrics{}
+	provider.set(metrics.Sample{
+		PodUsage: map[string]metrics.PodUsage{"team-a/api": {CPUUsageMilli: 50}},
+		Metadata: metrics.Metadata{CollectedAt: time.Unix(1700000000, 0), SuccessCount: 1},
+	})
+	recorder := &broadcastRecorder{}
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), provider)
+	notifier.debounce = 20 * time.Millisecond
+	notifier.SetBroadcast(recorder.record)
+	defer notifier.Stop()
+
+	notifier.MetricsChanged()
+	waitForBroadcasts(t, recorder, 1)
+	notifier.MetricsChanged()
+	requireNoMoreBroadcasts(t, recorder, 1)
+
+	provider.set(metrics.Sample{
+		PodUsage: map[string]metrics.PodUsage{"team-a/api": {CPUUsageMilli: 75}},
+		Metadata: metrics.Metadata{CollectedAt: time.Unix(1700000030, 0), SuccessCount: 2},
+	})
+	notifier.MetricsChanged()
+	waitForBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "namespace utilization changed")
+}
+
+func TestNamespaceNotifierGatesQuotaEventsOnPressureRollup(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	ingest.setQuotaRows(streamrows.ResourceQuotaAggregate{Namespace: "team-a", HighestUsedPercentage: 75})
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	defer notifier.Stop()
+
+	notifier.QuotaChanged()
+	waitForBroadcasts(t, recorder, 1)
+	notifier.QuotaChanged()
+	requireNoMoreBroadcasts(t, recorder, 1)
+
+	ingest.setQuotaRows(streamrows.ResourceQuotaAggregate{Namespace: "team-a", HighestUsedPercentage: 95})
+	notifier.QuotaChanged()
+	waitForBroadcasts(t, recorder, 2)
+	require.Contains(t, recorder.lastReason(), "quota pressure changed")
 }
 
 func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing.T) {
@@ -334,7 +434,7 @@ func TestNamespaceNotifierRetainsEventsUntilBroadcastWired(t *testing.T) {
 	ingest := &fakeNamespaceIngest{}
 	ingest.set(true)
 	recorder := &broadcastRecorder{}
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), nil)
 	notifier.debounce = 20 * time.Millisecond
 	defer notifier.Stop()
 

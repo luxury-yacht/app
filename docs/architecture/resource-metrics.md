@@ -64,7 +64,7 @@ successful collections and would otherwise freeze the overview's
 object-derived counts on metrics-less clusters.
 
 Backend metrics-poller demand is any active lease on `cluster-overview`,
-`nodes`, `pods`, or `namespace-workloads`
+`namespaces`, `nodes`, `pods`, or `namespace-workloads`
 (`frontend/src/core/refresh/orchestrator.ts` `isMetricsDemandActive`).
 
 ## Design history and trade-offs
@@ -141,6 +141,7 @@ row-key round-trips.
 | ReplicaSet utilization | object-detail DTO exception |
 | Node utilization | `nodes` scoped payload rows |
 | Cluster aggregate utilization | `cluster-overview` scoped payload; out of scope for table metrics |
+| Namespace aggregate utilization | `namespaces` payload rows, joined from one poller sample at serve |
 | Pod / workload / node tables | ONE base-domain query per table; CPU/memory sorts run server-side on the joined usage |
 
 Tables read the freshness block from the query payload (`queryPayload.metrics`).

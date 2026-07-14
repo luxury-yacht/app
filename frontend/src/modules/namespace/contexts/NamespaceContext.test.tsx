@@ -27,6 +27,14 @@ let mockClusterLifecycleStates = new Map([
 interface TestNamespaceDomain {
   status: 'ready' | 'loading' | 'idle';
   data: {
+    metrics?: {
+      collectedAt?: number;
+      stale: boolean;
+      staleAfterSeconds?: number;
+      successCount: number;
+      failureCount: number;
+    };
+    metricsState?: 'available' | 'loading' | 'unavailable';
     namespaces: Array<{
       name: string;
       phase: string;
@@ -37,6 +45,12 @@ interface TestNamespaceDomain {
       unhealthyWorkloads?: number;
       warningEvents?: number;
       warningEventsState?: 'available' | 'loading' | 'unavailable';
+      cpuUsageMilli?: number;
+      memoryUsageBytes?: number;
+      quotaCount?: number;
+      quotaHighestUsedPercentage?: number;
+      quotaPressure?: '' | 'warning' | 'critical';
+      quotaPressureState?: 'available' | 'loading' | 'unavailable';
     }>;
   } | null;
   error: null;
@@ -267,6 +281,13 @@ describe('NamespaceProvider selection behaviour', () => {
     namespaceDomainRef.current = {
       status: 'ready',
       data: {
+        metrics: {
+          collectedAt: 1_700_000_000,
+          stale: false,
+          successCount: 1,
+          failureCount: 0,
+        },
+        metricsState: 'available',
         namespaces: [
           {
             name: 'alpha',
@@ -278,6 +299,12 @@ describe('NamespaceProvider selection behaviour', () => {
             unhealthyWorkloads: 3,
             warningEvents: 2,
             warningEventsState: 'available',
+            cpuUsageMilli: 200,
+            memoryUsageBytes: 96 * 1024 * 1024,
+            quotaCount: 2,
+            quotaHighestUsedPercentage: 92,
+            quotaPressure: 'warning',
+            quotaPressureState: 'available',
           },
         ],
       },
@@ -293,8 +320,16 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(alpha?.unhealthyWorkloads).toBe(3);
     expect(alpha?.warningEvents).toBe(2);
     expect(alpha?.warningEventsState).toBe('available');
+    expect(alpha?.cpuUsageMilli).toBe(200);
+    expect(alpha?.memoryUsageBytes).toBe(96 * 1024 * 1024);
+    expect(alpha?.utilizationState).toBe('available');
+    expect(alpha?.quotaHighestUsedPercentage).toBe(92);
+    expect(alpha?.quotaPressure).toBe('warning');
+    expect(alpha?.quotaPressureState).toBe('available');
     expect(alpha?.details).toContain('Unhealthy workloads: 3');
     expect(alpha?.details).toContain('Warning events: 2');
+    expect(alpha?.details).toContain('Utilization: 200m CPU, 96Mi memory');
+    expect(alpha?.details).toContain('Quota pressure: 92%');
     cleanup();
   });
 
@@ -311,6 +346,46 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(namespaceRef.current?.namespaces).toEqual([]);
+    cleanup();
+  });
+
+  it('marks namespace utilization stale at the client-side freshness boundary', () => {
+    const collectedAt = Math.floor(Date.now() / 1000);
+    namespaceDomainRef.current = {
+      status: 'ready',
+      data: {
+        metrics: {
+          collectedAt,
+          stale: false,
+          staleAfterSeconds: 30,
+          successCount: 1,
+          failureCount: 0,
+        },
+        metricsState: 'available',
+        namespaces: [
+          {
+            name: 'alpha',
+            phase: 'Active',
+            resourceVersion: '1',
+            creationTimestamp: collectedAt,
+            clusterId: 'cluster-a',
+            clusterName: 'alpha',
+            cpuUsageMilli: 200,
+            memoryUsageBytes: 96 * 1024 * 1024,
+            quotaPressureState: 'available',
+          },
+        ],
+      },
+      error: null,
+    };
+
+    const { cleanup } = renderWithProvider();
+    expect(namespaceRef.current?.namespaces[1]?.details).not.toContain('Awaiting metrics data');
+
+    act(() => {
+      vi.advanceTimersByTime(30_500);
+    });
+    expect(namespaceRef.current?.namespaces[1]?.details).toContain('Awaiting metrics data');
     cleanup();
   });
 

@@ -157,6 +157,7 @@ var contractEnums = []enumSpec{
 	{name: "ResourceQueryCompleteness", typeOf: typeOf[snapshot.ResourceQueryCompleteness]()},
 	{name: "NamespaceScopeStatus", typeOf: typeOf[snapshot.NamespaceScopeStatus]()},
 	{name: "NamespaceSignalState", typeOf: typeOf[snapshot.NamespaceSignalState]()},
+	{name: "NamespaceQuotaPressure", typeOf: typeOf[snapshot.NamespaceQuotaPressure]()},
 	{name: "ResourceQueryAnchorReason", typeOf: typeOf[snapshot.ResourceQueryAnchorReason]()},
 	{name: "ResourceSource", typeOf: typeOf[resourcemodel.ResourceSource]()},
 	{name: "ResourceScope", typeOf: typeOf[resourcemodel.ResourceScope]()},

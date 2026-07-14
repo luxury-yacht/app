@@ -34,3 +34,23 @@ func TestBuildResourceModel(t *testing.T) {
 	require.Equal(t, 40, facts.UsedPercentage["pods"])
 	require.Equal(t, []string{"BestEffort"}, facts.Scopes)
 }
+
+func TestBuildAggregateCapturesNamespaceQuotaPressure(t *testing.T) {
+	quota := &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "rq", Namespace: "team-a"},
+		Status: corev1.ResourceQuotaStatus{
+			Hard: corev1.ResourceList{
+				corev1.ResourcePods: resource.MustParse("10"),
+				corev1.ResourceCPU:  resource.MustParse("2"),
+			},
+			Used: corev1.ResourceList{
+				corev1.ResourcePods: resource.MustParse("8"),
+				corev1.ResourceCPU:  resource.MustParse("2400m"),
+			},
+		},
+	}
+
+	aggregate := resourcequota.BuildAggregate(quota)
+	require.Equal(t, "team-a", aggregate.Namespace)
+	require.Equal(t, 120, aggregate.HighestUsedPercentage)
+}

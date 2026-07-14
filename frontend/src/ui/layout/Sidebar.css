@@ -436,7 +436,9 @@ body.sidebar-resizing::after {
 }
 
 .namespace-attention-badge,
-.namespace-warning-events-badge {
+.namespace-warning-events-badge,
+.namespace-utilization-badge,
+.namespace-quota-pressure-badge {
   display: inline-flex;
   min-width: 1.25rem;
   height: 1.25rem;
@@ -453,6 +455,16 @@ body.sidebar-resizing::after {
 
 .namespace-warning-events-badge {
   gap: 0.15rem;
+}
+
+.namespace-utilization-badge {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.namespace-quota-pressure-badge.critical {
+  background: var(--button-danger-bg);
+  color: var(--button-danger-text);
 }
 
 /* Inaccessible scope entries cannot expand: no pointer affordance, muted

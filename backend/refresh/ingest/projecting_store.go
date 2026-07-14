@@ -55,9 +55,9 @@ type Bundle struct {
 	Catalog   interface{}
 	ObjectMap interface{}
 	// Aggregate is an optional fourth half: a small reduced row a kind's bespoke
-	// aggregation consumers read (the pod kind's PodAggregate, consumed by the
-	// cluster-overview/nodes/namespace-workloads domains). It is nil for every kind
-	// except pods, exactly as ObjectMap is nil for kinds with no graph node.
+	// aggregation consumers read (for example PodAggregate for overview/workloads
+	// and ResourceQuotaAggregate for namespace pressure). It is nil for kinds with
+	// no aggregate consumer, exactly as ObjectMap is nil for kinds with no graph node.
 	Aggregate interface{}
 	// Indexes carries optional secondary-index entries for consumers that need keyed
 	// bundle reads without scanning the whole store. The map key is the index name and

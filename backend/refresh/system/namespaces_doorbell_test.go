@@ -55,7 +55,7 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, builds, "cache must serve the second pre-change build")
 
-	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), nil)
 	defer notifier.Stop()
 	wireNamespacesDoorbell(service, notifier, manager, nil)
 
@@ -113,7 +113,7 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 	}))
 	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
 
-	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))
+	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), nil)
 	defer notifier.Stop()
 
 	observer := &NamespacesDoorbellObserver{}

@@ -38,6 +38,8 @@ export type NamespaceScopeStatus = 'not-found' | 'no-access';
 
 export type NamespaceSignalState = 'available' | 'loading' | 'unavailable';
 
+export type NamespaceQuotaPressure = '' | 'warning' | 'critical';
+
 export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
@@ -878,6 +880,8 @@ export interface NamespaceSnapshotPayload {
   clusterId: string;
   clusterName: string;
   namespaces: Array<NamespaceSummary> | null;
+  metrics: PodMetricsInfo;
+  metricsState: NamespaceSignalState;
 }
 
 export interface NamespaceStorageSnapshotPayload {
@@ -940,6 +944,12 @@ export interface NamespaceSummary {
   unhealthyWorkloads?: number;
   warningEvents?: number;
   warningEventsState: NamespaceSignalState;
+  cpuUsageMilli?: number;
+  memoryUsageBytes?: number;
+  quotaCount?: number;
+  quotaHighestUsedPercentage?: number;
+  quotaPressure?: NamespaceQuotaPressure;
+  quotaPressureState: NamespaceSignalState;
   scopeStatus?: NamespaceScopeStatus;
 }
 

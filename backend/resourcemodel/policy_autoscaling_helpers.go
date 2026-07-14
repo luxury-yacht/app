@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"math"
 )
 
 func PolicyResourceModel(
@@ -67,8 +68,9 @@ func QuotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
 		if !ok {
 			continue
 		}
-		if hardValue := hardQuantity.Value(); hardValue > 0 {
-			result[string(resourceName)] = int((usedQuantity.Value() * 100) / hardValue)
+		if hardValue := hardQuantity.AsApproximateFloat64(); hardValue > 0 {
+			usedValue := usedQuantity.AsApproximateFloat64()
+			result[string(resourceName)] = int(math.Floor((usedValue/hardValue)*100 + 1e-9))
 		}
 	}
 	if len(result) == 0 {

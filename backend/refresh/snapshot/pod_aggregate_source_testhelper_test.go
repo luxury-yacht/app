@@ -21,6 +21,9 @@ import (
 // test drive the cluster-overview workload counts (len of catalog rows, gated on synced).
 type fakePodAggregateSource struct {
 	aggregates      []streamrows.PodAggregate
+	quotaAggregates []streamrows.ResourceQuotaAggregate
+	quotaTracked    bool
+	quotaSynced     bool
 	resourceVersion string
 	podSynced       *bool
 	workloadCatalog map[schema.GroupVersionResource][]interface{}
@@ -39,6 +42,13 @@ type fakePodAggregateSource struct {
 }
 
 func (s fakePodAggregateSource) AggregateRows(gvr schema.GroupVersionResource) []interface{} {
+	if gvr == ResourceQuotaGVR {
+		out := make([]interface{}, 0, len(s.quotaAggregates))
+		for _, aggregate := range s.quotaAggregates {
+			out = append(out, aggregate)
+		}
+		return out
+	}
 	if gvr != PodGVR {
 		return nil
 	}
@@ -101,9 +111,15 @@ func (s fakePodAggregateSource) HasSyncedFor(gvr schema.GroupVersionResource) bo
 		return true
 	case NodeGVR:
 		return s.nodeSynced
+	case ResourceQuotaGVR:
+		return s.quotaSynced
 	default:
 		return s.workloadSynced[gvr]
 	}
+}
+
+func (s fakePodAggregateSource) RawHasSyncedFor(gvr schema.GroupVersionResource) bool {
+	return s.HasSyncedFor(gvr)
 }
 
 func (s fakePodAggregateSource) withPodSynced(synced bool) fakePodAggregateSource {
@@ -148,9 +164,18 @@ func (s fakePodAggregateSource) Tracks(gvr schema.GroupVersionResource) bool {
 	switch gvr {
 	case DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR, PodGVR:
 		return true
+	case ResourceQuotaGVR:
+		return s.quotaTracked
 	default:
 		return false
 	}
+}
+
+func (s fakePodAggregateSource) withQuotaAggregates(aggregates ...streamrows.ResourceQuotaAggregate) fakePodAggregateSource {
+	s.quotaAggregates = append([]streamrows.ResourceQuotaAggregate(nil), aggregates...)
+	s.quotaTracked = true
+	s.quotaSynced = true
+	return s
 }
 
 // withWorkloadCatalog returns a copy of the source carrying `count` projected catalog rows

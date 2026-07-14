@@ -1101,6 +1101,7 @@ describe('refreshOrchestrator', () => {
       creationTimestamp: 100,
       hasWorkloads: false,
       warningEventsState: 'available' as const,
+      quotaPressureState: 'available' as const,
     };
     const changedNamespace = {
       clusterId: 'cluster-a',
@@ -1119,6 +1120,7 @@ describe('refreshOrchestrator', () => {
       creationTimestamp: 200,
       hasWorkloads: false,
       warningEventsState: 'available' as const,
+      quotaPressureState: 'available' as const,
     };
 
     setScopedDomainState('namespaces', scope, (prev) => ({
@@ -1126,6 +1128,8 @@ describe('refreshOrchestrator', () => {
       status: 'ready',
       data: {
         namespaces: [cachedNamespace, changedNamespace],
+        metrics: { stale: false, successCount: 1, failureCount: 0 },
+        metricsState: 'available',
         clusterId: 'test-cluster',
         clusterName: 'Test Cluster',
       },
@@ -1141,6 +1145,8 @@ describe('refreshOrchestrator', () => {
         sequence: 2,
         payload: {
           namespaces: [{ ...cachedNamespace }, { ...changedNamespace, phase: 'Terminating' }],
+          metrics: { stale: false, successCount: 1, failureCount: 0 },
+          metricsState: 'available',
           clusterId: 'test-cluster',
           clusterName: 'Test Cluster',
         },
@@ -1491,6 +1497,20 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', 'cluster-a', false);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(false);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats the namespace aggregate lease as metrics demand', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'cluster',
+    });
+
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster-a|', true);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(true);
+
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster-a|', false);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(false);
   });
 
   it('keeps single-scope system domains isolated by cluster runtime', () => {
