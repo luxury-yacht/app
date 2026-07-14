@@ -6,6 +6,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { canActivateClusterOverviewRefresh } from '@core/refresh/clusterOverviewLifecycle';
 import { buildClusterScope } from '@core/refresh/clusterScope';
 import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
+import { clusterOverviewCpuValue, clusterOverviewMemoryValue } from '@core/resource-metrics';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
@@ -47,6 +48,8 @@ interface GlobalClusterRow {
   memory: string;
   metrics: string;
   access: string;
+  overview?: ClusterOverviewPayload;
+  metricsInfo?: ClusterOverviewMetrics;
 }
 
 const connectionFor = (
@@ -97,6 +100,34 @@ const ratio = (ready: number | null, total: number | null): string =>
 
 const resourceUsage = (usage: string | undefined, allocatable: string | undefined): string =>
   usage && allocatable ? `${usage} / ${allocatable}` : '—';
+
+const createClusterResourceColumn = (
+  type: 'cpu' | 'memory'
+): GridColumnDefinition<GlobalClusterRow> => {
+  const value = type === 'cpu' ? clusterOverviewCpuValue : clusterOverviewMemoryValue;
+  const column = cf.createResourceBarColumn<GlobalClusterRow>({
+    key: type,
+    header: type === 'cpu' ? 'CPU' : 'Memory',
+    type,
+    getUsage: (row) => (row.overview ? value(row.overview, 'usage') : undefined),
+    getRequest: (row) => (row.overview ? value(row.overview, 'request') : undefined),
+    getLimit: (row) => (row.overview ? value(row.overview, 'limit') : undefined),
+    getAllocatable: (row) => (row.overview ? value(row.overview, 'allocatable') : undefined),
+    getMetricsStale: (row) => row.metricsInfo?.stale,
+    getMetricsError: (row) => row.metricsInfo?.lastError,
+    getMetricsLastUpdated: (row) =>
+      row.metricsInfo?.collectedAt ? new Date(row.metricsInfo.collectedAt * 1000) : undefined,
+    getVariant: () => 'compact',
+    getAnimationKey: (row) => `cluster:${row.clusterId}:${type}`,
+    sortable: true,
+    sortValue: (row) => (type === 'cpu' ? row.cpu : row.memory),
+  });
+
+  return {
+    ...column,
+    render: (row) => (row.overview ? column.render(row) : '—'),
+  };
+};
 
 const GlobalViewClusters: React.FC = () => {
   const {
@@ -157,6 +188,8 @@ const GlobalViewClusters: React.FC = () => {
                 : overview
                   ? 'Available'
                   : '—',
+            overview,
+            metricsInfo: metrics,
           },
         ];
       }),
@@ -275,8 +308,8 @@ const GlobalViewClusters: React.FC = () => {
           );
         },
       },
-      cf.createTextColumn('cpu', 'CPU', (row) => row.cpu),
-      cf.createTextColumn('memory', 'Memory', (row) => row.memory),
+      createClusterResourceColumn('cpu'),
+      createClusterResourceColumn('memory'),
       cf.createTextColumn('totalNamespaces', 'Namespaces', (row) => row.totalNamespaces ?? '—'),
       cf.createTextColumn('metrics', 'Metrics', (row) => row.metrics),
       cf.createTextColumn('access', 'Access', (row) => row.access),
@@ -289,6 +322,8 @@ const GlobalViewClusters: React.FC = () => {
       nodes: { autoWidth: true },
       pods: { autoWidth: true },
       attention: { autoWidth: true },
+      cpu: { width: 200, minWidth: 200 },
+      memory: { width: 200, minWidth: 200 },
       totalNamespaces: { autoWidth: true },
       metrics: { autoWidth: true },
       access: { autoWidth: true },

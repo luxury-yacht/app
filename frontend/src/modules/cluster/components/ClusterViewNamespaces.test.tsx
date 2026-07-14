@@ -215,6 +215,28 @@ describe('ClusterViewNamespaces', () => {
     expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(
       256 * 1024 * 1024
     );
+    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
+    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
+    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
+      throw new Error('expected CPU ResourceBar');
+    }
+    expect(cpuCell.props).toMatchObject({
+      usage: '450m',
+      type: 'cpu',
+      variant: 'compact',
+      animationScopeKey: 'cluster-a|/v1/Namespace//payments:cpu',
+    });
+    const memoryCell = columns.find(({ key }) => key === 'memory')?.render?.(rows[0]);
+    expect(isValidElement<Record<string, unknown>>(memoryCell)).toBe(true);
+    if (!isValidElement<Record<string, unknown>>(memoryCell)) {
+      throw new Error('expected Memory ResourceBar');
+    }
+    expect(memoryCell.props).toMatchObject({
+      usage: '256Mi',
+      type: 'memory',
+      variant: 'compact',
+      animationScopeKey: 'cluster-a|/v1/Namespace//payments:memory',
+    });
     const workloadsColumn = columns.find(({ key }) => key === 'workloads');
     expect(renderedText(workloadsColumn?.render?.(rows[0]))).toBe('✓');
     expect(renderedText(workloadsColumn?.render?.({ ...rows[0], hasWorkloads: false }))).toBe('-');

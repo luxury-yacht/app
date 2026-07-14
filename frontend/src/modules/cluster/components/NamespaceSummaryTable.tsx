@@ -86,6 +86,40 @@ const quotaPressureText = (row: NamespaceTableRow): string => {
   return `${row.quotaHighestUsedPercentage ?? 0}%`;
 };
 
+const createNamespaceResourceColumn = (
+  type: 'cpu' | 'memory'
+): GridColumnDefinition<NamespaceTableRow> => {
+  const usageNumber = (row: NamespaceTableRow): number =>
+    type === 'cpu' ? (row.cpuUsageMilli ?? 0) : (row.memoryUsageBytes ?? 0);
+  const usageDisplay = (row: NamespaceTableRow): string => {
+    const display = namespaceAggregateUsageDisplay(
+      row.cpuUsageMilli ?? 0,
+      row.memoryUsageBytes ?? 0
+    );
+    return type === 'cpu' ? display.cpu : display.memory;
+  };
+  const column = cf.createResourceBarColumn<NamespaceTableRow>({
+    key: type,
+    header: type === 'cpu' ? 'CPU' : 'Memory',
+    type,
+    getUsage: usageDisplay,
+    getVariant: () => 'compact',
+    getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row)}:${type}`,
+    sortable: true,
+    sortValue: (row) => (row.metricsState === 'available' ? usageNumber(row) : undefined),
+  });
+
+  return {
+    ...column,
+    render: (row) => {
+      if (row.metricsState !== 'available') {
+        return unavailableSignalText(row.metricsState);
+      }
+      return usageNumber(row) > 0 ? column.render(row) : '-';
+    },
+  };
+};
+
 const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   rows,
   navigate,
@@ -157,36 +191,8 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
             ? 'status-text warning'
             : 'status-text',
       }),
-      cf.createTextColumn(
-        'cpu',
-        'CPU',
-        (row) =>
-          row.metricsState === 'available'
-            ? (row.cpuUsageMilli ?? 0) > 0
-              ? namespaceAggregateUsageDisplay(row.cpuUsageMilli ?? 0, row.memoryUsageBytes ?? 0)
-                  .cpu
-              : '-'
-            : unavailableSignalText(row.metricsState),
-        {
-          sortValue: (row) =>
-            row.metricsState === 'available' ? (row.cpuUsageMilli ?? 0) : undefined,
-        }
-      ),
-      cf.createTextColumn(
-        'memory',
-        'Memory',
-        (row) =>
-          row.metricsState === 'available'
-            ? (row.memoryUsageBytes ?? 0) > 0
-              ? namespaceAggregateUsageDisplay(row.cpuUsageMilli ?? 0, row.memoryUsageBytes ?? 0)
-                  .memory
-              : '-'
-            : unavailableSignalText(row.metricsState),
-        {
-          sortValue: (row) =>
-            row.metricsState === 'available' ? (row.memoryUsageBytes ?? 0) : undefined,
-        }
-      ),
+      createNamespaceResourceColumn('cpu'),
+      createNamespaceResourceColumn('memory'),
       cf.createTextColumn('quotaPressure', 'Quota pressure', quotaPressureText, {
         sortValue: (row) =>
           row.quotaPressureState === 'available'
@@ -208,8 +214,8 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       workloads: { autoWidth: true },
       unhealthyWorkloads: { autoWidth: true },
       warningEvents: { autoWidth: true },
-      cpu: { autoWidth: true },
-      memory: { autoWidth: true },
+      cpu: { width: 200, minWidth: 200 },
+      memory: { width: 200, minWidth: 200 },
       quotaPressure: { autoWidth: true },
       age: { autoWidth: true },
     });

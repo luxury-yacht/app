@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,12 +27,17 @@ const overview = {
     pendingPods: 1,
     totalNamespaces: 8,
     cpuUsage: '1200m',
+    cpuRequests: '2400m',
+    cpuLimits: '6000m',
     cpuAllocatable: '8000m',
     memoryUsage: '8Gi',
+    memoryRequests: '12Gi',
+    memoryLimits: '24Gi',
     memoryAllocatable: '32Gi',
     unavailableResources: [],
   },
   metrics: {
+    collectedAt: 1_700_001_000,
     stale: false,
     successCount: 2,
     failureCount: 0,
@@ -222,6 +227,42 @@ describe('GlobalViewClusters', () => {
       { clusterId: 'cluster-b', name: 'beta' },
       { clusterId: 'cluster-c', name: 'gamma' },
     ]);
+    const columns = tableProps.columns as Array<{
+      key: string;
+      render?: (row: Record<string, unknown>) => React.ReactNode;
+    }>;
+    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
+    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
+    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
+      throw new Error('expected CPU ResourceBar');
+    }
+    expect(cpuCell.props).toMatchObject({
+      usage: '1200m',
+      request: '2400m',
+      limit: '6000m',
+      allocatable: '8000m',
+      type: 'cpu',
+      variant: 'compact',
+      metricsStale: false,
+      metricsLastUpdated: new Date(1_700_001_000 * 1000),
+      animationScopeKey: 'cluster:cluster-a:cpu',
+    });
+    const memoryCell = columns.find(({ key }) => key === 'memory')?.render?.(rows[0]);
+    expect(isValidElement<Record<string, unknown>>(memoryCell)).toBe(true);
+    if (!isValidElement<Record<string, unknown>>(memoryCell)) {
+      throw new Error('expected Memory ResourceBar');
+    }
+    expect(memoryCell.props).toMatchObject({
+      usage: '8Gi',
+      request: '12Gi',
+      limit: '24Gi',
+      allocatable: '32Gi',
+      type: 'memory',
+      variant: 'compact',
+      animationScopeKey: 'cluster:cluster-a:memory',
+    });
+    expect(columns.find(({ key }) => key === 'cpu')?.render?.(rows[1])).toBe('—');
+    expect(columns.find(({ key }) => key === 'memory')?.render?.(rows[1])).toBe('—');
     const keyExtractor = (
       tableProps.gridTableProps as {
         keyExtractor: (row: Record<string, unknown>) => string;
