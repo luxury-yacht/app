@@ -205,9 +205,6 @@ export function useGridTableController<T>({
     filterSignature,
     filtersContainerRef,
     filterFocusIndexRef,
-    showKindDropdown,
-    showNamespaceDropdown,
-    showClusterDropdown,
     filtersNode,
     handleFilterReset,
   } = useGridTableFiltersWiring<T>({
@@ -390,9 +387,6 @@ export function useGridTableController<T>({
 
   useGridTableKeyboardScopes({
     filteringEnabled,
-    showKindDropdown,
-    showNamespaceDropdown,
-    showClusterDropdown,
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,

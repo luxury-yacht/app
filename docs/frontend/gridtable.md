@@ -39,6 +39,10 @@ workflow and that exception is documented.
   rendering details. Changes to them need tests proving controlled search keeps
   focus across updates and rows-per-page menus open and dispatch supported
   values.
+- Filter-bar `Tab` and `Shift+Tab` navigation follows the rendered control
+  order. Provider query facets participate in that order alongside structural
+  filters, search, actions, and Columns; adding a facet must not create a
+  keyboard focus trap.
 - The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
   hideable columns only; do not add synthetic show-all or hide-all options.
 - Multi-select filter state preserves an explicit Select All selection so the

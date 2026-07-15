@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import type { RefObject } from 'react';
@@ -12,9 +13,6 @@ import { useCallback } from 'react';
 
 interface GridTableKeyboardOptions {
   filteringEnabled: boolean;
-  showKindDropdown: boolean;
-  showNamespaceDropdown: boolean;
-  showClusterDropdown: boolean;
   filtersContainerRef: RefObject<HTMLDivElement | null>;
   filterFocusIndexRef: RefObject<number | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
@@ -27,9 +25,6 @@ interface GridTableKeyboardOptions {
 
 export const useGridTableKeyboardScopes = ({
   filteringEnabled,
-  showKindDropdown,
-  showNamespaceDropdown,
-  showClusterDropdown,
   filtersContainerRef,
   filterFocusIndexRef,
   wrapperRef,
@@ -43,56 +38,8 @@ export const useGridTableKeyboardScopes = ({
     if (!filteringEnabled || !filtersContainerRef.current) {
       return [];
     }
-    const container = filtersContainerRef.current;
-    const targets: HTMLElement[] = [];
-
-    const addTarget = (element: HTMLElement | null) => {
-      if (element && element.tabIndex !== -1 && !element.hasAttribute('disabled')) {
-        targets.push(element);
-      }
-    };
-
-    if (showKindDropdown) {
-      addTarget(
-        container.querySelector<HTMLElement>(
-          '[data-gridtable-filter-role="kind"] .dropdown-trigger'
-        )
-      );
-    }
-    if (showNamespaceDropdown) {
-      addTarget(
-        container.querySelector<HTMLElement>(
-          '[data-gridtable-filter-role="namespace"] .dropdown-trigger'
-        )
-      );
-    }
-    if (showClusterDropdown) {
-      addTarget(
-        container.querySelector<HTMLElement>(
-          '[data-gridtable-filter-role="cluster"] .dropdown-trigger'
-        )
-      );
-    }
-    addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
-    container
-      .querySelectorAll<HTMLElement>('.gridtable-filter-actions .icon-bar-button')
-      .forEach((element) => {
-        addTarget(element);
-      });
-    addTarget(
-      container.querySelector<HTMLElement>(
-        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
-      )
-    );
-
-    return targets;
-  }, [
-    filteringEnabled,
-    filtersContainerRef,
-    showKindDropdown,
-    showNamespaceDropdown,
-    showClusterDropdown,
-  ]);
+    return getTabbableElements(filtersContainerRef.current);
+  }, [filteringEnabled, filtersContainerRef]);
 
   const focusFilterAtIndex = useCallback(
     (index: number) => {
