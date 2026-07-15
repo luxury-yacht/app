@@ -186,6 +186,12 @@
   bottom: auto;
 }
 
+.dropdown-menu.dropdown-menu--portal {
+  min-width: var(--dropdown-menu-anchor-width);
+  max-height: min(400px, var(--dropdown-menu-available-height));
+  margin: 0;
+}
+
 /* ============================================
    4. OPTION & ITEM STYLES
    ============================================ */

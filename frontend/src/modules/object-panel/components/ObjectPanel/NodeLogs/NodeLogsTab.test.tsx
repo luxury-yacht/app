@@ -110,7 +110,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const option = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+    const option = Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find(
       (node) => node.textContent?.includes(label)
     );
     await act(async () => {
@@ -211,11 +211,11 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const groupHeader = container.querySelector('.dropdown-group-header');
+    const groupHeader = document.body.querySelector('.dropdown-group-header');
     expect(groupHeader?.textContent).toBe('aws-routed-eni');
 
-    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
-      node.textContent?.replace(/\s+/g, ' ').trim()
+    const optionLabels = Array.from(document.body.querySelectorAll('.dropdown-option')).map(
+      (node) => node.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(optionLabels).toContain('ipamd.log');
     expect(optionLabels).toContain('plugin.log');
@@ -667,7 +667,7 @@ describe('NodeLogsTab', () => {
     });
 
     const secondOption = Array.from(
-      container.querySelectorAll<HTMLElement>('.dropdown-option')
+      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
     ).find((node) => node.textContent?.includes('containerd'));
     expect(secondOption).toBeTruthy();
 

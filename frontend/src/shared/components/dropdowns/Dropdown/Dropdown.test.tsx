@@ -126,12 +126,117 @@ describe('Dropdown', () => {
     const trigger = container.querySelector('.dropdown-trigger');
     click(trigger);
 
-    const secondOption = container.querySelectorAll('.dropdown-option').item(1);
+    const secondOption = document.body.querySelectorAll('.dropdown-option').item(1);
     click(secondOption);
 
     expect(handleChange).toHaveBeenCalledWith('beta');
-    expect(container.querySelector('.dropdown-menu')).toBeNull();
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
     expect(container.querySelector('.dropdown-value')?.textContent).toBe('Beta');
+  });
+
+  it('renders the menu in the body-level overlay layer instead of the trigger layout', async () => {
+    const dropdownId = createTestId('portal-dropdown');
+    await mount(<Dropdown id={dropdownId} options={OPTIONS} value="" onChange={vi.fn()} />);
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const menu = document.getElementById(`${dropdownId}-menu`);
+    expect(menu).not.toBeNull();
+    expect(menu?.parentElement).toBe(document.body);
+    expect(container.contains(menu)).toBe(false);
+  });
+
+  it('positions the portaled menu inside the viewport without using trigger layout space', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetHeight'
+    );
+
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get() {
+          return this.classList.contains('dropdown-menu')
+            ? 240
+            : (offsetWidthDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        get() {
+          return this.classList.contains('dropdown-menu')
+            ? 180
+            : (offsetHeightDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+
+      await mount(<Dropdown options={OPTIONS} value="" onChange={vi.fn()} />);
+      const trigger = requireValue(
+        container.querySelector<HTMLElement>('.dropdown-trigger'),
+        'expected dropdown trigger'
+      );
+      trigger.getBoundingClientRect = () =>
+        ({
+          top: 550,
+          bottom: 580,
+          height: 30,
+          width: 80,
+          left: 700,
+          right: 780,
+          x: 700,
+          y: 550,
+          toJSON: () => undefined,
+        }) as DOMRect;
+
+      click(trigger);
+
+      const menu = requireValue(
+        document.body.querySelector<HTMLElement>('.dropdown-menu'),
+        'expected portaled dropdown menu'
+      );
+      expect(menu.style.position).toBe('fixed');
+      expect(menu.style.left).toBe('552px');
+      expect(menu.style.top).toBe('368px');
+      expect(menu.style.getPropertyValue('--dropdown-menu-anchor-width')).toBe('80px');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalInnerHeight,
+      });
+      if (offsetWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
+      }
+      if (offsetHeightDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDescriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
+      }
+    }
+  });
+
+  it('treats pointer interaction inside the portaled menu as inside the dropdown', async () => {
+    await mount(<Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple />);
+
+    click(container.querySelector('.dropdown-trigger'));
+    const option = document.body.querySelector('.dropdown-option');
+    mouseDown(option);
+
+    expect(document.body.querySelector('.dropdown-menu')).not.toBeNull();
+    expect(container.querySelector('.dropdown.open')).not.toBeNull();
   });
 
   it('closes an open sibling dropdown when mousedown bubbling is stopped by a parent', async () => {
@@ -174,12 +279,12 @@ describe('Dropdown', () => {
 
     const triggers = container.querySelectorAll('.dropdown-trigger');
     click(triggers.item(0));
-    expect(container.querySelectorAll('.dropdown-menu')).toHaveLength(1);
+    expect(document.body.querySelectorAll('.dropdown-menu')).toHaveLength(1);
 
     mouseDown(triggers.item(1));
     click(triggers.item(1));
 
-    expect(container.querySelectorAll('.dropdown-menu')).toHaveLength(1);
+    expect(document.body.querySelectorAll('.dropdown-menu')).toHaveLength(1);
     expect(container.querySelectorAll('.dropdown.open')).toHaveLength(1);
     expect(container.querySelector('.dropdown.open .dropdown-value')?.textContent).toBe('Second');
   });
@@ -207,7 +312,7 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput).not.toBeNull();
 
     await setTextInputValue(searchInput, 'gam');
@@ -225,7 +330,7 @@ describe('Dropdown', () => {
     click(container.querySelector('.dropdown-trigger'));
     click(container.querySelector('.dropdown-trigger'));
 
-    const reopenedInput = container.querySelector<HTMLInputElement>('.search-input');
+    const reopenedInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(reopenedInput?.value ?? '').toBe('');
   });
 
@@ -251,18 +356,20 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput).not.toBeNull();
 
     await setTextInputValue(searchInput, 'gam');
 
-    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
-      node.textContent?.trim()
+    const optionLabels = Array.from(document.body.querySelectorAll('.dropdown-option')).map(
+      (node) => node.textContent?.trim()
     );
     expect(optionLabels).toEqual(['Gamma']);
 
     await pressKey(searchInput, 'ArrowDown');
-    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Gamma');
+    expect(document.body.querySelector('.dropdown-option.highlighted')?.textContent).toContain(
+      'Gamma'
+    );
 
     await pressKey(searchInput, 'Enter');
     expect(handleChange).toHaveBeenCalledWith('gamma');
@@ -285,12 +392,12 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
-      node.textContent?.trim()
+    const optionLabels = Array.from(document.body.querySelectorAll('.dropdown-option')).map(
+      (node) => node.textContent?.trim()
     );
     expect(optionLabels).toEqual(['Alpha', 'Beta', 'Gamma']);
 
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput?.value).toBe('ga');
 
     await setTextInputValue(searchInput, 'bet');
@@ -307,7 +414,9 @@ describe('Dropdown', () => {
     );
 
     click(container.querySelector('.dropdown-trigger'));
-    expect(container.querySelector('.no-options')?.textContent).toContain('No options available');
+    expect(document.body.querySelector('.no-options')?.textContent).toContain(
+      'No options available'
+    );
   });
 
   it('supports keyboard navigation for single-select dropdown', async () => {
@@ -333,14 +442,18 @@ describe('Dropdown', () => {
     click(trigger);
 
     await pressKey(trigger, 'ArrowDown');
-    const firstHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    const firstHighlighted = document.body.querySelector<HTMLElement>(
+      '.dropdown-option.highlighted'
+    );
     expect(firstHighlighted?.textContent).toContain('Alpha');
     expect(trigger?.getAttribute('aria-activedescendant')).toBe(firstHighlighted?.id);
     expect(firstHighlighted?.getAttribute('role')).toBe('option');
     expect(firstHighlighted?.getAttribute('aria-selected')).toBe('true');
 
     await pressKey(trigger, 'ArrowDown');
-    const secondHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    const secondHighlighted = document.body.querySelector<HTMLElement>(
+      '.dropdown-option.highlighted'
+    );
     expect(secondHighlighted?.textContent).toContain('Beta');
     expect(trigger?.getAttribute('aria-activedescendant')).toBe(secondHighlighted?.id);
     expect(firstHighlighted?.getAttribute('aria-selected')).toBe('false');
@@ -357,21 +470,25 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput).not.toBeNull();
     searchInput?.focus();
 
     await pressKey(searchInput, 'ArrowDown');
-    const firstHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    const firstHighlighted = document.body.querySelector<HTMLElement>(
+      '.dropdown-option.highlighted'
+    );
     expect(firstHighlighted?.textContent).toContain('Alpha');
     expect(searchInput?.getAttribute('role')).toBe('combobox');
     expect(searchInput?.getAttribute('aria-controls')).toBe(
-      container.querySelector<HTMLElement>('[role="listbox"]')?.id
+      document.body.querySelector<HTMLElement>('[role="listbox"]')?.id
     );
     expect(searchInput?.getAttribute('aria-activedescendant')).toBe(firstHighlighted?.id);
 
     await pressKey(searchInput, 'ArrowDown');
-    const secondHighlighted = container.querySelector<HTMLElement>('.dropdown-option.highlighted');
+    const secondHighlighted = document.body.querySelector<HTMLElement>(
+      '.dropdown-option.highlighted'
+    );
     expect(secondHighlighted?.textContent).toContain('Beta');
     expect(searchInput?.getAttribute('aria-activedescendant')).toBe(secondHighlighted?.id);
   });
@@ -384,7 +501,7 @@ describe('Dropdown', () => {
     click(container.querySelector('.dropdown-trigger'));
 
     const dropdown = container.querySelector('.dropdown') as HTMLElement | null;
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(dropdown).not.toBeNull();
     expect(searchInput).not.toBeNull();
 
@@ -410,7 +527,7 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    const searchInput = document.body.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput).not.toBeNull();
     searchInput?.focus();
 
@@ -420,7 +537,7 @@ describe('Dropdown', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.dropdown-menu')).toBeNull();
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
     expect(event.defaultPrevented).toBe(false);
   });
 
@@ -479,17 +596,17 @@ describe('Dropdown', () => {
     const trigger = container.querySelector('.dropdown-trigger');
     click(trigger);
 
-    const groupHeader = container.querySelector('.dropdown-group-header');
+    const groupHeader = document.body.querySelector('.dropdown-group-header');
     expect(groupHeader?.textContent).toBe('Databases');
     click(groupHeader);
     expect(onChange).not.toHaveBeenCalled();
 
-    const disabledOption = container.querySelector('.dropdown-option.disabled');
+    const disabledOption = document.body.querySelector('.dropdown-option.disabled');
     expect(disabledOption?.textContent).toBe('Redis');
     click(disabledOption);
     expect(onChange).not.toHaveBeenCalled();
 
-    const mongoOption = container.querySelector('[data-testid="option-mongo"]');
+    const mongoOption = document.body.querySelector('[data-testid="option-mongo"]');
     click(mongoOption);
     expect(onChange).toHaveBeenCalledWith(['postgres', 'mongo']);
     expect(container.querySelector('.dropdown-value')?.textContent).toBe(
@@ -527,7 +644,7 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
+    const bulkButtons = document.body.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
     expect(bulkButtons).toHaveLength(2);
     expect(bulkButtons[0]?.getAttribute('aria-label')).toBe('Select all');
     expect(bulkButtons[1]?.getAttribute('aria-label')).toBe('Select none');
@@ -536,7 +653,7 @@ describe('Dropdown', () => {
     expect(onChange).toHaveBeenCalledWith(['postgres', 'mongo', 'sqlite']);
 
     const selectNoneButton =
-      container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action')[1];
+      document.body.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action')[1];
     click(selectNoneButton);
     expect(onChange).toHaveBeenCalledWith([]);
   });
@@ -555,7 +672,7 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const controls = container.querySelector('.dropdown-menu-controls');
+    const controls = document.body.querySelector('.dropdown-menu-controls');
     expect(controls).not.toBeNull();
     expect(controls?.querySelector('.search-input')).not.toBeNull();
     expect(controls?.querySelectorAll('.dropdown-bulk-action')).toHaveLength(2);
@@ -568,11 +685,11 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
+    const bulkButtons = document.body.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
     expect(bulkButtons).toHaveLength(2);
     expect(bulkButtons[0]?.textContent).toContain('All');
     expect(bulkButtons[1]?.textContent).toContain('None');
-    expect(container.querySelector('.search-input')).toBeNull();
+    expect(document.body.querySelector('.search-input')).toBeNull();
   });
 
   it('renders bulk-action icons at the dropdown-specific size', async () => {
@@ -582,7 +699,7 @@ describe('Dropdown', () => {
 
     click(container.querySelector('.dropdown-trigger'));
 
-    const icon = container.querySelector<SVGElement>('.dropdown-bulk-action svg');
+    const icon = document.body.querySelector<SVGElement>('.dropdown-bulk-action svg');
     expect(icon).not.toBeNull();
     expect(requireValue(icon, 'expected bulk-action icon').getAttribute('width')).toBe('20');
     expect(requireValue(icon, 'expected bulk-action icon').getAttribute('height')).toBe('20');
@@ -611,7 +728,7 @@ describe('Dropdown', () => {
     await mount(<Harness />);
     click(container.querySelector('.dropdown-trigger'));
 
-    const menu = container.querySelector('.dropdown-menu') as HTMLDivElement | null;
+    const menu = document.body.querySelector('.dropdown-menu') as HTMLDivElement | null;
     expect(menu).not.toBeNull();
     if (!menu) {
       return;
@@ -623,10 +740,10 @@ describe('Dropdown', () => {
       await Promise.resolve();
     });
 
-    const targetOption = container.querySelectorAll('.dropdown-option')[25];
+    const targetOption = document.body.querySelectorAll('.dropdown-option')[25];
     click(targetOption);
 
-    const updatedMenu = container.querySelector('.dropdown-menu') as HTMLDivElement | null;
+    const updatedMenu = document.body.querySelector('.dropdown-menu') as HTMLDivElement | null;
     expect(updatedMenu).not.toBeNull();
     expect(updatedMenu?.scrollTop).toBe(180);
   });
@@ -668,7 +785,7 @@ describe('Dropdown', () => {
 
     click(trigger);
 
-    const menu = container.querySelector('.dropdown-menu');
+    const menu = document.body.querySelector('.dropdown-menu');
     expect(menu?.className).toContain('position-top');
 
     if (offsetHeightDescriptor) {
@@ -719,7 +836,7 @@ describe('Dropdown', () => {
 
     click(trigger);
 
-    expect(container.querySelector('.dropdown-menu')?.className).toContain(
+    expect(document.body.querySelector('.dropdown-menu')?.className).toContain(
       'position-horizontal-end'
     );
 
@@ -743,14 +860,14 @@ describe('Dropdown', () => {
 
     expect(container.querySelector('.dropdown-value')?.textContent).toBe('Loading...');
     click(container.querySelector('.dropdown-trigger'));
-    expect(container.querySelector('.dropdown-menu')).toBeNull();
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
 
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={handleChange} disabled placeholder="Pick" />
     );
 
     click(container.querySelector('.dropdown-trigger'));
-    expect(container.querySelector('.dropdown-menu')).toBeNull();
+    expect(document.body.querySelector('.dropdown-menu')).toBeNull();
     expect(handleChange).not.toHaveBeenCalled();
   });
 

@@ -503,6 +503,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 </label>
                 <Dropdown
                   options={clusterOptions}
+                  dropdownClassName="fav-save-dropdown-menu"
                   value={clusterSelection}
                   onChange={(val) => setClusterSelection(val as string)}
                   placeholder="Select cluster..."
@@ -539,6 +540,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 <label htmlFor={`${elementIdPrefix}-favorite-view`}>View</label>
                 <Dropdown
                   id={`${elementIdPrefix}-favorite-view`}
+                  dropdownClassName="fav-save-dropdown-menu"
                   options={ALL_VIEWS}
                   value={selectedView}
                   onChange={(val) => setSelectedView(val as string)}
@@ -550,6 +552,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   <label htmlFor={`${elementIdPrefix}-favorite-namespace`}>Namespace</label>
                   <Dropdown
                     id={`${elementIdPrefix}-favorite-namespace`}
+                    dropdownClassName="fav-save-dropdown-menu"
                     options={namespaceOptions}
                     value={selectedNamespace}
                     onChange={(val) => setSelectedNamespace(val as string)}
@@ -568,6 +571,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   <label htmlFor={`${elementIdPrefix}-favorite-kinds`}>Kinds</label>
                   <Dropdown
                     id={`${elementIdPrefix}-favorite-kinds`}
+                    dropdownClassName="fav-save-dropdown-menu"
                     options={kindDropdownOptions}
                     value={filterKinds}
                     onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
@@ -593,6 +597,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   </label>
                   <Dropdown
                     id={`${elementIdPrefix}-favorite-filter-namespaces`}
+                    dropdownClassName="fav-save-dropdown-menu"
                     options={nsFilterDropdownOptions}
                     value={filterNamespaces}
                     onChange={(val) =>

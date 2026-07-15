@@ -52,10 +52,12 @@ describe('TablePaginationControls', () => {
       container.querySelector<HTMLElement>('[role="combobox"]')?.click();
     });
 
-    expect(container.querySelector('[role="listbox"]')).not.toBeNull();
+    const menu = document.body.querySelector('[role="listbox"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.classList.contains('table-pagination-page-size-menu')).toBe(true);
 
     act(() => {
-      Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
         .find((option) => option.textContent?.includes('250'))
         ?.click();
     });

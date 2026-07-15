@@ -35,6 +35,20 @@ reference must retain its originating `clusterId`. Cluster-only resource views
 remain under `modules/cluster`; do not route Global views through the cluster
 resource manager.
 
+## Shared Transient Popups
+
+Shared dropdown menus render in a body-level portal so table, split-pane,
+modal, and docked-panel overflow cannot clip them or make them participate in
+layout. The shared dropdown owns viewport placement, available-height
+constraints, scroll/resize repositioning, outside-click containment, and popup
+keyboard registration. Consumers may provide a direct popup class through
+`dropdownClassName`; do not style a portaled menu through a trigger ancestor.
+
+A focusable body-level popup must declare its owning popup ID, and a control
+inside the owning modal must reference that ID with `aria-controls`. The shared
+modal focus trap uses that explicit relationship to keep the popup interactive
+without admitting unrelated body content into the modal focus boundary.
+
 ## Object-panel Overview rendering (descriptor-driven)
 
 The object panel's Details → Overview is rendered from per-kind **descriptors**, not bespoke

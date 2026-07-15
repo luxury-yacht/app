@@ -15,6 +15,7 @@ interface UseModalFocusTrapOptions {
 
 interface OpenModalEntry {
   id: symbol;
+  root: HTMLElement;
   surface: HTMLElement | null;
 }
 
@@ -22,6 +23,24 @@ const MANAGED_INERT_ATTR = 'data-modal-managed-inert';
 const MANAGED_ARIA_HIDDEN_ATTR = 'data-modal-managed-aria-hidden';
 
 const openModalStack: OpenModalEntry[] = [];
+
+const isOwnedFocusPortalTarget = (root: HTMLElement, target: EventTarget | null) => {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  const portal = target.closest<HTMLElement>('[data-focus-portal-owner]');
+  const ownerId = portal?.getAttribute('data-focus-portal-owner');
+  if (!ownerId) {
+    return false;
+  }
+
+  const possibleOwners = [
+    root,
+    ...Array.from(root.querySelectorAll<HTMLElement>('[aria-controls]')),
+  ];
+  return possibleOwners.some((owner) => owner.getAttribute('aria-controls') === ownerId);
+};
 
 const getTrackedBodyChildren = () =>
   Array.from(document.body.children).filter(
@@ -64,10 +83,16 @@ const syncBodyInertState = () => {
 
   pruneDisconnectedModalEntries();
 
-  const topmostSurface = openModalStack[openModalStack.length - 1]?.surface ?? null;
+  const topmostModal = openModalStack[openModalStack.length - 1] ?? null;
+  const topmostSurface = topmostModal?.surface ?? null;
 
   getTrackedBodyChildren().forEach((element) => {
-    setManagedBackgroundState(element, topmostSurface !== null && element !== topmostSurface);
+    const belongsToTopmostModal =
+      topmostModal !== null && isOwnedFocusPortalTarget(topmostModal.root, element);
+    setManagedBackgroundState(
+      element,
+      topmostSurface !== null && element !== topmostSurface && !belongsToTopmostModal
+    );
   });
 };
 
@@ -151,7 +176,7 @@ export const useModalFocusTrap = ({
       activeElement instanceof HTMLElement && !root.contains(activeElement) ? activeElement : null;
 
     const surface = root.closest<HTMLElement>('[data-modal-surface="true"]') ?? root;
-    registerOpenModal({ id: modalId, surface });
+    registerOpenModal({ id: modalId, root, surface });
 
     return () => {
       unregisterOpenModal(modalId);
@@ -174,7 +199,10 @@ export const useModalFocusTrap = ({
     }
 
     const active = document.activeElement;
-    if (active instanceof Node && root.contains(active)) {
+    if (
+      active instanceof Node &&
+      (root.contains(active) || isOwnedFocusPortalTarget(root, active))
+    ) {
       return;
     }
 
@@ -195,6 +223,10 @@ export const useModalFocusTrap = ({
 
       const activeRoot = ref.current;
       if (!activeRoot) {
+        return;
+      }
+
+      if (isOwnedFocusPortalTarget(activeRoot, document.activeElement)) {
         return;
       }
 
@@ -228,7 +260,12 @@ export const useModalFocusTrap = ({
 
       const activeRoot = ref.current;
       const target = event.target;
-      if (!activeRoot || !(target instanceof Node) || activeRoot.contains(target)) {
+      if (
+        !activeRoot ||
+        !(target instanceof Node) ||
+        activeRoot.contains(target) ||
+        isOwnedFocusPortalTarget(activeRoot, target)
+      ) {
         return;
       }
 

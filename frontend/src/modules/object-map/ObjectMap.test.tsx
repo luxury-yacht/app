@@ -1021,9 +1021,9 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
 
-    const podOption = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
-      (option) => option.textContent?.includes('Pod')
-    );
+    const podOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((option) => option.textContent?.includes('Pod'));
     expect(podOption).toBeTruthy();
 
     await act(async () => {
@@ -1060,7 +1060,7 @@ describe('ObjectMap', () => {
     });
 
     const optionByText = (text: string) =>
-      Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find((option) =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find((option) =>
         option.textContent?.includes(text)
       );
     const podOption = optionByText('Pod');
@@ -1118,7 +1118,7 @@ describe('ObjectMap', () => {
     });
 
     const serviceOption = Array.from(
-      container.querySelectorAll<HTMLElement>('.dropdown-option')
+      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
     ).find((option) => option.textContent?.includes('svc'));
     expect(serviceOption).toBeTruthy();
 

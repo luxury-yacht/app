@@ -767,6 +767,7 @@ const NodeLogsTab = ({
                 placeholder={loading ? 'Loading logs…' : 'Select log source'}
                 size="compact"
                 className="logs-viewer-selector-dropdown"
+                dropdownClassName="node-log-source-menu"
                 ariaLabel="Node log source"
                 renderOption={(option) => {
                   if (option.group === 'header') {

@@ -119,7 +119,7 @@ describe('CatalogPaginationFooter', () => {
       container.querySelector<HTMLElement>('[role="combobox"]')?.click();
     });
     act(() => {
-      Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
         .find((option) => option.textContent?.includes('250'))
         ?.click();
     });

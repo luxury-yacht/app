@@ -17,3 +17,5 @@
 - Combined namespace Workloads and Pods into independently filterable,
   sortable, paginated tables with a collapsible, resizable split. Selecting a
   workload scopes the Pods table through ReplicaSet and Job ownership.
+- Rendered shared dropdown menus in a viewport-aware overlay so opening one no
+  longer resizes or clips tables beside split panes and docked panels.

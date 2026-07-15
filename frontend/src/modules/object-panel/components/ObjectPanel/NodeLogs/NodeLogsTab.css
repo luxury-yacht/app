@@ -1,4 +1,4 @@
-.logs-viewer-selector-dropdown .dropdown-group-header {
+.dropdown-menu.node-log-source-menu .dropdown-group-header {
   text-transform: none;
   border: none;
   color: var(--color-text-secondary);

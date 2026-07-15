@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
@@ -17,6 +18,16 @@ import {
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
+
+type DropdownMenuStyle = React.CSSProperties & {
+  '--dropdown-menu-anchor-width': string;
+  '--dropdown-menu-available-height': string;
+};
+
+const DROPDOWN_MENU_GAP = 2;
+const DROPDOWN_VIEWPORT_PADDING = 8;
+const DROPDOWN_MENU_MAX_HEIGHT = 400;
+const DROPDOWN_MENU_MIN_VISIBLE_HEIGHT = 48;
 
 const Dropdown = <TMetadata,>({
   options,
@@ -66,6 +77,12 @@ const Dropdown = <TMetadata,>({
 
   const [isFocused, setIsFocused] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<DropdownMenuStyle>({
+    position: 'fixed',
+    visibility: 'hidden',
+    '--dropdown-menu-anchor-width': '0px',
+    '--dropdown-menu-available-height': `${DROPDOWN_MENU_MAX_HEIGHT}px`,
+  });
   const menuScrollTopRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const generatedId = React.useId().replace(/:/g, '');
@@ -75,26 +92,35 @@ const Dropdown = <TMetadata,>({
     isOpen && highlightedIndex >= 0 ? `${controlId}-option-${highlightedIndex}` : undefined;
 
   useEffect(() => {
-    const node = dropdownRef.current;
-    if (!node) {
+    const nodes = [dropdownRef.current, isOpen ? menuRef.current : null].filter(
+      (node): node is HTMLDivElement => node !== null
+    );
+    if (nodes.length === 0) {
       return;
     }
 
     const handleFocusIn = () => setIsFocused(true);
     const handleFocusOut = (event: FocusEvent) => {
       const nextTarget = event.relatedTarget as Node | null;
-      if (!nextTarget || !node.contains(nextTarget)) {
+      if (
+        !nextTarget ||
+        (!dropdownRef.current?.contains(nextTarget) && !menuRef.current?.contains(nextTarget))
+      ) {
         setIsFocused(false);
       }
     };
 
-    node.addEventListener('focusin', handleFocusIn);
-    node.addEventListener('focusout', handleFocusOut);
+    nodes.forEach((node) => {
+      node.addEventListener('focusin', handleFocusIn);
+      node.addEventListener('focusout', handleFocusOut);
+    });
     return () => {
-      node.removeEventListener('focusin', handleFocusIn);
-      node.removeEventListener('focusout', handleFocusOut);
+      nodes.forEach((node) => {
+        node.removeEventListener('focusin', handleFocusIn);
+        node.removeEventListener('focusout', handleFocusOut);
+      });
     };
-  }, [dropdownRef]);
+  }, [dropdownRef, isOpen, menuRef]);
 
   const effectiveSearchQuery = searchValue ?? searchQuery;
 
@@ -288,31 +314,112 @@ const Dropdown = <TMetadata,>({
   const [dropdownPosition, setDropdownPosition] = React.useState<'bottom' | 'top'>('bottom');
   const [horizontalPosition, setHorizontalPosition] = React.useState<'start' | 'end'>('start');
 
-  useEffect(() => {
-    if (isOpen && triggerRef.current && menuRef.current) {
-      const triggerRect = triggerRef.current.getBoundingClientRect();
-      const menuHeight = menuRef.current.offsetHeight;
-      const menuWidth = menuRef.current.offsetWidth;
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
-
-      const spaceBelow = viewportHeight - triggerRect.bottom;
-      const spaceAbove = triggerRect.top;
-      const spaceRight = viewportWidth - triggerRect.left;
-      const spaceLeft = triggerRect.right;
-
-      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-        setDropdownPosition('top');
-      } else {
-        setDropdownPosition('bottom');
-      }
-
-      if (spaceRight < menuWidth && spaceLeft > spaceRight) {
-        setHorizontalPosition('end');
-      } else {
-        setHorizontalPosition('start');
-      }
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current || !menuRef.current) {
+      return;
     }
+
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+
+    const positionMenu = () => {
+      const triggerRect = trigger.getBoundingClientRect();
+      const parsedZoomFactor = Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
+      );
+      const zoomFactor =
+        Number.isFinite(parsedZoomFactor) && parsedZoomFactor > 0 ? parsedZoomFactor : 1;
+      const viewportHeight = window.innerHeight / zoomFactor;
+      const viewportWidth = window.innerWidth / zoomFactor;
+      const viewportMenuWidth = Math.max(0, viewportWidth - DROPDOWN_VIEWPORT_PADDING * 2);
+      const viewportMenuHeight = Math.max(0, viewportHeight - DROPDOWN_VIEWPORT_PADDING * 2);
+      const anchorWidth = Math.min(triggerRect.width, viewportMenuWidth);
+
+      menu.style.setProperty('--dropdown-menu-anchor-width', `${anchorWidth}px`);
+      menu.style.setProperty(
+        '--dropdown-menu-available-height',
+        `${Math.min(DROPDOWN_MENU_MAX_HEIGHT, viewportMenuHeight)}px`
+      );
+      menu.style.maxWidth = `${viewportMenuWidth}px`;
+
+      const measuredMenuWidth = Math.min(
+        Math.max(menu.offsetWidth, anchorWidth),
+        viewportMenuWidth
+      );
+      const measuredMenuHeight = Math.min(menu.offsetHeight, DROPDOWN_MENU_MAX_HEIGHT);
+      const spaceBelow = Math.max(
+        0,
+        viewportHeight - DROPDOWN_VIEWPORT_PADDING - triggerRect.bottom - DROPDOWN_MENU_GAP
+      );
+      const spaceAbove = Math.max(
+        0,
+        triggerRect.top - DROPDOWN_VIEWPORT_PADDING - DROPDOWN_MENU_GAP
+      );
+      const nextVerticalPosition =
+        measuredMenuHeight <= spaceBelow || spaceBelow >= spaceAbove ? 'bottom' : 'top';
+      const selectedSpace = nextVerticalPosition === 'bottom' ? spaceBelow : spaceAbove;
+      const availableHeight = Math.min(
+        DROPDOWN_MENU_MAX_HEIGHT,
+        viewportMenuHeight,
+        Math.max(selectedSpace, Math.min(DROPDOWN_MENU_MIN_VISIBLE_HEIGHT, viewportMenuHeight))
+      );
+
+      menu.style.setProperty('--dropdown-menu-available-height', `${availableHeight}px`);
+      const renderedMenuHeight = Math.min(menu.offsetHeight, availableHeight);
+      const maxLeft = Math.max(
+        DROPDOWN_VIEWPORT_PADDING,
+        viewportWidth - DROPDOWN_VIEWPORT_PADDING - measuredMenuWidth
+      );
+      const preferredLeft = triggerRect.left;
+      const left = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(preferredLeft, maxLeft));
+      const maxTop = Math.max(
+        DROPDOWN_VIEWPORT_PADDING,
+        viewportHeight - DROPDOWN_VIEWPORT_PADDING - renderedMenuHeight
+      );
+      const preferredTop =
+        nextVerticalPosition === 'bottom'
+          ? triggerRect.bottom + DROPDOWN_MENU_GAP
+          : triggerRect.top - DROPDOWN_MENU_GAP - renderedMenuHeight;
+      const top = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(preferredTop, maxTop));
+      const nextHorizontalPosition =
+        preferredLeft + measuredMenuWidth > viewportWidth - DROPDOWN_VIEWPORT_PADDING
+          ? 'end'
+          : 'start';
+
+      setDropdownPosition(nextVerticalPosition);
+      setHorizontalPosition(nextHorizontalPosition);
+      setMenuStyle({
+        position: 'fixed',
+        top,
+        right: 'auto',
+        bottom: 'auto',
+        left,
+        maxWidth: viewportMenuWidth,
+        visibility: 'visible',
+        '--dropdown-menu-anchor-width': `${anchorWidth}px`,
+        '--dropdown-menu-available-height': `${availableHeight}px`,
+      });
+    };
+
+    positionMenu();
+    document.addEventListener('scroll', positionMenu, true);
+    window.addEventListener('resize', positionMenu);
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(positionMenu);
+    resizeObserver?.observe(trigger);
+    resizeObserver?.observe(menu);
+    let ancestor = trigger.parentElement;
+    while (ancestor) {
+      resizeObserver?.observe(ancestor);
+      ancestor = ancestor.parentElement;
+    }
+
+    return () => {
+      document.removeEventListener('scroll', positionMenu, true);
+      window.removeEventListener('resize', positionMenu);
+      resizeObserver?.disconnect();
+    };
   }, [isOpen, menuRef, triggerRef]);
 
   const containerClasses = [
@@ -330,6 +437,7 @@ const Dropdown = <TMetadata,>({
 
   const menuClasses = [
     'dropdown-menu',
+    'dropdown-menu--portal',
     `position-${dropdownPosition}`,
     `position-horizontal-${horizontalPosition}`,
     dropdownClassName,
@@ -347,26 +455,37 @@ const Dropdown = <TMetadata,>({
     return Boolean(active?.classList.contains('search-input'));
   };
 
+  const handleDropdownKeyDown = (event: KeyboardEvent) => {
+    if (event.key === ' ' && isTypingInSearch()) {
+      return false;
+    }
+
+    const result = handleKeyAction(event.key);
+    if (result === 'handled-no-prevent') {
+      return 'handled-no-prevent' as const;
+    }
+    if (result === 'handled') {
+      return true;
+    }
+    return false;
+  };
+
   useKeyboardSurface({
     kind: 'dropdown',
     rootRef: dropdownRef,
     active: shortcutsEnabled,
     priority: 350,
     suppressShortcuts: true,
-    onKeyDown: (event) => {
-      if (event.key === ' ' && isTypingInSearch()) {
-        return false;
-      }
+    onKeyDown: handleDropdownKeyDown,
+  });
 
-      const result = handleKeyAction(event.key);
-      if (result === 'handled-no-prevent') {
-        return 'handled-no-prevent';
-      }
-      if (result === 'handled') {
-        return true;
-      }
-      return false;
-    },
+  useKeyboardSurface({
+    kind: 'dropdown',
+    rootRef: menuRef,
+    active: isOpen,
+    priority: 350,
+    suppressShortcuts: true,
+    onKeyDown: handleDropdownKeyDown,
   });
 
   const handleSearchInputChange = (nextValue: string) => {
@@ -443,144 +562,154 @@ const Dropdown = <TMetadata,>({
       )}
 
       {/* Menu */}
-      {isOpen && !disabled && !loading && (
-        <div
-          ref={menuRef}
-          className={menuClasses}
-          role="listbox"
-          aria-multiselectable={multiple}
-          id={menuId}
-        >
-          {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
-            <div className="dropdown-menu-controls">
-              {!!searchable && (
-                <div className="search-container">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    className="search-input"
-                    placeholder={searchPlaceholder}
-                    value={effectiveSearchQuery}
-                    onChange={(e) => handleSearchInputChange(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setIsSearchFocused(false)}
-                    role="combobox"
-                    aria-label={searchPlaceholder}
-                    aria-autocomplete="list"
-                    aria-expanded="true"
-                    aria-controls={menuId}
-                    aria-activedescendant={activeOptionId}
-                  />
-                </div>
-              )}
-
-              {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
-                <div
-                  className={`dropdown-bulk-actions icon-bar${
-                    showBulkActionLabels ? ' dropdown-bulk-actions--labeled' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className={`dropdown-bulk-action icon-bar-button${
-                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectAll();
-                    }}
-                    disabled={selectableSelectedCount === selectableFilteredValues.length}
-                    title="Select all"
-                    aria-label="Select all"
-                  >
-                    <DropdownSelectAllIcon width={20} height={20} />
-                    {showBulkActionLabels && (
-                      <span className="dropdown-bulk-action-label">All</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className={`dropdown-bulk-action icon-bar-button${
-                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectNone();
-                    }}
-                    disabled={selectableSelectedCount === 0}
-                    title="Select none"
-                    aria-label="Select none"
-                  >
-                    <DropdownSelectNoneIcon width={20} height={20} />
-                    {showBulkActionLabels && (
-                      <span className="dropdown-bulk-action-label">None</span>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {filteredOptions.length === 0 ? (
-            <div className="no-options">No options available</div>
-          ) : (
-            filteredOptions.map((option, index) => {
-              const optionIsSelected = isSelected(option.value);
-              const optionIsHighlighted = index === highlightedIndex;
-              const isGroupHeader = option.group === 'header';
-              const isSeparator = isGroupHeader && option.label.trim().length === 0;
-
-              if (isGroupHeader) {
-                return isSeparator ? (
-                  <hr key={option.value} className="dropdown-separator" />
-                ) : (
-                  <div key={option.value} className="dropdown-group-header" role="presentation">
-                    {renderOption ? renderOption(option, false) : option.label}
+      {isOpen &&
+        !disabled &&
+        !loading &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={menuClasses}
+            style={menuStyle}
+            role="listbox"
+            aria-multiselectable={multiple}
+            id={menuId}
+            data-focus-portal-owner={menuId}
+          >
+            {(searchable ||
+              (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
+              <div className="dropdown-menu-controls">
+                {!!searchable && (
+                  <div className="search-container">
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      className="search-input"
+                      placeholder={searchPlaceholder}
+                      value={effectiveSearchQuery}
+                      onChange={(e) => handleSearchInputChange(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                      role="combobox"
+                      aria-label={searchPlaceholder}
+                      aria-autocomplete="list"
+                      aria-expanded="true"
+                      aria-controls={menuId}
+                      aria-activedescendant={activeOptionId}
+                    />
                   </div>
-                );
-              }
+                )}
 
-              const optionAriaSelected = multiple
-                ? optionIsSelected
-                : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
-              return (
-                <button
-                  type="button"
-                  key={option.value}
-                  id={`${controlId}-option-${index}`}
-                  className={[
-                    'dropdown-option',
-                    optionIsSelected && 'selected',
-                    optionIsHighlighted && 'highlighted',
-                    option.disabled && 'disabled',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  onClick={() => selectOption(option.value)}
-                  onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
-                  role="option"
-                  aria-selected={optionAriaSelected}
-                  aria-disabled={option.disabled}
-                  disabled={option.disabled}
-                  tabIndex={-1}
-                >
-                  {renderOption ? (
-                    renderOption(option, optionIsSelected)
-                  ) : (
-                    <>
-                      {!!multiple && (
-                        <span className="dropdown-filter-check">{optionIsSelected ? '✓' : ''}</span>
+                {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
+                  <div
+                    className={`dropdown-bulk-actions icon-bar${
+                      showBulkActionLabels ? ' dropdown-bulk-actions--labeled' : ''
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className={`dropdown-bulk-action icon-bar-button${
+                        showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectAll();
+                      }}
+                      disabled={selectableSelectedCount === selectableFilteredValues.length}
+                      title="Select all"
+                      aria-label="Select all"
+                    >
+                      <DropdownSelectAllIcon width={20} height={20} />
+                      {showBulkActionLabels && (
+                        <span className="dropdown-bulk-action-label">All</span>
                       )}
-                      <span className="option-label">{option.label}</span>
-                    </>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+                    </button>
+                    <button
+                      type="button"
+                      className={`dropdown-bulk-action icon-bar-button${
+                        showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectNone();
+                      }}
+                      disabled={selectableSelectedCount === 0}
+                      title="Select none"
+                      aria-label="Select none"
+                    >
+                      <DropdownSelectNoneIcon width={20} height={20} />
+                      {showBulkActionLabels && (
+                        <span className="dropdown-bulk-action-label">None</span>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {filteredOptions.length === 0 ? (
+              <div className="no-options">No options available</div>
+            ) : (
+              filteredOptions.map((option, index) => {
+                const optionIsSelected = isSelected(option.value);
+                const optionIsHighlighted = index === highlightedIndex;
+                const isGroupHeader = option.group === 'header';
+                const isSeparator = isGroupHeader && option.label.trim().length === 0;
+
+                if (isGroupHeader) {
+                  return isSeparator ? (
+                    <hr key={option.value} className="dropdown-separator" />
+                  ) : (
+                    <div key={option.value} className="dropdown-group-header" role="presentation">
+                      {renderOption ? renderOption(option, false) : option.label}
+                    </div>
+                  );
+                }
+
+                const optionAriaSelected = multiple
+                  ? optionIsSelected
+                  : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
+                return (
+                  <button
+                    type="button"
+                    key={option.value}
+                    id={`${controlId}-option-${index}`}
+                    className={[
+                      'dropdown-option',
+                      optionIsSelected && 'selected',
+                      optionIsHighlighted && 'highlighted',
+                      option.disabled && 'disabled',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => selectOption(option.value)}
+                    onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
+                    role="option"
+                    aria-selected={optionAriaSelected}
+                    aria-disabled={option.disabled}
+                    disabled={option.disabled}
+                    tabIndex={-1}
+                  >
+                    {renderOption ? (
+                      renderOption(option, optionIsSelected)
+                    ) : (
+                      <>
+                        {!!multiple && (
+                          <span className="dropdown-filter-check">
+                            {optionIsSelected ? '✓' : ''}
+                          </span>
+                        )}
+                        <span className="option-label">{option.label}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>,
+          document.body
+        )}
 
       {/* Hidden input for form integration */}
       {!!name && (

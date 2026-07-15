@@ -2,13 +2,16 @@ import { KeyboardProvider } from '@ui/shortcuts/context';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Dropdown from '../dropdowns/Dropdown/Dropdown';
 import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocusTrap';
 
 const TestModal: React.FC<{
   disabled?: boolean;
   onEscape?: (event: KeyboardEvent) => boolean | undefined;
-}> = ({ disabled = false, onEscape }) => {
+  withDropdown?: boolean;
+}> = ({ disabled = false, onEscape, withDropdown = false }) => {
   const ref = React.useRef<HTMLDivElement>(null);
+  const dropdownId = React.useId();
 
   useModalFocusTrap({
     ref,
@@ -19,6 +22,19 @@ const TestModal: React.FC<{
   return (
     <div ref={ref} className="modal-container" role="dialog" aria-modal="true" tabIndex={-1}>
       <input aria-label="First input" />
+      {withDropdown ? (
+        <Dropdown
+          id={dropdownId}
+          ariaLabel="Modal dropdown"
+          options={[
+            { value: 'alpha', label: 'Alpha' },
+            { value: 'beta', label: 'Beta' },
+          ]}
+          value=""
+          onChange={vi.fn()}
+          searchable
+        />
+      ) : null}
       <button type="button">Second</button>
     </div>
   );
@@ -164,6 +180,31 @@ describe('useModalFocusTrap', () => {
 
     expect(onEscape).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('keeps focus in a dropdown menu portaled by the active modal', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <TestModal withDropdown />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const trigger = document.querySelector<HTMLButtonElement>('[aria-label="Modal dropdown"]');
+    expect(trigger).not.toBeNull();
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const menuId = trigger?.getAttribute('aria-controls');
+    const menu = menuId ? document.getElementById(menuId) : null;
+    const searchInput = menu?.querySelector<HTMLInputElement>('.search-input') ?? null;
+    expect(searchInput).not.toBeNull();
+    expect(document.activeElement).toBe(searchInput);
   });
 
   it('reset helper clears managed background inert state', async () => {

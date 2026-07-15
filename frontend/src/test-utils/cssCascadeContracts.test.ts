@@ -37,7 +37,8 @@ describe('strict CSS cascade contracts', () => {
     );
     style.dataset.cssContract = 'kubeconfig';
     document.body.innerHTML = `
-      <div class="fav-save-modal">
+      <div class="fav-save-modal"></div>
+      <div class="dropdown-menu fav-save-dropdown-menu">
         <div class="dropdown-option selected"><span class="kubeconfig-option"></span></div>
       </div>
     `;

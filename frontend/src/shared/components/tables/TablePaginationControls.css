@@ -38,8 +38,8 @@
   text-align: right;
 }
 
-.table-pagination-page-size .dropdown-menu {
-  min-width: 5rem;
+.dropdown-menu.table-pagination-page-size-menu {
+  min-width: max(5rem, var(--dropdown-menu-anchor-width));
 }
 
 .table-pagination-status {
