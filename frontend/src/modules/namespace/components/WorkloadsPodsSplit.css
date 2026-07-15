@@ -1,11 +1,39 @@
 .workloads-pods-split {
   --workloads-pods-upper-size: 50%;
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: var(--dock-right-offset, 0px);
+  bottom: var(--dock-bottom-offset, 0px);
+  left: 0;
   display: grid;
   grid-template-rows: minmax(0, var(--workloads-pods-upper-size)) auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+.content-body .workloads-pods-split .gridtable-wrapper,
+.content-body .workloads-pods-split .gridtable-header-container,
+.content-body .workloads-pods-split .gridtable-pagination {
+  margin-right: 0;
+  margin-bottom: 0;
+}
+
+body.dock-right-open .content-body .workloads-pods-split {
+  transition: right 0.3s ease-out;
+}
+
+body.dock-bottom-open .content-body .workloads-pods-split {
+  transition: bottom 0.3s ease-out;
+}
+
+body.dock-right-open.dock-bottom-open .content-body .workloads-pods-split {
+  transition:
+    right 0.3s ease-out,
+    bottom 0.3s ease-out;
+}
+
+body.dockable-panel-resizing .content-body .workloads-pods-split {
+  transition: none;
 }
 
 .workloads-pods-split--collapsed {

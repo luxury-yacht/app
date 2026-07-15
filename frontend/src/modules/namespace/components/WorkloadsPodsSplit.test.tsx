@@ -140,6 +140,18 @@ describe('WorkloadsPodsSplit', () => {
     expect(resizerRule).not.toContain('inset: 0;');
   });
 
+  it('consumes dock offsets once at the split boundary instead of once per table', () => {
+    const splitRule = splitStyles.match(/\.workloads-pods-split\s*{([^}]*)}/)?.[1];
+    const nestedTableRule = splitStyles.match(
+      /\.content-body \.workloads-pods-split \.gridtable-wrapper,[^{]+{([^}]*)}/
+    )?.[1];
+
+    expect(splitRule).toContain('right: var(--dock-right-offset, 0px);');
+    expect(splitRule).toContain('bottom: var(--dock-bottom-offset, 0px);');
+    expect(nestedTableRule).toContain('margin-right: 0;');
+    expect(nestedTableRule).toContain('margin-bottom: 0;');
+  });
+
   it('collapses and restores the Pods pane without removing its header control', () => {
     act(() => {
       root.render(
