@@ -32,12 +32,14 @@ const { mocks } = vi.hoisted(() => ({
       loadKubeconfigs: vi.fn(),
     },
     viewState: {
+      viewType: 'cluster' as 'cluster' | 'global',
       sidebarSelection: undefined as { type: 'namespace'; value: string } | undefined,
       setIsAboutOpen: vi.fn(),
       setIsSettingsOpen: vi.fn(),
       setIsObjectDiffOpen: vi.fn(),
       onClusterObjectsClick: vi.fn(),
       setActiveClusterView: vi.fn(),
+      navigateToGlobal: vi.fn(),
       navigateToNamespace: vi.fn(),
       setActiveNamespaceTab: vi.fn(),
       onNamespaceSelect: vi.fn(),
@@ -169,6 +171,7 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.openKubeconfig.mockResolvedValue(undefined);
     mocks.kubeconfig.closeKubeconfig.mockReset();
     mocks.kubeconfig.closeKubeconfig.mockResolvedValue(undefined);
+    mocks.viewState.viewType = 'cluster';
     mocks.viewState.sidebarSelection = undefined;
     mocks.kubeconfig.loadKubeconfigs.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
@@ -213,12 +216,17 @@ describe('CommandPaletteCommands', () => {
 
     const { getCommands, unmount } = renderHook();
     const navigationViewIds = getCommands()
-      .filter((command) => command.id.startsWith('cluster-') || command.id.startsWith('namespace-'))
+      .filter(
+        (command) =>
+          command.id.startsWith('global-') ||
+          command.id.startsWith('cluster-') ||
+          command.id.startsWith('namespace-')
+      )
       .map((command) => command.id);
 
     expect(navigationViewIds).toEqual([
-      'cluster-fleet',
-      'cluster-global-namespaces',
+      'global-fleet',
+      'global-global-namespaces',
       'cluster-namespaces',
       'cluster-browse',
       'cluster-events',
@@ -243,10 +251,10 @@ describe('CommandPaletteCommands', () => {
       'namespace-rbac',
     ]);
 
-    const globalClusters = getCommands().find((command) => command.id === 'cluster-fleet');
+    const globalClusters = getCommands().find((command) => command.id === 'global-fleet');
     expect(globalClusters?.label).toBe('Global - Clusters');
     const globalNamespaces = getCommands().find(
-      (command) => command.id === 'cluster-global-namespaces'
+      (command) => command.id === 'global-global-namespaces'
     );
     expect(globalNamespaces?.label).toBe('Global - Namespaces');
 
@@ -259,10 +267,25 @@ describe('CommandPaletteCommands', () => {
     const { getCommands, unmount } = renderHook();
     const commandIds = getCommands().map((command) => command.id);
 
-    expect(commandIds).not.toContain('cluster-fleet');
-    expect(commandIds).not.toContain('cluster-global-namespaces');
+    expect(commandIds).not.toContain('global-fleet');
+    expect(commandIds).not.toContain('global-global-namespaces');
     expect(commandIds).toContain('cluster-namespaces');
 
+    unmount();
+  });
+
+  it('opens Global commands through the Global workspace action', () => {
+    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
+    const { getCommands, unmount } = renderHook();
+
+    act(() => {
+      getCommands()
+        .find((command) => command.id === 'global-global-namespaces')
+        ?.action();
+    });
+
+    expect(mocks.viewState.navigateToGlobal).toHaveBeenCalledWith('global-namespaces');
+    expect(mocks.viewState.onClusterObjectsClick).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -440,6 +463,23 @@ describe('CommandPaletteCommands', () => {
     expect(mocks.kubeconfig.closeKubeconfig).toHaveBeenCalledWith('/kube/beta:prod');
     expect(mocks.kubeconfig.loadKubeconfigs).not.toHaveBeenCalled();
     expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('does not close the foreground cluster while the Global workspace is active', async () => {
+    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
+    mocks.kubeconfig.selectedKubeconfig = '/kube/beta:prod';
+    mocks.viewState.viewType = 'global';
+
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'close-cluster-tab');
+
+    await act(async () => {
+      command?.action();
+      await Promise.resolve();
+    });
+
+    expect(mocks.kubeconfig.closeKubeconfig).not.toHaveBeenCalled();
     unmount();
   });
 

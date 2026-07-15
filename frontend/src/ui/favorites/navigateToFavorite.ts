@@ -8,6 +8,7 @@
  * navigation is handled by the FavoritesContext effect once the cluster is ready.
  */
 
+import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import type { Favorite } from '@/core/persistence/favorites';
 
 export interface NavigationContexts {
@@ -45,8 +46,10 @@ export function navigateToFavorite(
 
   setPendingFavorite(favorite);
 
+  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
   const favoriteClusterId = favorite.clusterId?.trim() ?? '';
-  const isClusterSpecific = favorite.clusterSelection !== '' || favoriteClusterId !== '';
+  const isClusterSpecific =
+    route.scope !== 'global' && (favorite.clusterSelection !== '' || favoriteClusterId !== '');
 
   if (isClusterSpecific) {
     const clusterSelection =

@@ -11,3 +11,6 @@
   and All Namespaces Events, with searchable high-cardinality options.
 
 ### Changed
+
+- Made Global a first-class workspace with its own tab and retained navigation,
+  independent of the foreground cluster tab.

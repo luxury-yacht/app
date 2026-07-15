@@ -43,6 +43,18 @@ also use the shared drag coordinator.
 - Dockable tab movement must preserve panel identity, group membership, active
   tab state, and cluster/object identity.
 
+## Global Workspace Tab
+
+The cluster strip prepends a synthetic `__global__` tab only while more than
+one cluster is open. It uses the shared `Tabs` renderer but is not part of
+persisted cluster ordering, close behavior, or drag payloads. DOM drop indices
+must be translated past this synthetic tab before updating cluster order.
+
+When Global is active, no cluster tab is selected. Clicking a cluster tab exits
+Global before changing the foreground kubeconfig; clicking Global preserves the
+foreground kubeconfig and restores the last Global view. See
+[navigation.md](navigation.md).
+
 ## Change Checklist
 
 When changing tabs:

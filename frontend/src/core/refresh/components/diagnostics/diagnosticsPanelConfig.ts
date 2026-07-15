@@ -54,8 +54,6 @@ export const STREAM_MODE_BY_NAME: Record<StreamTelemetryName, 'streaming' | 'wat
 const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey[]> = {
-  fleet: OVERVIEW_FEATURES,
-  'global-namespaces': [], // Each contributing scope is permission-gated by the namespaces domain.
   namespaces: [], // The view is backed by the permission-gated namespaces domain.
   nodes: [PERMISSION_FEATURES.clusterNodes, PERMISSION_FEATURES.nodeActions],
   rbac: [PERMISSION_FEATURES.clusterRBAC],
@@ -90,6 +88,11 @@ export const getScopedFeaturesForView = (
 ): readonly PermissionFeatureKey[] => {
   if (viewType === 'overview') {
     return OVERVIEW_FEATURES;
+  }
+  if (viewType === 'global') {
+    // Global views aggregate independently permission-gated per-cluster scopes;
+    // selected-cluster permission rows would not describe that workspace.
+    return [];
   }
   if (viewType === 'cluster') {
     return clusterTab ? (CLUSTER_FEATURE_MAP[clusterTab] ?? []) : [];

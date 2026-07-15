@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   setActiveKubeconfig: vi.fn(),
   setClusterNavigationTarget: vi.fn(),
+  activateClusterWorkspace: vi.fn(),
   setSidebarSelectionForCluster: vi.fn(),
   setSelectedNamespace: vi.fn(),
   tableProps: null as null | Record<string, unknown>,
@@ -103,7 +104,10 @@ vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({ setClusterNavigationTarget: mocks.setClusterNavigationTarget }),
+  useViewState: () => ({
+    setClusterNavigationTarget: mocks.setClusterNavigationTarget,
+    activateClusterWorkspace: mocks.activateClusterWorkspace,
+  }),
 }));
 
 vi.mock('@core/contexts/SidebarStateContext', () => ({
@@ -361,6 +365,7 @@ describe('GlobalViewNamespaces', () => {
       value: 'payments',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
     expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
@@ -368,6 +373,9 @@ describe('GlobalViewNamespaces', () => {
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
     expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
+    );
+    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
 
@@ -420,10 +428,14 @@ describe('GlobalViewNamespaces', () => {
       value: 'overview',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
     expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
     expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
+    );
+    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
 

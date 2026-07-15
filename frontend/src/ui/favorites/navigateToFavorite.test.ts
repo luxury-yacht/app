@@ -82,4 +82,23 @@ describe('navigateToFavorite', () => {
     await Promise.resolve();
     expect(setActiveKubeconfig).not.toHaveBeenCalled();
   });
+
+  it('does not activate a cluster for a legacy Global favorite', () => {
+    const openKubeconfig = vi.fn().mockResolvedValue(undefined);
+    const setActiveKubeconfig = vi.fn();
+    const setPendingFavorite = vi.fn();
+    const favorite = makeFavorite({ viewType: 'cluster', view: 'fleet' });
+
+    navigateToFavorite(favorite, {
+      selectedKubeconfigs: ['/kube/alpha:dev', '/kube/beta:prod'],
+      selectedClusterId: 'beta:prod',
+      openKubeconfig,
+      setActiveKubeconfig,
+      setPendingFavorite,
+    });
+
+    expect(setPendingFavorite).toHaveBeenCalledWith(favorite);
+    expect(openKubeconfig).not.toHaveBeenCalled();
+    expect(setActiveKubeconfig).not.toHaveBeenCalled();
+  });
 });

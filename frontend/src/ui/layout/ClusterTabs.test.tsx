@@ -10,7 +10,7 @@ import {
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-import ClusterTabs from '@ui/layout/ClusterTabs';
+import ClusterTabs, { toClusterInsertIndex } from '@ui/layout/ClusterTabs';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +21,7 @@ type MockState = {
   selectedKubeconfig: string;
   setSelectedKubeconfigs: (next: string[]) => Promise<void>;
   closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
-  setActiveKubeconfig: (config: string) => void;
+  setActiveKubeconfig: ReturnType<typeof vi.fn<(config: string) => void>>;
   getClusterMeta: (config: string) => { id: string; name: string };
   loadKubeconfigs: () => Promise<void>;
 };
@@ -36,8 +36,18 @@ const mockState: MockState = {
   loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
 };
 
+const viewState = {
+  viewType: 'overview',
+  navigateToGlobal: vi.fn(),
+  activateClusterWorkspace: vi.fn(),
+};
+
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => mockState,
+}));
+
+vi.mock('@core/contexts/ViewStateContext', () => ({
+  useViewState: () => viewState,
 }));
 
 describe('ClusterTabs', () => {
@@ -54,7 +64,11 @@ describe('ClusterTabs', () => {
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
     mockState.closeKubeconfig = vi.fn().mockResolvedValue(undefined);
     mockState.setActiveKubeconfig = vi.fn();
+    mockState.getClusterMeta = (config: string) => ({ id: config, name: config });
     mockState.loadKubeconfigs = vi.fn().mockResolvedValue(undefined);
+    viewState.viewType = 'overview';
+    viewState.navigateToGlobal.mockReset();
+    viewState.activateClusterWorkspace.mockReset();
     vi.clearAllMocks();
   });
 
@@ -75,6 +89,13 @@ describe('ClusterTabs', () => {
     });
   };
 
+  it('excludes the synthetic Global tab from persisted drag positions', () => {
+    expect(toClusterInsertIndex(0, true)).toBe(0);
+    expect(toClusterInsertIndex(1, true)).toBe(0);
+    expect(toClusterInsertIndex(2, true)).toBe(1);
+    expect(toClusterInsertIndex(2, false)).toBe(2);
+  });
+
   it('renders the tab strip with a single cluster open', async () => {
     mockState.selectedKubeconfigs = ['a'];
     mockState.selectedKubeconfig = 'a';
@@ -85,6 +106,67 @@ describe('ClusterTabs', () => {
       (node as HTMLElement).textContent?.trim()
     );
     expect(labels).toEqual(['a']);
+  });
+
+  it('renders a non-closeable Global tab only when multiple clusters are open', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs();
+
+    const globalTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
+      (tab) => tab.querySelector('.tab-item__label')?.textContent === 'Global'
+    );
+    expect(globalTab).toBeTruthy();
+    expect(globalTab?.querySelector('.tab-item__close')).toBeNull();
+
+    mockState.selectedKubeconfigs = ['a'];
+    await renderTabs({ onOpenCluster: vi.fn() });
+    expect(
+      Array.from(container.querySelectorAll('.tab-item__label')).some(
+        (label) => label.textContent === 'Global'
+      )
+    ).toBe(false);
+  });
+
+  it('selects Global independently from the foreground cluster', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    mockState.selectedKubeconfig = 'a';
+    viewState.viewType = 'global';
+    await renderTabs();
+
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    const globalTab = tabs.find((tab) => tab.textContent?.trim() === 'Global');
+    const clusterTab = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as HTMLElement;
+    expect(globalTab?.getAttribute('aria-selected')).toBe('true');
+    expect(
+      tabs.find((tab) => tab.textContent?.trim().startsWith('a'))?.getAttribute('aria-selected')
+    ).toBe('false');
+
+    act(() => {
+      clusterTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(viewState.activateClusterWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockState.setActiveKubeconfig).toHaveBeenCalledWith('b');
+    expect(viewState.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
+      mockState.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('enters Global without changing the foreground cluster', async () => {
+    mockState.selectedKubeconfigs = ['a', 'b'];
+    mockState.selectedKubeconfig = 'a';
+    await renderTabs();
+
+    const globalTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
+      (tab) => tab.textContent?.trim() === 'Global'
+    ) as HTMLElement;
+    act(() => {
+      globalTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(viewState.navigateToGlobal).toHaveBeenCalledTimes(1);
+    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
   });
 
   it('renders only the add-cluster button when no clusters are open', async () => {
@@ -198,7 +280,7 @@ describe('ClusterTabs', () => {
     const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
       (node as HTMLElement).textContent?.trim()
     );
-    expect(labels).toEqual(['b', 'a', 'c']);
+    expect(labels).toEqual(['Global', 'b', 'a', 'c']);
   });
 
   it('uses persisted order when available', async () => {
@@ -210,7 +292,7 @@ describe('ClusterTabs', () => {
     const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
       (node as HTMLElement).textContent?.trim()
     );
-    expect(labels).toEqual(['b', 'a']);
+    expect(labels).toEqual(['Global', 'b', 'a']);
   });
 
   it('invokes setActiveKubeconfig when a tab is clicked', async () => {
@@ -237,8 +319,8 @@ describe('ClusterTabs', () => {
     await renderTabs();
 
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    const targetTab = tabs.find((tab) =>
-      tab.querySelector('.tab-item__label')?.textContent?.includes('b')
+    const targetTab = tabs.find(
+      (tab) => tab.querySelector('.tab-item__label')?.textContent === 'b'
     );
     const closeButton = targetTab?.querySelector('.tab-item__close') as HTMLElement;
 
@@ -264,8 +346,8 @@ describe('ClusterTabs', () => {
 
     const closeButtonFor = (label: string) => {
       const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-      const tab = tabs.find((node) =>
-        node.querySelector('.tab-item__label')?.textContent?.includes(label)
+      const tab = tabs.find(
+        (node) => node.querySelector('.tab-item__label')?.textContent === label
       );
       return tab?.querySelector('.tab-item__close') as HTMLElement | null;
     };
@@ -311,6 +393,6 @@ describe('ClusterTabs', () => {
     );
     // "dev" appears twice, so those tabs should show filename:context (alpha:dev, beta:dev).
     // "prod" is unique, so it shows just the context name.
-    expect(labels).toEqual(['alpha:dev', 'beta:dev', 'prod']);
+    expect(labels).toEqual(['Global', 'alpha:dev', 'beta:dev', 'prod']);
   });
 });

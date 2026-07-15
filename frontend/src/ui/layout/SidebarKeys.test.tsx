@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import {
   describeElementTarget,
+  getFocusableSidebarItems,
   type SidebarCursorTarget,
   targetsAreEqual,
   useSidebarKeyboardControls,
@@ -41,6 +42,12 @@ describe('Sidebar keyboard helpers', () => {
     ).toBe(false);
     expect(
       targetsAreEqual(
+        { kind: 'global-view', view: 'fleet' },
+        { kind: 'global-view', view: 'fleet' }
+      )
+    ).toBe(true);
+    expect(
+      targetsAreEqual(
         { kind: 'cluster-toggle', id: 'resources' },
         { kind: 'cluster-toggle', id: 'resources' }
       )
@@ -60,6 +67,14 @@ describe('Sidebar keyboard helpers', () => {
         })
       )
     ).toEqual({ kind: 'cluster-view', view: 'nodes' });
+    expect(
+      describeElementTarget(
+        buildTargetElement({
+          'data-sidebar-target-kind': 'global-view',
+          'data-sidebar-target-view': 'global-namespaces',
+        })
+      )
+    ).toEqual({ kind: 'global-view', view: 'global-namespaces' });
     expect(
       describeElementTarget(
         buildTargetElement({
@@ -101,12 +116,34 @@ describe('Sidebar keyboard helpers', () => {
     expect(
       describeElementTarget(
         buildTargetElement({
+          'data-sidebar-target-kind': 'global-view',
+          'data-sidebar-target-view': 'nodes',
+        })
+      )
+    ).toBeNull();
+    expect(
+      describeElementTarget(
+        buildTargetElement({
           'data-sidebar-target-kind': 'namespace-view',
           'data-sidebar-target-namespace': 'dev',
           'data-sidebar-target-view': 'not-a-view',
         })
       )
     ).toBeNull();
+  });
+
+  it('excludes items inside hidden sidebar sections from keyboard navigation', () => {
+    const sidebar = document.createElement('div');
+    const visibleItem = document.createElement('button');
+    visibleItem.dataset.sidebarFocusable = 'true';
+    const hiddenSection = document.createElement('section');
+    hiddenSection.hidden = true;
+    const hiddenItem = document.createElement('button');
+    hiddenItem.dataset.sidebarFocusable = 'true';
+    hiddenSection.appendChild(hiddenItem);
+    sidebar.append(visibleItem, hiddenSection);
+
+    expect(getFocusableSidebarItems(sidebar)).toEqual([visibleItem]);
   });
 });
 

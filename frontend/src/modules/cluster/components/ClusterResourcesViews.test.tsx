@@ -7,12 +7,6 @@ vi.mock('@modules/cluster/components/ClusterViewConfig', () => ({ default: () =>
 vi.mock('@modules/cluster/components/ClusterViewCRDs', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewCustom', () => ({ default: () => null }));
 vi.mock('@modules/cluster/components/ClusterViewEvents', () => ({ default: () => null }));
-vi.mock('@modules/cluster/components/GlobalViewClusters', () => ({
-  default: () => <div data-testid="global-clusters" />,
-}));
-vi.mock('@modules/cluster/components/GlobalViewNamespaces', () => ({
-  default: () => <div data-testid="global-namespaces" />,
-}));
 vi.mock('@modules/cluster/components/ClusterViewNamespaces', () => ({
   default: () => <div data-testid="namespaces" />,
 }));
@@ -35,21 +29,9 @@ describe('ClusterResourcesViews', () => {
     container.remove();
   });
 
-  it('renders the global Clusters comparison view for the compatibility route', () => {
-    act(() => root.render(<ClusterResourcesViews activeTab="fleet" />));
-
-    expect(container.querySelector('[data-testid="global-clusters"]')).not.toBeNull();
-  });
-
   it('renders the namespace summary inventory', () => {
     act(() => root.render(<ClusterResourcesViews activeTab="namespaces" />));
 
     expect(container.querySelector('[data-testid="namespaces"]')).not.toBeNull();
-  });
-
-  it('renders the global namespace summary inventory', () => {
-    act(() => root.render(<ClusterResourcesViews activeTab="global-namespaces" />));
-
-    expect(container.querySelector('[data-testid="global-namespaces"]')).not.toBeNull();
   });
 });

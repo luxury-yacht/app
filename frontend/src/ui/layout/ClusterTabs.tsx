@@ -4,6 +4,7 @@
  * Cluster tab strip for multi-cluster navigation.
  */
 
+import { useViewState } from '@core/contexts/ViewStateContext';
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
@@ -28,6 +29,9 @@ import './ClusterTabs.css';
 const ordersMatch = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
+export const toClusterInsertIndex = (tabInsertIndex: number, hasGlobalTab: boolean): number =>
+  Math.max(0, tabInsertIndex - (hasGlobalTab ? 1 : 0));
+
 type ClusterTab = {
   id: string;
   label: string;
@@ -40,6 +44,7 @@ interface ClusterTabsProps {
 }
 
 const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
+  const { viewType, navigateToGlobal, activateClusterWorkspace } = useViewState();
   const {
     selectedKubeconfigs,
     selectedKubeconfig,
@@ -119,14 +124,19 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   }, [mergedOrder, tabsById]);
 
   const activeTabId = useMemo(() => {
+    if (viewType === 'global') {
+      return '__global__';
+    }
     return tabs.find((tab) => tab.selection === selectedKubeconfig)?.id ?? null;
-  }, [selectedKubeconfig, tabs]);
+  }, [selectedKubeconfig, tabs, viewType]);
 
   const handleTabClick = useCallback(
     (selection: string) => {
+      const clusterId = getClusterMeta(selection).id;
+      activateClusterWorkspace(clusterId);
       setActiveKubeconfig(selection);
     },
-    [setActiveKubeconfig]
+    [activateClusterWorkspace, getClusterMeta, setActiveKubeconfig]
   );
 
   const closeClusterSelection = useCallback(
@@ -155,11 +165,13 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       // it bumps every later position down by 1, so the effective destination
       // is insertIndex - 1. When source is at or after the insert index, no
       // shift is needed.
+      const clusterInsertIndex = toClusterInsertIndex(insertIndex, orderedTabs.length > 1);
       const sourceIdx = mergedOrder.indexOf(payload.clusterId);
       if (sourceIdx < 0) {
         return;
       }
-      const adjustedInsert = sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+      const adjustedInsert =
+        sourceIdx < clusterInsertIndex ? clusterInsertIndex - 1 : clusterInsertIndex;
       if (adjustedInsert === sourceIdx) {
         return; // no-op drop onto itself
       }
@@ -259,7 +271,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
   // one call per tab per render). Do NOT wrap this .map() in useMemo with
   // `makeDragSource` as a dep: the factory has new identity each render and
   // would bust the memo every time. Per-render allocation is fine here.
-  const tabDescriptors: TabDescriptor[] = orderedTabs.map((tab) => ({
+  const clusterTabDescriptors: TabDescriptor[] = orderedTabs.map((tab) => ({
     id: tab.id,
     label: tab.label,
     closeIcon: <CloseIcon width={10} height={10} />,
@@ -272,6 +284,10 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
       ...makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
     } as HTMLAttributes<HTMLElement>,
   }));
+  const tabDescriptors: TabDescriptor[] =
+    orderedTabs.length > 1
+      ? [{ id: '__global__', label: 'Global' }, ...clusterTabDescriptors]
+      : clusterTabDescriptors;
 
   return (
     <div ref={assignRootRef} className="cluster-tabs-wrapper">
@@ -281,6 +297,10 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
           tabs={tabDescriptors}
           activeId={activeTabId}
           onActivate={(id) => {
+            if (id === '__global__') {
+              navigateToGlobal();
+              return;
+            }
             const tab = tabsById.get(id);
             if (tab) {
               handleTabClick(tab.selection);

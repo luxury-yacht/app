@@ -247,19 +247,12 @@ export type ClusterViewDescriptor = (typeof CLUSTER_VIEW_DESCRIPTORS)[number];
 export type GlobalViewDescriptor = (typeof GLOBAL_VIEW_DESCRIPTORS)[number];
 export type NamespaceViewDescriptor = (typeof NAMESPACE_VIEW_DESCRIPTORS)[number];
 export type GlobalViewType = GlobalViewDescriptor['id'];
-// Global views currently retain their stable cluster-route ids so saved
-// favorites and table state continue to resolve after the presentation move.
-export type ClusterViewType = ClusterViewDescriptor['id'] | GlobalViewType;
+export type ClusterViewType = ClusterViewDescriptor['id'];
 export type NamespaceViewType = NamespaceViewDescriptor['id'];
 export type RegisteredViewDescriptor =
   | GlobalViewDescriptor
   | ClusterViewDescriptor
   | NamespaceViewDescriptor;
-
-export const CLUSTER_ROUTE_VIEW_DESCRIPTORS = [
-  ...GLOBAL_VIEW_DESCRIPTORS,
-  ...CLUSTER_VIEW_DESCRIPTORS,
-] as const;
 
 export const getViewDescriptor = (
   scope: ViewScope,

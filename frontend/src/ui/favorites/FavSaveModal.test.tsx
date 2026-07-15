@@ -512,8 +512,8 @@ describe('FavSaveModal', () => {
     );
 
     expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
-      'cluster:fleet',
-      'cluster:global-namespaces',
+      'global:fleet',
+      'global:global-namespaces',
       'cluster:namespaces',
       'cluster:browse',
       'cluster:events',
@@ -539,6 +539,34 @@ describe('FavSaveModal', () => {
     ]);
     expect(viewSelect.options[0]?.textContent).toBe('Clusters');
     expect(viewSelect.options[1]?.textContent).toBe('Namespaces');
+  });
+
+  it('saves Global favorites without an active-cluster binding', async () => {
+    const onSave = vi.fn();
+    await renderComponent(
+      makeProps({
+        onSave,
+        viewType: 'global',
+        viewLabel: 'Clusters',
+        namespace: '',
+      })
+    );
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterSelection: '',
+        clusterId: '',
+        clusterName: '',
+        viewType: 'global',
+        view: 'fleet',
+        namespace: '',
+      })
+    );
   });
 
   // -----------------------------------------------------------------------

@@ -35,7 +35,7 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
-import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
+import type { ClusterViewType, GlobalViewType, NamespaceViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
 import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
@@ -60,7 +60,6 @@ function Sidebar() {
   } = useNamespace();
   const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
-  const showGlobalViews = selectedClusterIds.length > 1;
   // The active cluster's "accessible namespaces" scope
   // (docs/plans/namespace-scope.md): the namespaces section doubles as its
   // inline editor when a scope is set or the cluster-wide list is denied.
@@ -72,6 +71,7 @@ function Sidebar() {
   // the sidebar renders the permission message — no catalog inference (manual
   // namespace entry is future work, docs/todo.md).
   const viewState = useViewState();
+  const showGlobalViews = selectedClusterIds.length > 1 && viewState.viewType === 'global';
   const [expandedNamespaceKeys, setExpandedNamespaceKeys] = useState<Set<string>>(() => new Set());
   const [lastExpandedNamespaceKey, setLastExpandedNamespaceKey] = useState<string | null>(null);
   const [clusterResourcesExpanded, setClusterResourcesExpanded] = useState<boolean>(true);
@@ -106,6 +106,9 @@ function Sidebar() {
     if (sidebarSelection?.type === 'overview') {
       return { kind: 'overview' };
     }
+    if (viewState.viewType === 'global') {
+      return { kind: 'global-view', view: viewState.activeGlobalTab };
+    }
     if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
       return { kind: 'cluster-view', view: viewState.activeClusterTab };
     }
@@ -125,6 +128,7 @@ function Sidebar() {
   }, [
     sidebarSelection,
     viewState.activeClusterTab,
+    viewState.activeGlobalTab,
     viewState.activeNamespaceTab,
     viewState.viewType,
     selectedNamespaceKey,
@@ -243,6 +247,11 @@ function Sidebar() {
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
   };
 
+  const handleGlobalViewSelect = (view: GlobalViewType) => {
+    setPendingSelection({ kind: 'global-view', view });
+    viewState.navigateToGlobal(view);
+  };
+
   const handleNamespaceSelect = (selectedNamespaceScope: string, clusterId?: string) => {
     const namespaceKey = toNamespaceKey(clusterId, selectedNamespaceScope);
     // Toggle expansion only; namespace selection happens when a view is chosen.
@@ -331,7 +340,7 @@ function Sidebar() {
         </button>
         {!isCollapsed && (
           <>
-            {showGlobalViews && (
+            {showGlobalViews ? (
               <div className="sidebar-section">
                 <h3>Global</h3>
                 <div className="cluster-items">
@@ -340,22 +349,22 @@ function Sidebar() {
                       type="button"
                       key={view.id}
                       className={buildSidebarItemClassName(['sidebar-item'], {
-                        kind: 'cluster-view',
+                        kind: 'global-view',
                         view: view.id,
                       })}
                       onClick={() => {
                         if (!keyboardActivationRef.current) {
                           clearKeyboardPreview();
                         }
-                        handleClusterViewSelect(view.id);
+                        handleGlobalViewSelect(view.id);
                       }}
                       data-sidebar-focusable="true"
                       data-sidebar-scope="global"
-                      data-sidebar-target-kind="cluster-view"
+                      data-sidebar-target-kind="global-view"
                       data-sidebar-target-view={view.id}
                       tabIndex={-1}
                       aria-current={
-                        isTargetSelected({ kind: 'cluster-view', view: view.id })
+                        isTargetSelected({ kind: 'global-view', view: view.id })
                           ? 'page'
                           : undefined
                       }
@@ -366,9 +375,9 @@ function Sidebar() {
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
-            <div className="sidebar-section">
+            <div className="sidebar-section" hidden={viewState.viewType === 'global'}>
               <h3>Cluster</h3>
               <div className="cluster-items">
                 <button
@@ -446,7 +455,10 @@ function Sidebar() {
               </div>
             </div>
 
-            <div className="sidebar-section namespaces-section">
+            <div
+              className="sidebar-section namespaces-section"
+              hidden={viewState.viewType === 'global'}
+            >
               <h3>
                 Namespaces
                 <button

@@ -17,7 +17,8 @@ import type { GridTableFilterState } from '@shared/components/tables/GridTable.t
 import { normalizeGridTableQueryFacets } from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GLOBAL_VIEW_DESCRIPTORS, getViewDescriptor } from '@/core/navigation/viewRegistry';
+import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
+import { getViewDescriptor } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import FavSaveModal from './FavSaveModal';
 
@@ -68,18 +69,25 @@ export function useFavToggle(state: FavToggleState): {
     setPendingFavorite,
   } = useFavorites();
   const { selectedKubeconfig, selectedClusterId, selectedClusterName } = useKubeconfig();
-  const { viewType, activeNamespaceTab, activeClusterTab } = useViewState();
+  const { viewType, activeNamespaceTab, activeClusterTab, activeGlobalTab } = useViewState();
   const { selectedNamespace } = useNamespace();
 
   // Derive the active view tab.
-  const activeViewTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
+  const activeViewTab =
+    viewType === 'global'
+      ? activeGlobalTab
+      : viewType === 'namespace'
+        ? activeNamespaceTab
+        : activeClusterTab;
 
   // Match the current view + filter state against saved favorites.
   // Includes filter comparison so multiple favorites on the same view
   // with different filters are treated as distinct entries.
   const currentFavoriteMatch = useMemo<Favorite | null>(() => {
     for (const fav of favorites) {
+      const favoriteRoute = resolveFavoriteRoute(fav.viewType, fav.view);
       const clusterMatches =
+        favoriteRoute.scope === 'global' ||
         fav.clusterSelection === '' ||
         (fav.clusterId
           ? selectedClusterId === fav.clusterId
@@ -87,7 +95,7 @@ export function useFavToggle(state: FavToggleState): {
       if (!clusterMatches) {
         continue;
       }
-      if (viewType !== fav.viewType) {
+      if (viewType !== favoriteRoute.scope) {
         continue;
       }
       if (activeViewTab !== fav.view) {
@@ -170,10 +178,16 @@ export function useFavToggle(state: FavToggleState): {
     }
 
     // Only apply in the view that matches the favorite's target.
-    if (pendingFavorite.viewType !== viewType) {
+    const pendingRoute = resolveFavoriteRoute(pendingFavorite.viewType, pendingFavorite.view);
+    if (pendingRoute.scope !== viewType) {
       return;
     }
-    const expectedTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
+    const expectedTab =
+      viewType === 'global'
+        ? activeGlobalTab
+        : viewType === 'namespace'
+          ? activeNamespaceTab
+          : activeClusterTab;
     if (pendingFavorite.view !== expectedTab) {
       return;
     }
@@ -208,6 +222,7 @@ export function useFavToggle(state: FavToggleState): {
     viewType,
     activeNamespaceTab,
     activeClusterTab,
+    activeGlobalTab,
     selectedNamespace,
     state,
   ]);
@@ -220,18 +235,14 @@ export function useFavToggle(state: FavToggleState): {
   const viewLabel = useMemo(() => {
     const tab = activeViewTab ?? '';
     const scope =
-      viewType === 'namespace'
-        ? 'namespace'
-        : GLOBAL_VIEW_DESCRIPTORS.some((view) => view.id === tab)
-          ? 'global'
-          : 'cluster';
+      viewType === 'global' ? 'global' : viewType === 'namespace' ? 'namespace' : 'cluster';
     return getViewDescriptor(scope, tab)?.label ?? tab;
   }, [viewType, activeViewTab]);
 
   // Auto-generate a default name for new favorites.
   const defaultName = useMemo(() => {
     const parts: string[] = [];
-    if (selectedClusterName) {
+    if (viewType !== 'global' && selectedClusterName) {
       parts.push(selectedClusterName);
     }
     if (viewType === 'namespace' && selectedNamespace) {

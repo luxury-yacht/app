@@ -37,6 +37,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | Question | Start here |
 | --- | --- |
 | Where should frontend code live? | [frontend/component-structure.md](frontend/component-structure.md) |
+| How are Global and per-cluster workspaces separated? | [frontend/navigation.md](frontend/navigation.md) |
 | How should shared tables be built? | [frontend/gridtable.md](frontend/gridtable.md) |
 | How should object age text update? | [frontend/live-age.md](frontend/live-age.md) |
 | How are shortcuts and focus owned? | [frontend/keyboard.md](frontend/keyboard.md) |

@@ -44,6 +44,10 @@
   margin-bottom: 0;
 }
 
+.sidebar-section[hidden] {
+  display: none;
+}
+
 /* sidebar section header (CLUSTER, NAMESPACE) */
 .sidebar h3 {
   display: flex;

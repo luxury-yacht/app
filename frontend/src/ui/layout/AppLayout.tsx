@@ -14,6 +14,7 @@ import '@/App.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
+import GlobalViews from '@modules/global/components/GlobalViews';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
@@ -51,6 +52,7 @@ import type { NamespaceViewType } from '@ui/navigation/types';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { eventBus } from '@/core/events';
+import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import {
   getSidebarWidthFromKey,
@@ -179,7 +181,11 @@ export const AppLayout: React.FC = () => {
           <div ref={contentBodyRef} className="content-body" data-app-region="content">
             <div className="content-body__main">
               {hasActiveClusters ? (
-                viewState.viewType === 'cluster' ? (
+                viewState.viewType === 'global' ? (
+                  <RouteErrorBoundary routeName="global">
+                    <GlobalViews activeView={viewState.activeGlobalTab} />
+                  </RouteErrorBoundary>
+                ) : viewState.viewType === 'cluster' ? (
                   viewState.activeClusterTab === 'browse' ? (
                     <RouteErrorBoundary routeName="browse">
                       <div className="view-content">
@@ -277,7 +283,9 @@ export const AppLayout: React.FC = () => {
           </div>
         )}
         {/* Per-cluster auth failure overlay - blocks sidebar and content when active cluster has auth error */}
-        {hasActiveClusters && <AuthFailureOverlay />}
+        {shouldShowActiveClusterAuthFailure(hasActiveClusters, viewState.viewType) && (
+          <AuthFailureOverlay />
+        )}
       </main>
 
       <PanelErrorBoundary onClose={() => viewState.setShowAppLogsPanel(false)} panelName="app-logs">

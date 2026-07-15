@@ -6,7 +6,6 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { PERMISSION_FEATURES } from '@/core/capabilities/permissionFeatures';
 import {
   getScopedFeaturesForView,
   PAUSE_POLLING_WHEN_STREAMING_DOMAINS,
@@ -50,13 +49,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
     ]);
   });
 
-  test('reports cluster-overview permissions for the Global Clusters view', () => {
-    expect(getScopedFeaturesForView('cluster', 'fleet', 'workloads')).toEqual([
-      PERMISSION_FEATURES.clusterOverview,
-    ]);
-  });
-
-  test('leaves Global Namespaces diagnostics scoped to its permission-gated domain', () => {
-    expect(getScopedFeaturesForView('cluster', 'global-namespaces', 'workloads')).toEqual([]);
+  test('does not project selected-cluster permissions onto the Global workspace', () => {
+    expect(getScopedFeaturesForView('global', null, 'workloads')).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseClusterViewType, parseGlobalViewType } from '@/types/navigation/views';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
   GLOBAL_VIEW_DESCRIPTORS,
@@ -91,6 +92,15 @@ describe('view registry', () => {
     expect(getViewDescriptor('cluster', 'attention')).toBeUndefined();
     expect(getViewDescriptor('namespace', 'map')?.label).toBe('Map');
     expect(getViewDescriptor('cluster', 'map')).toBeUndefined();
+  });
+
+  it('keeps global and cluster route ids in disjoint runtime vocabularies', () => {
+    expect(parseGlobalViewType('fleet')).toBe('fleet');
+    expect(parseGlobalViewType('global-namespaces')).toBe('global-namespaces');
+    expect(parseGlobalViewType('nodes')).toBeUndefined();
+    expect(parseClusterViewType('nodes')).toBe('nodes');
+    expect(parseClusterViewType('fleet')).toBeUndefined();
+    expect(parseClusterViewType('global-namespaces')).toBeUndefined();
   });
 
   it('declares which namespace views support the all-namespaces scope', () => {

@@ -11,14 +11,17 @@ import { hasNativeTabHandling, isInputElement, resolveEventElement } from '@ui/s
 import { type RefObject, useCallback, useEffect, useState } from 'react';
 import {
   type ClusterViewType,
+  type GlobalViewType,
   type NamespaceViewType,
   parseClusterViewType,
+  parseGlobalViewType,
   parseNamespaceViewType,
 } from '@/types/navigation/views';
 import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
 export type SidebarCursorTarget =
   | { kind: 'overview' }
+  | { kind: 'global-view'; view: GlobalViewType }
   | { kind: 'cluster-view'; view: ClusterViewType }
   | { kind: 'namespace-view'; namespace: string; view: NamespaceViewType }
   | { kind: 'cluster-toggle'; id: 'resources' }
@@ -31,6 +34,8 @@ export const targetsAreEqual = (a: SidebarCursorTarget | null, b: SidebarCursorT
   switch (a.kind) {
     case 'overview':
       return true;
+    case 'global-view':
+      return b.kind === 'global-view' && a.view === b.view;
     case 'cluster-view':
       return b.kind === 'cluster-view' && a.view === b.view;
     case 'namespace-view':
@@ -58,6 +63,10 @@ export const describeElementTarget = (element: HTMLElement | null): SidebarCurso
     const view = parseClusterViewType(element.dataset.sidebarTargetView);
     return view ? { kind: 'cluster-view', view } : null;
   }
+  if (kind === 'global-view') {
+    const view = parseGlobalViewType(element.dataset.sidebarTargetView);
+    return view ? { kind: 'global-view', view } : null;
+  }
   if (kind === 'namespace-view' && element.dataset.sidebarTargetNamespace) {
     const view = parseNamespaceViewType(element.dataset.sidebarTargetView);
     return view
@@ -79,6 +88,11 @@ export const describeElementTarget = (element: HTMLElement | null): SidebarCurso
   }
   return null;
 };
+
+export const getFocusableSidebarItems = (sidebar: HTMLElement): HTMLElement[] =>
+  Array.from(sidebar.querySelectorAll<HTMLElement>('[data-sidebar-focusable="true"]')).filter(
+    (element) => !element.closest('[hidden]')
+  );
 
 interface SidebarKeyboardParams {
   sidebarRef: RefObject<HTMLDivElement | null>;
@@ -123,9 +137,7 @@ export const useSidebarKeyboardControls = ({
     if (!sidebarRef.current) {
       return [];
     }
-    return Array.from(
-      sidebarRef.current.querySelectorAll<HTMLElement>('[data-sidebar-focusable="true"]')
-    );
+    return getFocusableSidebarItems(sidebarRef.current);
   }, [sidebarRef]);
 
   const findElementIndexForTarget = useCallback(

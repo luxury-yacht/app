@@ -107,7 +107,17 @@ export function useCommandPaletteCommands() {
     [viewState]
   );
 
+  const openGlobalView = useCallback(
+    (view: (typeof GLOBAL_VIEW_DESCRIPTORS)[number]['id']) => {
+      viewState.navigateToGlobal(view);
+    },
+    [viewState]
+  );
+
   const closeCurrentClusterTab = useCallback(() => {
+    if (viewState.viewType === 'global') {
+      return;
+    }
     const active = selectedKubeconfig;
     if (!active) {
       return;
@@ -118,7 +128,7 @@ export function useCommandPaletteCommands() {
     void closeKubeconfig(active).catch((err) => {
       console.warn('Failed to close cluster:', err);
     });
-  }, [closeKubeconfig, selectedKubeconfig, selectedKubeconfigs]);
+  }, [closeKubeconfig, selectedKubeconfig, selectedKubeconfigs, viewState.viewType]);
 
   const selectNamespace = useCallback(
     (scope: string) => {
@@ -432,12 +442,12 @@ export function useCommandPaletteCommands() {
       },
       ...(selectedKubeconfigs.length > 1
         ? GLOBAL_VIEW_DESCRIPTORS.map((view) => ({
-            id: `cluster-${view.id}`,
+            id: `global-${view.id}`,
             label: `Global - ${view.label}`,
             icon: <CategoryIcon width={16} height={16} />,
             description: view.description,
             category: 'Navigation',
-            action: () => openClusterTab(view.id),
+            action: () => openGlobalView(view.id),
             keywords: [...view.keywords],
           }))
         : []),
@@ -455,6 +465,7 @@ export function useCommandPaletteCommands() {
       viewState,
       mode,
       openClusterTab,
+      openGlobalView,
       closeCurrentClusterTab,
       closeTabShortcut,
       selectNamespaceShortcut,

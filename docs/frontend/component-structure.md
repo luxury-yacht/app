@@ -29,6 +29,12 @@ from app infrastructure to features to reusable building blocks.
 `hooks/`, `utils/`, and `types/` under a feature directory are local to that
 feature. Promote only when the dependency direction stays clean.
 
+Cross-cluster comparison workflows live under `modules/global`. They may read
+multiple cluster-keyed states, but each refresh read and object/navigation
+reference must retain its originating `clusterId`. Cluster-only resource views
+remain under `modules/cluster`; do not route Global views through the cluster
+resource manager.
+
 ## Object-panel Overview rendering (descriptor-driven)
 
 The object panel's Details → Overview is rendered from per-kind **descriptors**, not bespoke

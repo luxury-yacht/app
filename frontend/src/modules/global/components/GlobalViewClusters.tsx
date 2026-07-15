@@ -137,7 +137,7 @@ const GlobalViewClusters: React.FC = () => {
   } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
   const { getClusterAuthState } = useAuthError();
-  const { setClusterNavigationTarget } = useViewState();
+  const { setClusterNavigationTarget, activateClusterWorkspace } = useViewState();
   const { setSidebarSelectionForCluster } = useSidebarState();
   const overviewStates = useRefreshScopedDomainStates('cluster-overview');
 
@@ -243,9 +243,15 @@ const GlobalViewClusters: React.FC = () => {
         activeClusterView: null,
       });
       setSidebarSelectionForCluster(row.clusterId, { type: 'overview', value: 'overview' });
+      activateClusterWorkspace(row.clusterId);
       setActiveKubeconfig(row.selection);
     },
-    [setActiveKubeconfig, setClusterNavigationTarget, setSidebarSelectionForCluster]
+    [
+      activateClusterWorkspace,
+      setActiveKubeconfig,
+      setClusterNavigationTarget,
+      setSidebarSelectionForCluster,
+    ]
   );
 
   const columns = useMemo<GridColumnDefinition<GlobalClusterRow>[]>(() => {

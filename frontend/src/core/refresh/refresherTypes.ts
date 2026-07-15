@@ -6,7 +6,7 @@
  */
 
 import {
-  CLUSTER_ROUTE_VIEW_DESCRIPTORS,
+  CLUSTER_VIEW_DESCRIPTORS,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@/core/navigation/viewRegistry';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
@@ -84,7 +84,7 @@ export const namespaceViewToRefresher = Object.fromEntries(
 ) as Record<NamespaceViewType, NamespaceRefresherName | null>;
 
 export const clusterViewToRefresher = Object.fromEntries(
-  CLUSTER_ROUTE_VIEW_DESCRIPTORS.map(({ id, refresher }) => [id, refresher])
+  CLUSTER_VIEW_DESCRIPTORS.map(({ id, refresher }) => [id, refresher])
 ) as Record<ClusterViewType, ClusterRefresherName | null>;
 
 export { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS };

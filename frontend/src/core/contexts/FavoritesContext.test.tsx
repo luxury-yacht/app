@@ -42,6 +42,7 @@ let mockNamespaceReady = true;
 const mockSetViewType = vi.fn();
 const mockSetActiveNamespaceTab = vi.fn();
 const mockSetActiveClusterView = vi.fn();
+const mockNavigateToGlobal = vi.fn();
 const mockSetSidebarSelection = vi.fn();
 const mockOnNamespaceSelect = vi.fn();
 const mockSetSelectedNamespace = vi.fn();
@@ -69,6 +70,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     setViewType: mockSetViewType,
     setActiveNamespaceTab: mockSetActiveNamespaceTab,
     setActiveClusterView: mockSetActiveClusterView,
+    navigateToGlobal: mockNavigateToGlobal,
     setSidebarSelection: mockSetSidebarSelection,
     onNamespaceSelect: mockOnNamespaceSelect,
   }),
@@ -132,6 +134,7 @@ describe('FavoritesContext', () => {
     mockSetViewType.mockReset();
     mockSetActiveNamespaceTab.mockReset();
     mockSetActiveClusterView.mockReset();
+    mockNavigateToGlobal.mockReset();
     mockSetSidebarSelection.mockReset();
     mockOnNamespaceSelect.mockReset();
     mockSetSelectedNamespace.mockReset();
@@ -274,6 +277,40 @@ describe('FavoritesContext', () => {
       type: 'cluster',
       value: 'cluster',
     });
+  });
+
+  it('opens new and legacy Global favorites without applying cluster navigation', async () => {
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({
+          viewType: 'cluster',
+          view: 'global-namespaces',
+          namespace: '',
+        })
+      );
+    });
+
+    expect(mockNavigateToGlobal).toHaveBeenCalledWith('global-namespaces');
+    expect(mockSetViewType).not.toHaveBeenCalled();
+    expect(mockSetActiveClusterView).not.toHaveBeenCalled();
+
+    act(() => stateRef.current?.setPendingFavorite(null));
+    act(() => {
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({
+          id: 'fav-global',
+          clusterSelection: '',
+          clusterId: '',
+          viewType: 'global',
+          view: 'fleet',
+          namespace: '',
+        })
+      );
+    });
+
+    expect(mockNavigateToGlobal).toHaveBeenLastCalledWith('fleet');
   });
 
   it('waits for the favorite clusterId before applying cluster-specific navigation', async () => {

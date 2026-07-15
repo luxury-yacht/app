@@ -2,6 +2,10 @@ import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useSidebarState } from '@core/contexts/SidebarStateContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { buildClusterScope } from '@core/refresh/clusterScope';
+import NamespaceSummaryTable, {
+  type NamespaceTableRow,
+  projectNamespaceSummary,
+} from '@modules/cluster/components/NamespaceSummaryTable';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   isNamespaceRefreshAvailable,
@@ -10,10 +14,6 @@ import {
 } from '@modules/namespace/contexts/NamespaceContext';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceSnapshotPayload } from '@/core/refresh/types';
-import NamespaceSummaryTable, {
-  type NamespaceTableRow,
-  projectNamespaceSummary,
-} from './NamespaceSummaryTable';
 
 interface GlobalNamespaceTarget {
   clusterId: string;
@@ -27,7 +27,7 @@ const GlobalViewNamespaces: React.FC = () => {
   const { getClusterState } = useClusterLifecycle();
   const { setSelectedNamespace } = useNamespace();
   const namespaceStatesByScope = useNamespaceStatesByScope();
-  const { setClusterNavigationTarget } = useViewState();
+  const { setClusterNavigationTarget, activateClusterWorkspace } = useViewState();
   const { setSidebarSelectionForCluster } = useSidebarState();
 
   const targets = useMemo<GlobalNamespaceTarget[]>(
@@ -90,9 +90,11 @@ const GlobalViewNamespaces: React.FC = () => {
         type: 'namespace',
         value: row.name,
       });
+      activateClusterWorkspace(row.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [
+      activateClusterWorkspace,
       setActiveKubeconfig,
       setClusterNavigationTarget,
       setSelectedNamespace,
@@ -114,9 +116,11 @@ const GlobalViewNamespaces: React.FC = () => {
         type: 'overview',
         value: 'overview',
       });
+      activateClusterWorkspace(row.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [
+      activateClusterWorkspace,
       setActiveKubeconfig,
       setClusterNavigationTarget,
       setSidebarSelectionForCluster,

@@ -5,6 +5,8 @@
  * Covers key behaviors and edge cases for Sidebar.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
@@ -17,6 +19,8 @@ import {
 } from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import Sidebar from './Sidebar';
+
+const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar.css'), 'utf8');
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -102,10 +106,12 @@ const createViewState = () => ({
     | { type: 'cluster'; value: string },
   viewType: 'overview' as 'overview' | 'cluster' | 'namespace',
   activeClusterTab: 'nodes' as string | null,
+  activeGlobalTab: 'fleet' as const,
   activeNamespaceTab: 'workloads' as string | null,
   toggleSidebar: vi.fn(),
   setViewType: vi.fn(),
   setActiveClusterView: vi.fn(),
+  navigateToGlobal: vi.fn(),
   setSidebarSelection: vi.fn(),
   onNamespaceSelect: vi.fn(),
   setActiveNamespaceTab: vi.fn(),
@@ -255,6 +261,7 @@ describe('Sidebar', () => {
   });
 
   it('presents cross-cluster views under the Global scope instead of Cluster resources', () => {
+    viewStateMock.viewType = 'global' as never;
     renderSidebar();
 
     const host = requireValue(container, 'expected Sidebar test container');
@@ -285,6 +292,57 @@ describe('Sidebar', () => {
     );
     expect(clusterViews.querySelector('[data-sidebar-target-view="fleet"]')).toBeNull();
     expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
+  });
+
+  it.each([
+    'overview',
+    'cluster',
+    'namespace',
+  ] as const)('does not show Global navigation while the %s workspace is active', (viewType) => {
+    viewStateMock.viewType = viewType;
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
+    expect(
+      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual(['Cluster', 'Namespaces']);
+  });
+
+  it('enters Global through a Global sidebar target', () => {
+    viewStateMock.viewType = 'global' as never;
+    renderSidebar();
+    const globalNamespaces = requireValue(
+      container,
+      'expected Sidebar test container'
+    ).querySelector<HTMLElement>(
+      '[data-sidebar-target-kind="global-view"][data-sidebar-target-view="global-namespaces"]'
+    );
+
+    act(() => {
+      requireValue(globalNamespaces, 'expected Global Namespaces entry').click();
+    });
+
+    expect(viewStateMock.navigateToGlobal).toHaveBeenCalledWith('global-namespaces');
+    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
+  });
+
+  it('does not show active-cluster navigation while Global is active', () => {
+    viewStateMock.viewType = 'global' as never;
+    renderSidebar();
+
+    const host = requireValue(container, 'expected Sidebar test container');
+    expect(
+      host.querySelector('[data-sidebar-target-kind="overview"]')?.closest('[hidden]')
+    ).not.toBeNull();
+    const namespacesSection = requireValue(
+      host.querySelector<HTMLElement>('.namespaces-section'),
+      'expected namespace section'
+    );
+    expect(namespacesSection.hasAttribute('hidden')).toBe(true);
+    expect(sidebarStyles).toMatch(/\.sidebar-section\[hidden\]\s*\{[^}]*display:\s*none;/s);
   });
 
   it('hides the Global section when fewer than two clusters are open', () => {

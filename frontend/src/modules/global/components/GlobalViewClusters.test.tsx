@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   setActiveKubeconfig: vi.fn(),
   setClusterNavigationTarget: vi.fn(),
+  activateClusterWorkspace: vi.fn(),
   setSidebarSelectionForCluster: vi.fn(),
   requestRefreshDomain: vi.fn(() => Promise.resolve({ status: 'executed' })),
   setRefreshDomainEnabled: vi.fn(),
@@ -88,7 +89,10 @@ vi.mock('@/core/contexts/AuthErrorContext', async (importOriginal) => {
 });
 
 vi.mock('@/core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({ setClusterNavigationTarget: mocks.setClusterNavigationTarget }),
+  useViewState: () => ({
+    setClusterNavigationTarget: mocks.setClusterNavigationTarget,
+    activateClusterWorkspace: mocks.activateClusterWorkspace,
+  }),
 }));
 
 vi.mock('@/core/contexts/SidebarStateContext', () => ({
@@ -338,7 +342,11 @@ describe('GlobalViewClusters', () => {
       value: 'overview',
     });
     expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
     expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
+    );
+    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
 

@@ -46,8 +46,17 @@ validation errors. Frontend refresh code should not produce them.
 - Frontend cluster selection: `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`
 - Refresh scope helpers: `frontend/src/core/refresh/clusterScope.ts`
 - Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
+- Global/per-cluster workspace navigation:
+  `frontend/src/core/contexts/ViewStateContext.tsx`
 
 ## Global Clusters View
+
+Global is an independent app workspace, not a route owned by the foreground
+cluster. It retains its last Global view while every open cluster independently
+retains its last Cluster/Namespace/Overview route. The foreground kubeconfig is
+still used for backend foreground priority, but its tab is not visually active
+while Global is selected. When fewer than two clusters remain, the app restores
+the remaining foreground cluster's retained route.
 
 Clusters is a Global-scope view that compares only open clusters. The frontend
 fans out the existing `cluster-overview` domain over one `clusterId|` scope per
@@ -67,8 +76,9 @@ that cluster's Overview. The Needs Attention cell is a non-interactive summary
 of not-ready nodes and failing pods.
 
 The user-facing scope and label are **Global → Clusters**. The internal `fleet`
-route and `cluster-fleet` table-persistence id remain compatibility identities
-so existing favorites and table settings continue to resolve.
+Global route and `cluster-fleet` table-persistence id remain compatibility
+identities. Legacy favorites that encoded `fleet` or `global-namespaces` as a
+cluster route are normalized at the favorite navigation boundary.
 
 **Global → Namespaces** reads the existing per-cluster `namespaces` refresh
 entries for every open cluster; it does not introduce an aggregate refresh

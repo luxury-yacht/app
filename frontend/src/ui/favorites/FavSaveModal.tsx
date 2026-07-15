@@ -18,6 +18,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type FavoriteRouteScope, resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
   GLOBAL_VIEW_DESCRIPTORS,
@@ -36,9 +37,7 @@ import './FavSaveModal.css';
 const ALL_VIEWS = [
   { value: '__global_header__', label: 'Global', group: 'header' as const },
   ...GLOBAL_VIEW_DESCRIPTORS.map(({ id, label }) => ({
-    // Global views retain cluster-route persistence because the existing
-    // favorite contract stores overview/cluster destinations in this scope.
-    value: `cluster:${id}`,
+    value: `global:${id}`,
     label,
   })),
   { value: '__cluster_header__', label: 'Cluster', group: 'header' as const },
@@ -54,9 +53,9 @@ const ALL_VIEWS = [
 ];
 
 /** Parse a combined view value into scope and view. */
-const parseViewValue = (combined: string): { scope: 'cluster' | 'namespace'; view: string } => {
+const parseViewValue = (combined: string): { scope: FavoriteRouteScope; view: string } => {
   const [scope, view] = combined.split(':');
-  return { scope: scope as 'cluster' | 'namespace', view };
+  return { scope: scope as FavoriteRouteScope, view };
 };
 
 /** Build a combined view value from scope and view. */
@@ -123,7 +122,7 @@ interface FavoriteFormState {
   name: string;
   clusterSpecific: boolean;
   clusterSelection: string;
-  scope: 'cluster' | 'namespace';
+  scope: FavoriteRouteScope;
   view: string;
   namespace: string;
   filterText: string;
@@ -152,7 +151,9 @@ const hasFormChanges = (
   if (name !== existing.name) {
     return true;
   }
-  const existingIsClusterSpecific = existing.clusterSelection !== '';
+  const existingRoute = resolveFavoriteRoute(existing.viewType, existing.view);
+  const existingIsClusterSpecific =
+    existingRoute.scope !== 'global' && existing.clusterSelection !== '';
   if (clusterSpecific !== existingIsClusterSpecific) {
     return true;
   }
@@ -235,10 +236,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       return;
     }
     if (existingFavorite) {
+      const existingRoute = resolveFavoriteRoute(existingFavorite.viewType, existingFavorite.view);
       setName(existingFavorite.name);
-      setClusterSpecific(existingFavorite.clusterSelection !== '');
+      setClusterSpecific(
+        existingRoute.scope !== 'global' && existingFavorite.clusterSelection !== ''
+      );
       setClusterSelection(existingFavorite.clusterSelection || kubeconfigSelection);
-      setSelectedView(buildViewValue(existingFavorite.viewType, existingFavorite.view));
+      setSelectedView(buildViewValue(existingRoute.scope, existingRoute.view));
       setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(existingFavorite.filters?.search ?? '');
       setFilterKinds(existingFavorite.filters?.kinds ?? []);
@@ -246,10 +250,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
       setIncludeMetadataState(existingFavorite.filters?.includeMetadata ?? false);
     } else {
+      const initialRoute = resolveFavoriteRoute(viewType, resolveViewId(viewLabel, viewType));
       setName(defaultName);
-      setClusterSpecific(true);
+      setClusterSpecific(initialRoute.scope !== 'global');
       setClusterSelection(kubeconfigSelection);
-      setSelectedView(buildViewValue(viewType, resolveViewId(viewLabel, viewType)));
+      setSelectedView(buildViewValue(initialRoute.scope, initialRoute.view));
       setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(filters.search);
       setFilterKinds(filters.kinds ?? []);
@@ -357,6 +362,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Derive scope and view from the combined selectedView value.
   const { scope, view: activeView } = parseViewValue(selectedView);
   const isNamespaceScope = scope === 'namespace';
+  const isGlobalScope = scope === 'global';
+
+  useEffect(() => {
+    if (isGlobalScope) {
+      setClusterSpecific(false);
+    }
+  }, [isGlobalScope]);
 
   // Detect whether Save should be enabled when editing.
   const changesDetected =
@@ -379,13 +391,14 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // ----- Handlers -----
 
   const handleSave = () => {
-    const selectedClusterMeta = clusterSpecific ? getClusterMeta(clusterSelection) : null;
+    const bindsCluster = !isGlobalScope && clusterSpecific;
+    const selectedClusterMeta = bindsCluster ? getClusterMeta(clusterSelection) : null;
     const fav: Favorite = {
       id: existingFavorite?.id ?? '',
       name: name.trim() || defaultName,
-      clusterSelection: clusterSpecific ? clusterSelection : '',
-      clusterId: clusterSpecific ? (selectedClusterMeta?.id ?? '') : '',
-      clusterName: clusterSpecific ? (selectedClusterMeta?.name ?? '') : '',
+      clusterSelection: bindsCluster ? clusterSelection : '',
+      clusterId: bindsCluster ? (selectedClusterMeta?.id ?? '') : '',
+      clusterName: bindsCluster ? (selectedClusterMeta?.name ?? '') : '',
       viewType: scope,
       view: activeView,
       namespace: scope === 'namespace' ? selectedNamespace : '',
@@ -483,6 +496,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     name="cluster-type"
                     checked={clusterSpecific}
                     onChange={() => handleTypeChange(true)}
+                    disabled={isGlobalScope}
                   />
                   Cluster
                   <Tooltip content="Opens the saved view in a specific cluster, and will activate that cluster if needed." />

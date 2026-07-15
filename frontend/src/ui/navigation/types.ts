@@ -5,4 +5,8 @@
  * Defines shared interfaces and payload shapes for the UI layer.
  */
 
-export type { ClusterViewType, NamespaceViewType } from '@/core/navigation/viewRegistry';
+export type {
+  ClusterViewType,
+  GlobalViewType,
+  NamespaceViewType,
+} from '@/core/navigation/viewRegistry';
