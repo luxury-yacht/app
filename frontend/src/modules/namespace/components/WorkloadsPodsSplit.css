@@ -37,7 +37,11 @@ body.dockable-panel-resizing .content-body .workloads-pods-split {
 }
 
 .workloads-pods-split--collapsed {
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.workloads-pods-split--collapsed .workloads-pods-split__pane--lower {
+  border-top: 1px solid var(--color-border);
 }
 
 .workloads-pods-split__pane {
@@ -68,15 +72,18 @@ body.dockable-panel-resizing .content-body .workloads-pods-split {
   top: 50%;
   right: 0;
   left: 0;
-  height: 4px;
-  background: transparent;
+  height: 1px;
+  background: var(--color-border);
   content: "";
   transform: translateY(-50%);
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    height var(--transition-fast);
 }
 
 .workloads-pods-split__resizer:hover::after,
 .workloads-pods-split--resizing .workloads-pods-split__resizer::after {
+  height: 4px;
   background: var(--color-resize-handle);
 }
 

@@ -364,22 +364,25 @@ describe('NsViewWorkloads', () => {
     );
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    const collapseAction = (
-      gridTablePropsRef.current.filters?.options as
-        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
-        | undefined
-    )?.beforeNamespaceActions?.find((action) => action.title === 'Collapse Pods');
-    expect(collapseAction?.title).toBe('Collapse Pods');
-    act(() => collapseAction?.onClick());
-    expect(container.querySelector('[data-testid="pods-view"]')).toBeNull();
-    const expandAction = (
-      gridTablePropsRef.current.filters?.options as
-        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
-        | undefined
-    )?.beforeNamespaceActions?.find((action) => action.title === 'Expand Pods');
-    expect(expandAction?.title).toBe('Expand Pods');
+    expect(
+      gridTablePropsRef.current.filters?.options?.beforeNamespaceActions?.find(
+        (action) => action.type !== 'separator' && action.title === 'Collapse Pods'
+      )
+    ).toBeUndefined();
+    expect(podsViewPropsRef.current).toMatchObject({
+      collapsed: false,
+      onPodsCollapsedChange: expect.any(Function),
+    });
+    act(() => {
+      const onPodsCollapsedChange = podsViewPropsRef.current?.onPodsCollapsedChange;
+      if (typeof onPodsCollapsedChange !== 'function') {
+        throw new Error('Expected the Pods collapse callback');
+      }
+      onPodsCollapsedChange(true);
+    });
+    expect(podsViewPropsRef.current).toMatchObject({ collapsed: true });
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(container.querySelector('[data-testid="pods-view"]')).not.toBeNull();
+    expect(podsViewPropsRef.current).toMatchObject({ collapsed: false });
   });
 
   it('does not revive a prior workload selection after the namespace scope changes', async () => {

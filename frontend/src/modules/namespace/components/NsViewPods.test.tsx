@@ -7,6 +7,7 @@
 
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
@@ -501,6 +502,58 @@ describe('NsViewPods', () => {
     );
     // Single-namespace pod tables are query-backed now, so they issue a typed query.
     expect(requestRefreshDomainStateMock).toHaveBeenCalled();
+  });
+
+  it('owns the Pods collapse action as the first structural filter action', async () => {
+    const onPodsCollapsedChange = vi.fn();
+    await renderPods({ onPodsCollapsedChange });
+
+    const structuralActions = gridTablePropsRef.current.filters?.options?.beforeNamespaceActions;
+    expect(
+      structuralActions?.map((action) => (action.type === 'separator' ? null : action.title))
+    ).toEqual(['Collapse Pods']);
+    const collapseAction = structuralActions?.[0];
+    if (!collapseAction || collapseAction.type === 'separator') {
+      throw new Error('Expected the Collapse Pods action');
+    }
+    expect(requireReactElement(collapseAction.icon, 'expected collapse icon').type).toBe(
+      ExpandIcon
+    );
+
+    act(() => {
+      collapseAction.onClick();
+    });
+    expect(onPodsCollapsedChange).toHaveBeenCalledWith(true);
+  });
+
+  it('shows only the expand control and Show Pods text while collapsed', async () => {
+    const onPodsCollapsedChange = vi.fn();
+    await renderPods({ collapsed: true, onPodsCollapsedChange });
+
+    expect(container.querySelector('[data-testid="grid-table"]')).toBeNull();
+    expect(container.querySelector('.gridtable-filter-bar')?.textContent).toBe('Show Pods');
+    expect(container.querySelectorAll('.gridtable-filter-bar button')).toHaveLength(1);
+    const expandButton = container.querySelector<HTMLButtonElement>(
+      '.gridtable-filter-bar button[title="Expand Pods"]'
+    );
+    expect(expandButton).not.toBeNull();
+    const renderedCollapseIcon = CollapseIcon({});
+    if (renderedCollapseIcon instanceof Promise) {
+      throw new Error('Expected CollapseIcon to render synchronously');
+    }
+    const collapseSvg = requireReactElement<{ children: React.ReactNode }>(
+      renderedCollapseIcon,
+      'expected collapsed-state icon'
+    );
+    expect(expandButton?.querySelector('svg path')?.getAttribute('d')).toBe(
+      requireReactElement<{ d: string }>(
+        collapseSvg.props.children,
+        'expected collapsed-state icon path'
+      ).props.d
+    );
+
+    act(() => expandButton?.click());
+    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
   });
 
   it('uses the typed query result for all-namespaces pods on first render', async () => {

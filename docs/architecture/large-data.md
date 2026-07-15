@@ -303,17 +303,22 @@ tables: Workloads above and Pods below. Each table retains its own filter,
 sort, cursor pagination, page size, diagnostics, and persisted GridTable state.
 The split starts at 50% and supports pointer and keyboard resizing through a
 handle directly on the pane boundary; it has no separate divider band. The Pods
-pane can be collapsed from the Workloads GridTable filter bar, where its toggle
-appears immediately before Namespace. Selecting a Workloads row writes the
-normal Pods GridTable filters: Namespace when the table spans all namespaces,
-plus the provider-owned Owner facet. Owner values carry cluster, group, version,
-kind, namespace, and name. Deployments resolve through ReplicaSets, CronJobs
-resolve through Jobs, direct owners match directly, and an ownerless Pod uses
-its own core/v1 identity. The projected Pod row retains both direct-controller
-and resolved-ancestor identities; no generated name parsing is part of the
-descendant contract. Manually changing Namespace or Owner clears the Workloads
-row highlight without restoring the previous filters. The former standalone
-Pods navigation value is parsed as Workloads for persisted-state compatibility.
+pane boundary retains a one-pixel separator so the drag handle remains visible;
+hovering or dragging thickens it to the shared resize highlight. The Pods pane
+can be collapsed from the left edge of its own GridTable filter bar. While
+collapsed, the one-pixel boundary remains and the Pods row becomes a compact
+header containing only the expand control and `Show Pods`; expanding restores
+the full filter bar and table.
+Selecting a Workloads row writes the normal Pods GridTable filters: Namespace
+when the table spans all namespaces, plus the provider-owned Owner facet. Owner
+values carry cluster, group, version, kind, namespace, and name. Deployments
+resolve through ReplicaSets, CronJobs resolve through Jobs, direct owners match
+directly, and an ownerless Pod uses its own core/v1 identity. The projected Pod
+row retains both direct-controller and resolved-ancestor identities; no
+generated name parsing is part of the descendant contract. Manually changing
+Namespace or Owner clears the Workloads row highlight without restoring the
+previous filters. The former standalone Pods navigation value is parsed as
+Workloads for persisted-state compatibility.
 
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,

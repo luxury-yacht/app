@@ -22,5 +22,8 @@
   longer resizes or clips tables beside split panes and docked panels.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
-- Removed the visible Workloads/Pods divider band and moved the Pods
-  expand/collapse control into the Workloads filter bar before Namespace.
+- Removed the visible Workloads/Pods divider band and moved the expand/collapse
+  control to the left edge of the Pods filter bar. Collapsed Pods now retains a
+  compact `Show Pods` header instead of removing its expansion control. The
+  split retains a one-pixel separator that thickens when its resize handle is
+  hovered or dragged and remains visible when Pods is collapsed.

@@ -28,8 +28,12 @@ import {
 } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { WarningTriangleIcon } from '@shared/components/icons/SharedIcons';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import {
+  CollapseIcon,
+  ExpandIcon,
+  WarningTriangleIcon,
+} from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
@@ -61,6 +65,8 @@ interface PodsViewProps {
   workloadFilterRequest?: PodWorkloadFilterRequest;
   onWorkloadFilterMismatch?: () => void;
   showMetricsBanner?: boolean;
+  collapsed?: boolean;
+  onPodsCollapsedChange?: (collapsed: boolean) => void;
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
@@ -137,6 +143,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     workloadFilterRequest,
     onWorkloadFilterMismatch,
     showMetricsBanner = true,
+    collapsed = false,
+    onPodsCollapsedChange,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -470,6 +478,25 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Pods' : 'Namespace Pods';
     const showNamespaceFilter = isAllNamespaces;
+    const podsPaneActions = useMemo<IconBarItem[]>(
+      () =>
+        onPodsCollapsedChange
+          ? [
+              {
+                type: 'action',
+                id: 'pods-pane',
+                icon: collapsed ? (
+                  <CollapseIcon width={18} height={18} />
+                ) : (
+                  <ExpandIcon width={18} height={18} />
+                ),
+                onClick: () => onPodsCollapsedChange(!collapsed),
+                title: collapsed ? 'Expand Pods' : 'Collapse Pods',
+              },
+            ]
+          : [],
+      [collapsed, onPodsCollapsedChange]
+    );
     const podQueryPredicates = useMemo(
       () => (activePodFilter ? { health: activePodFilter } : undefined),
       [activePodFilter]
@@ -538,6 +565,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       // The unhealthy filter is a backend predicate (podQueryPredicates) in query mode, which
       // now backs single namespaces too — no client-side re-filter of the page.
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptionOverrides:
+        podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,
     });
 
     const currentFilters = resolvedGridTableProps.filters?.value;
@@ -739,6 +768,17 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         ),
       [namespace]
     );
+
+    if (collapsed) {
+      return (
+        <div className="gridtable-filter-bar pods-collapsed-filter-bar">
+          <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
+            <IconBar items={podsPaneActions} />
+            <span className="pods-collapsed-filter-bar__label">Show Pods</span>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <>

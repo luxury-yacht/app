@@ -46,6 +46,8 @@ workflow and that exception is documented.
 - A feature-owned structural action that must precede Namespace uses
   `beforeNamespaceActions`; GridTable renders that IconBar after Kind and before
   Namespace rather than forcing the action into the post-search action cluster.
+  A table without a Kind filter may use this as its leftmost filter-bar control;
+  the Workloads/Pods composite uses it for the expanded Pods collapse control.
 - Row focus and row selection are separate contracts. `Enter` runs
   `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs that
   selection action instead. Pointer-only selection uses `onRowPointerClick`,

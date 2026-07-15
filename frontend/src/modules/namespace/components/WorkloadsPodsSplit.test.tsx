@@ -152,6 +152,20 @@ describe('WorkloadsPodsSplit', () => {
     expect(container.querySelector('[aria-label="Resize Workloads and Pods"]')).not.toBeNull();
   });
 
+  it('shows a persistent separator line that thickens when the resize handle is active', () => {
+    const separatorRule = splitStyles.match(
+      /\.workloads-pods-split__resizer::after\s*{([^}]*)}/
+    )?.[1];
+    const activeSeparatorRule = splitStyles.match(
+      /\.workloads-pods-split__resizer:hover::after,[^{]+{([^}]*)}/
+    )?.[1];
+
+    expect(separatorRule).toContain('height: 1px;');
+    expect(separatorRule).toContain('background: var(--color-border);');
+    expect(activeSeparatorRule).toContain('height: 4px;');
+    expect(activeSeparatorRule).toContain('background: var(--color-resize-handle);');
+  });
+
   it('consumes dock offsets once at the split boundary instead of once per table', () => {
     const splitRule = splitStyles.match(/\.workloads-pods-split\s*{([^}]*)}/)?.[1];
     const nestedTableRule = splitStyles.match(
@@ -164,7 +178,11 @@ describe('WorkloadsPodsSplit', () => {
     expect(nestedTableRule).toContain('margin-bottom: 0;');
   });
 
-  it('renders the controlled collapsed state without a local toggle', () => {
+  it('retains the compact Pods section without a resize handle when collapsed', () => {
+    const collapsedPodsRule = splitStyles.match(
+      /\.workloads-pods-split--collapsed \.workloads-pods-split__pane--lower\s*{([^}]*)}/
+    )?.[1];
+
     act(() => {
       root.render(
         <WorkloadsPodsSplit
@@ -175,9 +193,13 @@ describe('WorkloadsPodsSplit', () => {
       );
     });
 
-    expect(container.textContent).not.toContain('Pods table');
+    expect(container.textContent).toContain('Pods table');
     expect(container.querySelector('[aria-label="Resize Workloads and Pods"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Expand Pods"]')).toBeNull();
+    expect(
+      container.querySelector('.workloads-pods-split--collapsed .workloads-pods-split__pane--lower')
+    ).not.toBeNull();
+    expect(collapsedPodsRule).toContain('border-top: 1px solid var(--color-border);');
 
     act(() => {
       root.render(

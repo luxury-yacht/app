@@ -25,7 +25,7 @@ import {
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CloseIcon, CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -51,8 +51,6 @@ interface WorkloadsTableProps extends WorkloadsViewProps {
   selectedWorkloadKey?: string | null;
   onWorkloadSelect?: (workload: WorkloadData) => void;
   onWorkloadSelectionClear?: () => void;
-  podsCollapsed?: boolean;
-  onPodsCollapsedChange?: (collapsed: boolean) => void;
 }
 
 /**
@@ -66,8 +64,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     selectedWorkloadKey = null,
     onWorkloadSelect,
     onWorkloadSelectionClear,
-    podsCollapsed = false,
-    onPodsCollapsedChange,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -193,23 +189,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               },
             ]
           : []),
-        ...(onPodsCollapsedChange
-          ? [
-              {
-                type: 'action' as const,
-                id: 'pods-pane',
-                icon: podsCollapsed ? (
-                  <ExpandIcon width={18} height={18} />
-                ) : (
-                  <CollapseIcon width={18} height={18} />
-                ),
-                onClick: () => onPodsCollapsedChange(!podsCollapsed),
-                title: podsCollapsed ? 'Expand Pods' : 'Collapse Pods',
-              },
-            ]
-          : []),
       ],
-      [onPodsCollapsedChange, onWorkloadSelectionClear, podsCollapsed, selectedWorkloadKey]
+      [onWorkloadSelectionClear, selectedWorkloadKey]
     );
 
     const getRowSearchValues = useCallback((row: WorkloadData) => {
@@ -382,8 +363,6 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           selectedWorkloadKey={selectedWorkloadKey}
           onWorkloadSelect={handleWorkloadSelect}
           onWorkloadSelectionClear={handleWorkloadSelectionClear}
-          podsCollapsed={podsCollapsed}
-          onPodsCollapsedChange={setPodsCollapsed}
         />
       }
       lower={
@@ -397,6 +376,8 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             setPodFilterRequest(undefined);
           }}
           showMetricsBanner={false}
+          collapsed={podsCollapsed}
+          onPodsCollapsedChange={setPodsCollapsed}
         />
       }
     />

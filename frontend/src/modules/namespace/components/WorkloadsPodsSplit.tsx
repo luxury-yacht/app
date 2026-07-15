@@ -122,14 +122,12 @@ export default function WorkloadsPodsSplit({
           onPointerCancel={stopPointerResize}
         />
       )}
-      {!collapsed && (
-        <section
-          className="workloads-pods-split__pane workloads-pods-split__pane--lower"
-          aria-label="Pods"
-        >
-          {lower}
-        </section>
-      )}
+      <section
+        className="workloads-pods-split__pane workloads-pods-split__pane--lower"
+        aria-label="Pods"
+      >
+        {lower}
+      </section>
     </div>
   );
 }

@@ -15,6 +15,15 @@
   min-height: 0;
 }
 
+.pods-collapsed-filter-bar {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.pods-collapsed-filter-bar__label {
+  color: var(--color-text-secondary);
+}
+
 .gridtable-workloads .gridtable-row--selected {
   border-left-color: var(--color-accent);
 }
