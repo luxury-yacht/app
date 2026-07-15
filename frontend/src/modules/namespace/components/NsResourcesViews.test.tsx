@@ -10,7 +10,6 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  podsViewMock,
   workloadsViewMock,
   configViewMock,
   networkViewMock,
@@ -23,7 +22,6 @@ const {
   eventsViewMock,
   browseViewMock,
 } = vi.hoisted(() => ({
-  podsViewMock: vi.fn(() => <div data-testid="pods-view" />),
   workloadsViewMock: vi.fn(() => <div data-testid="workloads-view" />),
   configViewMock: vi.fn(() => <div data-testid="config-view" />),
   networkViewMock: vi.fn(() => <div data-testid="network-view" />),
@@ -37,7 +35,6 @@ const {
   browseViewMock: vi.fn(() => <div data-testid="browse-view" />),
 }));
 
-vi.mock('@modules/namespace/components/NsViewPods', () => ({ default: podsViewMock }));
 vi.mock('@modules/namespace/components/NsViewWorkloads', () => ({ default: workloadsViewMock }));
 vi.mock('@modules/namespace/components/NsViewConfig', () => ({ default: configViewMock }));
 vi.mock('@modules/namespace/components/NsViewNetwork', () => ({ default: networkViewMock }));
@@ -60,7 +57,6 @@ describe('NamespaceResourcesViews', () => {
   let root: ReactDOM.Root;
 
   beforeEach(() => {
-    podsViewMock.mockClear();
     workloadsViewMock.mockClear();
     configViewMock.mockClear();
     networkViewMock.mockClear();
@@ -91,21 +87,6 @@ describe('NamespaceResourcesViews', () => {
       await Promise.resolve();
     });
   };
-
-  it('renders the pods view with namespace data', async () => {
-    await renderView({
-      namespace: 'team-a',
-      activeTab: 'pods',
-    });
-
-    expect(podsViewMock).toHaveBeenCalledTimes(1);
-    const podsCall = podsViewMock.mock.calls.length
-      ? (podsViewMock.mock.calls[0] as unknown[] | undefined)?.[0]
-      : undefined;
-    expect(podsCall).toMatchObject({
-      namespace: 'team-a',
-    });
-  });
 
   const tabCases = [
     {
@@ -226,7 +207,7 @@ describe('NamespaceResourcesViews', () => {
 
     await renderView({
       namespace: 'team-a',
-      activeTab: 'pods',
+      activeTab: 'workloads',
     });
 
     // Switch to an unknown tab and ensure nothing new renders

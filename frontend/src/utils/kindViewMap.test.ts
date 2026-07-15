@@ -11,9 +11,9 @@ import { getViewForKind, isNamespaceScopedKind } from './kindViewMap';
 describe('getViewForKind', () => {
   // Namespace-scoped kinds
   it.each([
-    ['Pod', 'namespace', 'pods'],
-    ['pod', 'namespace', 'pods'],
-    ['POD', 'namespace', 'pods'],
+    ['Pod', 'namespace', 'workloads'],
+    ['pod', 'namespace', 'workloads'],
+    ['POD', 'namespace', 'workloads'],
     ['Deployment', 'namespace', 'workloads'],
     ['StatefulSet', 'namespace', 'workloads'],
     ['DaemonSet', 'namespace', 'workloads'],

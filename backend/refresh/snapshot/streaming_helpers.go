@@ -35,7 +35,7 @@ func BuildWorkloadSummary(
 		if pod == nil {
 			continue
 		}
-		agg := projectPodAggregate(pod, nil)
+		agg := projectPodAggregate(pod, PodOwnerSources{})
 		if agg.OwnerKey != "" {
 			podsByOwner[agg.OwnerKey] = append(podsByOwner[agg.OwnerKey], agg)
 		}
@@ -105,7 +105,7 @@ func BuildNodeSummary(meta ClusterMeta, node *corev1.Node, pods []*corev1.Pod, n
 		if pod == nil {
 			continue
 		}
-		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{}))
 	}
 	// Scope "" carries no query string, so the parse cannot fail here. The zero metadata
 	// and zero podsVersion are fine: only the projected row is read from the snapshot,

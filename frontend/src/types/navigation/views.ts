@@ -47,8 +47,12 @@ const globalViewTypeSet: ReadonlySet<string> = new Set(GLOBAL_VIEW_DESCRIPTORS.m
  */
 export const parseNamespaceViewType = (
   raw: string | null | undefined
-): NamespaceViewType | undefined =>
-  raw && namespaceViewTypeSet.has(raw) ? (raw as NamespaceViewType) : undefined;
+): NamespaceViewType | undefined => {
+  if (raw === 'pods') {
+    return 'workloads';
+  }
+  return raw && namespaceViewTypeSet.has(raw) ? (raw as NamespaceViewType) : undefined;
+};
 
 export const parseClusterViewType = (
   raw: string | null | undefined

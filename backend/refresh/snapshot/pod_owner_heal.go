@@ -26,6 +26,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
+	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 )
 
@@ -75,7 +76,32 @@ func HealPodBundleReplicaSetOwner(
 
 	if aggregate, ok := bundle.Aggregate.(streamrows.PodAggregate); ok {
 		aggregate.WorkloadKind = deploymentpkg.Identity.Kind
+		aggregate.OwnerKey = WorkloadOwnerKey(deploymentpkg.Identity.Kind, namespace, deploymentName)
 		bundle.Aggregate = aggregate
+		bundle.Indexes = podAggregateBundleIndexes(aggregate)
 	}
+	return bundle, true
+}
+
+// HealPodBundleJobOwner rewrites a pod projected before its owning Job was
+// available, replacing the resolved owner with the Job's actual CronJob parent.
+// The direct Job identity remains intact so both Job and CronJob scopes match.
+func HealPodBundleJobOwner(bundle ingest.Bundle, owner JobControllerOwner) (ingest.Bundle, bool) {
+	if owner.Namespace == "" || owner.JobName == "" || owner.APIVersion == "" || owner.Kind == "" || owner.Name == "" {
+		return bundle, false
+	}
+	table, ok := bundle.Table.(PodSummary)
+	if !ok || table.Namespace != owner.Namespace ||
+		table.DirectOwnerKind != jobpkg.Identity.Kind || table.DirectOwnerName != owner.JobName {
+		return bundle, false
+	}
+	if table.OwnerAPIVersion == owner.APIVersion && table.OwnerKind == owner.Kind && table.OwnerName == owner.Name {
+		return bundle, false
+	}
+
+	table.OwnerAPIVersion = owner.APIVersion
+	table.OwnerKind = owner.Kind
+	table.OwnerName = owner.Name
+	bundle.Table = table
 	return bundle, true
 }

@@ -43,16 +43,12 @@ export const isResourceStreamDomain = (
   domain: RefreshDomain
 ): domain is ResourceStreamRefreshDomain => RESOURCE_STREAM_DOMAINS.has(domain);
 
-// A pods scope shaped `workload:...` or `node:...` is an object-panel Pods-tab
-// window: those scopes exist only while a panel's Pods tab actively leases them
-// (the lease drops when the tab deactivates), and the panel is visible over ANY
-// main view. The per-view gate below exists to keep the BIG namespace-shaped
-// table scopes from streaming while nobody is looking at them; applying it to
-// panel windows froze the embedded Pods tab — no doorbells, so its query-backed
-// table never refetched and its metrics meta aged into the staleness banner.
-const isPanelPodsScope = (scope?: string): boolean => {
+// Focused Pod scopes are small leased windows used by the combined Workloads
+// view and object panels. Their owning component controls the lease lifetime,
+// so they remain active independently of the broad namespace-table view gate.
+const isFocusedPodsScope = (scope?: string): boolean => {
   const base = stripClusterScope(scope);
-  return base.startsWith('workload:') || base.startsWith('node:');
+  return base.startsWith('workload:') || base.startsWith('object:') || base.startsWith('node:');
 };
 
 export const isResourceStreamViewActive = (
@@ -65,10 +61,10 @@ export const isResourceStreamViewActive = (
   }
 
   if (domain === 'pods') {
-    if (isPanelPodsScope(scope)) {
+    if (isFocusedPodsScope(scope)) {
       return true;
     }
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'pods';
+    return context.currentView === 'namespace' && context.activeNamespaceView === 'workloads';
   }
 
   if (domain === 'namespace-workloads') {

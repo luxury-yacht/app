@@ -189,6 +189,8 @@ export interface GridTableProps<T> {
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */
   onRowPointerClick?: (item: T) => void;
+  /** When supplied, Space applies this selection action to the focused row. */
+  onRowSelectionToggle?: (item: T) => void;
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
   embedded?: boolean;

@@ -58,6 +58,32 @@ var (
 	CronJobGVK     = schema.GroupVersionKind{Group: cronjob.Identity.Group, Version: cronjob.Identity.Version, Kind: cronjob.Identity.Kind}
 )
 
+// JobControllerOwner is the complete identity of a Job's controlling CronJob,
+// retained as the Job bundle's aggregate half so Pod projection can resolve
+// Job->CronJob without a second typed Job cache.
+type JobControllerOwner struct {
+	Namespace  string
+	JobName    string
+	APIVersion string
+	Kind       string
+	Name       string
+}
+
+func projectJobControllerOwner(job *batchv1.Job) JobControllerOwner {
+	if job == nil {
+		return JobControllerOwner{}
+	}
+	for _, owner := range job.OwnerReferences {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == cronjob.Identity.Kind && owner.Name != "" {
+			return JobControllerOwner{
+				Namespace: job.Namespace, JobName: job.Name,
+				APIVersion: owner.APIVersion, Kind: owner.Kind, Name: owner.Name,
+			}
+		}
+	}
+	return JobControllerOwner{Namespace: job.Namespace, JobName: job.Name}
+}
+
 // workloadProjectionError is the typed guard error a workload projector returns when the
 // reflector decodes the wrong object type into its store; the ProjectingStore logs it
 // once and skips the object, matching the per-kind type guard every projection applies.
@@ -146,6 +172,7 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
+			Aggregate: projectJobControllerOwner(job),
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil

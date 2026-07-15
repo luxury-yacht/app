@@ -262,7 +262,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 		if pod == nil {
 			continue
 		}
-		aggregates = append(aggregates, projectPodAggregate(pod, nil))
+		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{}))
 		if v := parsePodResourceVersion(pod); v > podsVersion {
 			podsVersion = v
 		}

@@ -369,5 +369,5 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 // resourcecontract — so the manager owns the usage lookup).
 func podStreamRow(m *Manager, pod *corev1.Pod, podUsage map[string]metrics.PodUsage) snapshot.PodSummary {
 	usage := podUsage[pod.Namespace+"/"+pod.Name]
-	return podres.BuildStreamSummary(m.clusterMeta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, m.rsLister)
+	return podres.BuildStreamSummary(m.clusterMeta, pod, usage.CPUUsageMilli, usage.MemoryUsageBytes, m.rsLister, nil)
 }

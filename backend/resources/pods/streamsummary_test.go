@@ -20,7 +20,7 @@ func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
 		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "argoproj.io/v1alpha1", Kind: "Rollout", Name: "canary", Controller: owner,
 		}}}}
-		resolved := resolvePodOwner(pod, map[string]string{})
+		resolved := resolvePodOwner(pod, map[string]string{}, nil)
 		require.Equal(t, "Rollout", resolved.kind)
 		require.Equal(t, "canary", resolved.name)
 		require.Equal(t, "argoproj.io/v1alpha1", resolved.apiVersion)
@@ -33,7 +33,7 @@ func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
 		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "kubevirt.io/v1", Kind: "VirtualMachineInstance", Name: "vmi-test", Controller: owner,
 		}}}}
-		resolved := resolvePodOwner(pod, map[string]string{})
+		resolved := resolvePodOwner(pod, map[string]string{}, nil)
 		require.Equal(t, "VirtualMachineInstance", resolved.kind)
 		require.Equal(t, "vmi-test", resolved.name)
 		require.Equal(t, "kubevirt.io/v1", resolved.apiVersion)
@@ -43,7 +43,7 @@ func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
 		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "demo-rs", Controller: owner,
 		}}}}
-		resolved := resolvePodOwner(pod, map[string]string{"demo-rs": "demo-deploy"})
+		resolved := resolvePodOwner(pod, map[string]string{"demo-rs": "demo-deploy"}, nil)
 		require.Equal(t, "Deployment", resolved.kind)
 		require.Equal(t, "demo-deploy", resolved.name)
 		require.Equal(t, "apps/v1", resolved.apiVersion)
@@ -56,7 +56,7 @@ func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
 
 	t.Run("ownerless pod returns empty apiVersion", func(t *testing.T) {
 		pod := &corev1.Pod{}
-		resolved := resolvePodOwner(pod, map[string]string{})
+		resolved := resolvePodOwner(pod, map[string]string{}, nil)
 		require.Equal(t, "None", resolved.kind)
 		require.Equal(t, "None", resolved.name)
 		require.Empty(t, resolved.apiVersion)

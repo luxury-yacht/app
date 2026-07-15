@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseClusterViewType, parseGlobalViewType } from '@/types/navigation/views';
+import {
+  parseClusterViewType,
+  parseGlobalViewType,
+  parseNamespaceViewType,
+} from '@/types/navigation/views';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
   GLOBAL_VIEW_DESCRIPTORS,
@@ -43,7 +47,6 @@ describe('view registry', () => {
       { id: 'map', label: 'Map' },
       { id: 'events', label: 'Events' },
       { id: 'workloads', label: 'Workloads' },
-      { id: 'pods', label: 'Pods' },
       { id: 'autoscaling', label: 'Autoscaling' },
       { id: 'helm', label: 'Helm' },
       { id: 'config', label: 'Config' },
@@ -54,6 +57,11 @@ describe('view registry', () => {
       { id: 'rbac', label: 'RBAC' },
     ]);
     expect(NAMESPACE_VIEW_DESCRIPTORS.some((descriptor) => 'intent' in descriptor)).toBe(false);
+  });
+
+  it('migrates the removed Pods route to the combined Workloads view', () => {
+    expect(parseNamespaceViewType('pods')).toBe('workloads');
+    expect(getViewDescriptor('namespace', 'pods')).toBeUndefined();
   });
 
   it('carries presentation, search, and refresh metadata for every view', () => {

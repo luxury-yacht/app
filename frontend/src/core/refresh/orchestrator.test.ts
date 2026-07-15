@@ -723,7 +723,7 @@ describe('refreshOrchestrator', () => {
     );
   });
 
-  it('refreshes pods scope when namespace pods view is active during manual refresh', async () => {
+  it('refreshes the Pods table when the combined Workloads view is active', async () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
       undefined as unknown as undefined
     );
@@ -732,7 +732,7 @@ describe('refreshOrchestrator', () => {
     registerPodsDomain();
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedNamespace: 'team-a',
       selectedClusterId: 'cluster-a',
     });
@@ -1853,7 +1853,7 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
     });
@@ -1874,7 +1874,7 @@ describe('refreshOrchestrator', () => {
     );
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
     });
@@ -1914,7 +1914,7 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
     });
@@ -2008,7 +2008,7 @@ describe('refreshOrchestrator', () => {
 
   it('streams a workload-scoped pods window regardless of the active main view', async () => {
     // The object panel's Pods tab leases a workload-scoped pods window while
-    // ANY main view is active. Gating its stream on the namespace pods view
+    // ANY main view is active. Gating its stream on a namespace-level view
     // froze the tab: no doorbells -> the typed query never refetches -> rows
     // stale + the metrics meta ages into "Awaiting metrics data...".
     registerStreamingPodsDomain();
@@ -2020,6 +2020,22 @@ describe('refreshOrchestrator', () => {
     });
 
     const scope = buildClusterScope('cluster-a', 'workload:team-a:apps:v1:Deployment:web');
+    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+  });
+
+  it('streams a standalone-Pod object scope regardless of the active main view', async () => {
+    registerStreamingPodsDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'nodes',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScope('cluster-a', 'object:team-a::v1:Pod:lonely');
     refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
     await Promise.resolve();
 
@@ -2055,13 +2071,13 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
     await Promise.resolve();
 
-    // Not looking at the namespace pods view: the big namespace scope stays polled-only.
+    // Not looking at the combined Workloads view: the broad namespace scope stays polled-only.
     expect(resourceStreamMocks.start).not.toHaveBeenCalledWith(scope);
 
-    // Switching to the namespace pods view starts it.
+    // Switching to the combined Workloads view starts it.
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
     });
     await Promise.resolve();
 
@@ -2886,7 +2902,7 @@ describe('refreshOrchestrator', () => {
     const scopeB = buildClusterScope('cluster-b', 'namespace:default');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],
@@ -2977,7 +2993,7 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope('cluster-a', 'namespace:default');
     refreshOrchestrator.updateContext({
       currentView: 'namespace',
-      activeNamespaceView: 'pods',
+      activeNamespaceView: 'workloads',
       selectedClusterId: 'cluster-a',
       selectedClusterIds: ['cluster-a'],
     });

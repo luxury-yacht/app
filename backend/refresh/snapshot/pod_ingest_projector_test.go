@@ -65,7 +65,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		},
 	}
 
-	project := NewPodIngestProjector(meta, rsLister)
+	project := NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: rsLister})
 
 	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, podres.Identity)
@@ -81,12 +81,12 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 			t.Fatalf("projector returned %T, want ingest.Bundle", raw)
 		}
 
-		wantTable := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
+		wantTable := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister, nil))
 		if gotTable, ok := bundle.Table.(streamrows.PodSummary); !ok || gotTable != wantTable {
 			t.Fatalf("Table half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Table, wantTable)
 		}
 
-		wantAgg := projectPodAggregate(pod, rsLister)
+		wantAgg := projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister})
 		if gotAgg, ok := bundle.Aggregate.(streamrows.PodAggregate); !ok || gotAgg != wantAgg {
 			t.Fatalf("Aggregate half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Aggregate, wantAgg)
 		}
@@ -124,7 +124,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 // TestNewPodIngestProjectorRejectsNonPod proves a non-Pod object yields the typed
 // guard error so the ProjectingStore logs-once and skips it, never panicking.
 func TestNewPodIngestProjectorRejectsNonPod(t *testing.T) {
-	project := NewPodIngestProjector(ClusterMeta{ClusterID: "c-1"}, nil)
+	project := NewPodIngestProjector(ClusterMeta{ClusterID: "c-1"}, PodOwnerSources{})
 	if _, err := project(&corev1.ConfigMap{}); err == nil {
 		t.Fatal("expected error for non-Pod object, got nil")
 	}

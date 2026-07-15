@@ -133,8 +133,8 @@ func TestProjectPodAggregateMatchesCurrentComputations(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rsLister := testsupport.NewReplicaSetLister(t)
-			got := projectPodAggregate(tc.pod, rsLister)
+			var rsLister appslisters.ReplicaSetLister
+			got := projectPodAggregate(tc.pod, PodOwnerSources{ReplicaSets: rsLister})
 			want := oraclePodAggregate(tc.pod, rsLister)
 			if got != want {
 				t.Fatalf("projectPodAggregate mismatch:\n got=%+v\nwant=%+v", got, want)
@@ -189,7 +189,7 @@ func TestProjectPodAggregateWorkloadKindMatchesOverviewResolution(t *testing.T) 
 	}
 	for _, p := range cases {
 		want := oracleClusterOverviewWorkloadKind(p, rsMap)
-		got := projectPodAggregate(p, rsLister).WorkloadKind
+		got := projectPodAggregate(p, PodOwnerSources{ReplicaSets: rsLister}).WorkloadKind
 		if got != want {
 			t.Fatalf("pod %s/%s WorkloadKind = %q, want %q (overview resolution)", p.Namespace, p.Name, got, want)
 		}

@@ -1,6 +1,48 @@
 /* Import shared GridTable styles */
 @import "@styles/components/gridtables.css";
 
+.workloads-pods-table-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workloads-pods-table-surface__table {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.workloads-pods-selection {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.workloads-pods-selection > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workloads-pods-selection__clear {
+  min-height: 1.25rem;
+  padding: 0 0.35rem;
+  font-size: 0.7rem;
+  pointer-events: auto;
+}
+
+.gridtable-workloads .gridtable-row--selected {
+  border-left-color: var(--color-accent);
+}
+
+.gridtable-workloads .gridtable-row--selected .grid-cell {
+  background-color: var(--color-bg-secondary);
+}
+
 .gridtable-workloads .gridtable-row--pod {
   background-color: var(--color-bg-secondary);
 }

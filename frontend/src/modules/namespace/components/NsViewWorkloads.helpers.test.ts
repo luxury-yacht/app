@@ -7,6 +7,7 @@
 
 import {
   appendWorkloadTokens,
+  buildPodsBaseScope,
   buildWorkloadKey,
   clampReplicas,
   extractDesiredReplicas,
@@ -14,6 +15,8 @@ import {
   parseWorkloadKeyValue,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
+
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { describe, expect, it } from 'vitest';
 
 describe('NsViewWorkloads helpers', () => {
@@ -88,5 +91,27 @@ describe('NsViewWorkloads helpers', () => {
     expect(tokens).toContain('10m');
     expect(tokens).toContain('20Mi');
     expect(tokens).toContain('5m');
+  });
+
+  it('builds full-identity workload and standalone Pod scopes', () => {
+    const deployment = buildRequiredObjectReference({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'team-a',
+      name: 'api',
+    });
+    const pod = buildRequiredObjectReference({
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'team-a',
+      name: 'standalone',
+    });
+
+    expect(buildPodsBaseScope(deployment)).toBe('workload:team-a:apps:v1:Deployment:api');
+    expect(buildPodsBaseScope(pod)).toBe('object:team-a::v1:Pod:standalone');
   });
 });

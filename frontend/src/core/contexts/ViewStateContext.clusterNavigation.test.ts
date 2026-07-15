@@ -9,7 +9,7 @@ describe('applyClusterNavigationTarget', () => {
           'cluster-a': {
             viewType: 'cluster',
             previousView: 'overview',
-            activeNamespaceView: 'pods',
+            activeNamespaceView: 'workloads',
             activeClusterView: 'browse',
           },
           'cluster-b': {
@@ -26,7 +26,7 @@ describe('applyClusterNavigationTarget', () => {
       'cluster-a': {
         viewType: 'cluster',
         previousView: 'overview',
-        activeNamespaceView: 'pods',
+        activeNamespaceView: 'workloads',
         activeClusterView: 'browse',
       },
       'cluster-b': {
@@ -45,7 +45,7 @@ describe('applyClusterNavigationTarget', () => {
           'cluster-a': {
             viewType: 'cluster',
             previousView: 'overview',
-            activeNamespaceView: 'pods',
+            activeNamespaceView: 'workloads',
             activeClusterView: 'browse',
           },
         },
@@ -56,7 +56,7 @@ describe('applyClusterNavigationTarget', () => {
       'cluster-a': {
         viewType: 'cluster',
         previousView: 'overview',
-        activeNamespaceView: 'pods',
+        activeNamespaceView: 'workloads',
         activeClusterView: 'browse',
       },
       'cluster-b': {

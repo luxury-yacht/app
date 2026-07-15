@@ -553,6 +553,23 @@ describe('NsViewPods', () => {
     );
   });
 
+  it('uses an explicit selected-workload base scope for the embedded Pods table', async () => {
+    await renderPods({
+      namespace: 'team-a',
+      baseScope: 'workload:team-a:apps:v1:Deployment:api',
+      showMetricsBanner: false,
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'pods',
+        scope:
+          'alpha:ctx|workload:team-a:apps:v1:Deployment:api?limit=50&sort=name&sortDirection=asc',
+      })
+    );
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
+  });
+
   it('publishes backend-owned Status and Node query facets', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',

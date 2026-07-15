@@ -481,7 +481,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		if pod == nil {
 			continue
 		}
-		podAggregates = append(podAggregates, projectPodAggregate(pod, rsLister))
+		podAggregates = append(podAggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister}))
 		if v := resourceVersionOrTimestamp(pod); v > podVersion {
 			podVersion = v
 		}

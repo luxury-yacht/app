@@ -247,7 +247,7 @@ import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
-import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
+import { WorkloadsTable } from '@modules/namespace/components/NsViewWorkloads';
 
 const typedQueryPayload = (data: Record<string, unknown>) => ({
   status: 'executed',
@@ -671,7 +671,7 @@ describe('query-backed leaf first load', () => {
 
   it('uses the typed query result on first load for namespace workloads', async () => {
     await expectQueryFirstLoad({
-      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -899,7 +899,7 @@ describe('query-backed leaf first load', () => {
 
   it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
     await expectQueryFirstLoad({
-      element: <NsViewWorkloads namespace="team-a" showNamespaceColumn={false} />,
+      element: <WorkloadsTable namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
@@ -1128,7 +1128,7 @@ describe('query-backed leaf first load', () => {
     },
     {
       label: 'namespace workloads',
-      element: <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
+      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { rows: [] },
       expected: [
         'age',

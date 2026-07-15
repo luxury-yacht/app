@@ -122,6 +122,43 @@ describe('useGridTableShortcuts', () => {
     );
   });
 
+  it('uses the optional row-selection action for Space while Enter still opens', async () => {
+    const onOpenFocusedRow = vi.fn(() => true);
+    const onSelectFocusedRow = vi.fn(() => true);
+    const Harness: React.FC = () => {
+      useGridTableShortcuts({
+        shortcutsActive: true,
+        enableContextMenu: false,
+        onOpenFocusedRow,
+        onSelectFocusedRow,
+        onOpenContextMenu: () => false,
+        moveSelectionByDelta: () => false,
+        jumpToIndex: () => false,
+        getPageSizeRef: { current: 10 },
+        tableDataLength: 1,
+        isContextMenuVisible: false,
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    requireValue(
+      capturedShortcuts.shortcuts.find((s) => s.key === 'Enter'),
+      'Enter shortcut'
+    ).handler();
+    requireValue(
+      capturedShortcuts.shortcuts.find((s) => s.key === ' '),
+      'Space shortcut'
+    ).handler();
+
+    expect(onOpenFocusedRow).toHaveBeenCalledTimes(1);
+    expect(onSelectFocusedRow).toHaveBeenCalledTimes(1);
+  });
+
   it('wires moveSelectionByDelta and jumpToIndex to navigation shortcuts', async () => {
     const moveSelectionByDelta = vi.fn(() => true);
     const jumpToIndex = vi.fn(() => true);

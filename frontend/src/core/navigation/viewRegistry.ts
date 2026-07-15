@@ -162,15 +162,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'namespace',
-    id: 'pods',
-    supportsAllNamespaces: true,
-    label: 'Pods',
-    description: 'View pods and their current status',
-    keywords: ['pods', 'namespace', 'containers', 'workloads'],
-    refresher: null,
-  },
-  {
-    scope: 'namespace',
     id: 'autoscaling',
     supportsAllNamespaces: true,
     label: 'Autoscaling',

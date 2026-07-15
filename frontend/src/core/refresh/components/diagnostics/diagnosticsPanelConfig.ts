@@ -68,8 +68,7 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey
 const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatureKey[]> = {
   browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
   map: [PERMISSION_FEATURES.objectMapResources],
-  pods: [PERMISSION_FEATURES.namespacePods],
-  workloads: [PERMISSION_FEATURES.namespaceWorkloads],
+  workloads: [PERMISSION_FEATURES.namespaceWorkloads, PERMISSION_FEATURES.namespacePods],
   config: [PERMISSION_FEATURES.namespaceConfig],
   network: [PERMISSION_FEATURES.namespaceNetwork],
   rbac: [PERMISSION_FEATURES.namespaceRBAC],

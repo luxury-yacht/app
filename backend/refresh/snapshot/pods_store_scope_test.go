@@ -70,7 +70,7 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
 	sink := maintained.Sink()
 	for _, pod := range pods {
-		sink.Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister)))
+		sink.Upsert(podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister, nil)))
 	}
 	storeBuilder := &PodBuilder{
 		maintained: maintained,
@@ -83,6 +83,9 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 		// DIRECT controlling owner; the store path must match it identically even
 		// though the row's collapsed owner is the Deployment.
 		"workload:prod:apps:v1:ReplicaSet:orders-7d9c8b6f5",
+		// A standalone Pod row in the upper Workloads table scopes the lower
+		// table to that exact object. The empty core API group is intentional.
+		"object:prod::v1:Pod:lonely",
 		"namespace:prod",
 	}
 	for _, scope := range scopes {
@@ -108,5 +111,19 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 		require.Len(t, storeRows, 1)
 		require.Equal(t, "prod", storeRows[0].Namespace)
 		require.Equal(t, "orders-7d9c8b6f5-abcde", storeRows[0].Name)
+	})
+
+	t.Run("object scope is full-identity and namespace bounded", func(t *testing.T) {
+		ctx := WithClusterMeta(context.Background(), meta)
+		storeSnap, err := storeBuilder.Build(ctx, "object:prod::v1:Pod:lonely")
+		require.NoError(t, err)
+
+		storeRows := storeSnap.Payload.(PodSnapshot).Rows
+		require.Len(t, storeRows, 1)
+		require.Equal(t, "prod", storeRows[0].Namespace)
+		require.Equal(t, "lonely", storeRows[0].Name)
+
+		_, err = storeBuilder.Build(ctx, "object:prod::v1:Deployment:lonely")
+		require.ErrorContains(t, err, "unsupported object scope")
 	})
 }

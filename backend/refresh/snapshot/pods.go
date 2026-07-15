@@ -239,6 +239,7 @@ type PodMetricsInfo struct {
 const (
 	podDomainName     = "pods"
 	workloadScopeKey  = "workload"
+	objectScopeKey    = "object"
 	nodeScopeKey      = "node"
 	namespaceScopeKey = "namespace"
 	podNodeIndexName  = "pods:node"
@@ -443,6 +444,14 @@ func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error)
 			return nil, err
 		}
 		return filterPodRows(rows, func(row PodSummary) bool { return podRowMatchesWorkload(row, parsed) }), nil
+	case objectScopeKey:
+		parsed, err := parsePodObjectScope(value)
+		if err != nil {
+			return nil, err
+		}
+		return filterPodRows(rows, func(row PodSummary) bool {
+			return row.Namespace == parsed.namespace && row.Name == parsed.name
+		}), nil
 	case namespaceScopeKey:
 		namespace := strings.TrimSpace(value)
 		if namespace == "" {
@@ -708,6 +717,19 @@ func (b *PodBuilder) collectPods(scope string) ([]*corev1.Pod, error) {
 			}
 		}
 		return filtered, nil
+	case objectScopeKey:
+		parsed, err := parsePodObjectScope(value)
+		if err != nil {
+			return nil, err
+		}
+		pod, err := b.podLister.Pods(parsed.namespace).Get(parsed.name)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return []*corev1.Pod{}, nil
+			}
+			return nil, err
+		}
+		return []*corev1.Pod{pod}, nil
 	case namespaceScopeKey:
 		namespace := strings.TrimSpace(value)
 		if namespace == "" {
@@ -728,6 +750,33 @@ type workloadScope struct {
 	version   string
 	kind      string
 	name      string
+}
+
+type podObjectScope struct {
+	namespace string
+	name      string
+}
+
+// parsePodObjectScope accepts the complete Kubernetes identity encoded by the
+// frontend selection. Pods are core/v1, so the group segment is intentionally
+// empty in object:<namespace>::v1:Pod:<name>.
+func parsePodObjectScope(value string) (podObjectScope, error) {
+	parts := strings.Split(value, ":")
+	if len(parts) != 5 {
+		return podObjectScope{}, fmt.Errorf("invalid object scope: %s", value)
+	}
+	namespace := strings.TrimSpace(parts[0])
+	group := strings.TrimSpace(parts[1])
+	version := strings.TrimSpace(parts[2])
+	kind := strings.TrimSpace(parts[3])
+	name := strings.TrimSpace(parts[4])
+	if namespace == "" || version == "" || kind == "" || name == "" {
+		return podObjectScope{}, fmt.Errorf("invalid object scope: %s", value)
+	}
+	if group != podres.Identity.Group || version != podres.Identity.Version || kind != podres.Identity.Kind {
+		return podObjectScope{}, fmt.Errorf("unsupported object scope: %s", value)
+	}
+	return podObjectScope{namespace: namespace, name: name}, nil
 }
 
 func parseWorkloadScope(value string) (workloadScope, error) {

@@ -17,7 +17,6 @@ import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewMap from '@modules/namespace/components/NsViewMap';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
@@ -73,16 +72,6 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             fallback={(_, reset) => <ViewErrorFallback viewName="Map" reset={reset} />}
           >
             <NsViewMap namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'pods':
-        return (
-          <ErrorBoundary
-            scope="namespace-pods"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Pods" reset={reset} />}
-          >
-            <NsViewPods namespace={namespace} />
           </ErrorBoundary>
         );
       case 'workloads':

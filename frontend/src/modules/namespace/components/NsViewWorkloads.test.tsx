@@ -36,6 +36,15 @@ const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
   requestRefreshDomainStateMock: vi.fn(),
 }));
 
+const podsViewPropsRef = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+
+vi.mock('@modules/namespace/components/NsViewPods', () => ({
+  default: (props: Record<string, unknown>) => {
+    podsViewPropsRef.current = props;
+    return <div data-testid="pods-view" />;
+  },
+}));
+
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
     onClick: vi.fn(),
@@ -225,6 +234,7 @@ describe('NsViewWorkloads', () => {
     navigateToViewMock.mockReset();
     useTableSortMock.mockClear();
     requestRefreshDomainStateMock.mockReset();
+    podsViewPropsRef.current = null;
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -266,6 +276,115 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('selects a workload row to scope the independent Pods table without opening the object', async () => {
+    const workload: WorkloadData = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      clusterId: 'path:context',
+      clusterName: 'ctx',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
+
+    expect(openWithObjectMock).not.toHaveBeenCalled();
+    expect(podsViewPropsRef.current).toMatchObject({
+      namespace: 'team-a',
+      baseScope: 'workload:team-a:apps:v1:Deployment:api',
+      showMetricsBanner: false,
+    });
+    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).toContain(
+      'gridtable-row--selected'
+    );
+
+    const clearButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Clear'
+    );
+    expect(clearButton).toBeTruthy();
+    act(() => clearButton?.click());
+
+    expect(podsViewPropsRef.current).toMatchObject({
+      namespace: 'team-a',
+      baseScope: undefined,
+      showMetricsBanner: false,
+    });
+    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
+      'gridtable-row--selected'
+    );
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Collapse Pods"]')?.click()
+    );
+    expect(container.querySelector('[data-testid="pods-view"]')).toBeNull();
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
+    expect(container.querySelector('[data-testid="pods-view"]')).not.toBeNull();
+  });
+
+  it('does not revive a prior workload selection after the namespace scope changes', async () => {
+    const workload: WorkloadData = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      clusterId: 'path:context',
+      clusterName: 'ctx',
+    };
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [workload],
+          total: 1,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
+    expect(podsViewPropsRef.current?.baseScope).toBe('workload:team-a:apps:v1:Deployment:api');
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+    });
+
+    expect(podsViewPropsRef.current?.baseScope).toBeUndefined();
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

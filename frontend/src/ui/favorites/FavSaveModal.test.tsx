@@ -527,7 +527,6 @@ describe('FavSaveModal', () => {
       'namespace:map',
       'namespace:events',
       'namespace:workloads',
-      'namespace:pods',
       'namespace:autoscaling',
       'namespace:helm',
       'namespace:config',

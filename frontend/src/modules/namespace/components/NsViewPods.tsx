@@ -50,6 +50,8 @@ interface PodsViewProps {
   namespace: string;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
+  baseScope?: string;
+  showMetricsBanner?: boolean;
 }
 
 const UNHEALTHY_POD_PRESENTATIONS = new Set(['warning', 'error', 'not-ready', 'terminating']);
@@ -119,10 +121,10 @@ export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry)
  * GridTable component for namespace Pods
  */
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
-  ({ namespace, showNamespaceColumn = false, metrics }) => {
+  ({ namespace, showNamespaceColumn = false, metrics, baseScope, showMetricsBanner = true }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
+    const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('workloads');
     const clusterMetrics = useClusterMetricsAvailability();
     const fallbackMetrics = metrics ?? clusterMetrics ?? null;
     const { selectedClusterId } = useKubeconfig();
@@ -508,6 +510,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
       namespace,
+      baseScope,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
@@ -666,12 +669,12 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     return (
       <>
-        {metricsBanner && (
+        {showMetricsBanner && metricsBanner ? (
           <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
             <span className="metrics-warning-banner__dot" />
             {metricsBanner.message}
           </div>
-        )}
+        ) : null}
         <ResourceInventoryTable
           source={source}
           gridTableProps={resolvedGridTableProps}

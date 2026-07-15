@@ -681,7 +681,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
-  it('navigates to the pods view with unhealthy filter when clicking a non-ready status card', async () => {
+  it('navigates to the Workloads Pods table with an unhealthy filter from a non-ready status card', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -702,7 +702,7 @@ describe('ClusterOverview', () => {
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('pods');
+    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
     expect(setSidebarSelectionMock).toHaveBeenCalledWith({
       type: 'namespace',
       value: ALL_NAMESPACES_SCOPE,
@@ -715,7 +715,7 @@ describe('ClusterOverview', () => {
     );
   });
 
-  it('navigates to the filtered pods view from signal cards', async () => {
+  it('navigates to the filtered Workloads Pods table from signal cards', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -753,7 +753,7 @@ describe('ClusterOverview', () => {
     );
   });
 
-  it('navigates to the pods view without unhealthy filter when clicking the ready item', async () => {
+  it('navigates to the Workloads Pods table without an unhealthy filter from the ready item', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -775,7 +775,7 @@ describe('ClusterOverview', () => {
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('pods');
+    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
     expect(setSidebarSelectionMock).toHaveBeenCalledWith({
       type: 'namespace',
       value: ALL_NAMESPACES_SCOPE,

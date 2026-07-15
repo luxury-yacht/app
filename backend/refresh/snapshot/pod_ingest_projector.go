@@ -33,7 +33,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
 // PodGVR / PodGVK are the pod kind's group/version/resource and group/version/kind,
@@ -50,7 +49,7 @@ var (
 // rsLister resolves the ReplicaSet->Deployment owner for the Table half's OwnerKind
 // and the Aggregate half's WorkloadKind (the metrics-bucketing kind). The Table half
 // carries no-data metrics so base pod rows do not depend on the metrics provider.
-func NewPodIngestProjector(meta ClusterMeta, rsLister appslisters.ReplicaSetLister) ingest.ProjectFunc {
+func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.ProjectFunc {
 	// ClusterMeta is a type alias of streamrows.ClusterMeta, so meta is the stream meta.
 	streamMeta := meta
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, podres.Identity)
@@ -65,8 +64,12 @@ func NewPodIngestProjector(meta ClusterMeta, rsLister appslisters.ReplicaSetList
 			return nil, errNotPodObject
 		}
 		var metaObj metav1.Object = pod
-		table := podSummaryWithoutMetrics(podres.BuildStreamSummary(streamMeta, pod, 0, 0, rsLister))
-		aggregate := projectPodAggregate(pod, rsLister)
+		table := podSummaryWithoutMetrics(podres.BuildStreamSummary(
+			streamMeta, pod, 0, 0,
+			sources.ReplicaSets,
+			jobOwnerLookupAdapter(sources.JobControllerOwner),
+		))
+		aggregate := projectPodAggregateFromSummary(pod, sources, table)
 		return ingest.Bundle{
 			Table:     table,
 			Aggregate: aggregate,

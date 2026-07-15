@@ -63,8 +63,8 @@ func TestBuildStandalonePodSummaryFromRowsMatchesTyped(t *testing.T) {
 			want := buildStandalonePodSummary(meta.ClusterID, tc.pod, tc.usage)
 
 			// The ingest rows the pod reflector projects for this pod.
-			podSummary := podres.BuildStreamSummary(streamMeta, tc.pod, 0, 0, nil)
-			agg := projectPodAggregate(tc.pod, nil)
+			podSummary := podres.BuildStreamSummary(streamMeta, tc.pod, 0, 0, nil, nil)
+			agg := projectPodAggregate(tc.pod, PodOwnerSources{})
 			got := buildStandalonePodSummaryFromRows(podSummary, agg, tc.usage)
 
 			if got != want {

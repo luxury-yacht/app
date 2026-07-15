@@ -159,7 +159,7 @@ describe('BackgroundClusterRefresher', () => {
       () => ({
         viewType: 'namespace',
         previousView: 'overview',
-        activeNamespaceView: 'pods',
+        activeNamespaceView: 'workloads',
         activeClusterView: 'nodes',
       }),
       () => 'team-a'
@@ -169,6 +169,11 @@ describe('BackgroundClusterRefresher', () => {
     await (refresher as unknown as { tick: () => Promise<void> }).tick();
 
     expect(fetchForCluster).toHaveBeenCalledWith('namespaces', 'cluster-b');
+    expect(fetchForCluster).toHaveBeenCalledWith(
+      'namespace-workloads',
+      'cluster-b',
+      'namespace:team-a'
+    );
     expect(fetchForCluster).toHaveBeenCalledWith('pods', 'cluster-b', 'namespace:team-a');
   });
 

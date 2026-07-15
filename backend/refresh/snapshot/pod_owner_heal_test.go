@@ -58,7 +58,7 @@ func healTestPod() *corev1.Pod {
 func projectPodBundle(t *testing.T, rsObjects ...*appsv1.ReplicaSet) ingest.Bundle {
 	t.Helper()
 	meta := ClusterMeta{ClusterID: "c-1", ClusterName: "prod"}
-	project := NewPodIngestProjector(meta, testsupport.NewReplicaSetLister(t, rsObjects...))
+	project := NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: testsupport.NewReplicaSetLister(t, rsObjects...)})
 	projected, err := project(healTestPod())
 	if err != nil {
 		t.Fatalf("project: %v", err)

@@ -298,6 +298,18 @@ from a maintained `querypage` store fed by the workload GVRs' ingest reflectors,
 with the pod-aggregate / HPA / metrics join applied at serve — see
 [data-layer.md](./data-layer.md).
 
+The namespace Workloads destination composes two independent query-backed
+tables: Workloads above and Pods below. Each table retains its own filter,
+sort, cursor pagination, page size, diagnostics, and persisted GridTable state.
+The horizontal divider starts at 50%, supports pointer and keyboard resizing,
+and the Pods pane can be collapsed. Selecting a Workloads row changes only the
+Pods query's structural base scope: a Deployment resolves through its
+ReplicaSets, a CronJob resolves through its Jobs, direct owners match directly,
+and a standalone Pod uses its full core/v1 object scope. The projected Pod row
+retains both direct-controller and resolved-ancestor identities; no generated
+name parsing is part of the descendant contract. The former standalone Pods
+navigation value is parsed as Workloads for persisted-state compatibility.
+
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,
 sort, paging, counts, and facets for the visible table are owned by the backend

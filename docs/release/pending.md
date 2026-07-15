@@ -14,3 +14,6 @@
 
 - Made Global a first-class workspace with its own tab and retained navigation,
   independent of the foreground cluster tab.
+- Combined namespace Workloads and Pods into independently filterable,
+  sortable, paginated tables with a collapsible, resizable split. Selecting a
+  workload scopes the Pods table through ReplicaSet and Job ownership.

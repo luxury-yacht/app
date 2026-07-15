@@ -848,7 +848,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 }
 
 func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
-	resources := aggregateWorkloadPodResources([]streamrows.PodAggregate{projectPodAggregate(pod, nil)}, usage)
+	resources := aggregateWorkloadPodResources([]streamrows.PodAggregate{projectPodAggregate(pod, PodOwnerSources{})}, usage)
 	ready := podReadyStatus(pod)
 	model := podres.BuildResourceModel(clusterID, pod)
 
@@ -987,7 +987,7 @@ func podReadyStatus(pod *corev1.Pod) string {
 	if pod == nil {
 		return "0/0"
 	}
-	agg := projectPodAggregate(pod, nil)
+	agg := projectPodAggregate(pod, PodOwnerSources{})
 	return fmt.Sprintf("%d/%d", agg.ReadyContainers, agg.TotalContainers)
 }
 

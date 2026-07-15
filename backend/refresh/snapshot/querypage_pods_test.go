@@ -304,11 +304,11 @@ func TestPodMaintainedIngestOverlayMatchesProject(t *testing.T) {
 	const cpuMilli, memBytes = int64(245), int64(256 * 1024 * 1024)
 
 	// OLD: project the row with the real metrics inline.
-	live := podres.BuildStreamSummary(meta, pod, cpuMilli, memBytes, rs)
+	live := podres.BuildStreamSummary(meta, pod, cpuMilli, memBytes, rs, nil)
 
 	// NEW: project with no-data metrics (what the informer feeds the store), then
 	// overlay the same metrics exactly as the metrics-domain serve path does.
-	stored := podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, pod, 0, 0, rs))
+	stored := podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, pod, 0, 0, rs, nil))
 	stored.CPUUsage = streamrows.FormatCPUMilli(cpuMilli)
 	stored.MemUsage = streamrows.FormatMemoryBytes(memBytes)
 
@@ -342,7 +342,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 	rs := testsupport.NewReplicaSetLister(t)
 	for _, p := range []*corev1.Pod{mkPod("alpha"), mkPod("bravo")} {
 		// Ingest the no-data metric row, exactly as the informer handler does.
-		maintained.upsertRow(podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, p, 0, 0, rs)), p)
+		maintained.upsertRow(podSummaryWithoutMetrics(podres.BuildStreamSummary(meta, p, 0, 0, rs, nil)), p)
 	}
 
 	builder := &PodBuilder{

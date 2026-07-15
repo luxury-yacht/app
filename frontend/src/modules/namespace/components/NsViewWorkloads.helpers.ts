@@ -5,6 +5,8 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
+
 export interface WorkloadData {
   kind: string;
   kindAlias?: string;
@@ -29,6 +31,17 @@ export interface WorkloadData {
   desiredReplicas?: number;
   age?: string;
 }
+
+export const buildPodsBaseScope = (
+  ref: Pick<ClusterObjectReference, 'group' | 'version' | 'kind' | 'namespace' | 'name'>
+): string => {
+  const namespace = ref.namespace?.trim();
+  if (!namespace) {
+    throw new Error(`Cannot scope Pods for ${ref.kind}/${ref.name} without a namespace`);
+  }
+  const scopeType = ref.kind === 'Pod' ? 'object' : 'workload';
+  return `${scopeType}:${namespace}:${ref.group}:${ref.version}:${ref.kind}:${ref.name}`;
+};
 
 export const normalizeWorkloadKind = (rawKind: string) => {
   const lower = rawKind?.toLowerCase?.() ?? '';

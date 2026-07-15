@@ -82,7 +82,26 @@ func registerPodReflector(mgr *ingest.IngestManager, factory *informer.Factory, 
 	// (ingest_notify_pods) paths read the STORED Table half (PodSummary), so it must not be
 	// dropped. Every other reflector below passes false — its Table half lives only in the
 	// columnar maintained store after being fanned to the BundleSink.
-	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, rsLister), true)
+	jobOwnerLookup := func(namespace, jobName string) (snapshot.JobControllerOwner, bool) {
+		store := mgr.StoreFor(snapshot.JobGVR)
+		if store == nil {
+			return snapshot.JobControllerOwner{}, false
+		}
+		raw, exists, err := store.GetByKey(namespace + "/" + jobName)
+		if err != nil || !exists {
+			return snapshot.JobControllerOwner{}, false
+		}
+		bundle, ok := raw.(ingest.Bundle)
+		if !ok {
+			return snapshot.JobControllerOwner{}, false
+		}
+		owner, ok := bundle.Aggregate.(snapshot.JobControllerOwner)
+		return owner, ok && owner.Kind != "" && owner.Name != ""
+	}
+	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, snapshot.PodOwnerSources{
+		ReplicaSets:        rsLister,
+		JobControllerOwner: jobOwnerLookup,
+	}), true)
 }
 
 // registerWorkloadReflectors wires the five bespoke workload reflectors onto the manager.

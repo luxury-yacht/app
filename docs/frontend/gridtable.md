@@ -43,6 +43,12 @@ workflow and that exception is documented.
   order. Provider query facets participate in that order alongside structural
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
+- Row focus and row selection are separate contracts. `Enter` runs
+  `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs that
+  selection action instead. Pointer-only selection uses `onRowPointerClick`,
+  which excludes interactive descendants. A view that enables selection must
+  expose the selected state through `gridtable-row--selected` so the shared row
+  renderer publishes `aria-selected`.
 - The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
   hideable columns only; do not add synthetic show-all or hide-all options.
 - Multi-select filter state preserves an explicit Select All selection so the

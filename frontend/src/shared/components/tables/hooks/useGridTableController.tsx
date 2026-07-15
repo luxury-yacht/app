@@ -42,7 +42,7 @@ import {
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import type { ReactElement, ReactNode, RefObject } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 // Stable default to avoid re-creating lock lists on every render.
 const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
@@ -116,6 +116,7 @@ export function useGridTableController<T>({
   getRowStyle,
   onRowClick,
   onRowPointerClick,
+  onRowSelectionToggle,
   onSort,
   sortConfig,
   loading = false,
@@ -397,10 +398,24 @@ export function useGridTableController<T>({
     jumpToIndex,
   });
 
+  const selectFocusedRow = useCallback(() => {
+    if (
+      !onRowSelectionToggle ||
+      focusedRowIndex === null ||
+      focusedRowIndex < 0 ||
+      focusedRowIndex >= tableData.length
+    ) {
+      return false;
+    }
+    onRowSelectionToggle(tableData[focusedRowIndex]);
+    return true;
+  }, [focusedRowIndex, onRowSelectionToggle, tableData]);
+
   useGridTableShortcuts({
     shortcutsActive,
     enableContextMenu,
     onOpenFocusedRow: activateFocusedRow,
+    onSelectFocusedRow: onRowSelectionToggle ? selectFocusedRow : undefined,
     onOpenContextMenu: openFocusedRowContextMenu,
     moveSelectionByDelta,
     jumpToIndex,

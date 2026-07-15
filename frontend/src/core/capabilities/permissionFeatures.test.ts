@@ -36,7 +36,6 @@ describe('permission feature contract', () => {
       ...getScopedFeaturesForView('cluster', 'custom', 'browse'),
       ...getScopedFeaturesForView('cluster', 'events', 'browse'),
       ...getScopedFeaturesForView('namespace', null, 'map'),
-      ...getScopedFeaturesForView('namespace', null, 'pods'),
       ...getScopedFeaturesForView('namespace', null, 'workloads'),
       ...getScopedFeaturesForView('namespace', null, 'config'),
       ...getScopedFeaturesForView('namespace', null, 'network'),

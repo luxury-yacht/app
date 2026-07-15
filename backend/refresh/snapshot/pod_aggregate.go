@@ -23,18 +23,47 @@ import (
 	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
+// PodOwnerSources are the related-object lookups needed to resolve a Pod's
+// controller ancestry without retaining typed Pods in the ingest store.
+type PodOwnerSources struct {
+	ReplicaSets        appslisters.ReplicaSetLister
+	JobControllerOwner func(namespace, jobName string) (JobControllerOwner, bool)
+}
+
 // projectPodAggregate computes the per-pod aggregation row from a typed Pod.
 // A nil pod yields the zero PodAggregate (matching the nil-skip guards the
-// callers already apply before aggregating). rsLister resolves the WorkloadKind
-// field's ReplicaSet->Deployment relationship via the actual ReplicaSet owner
-// reference (cluster-overview's metrics-bucketing resolution); it may be nil, in
-// which case a ReplicaSet-owned pod's WorkloadKind is empty — exactly as overview
-// would leave it when the ReplicaSet list is unavailable.
-func projectPodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) streamrows.PodAggregate {
+// callers already apply before aggregating). The owner sources resolve
+// controller ancestry through actual owner references. A nil ReplicaSet source
+// leaves a ReplicaSet-owned Pod's WorkloadKind empty, matching the overview
+// metrics-bucketing behavior when that relationship source is unavailable.
+func projectPodAggregate(pod *corev1.Pod, sources PodOwnerSources) streamrows.PodAggregate {
 	if pod == nil {
 		return streamrows.PodAggregate{}
 	}
 
+	ownerSummary := podres.BuildStreamSummary(streamrows.ClusterMeta{}, pod, 0, 0, sources.ReplicaSets, jobOwnerLookupAdapter(sources.JobControllerOwner))
+	return projectPodAggregateFromSummary(pod, sources, ownerSummary)
+}
+
+func projectPodAggregateFromSummary(pod *corev1.Pod, sources PodOwnerSources, ownerSummary streamrows.PodSummary) streamrows.PodAggregate {
+	ownerKey := ""
+	if ownerSummary.OwnerKind != "" && ownerSummary.OwnerKind != "None" && ownerSummary.OwnerName != "" && ownerSummary.OwnerName != "None" {
+		ownerKey = workloadOwnerKey(ownerSummary.OwnerKind, pod.Namespace, ownerSummary.OwnerName)
+	}
+	// Jobs are visible workload rows, so their Pods remain attributed to the
+	// direct Job for metrics. The resolved CronJob identity on PodSummary is
+	// separately available for descendant filtering. ReplicaSets are not visible
+	// workload rows and continue to collapse into their Deployment owner.
+	if ownerSummary.DirectOwnerKind == "Job" && ownerSummary.DirectOwnerName != "" {
+		ownerKey = workloadOwnerKey(ownerSummary.DirectOwnerKind, pod.Namespace, ownerSummary.DirectOwnerName)
+	}
+	// Legacy typed snapshot helpers have no ReplicaSet source at all. Preserve
+	// their established Deployment aggregation fallback; the production ingest
+	// projector always supplies a (possibly not-yet-synced) lister and therefore
+	// keeps the unresolved ReplicaSet identity until the relationship heal runs.
+	if sources.ReplicaSets == nil && ownerSummary.OwnerKind == replicasetpkg.Identity.Kind {
+		ownerKey = ownerKeyForPod(pod)
+	}
 	agg := streamrows.PodAggregate{
 		Namespace:          pod.Namespace,
 		Name:               pod.Name,
@@ -42,13 +71,12 @@ func projectPodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister)
 		Phase:              string(pod.Status.Phase),
 		ContainerCount:     len(pod.Spec.Containers),
 		InitContainerCount: len(pod.Spec.InitContainers),
-		// Reuse the workloads owner-grouping key so the RS->Deployment
-		// string-suffix collapse stays in one place (namespace_workloads.go).
-		OwnerKey: ownerKeyForPod(pod),
+		// The grouping key attributes metrics to the visible owning workload.
+		OwnerKey: ownerKey,
 		// WorkloadKind is cluster-overview's metrics-bucketing kind: the controlling
 		// owner's kind, with a ReplicaSet resolved to Deployment via the RS lister
 		// (the actual RS owner ref), matching clusterOverviewWorkloadKind exactly.
-		WorkloadKind: workloadKindForPod(pod, rsLister),
+		WorkloadKind: workloadKindForPod(pod, sources.ReplicaSets),
 		// Status presentation is derived once from the typed pod (overview reads
 		// exactly this string via BuildResourceModel(...).Status.Presentation).
 		StatusPresentation: podres.BuildResourceModel("", pod).Status.Presentation,
@@ -101,6 +129,16 @@ func projectPodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister)
 	}
 
 	return agg
+}
+
+func jobOwnerLookupAdapter(lookup func(namespace, jobName string) (JobControllerOwner, bool)) podres.JobControllerOwnerLookup {
+	if lookup == nil {
+		return nil
+	}
+	return func(namespace, jobName string) (string, string, string, bool) {
+		owner, ok := lookup(namespace, jobName)
+		return owner.APIVersion, owner.Kind, owner.Name, ok
+	}
 }
 
 // workloadKindForPod resolves the cluster-overview metrics-bucketing workload kind

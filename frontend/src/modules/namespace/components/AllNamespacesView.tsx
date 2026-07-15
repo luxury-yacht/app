@@ -15,7 +15,6 @@ import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
@@ -31,8 +30,6 @@ interface AllNamespacesViewProps {
 const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
   const renderContent = () => {
     switch (activeTab) {
-      case 'pods':
-        return <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'workloads':
         return <NsViewWorkloads namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn />;
       case 'config':

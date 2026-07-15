@@ -248,7 +248,6 @@ describe('Sidebar', () => {
       'map',
       'events',
       'workloads',
-      'pods',
       'autoscaling',
       'helm',
       'config',
@@ -1037,18 +1036,18 @@ describe('Sidebar', () => {
       await Promise.resolve();
     });
 
-    const podsView = requireValue(
+    const workloadsView = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
     ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
-      )}"][data-sidebar-target-view="pods"]`
+      )}"][data-sidebar-target-view="workloads"]`
     );
-    expect(podsView).not.toBeNull();
+    expect(workloadsView).not.toBeNull();
 
     act(() => {
-      requireValue(podsView, 'expected test value in Sidebar.test.tsx').click();
+      requireValue(workloadsView, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
@@ -1074,23 +1073,23 @@ describe('Sidebar', () => {
       requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
     });
 
-    const podsView = requireValue(
+    const workloadsView = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
     ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
-      )}"][data-sidebar-target-view="pods"]`
+      )}"][data-sidebar-target-view="workloads"]`
     );
-    expect(podsView).not.toBeNull();
+    expect(workloadsView).not.toBeNull();
 
     act(() => {
-      requireValue(podsView, 'expected test value in Sidebar.test.tsx').click();
+      requireValue(workloadsView, 'expected test value in Sidebar.test.tsx').click();
     });
 
     expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
     expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('pods');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
   });
 
   it('allows modified navigation keys to bubble to global handlers', () => {
@@ -1290,20 +1289,20 @@ describe('Sidebar', () => {
       viewState: {
         sidebarSelection: { type: 'namespace', value: 'default' },
         viewType: 'namespace',
-        activeNamespaceTab: 'pods',
+        activeNamespaceTab: 'workloads',
       },
     });
     await act(async () => {
       await Promise.resolve();
     });
-    const podsView = requireValue(
+    const workloadsView = requireValue(
       container,
       'expected test value in Sidebar.test.tsx'
     ).querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
         'default'
-      )}"][data-sidebar-target-view="pods"]`
+      )}"][data-sidebar-target-view="workloads"]`
     );
-    expect(podsView).not.toBeNull();
+    expect(workloadsView).not.toBeNull();
   });
 });

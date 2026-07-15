@@ -372,7 +372,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         return;
       }
       setSelectedNamespace(ALL_NAMESPACES_SCOPE);
-      setActiveNamespaceTab('pods');
+      setActiveNamespaceTab('workloads');
       setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigateToNamespace();
       if (filter !== 'none' && selectedClusterId) {

@@ -124,7 +124,35 @@ func (m *Manager) registerWorkloadIngestNotify(ingestManager *ingest.IngestManag
 		}
 		ingestManager.AddCatalogSink(gvr, workloadNotifyCatalogSink{manager: m, identity: identity})
 	}
+	if m.canListWatch(jobres.Identity.Group, jobres.Identity.Resource) {
+		ingestManager.AddBundleSink(snapshot.JobGVR, jobPodOwnerHealBundleSink{manager: m})
+	}
 }
+
+// jobPodOwnerHealBundleSink closes the startup race where the Pod reflector
+// projects a Job-owned Pod before the Job reflector has exposed its CronJob
+// controller. Job arrival rewrites the affected Pod bundles through their
+// owner-key index, which also emits the normal Pod/workload change signals.
+type jobPodOwnerHealBundleSink struct {
+	manager *Manager
+}
+
+func (s jobPodOwnerHealBundleSink) UpsertBundle(bundle ingest.Bundle) {
+	owner, ok := bundle.Aggregate.(snapshot.JobControllerOwner)
+	if !ok || s.manager == nil || s.manager.podIngest == nil || owner.Kind == "" || owner.Name == "" {
+		return
+	}
+	s.manager.podIngest.RewriteBundlesByIndex(
+		podGVR,
+		snapshot.PodOwnerKeyIndexName,
+		[]string{snapshot.WorkloadOwnerKey(jobres.Identity.Kind, owner.Namespace, owner.JobName)},
+		func(podBundle ingest.Bundle) (ingest.Bundle, bool) {
+			return snapshot.HealPodBundleJobOwner(podBundle, owner)
+		},
+	)
+}
+
+func (s jobPodOwnerHealBundleSink) DeleteBundle(ingest.Bundle) {}
 
 // workloadNotifyCatalogSink adapts the workloads signal-only broadcast to an ingest
 // Catalog-half Sink. The reflector delivers the projected catalog Summary (never the source

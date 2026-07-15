@@ -23,13 +23,19 @@ import (
 	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
-// BuildStreamSummary builds the pod row, resolving the Deployment owner from the
-// ReplicaSet lister. cpuUsageMilli/memUsageBytes are the pod's current usage.
-func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsLister appslisters.ReplicaSetLister) streamrows.PodSummary {
+// JobControllerOwnerLookup resolves a directly owning Job to its controlling
+// CronJob. It reports the complete parent identity so callers never infer the
+// CronJob from a generated Job name.
+type JobControllerOwnerLookup func(namespace, jobName string) (apiVersion, kind, name string, ok bool)
+
+// BuildStreamSummary builds the pod row, resolving controller ancestry from the
+// supplied ReplicaSet lister and Job lookup. cpuUsageMilli/memUsageBytes are the
+// pod's current usage.
+func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsLister appslisters.ReplicaSetLister, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	if pod == nil {
 		return streamrows.PodSummary{ClusterMeta: meta}
 	}
-	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, buildReplicaSetDeploymentMapForPod(pod, rsLister))
+	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, buildReplicaSetDeploymentMapForPod(pod, rsLister), jobOwnerLookup)
 }
 
 // BuildStreamSummaryFromRSMap builds the pod row with a pre-built ReplicaSet->
@@ -38,13 +44,13 @@ func BuildStreamSummaryFromRSMap(meta streamrows.ClusterMeta, pod *corev1.Pod, c
 	if pod == nil {
 		return streamrows.PodSummary{ClusterMeta: meta}
 	}
-	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, rsMap)
+	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, rsMap, nil)
 }
 
-func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string) streamrows.PodSummary {
+func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	model := BuildResourceModel(meta.ClusterID, pod)
 	podFacts := BuildFacts(pod)
-	owner := resolvePodOwner(pod, rsMap)
+	owner := resolvePodOwner(pod, rsMap, jobOwnerLookup)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	return streamrows.PodSummary{
 		ClusterMeta:           meta,
@@ -76,14 +82,14 @@ func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, me
 }
 
 // podOwner carries both owner identities a pod row stores: the direct
-// controlling ownerRef as written on the pod, and the collapsed owner with a
-// ReplicaSet resolved to its Deployment (equal to direct for every other kind).
+// controlling ownerRef as written on the pod, and the resolved owner with a
+// ReplicaSet mapped to its Deployment or a Job mapped to its CronJob.
 type podOwner struct {
 	kind, name, apiVersion                   string
 	directKind, directName, directAPIVersion string
 }
 
-func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) podOwner {
+func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string, jobOwnerLookup JobControllerOwnerLookup) podOwner {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {
 			continue
@@ -101,6 +107,13 @@ func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) podOwner {
 				resolved.kind = "Deployment"
 				resolved.name = deployment
 				resolved.apiVersion = "apps/v1"
+			}
+		}
+		if owner.Kind == "Job" && jobOwnerLookup != nil {
+			if apiVersion, kind, name, ok := jobOwnerLookup(pod.Namespace, owner.Name); ok {
+				resolved.kind = kind
+				resolved.name = name
+				resolved.apiVersion = apiVersion
 			}
 		}
 		return resolved
