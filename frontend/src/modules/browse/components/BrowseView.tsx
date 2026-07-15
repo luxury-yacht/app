@@ -414,8 +414,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       ],
       showKindDropdown: true,
       showNamespaceDropdown: showNamespaceColumn,
-      kindDropdownSearchable: true,
-      kindDropdownBulkActions: true,
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
       // Show the "showing N of M items due to filters" banner like every other view (the bar only

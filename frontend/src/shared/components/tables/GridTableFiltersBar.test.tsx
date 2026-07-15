@@ -272,33 +272,7 @@ describe('GridTableFiltersBar', () => {
     expect(controls).toEqual(['facet-apiGroups', 'kinds']);
   });
 
-  it('passes searchable through to kind and namespace dropdowns when enabled', async () => {
-    await renderFilters({
-      showKindDropdown: true,
-      showNamespaceDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [
-          { label: 'Pods', value: 'Pod' },
-          { label: 'Deployments', value: 'Deployment' },
-        ],
-        namespaces: [
-          { label: 'team-a', value: 'team-a' },
-          { label: 'team-b', value: 'team-b' },
-        ],
-        kindDropdownSearchable: true,
-        namespaceDropdownSearchable: true,
-      },
-    });
-
-    expect(container.querySelector('[data-testid="kinds"]')?.getAttribute('data-searchable')).toBe(
-      'true'
-    );
-    expect(
-      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
-    ).toBe('true');
-  });
-
-  it('passes bulk actions through to the kind dropdown when enabled', async () => {
+  it('always enables search and bulk actions for the kind dropdown', async () => {
     await renderFilters({
       showKindDropdown: true,
       resolvedFilterOptions: {
@@ -307,12 +281,32 @@ describe('GridTableFiltersBar', () => {
           { label: 'Deployments', value: 'Deployment' },
         ],
         namespaces: [],
-        kindDropdownBulkActions: true,
+      },
+    });
+
+    expect(container.querySelector('[data-testid="kinds"]')?.getAttribute('data-searchable')).toBe(
+      'true'
+    );
+    expect(
+      container.querySelector('[data-testid="kinds"]')?.getAttribute('data-bulk-actions')
+    ).toBe('true');
+  });
+
+  it('passes searchable through to the namespace dropdown when enabled', async () => {
+    await renderFilters({
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+        namespaceDropdownSearchable: true,
       },
     });
 
     expect(
-      container.querySelector('[data-testid="kinds"]')?.getAttribute('data-bulk-actions')
+      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
     ).toBe('true');
   });
 

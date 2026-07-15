@@ -446,7 +446,7 @@ describe('ClusterViewCustom', () => {
     ]);
   });
 
-  it('enables searchable kind dropdown bulk actions for custom resources', async () => {
+  it('shows the kind dropdown for custom resources', async () => {
     await act(async () => {
       root.render(<ClusterViewCustom loaded={true} />);
       await Promise.resolve();
@@ -454,8 +454,6 @@ describe('ClusterViewCustom', () => {
 
     const props = gridTablePropsRef.current;
     expect(props?.filters?.options?.showKindDropdown).toBe(true);
-    expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
-    expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
     // Export is now the unified frontend fetcher (the GridTable filter bar wires the Copy/Export
     // cluster from it), not a server-side per-action catalog export.
     expect(typeof props?.fetchAllRows).toBe('function');

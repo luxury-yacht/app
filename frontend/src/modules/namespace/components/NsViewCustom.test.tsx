@@ -438,7 +438,7 @@ describe('NsViewCustom', () => {
     ]);
   });
 
-  it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
+  it('shows the kind dropdown in the all-namespaces custom view', async () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceColumn: true,
@@ -446,8 +446,6 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
-    expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
-    expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
     // Export is now the unified frontend fetcher, not a server-side per-action catalog export.
     expect(typeof gridProps.fetchAllRows).toBe('function');
     expect(

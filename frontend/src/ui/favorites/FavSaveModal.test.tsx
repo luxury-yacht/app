@@ -113,13 +113,23 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 
 // Mock Dropdown to render a simple <select> so we can drive view changes.
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({ options, value, onChange, placeholder, disabled }: DropdownProps) => {
+  Dropdown: ({
+    options,
+    value,
+    onChange,
+    placeholder,
+    disabled,
+    searchable,
+    showBulkActions,
+  }: DropdownProps) => {
     const opts = options.filter((option) => !option.group);
     return (
       <select
         data-testid={`dropdown-${placeholder ?? 'select'}`}
         value={Array.isArray(value) ? value.join(',') : (value ?? '')}
         disabled={disabled}
+        data-searchable={searchable ? 'true' : 'false'}
+        data-bulk-actions={showBulkActions ? 'true' : 'false'}
         onChange={(e) => onChange(e.target.value)}
       >
         {opts.map((option) => (
@@ -275,6 +285,14 @@ describe('FavSaveModal', () => {
     expect(container.querySelector('.modal-overlay')).toBeTruthy();
     expect(container.querySelector('.fav-save-modal')).toBeTruthy();
     expect(container.querySelector('.modal-header h2')?.textContent).toBe('Save Favorite');
+  });
+
+  it('enables search and bulk actions for the Kinds dropdown', async () => {
+    await renderComponent(makeProps({ availableKinds: ['Pod', 'Deployment'] }));
+
+    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
+    expect(kinds?.getAttribute('data-searchable')).toBe('true');
+    expect(kinds?.getAttribute('data-bulk-actions')).toBe('true');
   });
 
   it('does not close when overlay is clicked', async () => {

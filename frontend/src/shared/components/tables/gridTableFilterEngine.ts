@@ -47,8 +47,6 @@ export function buildGridTableFilterOptions<T>({
   const baseOptions = {
     searchBehavior: options?.searchBehavior ?? 'local',
     searchPlaceholder: options?.searchPlaceholder,
-    kindDropdownSearchable: options?.kindDropdownSearchable ?? false,
-    kindDropdownBulkActions: options?.kindDropdownBulkActions ?? false,
     namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
     namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
     clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,

@@ -226,8 +226,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         kinds: catalogFilterOptions.kinds,
         namespaces: undefined,
         showKindDropdown: true,
-        kindDropdownSearchable: true,
-        kindDropdownBulkActions: true,
         totalCount,
         unfilteredTotal,
         totalIsExact,

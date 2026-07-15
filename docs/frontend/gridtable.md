@@ -51,6 +51,9 @@ workflow and that exception is documented.
   renderer publishes `aria-selected`.
 - The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
   hideable columns only; do not add synthetic show-all or hide-all options.
+- Every multi-select Kinds dropdown exposes search plus `Select all` and
+  `Select none`. GridTable owns this as an invariant of a visible Kind filter;
+  views may decide whether the filter is present but cannot disable its controls.
 - Filter-style multiselects use three explicit states: `all` is unrestricted
   and includes options discovered later, `some` matches only its stored values,
   and `none` matches no rows. Controlled Dropdown values project `all` to every

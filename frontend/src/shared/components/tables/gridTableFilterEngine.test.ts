@@ -160,7 +160,6 @@ describe('gridTableFilterEngine', () => {
       filteringEnabled: false,
       options: {
         searchPlaceholder: 'Find resources',
-        kindDropdownSearchable: true,
       },
       data: rows,
       accessors,
@@ -169,7 +168,6 @@ describe('gridTableFilterEngine', () => {
     });
 
     expect(options.searchPlaceholder).toBe('Find resources');
-    expect(options.kindDropdownSearchable).toBe(true);
     expect(options.kinds).toEqual([]);
     expect(options.namespaces).toEqual([]);
   });

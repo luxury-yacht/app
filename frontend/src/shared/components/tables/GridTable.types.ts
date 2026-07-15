@@ -114,8 +114,6 @@ export interface GridTableFilterOptions {
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
   showClusterDropdown?: boolean;
-  kindDropdownSearchable?: boolean;
-  kindDropdownBulkActions?: boolean;
   namespaceDropdownSearchable?: boolean;
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
@@ -246,8 +244,6 @@ export interface InternalFilterOptions {
   clusters?: DropdownOption[];
   queryFacets?: GridTableQueryFacetDefinition[];
   searchPlaceholder?: string;
-  kindDropdownSearchable?: boolean;
-  kindDropdownBulkActions?: boolean;
   namespaceDropdownSearchable?: boolean;
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;

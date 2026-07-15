@@ -242,8 +242,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-kind"
                   multiple
                   size="compact"
-                  searchable={resolvedFilterOptions.kindDropdownSearchable}
-                  showBulkActions={resolvedFilterOptions.kindDropdownBulkActions}
+                  searchable
+                  showBulkActions
                   placeholder="All kinds"
                   value={filterSelectionToDropdownValues(
                     activeFilters.kinds,

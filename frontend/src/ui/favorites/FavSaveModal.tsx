@@ -598,6 +598,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     }
                     placeholder="All kinds"
                     multiple
+                    searchable
+                    showBulkActions
                     renderValue={(val) => {
                       const count = Array.isArray(val) ? val.length : val ? 1 : 0;
                       if (count === 0) {

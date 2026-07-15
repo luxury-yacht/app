@@ -541,15 +541,6 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(false);
     });
 
-    it('enables kind dropdown bulk actions for browse filters', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.filters?.options?.kindDropdownBulkActions).toBe(true);
-    });
-
     it('uses the cluster browse persistence id', async () => {
       await act(async () => {
         root.render(<BrowseView namespace={undefined} />);

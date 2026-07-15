@@ -72,8 +72,6 @@ export interface ResourceGridTableBaseParams<T extends ResourceGridTableRow> {
   filterOptions?: GridTableFilterPersistenceOptions;
   pageSizeOptions?: readonly number[];
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
-  kindDropdownBulkActions?: boolean;
-  kindDropdownSearchable?: boolean;
   metadataSearch?: ResourceGridMetadataSearchParams<T>;
   onTableStateChange?: (state: {
     filters: GridTableFilterState;

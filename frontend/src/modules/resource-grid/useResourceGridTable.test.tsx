@@ -350,7 +350,6 @@ describe('useNamespaceResourceGridTable', () => {
 
     expect(harness.result.current?.gridTableProps.filters?.options).toMatchObject({
       searchBehavior: 'local',
-      kindDropdownBulkActions: false,
     });
     expect(harness.result.current?.gridTableProps.filters?.options?.partialDataLabel).toContain(
       'visible dataset'

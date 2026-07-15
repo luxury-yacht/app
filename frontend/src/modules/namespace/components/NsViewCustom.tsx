@@ -232,8 +232,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         namespaces: showNamespaceFilter ? catalogFilterOptions.namespaces : undefined,
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceFilter,
-        kindDropdownSearchable: true,
-        kindDropdownBulkActions: true,
         namespaceDropdownSearchable: showNamespaceFilter,
         namespaceDropdownBulkActions: showNamespaceFilter,
         totalCount,
