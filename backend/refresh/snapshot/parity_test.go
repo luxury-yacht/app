@@ -141,8 +141,7 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"nodes":                 {},
 	}
 	excluded := map[string]string{
-		"namespace-helm":         "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
-		"namespace-applications": "query-refetch change signals; rows are derived from multiple aggregate sources at snapshot time",
+		"namespace-helm": "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
 	}
 
 	supported := resourceStreamContractDomains(t)

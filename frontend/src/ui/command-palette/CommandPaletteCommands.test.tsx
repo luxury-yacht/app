@@ -231,7 +231,6 @@ describe('CommandPaletteCommands', () => {
       'namespace-browse',
       'namespace-map',
       'namespace-events',
-      'namespace-applications',
       'namespace-workloads',
       'namespace-pods',
       'namespace-autoscaling',

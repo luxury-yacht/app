@@ -33,7 +33,6 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'cluster-events',
       'cluster-rbac',
       'cluster-storage',
-      'namespace-applications',
       'namespace-autoscaling',
       'namespace-config',
       'namespace-custom',

@@ -119,12 +119,9 @@ func TestPublishedQueryFacetsHaveBackendExecutionAndOptionProjections(t *testing
 		keys         []string
 	}
 	providers := map[string]providerFacetContract{
-		"pods":           {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
-		"nodes":          {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
-		"cluster-events": {clusterEventsQueryCapabilities(), typedTableFacetKeys(clusterEventTableQueryAdapter().Facets)},
-		"namespace-applications": {
-			namespaceApplicationsQueryCapabilities(), typedTableFacetKeys(namespaceApplicationQueryFacets()),
-		},
+		"pods":                {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
+		"nodes":               {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
+		"cluster-events":      {clusterEventsQueryCapabilities(), typedTableFacetKeys(clusterEventTableQueryAdapter().Facets)},
 		"namespace-events":    {namespaceEventsQueryCapabilities(), typedTableFacetKeys(namespacedEventTableQueryAdapter().Facets)},
 		"namespace-workloads": {namespaceWorkloadsQueryCapabilities(), typedTableFacetKeys(workloadQueryFacets())},
 	}
@@ -242,23 +239,22 @@ func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 // (no kind filtering at all).
 func TestTypedResourceProvidersPublishKindVocabulary(t *testing.T) {
 	expected := map[string][]string{
-		"cluster-config":         {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
-		"cluster-storage":        {"PersistentVolume"},
-		"cluster-rbac":           {"ClusterRole", "ClusterRoleBinding"},
-		"cluster-crds":           {"CustomResourceDefinition"},
-		"cluster-events":         nil,
-		"namespace-config":       {"ConfigMap", "Secret"},
-		"namespace-network":      {"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
-		"namespace-storage":      {"PersistentVolumeClaim"},
-		"namespace-rbac":         {"Role", "RoleBinding", "ServiceAccount"},
-		"namespace-quotas":       {"ResourceQuota", "LimitRange", "PodDisruptionBudget"},
-		"namespace-autoscaling":  {"HorizontalPodAutoscaler"},
-		"namespace-helm":         {"HelmRelease"},
-		"namespace-events":       nil,
-		"namespace-workloads":    {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
-		"namespace-applications": {"Application"},
-		"nodes":                  nil,
-		"pods":                   {"Pod"},
+		"cluster-config":        {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
+		"cluster-storage":       {"PersistentVolume"},
+		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
+		"cluster-crds":          {"CustomResourceDefinition"},
+		"cluster-events":        nil,
+		"namespace-config":      {"ConfigMap", "Secret"},
+		"namespace-network":     {"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
+		"namespace-storage":     {"PersistentVolumeClaim"},
+		"namespace-rbac":        {"Role", "RoleBinding", "ServiceAccount"},
+		"namespace-quotas":      {"ResourceQuota", "LimitRange", "PodDisruptionBudget"},
+		"namespace-autoscaling": {"HorizontalPodAutoscaler"},
+		"namespace-helm":        {"HelmRelease"},
+		"namespace-events":      nil,
+		"namespace-workloads":   {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"},
+		"nodes":                 nil,
+		"pods":                  {"Pod"},
 	}
 
 	if len(expected) != len(typedCapabilityConformance) {

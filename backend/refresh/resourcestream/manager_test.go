@@ -933,8 +933,6 @@ func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 
 	sub, err := subscribeForTest(t, manager, domainNamespaceHelm, "namespace:default")
 	require.NoError(t, err)
-	applicationsSub, err := subscribeForTest(t, manager, domainNamespaceApplications, "namespace:default")
-	require.NoError(t, err)
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -964,14 +962,6 @@ func TestManagerHelmUpdateBroadcasts(t *testing.T) {
 	default:
 		t.Fatal("expected helm update to be delivered")
 	}
-	applicationsUpdate := requireNextUpdate(t, applicationsSub)
-	require.Equal(t, MessageTypeComplete, applicationsUpdate.Type)
-	require.Equal(t, domainNamespaceApplications, applicationsUpdate.Domain)
-	require.Equal(t, "namespace:default", applicationsUpdate.Scope)
-	require.Equal(t, "demo", applicationsUpdate.Ref.Name)
-	require.Equal(t, "helm.sh", applicationsUpdate.Ref.Group)
-	require.Equal(t, "v3", applicationsUpdate.Ref.Version)
-	require.Equal(t, "HelmRelease", applicationsUpdate.Ref.Kind)
 }
 
 func TestManagerSecretUpdateRefreshesOldHelmReleaseWhenRelationChanges(t *testing.T) {
@@ -1105,8 +1095,6 @@ func TestManagerWorkloadEventBroadcastsNotifyOnly(t *testing.T) {
 	}
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
-	applicationsSub, err := subscribeForTest(t, manager, domainNamespaceApplications, "namespace:default")
-	require.NoError(t, err)
 
 	manager.handleWorkload(deployment, MessageTypeModified)
 
@@ -1117,15 +1105,6 @@ func TestManagerWorkloadEventBroadcastsNotifyOnly(t *testing.T) {
 	require.Equal(t, "Deployment", update.Ref.Kind)
 	// namespace-workloads is query-backed: the live stream carries the change
 	// signal, not the row. HPA context in the row is covered in the snapshot path.
-	applicationsUpdate := requireNextUpdate(t, applicationsSub)
-	require.Equal(t, domainNamespaceApplications, applicationsUpdate.Domain)
-	require.Equal(t, "namespace:default", applicationsUpdate.Scope)
-	require.Equal(t, "c1", applicationsUpdate.Ref.ClusterID)
-	require.Equal(t, "apps", applicationsUpdate.Ref.Group)
-	require.Equal(t, "v1", applicationsUpdate.Ref.Version)
-	require.Equal(t, "Deployment", applicationsUpdate.Ref.Kind)
-	require.Equal(t, "default", applicationsUpdate.Ref.Namespace)
-	require.Equal(t, "web", applicationsUpdate.Ref.Name)
 }
 
 func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {

@@ -24,7 +24,6 @@ import {
 const EXPECTED_DOMAINS: ResourceDomain[] = [
   'pods',
   'namespace-workloads',
-  'namespace-applications',
   'namespace-config',
   'namespace-network',
   'namespace-rbac',

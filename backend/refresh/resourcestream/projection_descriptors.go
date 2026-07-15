@@ -111,12 +111,6 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		StaleScopeResolver:   "ReplicaSet and pod stale owner/scope resolvers",
 		CompleteIsScopeLevel: true,
 	},
-	domainNamespaceApplications: namespaceDescriptor(
-		domainNamespaceApplications,
-		"snapshot application evidence grouping",
-		streamResourceDescriptors(domainNamespaceApplications),
-		[]ResourceDescriptor{},
-	),
 	domainNamespaceConfig: namespaceDescriptor(
 		domainNamespaceConfig,
 		"configmap.BuildStreamSummary / secret.BuildStreamSummary",

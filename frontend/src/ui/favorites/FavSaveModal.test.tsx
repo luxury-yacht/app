@@ -344,7 +344,7 @@ describe('FavSaveModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('saves Event and Application provider facet selections in favorites', async () => {
+  it('saves Event provider facet selections in favorites', async () => {
     const onSave = vi.fn();
     const filters: FavoriteFilters = {
       ...defaultFilters,
@@ -353,8 +353,6 @@ describe('FavSaveModal', () => {
         reasons: ['BackOff'],
         sources: ['kubelet'],
         statuses: ['Needs attention'],
-        confidences: ['low'],
-        hasIssues: ['true'],
       },
     };
     await renderComponent(makeProps({ onSave, filters, viewLabel: 'Events' }));
@@ -528,7 +526,6 @@ describe('FavSaveModal', () => {
       'namespace:browse',
       'namespace:map',
       'namespace:events',
-      'namespace:applications',
       'namespace:workloads',
       'namespace:pods',
       'namespace:autoscaling',

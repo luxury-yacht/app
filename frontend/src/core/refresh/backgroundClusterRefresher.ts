@@ -73,7 +73,6 @@ const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   'catalog-diff': 'catalog-diff',
   // Namespace refreshers
   workloads: 'namespace-workloads',
-  applications: 'namespace-applications',
   config: 'namespace-config',
   network: 'namespace-network',
   rbac: 'namespace-rbac',

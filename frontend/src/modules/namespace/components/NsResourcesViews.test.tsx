@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   podsViewMock,
-  applicationsViewMock,
   workloadsViewMock,
   configViewMock,
   networkViewMock,
@@ -25,7 +24,6 @@ const {
   browseViewMock,
 } = vi.hoisted(() => ({
   podsViewMock: vi.fn(() => <div data-testid="pods-view" />),
-  applicationsViewMock: vi.fn(() => <div data-testid="applications-view" />),
   workloadsViewMock: vi.fn(() => <div data-testid="workloads-view" />),
   configViewMock: vi.fn(() => <div data-testid="config-view" />),
   networkViewMock: vi.fn(() => <div data-testid="network-view" />),
@@ -40,9 +38,6 @@ const {
 }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({ default: podsViewMock }));
-vi.mock('@modules/namespace/components/NsViewApplications', () => ({
-  default: applicationsViewMock,
-}));
 vi.mock('@modules/namespace/components/NsViewWorkloads', () => ({ default: workloadsViewMock }));
 vi.mock('@modules/namespace/components/NsViewConfig', () => ({ default: configViewMock }));
 vi.mock('@modules/namespace/components/NsViewNetwork', () => ({ default: networkViewMock }));
@@ -66,7 +61,6 @@ describe('NamespaceResourcesViews', () => {
 
   beforeEach(() => {
     podsViewMock.mockClear();
-    applicationsViewMock.mockClear();
     workloadsViewMock.mockClear();
     configViewMock.mockClear();
     networkViewMock.mockClear();
@@ -114,14 +108,6 @@ describe('NamespaceResourcesViews', () => {
   });
 
   const tabCases = [
-    {
-      tab: 'applications' as const,
-      props: {},
-      mock: applicationsViewMock,
-      expected: {
-        namespace: 'team-a',
-      },
-    },
     {
       tab: 'browse' as const,
       props: {},

@@ -241,7 +241,6 @@ describe('Sidebar', () => {
       'browse',
       'map',
       'events',
-      'applications',
       'workloads',
       'pods',
       'autoscaling',

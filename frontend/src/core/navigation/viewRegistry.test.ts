@@ -41,7 +41,6 @@ describe('view registry', () => {
       { id: 'browse', label: 'Browse' },
       { id: 'map', label: 'Map' },
       { id: 'events', label: 'Events' },
-      { id: 'applications', label: 'Applications' },
       { id: 'workloads', label: 'Workloads' },
       { id: 'pods', label: 'Pods' },
       { id: 'autoscaling', label: 'Autoscaling' },

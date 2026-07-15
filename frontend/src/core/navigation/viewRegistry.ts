@@ -144,15 +144,6 @@ export const NAMESPACE_VIEW_DESCRIPTORS = [
   },
   {
     scope: 'namespace',
-    id: 'applications',
-    supportsAllNamespaces: true,
-    label: 'Applications',
-    description: 'Group workloads by Helm, owner, and recommended application metadata',
-    keywords: ['applications', 'namespace', 'helm', 'owners', 'labels', 'workloads'],
-    refresher: 'applications',
-  },
-  {
-    scope: 'namespace',
     id: 'workloads',
     supportsAllNamespaces: true,
     label: 'Workloads',

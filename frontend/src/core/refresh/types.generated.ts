@@ -40,10 +40,6 @@ export type NamespaceSignalState = 'available' | 'loading' | 'unavailable';
 
 export type NamespaceQuotaPressure = '' | 'warning' | 'critical';
 
-export type ApplicationEvidence = 'helm' | 'owner' | 'label';
-
-export type ApplicationConfidence = 'high' | 'medium' | 'low';
-
 export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
@@ -554,49 +550,6 @@ export interface DrainNodeOptionsPayload {
 export interface KindInfo {
   kind: string;
   namespaced: boolean;
-}
-
-export interface NamespaceApplicationSummary {
-  clusterId: string;
-  clusterName: string;
-  kind: string;
-  name: string;
-  namespace: string;
-  confidence: ApplicationConfidence;
-  evidence: Array<ApplicationEvidence> | null;
-  root?: ResourceRef;
-  workloadCount: number;
-  needsAttention: number;
-  workloadKinds?: Array<string>;
-  status: string;
-  statusPresentation: string;
-}
-
-export interface NamespaceApplicationsSnapshotPayload {
-  clusterId: string;
-  clusterName: string;
-  provider: ResourceQueryProvider;
-  table: string;
-  queryIdentity?: string;
-  continue?: string;
-  previous?: string;
-  self?: string;
-  cursorInvalid?: boolean;
-  anchor?: ResourceQueryAnchorResult;
-  pageStartRank?: number;
-  total: number;
-  unfilteredTotal: number;
-  totalIsExact: boolean;
-  kinds?: Array<string>;
-  namespaces?: Array<string>;
-  facetValues?: Array<ResourceQueryFacetValues>;
-  facetsExact: boolean;
-  completeness?: ResourceQueryCompleteness;
-  issues?: Array<ResourceQueryIssue>;
-  dynamic?: ResourceQueryDynamicRef;
-  capabilities: ResourceQueryCapabilities;
-  rows: Array<NamespaceApplicationSummary> | null;
-  ungroupedWorkloads: number;
 }
 
 export interface NamespaceAutoscalingSnapshotPayload {
@@ -1648,7 +1601,6 @@ export const REFRESH_DOMAINS = [
   'cluster-rbac',
   'cluster-storage',
   'namespace-workloads',
-  'namespace-applications',
   'namespace-autoscaling',
   'namespace-config',
   'namespace-custom',
@@ -1906,7 +1858,6 @@ export interface BackendDomainPayloadMap {
   'cluster-rbac': ClusterRBACSnapshotPayload;
   'cluster-storage': ClusterStorageSnapshotPayload;
   'namespace-workloads': NamespaceWorkloadSnapshotPayload;
-  'namespace-applications': NamespaceApplicationsSnapshotPayload;
   'namespace-autoscaling': NamespaceAutoscalingSnapshotPayload;
   'namespace-config': NamespaceConfigSnapshotPayload;
   'namespace-custom': NamespaceCustomSnapshotPayload;

@@ -108,11 +108,6 @@ export const resourceStreamDomainDescriptors = [
     isClusterScoped: false,
   },
   {
-    domain: 'namespace-applications',
-    scopeKind: 'namespace',
-    isClusterScoped: false,
-  },
-  {
     domain: 'namespace-config',
     scopeKind: 'namespace',
     isClusterScoped: false,

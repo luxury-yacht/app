@@ -9,7 +9,7 @@ object-map ownership boundaries.
 Target navigation order:
 
 1. Explicit global, cluster, and namespace scope.
-2. View (Browse, Needs Attention, Applications, Nodes, Events, Clusters).
+2. View (Browse, Needs Attention, Nodes, Events, Clusters).
 3. Concrete Kubernetes objects with full cluster/GVK identity.
 
 ## Non-goals
@@ -18,7 +18,6 @@ Target navigation order:
 - Do not move backend-owned status semantics into frontend code.
 - Do not locally filter or sort a query page as though it were the global row set.
 - Do not create aggregate refresh scopes that omit `clusterId`.
-- Do not make application grouping navigable when the source identity is incomplete.
 
 ## Current Inventory
 
@@ -75,10 +74,10 @@ Target navigation order:
       materializing unbounded datasets in React.
 - [x] Make the new lens and canonical view labels available to existing favorite
       persistence without a stored-state migration.
-- [x] Keep global status/owner/application filters disabled until their backend
+- [x] Keep global status/owner filters disabled until their backend
       query projections exist.
 
-### Phase 5: Namespace, application, and topology lenses
+### Phase 5: Namespace and topology lenses
 
 - [x] Expand the per-cluster namespace workload rollup into a broader aggregate
       domain for warning events, utilization, quota pressure, and degraded access.
@@ -88,8 +87,6 @@ Target navigation order:
   - [x] Keep the expandable sidebar namespace list navigation-focused and present
         namespace status, workload health, warning events, utilization, quota
         pressure, access, and age in a Cluster → Namespaces table.
-- [x] Add confidence-bearing application grouping from owner links, Helm links,
-      and explicit application labels.
 - [x] Add table-to-map and map-to-table navigation with complete object refs.
 - [x] Keep graph limits and partial/truncated presentation visible.
 
@@ -180,14 +177,11 @@ Target navigation order:
       serialization, backend execution, stable options, UI projection, and
       persistence all exist.
 
-### Phase 11: Event and application triage facets
+### Phase 11: Event triage facets
 
 - [x] Add backend-query Event Type, Reason, and Source facets to cluster,
       namespace, and All Namespaces Events, with options derived from the full
       structural scope rather than the current page or selection.
-- [x] Add backend-query Application Status, Confidence, and Has Issues facets to
-      namespace and All Namespaces Applications using the existing backend-owned
-      grouping status, evidence confidence, and needs-attention count.
 - [x] Keep high-cardinality Reason/Source options searchable and truthful when
       facet metadata is approximate or contributing sources are degraded.
 - [x] Preserve selections through favorites and cluster/namespace-scoped table

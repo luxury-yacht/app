@@ -205,23 +205,6 @@
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
     },
-    "namespace-applications": {
-      "behaviorClass": "resource-stream-table",
-      "scopeContract": {
-        "kind": "resource-stream-selector",
-        "clusterPrefix": "required",
-        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
-        "frontendBuilder": "frontend/src/core/refresh/streaming/resourceStreamSubscriptions.ts:ResourceStreamSubscriptionStore:ResourceStreamSubscriptionStore",
-        "acceptedEncodings": ["namespace:<namespace>", "namespace:all"]
-      },
-      "singleCluster": true,
-      "payloadOwner": "backend/refresh/snapshot.NamespaceApplicationsBuilder",
-      "refreshPayloadType": "NamespaceApplicationsSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
-      "coverageContract": "query-refetch-on-signal",
-      "coverageStatus": "enforced"
-    },
     "namespace-autoscaling": {
       "behaviorClass": "resource-stream-table",
       "scopeContract": {
@@ -597,21 +580,6 @@
           {"group": "autoscaling", "version": "v1", "kind": "HorizontalPodAutoscaler", "resource": "horizontalpodautoscalers"}
         ]
       },
-      "namespace-applications": {
-        "scopeKind": "namespace",
-        "completeIsScopeLevel": true,
-        "primaryResources": [
-          {"group": "apps", "version": "v1", "kind": "Deployment", "resource": "deployments"},
-          {"group": "apps", "version": "v1", "kind": "StatefulSet", "resource": "statefulsets"},
-          {"group": "apps", "version": "v1", "kind": "DaemonSet", "resource": "daemonsets"},
-          {"group": "batch", "version": "v1", "kind": "Job", "resource": "jobs"},
-          {"group": "batch", "version": "v1", "kind": "CronJob", "resource": "cronjobs"},
-          {"group": "", "version": "v1", "kind": "Pod", "resource": "pods"},
-          {"group": "", "version": "v1", "kind": "ConfigMap", "resource": "configmaps"},
-          {"group": "", "version": "v1", "kind": "Secret", "resource": "secrets"}
-        ],
-        "relatedResources": []
-      },
       "namespace-config": {
         "scopeKind": "namespace",
         "completeIsScopeLevel": true,
@@ -881,19 +849,6 @@
       "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
       "frontend": {
         "refresherName": "workloads",
-        "orchestrator": "resource-stream",
-        "diagnosticsStream": "resources",
-        "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
-        "priority": 5
-      }
-    },
-    {
-      "domain": "namespace-applications",
-      "category": "namespace",
-      "sourceClocks": ["object"],
-      "backend": { "registration": "list", "permission": "runtime", "resourceStream": true },
-      "frontend": {
-        "refresherName": "applications",
         "orchestrator": "resource-stream",
         "diagnosticsStream": "resources",
         "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },

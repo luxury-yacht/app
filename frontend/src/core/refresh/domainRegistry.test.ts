@@ -52,7 +52,6 @@ describe('refresh domain registry', () => {
       'cluster-overview',
       'catalog',
       'namespace-workloads',
-      'namespace-applications',
     ]);
   });
 

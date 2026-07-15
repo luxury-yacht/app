@@ -447,25 +447,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				)
 			},
 		}),
-		accessListRegistration(runtimeAccess, listDomainConfig{
-			name: "namespace-applications",
-			register: func(allowed domainpermissions.AllowedResources) error {
-				return snapshot.RegisterNamespaceApplicationsDomain(
-					deps.registry,
-					deps.ingestManager,
-					snapshot.NamespaceApplicationsPermissions{
-						IncludePods:         allowed.Allows("", "pods"),
-						IncludeDeployments:  allowed.Allows("apps", "deployments"),
-						IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
-						IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
-						IncludeJobs:         allowed.Allows("batch", "jobs"),
-						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
-						IncludeConfigMaps:   allowed.Allows("", "configmaps"),
-						IncludeSecrets:      allowed.Allows("", "secrets"),
-					},
-				)
-			},
-		}),
 		directRegistration("namespace-autoscaling", func() error {
 			return snapshot.RegisterNamespaceAutoscalingDomain(
 				deps.registry,

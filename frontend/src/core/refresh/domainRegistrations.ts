@@ -95,7 +95,6 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
 
   doorbellStreamDomain('namespace-events');
   resourceStreamDomain('namespace-workloads');
-  resourceStreamDomain('namespace-applications');
   resourceStreamDomain('namespace-config');
   resourceStreamDomain('namespace-network');
   resourceStreamDomain('namespace-rbac');

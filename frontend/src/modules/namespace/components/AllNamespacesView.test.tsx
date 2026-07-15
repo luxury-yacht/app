@@ -43,9 +43,6 @@ const hoistedMocks = vi.hoisted(() => {
 
 const viewRenderers = hoistedMocks.renderers;
 vi.mock('@modules/namespace/components/NsViewPods', () => hoistedMocks.makeMock('pods-view'));
-vi.mock('@modules/namespace/components/NsViewApplications', () =>
-  hoistedMocks.makeMock('applications-view')
-);
 vi.mock('@modules/namespace/components/NsViewWorkloads', () =>
   hoistedMocks.makeMock('workloads-view')
 );
@@ -97,7 +94,6 @@ describe('AllNamespacesView', () => {
   };
 
   const tableTabs: Array<[NamespaceViewType, string]> = [
-    ['applications', 'applications-view'],
     ['pods', 'pods-view'],
     ['workloads', 'workloads-view'],
     ['config', 'config-view'],

@@ -92,10 +92,6 @@ type PodAggregate struct {
 	// (e.g. "ready"/"warning"/"error"/"terminating"), derived once from the Pod.
 	StatusPresentation string
 
-	// Application is the metadata-only grouping candidate used for standalone
-	// pods. Owned pods are folded into their workload and ignore this field.
-	Application resourcemodel.ApplicationCandidate
-
 	// OwnerKey is the namespace-workloads owner grouping key with the
 	// ReplicaSet->Deployment string-suffix collapse applied; empty when the pod
 	// has no controlling owner.

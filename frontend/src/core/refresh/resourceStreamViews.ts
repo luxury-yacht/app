@@ -5,7 +5,6 @@ import type { RefreshDomain } from './types';
 export type ResourceStreamRefreshDomain =
   | 'pods'
   | 'namespace-workloads'
-  | 'namespace-applications'
   | 'namespace-config'
   | 'namespace-network'
   | 'namespace-rbac'
@@ -24,7 +23,6 @@ export type ResourceStreamRefreshDomain =
 const RESOURCE_STREAM_DOMAINS = new Set<RefreshDomain>([
   'pods',
   'namespace-workloads',
-  'namespace-applications',
   'namespace-config',
   'namespace-network',
   'namespace-rbac',
@@ -75,10 +73,6 @@ export const isResourceStreamViewActive = (
 
   if (domain === 'namespace-workloads') {
     return context.currentView === 'namespace' && context.activeNamespaceView === 'workloads';
-  }
-
-  if (domain === 'namespace-applications') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'applications';
   }
 
   if (domain === 'namespace-config') {
