@@ -9,9 +9,7 @@ const KEYBOARD_RESIZE_STEP_PX = 16;
 interface WorkloadsPodsSplitProps {
   upper: React.ReactNode;
   lower: React.ReactNode;
-  lowerLabel?: React.ReactNode;
   collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 const clampResizePercent = (value: number) =>
@@ -20,17 +18,13 @@ const clampResizePercent = (value: number) =>
 export default function WorkloadsPodsSplit({
   upper,
   lower,
-  lowerLabel = 'Pods',
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
+  collapsed = false,
 }: WorkloadsPodsSplitProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resizingRef = useRef(false);
   const resizeStartRef = useRef({ clientY: 0, upperPercent: 50 });
   const [isResizing, setIsResizing] = useState(false);
   const [upperPercent, setUpperPercent] = useState(50);
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
 
   useEffect(() => {
     if (!isResizing) {
@@ -45,16 +39,6 @@ export default function WorkloadsPodsSplit({
     rootRef.current?.style.setProperty('--workloads-pods-upper-size', `${next}%`);
     setUpperPercent(next);
   }, []);
-
-  const setCollapsed = useCallback(
-    (next: boolean) => {
-      if (controlledCollapsed === undefined) {
-        setInternalCollapsed(next);
-      }
-      onCollapsedChange?.(next);
-    },
-    [controlledCollapsed, onCollapsedChange]
-  );
 
   const handleResizeKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLHRElement>) => {
@@ -122,7 +106,7 @@ export default function WorkloadsPodsSplit({
       >
         {upper}
       </section>
-      <div className="workloads-pods-split__divider">
+      {!collapsed && (
         <hr
           className="workloads-pods-split__resizer"
           aria-label="Resize Workloads and Pods"
@@ -130,24 +114,14 @@ export default function WorkloadsPodsSplit({
           aria-valuemin={MIN_UPPER_PERCENT}
           aria-valuemax={MAX_UPPER_PERCENT}
           aria-valuenow={upperPercent}
-          tabIndex={collapsed ? -1 : 0}
+          tabIndex={0}
           onKeyDown={handleResizeKeyDown}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={stopPointerResize}
           onPointerCancel={stopPointerResize}
         />
-        <div className="workloads-pods-split__divider-label">{lowerLabel}</div>
-        <button
-          type="button"
-          className="button generic workloads-pods-split__collapse"
-          aria-label={collapsed ? 'Expand Pods' : 'Collapse Pods'}
-          title={collapsed ? 'Expand Pods' : 'Collapse Pods'}
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
-        </button>
-      </div>
+      )}
       {!collapsed && (
         <section
           className="workloads-pods-split__pane workloads-pods-split__pane--lower"

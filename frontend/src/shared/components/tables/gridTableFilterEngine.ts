@@ -51,6 +51,7 @@ export function buildGridTableFilterOptions<T>({
     namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
     clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
     clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
+    beforeNamespaceActions: options?.beforeNamespaceActions,
     queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
     preActions: options?.preActions,
     postActions: options?.postActions,

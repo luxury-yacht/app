@@ -272,6 +272,40 @@ describe('GridTableFiltersBar', () => {
     expect(controls).toEqual(['facet-apiGroups', 'kinds']);
   });
 
+  it('renders structural actions immediately before Namespaces', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [{ label: 'Deployments', value: 'Deployment' }],
+        namespaces: [{ label: 'team-a', value: 'team-a' }],
+        ...({
+          beforeNamespaceActions: [
+            {
+              type: 'toggle',
+              id: 'pods-pane',
+              icon: <span>toggle</span>,
+              active: true,
+              onClick: vi.fn(),
+              title: 'Collapse Pods',
+            },
+          ],
+        } as Record<string, unknown>),
+      },
+    });
+
+    const controls = Array.from(
+      container.querySelector('[data-gridtable-filter-cluster="primary"]')?.children[0]?.children ??
+        []
+    ).map((element) => element.getAttribute('data-gridtable-filter-role'));
+    expect(controls).toEqual(['kind', 'before-namespace-actions', 'namespace']);
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '[data-gridtable-filter-role="before-namespace-actions"] button'
+      )?.title
+    ).toBe('Collapse Pods');
+  });
+
   it('always enables search and bulk actions for the kind dropdown', async () => {
     await renderFilters({
       showKindDropdown: true,

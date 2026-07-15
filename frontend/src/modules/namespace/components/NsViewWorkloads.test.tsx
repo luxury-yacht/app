@@ -344,12 +344,16 @@ describe('NsViewWorkloads', () => {
 
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
-    const clearButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Clear'
+    const structuralActions = (
+      gridTablePropsRef.current.filters?.options as
+        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
+        | undefined
+    )?.beforeNamespaceActions;
+    const clearAction = structuralActions?.find(
+      (action) => action.title === 'Clear selected workload'
     );
-    expect(clearButton).toBeTruthy();
-    act(() => clearButton?.click());
-
+    expect(clearAction).toBeTruthy();
+    act(() => clearAction?.onClick());
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
       workloadFilterRequest: { type: 'clear' },
@@ -359,10 +363,21 @@ describe('NsViewWorkloads', () => {
       'gridtable-row--selected'
     );
 
-    act(() =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Collapse Pods"]')?.click()
-    );
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
+    const collapseAction = (
+      gridTablePropsRef.current.filters?.options as
+        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
+        | undefined
+    )?.beforeNamespaceActions?.find((action) => action.title === 'Collapse Pods');
+    expect(collapseAction?.title).toBe('Collapse Pods');
+    act(() => collapseAction?.onClick());
     expect(container.querySelector('[data-testid="pods-view"]')).toBeNull();
+    const expandAction = (
+      gridTablePropsRef.current.filters?.options as
+        | { beforeNamespaceActions?: Array<{ title: string; onClick: () => void }> }
+        | undefined
+    )?.beforeNamespaceActions?.find((action) => action.title === 'Expand Pods');
+    expect(expandAction?.title).toBe('Expand Pods');
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
     expect(container.querySelector('[data-testid="pods-view"]')).not.toBeNull();
   });

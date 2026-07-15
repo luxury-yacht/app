@@ -231,6 +231,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           showKindDropdown ||
           showNamespaceDropdown ||
           showClusterDropdown ||
+          (resolvedFilterOptions.beforeNamespaceActions?.length ?? 0) > 0 ||
           (resolvedFilterOptions.queryFacets?.length ?? 0) > 0
         ) && (
           <div className="gridtable-filter-subcluster">
@@ -256,6 +257,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   renderOption={renderOption}
                   renderValue={renderKindsValue}
                 />
+              </div>
+            )}
+            {!!resolvedFilterOptions.beforeNamespaceActions?.length && (
+              <div
+                className="gridtable-filter-group"
+                data-gridtable-filter-role="before-namespace-actions"
+              >
+                <IconBar items={resolvedFilterOptions.beforeNamespaceActions} />
               </div>
             )}
             {!!showNamespaceDropdown && (

@@ -24,6 +24,8 @@ import {
 } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CloseIcon, CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -48,6 +50,9 @@ interface WorkloadsViewProps {
 interface WorkloadsTableProps extends WorkloadsViewProps {
   selectedWorkloadKey?: string | null;
   onWorkloadSelect?: (workload: WorkloadData) => void;
+  onWorkloadSelectionClear?: () => void;
+  podsCollapsed?: boolean;
+  onPodsCollapsedChange?: (collapsed: boolean) => void;
 }
 
 /**
@@ -60,6 +65,9 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     metrics = null,
     selectedWorkloadKey = null,
     onWorkloadSelect,
+    onWorkloadSelectionClear,
+    podsCollapsed = false,
+    onPodsCollapsedChange,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
@@ -172,6 +180,37 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
+    const beforeNamespaceActions = useMemo<IconBarItem[]>(
+      () => [
+        ...(selectedWorkloadKey && onWorkloadSelectionClear
+          ? [
+              {
+                type: 'action' as const,
+                id: 'clear-workload-selection',
+                icon: <CloseIcon width={18} height={18} />,
+                onClick: onWorkloadSelectionClear,
+                title: 'Clear selected workload',
+              },
+            ]
+          : []),
+        ...(onPodsCollapsedChange
+          ? [
+              {
+                type: 'action' as const,
+                id: 'pods-pane',
+                icon: podsCollapsed ? (
+                  <ExpandIcon width={18} height={18} />
+                ) : (
+                  <CollapseIcon width={18} height={18} />
+                ),
+                onClick: () => onPodsCollapsedChange(!podsCollapsed),
+                title: podsCollapsed ? 'Expand Pods' : 'Collapse Pods',
+              },
+            ]
+          : []),
+      ],
+      [onPodsCollapsedChange, onWorkloadSelectionClear, podsCollapsed, selectedWorkloadKey]
+    );
 
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
@@ -206,6 +245,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
+      filterOptionOverrides:
+        beforeNamespaceActions.length > 0 ? { beforeNamespaceActions } : undefined,
     });
 
     // The base query payload carries the poller freshness block for the usage
@@ -326,31 +367,13 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
         : null,
     [selectedClusterId, selectedWorkload]
   );
-  const podsLabel = selectedWorkload
-    ? `Pods for ${selectedWorkload.kind}/${selectedWorkload.name}`
-    : 'Pods';
-
+  const handleWorkloadSelectionClear = useCallback(() => {
+    setSelectedWorkload(null);
+    setPodFilterRequest({ type: 'clear' });
+  }, []);
   return (
     <WorkloadsPodsSplit
       collapsed={podsCollapsed}
-      onCollapsedChange={setPodsCollapsed}
-      lowerLabel={
-        <div className="workloads-pods-selection">
-          <span>{podsLabel}</span>
-          {selectedWorkload ? (
-            <button
-              type="button"
-              className="button generic workloads-pods-selection__clear"
-              onClick={() => {
-                setSelectedWorkload(null);
-                setPodFilterRequest({ type: 'clear' });
-              }}
-            >
-              Clear
-            </button>
-          ) : null}
-        </div>
-      }
       upper={
         <WorkloadsTable
           namespace={namespace}
@@ -358,6 +381,9 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           metrics={metrics}
           selectedWorkloadKey={selectedWorkloadKey}
           onWorkloadSelect={handleWorkloadSelect}
+          onWorkloadSelectionClear={handleWorkloadSelectionClear}
+          podsCollapsed={podsCollapsed}
+          onPodsCollapsedChange={setPodsCollapsed}
         />
       }
       lower={

@@ -15,26 +15,6 @@
   min-height: 0;
 }
 
-.workloads-pods-selection {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  min-width: 0;
-}
-
-.workloads-pods-selection > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workloads-pods-selection__clear {
-  min-height: 1.25rem;
-  padding: 0 0.35rem;
-  font-size: 0.7rem;
-  pointer-events: auto;
-}
-
 .gridtable-workloads .gridtable-row--selected {
   border-left-color: var(--color-accent);
 }

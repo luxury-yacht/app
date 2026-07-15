@@ -43,6 +43,9 @@ workflow and that exception is documented.
   order. Provider query facets participate in that order alongside structural
   filters, search, actions, and Columns; adding a facet must not create a
   keyboard focus trap.
+- A feature-owned structural action that must precede Namespace uses
+  `beforeNamespaceActions`; GridTable renders that IconBar after Kind and before
+  Namespace rather than forcing the action into the post-search action cluster.
 - Row focus and row selection are separate contracts. `Enter` runs
   `onRowClick`; when `onRowSelectionToggle` is supplied, `Space` runs that
   selection action instead. Pointer-only selection uses `onRowPointerClick`,

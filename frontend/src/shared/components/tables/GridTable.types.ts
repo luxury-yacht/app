@@ -119,6 +119,8 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
+  /** Icon actions rendered with structural filters immediately before Namespace. */
+  beforeNamespaceActions?: IconBarItem[];
   /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following Reset (e.g. Load More). */
@@ -248,6 +250,7 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
+  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
   customActions?: React.ReactNode;

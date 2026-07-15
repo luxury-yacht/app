@@ -130,14 +130,26 @@ describe('WorkloadsPodsSplit', () => {
     expect(document.body.classList.contains('workloads-pods-resizing')).toBe(false);
   });
 
-  it('places the resize hit area across the top edge instead of over the divider content', () => {
+  it('places the resize hit area directly on the split boundary', () => {
     const resizerRule = splitStyles.match(/\.workloads-pods-split__resizer\s*{([^}]*)}/)?.[1];
 
-    expect(resizerRule).toContain('top: -5px;');
+    expect(resizerRule).toContain('top: var(--workloads-pods-upper-size);');
     expect(resizerRule).toContain('right: 0;');
     expect(resizerRule).toContain('left: 0;');
     expect(resizerRule).toContain('height: 10px;');
+    expect(resizerRule).toContain('transform: translateY(-50%);');
     expect(resizerRule).not.toContain('inset: 0;');
+  });
+
+  it('does not render a visible divider band', () => {
+    act(() => {
+      root.render(
+        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
+      );
+    });
+
+    expect(container.querySelector('.workloads-pods-split__divider')).toBeNull();
+    expect(container.querySelector('[aria-label="Resize Workloads and Pods"]')).not.toBeNull();
   });
 
   it('consumes dock offsets once at the split boundary instead of once per table', () => {
@@ -152,23 +164,30 @@ describe('WorkloadsPodsSplit', () => {
     expect(nestedTableRule).toContain('margin-bottom: 0;');
   });
 
-  it('collapses and restores the Pods pane without removing its header control', () => {
+  it('renders the controlled collapsed state without a local toggle', () => {
     act(() => {
       root.render(
-        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
+        <WorkloadsPodsSplit
+          upper={<div>Workloads table</div>}
+          lower={<div>Pods table</div>}
+          collapsed
+        />
       );
     });
 
-    const collapse = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Collapse Pods"]'
-    );
-    act(() => collapse?.click());
     expect(container.textContent).not.toContain('Pods table');
-    expect(container.querySelector('button[aria-label="Expand Pods"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Resize Workloads and Pods"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Expand Pods"]')).toBeNull();
 
-    act(() =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Expand Pods"]')?.click()
-    );
+    act(() => {
+      root.render(
+        <WorkloadsPodsSplit
+          upper={<div>Workloads table</div>}
+          lower={<div>Pods table</div>}
+          collapsed={false}
+        />
+      );
+    });
     expect(container.textContent).toContain('Pods table');
   });
 });
