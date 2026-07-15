@@ -14,6 +14,7 @@ import {
 } from '@modules/namespace/contexts/NamespaceContext';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceSnapshotPayload } from '@/core/refresh/types';
+import { GLOBAL_TABLE_OWNERS } from '../globalTableOwner';
 
 interface GlobalNamespaceTarget {
   clusterId: string;
@@ -22,8 +23,7 @@ interface GlobalNamespaceTarget {
 }
 
 const GlobalViewNamespaces: React.FC = () => {
-  const { selectedKubeconfigs, selectedClusterIds, getClusterMeta, setActiveKubeconfig } =
-    useKubeconfig();
+  const { selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
   const { setSelectedNamespace } = useNamespace();
   const namespaceStatesByScope = useNamespaceStatesByScope();
@@ -145,7 +145,7 @@ const GlobalViewNamespaces: React.FC = () => {
   const resolvedCount = resolvedTargets.length;
   const isComplete = resolvedCount === targets.length;
   const tableMode = isComplete ? 'Local Complete' : 'Local Partial';
-  const clusterSetIdentity = `global-namespaces:${[...selectedClusterIds].sort().join('|')}`;
+  const tableOwner = GLOBAL_TABLE_OWNERS.namespaces;
 
   return (
     <div className="global-namespaces">
@@ -159,7 +159,7 @@ const GlobalViewNamespaces: React.FC = () => {
           value: clusterId,
           label: clusterName,
         }))}
-        clusterIdentity={clusterSetIdentity}
+        clusterIdentity={tableOwner.identity}
         persistenceEnabled={targets.length > 0}
         loading={targets.length > 0 && resolvedCount === 0 && pending}
         loaded={targets.length === 0 || resolvedCount > 0 || !pending}
@@ -175,7 +175,7 @@ const GlobalViewNamespaces: React.FC = () => {
             ? null
             : `Showing namespace data from ${resolvedCount} of ${targets.length} clusters`
         }
-        cacheKey={clusterSetIdentity}
+        cacheKey={tableOwner.identity}
         emptyMessage="No namespaces found across open clusters"
       />
     </div>

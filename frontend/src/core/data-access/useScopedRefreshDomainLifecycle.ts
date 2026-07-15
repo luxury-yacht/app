@@ -26,6 +26,7 @@ interface ScopedRefreshDomainLifecycleOptions {
   enabled: boolean;
   preserveState?: boolean;
   fetchOnEnable?: DataRequestReason | false;
+  fetchLabel?: string;
   onFetchError?: (error: unknown) => void;
 }
 
@@ -37,13 +38,16 @@ export function useScopedRefreshDomainLifecycle({
   enabled,
   preserveState = false,
   fetchOnEnable = false,
+  fetchLabel,
   onFetchError,
 }: ScopedRefreshDomainLifecycleOptions): void {
   const onFetchErrorRef = useRef(onFetchError);
+  const fetchLabelRef = useRef(fetchLabel);
 
   useEffect(() => {
     onFetchErrorRef.current = onFetchError;
-  }, [onFetchError]);
+    fetchLabelRef.current = fetchLabel;
+  }, [fetchLabel, onFetchError]);
 
   useEffect(() => {
     if (!domain || !scope || !enabled) {
@@ -61,6 +65,7 @@ export function useScopedRefreshDomainLifecycle({
         domain,
         scope,
         reason: fetchOnEnable,
+        label: fetchLabelRef.current,
       }).catch((error) => {
         const handler = onFetchErrorRef.current;
         if (handler) {

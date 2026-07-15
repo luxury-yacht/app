@@ -65,6 +65,12 @@ entry. Each row keeps the originating `clusterId` as its identity and uses
 overview-owned readiness, capacity, workload, metrics, and
 unavailable-resource projections.
 
+Each eligible cluster has its own keyed refresh lease owner. Adding or removing
+one cluster must acquire or release only that cluster's lease; it must not cycle
+the leases or startup fetches of surviving clusters. Global table persistence,
+pagination, and replay-cache identities are fixed per Global view and must never
+be derived from the changing open-cluster membership.
+
 Lifecycle and confirmed authentication failures remain per cluster. Clusters may
 show ready, loading, reconnecting, disconnected, and authentication-required
 rows together, and it does not start overview refresh for a cluster whose

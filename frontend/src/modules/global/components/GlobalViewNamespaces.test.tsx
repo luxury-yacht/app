@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import { act, isValidElement, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   resourceGridParams: null as null | Record<string, unknown>,
   persistenceParams: null as null | Record<string, unknown>,
   openWithObject: vi.fn(),
+  selectedKubeconfigs: [
+    '/kube/config:alpha',
+    '/kube/config:beta',
+    '/kube/config:gamma',
+  ] as string[],
 }));
 
 const namespace = (clusterId: string, clusterName: string, name: string) => ({
@@ -50,8 +56,12 @@ const namespace = (clusterId: string, clusterName: string, name: string) => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
-    selectedKubeconfigs: ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'],
-    selectedClusterIds: ['cluster-a', 'cluster-b', 'cluster-c'],
+    selectedKubeconfigs: [...mocks.selectedKubeconfigs],
+    selectedClusterIds: mocks.selectedKubeconfigs.map((selection) => {
+      const parts = selection.split(':');
+      const name = parts[parts.length - 1];
+      return `cluster-${name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c'}`;
+    }),
     getClusterMeta: (selection: string) => {
       const parts = selection.split(':');
       const name = parts[parts.length - 1] ?? '';
@@ -194,13 +204,27 @@ const renderView = async () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
-  await act(async () => {
+  let renderVersion = 0;
+  const render = async () => {
     const { default: GlobalViewNamespaces } = await import('./GlobalViewNamespaces');
-    root.render(<GlobalViewNamespaces />);
+    const TestableGlobalViewNamespaces = GlobalViewNamespaces as React.ComponentType<{
+      renderVersion: number;
+    }>;
+    root.render(<TestableGlobalViewNamespaces renderVersion={renderVersion} />);
+  };
+  await act(async () => {
+    await render();
     await Promise.resolve();
   });
   return {
     container,
+    rerender: async () => {
+      await act(async () => {
+        renderVersion += 1;
+        await render();
+        await Promise.resolve();
+      });
+    },
     unmount: async () => {
       await act(async () => root.unmount());
       container.remove();
@@ -210,6 +234,7 @@ const renderView = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
   mocks.tableProps = null;
   mocks.resourceGridParams = null;
   mocks.persistenceParams = null;
@@ -229,7 +254,39 @@ const renderedText = (node: ReactNode): string => {
   return '';
 };
 
+const getTableProps = (): Record<string, unknown> => {
+  if (!mocks.tableProps) {
+    throw new Error('expected global namespace table props');
+  }
+  return mocks.tableProps;
+};
+
+const getPersistenceParams = (): Record<string, unknown> => {
+  if (!mocks.persistenceParams) {
+    throw new Error('expected global namespace persistence params');
+  }
+  return mocks.persistenceParams;
+};
+
 describe('GlobalViewNamespaces', () => {
+  it('retains its Global table owner when cluster membership changes', async () => {
+    const { rerender, unmount } = await renderView();
+    const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;
+    const initialCacheKey = (getTableProps().source as { cacheKey?: string }).cacheKey;
+    const initialPaginationId = (getTableProps().localPagination as { idPrefix?: string }).idPrefix;
+
+    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:gamma'];
+    await rerender();
+
+    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
+    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
+    expect((getTableProps().localPagination as { idPrefix?: string }).idPrefix).toBe(
+      initialPaginationId
+    );
+
+    await unmount();
+  });
+
   it('combines namespace snapshots with complete cluster identity and a Cluster column', async () => {
     const { container, unmount } = await renderView();
     if (!mocks.tableProps) {
@@ -322,7 +379,7 @@ describe('GlobalViewNamespaces', () => {
       pageSizeOptions: [25, 50, 100, 250, 500, 1000],
     });
     expect(mocks.tableProps.localPagination).toMatchObject({
-      idPrefix: 'global-namespaces-global-namespaces:cluster-a|cluster-b|cluster-c',
+      idPrefix: 'global-namespaces-global:namespaces',
       pageSize: 50,
       pageSizeOptions: [25, 50, 100, 250, 500, 1000],
     });

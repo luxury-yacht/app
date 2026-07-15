@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,9 +9,17 @@ const mocks = vi.hoisted(() => ({
   activateClusterWorkspace: vi.fn(),
   setSidebarSelectionForCluster: vi.fn(),
   requestRefreshDomain: vi.fn(() => Promise.resolve({ status: 'executed' })),
+  acquireRefreshDomainLease: vi.fn(),
+  releaseRefreshDomainLease: vi.fn(),
   setRefreshDomainEnabled: vi.fn(),
   useStreamSignalRefetch: vi.fn(),
+  selectedKubeconfigs: [
+    '/kube/config:alpha',
+    '/kube/config:beta',
+    '/kube/config:gamma',
+  ] as string[],
   tableProps: null as null | Record<string, unknown>,
+  persistenceParams: null as null | Record<string, unknown>,
 }));
 
 const overview = {
@@ -47,8 +56,12 @@ const overview = {
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
-    selectedKubeconfigs: ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'],
-    selectedClusterIds: ['cluster-a', 'cluster-b', 'cluster-c'],
+    selectedKubeconfigs: [...mocks.selectedKubeconfigs],
+    selectedClusterIds: mocks.selectedKubeconfigs.map((selection) => {
+      const parts = selection.split(':');
+      const name = parts[parts.length - 1];
+      return `cluster-${name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c'}`;
+    }),
     selectedClusterId: 'cluster-a',
     kubeconfigsLoading: false,
     getClusterMeta: (selection: string) => {
@@ -103,6 +116,15 @@ vi.mock('@/core/contexts/SidebarStateContext', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
+  acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
+  releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
+  setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
+}));
+
+vi.mock('@/core/data-access/dataAccess', () => ({
+  requestRefreshDomain: mocks.requestRefreshDomain,
+  acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
+  releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
   setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
 }));
 
@@ -123,26 +145,29 @@ vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: {
-      search: '',
-      kinds: [],
-      namespaces: [],
-      caseSensitive: false,
-      includeMetadata: false,
-    },
-    setFilters: vi.fn(),
-    pageSize: null,
-    setPageSize: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-  }),
+  useGridTablePersistence: (params: Record<string, unknown>) => {
+    mocks.persistenceParams = params;
+    return {
+      sortConfig: { key: 'name', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      setFilters: vi.fn(),
+      pageSize: null,
+      setPageSize: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
+    };
+  },
 }));
 
 vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
@@ -180,13 +205,27 @@ const renderGlobalClusters = async () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
-  await act(async () => {
+  let renderVersion = 0;
+  const render = async () => {
     const { default: GlobalViewClusters } = await import('./GlobalViewClusters');
-    root.render(<GlobalViewClusters />);
+    const TestableGlobalViewClusters = GlobalViewClusters as React.ComponentType<{
+      renderVersion: number;
+    }>;
+    root.render(<TestableGlobalViewClusters renderVersion={renderVersion} />);
+  };
+  await act(async () => {
+    await render();
     await Promise.resolve();
   });
   return {
     container,
+    rerender: async () => {
+      await act(async () => {
+        renderVersion += 1;
+        await render();
+        await Promise.resolve();
+      });
+    },
     unmount: async () => {
       await act(async () => root.unmount());
       container.remove();
@@ -196,14 +235,91 @@ const renderGlobalClusters = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
   mocks.tableProps = null;
+  mocks.persistenceParams = null;
 });
 
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
+const getTableProps = (): Record<string, unknown> => {
+  if (!mocks.tableProps) {
+    throw new Error('expected Clusters table props');
+  }
+  return mocks.tableProps;
+};
+
+const getPersistenceParams = (): Record<string, unknown> => {
+  if (!mocks.persistenceParams) {
+    throw new Error('expected Clusters persistence params');
+  }
+  return mocks.persistenceParams;
+};
+
 describe('GlobalViewClusters', () => {
+  it('removes only the closed cluster owner and retains the Global table owner', async () => {
+    const { rerender, unmount } = await renderGlobalClusters();
+
+    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
+      domain: 'cluster-overview',
+      scope: 'cluster-a|',
+      preserveState: true,
+    });
+    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
+      domain: 'cluster-overview',
+      scope: 'cluster-b|',
+      preserveState: true,
+    });
+    const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;
+    const initialCacheKey = (getTableProps().source as { cacheKey?: string }).cacheKey;
+
+    mocks.acquireRefreshDomainLease.mockClear();
+    mocks.releaseRefreshDomainLease.mockClear();
+    mocks.requestRefreshDomain.mockClear();
+    mocks.setRefreshDomainEnabled.mockClear();
+    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:gamma'];
+    await rerender();
+
+    expect(mocks.releaseRefreshDomainLease).toHaveBeenCalledOnce();
+    expect(mocks.releaseRefreshDomainLease).toHaveBeenCalledWith({
+      domain: 'cluster-overview',
+      scope: 'cluster-b|',
+      preserveState: true,
+    });
+    expect(mocks.acquireRefreshDomainLease).not.toHaveBeenCalled();
+    expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
+    expect(mocks.setRefreshDomainEnabled).not.toHaveBeenCalled();
+    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
+    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
+
+    mocks.acquireRefreshDomainLease.mockClear();
+    mocks.releaseRefreshDomainLease.mockClear();
+    mocks.requestRefreshDomain.mockClear();
+    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
+    await rerender();
+
+    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledOnce();
+    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
+      domain: 'cluster-overview',
+      scope: 'cluster-b|',
+      preserveState: true,
+    });
+    expect(mocks.releaseRefreshDomainLease).not.toHaveBeenCalled();
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledOnce();
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'cluster-overview',
+      scope: 'cluster-b|',
+      reason: 'startup',
+      label: 'Clusters overview: beta',
+    });
+    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
+    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
+
+    await unmount();
+  });
+
   it('renders complete cluster identity and mixed ready, loading, and auth-failed states', async () => {
     const { container, unmount } = await renderGlobalClusters();
 

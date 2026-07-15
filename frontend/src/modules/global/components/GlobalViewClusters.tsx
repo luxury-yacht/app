@@ -3,6 +3,7 @@ import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import type { ClusterLifecycleState } from '@core/contexts/clusterLifecycleState';
 import { useSidebarState } from '@core/contexts/SidebarStateContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
+import { useScopedRefreshDomainLifecycle } from '@core/data-access/useScopedRefreshDomainLifecycle';
 import { canActivateClusterOverviewRefresh } from '@core/refresh/clusterOverviewLifecycle';
 import { buildClusterScope } from '@core/refresh/clusterScope';
 import { useStreamSignalRefetch } from '@core/refresh/hooks/useStreamSignalRefetch';
@@ -15,8 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import React, { useCallback, useMemo } from 'react';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
 import type {
   ClusterOverviewMetrics,
@@ -24,6 +24,7 @@ import type {
   ClusterOverviewSnapshotPayload,
 } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
+import { GLOBAL_TABLE_OWNERS } from '../globalTableOwner';
 import './GlobalViewClusters.css';
 
 interface GlobalClusterRow {
@@ -49,6 +50,39 @@ interface GlobalClusterRow {
   overview?: ClusterOverviewPayload;
   metricsInfo?: ClusterOverviewMetrics;
 }
+
+interface GlobalClusterOverviewOwnerProps {
+  clusterId: string;
+  label: string;
+}
+
+const GlobalClusterOverviewOwner: React.FC<GlobalClusterOverviewOwnerProps> = ({
+  clusterId,
+  label,
+}) => {
+  const scope = buildClusterScope(clusterId, '');
+  const onFetchError = useCallback(
+    (error: unknown) => {
+      errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+        source: 'global-clusters-overview',
+        scope,
+      });
+    },
+    [scope]
+  );
+
+  useScopedRefreshDomainLifecycle({
+    domain: 'cluster-overview',
+    scope,
+    enabled: true,
+    preserveState: true,
+    fetchOnEnable: 'startup',
+    fetchLabel: `Clusters overview: ${label}`,
+    onFetchError,
+  });
+
+  return null;
+};
 
 const connectionFor = (
   lifecycle: ClusterLifecycleState | undefined,
@@ -128,13 +162,8 @@ const createClusterResourceColumn = (
 };
 
 const GlobalViewClusters: React.FC = () => {
-  const {
-    selectedKubeconfigs,
-    selectedClusterIds,
-    kubeconfigsLoading,
-    getClusterMeta,
-    setActiveKubeconfig,
-  } = useKubeconfig();
+  const { selectedKubeconfigs, kubeconfigsLoading, getClusterMeta, setActiveKubeconfig } =
+    useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
   const { getClusterAuthState } = useAuthError();
   const { setClusterNavigationTarget, activateClusterWorkspace } = useViewState();
@@ -199,42 +228,15 @@ const GlobalViewClusters: React.FC = () => {
         ) {
           return [];
         }
-        return [{ scope: buildClusterScope(meta.id, ''), label: meta.name || meta.id }];
+        return [{ clusterId: meta.id, label: meta.name || meta.id }];
       }),
     [getClusterAuthState, getClusterMeta, getClusterState, selectedKubeconfigs]
   );
   const refreshScopes = useMemo(
-    () => refreshTargets.map((target) => target.scope),
+    () => refreshTargets.map(({ clusterId }) => buildClusterScope(clusterId, '')),
     [refreshTargets]
   );
   useStreamSignalRefetch('cluster-overview', refreshScopes);
-
-  useEffect(() => {
-    refreshTargets.forEach(({ scope, label }) => {
-      setRefreshDomainEnabled({ domain: 'cluster-overview', scope, enabled: true });
-      void requestRefreshDomain({
-        domain: 'cluster-overview',
-        scope,
-        reason: 'startup',
-        label: `Clusters overview: ${label}`,
-      }).catch((error) => {
-        errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-          source: 'global-clusters-overview',
-          scope,
-        });
-      });
-    });
-    return () => {
-      refreshTargets.forEach(({ scope }) => {
-        setRefreshDomainEnabled({
-          domain: 'cluster-overview',
-          scope,
-          enabled: false,
-          preserveState: true,
-        });
-      });
-    };
-  }, [refreshTargets]);
 
   const navigateToOverview = useCallback(
     (row: GlobalClusterRow) => {
@@ -344,19 +346,15 @@ const GlobalViewClusters: React.FC = () => {
     (row: GlobalClusterRow) => buildClusterScopedKey(row, row.clusterId),
     []
   );
-  const clusterSetIdentity = useMemo(
-    // Retain the prefix because it participates in the persisted table-state key.
-    () => `fleet:${[...selectedClusterIds].sort().join('|')}`,
-    [selectedClusterIds]
-  );
+  const tableOwner = GLOBAL_TABLE_OWNERS.clusters;
   const persistence = useGridTablePersistence({
     viewId: 'cluster-fleet',
-    clusterIdentity: clusterSetIdentity,
+    clusterIdentity: tableOwner.identity,
     isNamespaceScoped: false,
     columns,
     data: rows,
     keyExtractor,
-    enabled: selectedClusterIds.length > 0,
+    enabled: selectedKubeconfigs.length > 0,
   });
   const { gridTableProps, favModal } = useClusterResourceGridTable({
     viewId: 'cluster-fleet',
@@ -384,25 +382,30 @@ const GlobalViewClusters: React.FC = () => {
     loading: kubeconfigsLoading && rows.length === 0,
     loaded: !kubeconfigsLoading,
     mode: 'Local Complete',
-    cacheKey: clusterSetIdentity,
+    cacheKey: tableOwner.identity,
   });
 
   return (
-    <div className="global-clusters">
-      <ResourceInventoryTable
-        source={source}
-        gridTableProps={gridTableProps}
-        columns={columns}
-        spinnerMessage="Loading clusters..."
-        updatingMessage="Updating clusters…"
-        emptyMessage="Open at least one cluster to compare cluster state"
-        diagnosticsLabel="Clusters"
-        diagnosticsMode="local"
-        enableColumnVisibilityMenu
-        allowHorizontalOverflow
-        favModal={favModal}
-      />
-    </div>
+    <>
+      {refreshTargets.map(({ clusterId, label }) => (
+        <GlobalClusterOverviewOwner key={clusterId} clusterId={clusterId} label={label} />
+      ))}
+      <div className="global-clusters">
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={gridTableProps}
+          columns={columns}
+          spinnerMessage="Loading clusters..."
+          updatingMessage="Updating clusters…"
+          emptyMessage="Open at least one cluster to compare cluster state"
+          diagnosticsLabel="Clusters"
+          diagnosticsMode="local"
+          enableColumnVisibilityMenu
+          allowHorizontalOverflow
+          favModal={favModal}
+        />
+      </div>
+    </>
   );
 };
 
