@@ -45,6 +45,7 @@ const {
   useUserPermissionsMock,
   queryNamespacesPermissionsMock,
   requestRefreshDomainStateMock,
+  setFiltersMock,
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -61,6 +62,7 @@ const {
   useUserPermissionsMock: vi.fn(),
   queryNamespacesPermissionsMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
+  setFiltersMock: vi.fn(),
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -188,7 +190,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
         caseSensitive: false,
         includeMetadata: false,
       },
-      setFilters: vi.fn(),
+      setFilters: setFiltersMock,
       pageSize: null,
       setPageSize: vi.fn(),
       isNamespaceScoped: true,
@@ -221,7 +223,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
         caseSensitive: false,
         includeMetadata: false,
       },
-      setFilters: vi.fn(),
+      setFilters: setFiltersMock,
       pageSize: null,
       setPageSize: vi.fn(),
       resetState: vi.fn(),
@@ -342,6 +344,7 @@ describe('NsViewPods', () => {
     runObjectActionMock.mockClear();
     queryNamespacesPermissionsMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
+    setFiltersMock.mockReset();
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
     errorHandlerMock.handle.mockClear();
@@ -553,21 +556,66 @@ describe('NsViewPods', () => {
     );
   });
 
-  it('uses an explicit selected-workload base scope for the embedded Pods table', async () => {
-    await renderPods({
-      namespace: 'team-a',
-      baseScope: 'workload:team-a:apps:v1:Deployment:api',
+  it('populates Namespace and Owner filters for an embedded Workloads selection', async () => {
+    const onWorkloadFilterMismatch = vi.fn();
+    const workloadFilterRequest = {
+      type: 'set' as const,
+      workload: {
+        clusterId: 'alpha:ctx',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    };
+    const props = {
+      namespace: ALL_NAMESPACES_SCOPE,
+      workloadFilterRequest,
+      onWorkloadFilterMismatch,
       showMetricsBanner: false,
-    });
+    };
+    await renderPods(props);
 
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        scope:
-          'alpha:ctx|workload:team-a:apps:v1:Deployment:api?limit=50&sort=name&sortDirection=asc',
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      search: '',
+      kinds: { mode: 'none' },
+      namespaces: { mode: 'some', values: ['team-a'] },
+      clusters: { mode: 'all' },
+      queryFacets: {
+        owners: {
+          mode: 'some',
+          values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
+        },
+      },
+      caseSensitive: false,
+      includeMetadata: false,
+    });
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
+
+    act(() => gridTablePropsRef.current.filters?.onReset?.());
+    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
+    onWorkloadFilterMismatch.mockClear();
+
+    setFiltersMock.mockClear();
+    const currentFilters = requireValue(
+      gridTablePropsRef.current.filters?.value,
+      'expected controlled Pod filters'
+    );
+    act(() =>
+      gridTablePropsRef.current.filters?.onChange?.({
+        ...currentFilters,
+        queryFacets: {
+          ...currentFilters.queryFacets,
+          owners: { mode: 'some', values: ['another-owner'] },
+        },
       })
     );
-    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
+    expect(onWorkloadFilterMismatch).toHaveBeenCalledOnce();
+    expect(setFiltersMock).toHaveBeenCalledOnce();
+
+    await renderPods(props);
+    expect(setFiltersMock).toHaveBeenCalledOnce();
   });
 
   it('omits Status while preserving the backend-owned Node query facet', async () => {
@@ -587,6 +635,16 @@ describe('NsViewPods', () => {
               options: [
                 { value: 'Pending', label: 'Pending' },
                 { value: 'Running', label: 'Running' },
+              ],
+              exact: true,
+            },
+            {
+              key: 'owners',
+              options: [
+                {
+                  value: '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
+                  label: 'Deployment/api',
+                },
               ],
               exact: true,
             },
@@ -611,6 +669,13 @@ describe('NsViewPods', () => {
                 bulkActions: true,
               },
               {
+                key: 'owners',
+                label: 'Owner',
+                placeholder: 'All owners',
+                searchable: true,
+                bulkActions: true,
+              },
+              {
                 key: 'nodes',
                 label: 'Node',
                 placeholder: 'All nodes',
@@ -627,6 +692,16 @@ describe('NsViewPods', () => {
     await renderPods({}, { skipDefaultQueryMock: true });
 
     expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
+      expect.objectContaining({
+        key: 'owners',
+        label: 'Owner',
+        options: [
+          {
+            value: '["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]',
+            label: 'Deployment/api',
+          },
+        ],
+      }),
       expect.objectContaining({
         key: 'nodes',
         label: 'Node',

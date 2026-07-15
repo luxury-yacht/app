@@ -10,9 +10,9 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 import {
   appendWorkloadTokens,
-  buildPodsBaseScope,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import type { PodWorkloadFilterRequest } from '@modules/namespace/components/podOwnerFilter';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -295,22 +295,23 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   selectedClusterId,
 }) => {
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
+  const [podFilterRequest, setPodFilterRequest] = useState<PodWorkloadFilterRequest>();
   const [podsCollapsed, setPodsCollapsed] = useState(false);
 
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => {
-      setSelectedWorkload(
-        buildRequiredObjectReference(
-          {
-            clusterId: workload.clusterId,
-            clusterName: workload.clusterName,
-            kind: workload.kind,
-            namespace: workload.namespace,
-            name: workload.name,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
+      const ref = buildRequiredObjectReference(
+        {
+          clusterId: workload.clusterId,
+          clusterName: workload.clusterName,
+          kind: workload.kind,
+          namespace: workload.namespace,
+          name: workload.name,
+        },
+        { fallbackClusterId: selectedClusterId }
       );
+      setSelectedWorkload(ref);
+      setPodFilterRequest({ type: 'set', workload: ref });
       setPodsCollapsed(false);
     },
     [selectedClusterId]
@@ -324,10 +325,6 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           })
         : null,
     [selectedClusterId, selectedWorkload]
-  );
-  const podsBaseScope = useMemo(
-    () => (selectedWorkload ? buildPodsBaseScope(selectedWorkload) : undefined),
-    [selectedWorkload]
   );
   const podsLabel = selectedWorkload
     ? `Pods for ${selectedWorkload.kind}/${selectedWorkload.name}`
@@ -344,7 +341,10 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             <button
               type="button"
               className="button generic workloads-pods-selection__clear"
-              onClick={() => setSelectedWorkload(null)}
+              onClick={() => {
+                setSelectedWorkload(null);
+                setPodFilterRequest({ type: 'clear' });
+              }}
             >
               Clear
             </button>
@@ -365,7 +365,11 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
           namespace={namespace}
           showNamespaceColumn={showNamespaceColumn}
           metrics={metrics}
-          baseScope={podsBaseScope}
+          workloadFilterRequest={podFilterRequest}
+          onWorkloadFilterMismatch={() => {
+            setSelectedWorkload(null);
+            setPodFilterRequest(undefined);
+          }}
           showMetricsBanner={false}
         />
       }

@@ -143,8 +143,10 @@ invalidators even though the callback does not read them.
 - Provider-specific facets are declared by backend capability descriptors and
   paired by key with envelope `facetValues`. The shared resource-query adapter
   maps descriptor labels/placeholders/searchability/bulk actions and option
-  value/labels into GridTable controls, and serializes selections as
-  `facet.<key>`. Views must not add key-specific projection or serializer branches.
+  value/labels into GridTable controls, and serializes selections as repeated
+  `facet.<key>` query values. Each value is opaque and must never be comma-split
+  because providers may use structured identities containing commas. Views must
+  not add key-specific projection or serializer branches.
 - A query-backed view may exclude provider facets from its filter bar through
   the shared query wrapper. Exclusion removes both the control and that facet's
   active query state; filtering only the rendered controls would leave an
@@ -157,7 +159,10 @@ invalidators even though the callback does not read them.
   their provider-owned options describe the full structural scope, remain stable
   when a selection narrows the result set, and feed backend query parameters
   through the shared typed-resource scope builder. Their providers publish
-  Status, but the user-facing tables exclude it; Pods continue to expose Node.
+  Status, but the user-facing tables exclude it. Pods expose Owner followed by
+  Node; in all-namespaces views those controls follow Namespace. Workloads row
+  selection writes Namespace and Owner through the same controlled filter state
+  used by direct dropdown interaction.
 
 ## Sorting
 

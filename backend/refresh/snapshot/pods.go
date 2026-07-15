@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -202,8 +203,54 @@ func podQueryCapabilities() ResourceQueryCapabilities {
 func podQueryFacets() []typedTableQueryFacet[PodSummary] {
 	return []typedTableQueryFacet[PodSummary]{
 		statusQueryFacet(func(pod PodSummary) string { return pod.Status }),
+		podOwnerQueryFacet(),
 		nodeQueryFacet(func(pod PodSummary) string { return pod.Node }),
 	}
+}
+
+func podOwnerQueryFacet() typedTableQueryFacet[PodSummary] {
+	return typedTableQueryFacet[PodSummary]{
+		Descriptor: ResourceQueryFacetDescriptor{
+			Key:         "owners",
+			Label:       "Owner",
+			Placeholder: "All owners",
+			Searchable:  true,
+			BulkActions: true,
+		},
+		Value: podOwnerFacetValue,
+		Label: podOwnerFacetLabel,
+	}
+}
+
+// Pod Owner facet values carry a complete object identity in a stable JSON
+// tuple: [scope, kind, name, clusterId, group, version, namespace]. A standalone
+// Pod uses its own identity so selecting that row in Workloads isolates exactly
+// that Pod instead of every ownerless Pod in the namespace.
+func podOwnerFacetValue(pod PodSummary) string {
+	if strings.EqualFold(strings.TrimSpace(pod.OwnerKind), "none") || strings.TrimSpace(pod.OwnerName) == "" {
+		return encodePodOwnerFacetValue("pod", podres.Identity.Kind, pod.Name, pod.ClusterID, podres.Identity.Group, podres.Identity.Version, pod.Namespace)
+	}
+	gv, err := schema.ParseGroupVersion(strings.TrimSpace(pod.OwnerAPIVersion))
+	if err != nil || strings.TrimSpace(pod.OwnerKind) == "" {
+		return ""
+	}
+	return encodePodOwnerFacetValue("owner", pod.OwnerKind, pod.OwnerName, pod.ClusterID, gv.Group, gv.Version, pod.Namespace)
+}
+
+func encodePodOwnerFacetValue(scope, kind, name, clusterID, group, version, namespace string) string {
+	encoded, _ := json.Marshal([]string{scope, kind, name, clusterID, group, version, namespace})
+	return string(encoded)
+}
+
+func podOwnerFacetLabel(value string) string {
+	var identity []string
+	if err := json.Unmarshal([]byte(value), &identity); err != nil || len(identity) != 7 {
+		return value
+	}
+	if identity[0] == "pod" {
+		return "No owner: " + identity[2]
+	}
+	return identity[1] + "/" + identity[2]
 }
 
 // podQuerypageSchema derives the querypage Schema for the pods table from its

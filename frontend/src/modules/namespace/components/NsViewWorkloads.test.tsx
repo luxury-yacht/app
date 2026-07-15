@@ -278,7 +278,7 @@ describe('NsViewWorkloads', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it('selects a workload row to scope the independent Pods table without opening the object', async () => {
+  it('selects a workload row by populating the Pods table filters without opening the object', async () => {
     const workload: WorkloadData = {
       kind: 'Deployment',
       name: 'api',
@@ -313,12 +313,36 @@ describe('NsViewWorkloads', () => {
     expect(openWithObjectMock).not.toHaveBeenCalled();
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
-      baseScope: 'workload:team-a:apps:v1:Deployment:api',
+      workloadFilterRequest: {
+        type: 'set',
+        workload: {
+          clusterId: 'path:context',
+          group: 'apps',
+          version: 'v1',
+          kind: 'Deployment',
+          namespace: 'team-a',
+          name: 'api',
+        },
+      },
       showMetricsBanner: false,
     });
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).toContain(
       'gridtable-row--selected'
     );
+
+    act(() => {
+      const onWorkloadFilterMismatch = podsViewPropsRef.current?.onWorkloadFilterMismatch;
+      if (typeof onWorkloadFilterMismatch !== 'function') {
+        throw new Error('Expected the Pods filter mismatch callback');
+      }
+      onWorkloadFilterMismatch();
+    });
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
+    expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
+      'gridtable-row--selected'
+    );
+
+    act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
 
     const clearButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Clear'
@@ -328,7 +352,7 @@ describe('NsViewWorkloads', () => {
 
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
-      baseScope: undefined,
+      workloadFilterRequest: { type: 'clear' },
       showMetricsBanner: false,
     });
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
@@ -373,7 +397,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
     act(() => gridTablePropsRef.current.onRowPointerClick?.(workload));
-    expect(podsViewPropsRef.current?.baseScope).toBe('workload:team-a:apps:v1:Deployment:api');
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toMatchObject({ type: 'set' });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
@@ -384,7 +408,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current?.baseScope).toBeUndefined();
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

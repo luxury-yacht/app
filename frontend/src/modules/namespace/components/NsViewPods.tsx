@@ -7,6 +7,11 @@
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
+  applyPodWorkloadFilterRequest,
+  type PodWorkloadFilterRequest,
+  podFiltersMatchWorkload,
+} from '@modules/namespace/components/podOwnerFilter';
+import {
   getPodsUnhealthyStorageKey,
   type PodsFilterMode,
   type PodsFilterRequest,
@@ -53,7 +58,8 @@ interface PodsViewProps {
   namespace: string;
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
-  baseScope?: string;
+  workloadFilterRequest?: PodWorkloadFilterRequest;
+  onWorkloadFilterMismatch?: () => void;
   showMetricsBanner?: boolean;
 }
 
@@ -124,7 +130,14 @@ export const matchesPodsFilter = (filter: PodsFilterMode, pod: PodSnapshotEntry)
  * GridTable component for namespace Pods
  */
 const NsViewPods: React.FC<PodsViewProps> = React.memo(
-  ({ namespace, showNamespaceColumn = false, metrics, baseScope, showMetricsBanner = true }) => {
+  ({
+    namespace,
+    showNamespaceColumn = false,
+    metrics,
+    workloadFilterRequest,
+    onWorkloadFilterMismatch,
+    showMetricsBanner = true,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('workloads');
@@ -514,7 +527,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       selectRows: selectPayloadRows,
       viewId: 'namespace-pods',
       namespace,
-      baseScope,
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
@@ -527,6 +539,63 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       // now backs single namespaces too — no client-side re-filter of the page.
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
+
+    const currentFilters = resolvedGridTableProps.filters?.value;
+    const setFilters = resolvedGridTableProps.filters?.onChange;
+    const appliedWorkloadFilterRequestRef = useRef<PodWorkloadFilterRequest | undefined>(undefined);
+    useEffect(() => {
+      if (
+        !workloadFilterRequest ||
+        appliedWorkloadFilterRequestRef.current === workloadFilterRequest ||
+        !currentFilters ||
+        !setFilters
+      ) {
+        return;
+      }
+      appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
+      const next = applyPodWorkloadFilterRequest(
+        currentFilters,
+        workloadFilterRequest,
+        showNamespaceFilter
+      );
+      if (next !== currentFilters) {
+        setFilters(next);
+      }
+    }, [currentFilters, setFilters, showNamespaceFilter, workloadFilterRequest]);
+
+    const gridTableProps = useMemo(() => {
+      const filters = resolvedGridTableProps.filters;
+      if (
+        !filters?.onChange ||
+        workloadFilterRequest?.type !== 'set' ||
+        !onWorkloadFilterMismatch
+      ) {
+        return resolvedGridTableProps;
+      }
+      return {
+        ...resolvedGridTableProps,
+        filters: {
+          ...filters,
+          onChange: (next: Parameters<NonNullable<typeof filters.onChange>>[0]) => {
+            filters.onChange?.(next);
+            if (
+              !podFiltersMatchWorkload(next, workloadFilterRequest.workload, showNamespaceFilter)
+            ) {
+              onWorkloadFilterMismatch();
+            }
+          },
+          onReset: () => {
+            filters.onReset?.();
+            onWorkloadFilterMismatch();
+          },
+        },
+      };
+    }, [
+      onWorkloadFilterMismatch,
+      resolvedGridTableProps,
+      showNamespaceFilter,
+      workloadFilterRequest,
+    ]);
 
     // The base query payload carries the poller freshness block for the usage
     // joined onto the rows at serve.
@@ -681,7 +750,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         ) : null}
         <ResourceInventoryTable
           source={source}
-          gridTableProps={resolvedGridTableProps}
+          gridTableProps={gridTableProps}
           spinnerMessage="Loading pods..."
           updatingMessage="Updating pods…"
           favModal={favModal}

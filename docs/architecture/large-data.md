@@ -302,13 +302,16 @@ The namespace Workloads destination composes two independent query-backed
 tables: Workloads above and Pods below. Each table retains its own filter,
 sort, cursor pagination, page size, diagnostics, and persisted GridTable state.
 The horizontal divider starts at 50%, supports pointer and keyboard resizing,
-and the Pods pane can be collapsed. Selecting a Workloads row changes only the
-Pods query's structural base scope: a Deployment resolves through its
-ReplicaSets, a CronJob resolves through its Jobs, direct owners match directly,
-and a standalone Pod uses its full core/v1 object scope. The projected Pod row
-retains both direct-controller and resolved-ancestor identities; no generated
-name parsing is part of the descendant contract. The former standalone Pods
-navigation value is parsed as Workloads for persisted-state compatibility.
+and the Pods pane can be collapsed. Selecting a Workloads row writes the normal
+Pods GridTable filters: Namespace when the table spans all namespaces, plus the
+provider-owned Owner facet. Owner values carry cluster, group, version, kind,
+namespace, and name. Deployments resolve through ReplicaSets, CronJobs resolve
+through Jobs, direct owners match directly, and an ownerless Pod uses its own
+core/v1 identity. The projected Pod row retains both direct-controller and
+resolved-ancestor identities; no generated name parsing is part of the
+descendant contract. Manually changing Namespace or Owner clears the Workloads
+row highlight without restoring the previous filters. The former standalone
+Pods navigation value is parsed as Workloads for persisted-state compatibility.
 
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,
@@ -333,7 +336,7 @@ metric sorts are backend-owned for the current resource and metric projection
 state. Node Status options cover the full cluster scope rather than the current
 page or active Status selection.
 
-Status and Node are provider-owned query facets, not fixed typed-query fields.
+Status, Owner, and Node are provider-owned query facets, not fixed typed-query fields.
 Pods, Workloads, and Nodes publish generic facet descriptors in capabilities;
 their responses pair those descriptors with full-structural-scope option values
 and exactness. The shared request path serializes every selection as

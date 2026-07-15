@@ -164,7 +164,9 @@ export function buildTypedResourceQueryScope(
   for (const [key, values] of Object.entries(
     stableTypedQueryFacets(descriptor.filters.queryFacets)
   )) {
-    params.set(`facet.${key}`, values.join(','));
+    for (const value of values) {
+      params.append(`facet.${key}`, value);
+    }
   }
   if (descriptor.sortConfig?.key && descriptor.sortConfig.direction) {
     params.set('sort', descriptor.sortConfig.key);

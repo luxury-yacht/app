@@ -365,7 +365,7 @@ func TestTypedTableQueryInvalidatesCursorWhenPageSizeChanges(t *testing.T) {
 
 func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing.T) {
 	values := mapValues(
-		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&facet.statuses=Running,Pending,Completed&facet.nodes=node-b,node-a,node-c&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy&includeMetadata=true",
+		"kinds=Pod,Deployment&kind=StatefulSet&namespaces=apps,default&namespace=kube-system&facet.statuses=Running&facet.statuses=Pending&facet.statuses=Completed&facet.nodes=node-b&facet.nodes=node-a&facet.nodes=node-c&sort=cpu&sortDirection=desc&limit=500&predicate.health=unhealthy&includeMetadata=true",
 	)
 
 	request := resourceQueryRequestFromValues("cluster-a", "pods", values, ResourceQueryRequest{
@@ -389,6 +389,17 @@ func TestResourceQueryRequestFromValuesAcceptsCatalogAndTypedListKeys(t *testing
 	}
 	if !request.IncludeMetadata {
 		t.Fatal("expected includeMetadata=true to parse into request.IncludeMetadata")
+	}
+}
+
+func TestResourceQueryRequestPreservesOpaqueFacetValues(t *testing.T) {
+	owner := `["owner","Deployment","metrics-server","cluster-a","apps","v1","kube-system"]`
+	values := url.Values{"facet.owners": {owner}}
+
+	request := resourceQueryRequestFromValues("cluster-a", "pods", values, ResourceQueryRequest{})
+
+	if selected := request.Facets["owners"]; len(selected) != 1 || selected[0] != owner {
+		t.Fatalf("owner facet = %q, want one opaque value %q", selected, owner)
 	}
 }
 

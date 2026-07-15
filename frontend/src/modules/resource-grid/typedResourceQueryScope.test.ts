@@ -27,8 +27,24 @@ describe('typedResourceQueryScope', () => {
     });
 
     expect(scope).toBe(
-      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&facet.nodes=node-a%2Cnode-b&facet.statuses=Pending%2CRunning&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
+      'cluster-a|namespace:all?limit=250&search=api&namespaces=apps%2Czeta&kinds=Deployment%2CPod&facet.nodes=node-a&facet.nodes=node-b&facet.statuses=Pending&facet.statuses=Running&sort=cpu&sortDirection=desc&predicate.health=unhealthy&continue=cursor-1'
     );
+  });
+
+  it('serializes opaque facet selections as repeated query values', () => {
+    const deployment = '["owner","Deployment","api","cluster-a","apps","v1","team-a"]';
+    const cronJob = '["owner","CronJob","nightly","cluster-a","batch","v1","team-a"]';
+    const scope = buildTypedResourceQueryScope('cluster-a', {
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        queryFacets: { owners: { mode: 'some', values: [deployment, cronJob] } },
+      },
+      sortConfig: { key: 'name', direction: 'asc' },
+      pageLimit: 50,
+    });
+
+    const query = new URLSearchParams(scope?.split('?')[1]);
+    expect(query.getAll('facet.owners')).toEqual([cronJob, deployment]);
   });
 
   it('serializes Event and Application triage facet selections as provider-owned query keys', () => {

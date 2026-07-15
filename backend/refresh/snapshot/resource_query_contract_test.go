@@ -174,7 +174,8 @@ func TestTypedResourceProviderFacetContractIsPublishedAndSerializable(t *testing
 	}
 
 	values := url.Values{}
-	values.Set("facet.statuses", "NotReady,Ready")
+	values.Add("facet.statuses", "NotReady")
+	values.Add("facet.statuses", "Ready")
 	request := resourceQueryRequestFromValues("cluster-a", "nodes", values, ResourceQueryRequest{})
 	requestRaw, err := json.Marshal(request)
 	if err != nil {

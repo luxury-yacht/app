@@ -367,7 +367,7 @@ func resourceQueryFacetSelections(values url.Values) map[string][]string {
 		if !ok || key == "" {
 			continue
 		}
-		selected := resourceQueryListValues(values, rawKey, "")
+		selected := normalizeResourceQueryValues(values[rawKey])
 		if len(selected) > 0 {
 			result[key] = selected
 		}
@@ -407,6 +407,13 @@ func resourceQueryListValues(values url.Values, pluralKey, singularKey string) [
 	if singularKey != "" {
 		raw = append(raw, values[singularKey]...)
 	}
+	return normalizeResourceQueryValues(raw)
+}
+
+// Provider-owned facet values are opaque. Unlike structural namespace/kind
+// lists, they must not be comma-split: a value may itself be a structured
+// identity containing commas. Multiple selections use repeated query keys.
+func normalizeResourceQueryValues(raw []string) []string {
 	if len(raw) == 0 {
 		return nil
 	}
