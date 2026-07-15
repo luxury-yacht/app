@@ -327,7 +327,7 @@ describe('ClusterViewNodes', () => {
     expect(preActions.some((item) => 'id' in item && item.id === 'include-metadata')).toBe(true);
   });
 
-  it('projects advertised Node Status values into a query facet', async () => {
+  it('omits the advertised Node Status query facet', async () => {
     const response = {
       status: 'executed',
       data: {
@@ -370,19 +370,7 @@ describe('ClusterViewNodes', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
-      {
-        key: 'statuses',
-        label: 'Status',
-        placeholder: 'All statuses',
-        options: [
-          { value: 'NotReady', label: 'NotReady' },
-          { value: 'Ready', label: 'Ready' },
-        ],
-        searchable: false,
-        bulkActions: true,
-      },
-    ]);
+    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toBeUndefined();
   });
 
   it('places the favorite with the filter pre-actions (left), not the export cluster', async () => {

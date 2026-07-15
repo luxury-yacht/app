@@ -632,11 +632,11 @@ export namespace backend {
 	export class FavoriteFilterSelection {
 	    mode: string;
 	    values?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FavoriteFilterSelection(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -666,7 +666,7 @@ export namespace backend {
 	        this.caseSensitive = source["caseSensitive"];
 	        this.includeMetadata = source["includeMetadata"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -737,7 +737,7 @@ export namespace backend {
 	}
 	
 	
-
+	
 	export class KubernetesAPIClientDiagnostics {
 	    clusterId: string;
 	    clusterName: string;
@@ -5901,3 +5901,4 @@ export namespace v1 {
 	}
 
 }
+

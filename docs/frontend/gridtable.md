@@ -145,6 +145,10 @@ invalidators even though the callback does not read them.
   maps descriptor labels/placeholders/searchability/bulk actions and option
   value/labels into GridTable controls, and serializes selections as
   `facet.<key>`. Views must not add key-specific projection or serializer branches.
+- A query-backed view may exclude provider facets from its filter bar through
+  the shared query wrapper. Exclusion removes both the control and that facet's
+  active query state; filtering only the rendered controls would leave an
+  invisible persisted filter affecting results.
 - A provider may publish a facet only after request serialization, backend
   extraction/filtering, full-structural-scope options, UI projection, and shared
   persistence exist. Do not advertise status, owner, node, application, or other
@@ -152,8 +156,8 @@ invalidators even though the callback does not read them.
 - Pods, Workloads, and Nodes are the reference typed-query facet implementations:
   their provider-owned options describe the full structural scope, remain stable
   when a selection narrows the result set, and feed backend query parameters
-  through the shared typed-resource scope builder. Pods add Node; all three expose
-  Status.
+  through the shared typed-resource scope builder. Their providers publish
+  Status, but the user-facing tables exclude it; Pods continue to expose Node.
 
 ## Sorting
 

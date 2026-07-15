@@ -325,6 +325,60 @@ describe('PodsTab (query-backed)', () => {
     ]);
   });
 
+  it('omits Status while preserving the backend-owned Node query facet', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [createPod()],
+          total: 1,
+          totalIsExact: true,
+          facetValues: [
+            {
+              key: 'statuses',
+              options: [{ value: 'Running', label: 'Running' }],
+              exact: true,
+            },
+            {
+              key: 'nodes',
+              options: [{ value: 'node-a', label: 'node-a' }],
+              exact: true,
+            },
+          ],
+          facetsExact: true,
+          capabilities: {
+            queryFacets: [
+              {
+                key: 'statuses',
+                label: 'Status',
+                placeholder: 'All statuses',
+                bulkActions: true,
+              },
+              {
+                key: 'nodes',
+                label: 'Node',
+                placeholder: 'All nodes',
+                searchable: true,
+                bulkActions: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await renderPods();
+
+    expect(getGridTableProps().filters?.options?.queryFacets).toEqual([
+      expect.objectContaining({
+        key: 'nodes',
+        label: 'Node',
+        options: [{ value: 'node-a', label: 'node-a' }],
+      }),
+    ]);
+  });
+
   it('issues a node-scoped pods query for Node panels', async () => {
     objectPanelRef.current = NODE_OBJECT_DATA;
     mockQueryRows([createPod({ name: 'node-pod' })]);

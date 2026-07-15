@@ -570,7 +570,7 @@ describe('NsViewPods', () => {
     expect(container.querySelector('.metrics-warning-banner')).toBeNull();
   });
 
-  it('publishes backend-owned Status and Node query facets', async () => {
+  it('omits Status while preserving the backend-owned Node query facet', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -627,14 +627,6 @@ describe('NsViewPods', () => {
     await renderPods({}, { skipDefaultQueryMock: true });
 
     expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
-      expect.objectContaining({
-        key: 'statuses',
-        label: 'Status',
-        options: [
-          { value: 'Pending', label: 'Pending' },
-          { value: 'Running', label: 'Running' },
-        ],
-      }),
       expect.objectContaining({
         key: 'nodes',
         label: 'Node',

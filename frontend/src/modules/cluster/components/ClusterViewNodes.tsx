@@ -9,7 +9,10 @@ import './ClusterViewNodes.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import {
+  RESOURCE_STATUS_QUERY_FACET_KEYS,
+  selectPayloadRows,
+} from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
@@ -346,6 +349,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     queryTableMode: 'Query Backed Dynamic',
     clusterId: selectedClusterId,
     domain: 'nodes',
+    excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
     label: 'Cluster Nodes',
     selectRows: selectPayloadRows,
     viewId: 'cluster-nodes',

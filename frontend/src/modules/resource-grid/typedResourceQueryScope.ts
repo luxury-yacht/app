@@ -15,6 +15,8 @@ import type {
   ResourceQueryIssue,
 } from '@/core/refresh/types';
 
+export const RESOURCE_STATUS_QUERY_FACET_KEYS = ['statuses'] as const;
+
 export interface TypedQueryPayload {
   continue?: string;
   /** Backend prev-page cursor — populated on every engine-served response. */

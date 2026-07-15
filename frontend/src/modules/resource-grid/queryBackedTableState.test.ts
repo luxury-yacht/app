@@ -2,12 +2,44 @@ import type { GridTableFilterState } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { describe, expect, it } from 'vitest';
 import {
+  excludeQueryFacetsFromFilterOptions,
+  excludeQueryFacetsFromTableState,
   normalizeQueryBackedNamespaceQueryFilters,
   queryBackedFacetFilterOptions,
   removeQueryBackedNamespaceFilterSentinels,
 } from './queryBackedTableState';
 
 describe('queryBackedTableState', () => {
+  it('excludes selected query facets from both controls and backend query state', () => {
+    const options = excludeQueryFacetsFromFilterOptions(
+      {
+        queryFacets: [
+          { key: 'statuses', label: 'Status', placeholder: 'All statuses', options: [] },
+          { key: 'nodes', label: 'Node', placeholder: 'All nodes', options: [] },
+        ],
+      },
+      ['statuses']
+    );
+    const state = excludeQueryFacetsFromTableState(
+      {
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          queryFacets: {
+            statuses: { mode: 'some', values: ['Running'] },
+            nodes: { mode: 'some', values: ['node-a'] },
+          },
+        },
+        sortConfig: { key: 'name', direction: 'asc' },
+      },
+      ['statuses']
+    );
+
+    expect(options.queryFacets?.map((facet) => facet.key)).toEqual(['nodes']);
+    expect(state.filters.queryFacets).toEqual({
+      nodes: { mode: 'some', values: ['node-a'] },
+    });
+  });
+
   it('keeps explicit namespace options instead of collapsing to filtered query facets', () => {
     expect(queryBackedFacetFilterOptions(['team-a', 'team-b'], ['team-a'])).toEqual([
       'team-a',

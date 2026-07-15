@@ -18,7 +18,10 @@ import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import {
+  RESOURCE_STATUS_QUERY_FACET_KEYS,
+  selectPayloadRows,
+} from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -185,6 +188,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       queryTableMode: 'Query Backed Dynamic',
       clusterId: selectedClusterId,
       domain: 'namespace-workloads',
+      excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
       label: diagnosticsLabel,
       selectRows: selectPayloadRows,
       viewId: 'namespace-workloads',

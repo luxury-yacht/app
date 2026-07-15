@@ -33,7 +33,10 @@ import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/cor
 import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
 import '../shared.css';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
+import {
+  RESOURCE_STATUS_QUERY_FACET_KEYS,
+  selectPayloadRows,
+} from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -261,6 +264,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     queryTableMode: 'Query Backed Dynamic',
     clusterId: queryClusterId,
     domain: 'pods',
+    excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
     label: 'Object Panel Pods',
     baseScope: podsScope ?? undefined,
     selectRows: selectPayloadRows,

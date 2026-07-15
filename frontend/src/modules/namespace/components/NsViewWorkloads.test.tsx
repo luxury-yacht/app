@@ -436,7 +436,7 @@ describe('NsViewWorkloads', () => {
     );
   });
 
-  it('projects advertised workload Status values into a query facet', async () => {
+  it('omits the advertised workload Status query facet', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -480,19 +480,7 @@ describe('NsViewWorkloads', () => {
       await Promise.resolve();
     });
 
-    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toEqual([
-      {
-        key: 'statuses',
-        label: 'Status',
-        placeholder: 'All statuses',
-        options: [
-          { value: 'Degraded', label: 'Degraded' },
-          { value: 'Running', label: 'Running' },
-        ],
-        searchable: false,
-        bulkActions: true,
-      },
-    ]);
+    expect(gridTablePropsRef.current.filters?.options?.queryFacets).toBeUndefined();
   });
 
   it('uses the typed query result for all-namespaces workloads on first render', async () => {

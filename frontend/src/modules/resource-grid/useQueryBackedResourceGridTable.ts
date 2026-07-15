@@ -25,7 +25,12 @@ import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { backendQuerySource } from './backendQuerySource';
 import type { QueryBackedTableState } from './queryBackedTableState';
-import { mergeQueryBackedFilterOptions, useQueryBackedTableState } from './queryBackedTableState';
+import {
+  excludeQueryFacetsFromFilterOptions,
+  excludeQueryFacetsFromTableState,
+  mergeQueryBackedFilterOptions,
+  useQueryBackedTableState,
+} from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
   NamespaceResourceGridTableParams,
@@ -169,6 +174,7 @@ interface QueryBackedGridParamsCommon<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
+  excludedQueryFacetKeys?: readonly string[];
 }
 
 interface TypedQueryLifecycle<
@@ -204,6 +210,7 @@ function useTypedQueryLifecycle<
   selectRows,
   predicates,
   filterOptionOverrides,
+  excludedQueryFacetKeys,
   defaultSort,
   persistence,
   liveScope,
@@ -217,6 +224,7 @@ function useTypedQueryLifecycle<
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
+  excludedQueryFacetKeys?: readonly string[];
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
@@ -225,6 +233,15 @@ function useTypedQueryLifecycle<
   const [tableStateReady, setTableStateReady] = useState(false);
   const defaultPageSize = useDefaultTablePageSize();
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize, defaultPageSize);
+  useEffect(() => {
+    const sanitized = excludeQueryFacetsFromTableState(
+      { filters: persistence.filters, sortConfig: null },
+      excludedQueryFacetKeys
+    );
+    if (sanitized.filters !== persistence.filters) {
+      persistence.setFilters(sanitized.filters);
+    }
+  }, [excludedQueryFacetKeys, persistence.filters, persistence.setFilters]);
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
@@ -247,9 +264,9 @@ function useTypedQueryLifecycle<
       if (hydratedRef.current) {
         setTableStateReady(true);
       }
-      handleTableStateChange(next);
+      handleTableStateChange(excludeQueryFacetsFromTableState(next, excludedQueryFacetKeys));
     },
-    [handleTableStateChange]
+    [excludedQueryFacetKeys, handleTableStateChange]
   );
   // clusterId is required: without it buildTypedResourceQueryScope returns null and no fetch is
   // ever issued, so the query path could never settle. Gating here holds the table in its gating
@@ -266,7 +283,7 @@ function useTypedQueryLifecycle<
     domain,
     label,
     baseScope,
-    filters: tableState.filters,
+    filters: excludeQueryFacetsFromTableState(tableState, excludedQueryFacetKeys).filters,
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
@@ -275,8 +292,12 @@ function useTypedQueryLifecycle<
   });
 
   const effectiveFilterOptionOverrides = useMemo(
-    () => mergeQueryBackedFilterOptions(filterOptionOverrides, query.filterOptions),
-    [filterOptionOverrides, query.filterOptions]
+    () =>
+      mergeQueryBackedFilterOptions(
+        filterOptionOverrides,
+        excludeQueryFacetsFromFilterOptions(query.filterOptions, excludedQueryFacetKeys)
+      ),
+    [excludedQueryFacetKeys, filterOptionOverrides, query.filterOptions]
   );
 
   const { data, loading, loaded, error } = deriveQueryBackedData<TRow>({
@@ -533,6 +554,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
+  excludedQueryFacetKeys,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   ...tableParams
@@ -574,6 +596,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     selectRows,
     predicates,
     filterOptionOverrides,
+    excludedQueryFacetKeys,
     defaultSort,
     persistence,
     liveScope,
@@ -637,6 +660,7 @@ export function useQueryBackedClusterResourceGridTable<
   selectRows,
   predicates,
   filterOptionOverrides,
+  excludedQueryFacetKeys,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   ...tableParams
@@ -675,6 +699,7 @@ export function useQueryBackedClusterResourceGridTable<
     selectRows,
     predicates,
     filterOptionOverrides,
+    excludedQueryFacetKeys,
     defaultSort,
     persistence,
     liveScope,

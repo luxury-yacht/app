@@ -40,6 +40,48 @@ export function mergeQueryBackedFilterOptions(
   };
 }
 
+export function excludeQueryFacetsFromFilterOptions(
+  options: Partial<GridTableFilterOptions>,
+  excludedKeys: readonly string[] | undefined
+): Partial<GridTableFilterOptions> {
+  if (!excludedKeys?.length || !options.queryFacets?.length) {
+    return options;
+  }
+  const excluded = new Set(excludedKeys);
+  const queryFacets = options.queryFacets.filter((facet) => !excluded.has(facet.key));
+  if (queryFacets.length === options.queryFacets.length) {
+    return options;
+  }
+  return {
+    ...options,
+    queryFacets: queryFacets.length > 0 ? queryFacets : undefined,
+  };
+}
+
+export function excludeQueryFacetsFromTableState(
+  state: QueryBackedTableState,
+  excludedKeys: readonly string[] | undefined
+): QueryBackedTableState {
+  if (!excludedKeys?.length || !state.filters.queryFacets) {
+    return state;
+  }
+  const excluded = new Set(excludedKeys);
+  const queryFacets = Object.fromEntries(
+    Object.entries(state.filters.queryFacets).filter(([key]) => !excluded.has(key))
+  );
+  if (Object.keys(queryFacets).length === Object.keys(state.filters.queryFacets).length) {
+    return state;
+  }
+  const { queryFacets: _excludedQueryFacets, ...filters } = state.filters;
+  return {
+    ...state,
+    filters: {
+      ...filters,
+      ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
+    },
+  };
+}
+
 const normalizeOptionSet = (values: string[] | undefined): Set<string> =>
   new Set((values ?? []).map((value) => value.trim()).filter(Boolean));
 
