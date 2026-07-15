@@ -5,6 +5,7 @@
  * Covers key behaviors and edge cases for NsViewStorage.
  */
 
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
@@ -283,6 +284,15 @@ describe('NsViewStorage', () => {
     // the backend capabilities on the payload (see the NsViewWorkloads
     // end-to-end pin), never from a frontend constant.
     expect(props.filters?.options?.kinds).toEqual([]);
+  });
+
+  it.each([
+    ['a selected namespace', 'team-a'],
+    ['All Namespaces', ALL_NAMESPACES_SCOPE],
+  ])('does not show a Kind dropdown for %s', async (_label, namespace) => {
+    const props = await renderStorageView({ namespace });
+
+    expect(props.filters?.options?.showKindDropdown).toBe(false);
   });
 
   it('uses canonical object identity for row keys', async () => {

@@ -30,7 +30,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for storage resources (PVCs, VolumeAttachments, etc.)
+// Data interface for PersistentVolumeClaim rows.
 export interface StorageData {
   kind: string;
   kindAlias?: string;
@@ -54,7 +54,7 @@ interface StorageViewProps {
 
 /**
  * GridTable component for namespace storage resources
- * Aggregates PersistentVolumeClaims, VolumeAttachments, and related storage resources
+ * Displays PersistentVolumeClaims for one namespace or all namespaces.
  */
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ namespace, showNamespaceColumn = false }) => {
@@ -229,7 +229,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      showKindDropdown: true,
       showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
     });

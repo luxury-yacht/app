@@ -268,7 +268,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
     viewId: 'cluster-storage',
     columns,
     keyExtractor,
-    showKindDropdown: true,
     diagnosticsLabel: 'Cluster Storage',
   });
 

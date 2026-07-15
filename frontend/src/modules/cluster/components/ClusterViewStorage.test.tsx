@@ -199,6 +199,15 @@ describe('ClusterViewStorage', () => {
     expect(props.filters?.options?.kinds).toEqual([]);
   });
 
+  it('does not show a Kind dropdown for its single-kind resource family', async () => {
+    await act(async () => {
+      root.render(<ClusterViewStorage />);
+      await Promise.resolve();
+    });
+
+    expect(getGridTableProps().filters?.options?.showKindDropdown).toBe(false);
+  });
+
   it('uses backend statusPresentation for PersistentVolume status styling', async () => {
     await act(async () => {
       root.render(<ClusterViewStorage />);
